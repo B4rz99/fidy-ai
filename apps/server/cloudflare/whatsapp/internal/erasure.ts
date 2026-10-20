@@ -1,7 +1,7 @@
 import type { ErasureProjection } from "../../erasure-store/contract";
 
 /** Keep exact logical permits and archive fields while sharing the delivery storage mechanics. */
-const deliveryProjection = ({
+const recordProjection = ({
   id,
   kind,
   fields,
@@ -9,12 +9,26 @@ const deliveryProjection = ({
   quiescence,
 }: Readonly<{
   id: string;
-  kind: "hosted" | "insight" | "proactivity" | "weekly-question";
+  kind:
+    | "hosted"
+    | "insight"
+    | "proactivity"
+    | "weekly-question"
+    | "voice-refusal"
+    | "delivery-status";
   fields: ReadonlyArray<string>;
   dependencies: ReadonlyArray<string>;
   quiescence: ErasureProjection["quiescence"];
 }>): ErasureProjection => {
-  const owned = `r.kind='${kind}' AND r.user_id=?`;
+  const table =
+    kind === "voice-refusal" || kind === "delivery-status"
+      ? "whatsapp_event_records"
+      : "whatsapp_deliveries";
+  const subject =
+    kind === "delivery-status"
+      ? "EXISTS(SELECT 1 FROM whatsapp_deliveries p WHERE p.kind='hosted' AND p.hosted_correlation_token=r.correlation_token AND p.user_id=?)"
+      : "r.user_id=?";
+  const owned = `r.kind='${kind}' AND ${subject}`;
   const body = "json_object(" + fields.map((field) => `'${field}',r."${field}"`).join(",") + ")";
   return {
     id,
@@ -22,20 +36,20 @@ const deliveryProjection = ({
     dependencies,
     quiescence,
     select: (userId) => ({
-      sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef,${body} AS body FROM whatsapp_deliveries r WHERE ${owned}`,
+      sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef,${body} AS body FROM ${table} r WHERE ${owned}`,
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef FROM whatsapp_deliveries r WHERE ${owned}`,
+      sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef FROM ${table} r WHERE ${owned}`,
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: `SELECT 1 FROM whatsapp_deliveries r WHERE ${owned}`,
+      sql: `SELECT 1 FROM ${table} r WHERE ${owned}`,
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: `DELETE FROM whatsapp_deliveries AS r WHERE ${owned} AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
+        sql: `DELETE FROM ${table} AS r WHERE ${owned} AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
         params: [scope.userId, scope.reference],
       },
     ],
@@ -43,31 +57,14 @@ const deliveryProjection = ({
 };
 
 export const projections: ReadonlyArray<ErasureProjection> = [
-  {
+  recordProjection({
     id: "hosted_voice_refusals",
-    dataClass: "conversation",
+    kind: "voice-refusal",
+    fields: ["portfolio_id", "message_id", "user_id", "claimed_at_ms", "outcome"],
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('portfolio_id',r.\"portfolio_id\",'message_id',r.\"message_id\",'user_id',r.\"user_id\",'claimed_at_ms',r.\"claimed_at_ms\",'outcome',r.\"outcome\") AS body FROM hosted_voice_refusals r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_voice_refusals r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM hosted_voice_refusals r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM hosted_voice_refusals AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  deliveryProjection({
+  }),
+  recordProjection({
     id: "hosted_whatsapp_delivery",
     kind: "hosted",
     fields: [
@@ -90,30 +87,13 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       }),
     },
   }),
-  {
+  recordProjection({
     id: "hosted_whatsapp_delivery_events",
-    dataClass: "conversation",
+    kind: "delivery-status",
+    fields: ["provider_message_id", "status", "occurred_at_ms", "received_at_ms"],
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('provider_message_id',r.\"provider_message_id\",'status',r.\"status\",'occurred_at_ms',r.\"occurred_at_ms\",'received_at_ms',r.\"received_at_ms\") AS body FROM hosted_whatsapp_delivery_events r WHERE EXISTS(SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') p WHERE p.correlation_token=r.correlation_token AND p.user_id=?)",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_whatsapp_delivery_events r WHERE EXISTS(SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') p WHERE p.correlation_token=r.correlation_token AND p.user_id=?)",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM hosted_whatsapp_delivery_events r WHERE EXISTS(SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') p WHERE p.correlation_token=r.correlation_token AND p.user_id=?)",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM hosted_whatsapp_delivery_events AS r WHERE EXISTS(SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') p WHERE p.correlation_token=r.correlation_token AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
+  }),
   {
     id: "hosted_whatsapp_inbound",
     dataClass: "conversation",
@@ -162,7 +142,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       },
     ],
   },
-  deliveryProjection({
+  recordProjection({
     id: "insight_whatsapp_claims",
     kind: "insight",
     dependencies: [],
@@ -209,7 +189,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       },
     ],
   },
-  deliveryProjection({
+  recordProjection({
     id: "proactivity_whatsapp_claims",
     kind: "proactivity",
     dependencies: [],
@@ -233,7 +213,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "delivered_at_ms",
     ],
   }),
-  deliveryProjection({
+  recordProjection({
     id: "weekly_governor_questions",
     kind: "weekly-question",
     dependencies: [],

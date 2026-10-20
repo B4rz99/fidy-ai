@@ -189,9 +189,9 @@ const prepareStatusEvidence = ({
   const phoneId = evidence.businessPhoneNumberId;
   const status = evidence.outcome;
   return db
-    .prepare(`INSERT OR IGNORE INTO hosted_whatsapp_delivery_events
-      (correlation_token, provider_message_id, status, occurred_at_ms, received_at_ms)
-      SELECT ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery
+    .prepare(`INSERT OR IGNORE INTO whatsapp_event_records
+      (kind,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms)
+      SELECT 'delivery-status',?,?,?,?,? WHERE EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery
         WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
           AND (provider_message_id IS NULL OR provider_message_id = ?))`)
     .bind(

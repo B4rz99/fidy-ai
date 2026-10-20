@@ -49,7 +49,7 @@ export const dispatchCancellations = (
     const trace = yield* captureWorkTrace;
     const now = yield* Clock.currentTimeMillis;
     const result = yield* wait(() =>
-      input.DB.prepare(`SELECT user_id FROM subscription_cancellations WHERE source_cancellation='void-pending'
+      input.DB.prepare(`SELECT user_id FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) WHERE source_cancellation='void-pending'
     AND verification_count<8 AND (last_offered_at_ms IS NULL OR last_offered_at_ms<?) ORDER BY last_offered_at_ms,user_id LIMIT 32`)
         .bind(now - offerCooldownMs)
         .all()
@@ -57,9 +57,7 @@ export const dispatchCancellations = (
     const rows = yield* decode(Schema.Array(Schema.Struct({ user_id: UserId })), result.results);
     for (const row of rows) {
       yield* wait(() =>
-        input.DB.prepare(
-          "UPDATE subscription_cancellations SET last_offered_at_ms=? WHERE user_id=?"
-        )
+        input.DB.prepare("UPDATE users SET cancellation_last_offered_at_ms=? WHERE id=?")
           .bind(now, row.user_id)
           .run()
       );
@@ -84,7 +82,7 @@ export const receiveCancellation = (
     const row = yield* wait(() =>
       input.db
         .prepare(
-          "SELECT last_offered_at_ms FROM subscription_cancellations WHERE user_id=? AND source_cancellation='void-pending' AND verification_count<8"
+          "SELECT last_offered_at_ms FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) WHERE user_id=? AND source_cancellation='void-pending' AND verification_count<8"
         )
         .bind(input.work.userId)
         .first()
@@ -115,7 +113,7 @@ export const cancelSource = (
     const row = yield* wait(() =>
       db
         .prepare(`SELECT source.wompi_source_id,a.wompi_environment,c.void_started_at_ms
-    FROM subscription_cancellations c JOIN card_payment_sources source ON source.id=c.payment_source_id AND source.user_id=c.user_id
+    FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) c JOIN card_payment_sources source ON source.id=c.payment_source_id AND source.user_id=c.user_id
     JOIN billing_attempts a ON a.id=c.paid_attempt_id AND a.user_id=c.user_id
     WHERE c.user_id=? AND source.method='daviplata' AND c.source_cancellation='void-pending' AND c.verification_count<8`)
         .bind(input.work.userId)
@@ -135,7 +133,7 @@ export const cancelSource = (
     const reservation = yield* wait(() =>
       db
         .prepare(
-          "UPDATE subscription_cancellations SET verification_count=verification_count+1 WHERE user_id=? AND source_cancellation='void-pending' AND verification_count<8"
+          "UPDATE users SET cancellation_verification_count=cancellation_verification_count+1 WHERE id=? AND cancellation_source_cancellation='void-pending' AND cancellation_verification_count<8"
         )
         .bind(input.work.userId)
         .run()
@@ -158,7 +156,7 @@ export const cancelSource = (
       yield* wait(() =>
         db
           .prepare(
-            "UPDATE subscription_cancellations SET source_cancellation='voided',void_verified_at_ms=? WHERE user_id=? AND source_cancellation='void-pending'"
+            "UPDATE users SET cancellation_source_cancellation='voided',cancellation_void_verified_at_ms=? WHERE id=? AND cancellation_source_cancellation='void-pending'"
           )
           .bind(now, input.work.userId)
           .run()
@@ -180,7 +178,7 @@ const submitVoid = (
       const claim = yield* wait(() =>
         input.db
           .prepare(
-            "UPDATE subscription_cancellations SET void_started_at_ms=? WHERE user_id=? AND void_started_at_ms IS NULL AND source_cancellation='void-pending'"
+            "UPDATE users SET cancellation_void_started_at_ms=? WHERE id=? AND cancellation_void_started_at_ms IS NULL AND cancellation_source_cancellation='void-pending'"
           )
           .bind(input.now, input.userId)
           .run()

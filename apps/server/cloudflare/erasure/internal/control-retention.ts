@@ -31,8 +31,7 @@ const deleteControls = (
       "erasure_archives",
       "erasure_permits",
       "erasure_chunk",
-      "erasure_custody_evidence",
-      "erasure_custody_events",
+      "erasure_custody_records",
       "erasure_objects",
       "erasure_restore_members",
     ];
@@ -41,7 +40,7 @@ const deleteControls = (
         ...children.map((table) =>
           db
             .prepare(
-              `DELETE FROM ${table} WHERE rowid IN(SELECT rowid FROM ${table} WHERE request_id=? LIMIT ?)`
+              `DELETE FROM ${table} WHERE rowid IN(SELECT rowid FROM ${table} WHERE request_id=? ${table === "erasure_custody_records" ? "ORDER BY record_type" : ""} LIMIT ?)`
             )
             .bind(scope.reference, maximumRows)
         ),

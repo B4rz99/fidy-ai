@@ -108,7 +108,7 @@ it("records same-User recurring Consent and standing atomically and rejects a fo
       const row = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT enabled,grant_id,acceptance_from_ms FROM recurring_digest_instructions WHERE user_id=?"
+            "SELECT enabled,grant_id,acceptance_from_ms FROM (SELECT rowid,user_id,id,version,enabled,consent_grant_id AS grant_id,snapshot_json AS context_json,acceptance_from_ms,accepted_at_ms,last_source_identity,next_closed_at_ms,last_evaluated_at_ms,source_checkpoint,source_cursor,source_cutoff_at_ms,source_complete FROM schedules WHERE kind='digest') WHERE user_id=?"
           )
           .bind(context.userId)
           .first()
@@ -264,7 +264,7 @@ it("rolls back legal acceptance when native instruction activation cannot commit
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER test_recurring_activation BEFORE INSERT ON recurring_digest_instructions BEGIN SELECT RAISE(ABORT,'activation_refused'); END"
+            "CREATE TRIGGER test_recurring_activation BEFORE INSERT ON schedules WHEN NEW.kind='digest' BEGIN SELECT RAISE(ABORT,'activation_refused'); END"
           )
           .run()
       );
@@ -342,7 +342,11 @@ it("requires every source page, recovers after revision changes, and links the e
       });
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS total FROM recurring_digest_consumption").first()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT rowid,user_id,confirmation_id,disposition FROM recurring_digest_items WHERE disposition IS NOT NULL)"
+            )
+            .first()
         )
       ).toEqual({ total: 33 });
       expect((yield* advanceRecurringDigest({ ...context, now: closedNow }))._tag).toBe("Progress");
@@ -719,7 +723,7 @@ it("offers once on foreground discovery, replaces a definitively rejected disclo
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS total FROM proactivity_offer_requests WHERE kind='new-recurring-series'"
+              "SELECT count(*) AS total FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE kind='new-recurring-series'"
             )
             .first()
         )
@@ -769,7 +773,7 @@ it("offers once on foreground discovery, replaces a definitively rejected disclo
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS total FROM proactivity_offer_requests WHERE kind='new-recurring-series'"
+              "SELECT count(*) AS total FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE kind='new-recurring-series'"
             )
             .first()
         )
@@ -784,7 +788,7 @@ it("offers once on foreground discovery, replaces a definitively rejected disclo
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS total FROM proactivity_offer_requests WHERE kind='new-recurring-series'"
+              "SELECT count(*) AS total FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE kind='new-recurring-series'"
             )
             .first()
         )
@@ -907,7 +911,7 @@ it("excludes earlier-day backlog and permanently suppressed confirmations while 
         yield* Effect.tryPromise(() =>
           suppressedDb
             .prepare(
-              "SELECT count(*) AS total FROM proactivity_offer_requests WHERE kind='new-recurring-series'"
+              "SELECT count(*) AS total FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE kind='new-recurring-series'"
             )
             .first()
         )

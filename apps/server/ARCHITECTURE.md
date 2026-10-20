@@ -707,9 +707,9 @@ substitutes only external provider/Kapso responses. Live WhatsApp and deployed p
 
 ## Monthly budget planning
 
-Budget queries remain observational. An explicit month on a canonical Budget write freezes that User's inherited category caps in `budget_month_caps`, together with the `budget_plan_months` marker, cap edit, and Audit in one guarded D1 batch. Saved month amounts remain fixed; unsaved months preview the latest prior plan without rollover. A budget begins in its explicitly selected creation month and can be assigned to an earlier month through its existing identity. Legacy writes without a month retain the baseline-cap behavior. Current cap reads project the applied current plan, while historical spending uses the requested half-open calendar period in the supplied IANA zone.
+Budget queries remain observational. An explicit month on a canonical Budget write freezes that User's inherited category caps as cap records in `budget_month_plan_records`, together with its separate saved-month marker, cap edit, and Audit in one guarded D1 batch. Saved month amounts remain fixed; unsaved months preview the latest prior plan without rollover. A budget begins in its explicitly selected creation month and can be assigned to an earlier month through its existing identity. Legacy writes without a month retain the baseline-cap behavior. Current cap reads project the applied current plan, while historical spending uses the requested half-open calendar period in the supplied IANA zone.
 
-Group labels organize categories across months. A group rename explicitly selects Category identities, updates only the caller's Budgets, and captures the selected collection's revision for OAuth review. Each named group owns one Currency in `budget_group_currencies`, versioned from a selected month in the same canonical D1 unit as its caps and Audit. Category caps project that inherited Currency. Changes retain nominal amounts, preserve earlier month Currency, and reject incompatible precision in affected retained caps. Currency revisions invalidate Budget projections and group confirmation evidence. The browser never combines currencies or converts Money to floating-point values for totals.
+Group labels organize categories across months. A group rename explicitly selects Category identities, updates only the caller's Budgets, and captures the selected collection's revision for OAuth review. Each named group owns one Currency through currency records in `budget_month_plan_records`, versioned from a selected month in the same canonical D1 unit as its caps and Audit. Category caps project that inherited Currency. Changes retain nominal amounts, preserve earlier month Currency, and reject incompatible precision in affected retained caps. Currency revisions invalidate Budget projections and group confirmation evidence. The browser never combines currencies or converts Money to floating-point values for totals.
 
 Budget status reports include observed monthly income and expenses from Transactions’ published exact aggregate projection. The same requested half-open period, caller ownership, and optional category/currency filters apply to that cash flow, including when no caps match. Category spending uses those same complete aggregates. There is no separate paginated Budget contribution reader or report checkpoint. Consent and projection readiness are checked in the same native D1 batch as the totals; unavailable projections refuse the report rather than return partial spending.
 
@@ -802,7 +802,9 @@ creation time and last attempt remain independent of report content and WhatsApp
 Publication writes the report and initial work in one insert. Indexed metadata discovery derives
 expiry and content availability directly from that row; text expiry preserves dispatch progress.
 Category sends retain channel-started proof across expiry and ambiguous delivery. Weekly question
-intents retain their distinct request and governor evidence.
+work and offer requests use separate `insight_reports` kinds, preserving their request and governor
+evidence without creating financial reports or InsightEvents. All delivery work uses the same
+dispatch state, retry fields and metadata discovery.
 
 A recurring-discovery offer request carries an explicit current-opportunity marker, unique per User.
 Foreground request admission moves that marker atomically to the exact request, including a replay
@@ -849,8 +851,10 @@ relationships between grants, revocations and retained reports. Permission check
 the appropriate purpose. A shared erasure implementation retains each purpose's dependency
 order, archive fields, and exact logical permit, while all history records use one physical table.
 
-Weekly summaries and manual-entry reminders share `schedules`, `schedule_revisions`, and
-`schedule_executions`. Kind-qualified identities allow one schedule per User per kind and keep
+Weekly summaries and manual-entry reminders share `schedules` and typed revision/execution records in
+`schedule_history`. Recurring digest instructions use a separate schedule kind; closed digest days
+use a history kind that needs no fabricated schedule identity. Kind-qualified identities allow one
+schedule per User per kind and keep
 revision and occurrence foreign keys within that User and kind. Current schedules retain indexed
 execution fields and a typed instruction snapshot; immutable revision snapshots remain unchanged
 when a schedule advances or disables. Activation, advancement, and erasure use shared persistence.
@@ -875,7 +879,8 @@ fields and follow the resulting foreign-key dependencies.
 
 Weekly and contextual offers share `consent_offers`; typed references preserve their separate
 consent meanings. Weekly and reminder state share `proactivity_governors`, with once-only delivery
-observations in `governor_delivery_receipts`. Every identity and mutation qualifies its purpose.
+markers on their verified InsightEvent or report. Each marker retains its original receipt erasure
+purpose and clears before its parent is removed. Every identity and mutation qualifies its purpose.
 The policies for unanswered messages, questions and pausing remain feature-owned.
 
 Hosted replies, weekly summaries, contextual sends and weekly questions share
@@ -923,3 +928,35 @@ Budget threshold InsightEvents retain the immutable crossing snapshot and unique
 threshold identity. Publication creates the event and snapshot in one write. The global pending
 statement-review counter stays materialized: deriving it at its 5,000-item bound examines 5,000 rows
 per check instead of one, with no measured local latency benefit.
+
+## Operational record consolidation
+
+`recurring_evaluation_records` holds typed facts, proposals and one progress record per User.
+Evaluation restart and completion clear only scratch variants; the last completed evaluation and
+its revision remain available while a newer scan runs. Copied facts and the detector's captured
+time zone and revision guards retain their original meaning.
+
+`recurring_digest_items` retains independently optional staging and permanent consumption fields.
+Rebuilding a staged source clears only staging, preserving consumed-only dispositions. Completeness
+counts only the staged set. Each field group retains its own logical erasure permit and archive shape.
+
+`erasure_control` separates the optional published generation, restore session and per-bucket cursors.
+A restore candidate never supplies a missing published generation. Cursor compare-and-swap, scan
+completion and independent restore membership remain release requirements. `erasure_custody_records`
+retains typed current states and event history; a current state references the exact same-case,
+same-custodian event instead of duplicating its evidence payload. Pending states need no event.
+Custody migration refuses unmatched historical evidence rather than dropping or inventing it.
+
+Subscription cancellation is an optional User field group independent of paid standing. Its original
+paid period, source identity, void claim, verification budget and retry cooldown survive re-enrollment
+and expire only through their billing erasure purpose. Email security counters share one store with
+an explicit global variant; the global pairing limit remains 1,000/hour, User pairing remains 5/hour,
+and replacement remains 5/day. Recovery admission continues to use its live admission records;
+the unwritten operator-counter table and its cleanup are removed.
+
+Voice refusal and hosted delivery callbacks share `whatsapp_event_records`, with distinct kind-qualified
+identities. Voice refusals keep their User admission and seven-day replay retention; callbacks keep
+their hosted delivery foreign key, immutable status events and Turn-owned retention. The channel's
+shared erasure projection retains each original purpose, owner predicate and archived fields.
+Reminder control decisions use `audit_entries` as exact same-User/message replay evidence. Ordinary
+Audit retention never expires those decisions or counts them as product usage.

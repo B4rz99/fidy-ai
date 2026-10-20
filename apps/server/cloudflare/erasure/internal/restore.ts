@@ -71,12 +71,12 @@ export const restoreNext = (input: RestoreInput): Effect.Effect<Response, Erasur
     const results = yield* io(() =>
       db.batch([
         db
-          .prepare(`INSERT INTO erasure_restore_sessions(id,generation,cursor,scanned) VALUES(1,?,'',0)
-      ON CONFLICT(id) DO UPDATE SET generation=excluded.generation,cursor='',scanned=0 WHERE erasure_restore_sessions.generation<>excluded.generation`)
+          .prepare(`INSERT INTO erasure_control(kind,generation,cursor,scanned) VALUES('restore',?,'',0)
+      ON CONFLICT(kind) DO UPDATE SET generation=excluded.generation,cursor='',scanned=0 WHERE erasure_control.generation<>excluded.generation`)
           .bind(expected.generation),
         db
           .prepare(
-            "SELECT cursor,scanned FROM erasure_restore_sessions WHERE id=1 AND generation=?"
+            "SELECT cursor,scanned FROM erasure_control WHERE kind='restore' AND generation=?"
           )
           .bind(expected.generation),
       ])
@@ -102,7 +102,7 @@ export const restoreNext = (input: RestoreInput): Effect.Effect<Response, Erasur
     yield* io(() =>
       db
         .prepare(
-          "UPDATE erasure_restore_sessions SET cursor=?,scanned=? WHERE id=1 AND generation=? AND cursor=? AND scanned=0"
+          "UPDATE erasure_control SET cursor=?,scanned=? WHERE kind='restore' AND generation=? AND cursor=? AND scanned=0"
         )
         .bind(
           page.truncated ? page.cursor : "",
@@ -132,8 +132,8 @@ export const releaseRestore = (input: RestoreInput): Effect.Effect<Response, Era
     const { db } = configuration;
     const result = yield* io(() =>
       db
-        .prepare(`UPDATE erasure_generation SET generation=? WHERE id=1
-    AND EXISTS(SELECT 1 FROM erasure_restore_sessions WHERE id=1 AND generation=? AND scanned=1)
+        .prepare(`UPDATE erasure_control SET generation=? WHERE kind='published'
+    AND EXISTS(SELECT 1 FROM erasure_control WHERE kind='restore' AND generation=? AND scanned=1)
     AND NOT EXISTS(SELECT 1 FROM erasure_restore_members m LEFT JOIN erasure_requests q ON q.id=m.request_id
       WHERE m.generation=? AND (q.id IS NULL OR q.user_id<>m.user_id OR q.restore_generation IS NOT m.generation
       OR q.state NOT IN('ExternalPending','Complete') OR NOT EXISTS(SELECT 1 FROM erasure_steps WHERE request_id=q.id) OR EXISTS(SELECT 1 FROM erasure_steps s WHERE s.request_id=q.id AND s.delete_done=0)

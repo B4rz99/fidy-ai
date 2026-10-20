@@ -51,7 +51,7 @@ export const discoverProactivityUsers = (
       ? yield* Effect.tryPromise(() =>
           input.db
             .prepare(
-              `SELECT i.user_id FROM recurring_digest_instructions AS i JOIN (${source.sql}) AS s ON s.user_id=i.user_id WHERE i.enabled=1 AND (i.last_source_identity IS NULL OR i.last_source_identity<>s.source_identity OR i.next_closed_at_ms<=?) ORDER BY i.last_evaluated_at_ms,i.user_id LIMIT ?`
+              `SELECT i.user_id FROM (SELECT rowid,user_id,id,version,enabled,consent_grant_id AS grant_id,snapshot_json AS context_json,acceptance_from_ms,accepted_at_ms,last_source_identity,next_closed_at_ms,last_evaluated_at_ms,source_checkpoint,source_cursor,source_cutoff_at_ms,source_complete FROM schedules WHERE kind='digest') AS i JOIN (${source.sql}) AS s ON s.user_id=i.user_id WHERE i.enabled=1 AND (i.last_source_identity IS NULL OR i.last_source_identity<>s.source_identity OR i.next_closed_at_ms<=?) ORDER BY i.last_evaluated_at_ms,i.user_id LIMIT ?`
             )
             .bind(...source.params, input.now.epochMilliseconds, maximumGenerationUsers)
             .all()
@@ -75,7 +75,7 @@ export const noteProactivityEvaluation = (
   Effect.gen(function* () {
     yield* Effect.tryPromise(() =>
       input.db
-        .prepare("UPDATE recurring_digest_instructions SET last_evaluated_at_ms=? WHERE user_id=?")
+        .prepare("UPDATE schedules SET last_evaluated_at_ms=? WHERE kind='digest' AND user_id=?")
         .bind(input.now.epochMilliseconds, input.userId)
         .run()
     );
@@ -84,14 +84,16 @@ export const noteProactivityEvaluation = (
     yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          `UPDATE proactivity_offer_requests SET last_evaluated_at_ms=? WHERE user_id=? AND id IN (SELECT id FROM (${pending.sql}) WHERE user_id=?)`
+          `UPDATE insight_reports SET last_evaluated_at_ms=? WHERE kind='offer-request' AND user_id=? AND delivery_id IN (SELECT id FROM (${pending.sql}) WHERE user_id=?)`
         )
         .bind(input.now.epochMilliseconds, input.userId, ...pending.params, input.userId)
         .run()
     );
     yield* Effect.tryPromise(() =>
       input.db
-        .prepare("UPDATE schedules SET last_evaluated_at_ms=? WHERE kind='reminder' AND user_id=?")
+        .prepare(
+          "UPDATE schedules SET last_evaluated_at_ms=? WHERE kind='digest' AND kind='reminder' AND user_id=?"
+        )
         .bind(input.now.epochMilliseconds, input.userId)
         .run()
     );

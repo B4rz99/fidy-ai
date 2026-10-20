@@ -35,7 +35,7 @@ const transition = (
             ),
           input.db
             .prepare(
-              "UPDATE erasure_custody_evidence SET state='Pending',evidence_json=NULL WHERE request_id=? AND custodian='Cloudflare' AND ?='Erasing' AND changes()>0"
+              "UPDATE erasure_custody_records SET state='Pending',current_event_id=NULL WHERE record_type='current' AND request_id=? AND custodian='Cloudflare' AND ?='Erasing' AND changes()>0"
             )
             .bind(input.scope.reference, input.from),
         ]),

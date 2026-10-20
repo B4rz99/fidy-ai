@@ -435,7 +435,7 @@ it("a contextual no revokes the category permanently; only a fresh explicit requ
         yield* testPromise(() =>
           fixture.db
             .prepare(
-              "SELECT id FROM weekly_question_intents WHERE user_id=? AND request_message_id='older-request'"
+              "SELECT id FROM (SELECT rowid,delivery_id AS id,user_id,origin,request_message_id,rejection_offer_id,dispatch_state AS state,created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE kind='weekly-question') WHERE user_id=? AND request_message_id='older-request'"
             )
             .bind(userId)
             .first()
@@ -458,7 +458,7 @@ it("a contextual no revokes the category permanently; only a fresh explicit requ
         yield* testPromise(() =>
           fixture.db
             .prepare(
-              "SELECT id FROM weekly_question_intents WHERE user_id=? AND request_message_id='fresh-request'"
+              "SELECT id FROM (SELECT rowid,delivery_id AS id,user_id,origin,request_message_id,rejection_offer_id,dispatch_state AS state,created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE kind='weekly-question') WHERE user_id=? AND request_message_id='fresh-request'"
             )
             .bind(userId)
             .first()

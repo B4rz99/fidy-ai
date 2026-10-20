@@ -232,7 +232,7 @@ it("rolls back a competing prepared canonical edit and all its Audit without rew
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT (SELECT count(*) FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit) AS audits,(SELECT count(*) FROM schedule_revisions WHERE kind='reminder') AS revisions"
+              "SELECT (SELECT count(*) FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit) AS audits,(SELECT count(*) FROM (SELECT rowid,kind,user_id,schedule_id,version,snapshot_json FROM schedule_history WHERE record_type='revision') WHERE kind='reminder') AS revisions"
             )
             .first()
         )

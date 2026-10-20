@@ -66,7 +66,7 @@ it("an authenticated reminder request creates a contextual offer without inferen
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS n FROM proactivity_offer_requests WHERE user_id=? AND kind='manual-entry-reminder'"
+              "SELECT count(*) AS n FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE user_id=? AND kind='manual-entry-reminder'"
             )
             .bind(admission.userId)
             .first()

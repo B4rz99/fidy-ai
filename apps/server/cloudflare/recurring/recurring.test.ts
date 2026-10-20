@@ -947,7 +947,7 @@ const seedRetainedPatternLimit = (db: D1Database): Effect.Effect<void> =>
         FROM recurring_series CROSS JOIN copies WHERE user_id = ? AND id = ?`)
           .bind(count - 1, userId, original),
         db
-          .prepare(`UPDATE recurring_progress SET revision =
+          .prepare(`UPDATE recurring_evaluation_records SET revision =
         (SELECT fact_revision FROM dashboard_projection_state WHERE user_id = ?), evaluated_revision =
         (SELECT fact_revision FROM dashboard_projection_state WHERE user_id = ?) WHERE user_id = ?`)
           .bind(userId, userId, userId),
@@ -1181,7 +1181,9 @@ it.effect("discovers new Users hourly while resuming interrupted evaluation on t
     expect(
       yield* fromPromise(() =>
         db
-          .prepare("SELECT phase FROM recurring_progress WHERE user_id=?")
+          .prepare(
+            "SELECT phase FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id=?"
+          )
           .bind(userId)
           .first("phase")
       )

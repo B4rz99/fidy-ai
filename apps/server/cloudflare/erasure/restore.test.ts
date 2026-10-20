@@ -489,7 +489,7 @@ const verifyRestore = Effect.gen(function* () {
     yield* Effect.tryPromise(() =>
       native.db
         .prepare(
-          "SELECT state FROM erasure_custody_evidence WHERE request_id=? AND custodian='Cloudflare'"
+          "SELECT state FROM (SELECT c.rowid,c.request_id,c.custodian,c.state,e.evidence_json FROM erasure_custody_records c LEFT JOIN erasure_custody_records e ON e.event_identity=c.current_event_id WHERE c.record_type='current') WHERE request_id=? AND custodian='Cloudflare'"
         )
         .bind(reference)
         .first("state")

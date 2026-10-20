@@ -109,13 +109,13 @@ const importCase = (input: CaseImport): Effect.Effect<void, ErasureUnavailable> 
       ON CONFLICT(request_id,store_id) DO UPDATE SET archive_done=0,delete_done=0`)
           .bind(inventory, admission.reference, admission.userId, admission.generation, encoded),
         db
-          .prepare(`INSERT INTO erasure_custody_evidence(request_id,custodian,state)
-      SELECT q.id,p.value,'Pending' FROM erasure_requests q,json_each('["Cloudflare","Kapso","Meta","Resend","Wompi","SupportInbox","CaseRegister","CaseEvidence"]') p
-      WHERE q.id=? AND q.user_id=? AND q.restore_generation=? ON CONFLICT(request_id,custodian) DO NOTHING`)
+          .prepare(`INSERT INTO erasure_custody_records(record_type,request_id,custodian,state)
+      SELECT 'current',q.id,p.value,'Pending' FROM erasure_requests q,json_each('["Cloudflare","Kapso","Meta","Resend","Wompi","SupportInbox","CaseRegister","CaseEvidence"]') p
+      WHERE q.id=? AND q.user_id=? AND q.restore_generation=? ON CONFLICT(request_id,custodian) WHERE record_type='current' DO NOTHING`)
           .bind(admission.reference, admission.userId, admission.generation),
         db
           .prepare(
-            "UPDATE erasure_custody_evidence SET state='Pending',evidence_json=NULL WHERE request_id=? AND custodian='Cloudflare' AND EXISTS(SELECT 1 FROM erasure_requests WHERE id=? AND user_id=? AND state='Sealing' AND restore_generation=?)"
+            "UPDATE erasure_custody_records SET state='Pending',current_event_id=NULL WHERE record_type='current' AND request_id=? AND custodian='Cloudflare' AND EXISTS(SELECT 1 FROM erasure_requests WHERE id=? AND user_id=? AND state='Sealing' AND restore_generation=?)"
           )
           .bind(admission.reference, admission.reference, admission.userId, admission.generation),
         db

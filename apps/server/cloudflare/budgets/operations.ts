@@ -496,8 +496,8 @@ const readPlannedCaps = ({
     const rows = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT b.id,b.category_id,
-      COALESCE((SELECT g.currency FROM budget_group_currencies g WHERE g.user_id=b.user_id AND g.group_name=b.group_name AND g.month<=? ORDER BY g.month DESC LIMIT 1),b.currency) AS currency,
-      COALESCE((SELECT p.cap FROM budget_month_caps p WHERE p.user_id=b.user_id AND p.budget_id=b.id AND p.month<=? ORDER BY p.month DESC LIMIT 1),b.cap) AS cap,
+      COALESCE((SELECT g.currency FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency') g WHERE g.user_id=b.user_id AND g.group_name=b.group_name AND g.month<=? ORDER BY g.month DESC LIMIT 1),b.currency) AS currency,
+      COALESCE((SELECT p.cap FROM (SELECT rowid,user_id,budget_id,month,cap FROM budget_month_plan_records WHERE kind='cap') p WHERE p.user_id=b.user_id AND p.budget_id=b.id AND p.month<=? ORDER BY p.month DESC LIMIT 1),b.cap) AS cap,
       b.created_at,b.updated_at,b.group_name FROM budgets b WHERE b.user_id=? AND (?=1 OR b.starts_month IS NULL OR b.starts_month<=?)
       ORDER BY b.currency,b.category_id LIMIT ${maximumBudgetCount + 1}`)
         .bind(month, month, userId, includeInactive ? 1 : 0, month)
@@ -570,7 +570,9 @@ export const readBudgetSpending = ({
     const initialized =
       (yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT 1 FROM budget_plan_months WHERE user_id=? AND month=?")
+          .prepare(
+            "SELECT 1 FROM (SELECT rowid,user_id,month FROM budget_month_plan_records WHERE kind='plan') WHERE user_id=? AND month=?"
+          )
           .bind(userId, month)
           .first()
       )) !== null;

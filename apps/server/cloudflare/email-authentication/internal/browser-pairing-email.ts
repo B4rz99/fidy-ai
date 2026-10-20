@@ -121,19 +121,15 @@ const prepareEmailAdmission = (
       params: [workId],
     },
   }),
-  db
-    .prepare(`INSERT INTO browser_pairing_email_global_limit
-            (id, window_started_at_ms, requests)
-            SELECT 1, ?, 1 FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) AS browser_pairing_email_proofs WHERE work_id = ?
-            ON CONFLICT(id) DO UPDATE SET
-              requests = CASE WHEN window_started_at_ms <= ? THEN 1 ELSE requests + 1 END,
-              window_started_at_ms = CASE WHEN window_started_at_ms <= ? THEN excluded.window_started_at_ms ELSE window_started_at_ms END`)
-    .bind(
-      current,
-      workId,
-      current - emailAdmissionWindowMilliseconds,
-      current - emailAdmissionWindowMilliseconds
-    ),
+  prepareEmailSecurityLimit({
+    db,
+    kind: "pairing-global",
+    current,
+    subject: {
+      sql: "SELECT email_user_id AS user_id FROM browser_login_pairings WHERE email_work_id=?",
+      params: [workId],
+    },
+  }),
 ];
 
 type PairingEmailIntent = Readonly<{
@@ -170,8 +166,8 @@ const startPairingEmailIntent = ({
           WHERE p.expiresAt=?
           AND NOT EXISTS(SELECT 1 FROM email_security_limits l
             WHERE l.kind='pairing' AND l.user_id=v.user_id AND l.window_started_at_ms>? AND l.requests>=?)
-          AND NOT EXISTS(SELECT 1 FROM browser_pairing_email_global_limit l
-            WHERE l.window_started_at_ms>? AND l.requests>=?)) AS incoming
+          AND NOT EXISTS(SELECT 1 FROM email_security_limits l
+            WHERE l.kind='pairing-global' AND l.window_started_at_ms>? AND l.requests>=?)) AS incoming
         WHERE browser_login_pairings.id=incoming.pairing_id
           AND (email_work_id IS NULL OR(email_state NOT IN('approved','sending')
             AND email_generation<5 AND email_last_requested_at_ms<=?))`)

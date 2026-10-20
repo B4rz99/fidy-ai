@@ -18,7 +18,17 @@ const entryProjection = ({
       : "r.user_id=?";
   const scope = owner + " AND r.record_type='" + recordType + "'";
   const body =
-    "json_object(" + archiveFields.map((field) => `'${field}',r."${field}"`).join(",") + ")";
+    "json_object(" +
+    archiveFields
+      .map((field) => {
+        if (recordType === "reminder_control" && field === "message_id") {
+          return "'message_id',json_extract(r.id,'$[1]')";
+        }
+        if (recordType === "reminder_control" && field === "choice") return "'choice',r.outcome";
+        return `'${field}',r."${field}"`;
+      })
+      .join(",") +
+    ")";
   return {
     id,
     dataClass,
@@ -46,6 +56,12 @@ const entryProjection = ({
 };
 
 export const projections: ReadonlyArray<ErasureProjection> = [
+  entryProjection({
+    id: "reminder_control_receipts",
+    recordType: "reminder_control",
+    dataClass: "schedules",
+    archiveFields: ["user_id", "message_id", "choice"],
+  }),
   entryProjection({
     id: "canonical_request_acceptances",
     recordType: "request_admission",

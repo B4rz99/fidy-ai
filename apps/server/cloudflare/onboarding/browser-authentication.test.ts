@@ -2141,7 +2141,9 @@ it("bounds concurrent email sends across pairings and preserves admission after 
       ).toEqual({ count: 0 });
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT requests FROM browser_pairing_email_global_limit").first()
+          db
+            .prepare("SELECT requests FROM email_security_limits WHERE kind='pairing-global'")
+            .first()
         )
       ).toEqual({ requests: 5 });
       yield* Effect.tryPromise(() =>
@@ -2150,7 +2152,7 @@ it("bounds concurrent email sends across pairings and preserves admission after 
             "UPDATE email_security_limits SET window_started_at_ms=window_started_at_ms-3600000 WHERE kind='pairing'"
           ),
           db.prepare(
-            "UPDATE browser_pairing_email_global_limit SET window_started_at_ms = window_started_at_ms - 3600000"
+            "UPDATE email_security_limits SET window_started_at_ms = window_started_at_ms - 3600000 WHERE kind='pairing-global'"
           ),
         ])
       );
@@ -2166,7 +2168,9 @@ it("bounds concurrent email sends across pairings and preserves admission after 
       ).toEqual({ requests: 1 });
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT requests FROM browser_pairing_email_global_limit").first()
+          db
+            .prepare("SELECT requests FROM email_security_limits WHERE kind='pairing-global'")
+            .first()
         )
       ).toEqual({ requests: 1 });
     })
@@ -2191,11 +2195,15 @@ it("does not spend email capacity for same-pairing cooldown or exhausted aggrega
       ).toEqual({ requests: 1 });
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT requests FROM browser_pairing_email_global_limit").first()
+          db
+            .prepare("SELECT requests FROM email_security_limits WHERE kind='pairing-global'")
+            .first()
         )
       ).toEqual({ requests: 1 });
       yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE browser_pairing_email_global_limit SET requests = 999").run()
+        db
+          .prepare("UPDATE email_security_limits SET requests = 999 WHERE kind='pairing-global'")
+          .run()
       );
       const competing = yield* Effect.all([
         emailAdmissionPairing(sendRequest),
@@ -2208,7 +2216,9 @@ it("does not spend email capacity for same-pairing cooldown or exhausted aggrega
       expect(admitted.map((response) => response.status)).toEqual([202, 202]);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT requests FROM browser_pairing_email_global_limit").first()
+          db
+            .prepare("SELECT requests FROM email_security_limits WHERE kind='pairing-global'")
+            .first()
         )
       ).toEqual({ requests: 1000 });
       const fresh = yield* emailAdmissionPairing(sendRequest);
@@ -2250,7 +2260,7 @@ it("rolls email admission back when recording its proof fails", () =>
       expect((yield* emailAdmissionRequest(sendRequest, pairing)).status).toBe(503);
       for (const table of [
         "(SELECT user_id FROM email_security_limits WHERE kind='pairing')",
-        "browser_pairing_email_global_limit",
+        "(SELECT requests FROM email_security_limits WHERE kind='pairing-global')",
         "(SELECT id FROM browser_login_pairings WHERE email_work_id IS NOT NULL)",
       ]) {
         expect(

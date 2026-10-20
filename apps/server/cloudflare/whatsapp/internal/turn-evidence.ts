@@ -189,8 +189,8 @@ export const expireWhatsAppEvidence = ({
         userId,
         now,
         statement: {
-          sql: `DELETE FROM hosted_whatsapp_delivery_events WHERE rowid IN (
-        SELECT e.rowid FROM channel_retention_turns AS t CROSS JOIN (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d CROSS JOIN hosted_whatsapp_delivery_events AS e
+          sql: `DELETE FROM whatsapp_event_records WHERE kind='delivery-status' AND rowid IN (
+        SELECT e.rowid FROM channel_retention_turns AS t CROSS JOIN (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d CROSS JOIN (SELECT rowid,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms FROM whatsapp_event_records WHERE kind='delivery-status') AS e
         WHERE d.user_id=t.user_id AND d.turn_id=t.id AND e.correlation_token=d.correlation_token
         LIMIT 200)`,
           params: [],
@@ -204,7 +204,7 @@ export const expireWhatsAppEvidence = ({
           sql: `DELETE FROM whatsapp_deliveries WHERE kind='hosted' AND rowid IN (
         SELECT d.rowid FROM channel_retention_turns AS t CROSS JOIN (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d
         WHERE d.user_id=t.user_id AND d.turn_id=t.id AND NOT EXISTS (
-          SELECT 1 FROM hosted_whatsapp_delivery_events AS e WHERE e.correlation_token=d.correlation_token)
+          SELECT 1 FROM (SELECT rowid,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms FROM whatsapp_event_records WHERE kind='delivery-status') AS e WHERE e.correlation_token=d.correlation_token)
         LIMIT 100)`,
           params: [],
         },

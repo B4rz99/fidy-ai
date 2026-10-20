@@ -48,9 +48,14 @@ it("requires a fresh exact-User control review, preserves unresolved custody and
             .bind(reference, userId, current, encoded, current),
           db
             .prepare(
-              "INSERT INTO erasure_custody_evidence(request_id,custodian,state,evidence_json) VALUES(?,'Kapso','Unresolved',?)"
+              "INSERT INTO erasure_custody_records(record_type,request_id,custodian,id,evidence_json,recorded_at_ms,operator_ref) VALUES('event',?,'Kapso',?,?,?,'obarboza@fidyapp.com')"
             )
-            .bind(reference, custody),
+            .bind(reference, reviewRef, custody, current),
+          db
+            .prepare(
+              "INSERT INTO erasure_custody_records(record_type,request_id,custodian,state,current_event_id) VALUES('current',?,'Kapso','Unresolved',?)"
+            )
+            .bind(reference, reviewRef),
         ])
       );
       yield* Effect.tryPromise(() => bucket.put(`recovery/cases/${reference}`, marker));
@@ -120,7 +125,7 @@ it("requires a fresh exact-User control review, preserves unresolved custody and
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT state FROM erasure_custody_evidence WHERE request_id=? AND custodian='Kapso'"
+              "SELECT state FROM (SELECT c.rowid,c.request_id,c.custodian,c.state,e.evidence_json FROM erasure_custody_records c LEFT JOIN erasure_custody_records e ON e.event_identity=c.current_event_id WHERE c.record_type='current') WHERE request_id=? AND custodian='Kapso'"
             )
             .bind(reference)
             .first("state")
@@ -136,7 +141,7 @@ it("requires a fresh exact-User control review, preserves unresolved custody and
           .run()
       );
       yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE erasure_generation SET generation='initial' WHERE id=1").run()
+        db.prepare("UPDATE erasure_control SET generation='initial' WHERE kind='published'").run()
       );
       const guarded = withErasureRecovery({ DB: db, ERASURE_BUCKET: bucket }).DB;
       expect(

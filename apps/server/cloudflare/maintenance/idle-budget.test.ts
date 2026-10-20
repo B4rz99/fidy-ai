@@ -99,7 +99,11 @@ it(
         expect(queueOffers - warmOffers).toBe(12);
         expect(
           yield* Effect.tryPromise(() =>
-            db.prepare("SELECT count(*) AS n FROM erasure_control_sweeps").first("n")
+            db
+              .prepare(
+                "SELECT count(*) AS n FROM erasure_control WHERE kind IN ('email','statement','erasure')"
+              )
+              .first("n")
           )
         ).toBe(0);
       })

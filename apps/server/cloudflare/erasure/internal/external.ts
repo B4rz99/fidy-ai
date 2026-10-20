@@ -30,7 +30,7 @@ const purgeArchives = (
           .bind(current, input.scope.reference, input.scope.userId),
         input.db
           .prepare(
-            "UPDATE erasure_custody_evidence SET state='Pending',evidence_json=NULL WHERE request_id=? AND custodian='Cloudflare' AND changes()>0"
+            "UPDATE erasure_custody_records SET state='Pending',current_event_id=NULL WHERE record_type='current' AND request_id=? AND custodian='Cloudflare' AND changes()>0"
           )
           .bind(input.scope.reference),
       ])
@@ -63,8 +63,8 @@ export const settleExternal = (
     AND NOT EXISTS(SELECT 1 FROM erasure_steps WHERE request_id=erasure_requests.id AND delete_done=0)
     AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE request_id=erasure_requests.id)
     AND NOT EXISTS(SELECT 1 FROM erasure_objects WHERE request_id=erasure_requests.id AND done=0)
-    AND (SELECT count(*) FROM erasure_custody_evidence WHERE request_id=erasure_requests.id)=?
-    AND NOT EXISTS(SELECT 1 FROM erasure_custody_evidence WHERE request_id=erasure_requests.id AND state NOT IN('Verified','NotApplicable'))`)
+    AND (SELECT count(*) FROM (SELECT c.rowid,c.request_id,c.custodian,c.state,e.evidence_json FROM erasure_custody_records c LEFT JOIN erasure_custody_records e ON e.event_identity=c.current_event_id WHERE c.record_type='current') WHERE request_id=erasure_requests.id)=?
+    AND NOT EXISTS(SELECT 1 FROM (SELECT c.rowid,c.request_id,c.custodian,c.state,e.evidence_json FROM erasure_custody_records c LEFT JOIN erasure_custody_records e ON e.event_identity=c.current_event_id WHERE c.record_type='current') WHERE request_id=erasure_requests.id AND state NOT IN('Verified','NotApplicable'))`)
         .bind(input.scope.reference, input.scope.userId, current, expectedCustodians)
         .run()
     );
@@ -84,7 +84,7 @@ const finalizePurge = (
           .bind(current, input.scope.reference, input.scope.userId),
         input.db
           .prepare(
-            "UPDATE erasure_custody_evidence SET state='Pending',evidence_json=NULL WHERE request_id=? AND custodian='Cloudflare' AND changes()>0"
+            "UPDATE erasure_custody_records SET state='Pending',current_event_id=NULL WHERE record_type='current' AND request_id=? AND custodian='Cloudflare' AND changes()>0"
           )
           .bind(input.scope.reference),
       ])

@@ -60,7 +60,9 @@ export const prepareCheckpoint = (
     const previous = yield* expectedGeneration(configuration);
     const matching = yield* io(() =>
       configuration.db
-        .prepare("SELECT count(*) AS matched FROM erasure_generation WHERE id=1 AND generation=?")
+        .prepare(
+          "SELECT count(*) AS matched FROM erasure_control WHERE kind='published' AND generation=?"
+        )
         .bind(previous.generation)
         .first<number>("matched")
     );
@@ -75,7 +77,7 @@ export const prepareCheckpoint = (
     return [
       generationAssertion({ db: configuration.db, generation: previous.generation }),
       configuration.db
-        .prepare("UPDATE erasure_generation SET generation=? WHERE id=1")
+        .prepare("UPDATE erasure_control SET generation=? WHERE kind='published'")
         .bind(generation),
     ];
   });

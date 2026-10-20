@@ -78,7 +78,7 @@ export const evaluateRecurringSeries = (work: Work): Effect.Effect<void, Recurri
     if (Option.isNone(snapshot)) return yield* new RecurringUnavailable();
     const rows = yield* query({
       db: work.db,
-      sql: "SELECT revision, phase, cursor_at, cursor_id, group_key, evaluated_at, first_captured_at, time_zone FROM recurring_progress WHERE user_id = ?",
+      sql: "SELECT revision, phase, cursor_at, cursor_id, group_key, evaluated_at, first_captured_at, time_zone FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id = ?",
       values: [work.userId],
     });
     const first = rows[0];
@@ -91,7 +91,7 @@ export const evaluateRecurringSeries = (work: Work): Effect.Effect<void, Recurri
     if (progress.phase === "complete") return;
     const groups = yield* query({
       db: work.db,
-      sql: "SELECT group_key AS value FROM recurring_facts WHERE user_id = ? AND group_key > ? GROUP BY group_key ORDER BY group_key LIMIT 1",
+      sql: "SELECT group_key AS value FROM (SELECT rowid,user_id,id,group_key,occurred_at,fact_json FROM recurring_evaluation_records WHERE kind='fact') WHERE user_id = ? AND group_key > ? GROUP BY group_key ORDER BY group_key LIMIT 1",
       values: [work.userId, progress.group_key],
     });
     const group = groups[0];
@@ -117,14 +117,14 @@ const discoveryStatement = ({
     ? prepareFactRevisionProjection({
         db,
         statement: {
-          sql: `SELECT f.userId FROM transaction_fact_revisions f LEFT JOIN recurring_progress p ON p.user_id=f.userId
+          sql: `SELECT f.userId FROM transaction_fact_revisions f LEFT JOIN (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') p ON p.user_id=f.userId
           WHERE p.user_id IS NULL OR p.phase<>'complete'
           OR (p.revision<>f.revision AND (p.evaluated_at IS NULL OR p.evaluated_at<=?)) ${discoveryOrder}`,
           params: [DateTime.formatIso(DateTime.makeUnsafe(current - recurringWeekMs))],
         },
       })
     : db.prepare(
-        `SELECT user_id AS userId FROM recurring_progress WHERE phase<>'complete' ${discoveryOrder}`
+        `SELECT user_id AS userId FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE phase<>'complete' ${discoveryOrder}`
       );
 const discoveryCheckpoint = ({
   db,
@@ -301,7 +301,7 @@ export const findRecurringDiscovery = (
 
 /** Metadata-only complete evaluation identities for fair digest discovery; no financial content or execution authority is projected. */
 export const recurringDigestSourceIdentities = (): OwnedStatement => ({
-  sql: "SELECT p.user_id,p.evaluated_revision||':'||p.evaluated_at||':'||(SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=p.user_id AND confirmation_sequence IS NOT NULL)||':'||(SELECT count(*) FROM recurring_series WHERE user_id=p.user_id AND confirmation_sequence IS NOT NULL) AS source_identity FROM recurring_progress AS p WHERE p.phase='complete'",
+  sql: "SELECT p.user_id,p.evaluated_revision||':'||p.evaluated_at||':'||(SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=p.user_id AND confirmation_sequence IS NOT NULL)||':'||(SELECT count(*) FROM recurring_series WHERE user_id=p.user_id AND confirmation_sequence IS NOT NULL) AS source_identity FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') AS p WHERE p.phase='complete'",
   params: [],
 });
 

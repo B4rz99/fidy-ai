@@ -65,7 +65,7 @@ const prepareQuestionIntent = (
     subject: { _tag: "User", userId: input.userId },
     requirement: "active",
     statement: {
-      sql: `INSERT INTO weekly_question_intents(id,user_id,origin,created_at_ms) SELECT g.question_event_id,g.user_id,'proactive',v.delivered_at_ms FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS g JOIN (${input.proof.sql}) AS v ON v.user_id=g.user_id AND v.insight_event_id=g.question_event_id WHERE g.user_id=? AND g.question_needed=1 AND g.paused_at_ms IS NULL`,
+      sql: `INSERT INTO insight_reports(kind,delivery_id,user_id,origin,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) SELECT 'weekly-question',g.question_event_id,g.user_id,'proactive',v.delivered_at_ms,'ready',v.delivered_at_ms,0,0 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS g JOIN (${input.proof.sql}) AS v ON v.user_id=g.user_id AND v.insight_event_id=g.question_event_id WHERE g.user_id=? AND g.question_needed=1 AND g.paused_at_ms IS NULL`,
       params: [...input.proof.params, input.userId],
     },
   });
@@ -91,7 +91,7 @@ export const prepareCount = (
       .bind(userId, userId, insightEventId, ...proof.params, userId, insightEventId),
     db
       .prepare(
-        `INSERT INTO governor_delivery_receipts AS weekly_governor_deliveries(kind,user_id,insight_event_id) SELECT 'weekly', ?,? WHERE EXISTS (SELECT 1 FROM (${proof.sql}) AS v JOIN (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS g ON g.user_id=v.user_id JOIN insight_events AS e ON e.user_id=v.user_id AND e.id=v.insight_event_id AND e.kind='weekly-summary' WHERE v.user_id=? AND v.insight_event_id=? AND v.delivered_at_ms > g.last_reply_at_ms AND g.paused_at_ms IS NULL AND (g.question_needed=0 OR (g.question_delivered=1 AND v.delivered_at_ms > g.question_delivered_at_ms))) ON CONFLICT DO NOTHING`
+        `UPDATE insight_events SET weekly_governor_counted=1 WHERE user_id=? AND id=? AND kind='weekly-summary' AND weekly_governor_counted IS NULL AND EXISTS (SELECT 1 FROM (${proof.sql}) AS v JOIN (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS g ON g.user_id=v.user_id JOIN insight_events AS e ON e.user_id=v.user_id AND e.id=v.insight_event_id AND e.kind='weekly-summary' WHERE v.user_id=? AND v.insight_event_id=? AND v.delivered_at_ms > g.last_reply_at_ms AND g.paused_at_ms IS NULL AND (g.question_needed=0 OR (g.question_delivered=1 AND v.delivered_at_ms > g.question_delivered_at_ms)))`
       )
       .bind(userId, insightEventId, ...proof.params, userId, insightEventId),
     db

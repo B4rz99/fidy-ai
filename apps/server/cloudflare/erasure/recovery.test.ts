@@ -30,7 +30,7 @@ it("checks the recovery generation without spending writes on guarded reads", ()
       const rows = yield* Effect.tryPromise(() =>
         db.batch([
           generationAssertion({ db, generation: "initial" }),
-          db.prepare("SELECT generation FROM erasure_generation WHERE id=1"),
+          db.prepare("SELECT generation FROM erasure_control WHERE kind='published'"),
         ])
       );
       expect(rows.map((row) => row.meta.rows_written)).toEqual([0, 0]);
@@ -42,7 +42,7 @@ it("checks the recovery generation without spending writes on guarded reads", ()
       expect(
         yield* Effect.tryPromise(() =>
           guarded
-            .prepare("SELECT generation FROM erasure_generation WHERE id=1")
+            .prepare("SELECT generation FROM erasure_control WHERE kind='published'")
             .first("generation")
         )
       ).toBe("initial");
@@ -63,7 +63,9 @@ it("rolls back an earlier write when a later recovery assertion fails", () =>
                   "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
                 )
                 .bind(userId),
-              db.prepare("UPDATE erasure_generation SET generation=? WHERE id=1").bind(generation),
+              db
+                .prepare("UPDATE erasure_control SET generation=? WHERE kind='published'")
+                .bind(generation),
               generationAssertion({ db, generation: "initial" }),
             ])
           )
@@ -76,10 +78,14 @@ it("rolls back an earlier write when a later recovery assertion fails", () =>
       ).toBe(0);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT generation FROM erasure_generation WHERE id=1").first("generation")
+          db
+            .prepare("SELECT generation FROM erasure_control WHERE kind='published'")
+            .first("generation")
         )
       ).toBe("initial");
-      yield* Effect.tryPromise(() => db.prepare("DELETE FROM erasure_generation WHERE id=1").run());
+      yield* Effect.tryPromise(() =>
+        db.prepare("DELETE FROM erasure_control WHERE kind='published'").run()
+      );
       expect(
         (yield* Effect.result(
           Effect.tryPromise(() =>
@@ -155,13 +161,16 @@ it("fences reads, writes and native Sessions after an interrupted checkpoint or 
         yield* Effect.tryPromise(() => db.prepare("SELECT count(*) FROM users").first("count(*)"))
       ).toBe(1);
       yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE erasure_generation SET generation=? WHERE id=1").bind(generation).run()
+        db
+          .prepare("UPDATE erasure_control SET generation=? WHERE kind='published'")
+          .bind(generation)
+          .run()
       );
       expect(
         yield* Effect.tryPromise(() => guarded.prepare("SELECT id FROM users").first("id"))
       ).toBe(userId);
       yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE erasure_generation SET generation='initial' WHERE id=1").run()
+        db.prepare("UPDATE erasure_control SET generation='initial' WHERE kind='published'").run()
       );
       expect(
         (yield* Effect.result(
@@ -438,17 +447,13 @@ it("avoids empty cursor writes and resumes a multi-page control sweep", () =>
       yield* sweep;
       expect(
         yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT cursor FROM erasure_control_sweeps WHERE bucket='erasure'")
-            .first("cursor")
+          db.prepare("SELECT cursor FROM erasure_control WHERE kind='erasure'").first("cursor")
         )
       ).not.toBe("");
       yield* sweep;
       expect(
         yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT cursor FROM erasure_control_sweeps WHERE bucket='erasure'")
-            .first("cursor")
+          db.prepare("SELECT cursor FROM erasure_control WHERE kind='erasure'").first("cursor")
         )
       ).toBe("");
       expect((yield* Effect.tryPromise(() => bucket.list())).objects).toHaveLength(40);

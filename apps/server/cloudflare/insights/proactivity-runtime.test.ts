@@ -1104,7 +1104,7 @@ it("sixteen unserviceable contextual offers cannot starve an eligible reminder d
               .bind(userId, now.epochMilliseconds),
             db
               .prepare(
-                "INSERT INTO proactivity_offer_requests(id,user_id,kind,request_message_id,created_at_ms) VALUES(?,?,'manual-entry-reminder','request-offer',?)"
+                "INSERT INTO insight_reports(kind,delivery_id,user_id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms) VALUES('offer-request',?,?,'manual-entry-reminder','request-offer',?,0)"
               )
               .bind(newId(), userId, now.epochMilliseconds),
           ])
@@ -1588,7 +1588,9 @@ it.each(["paused", "stopped"] as const)(
               expect(
                 yield* Effect.tryPromise(() =>
                   db
-                    .prepare("SELECT count(*) AS n FROM reminder_control_receipts WHERE user_id=?")
+                    .prepare(
+                      "SELECT count(*) AS n FROM (SELECT user_id,json_extract(id,'$[1]') AS message_id,outcome AS choice FROM audit_entries WHERE record_type='reminder_control') WHERE user_id=?"
+                    )
                     .bind(userId)
                     .first()
                 )

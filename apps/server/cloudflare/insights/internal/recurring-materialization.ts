@@ -119,7 +119,7 @@ const prepareDay = (
         kind: "new-recurring-series",
         grantId: instruction.grant_id,
         statement: {
-          sql: "UPDATE sql_assertions SET accepted=1 WHERE scope='proactivity_message' AND EXISTS(SELECT 1 FROM recurring_digest_instructions WHERE user_id=? AND id=? AND version=? AND grant_id=? AND enabled=1)",
+          sql: "UPDATE sql_assertions SET accepted=1 WHERE scope='proactivity_message' AND EXISTS(SELECT 1 FROM (SELECT rowid,user_id,id,version,enabled,consent_grant_id AS grant_id,snapshot_json AS context_json,acceptance_from_ms,accepted_at_ms,last_source_identity,next_closed_at_ms,last_evaluated_at_ms,source_checkpoint,source_cursor,source_cutoff_at_ms,source_complete FROM schedules WHERE kind='digest') WHERE user_id=? AND id=? AND version=? AND grant_id=? AND enabled=1)",
           params: [input.userId, instruction.id, instruction.version, instruction.grant_id],
         },
       }),
@@ -128,7 +128,7 @@ const prepareDay = (
     statements.push(
       input.db
         .prepare(
-          "INSERT INTO recurring_digest_days(user_id,local_date,day_from_ms,day_to_ms,insight_event_id) VALUES(?,?,?,?,?)"
+          "INSERT INTO schedule_history(record_type,user_id,local_date,day_from_ms,day_to_ms,insight_event_id) VALUES('digest-day',?,?,?,?,?)"
         )
         .bind(
           input.userId,
@@ -217,7 +217,7 @@ export const materializeDay = (
       statements.push(
         input.db
           .prepare(
-            "INSERT INTO recurring_digest_consumption(user_id,confirmation_id,disposition) VALUES(?,?,?)"
+            "INSERT INTO recurring_digest_items(user_id,confirmation_id,disposition) VALUES(?,?,?) ON CONFLICT(user_id,confirmation_id) DO UPDATE SET disposition=excluded.disposition"
           )
           .bind(input.userId, row.confirmation_id, disposition(row, items))
       );

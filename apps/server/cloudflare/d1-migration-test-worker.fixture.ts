@@ -32,7 +32,7 @@ type TranscriptEvidence = typeof TranscriptEvidenceSchema.Type;
 type Snapshot = {
   readonly appliedMigrationNames: ReadonlyArray<string>;
   readonly transcriptHasIteration: boolean;
-  readonly hostedVoiceRefusalsExists: boolean;
+  readonly whatsAppEventRecordsExists: boolean;
   readonly hostedWhatsAppWindowsExists: boolean;
   readonly foreignKeyViolationCount: number;
   readonly preservedEvidence: Option.Option<TranscriptEvidence>;
@@ -41,7 +41,7 @@ type Snapshot = {
 type ConstraintChecks = {
   readonly pendingTurnUniquenessEnforced: boolean;
   readonly transcriptAppendOnlyEnforced: boolean;
-  readonly hostedVoiceRefusalPrimaryKeyEnforced: boolean;
+  readonly hostedVoiceRefusalIdentityEnforced: boolean;
   readonly hostedVoiceRefusalOutcomeCheckEnforced: boolean;
   readonly hostedWhatsAppWindowPrimaryKeyEnforced: boolean;
   readonly hostedWhatsAppWindowBoundsCheckEnforced: boolean;
@@ -50,7 +50,7 @@ type ConstraintChecks = {
 type MigrationState = {
   readonly appliedMigrationNames: ReadonlyArray<string>;
   readonly transcriptHasIteration: boolean;
-  readonly hostedVoiceRefusalsExists: boolean;
+  readonly whatsAppEventRecordsExists: boolean;
   readonly hostedWhatsAppWindowsExists: boolean;
   readonly foreignKeyViolationCount: number;
   readonly transcriptEvidence:
@@ -161,7 +161,7 @@ const readSnapshot = Effect.fn(function* (db: D1Database) {
   return {
     appliedMigrationNames: migrations.map((migration) => migration.name),
     transcriptHasIteration: columns.some((column) => column.name === "iteration"),
-    hostedVoiceRefusalsExists: tables.some((table) => table.name === "hosted_voice_refusals"),
+    whatsAppEventRecordsExists: tables.some((table) => table.name === "whatsapp_event_records"),
     hostedWhatsAppWindowsExists: tables.some((table) => table.name === "hosted_whatsapp_windows"),
     foreignKeyViolationCount: foreignKeys.length,
     preservedEvidence: evidence,
@@ -210,9 +210,9 @@ const checkVoiceRefusalConstraints = Effect.fn(function* (db: D1Database) {
   ): D1PreparedStatement =>
     db
       .prepare(
-        `INSERT INTO hosted_voice_refusals
-         (portfolio_id, message_id, user_id, claimed_at_ms, outcome)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO whatsapp_event_records
+         (kind,portfolio_id,message_id,user_id,claimed_at_ms,outcome)
+         VALUES ('voice-refusal',?,?,?,?,?)`
       )
       .bind(portfolio, message, legacyUser, timestamp, outcome);
   const insert = yield* statementAttempt(insertRefusal(portfolioId, messageId, "started"));
@@ -228,7 +228,7 @@ const checkVoiceRefusalConstraints = Effect.fn(function* (db: D1Database) {
   );
 
   return {
-    hostedVoiceRefusalPrimaryKeyEnforced:
+    hostedVoiceRefusalIdentityEnforced:
       insert._tag === "Succeeded" &&
       duplicate._tag === "Failed" &&
       differentPortfolio._tag === "Succeeded" &&
@@ -292,7 +292,7 @@ const readMigrationState = Effect.fn(function* (db: D1Database) {
     : {
         pendingTurnUniquenessEnforced: false,
         transcriptAppendOnlyEnforced: false,
-        hostedVoiceRefusalPrimaryKeyEnforced: false,
+        hostedVoiceRefusalIdentityEnforced: false,
         hostedVoiceRefusalOutcomeCheckEnforced: false,
         hostedWhatsAppWindowPrimaryKeyEnforced: false,
         hostedWhatsAppWindowBoundsCheckEnforced: false,
@@ -301,7 +301,7 @@ const readMigrationState = Effect.fn(function* (db: D1Database) {
   return {
     appliedMigrationNames: snapshot.appliedMigrationNames,
     transcriptHasIteration: snapshot.transcriptHasIteration,
-    hostedVoiceRefusalsExists: snapshot.hostedVoiceRefusalsExists,
+    whatsAppEventRecordsExists: snapshot.whatsAppEventRecordsExists,
     hostedWhatsAppWindowsExists: snapshot.hostedWhatsAppWindowsExists,
     foreignKeyViolationCount: snapshot.foreignKeyViolationCount,
     transcriptEvidence: Option.match(snapshot.preservedEvidence, {

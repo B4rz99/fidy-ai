@@ -289,7 +289,7 @@ it.each([
             .bind(userId, deliveryId, now - 600_000),
           db
             .prepare(
-              "INSERT INTO weekly_question_intents(id,user_id,origin,created_at_ms) VALUES (?,?,'requested',?)"
+              "INSERT INTO insight_reports(kind,delivery_id,user_id,origin,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('weekly-question',?,?,'requested',?,'ready',?3,0,0)"
             )
             .bind(questionId, userId, now - 300_000),
         ])

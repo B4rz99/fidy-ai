@@ -223,7 +223,7 @@ export const prepareRevisionWrites = (
       update,
       input.db
         .prepare(
-          "INSERT INTO schedule_revisions(kind,user_id,schedule_id,version,snapshot_json) SELECT 'reminder',?,?,?,? WHERE changes()=1"
+          "INSERT INTO schedule_history(record_type,kind,user_id,schedule_id,version,snapshot_json) SELECT 'revision','reminder',?,?,?,? WHERE changes()=1"
         )
         .bind(input.userId, schedule.id, schedule.version, json),
     ];

@@ -28,6 +28,22 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
   );
   yield* fromPromise(() => db.prepare("ALTER TABLE users ADD COLUMN subscription_id TEXT").run());
   yield* fromPromise(() =>
+    db.batch(
+      [
+        "cancellation_paid_attempt_id TEXT",
+        "cancellation_payment_source_id TEXT",
+        "cancellation_cancelled_at_ms INTEGER",
+        "cancellation_paid_through_ms INTEGER",
+        "cancellation_source_cancellation TEXT",
+        "cancellation_void_started_at_ms INTEGER",
+        "cancellation_void_verified_at_ms INTEGER",
+        "cancellation_verification_count INTEGER",
+        "cancellation_last_offered_at_ms INTEGER",
+      ].map((column) => db.prepare(`ALTER TABLE users ADD COLUMN ${column}`))
+    )
+  );
+
+  yield* fromPromise(() =>
     installCurrentTestObjects({
       db,
       tables: [
@@ -41,7 +57,6 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
         "card_enrollments",
         "card_payment_sources",
         "refund_attempts",
-        "subscription_cancellations",
         "subscription_prices",
         "subscription_renewal_fences",
         "subscription_standing",

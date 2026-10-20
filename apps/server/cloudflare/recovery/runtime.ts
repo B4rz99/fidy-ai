@@ -35,17 +35,13 @@ export const sweepRecoveryEvidence = ({
         DateTime.toEpochMillis(DateTime.add(entry.closed_at_ms, { months: retentionMonths })) <=
         nowEpochMs
     );
-    const cleanup = db
-      .prepare(`DELETE FROM support_recovery_operator_limits WHERE (operator_issuer,operator_subject) IN
-      (SELECT operator_issuer,operator_subject FROM support_recovery_operator_limits WHERE window_started_at_ms<=? ORDER BY window_started_at_ms LIMIT ?)`)
-      .bind(nowEpochMs - admissionLifetimeMs, maximumSweepRows);
     const admissions = db
       .prepare(
         "DELETE FROM support_recovery_admissions WHERE id IN (SELECT id FROM support_recovery_admissions WHERE admitted_at_ms<=? ORDER BY admitted_at_ms LIMIT ?)"
       )
       .bind(nowEpochMs - admissionLifetimeMs, maximumSweepRows);
     if (expired.length === 0) {
-      yield* Effect.tryPromise(() => db.batch([cleanup, admissions]));
+      yield* Effect.tryPromise(() => db.batch([admissions]));
       return;
     }
     const ids = expired.map((entry) => entry.id);
@@ -58,7 +54,6 @@ export const sweepRecoveryEvidence = ({
           )
           .bind(...ids),
         db.prepare(`DELETE FROM support_recovery_cases WHERE id IN (${placeholders})`).bind(...ids),
-        cleanup,
         admissions,
       ])
     );

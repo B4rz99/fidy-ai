@@ -108,7 +108,7 @@ test(
       expect(state).toMatchObject({
         appliedMigrationNames: [...names].sort(),
         transcriptHasIteration: true,
-        hostedVoiceRefusalsExists: true,
+        whatsAppEventRecordsExists: true,
         hostedWhatsAppWindowsExists: true,
         foreignKeyViolationCount: 0,
         transcriptEvidence: { _tag: "Empty" },
@@ -132,7 +132,7 @@ test(
       const beforeUrl = yield* workerUrl(Option.fromUndefinedOr(before.worker.url));
       expect(yield* readState(beforeUrl)).toMatchObject({
         appliedMigrationNames: [...names].sort(),
-        hostedVoiceRefusalsExists: true,
+        whatsAppEventRecordsExists: true,
         hostedWhatsAppWindowsExists: true,
         transcriptEvidence: { _tag: "Empty" },
       });
@@ -148,12 +148,12 @@ test(
       expect(state).toMatchObject({
         appliedMigrationNames: [...names].sort(),
         transcriptHasIteration: true,
-        hostedVoiceRefusalsExists: true,
+        whatsAppEventRecordsExists: true,
         hostedWhatsAppWindowsExists: true,
         foreignKeyViolationCount: 0,
         pendingTurnUniquenessEnforced: true,
         transcriptAppendOnlyEnforced: true,
-        hostedVoiceRefusalPrimaryKeyEnforced: true,
+        hostedVoiceRefusalIdentityEnforced: true,
         hostedVoiceRefusalOutcomeCheckEnforced: true,
         hostedWhatsAppWindowPrimaryKeyEnforced: true,
         hostedWhatsAppWindowBoundsCheckEnforced: true,

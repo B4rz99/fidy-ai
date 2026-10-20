@@ -183,7 +183,7 @@ const pageStatements = (
     prepareFactRevisionProjection({
       db,
       statement: {
-        sql: `SELECT f.revision AS factRevision, p.evaluated_revision AS evaluatedRevision, p.phase, p.evaluated_at AS evaluatedAt FROM transaction_fact_revisions f LEFT JOIN recurring_progress p ON p.user_id = f.userId WHERE f.userId = ?`,
+        sql: `SELECT f.revision AS factRevision, p.evaluated_revision AS evaluatedRevision, p.phase, p.evaluated_at AS evaluatedAt FROM transaction_fact_revisions f LEFT JOIN (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') p ON p.user_id = f.userId WHERE f.userId = ?`,
         params: [subject.userId],
       },
     }),
@@ -227,7 +227,7 @@ export const readPage = ({
             db,
             scope: "recurring_cursor",
             predicate: {
-              sql: "SELECT 1 WHERE ? = COALESCE((SELECT evaluated_revision FROM recurring_progress WHERE user_id = ?), 0)",
+              sql: "SELECT 1 WHERE ? = COALESCE((SELECT evaluated_revision FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id = ?), 0)",
               params: [revision, subject.userId],
             },
           }),

@@ -299,7 +299,7 @@ it.live(
       const executions = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT scheduled_at,outcome FROM schedule_executions WHERE kind='weekly' AND user_id = ?"
+            "SELECT scheduled_at,outcome FROM (SELECT rowid,kind,user_id,schedule_id,version AS schedule_version,scheduled_at,outcome FROM schedule_history WHERE record_type='execution') WHERE kind='weekly' AND user_id = ?"
           )
           .bind(context.userId)
           .all()

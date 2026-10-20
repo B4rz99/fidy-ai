@@ -35,7 +35,7 @@ const noteIdleSource = (
     yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "UPDATE recurring_digest_instructions SET last_source_identity=?,next_closed_at_ms=? WHERE user_id=? AND version=?"
+          "UPDATE schedules SET last_source_identity=?,next_closed_at_ms=? WHERE kind='digest' AND user_id=? AND version=?"
         )
         .bind(
           sourceIdentity,
@@ -83,7 +83,7 @@ export const advance = (input: Scope): Effect.Effect<AdvanceResult, InsightUnava
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT s.confirmation_id,s.confirmed_at_ms,s.context_json,s.item_json,s.eligible FROM recurring_digest_staging AS s WHERE s.user_id=? AND NOT EXISTS(SELECT 1 FROM recurring_digest_consumption AS c WHERE c.user_id=s.user_id AND c.confirmation_id=s.confirmation_id) ORDER BY s.confirmed_at_ms,s.confirmation_id LIMIT ?"
+          "SELECT s.confirmation_id,s.confirmed_at_ms,s.context_json,s.item_json,s.eligible FROM recurring_digest_items AS s WHERE s.user_id=? AND s.confirmed_at_ms IS NOT NULL AND s.disposition IS NULL ORDER BY s.confirmed_at_ms,s.confirmation_id LIMIT ?"
         )
         .bind(input.userId, maximumItems + 1)
         .all()

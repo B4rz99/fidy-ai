@@ -319,9 +319,9 @@ it("drains channel event backlogs without losing their parent deadline or touchi
             `INSERT INTO whatsapp_deliveries AS hosted_whatsapp_delivery(kind,turn_id,user_id,text,correlation_token,business_phone_number_id,proposed_at_ms,state,send_started_at_ms) SELECT 'hosted', turn_id,user_id,'retained',turn_id,'phone',1,'accepted',1 FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL)`
           ),
           db.prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<600)
-        INSERT INTO hosted_whatsapp_delivery_events SELECT 'retired-1','message-'||i,'sent',1,1 FROM n`),
+        INSERT INTO whatsapp_event_records(kind,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms) SELECT 'delivery-status','retired-1','message-'||i,'sent',1,1 FROM n`),
           db.prepare(
-            "INSERT INTO hosted_whatsapp_delivery_events VALUES ('other-retired','foreign-message','sent',1,1)"
+            "INSERT INTO whatsapp_event_records(kind,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms) VALUES ('delivery-status','other-retired','foreign-message','sent',1,1)"
           ),
           db.prepare(
             "UPDATE hosted_turns SET dispatch_user_id=incoming.user_id,dispatch_offered_at_ms=incoming.offered_at_ms,dispatch_created_at_ms=incoming.created_at_ms FROM (SELECT turn_id AS turn_id,user_id AS user_id,NULL AS offered_at_ms,1 AS created_at_ms FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL)) AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.dispatch_created_at_ms IS NULL"
@@ -337,7 +337,7 @@ it("drains channel event backlogs without losing their parent deadline or touchi
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT count(*) AS count FROM hosted_whatsapp_delivery_events WHERE correlation_token='retired-1'"
+                "SELECT count(*) AS count FROM (SELECT rowid,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms FROM whatsapp_event_records WHERE kind='delivery-status') WHERE correlation_token='retired-1'"
               )
               .first("count")
           )
@@ -356,7 +356,7 @@ it("drains channel event backlogs without losing their parent deadline or touchi
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS count FROM hosted_whatsapp_delivery_events WHERE correlation_token='other-retired'"
+              "SELECT count(*) AS count FROM (SELECT rowid,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms FROM whatsapp_event_records WHERE kind='delivery-status') WHERE correlation_token='other-retired'"
             )
             .first("count")
         )

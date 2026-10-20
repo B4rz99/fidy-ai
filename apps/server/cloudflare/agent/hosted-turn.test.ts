@@ -407,7 +407,11 @@ it("admits one exact User entry through WhatsApp without borrowing browser sessi
       expect(Option.isNone(wrongUserStatus)).toBe(true);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT COUNT(*) AS count FROM hosted_whatsapp_delivery_events").first()
+          db
+            .prepare(
+              "SELECT COUNT(*) AS count FROM (SELECT rowid,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms FROM whatsapp_event_records WHERE kind='delivery-status')"
+            )
+            .first()
         )
       ).toEqual({ count: 0 });
       const sent = yield* recordWhatsAppStatus({
@@ -1039,7 +1043,11 @@ it("rejects malformed delivery proposals before retaining authenticated status e
       expect(yield* Effect.tryPromise(() => retainedChannelState(db))).toEqual(before);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT COUNT(*) AS count FROM hosted_whatsapp_delivery_events").first()
+          db
+            .prepare(
+              "SELECT COUNT(*) AS count FROM (SELECT rowid,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms FROM whatsapp_event_records WHERE kind='delivery-status')"
+            )
+            .first()
         )
       ).toEqual({ count: 0 });
     })

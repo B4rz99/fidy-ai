@@ -25,24 +25,19 @@ export const prepareProactivityWorkObservation = (
 ): D1PreparedStatement => {
   const sources: string[] = [];
   const kinds = [
-    ...(input.weeklyEnabled ? ["weekly-summary"] : []),
+    ...(input.weeklyEnabled ? ["weekly-summary", "weekly-question"] : []),
     ...(input.proactivityEnabled ? ["proactivity-delivery"] : []),
   ];
   for (const kind of kinds) {
     sources.push(`SELECT * FROM (SELECT user_id AS userId,kind,
       CASE WHEN kind='weekly-summary' THEN delivery_id END AS insightEventId,
-      CASE WHEN kind='proactivity-delivery' THEN delivery_id END AS id,
-      dispatch_created_at_ms AS created,expires_at_ms AS deadline
+      CASE WHEN kind<>'weekly-summary' THEN delivery_id END AS id,
+      dispatch_created_at_ms AS created,CASE WHEN kind='weekly-question' THEN created_at_ms+86400000 ELSE expires_at_ms END AS deadline
       FROM insight_reports INDEXED BY report_dispatch_health
       WHERE kind='${kind}' AND dispatch_state IN ('ready','started')
       ORDER BY dispatch_created_at_ms,user_id,delivery_id LIMIT ${proactivityObservationLimit})`);
   }
-  if (input.weeklyEnabled) {
-    sources.push(`SELECT user_id AS userId, 'weekly-question' AS kind, NULL AS insightEventId, id,
-      created_at_ms AS created, created_at_ms+86400000 AS deadline
-      FROM (SELECT user_id, id, created_at_ms FROM weekly_question_intents
-        WHERE state='ready' ORDER BY created_at_ms, user_id, id LIMIT ${proactivityObservationLimit})`);
-  }
+
   return input.db.prepare(
     sources.length === 0
       ? "SELECT NULL AS userId, NULL AS kind, 1 AS version, NULL AS insightEventId, NULL AS id, 0 AS created, NULL AS deadline WHERE 0"

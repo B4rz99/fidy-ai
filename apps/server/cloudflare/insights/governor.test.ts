@@ -73,7 +73,7 @@ it.live("rejects a corrupt retained question origin without staging or sending w
     yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "INSERT INTO weekly_question_intents(id,user_id,origin,created_at_ms) VALUES(?,?,'requested',?)"
+          "INSERT INTO insight_reports(kind,delivery_id,user_id,origin,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES('weekly-question',?,?,'requested',?,'ready',?3,0,0)"
         )
         .bind(id, userId, 8_640_000_000_000_001)
         .run()
@@ -112,7 +112,9 @@ it.live("rejects a corrupt retained question origin without staging or sending w
     expect(
       yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT state FROM weekly_question_intents WHERE user_id=? AND id=?")
+          .prepare(
+            "SELECT state FROM (SELECT rowid,delivery_id AS id,user_id,origin,request_message_id,rejection_offer_id,dispatch_state AS state,created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE kind='weekly-question') WHERE user_id=? AND id=?"
+          )
           .bind(userId, id)
           .first()
       )
@@ -173,7 +175,12 @@ it.live(
         });
       }
       const questions = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT id FROM weekly_question_intents WHERE user_id=?").bind(userId).all()
+        db
+          .prepare(
+            "SELECT id FROM (SELECT rowid,delivery_id AS id,user_id,origin,request_message_id,rejection_offer_id,dispatch_state AS state,created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE kind='weekly-question') WHERE user_id=?"
+          )
+          .bind(userId)
+          .all()
       );
       expect(questions.results).toEqual([]);
     })

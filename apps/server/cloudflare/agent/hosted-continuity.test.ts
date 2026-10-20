@@ -1119,7 +1119,7 @@ it("expires only one User's eligible channel evidence while preserving pending, 
               )
               .bind(turnId),
             db
-              .prepare(`SELECT e.* FROM hosted_whatsapp_delivery_events AS e
+              .prepare(`SELECT e.* FROM (SELECT rowid,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms FROM whatsapp_event_records WHERE kind='delivery-status') AS e
             JOIN (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d ON d.correlation_token = e.correlation_token
             WHERE d.turn_id = ?`)
               .bind(turnId),
@@ -1165,9 +1165,9 @@ it("expires only one User's eligible channel evidence while preserving pending, 
                 entry.terminalAt - 1
               ),
             db
-              .prepare(`INSERT INTO hosted_whatsapp_delivery_events
-            (correlation_token, provider_message_id, status, occurred_at_ms, received_at_ms)
-            VALUES (?, ?, 'delivered', ?, ?)`)
+              .prepare(`INSERT INTO whatsapp_event_records
+            (kind,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms)
+            VALUES ('delivery-status',?,?,'delivered',?,?)`)
               .bind(
                 entry.token,
                 `wamid.answer.${entry.turnId}`,

@@ -191,20 +191,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'paid_attempt_id',r.\"paid_attempt_id\",'payment_source_id',r.\"payment_source_id\",'cancelled_at_ms',r.\"cancelled_at_ms\",'paid_through_ms',r.\"paid_through_ms\",'source_cancellation',r.\"source_cancellation\",'void_started_at_ms',r.\"void_started_at_ms\",'void_verified_at_ms',r.\"void_verified_at_ms\",'verification_count',r.\"verification_count\",'last_offered_at_ms',r.\"last_offered_at_ms\") AS body FROM subscription_cancellations r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'paid_attempt_id',r.\"paid_attempt_id\",'payment_source_id',r.\"payment_source_id\",'cancelled_at_ms',r.\"cancelled_at_ms\",'paid_through_ms',r.\"paid_through_ms\",'source_cancellation',r.\"source_cancellation\",'void_started_at_ms',r.\"void_started_at_ms\",'void_verified_at_ms',r.\"void_verified_at_ms\",'verification_count',r.\"verification_count\",'last_offered_at_ms',r.\"last_offered_at_ms\") AS body FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM subscription_cancellations r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM subscription_cancellations r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM subscription_cancellations AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE users AS r SET cancellation_paid_attempt_id=NULL,cancellation_payment_source_id=NULL,cancellation_cancelled_at_ms=NULL,cancellation_paid_through_ms=NULL,cancellation_source_cancellation=NULL,cancellation_void_started_at_ms=NULL,cancellation_void_verified_at_ms=NULL,cancellation_verification_count=NULL,cancellation_last_offered_at_ms=NULL WHERE r.cancellation_cancelled_at_ms IS NOT NULL AND r.id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

@@ -6,22 +6,14 @@ import { settleDeliveryWork } from "./proactivity-delivery-work";
 
 type Delivery = Readonly<{ userId: UserId; work: ProactivityDeliveryWork; now: number }>;
 /** Metadata is bounded to one native identity, never provider or transport claims. */
-const deliveryMetadataQuery = (input: Delivery): OwnedStatement => {
-  if (input.work.kind === "weekly-question") {
-    return {
-      sql: "SELECT user_id,state,created_at_ms+86400000 AS expires_at_ms,1 AS content_available FROM weekly_question_intents WHERE user_id=? AND id=?",
-      params: [input.userId, input.work.id],
-    };
-  }
-  return {
-    sql: "SELECT user_id,state,expires_at_ms,content_available FROM proactivity_delivery_metadata WHERE user_id=? AND kind=? AND delivery_id=?",
-    params: [
-      input.userId,
-      input.work.kind,
-      input.work.kind === "weekly-summary" ? input.work.insightEventId : input.work.id,
-    ],
-  };
-};
+const deliveryMetadataQuery = (input: Delivery): OwnedStatement => ({
+  sql: "SELECT user_id,state,expires_at_ms,content_available FROM proactivity_delivery_metadata WHERE user_id=? AND kind=? AND delivery_id=?",
+  params: [
+    input.userId,
+    input.work.kind,
+    input.work.kind === "weekly-summary" ? input.work.insightEventId : input.work.id,
+  ],
+});
 
 /** Exact unfinished, unexpired admission; never a recurring schedule or Workflow payload. */
 export const queuedDeliveryQuery = (input: Delivery): OwnedStatement => {

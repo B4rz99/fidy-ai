@@ -64,3 +64,14 @@ it("resumes an interrupted ledger replacement without replaying DDL or changing 
     expect(database.query("SELECT * FROM users").all()).toEqual([{ id: "retained" }]);
   });
 });
+
+it("adopts matching schema despite formatting differences in stored DDL", () => {
+  withDatabase((database) => {
+    expect(
+      adopt(database, (sql) =>
+        execute(database, sql).replaceAll("CREATE TABLE users", "CREATE  TABLE users")
+      )
+    ).toEqual([target]);
+    expect(database.query("SELECT * FROM users").all()).toEqual([{ id: "retained" }]);
+  });
+});

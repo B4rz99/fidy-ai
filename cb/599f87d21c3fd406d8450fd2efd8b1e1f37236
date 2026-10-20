@@ -1,0 +1,19 @@
+apps/server/cloudflare/agent/hosted-continuity.test.ts
+  s_6d017cc65783af::t_69c16efbf3ab59 510,514,1466,1470
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb599f87d21c3fd406d8450fd2efd8b1e1f37236",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

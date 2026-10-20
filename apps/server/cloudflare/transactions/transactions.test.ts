@@ -1882,14 +1882,12 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
         ]).then(() =>
-          Promise.all([
-            seedManualAttestation({
-              db,
-              userId: owner,
-              transactionId: suppressed,
-              id: "30000000-0000-4000-8000-000000000402",
-            }),
-          ])
+          seedManualAttestation({
+            db,
+            userId: owner,
+            transactionId: suppressed,
+            id: "30000000-0000-4000-8000-000000000402",
+          })
         )
       );
       const send = (path: string, body: object): Promise<Response> =>
@@ -2186,14 +2184,12 @@ it("keeps the effective Transaction consistent after corrections to either membe
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
         ]).then(() =>
-          Promise.all([
-            seedManualAttestation({
-              db,
-              userId: owner,
-              transactionId: visible,
-              id: "30000000-0000-4000-8000-000000000801",
-            }),
-          ])
+          seedManualAttestation({
+            db,
+            userId: owner,
+            transactionId: visible,
+            id: "30000000-0000-4000-8000-000000000801",
+          })
         )
       );
       const send = (path: string, method: string, body: object): Promise<Response> =>
@@ -4358,14 +4354,12 @@ it("links and unlinks pair children inside one atomic batch", () =>
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
         ]).then(() =>
-          Promise.all([
-            seedManualAttestation({
-              db,
-              userId: owner,
-              transactionId: suppressed,
-              id: "30000000-0000-4000-8000-000000000903",
-            }),
-          ])
+          seedManualAttestation({
+            db,
+            userId: owner,
+            transactionId: suppressed,
+            id: "30000000-0000-4000-8000-000000000903",
+          })
         )
       );
       const linked = yield* fromTestPromise(() =>

@@ -284,7 +284,8 @@ credential storage and server authorization remain the same.
 
 Candidate and publication gates extract the checksummed native archive and execute that exact
 binary. On disposable GitHub-hosted runners, a synthetic PAT is seeded directly into the real
-OS credential store, paired with private grant metadata in a temporary home. The executable must
+OS credential store, paired with private grant metadata in a temporary home (the initialized
+disposable runner home on macOS). The executable must
 load it through `status`, exclude the bearer from both human and JSON output, refuse malformed
 metadata safely, and remove both native access and metadata on `logout`. The harness refuses an
 occupied native login slot and local credential-test execution; it never overwrites an existing

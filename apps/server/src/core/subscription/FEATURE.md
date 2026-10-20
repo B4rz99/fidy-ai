@@ -295,6 +295,26 @@ DaviPlata runs timed out; two focused diagnostic runs and the final clean run pa
 definitive cause was established. Temporary diagnostics were removed; no waits, test retries or
 timeout increases were retained. This is local verification, not deployed wallet proof.
 
+Release verification, 2026-10-20: [PR #1364](https://github.com/B4rz99/fidy-ai/pull/1364)
+merged as `d179bc162ebc15213b5e1f1e29f1cd2aa7f05c47` after all required checks passed.
+The [Production deployment](https://github.com/B4rz99/fidy-ai/actions/runs/39424387530)
+passed all three full smoke probes without quota deferral. Public API health, web metadata and
+landing metadata independently reported that revision; API and web reported matching contract
+digest `43da8b6e7f0bfbed827ab4d6675978f04b5436e9f014bc406b05d673d1c3815e`.
+The fresh real-provider [Nequi](https://github.com/B4rz99/fidy-ai/actions/runs/39424452791)
+and [DaviPlata](https://github.com/B4rz99/fidy-ai/actions/runs/39424457614) Sandbox workflows
+passed all four selected cases each on that revision with Effect 4.0.4. DaviPlata verified actual
+Sandbox OTP and reusable source authorization. These workflows exercise real provider responses
+with isolated local D1/activity execution; they do not establish a deployed wallet journey or
+Queue/Workflow recovery behavior. No real money or deployed QA account was involved.
+
+Remaining deployed checks: wallet authorization through settlement and cancellation on an eligible
+account; scheduled renewal/grace at real due dates; isolated Queue/Workflow interruption/replay;
+and isolated Price-change notification. Reusing the historical Gmail card still requires genuine,
+attributable Wompi no-charge confirmation under the [ambiguity runbook](../../../../../docs/runbooks/billing-ambiguity.md).
+No new sign-in is requested while that prerequisite remains unresolved. Earlier DaviPlata browser
+timeouts remain unexplained; passing subsequent runs does not establish a causal timeout fix.
+
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),
 [AccessTier guard](../../shell/access-tier/operations.ts), and

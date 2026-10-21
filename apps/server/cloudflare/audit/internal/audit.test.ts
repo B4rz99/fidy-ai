@@ -1,5 +1,7 @@
+import assert from "node:assert/strict";
+import { AuditUnavailable } from "../../../src/shell/audit/contract";
 import { afterAll, expect, it } from "vitest";
-import { Data, DateTime, Effect } from "effect";
+import { Data, DateTime, Effect, Exit } from "effect";
 import { recordAuthorizedCall, recordOwnerCall } from "../../../src/shell/audit/operations";
 import { makeAudit, makeAuditRetention } from "../../../src/shell/audit/runtime";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
@@ -346,13 +348,10 @@ it.each(["retained_permit", "erasure_fence"] as const)(
           );
         }
         const before = yield* makeAudit({ database: db }).query({ userId, limit: 10 });
-        const retained = yield* Effect.result(
+        const retained = yield* Effect.exit(
           makeAuditRetention({ database: db }).retain({ userId, now: current + 365 * 86400000 })
         );
-        expect(retained._tag).toBe("Failure");
-        if (retained._tag === "Failure") {
-          expect(retained.failure).toEqual(expect.objectContaining({ _tag: "AuditUnavailable" }));
-        }
+        assert.deepStrictEqual(retained, Exit.fail(new AuditUnavailable()));
         expect(yield* makeAudit({ database: db }).query({ userId, limit: 10 })).toEqual(before);
         expect(
           (yield* attempt(() =>

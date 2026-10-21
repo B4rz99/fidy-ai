@@ -1,0 +1,46 @@
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_c20a1f12a3db65 298-314,338
+  s_6d017cc65783af::t_c8073a03ab5372 316-317
+  s_6d017cc65783af::t_2f7c87fb98cc9e 325-327
+  s_6d017cc65783af::t_040c3b5959d2a6 315,318-324
+  s_6d017cc65783af::t_2ce54218a96580 333-334
+  s_6d017cc65783af::t_8b641db5da0b83 335-337
+  s_6d017cc65783af::t_5449025c2a4dd2 329-332,338
+apps/server/cloudflare/agent/hosted-continuity.test.ts
+  s_6d017cc65783af::t_69c16efbf3ab59 513,517,1482,1486
+apps/web/e2e/consent-navigation.spec.ts
+  s_6d017cc65783af::t_546f0d863b028f 15
+  s_6d017cc65783af::t_6c58c0b56ed39e 41-43,49,54-58,60,67-69
+  s_6d017cc65783af::t_7445727a47b4c5 1,9,11-13,17-19,24-37,48,50-53,59,62
+  s_6d017cc65783af::t_68d86b0f023d46 20-23
+  s_6d017cc65783af::t_64431e1b8a970e 2-4,6-8,10,38-40,44,61,63-66
+  s_6d017cc65783af::t_fe633c5417896b 14,16
+  s_6d017cc65783af::t_9e3d965beebf1a 5,45-47
+apps/web/e2e/real-core-fixture.ts
+  s_6d017cc65783af::t_e29bd3931aa001 41-42,44
+  s_6d017cc65783af::t_6ab3960b46da7b 116,297
+  s_6d017cc65783af::t_9e3d965beebf1a 117,298
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_6d017cc65783af::t_8bca8e9aeac202 3-4,844,864,893
+  s_6d017cc65783af::t_6ab3960b46da7b 14,438,441
+  s_6d017cc65783af::t_b01ceffbf676c0 41-52,433-435,444,453-456,464-466
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_6d017cc65783af::t_9e3d965beebf1a 42
+  s_6d017cc65783af::t_6ab3960b46da7b 43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dfeae5079c8af976b67ea77749f5801381832ce8",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

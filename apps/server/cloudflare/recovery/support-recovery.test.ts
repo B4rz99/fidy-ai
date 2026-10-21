@@ -183,7 +183,9 @@ it("enforces an operator rolling-hour limit independently of minute refills", ()
       const started = Math.floor((yield* Clock.currentTimeMillis) / 1000) * 1000;
       let current = started;
       const clock = ownedClock(yield* Clock.Clock, () => current);
-      const fixture = yield* setup(current).pipe(Effect.provideService(Clock.Clock, clock));
+      const sourceFixture = yield* setup(current).pipe(Effect.provideService(Clock.Clock, clock));
+      const observed = observeRetentionCost(sourceFixture.db);
+      const fixture = { ...sourceFixture, db: observed.database };
       const assertion = yield* fixture.assertion({
         subject: Option.none(),
         issuedAt: current / 1000,
@@ -198,13 +200,63 @@ it("enforces an operator rolling-hour limit independently of minute refills", ()
         current += 60_000;
       }
       expect((yield* malformedCommand(fixture, assertion, clock)).status).toBe(429);
-      current = started + 3_600_000;
-      const renewed = yield* fixture.assertion({
-        subject: Option.none(),
-        issuedAt: current / 1000,
-        expiresAt: current / 1000 + 300,
+
+      current = started + 3_570_000;
+      const outsider = yield* fixture.assertion({
+        subject: Option.some("cleanup-foreign"),
+        issuedAt: Math.floor(current / 1000),
+        expiresAt: Math.floor(current / 1000) + 300,
       });
-      expect((yield* malformedCommand(fixture, renewed, clock)).status).toBe(400);
+      expect((yield* malformedCommand(fixture, outsider, clock)).status).toBe(400);
+      for (const boundary of [
+        {
+          offset: 3_599_999,
+          status: 429,
+          remaining: 21,
+          costs: [
+            { rowsRead: 1, rowsWritten: 0 },
+            { rowsRead: 22, rowsWritten: 0 },
+          ],
+        },
+        {
+          offset: 3_600_000,
+          status: 400,
+          remaining: 17,
+          costs: [
+            { rowsRead: 6, rowsWritten: 5 },
+            { rowsRead: 34, rowsWritten: 4 },
+          ],
+        },
+      ]) {
+        current = started + boundary.offset;
+        const renewed = yield* fixture.assertion({
+          subject: Option.none(),
+          issuedAt: Math.floor(current / 1000),
+          expiresAt: Math.floor(current / 1000) + 300,
+        });
+        const first = observed.statements().length;
+        expect((yield* malformedCommand(fixture, renewed, clock)).status).toBe(boundary.status);
+        const statements = observed.statements().slice(first);
+        expect(statements.map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }))).toEqual(
+          boundary.costs
+        );
+        expect(
+          yield* wait(() =>
+            fixture.db
+              .prepare("SELECT count(*) AS remaining FROM support_recovery_admissions")
+              .first()
+          )
+        ).toEqual({ remaining: boundary.remaining });
+      }
+      expect(
+        yield* wait(() =>
+          fixture.db
+            .prepare(
+              "SELECT count(*) AS remaining FROM support_recovery_admissions WHERE operator_subject='cleanup-foreign'"
+            )
+            .first()
+        )
+      ).toEqual({ remaining: 1 });
     }).pipe(Effect.scoped)
   ));
 

@@ -181,3 +181,17 @@ from insert costs above. Cleanup now avoids repeated review-candidate discovery.
 cleanup adds the grant deletion while retaining the original read cost; source cleanup adds one lookup.
 Idle cleanup has the same measured cost. Existing owner erasure proves that a multi-policy grant
 and its foreign charge survive deleting the addressed User's review.
+
+## Recovery conversion blocked (#1434)
+
+The one-event/one-grant candidate passed the existing recovery behavior tests but failed the cost
+gate. Its concurrent malformed-command journey used 99 reads/35 writes versus 59/20; five expired
+invocations required 31 reads/10 writes to clean up versus 6/5. The four custom rolling predicates
+remained necessary, so the extra work offered no concrete code/behavior benefit.
+
+Retain Recovery's `support_recovery_admissions` store and current persistence owner under #1405's
+explicit cost-gate exception. No shared recovery policy or schema conversion is installed. The
+[comparison evidence](../../../../docs/operations/recovery-admission-1434.md) records the candidate,
+its native measurements, exact cutoff and foreign-operator preservation, and why the conditional
+mapping must be revisited before migration. The existing public recovery test now also checks
+cleanup immediately before and at the one-hour cutoff; production limits and accounting are unchanged.

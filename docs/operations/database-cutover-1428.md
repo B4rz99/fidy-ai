@@ -551,3 +551,16 @@ DELETE FROM sql_assertions WHERE scope='pat_admission_cutover';
 ```
 
 <!-- pat-admission-grants:end -->
+
+## Recovery admission gate (#1434)
+
+**Do not drop or backfill `support_recovery_admissions`.** The shared one-event/one-grant candidate
+failed #1434/#1405's native cost gate without simplifying the four rolling admission predicates.
+Recovery retains its compact four-column store under the accepted design's explicit exception.
+The conditional target mapping remains blocked; it is not a completed consolidation or a pending
+quota-only deployment. No schema or migration ledger adjustment belongs to this slice.
+
+[Native comparison evidence](recovery-admission-1434.md) includes admission, refusal, cleanup, exact
+hour cutoffs and a fresh foreign operator. A future target revision must demonstrate equivalence
+and a concrete cost/code benefit before any conversion or source-table removal. The current one-hour
+accounting and original admission identities remain authoritative.

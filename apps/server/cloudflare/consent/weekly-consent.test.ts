@@ -59,7 +59,7 @@ const setup = (): Effect.Effect<D1Database> =>
       yield* testPromise(() =>
         db
           .prepare(
-            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,?,'disclosed','accepted',?,?)"
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,?,'disclosed','accepted',?,?)"
           )
           .bind(id, id, json, 0, 0)
           .run()

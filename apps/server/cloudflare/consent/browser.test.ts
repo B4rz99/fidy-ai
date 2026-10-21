@@ -207,7 +207,7 @@ const consentSetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
         users.map((userId, index) =>
           db
             .prepare(
-              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)"
+              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)"
             )
             .bind(
               `30000000-0000-4000-8000-00000000000${index}`,

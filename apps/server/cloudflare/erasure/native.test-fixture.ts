@@ -216,7 +216,7 @@ const identityRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> =
 const conversationRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> => [
   input.db
     .prepare(
-      "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','test-disclosure','test-decision',?,?)"
+      "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','test-disclosure','test-decision',?,?)"
     )
     .bind(input.userId, input.userId, input.current, input.current),
 
@@ -323,7 +323,7 @@ const renewalAndPlanRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatem
     .bind(input.userId, input.userId, input.userId, input.userId, input.current),
   input.db
     .prepare(
-      "INSERT INTO consent_history (record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,accepted_at_ms) VALUES ('processing_renewal',?,?,?,?,?,'{}',?)"
+      "INSERT INTO consent_history (record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,occurred_at_ms) VALUES ('processing_renewal',?,?,?,?,?,'{}',?)"
     )
     .bind(input.userId, input.userId, input.userId, input.userId, input.userId, input.current + 1),
 ];

@@ -4,7 +4,7 @@ import { asynchronousNativeDatabase } from "./d1-test-bridge.test-fixture";
 import { Option, Schema } from "effect";
 
 export const consentHistoryTestSchema =
-  "CREATE TABLE IF NOT EXISTS consent_history (sequence INTEGER PRIMARY KEY AUTOINCREMENT, record_type TEXT NOT NULL, id TEXT,user_id TEXT,disclosure_json TEXT,disclosure_message_id TEXT,decision_message_id TEXT,decision_received_at_ms INTEGER,accepted_at_ms INTEGER,grant_record_id TEXT,session_id TEXT,occurred_at_ms INTEGER,withdrawal_id TEXT,grant_id TEXT,offer_id TEXT,record_json TEXT,decision TEXT,kind TEXT,pairing_id TEXT,request_id TEXT,disclosure_revision TEXT,disclosure_text TEXT,grant_consent_id TEXT,pat_id TEXT,policy_reason TEXT,connection_id TEXT,reason TEXT)";
+  "CREATE TABLE IF NOT EXISTS consent_history (sequence INTEGER PRIMARY KEY AUTOINCREMENT, record_type TEXT NOT NULL, id TEXT,user_id TEXT,disclosure_json TEXT,disclosure_message_id TEXT,decision_message_id TEXT,decision_received_at_ms INTEGER,grant_record_id TEXT,session_id TEXT,occurred_at_ms INTEGER,withdrawal_id TEXT,grant_id TEXT,offer_id TEXT,record_json TEXT,decision TEXT,kind TEXT,pairing_id TEXT,request_id TEXT,grant_consent_id TEXT,pat_id TEXT,connection_id TEXT,reason TEXT)";
 
 export const auditEntriesTestSchema =
   "CREATE TABLE IF NOT EXISTS audit_entries (sequence INTEGER PRIMARY KEY AUTOINCREMENT,record_type TEXT NOT NULL,id TEXT,user_id TEXT,session_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER,pat_id TEXT,oauth_connection_id TEXT,oauth_credential_id TEXT,hosted_turn_id TEXT,attempt_id TEXT,transition TEXT,accepted_at_ms INTEGER,UNIQUE(record_type,id),UNIQUE(attempt_id,transition))";

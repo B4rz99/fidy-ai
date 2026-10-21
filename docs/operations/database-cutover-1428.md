@@ -804,3 +804,169 @@ and archives), and exercises rollback after trigger installation and refusal of 
 These changes are local and undeployed while D1 quota is exhausted. Editing the applied baseline alone
 does not install the new guards on an existing database. Consent history extraction and pre-User
 exchanges remain separate tickets.
+
+## Durable Consent history (#1438)
+
+`consent_history` retains 23 stored fields plus its existing generated typed-reference helpers.
+Grant/renewal event times use `occurred_at_ms`; `decision_received_at_ms` remains independent.
+PAT/OAuth disclosure JSON is exactly `{"revision": original revision, "text": original text}`.
+The text stays a string even when it contains JSON: parsing and reserializing it would alter original
+bytes. Full processing disclosure snapshots and serialized notification ConsentRecords remain exact.
+The latter retain independently meaningful disclosure and provider-qualified evidence; this slice
+does not remove their embedded envelope fields without historical equivalence proof.
+
+Automatic PAT expiry uses `reason`; browser-origin revocations retain their session and no automatic
+reason. Existing record-kind constraints, append-only rules, same-User links, offer category checks,
+scoped uniqueness, null IDs, erasure dependencies and policy remain in force. Erasure projections and
+drain triggers keep the original archive field names and values. Already written archives are never
+rewritten or reinterpreted as live Consent.
+
+### Fenced populated cutover
+
+Back up D1 and fence **all** application writers, including onboarding, PAT/OAuth decisions, Insights,
+forwarded mail and erasure. The edited single baseline is for fresh installation; it does not update
+an existing database. This is one coordinated code/schema cutover, with no mixed-client release.
+
+Capture the current trigger/view definitions that directly reference `consent_history` from
+`sqlite_schema` (`sql IS NOT NULL`, word-qualified table reference), including triggers owned by other
+tables. Record their exact names/types and map each to its final baseline definition. Stop if any
+source object has no explained destination or a destination is already present unexpectedly. Also
+capture every explicit index owned by Consent history. The baseline still owns the same helpers and
+incoming references. Do not turn foreign keys off or use `legacy_alter_table` to hide stale objects.
+
+Assemble **one native D1 batch** in this order; no intermediate commits:
+
+1. `PRAGMA defer_foreign_keys=ON`, then `consent-history-preflight` below. Refuse conflicting or
+   unmappable timestamp, disclosure and reason variants; inspect original evidence instead of
+   selecting one value or fabricating missing facts. Drain any active erasure chunk first.
+2. Drop the captured dependent triggers/views by exact validated identifiers. Create
+   `consent_history_next` from the final baseline `consent_history` declaration, changing only the
+   CREATE table name. Its self-references continue to name `consent_history`.
+3. Execute `consent-history-copy`. Original sequences and the AUTOINCREMENT high-water mark survive,
+   including a removed highest row. No forwarding address, credential or other domain side effect
+   runs while copying; owner triggers are installed after copying.
+4. Execute `consent-history-swap`, then install the final baseline indexes and the captured dependent
+   triggers/views at their final destinations. Ordinary permissions cannot authorize this operation.
+5. Execute `consent-history-verify`. Only after success publish matching code and align the one-file
+   baseline ledger. Any failure, including one after DROP/rename, rolls back data and DDL together.
+
+<!-- consent-history-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_history_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM consent_history WHERE
+   (record_type IN ('processing_grant','processing_renewal','pat_grant','oauth_grant') AND (accepted_at_ms IS NULL OR occurred_at_ms IS NOT NULL))
+   OR (record_type NOT IN ('processing_grant','processing_renewal','pat_grant','oauth_grant') AND accepted_at_ms IS NOT NULL)
+   OR (record_type IN ('pat_grant','pat_revocation','oauth_grant','oauth_user_revocation') AND (disclosure_revision IS NULL OR disclosure_text IS NULL OR disclosure_json IS NOT NULL))
+   OR (record_type NOT IN ('pat_grant','pat_revocation','oauth_grant','oauth_user_revocation') AND (disclosure_revision IS NOT NULL OR disclosure_text IS NOT NULL))
+   OR (record_type='pat_revocation' AND reason IS NOT NULL)
+   OR (record_type<>'pat_revocation' AND policy_reason IS NOT NULL))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- consent-history-preflight:end -->
+
+<!-- consent-history-copy:start -->
+
+```sql
+INSERT INTO consent_history_next (sequence, record_type, id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, grant_record_id, session_id, occurred_at_ms, withdrawal_id, grant_id, offer_id, record_json, decision, kind, pairing_id, request_id, grant_consent_id, pat_id, connection_id, reason)
+SELECT sequence,
+ record_type,
+ id,
+ user_id,
+ CASE WHEN record_type IN ('pat_grant','pat_revocation','oauth_grant','oauth_user_revocation') THEN json_object('revision',disclosure_revision,'text',disclosure_text) ELSE disclosure_json END,
+ disclosure_message_id,
+ decision_message_id,
+ decision_received_at_ms,
+ grant_record_id,
+ session_id,
+ CASE WHEN record_type IN ('processing_grant','processing_renewal','pat_grant','oauth_grant') THEN accepted_at_ms ELSE occurred_at_ms END,
+ withdrawal_id,
+ grant_id,
+ offer_id,
+ record_json,
+ decision,
+ kind,
+ pairing_id,
+ request_id,
+ grant_consent_id,
+ pat_id,
+ connection_id,
+ CASE WHEN record_type='pat_revocation' THEN policy_reason ELSE reason END
+FROM consent_history ORDER BY sequence;
+UPDATE sqlite_sequence SET seq=(SELECT seq FROM sqlite_sequence WHERE name='consent_history')
+WHERE name='consent_history_next' AND EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='consent_history');
+INSERT INTO sqlite_sequence(name,seq)
+SELECT 'consent_history_next',seq FROM sqlite_sequence WHERE name='consent_history'
+ AND NOT EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='consent_history_next');
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_history_cutover',CASE WHEN
+ (SELECT count(*) FROM consent_history)=(SELECT count(*) FROM consent_history_next)
+ AND NOT EXISTS(SELECT * FROM (
+ SELECT sequence,
+ record_type,
+ id,
+ user_id,
+ CASE WHEN record_type IN ('pat_grant','pat_revocation','oauth_grant','oauth_user_revocation') THEN json_object('revision',disclosure_revision,'text',disclosure_text) ELSE disclosure_json END,
+ disclosure_message_id,
+ decision_message_id,
+ decision_received_at_ms,
+ grant_record_id,
+ session_id,
+ CASE WHEN record_type IN ('processing_grant','processing_renewal','pat_grant','oauth_grant') THEN accepted_at_ms ELSE occurred_at_ms END,
+ withdrawal_id,
+ grant_id,
+ offer_id,
+ record_json,
+ decision,
+ kind,
+ pairing_id,
+ request_id,
+ grant_consent_id,
+ pat_id,
+ connection_id,
+ CASE WHEN record_type='pat_revocation' THEN policy_reason ELSE reason END
+ FROM consent_history EXCEPT SELECT sequence, record_type, id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, grant_record_id, session_id, occurred_at_ms, withdrawal_id, grant_id, offer_id, record_json, decision, kind, pairing_id, request_id, grant_consent_id, pat_id, connection_id, reason FROM consent_history_next))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- consent-history-copy:end -->
+
+<!-- consent-history-swap:start -->
+
+```sql
+DROP TABLE consent_history;
+ALTER TABLE consent_history_next RENAME TO consent_history;
+```
+
+<!-- consent-history-swap:end -->
+
+<!-- consent-history-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_history_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+PRAGMA defer_foreign_keys=OFF;
+DELETE FROM sql_assertions WHERE scope='consent_history_cutover';
+```
+
+<!-- consent-history-verify:end -->
+
+After the explicit whole-database foreign-key assertion succeeds, the batch resumes immediate
+checking with `PRAGMA defer_foreign_keys=OFF`, as supported by
+[Cloudflare's foreign-key guidance](https://developers.cloudflare.com/d1/sql-api/foreign-keys/).
+The explicit check is required: in native D1 a populated drop/rename can leave deferred bookkeeping
+that still rejects commit despite valid final references. Do not omit the assertion, leave real
+violations unresolved, or append unguarded mutations after verification. The native test also proves
+that an injected orphan before verification blocks commit and that immediate checking resumes afterward.
+
+The populated native test runs these exact blocks with baseline DDL. It verifies original disclosures,
+missing timestamps, parent links, anonymous-ID OAuth revocations, sequence high-water, unrelated User
+and offer rows, archives, constraint rejection, and interruption after the destructive swap. Historical
+source DDL lives only in a test fixture; it is not another migration or a runtime compatibility path.
+Changes stay local until quota permits a separately authorized deployment.

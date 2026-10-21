@@ -84,7 +84,7 @@ const setup = Effect.fn(function* () {
     yield* wait(() =>
       db
         .prepare(
-          "INSERT INTO consent_history (record_type,user_id,accepted_at_ms) VALUES ('processing_grant',?, 1)"
+          "INSERT INTO consent_history (record_type,user_id,occurred_at_ms) VALUES ('processing_grant',?, 1)"
         )
         .bind(user)
         .run()

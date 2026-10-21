@@ -1,5 +1,21 @@
 import type { ErasureProjection } from "../../erasure-store/contract";
 
+/** Preserve original archive keys and exact evidence while live history uses its normalized envelope. */
+const archiveValue = (field: string): string => {
+  switch (field) {
+    case "accepted_at_ms":
+      return "r.occurred_at_ms";
+    case "disclosure_revision":
+      return "json_extract(r.disclosure_json,'$.revision')";
+    case "disclosure_text":
+      return "json_extract(r.disclosure_json,'$.text')";
+    case "policy_reason":
+      return "r.reason";
+    default:
+      return `r."${field}"`;
+  }
+};
+
 /** A logical Consent purpose keeps its dependency order and exact erasure permit in the shared store. */
 const historyProjection = ({
   id,
@@ -18,7 +34,9 @@ const historyProjection = ({
   const body =
     archiveFields.length === 0
       ? "'{}'"
-      : "json_object(" + archiveFields.map((field) => `'${field}',r."${field}"`).join(",") + ")";
+      : "json_object(" +
+        archiveFields.map((field) => `'${field}',${archiveValue(field)}`).join(",") +
+        ")";
   return {
     id,
     dataClass: "consent",

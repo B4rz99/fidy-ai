@@ -324,7 +324,7 @@ it.each([
               .bind(userId, portfolio, bsuid, timestamp),
             db
               .prepare(
-                "INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)"
+                "INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, occurred_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)"
               )
               .bind("10000000-0000-4000-8000-000000000073", userId, snapshot, timestamp, timestamp),
           ])

@@ -93,7 +93,7 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
       .bind(identity.userId, identity.createdAtMs, identity.createdAtMs + trialDurationMs),
     db
       .prepare(`INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
-     decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?,?,?,?,?,?,?)`)
+     decision_received_at_ms, occurred_at_ms) VALUES ('processing_grant',?,?,?,?,?,?,?)`)
       .bind(
         identity.consentId,
         identity.userId,

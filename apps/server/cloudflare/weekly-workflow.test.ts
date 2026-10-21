@@ -618,7 +618,7 @@ it("four unavailable due Users do not starve a healthy fifth User's generation",
                 .bind(id, userId),
               db
                 .prepare(
-                  "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) SELECT 'processing_grant',?,?,disclosure_json,?, ?,0,0 FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records WHERE user_id=? LIMIT 1"
+                  "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) SELECT 'processing_grant',?,?,disclosure_json,?, ?,0,0 FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records WHERE user_id=? LIMIT 1"
                 )
                 .bind(id, id, `disclosed-${id}`, `accepted-${id}`, userId),
             ])

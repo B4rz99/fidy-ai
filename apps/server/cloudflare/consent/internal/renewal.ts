@@ -78,7 +78,7 @@ const retryReceipt = ({
     const decision = admission.renewal;
     const previous = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT n.id AS reference,n.withdrawal_id AS withdrawalReference,n.accepted_at_ms AS acceptedAtMs
+        .prepare(`SELECT n.id AS reference,n.withdrawal_id AS withdrawalReference,n.occurred_at_ms AS acceptedAtMs
     FROM (SELECT * FROM consent_history WHERE record_type='processing_renewal') n WHERE n.withdrawal_id=? AND n.user_id=? AND n.grant_record_id=?
     AND json_extract(n.disclosure_json,'$.contentSha256')=?
     AND NOT EXISTS(SELECT 1 FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) AS consent_user_revocations WHERE user_id=n.user_id)
@@ -116,7 +116,7 @@ const commitRenewal = (
       Effect.tryPromise(() =>
         db.batch([
           db
-            .prepare(`INSERT INTO consent_history (record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,accepted_at_ms) SELECT 'processing_renewal',?,g.user_id,?,g.id,?,g.disclosure_json,? FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') g
+            .prepare(`INSERT INTO consent_history (record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,occurred_at_ms) SELECT 'processing_renewal',?,g.user_id,?,g.id,?,g.disclosure_json,? FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') g
       WHERE g.id=? AND g.user_id=? AND EXISTS(${eligible.sql})`)
             .bind(
               reference,

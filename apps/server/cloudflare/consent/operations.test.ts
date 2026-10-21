@@ -44,7 +44,7 @@ it("reads one User's exact Consent basis without borrowing another User's grant"
             .bind(userB, now),
           db
             .prepare(
-              `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
+              `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
             )
             .bind(grantA, userA, disclosureJson, now, now),
         ])
@@ -90,7 +90,7 @@ const seedSubject = ({
         .bind(userId, now),
       db
         .prepare(
-          `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
+          `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
         )
         .bind(
           index === 1 ? grantA : "30000000-0000-4000-8000-000000000002",

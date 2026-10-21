@@ -318,7 +318,7 @@ it("revokes all owned agents while a refresh is queued, leaving another User and
       yield* wait(
         fixture.db
           .prepare(
-            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','other-grant-test', ?, '{}', 'disclosure', 'decision', 1, 1)"
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','other-grant-test', ?, '{}', 'disclosure', 'decision', 1, 1)"
           )
           .bind("20000000-0000-4000-8000-000000000001")
           .run()
@@ -736,7 +736,7 @@ it("pages retained connections and refuses oversized revoke-all atomically rathe
             .bind(fixture.connectionId),
           fixture.db
             .prepare(
-              `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) SELECT 'oauth_grant','copy-' || g.id,g.id,g.user_id,c.session_id,c.disclosure_revision,c.disclosure_text,c.accepted_at_ms FROM oauth_connections g,consent_history c WHERE c.record_type='oauth_grant' AND c.connection_id = ? AND g.id != ?`
+              `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_json,occurred_at_ms) SELECT 'oauth_grant','copy-' || g.id,g.id,g.user_id,c.session_id,c.disclosure_json,c.occurred_at_ms FROM oauth_connections g,consent_history c WHERE c.record_type='oauth_grant' AND c.connection_id = ? AND g.id != ?`
             )
             .bind(fixture.connectionId, fixture.connectionId),
         ])

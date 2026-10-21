@@ -61,7 +61,7 @@ const setup = (): Effect.Effect<D1Database, TestAdapterFailure> =>
           .bind(userId, now),
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosed','accepted',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosed','accepted',?,?)`
           )
           .bind(userId, userId, now, now),
         db
@@ -98,7 +98,7 @@ const setup = (): Effect.Effect<D1Database, TestAdapterFailure> =>
           ),
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) VALUES ('oauth_grant',?,?,?,?,'test-v1','Disclosure',?)`
+            `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_json,occurred_at_ms) VALUES ('oauth_grant',?,?,?,?,json_object('revision','test-v1','text','Disclosure'),?)`
           )
           .bind(subject.oauthConnectionId, subject.oauthConnectionId, userId, sessionId, now),
         db

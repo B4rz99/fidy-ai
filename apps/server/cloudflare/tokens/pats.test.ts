@@ -1116,13 +1116,13 @@ it("sweeps expired anonymous pairing metadata but preserves approved grant evide
         yield* awaitPromise(
           db
             .prepare(
-              "SELECT policy_reason,session_id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
+              "SELECT reason,session_id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
             )
             .bind(approved.pairingId)
             .first()
         )
       ).toMatchObject({
-        policy_reason: "pat-approved-unclaimed-expiry",
+        reason: "pat-approved-unclaimed-expiry",
         session_id: null,
       });
       yield* awaitPromise(scheduled());
@@ -1239,14 +1239,14 @@ it("atomically revokes claimable approvals with User-origin Consent evidence and
         yield* awaitPromise(
           db
             .prepare(
-              "SELECT session_id,policy_reason FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
+              "SELECT session_id,reason FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
             )
             .bind(started.pairingId)
             .first()
         )
       ).toMatchObject({
         session_id: "40000000-0000-4000-8000-000000000001",
-        policy_reason: null,
+        reason: null,
       });
       expect(
         (yield* awaitPromise(
@@ -1604,13 +1604,13 @@ it("atomically expires a fixed-lifetime PAT with policy-origin Consent evidence"
       expect(
         yield* awaitPromise(
           db
-            .prepare(`SELECT r.policy_reason,r.session_id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r
+            .prepare(`SELECT r.reason,r.session_id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r
     JOIN pats p ON p.id = r.pat_id WHERE p.short_id = ?`)
             .bind(issued.pat.shortId)
             .first()
         )
       ).toMatchObject({
-        policy_reason: "pat-fixed-lifetime-expiry",
+        reason: "pat-fixed-lifetime-expiry",
         session_id: null,
       });
       expect(
@@ -1838,14 +1838,14 @@ it("isolates management by User and immediately refuses revoked and under-scoped
       expect(
         yield* awaitPromise(
           db
-            .prepare(`SELECT r.session_id,r.policy_reason FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r
+            .prepare(`SELECT r.session_id,r.reason FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r
     JOIN pats p ON p.id = r.pat_id WHERE p.short_id = ?`)
             .bind(issued.pat.shortId)
             .first()
         )
       ).toMatchObject({
         session_id: "40000000-0000-4000-8000-000000000001",
-        policy_reason: null,
+        reason: null,
       });
       expect(
         (yield* awaitPromise(
@@ -2439,7 +2439,7 @@ for (const refusal of ["revoked", "withdrawn", "suppressed-audit"] as const) {
             db.batch([
               db
                 .prepare(
-                  "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)"
+                  "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)"
                 )
                 .bind(grantId, userA, current, current),
               db
@@ -2574,7 +2574,7 @@ it("denies PAT metadata reads after explicit Consent withdrawal at protected wor
       yield* awaitPromise(
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(grantId, userA, clock(), clock())
           .run()
@@ -2694,7 +2694,7 @@ it("returns user_action_required when Consent is withdrawn between PAT admission
       yield* awaitPromise(
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(grantId, userA, clock(), clock())
           .run()
@@ -2702,7 +2702,7 @@ it("returns user_action_required when Consent is withdrawn between PAT admission
       yield* awaitPromise(
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(writerGrantId, userB, clock(), clock())
           .run()
@@ -3311,7 +3311,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
       yield* awaitPromise(
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(grantId, userA, clock(), clock())
           .run()
@@ -4014,7 +4014,7 @@ for (const refusal of [
           yield* awaitPromise(
             db
               .prepare(
-                `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','e0000000-0000-4000-8000-000000000001',?,'{}','disclosure','decision',?,?)`
+                `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','e0000000-0000-4000-8000-000000000001',?,'{}','disclosure','decision',?,?)`
               )
               .bind(userA, current, current)
               .run()
@@ -4120,7 +4120,7 @@ it("offers PAT activity to admitted hosted Turns and refuses substituted Users o
       yield* awaitPromise(
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','e0000000-0000-4000-8000-000000000257',?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','e0000000-0000-4000-8000-000000000257',?,'{}','disclosure','decision',?,?)`
           )
           .bind(userA, current, current)
           .run()

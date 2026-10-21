@@ -32,7 +32,7 @@ const verifyRenewalFence = (
       expect(
         input.db
           .prepare(
-            "INSERT INTO consent_history (record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,accepted_at_ms) VALUES ('processing_renewal',?,?,?,?,?,'{}',?)"
+            "INSERT INTO consent_history (record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,occurred_at_ms) VALUES ('processing_renewal',?,?,?,?,?,'{}',?)"
           )
           .bind(withdrawal, userId, withdrawal, userId, userId, input.current + 2)
           .run()

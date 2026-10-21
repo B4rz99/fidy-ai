@@ -119,6 +119,10 @@ jobs:
         run: |
           if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then unset PR_TITLE; fi
           /usr/bin/time -p bun run verify -- --group static
+      - name: Select the reproduced Inspector Node runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "26.5.0"
       - name: Inspector transport regressions
         run: |
           bun run --cwd tools/mcp-inspector check

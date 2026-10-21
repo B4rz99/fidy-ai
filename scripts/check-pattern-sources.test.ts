@@ -73,7 +73,7 @@ it.effect("requires a pattern review when an application pin changes", () =>
     yield* write(`${root}/apps/web/package.json`, '{"dependencies":{"react":"19.4.0"}}');
     const result = run(root);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("react: react changed from 19.3.0 to 19.4.0");
+    expect(result.stderr).toContain("react: react changed from 19.3.1 to 19.4.0");
   })
 );
 

@@ -2,6 +2,9 @@
 
 This optional, isolated tool runs Inspector 2.11.0 with the pinned Undici 8.12.3 dispatcher.
 It is not part of Fidy's application dependencies or production deployment.
+Use Node 26.5.0 for the reproduced native-fetch HTTP/2 journey and its red/green comparison.
+Node 24's native fetch forces HTTP/1.1, so it cannot exercise this HTTP/2-only fixture; CI selects
+the reproduced Node runtime explicitly after the repository's normal static checks.
 
 ```sh
 bun install --cwd tools/mcp-inspector --frozen-lockfile

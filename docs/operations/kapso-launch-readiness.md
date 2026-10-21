@@ -1,5 +1,56 @@
 # Kapso production launch check
 
+## Dedicated-number cutover (2026-10-21)
+
+Kapso CLI authenticated to project `e12c802f-113f-4a71-9516-d9c2191392e8` and verified the
+connected production number **+1 205-687-1742**:
+
+| Configuration            | Value                                              |
+| ------------------------ | -------------------------------------------------- |
+| WhatsApp phone number ID | `1397401100120558`                                 |
+| Kapso configuration ID   | `d63b8abf-23ee-4f58-9ab1-98baa88f4980`             |
+| Business portfolio ID    | `3582698951893989`                                 |
+| Business account ID      | `1121409637522296`                                 |
+| Fidy webhook ID          | `7eac1474-ffdc-4150-98d9-89a6a9195d3f`             |
+| Callback                 | `https://api.fidyapp.com/providers/kapso/callback` |
+
+Number health reported available messaging, verified webhook subscription, and passed number
+access. The registered Fidy webhook uses Kapso payload v2 without buffering and subscribes to
+`whatsapp.message.received`, `whatsapp.message.sent`, `whatsapp.message.delivered`, and
+`whatsapp.message.failed`. It is **inactive**, pending deployment and live verification.
+
+GitHub's **Production environment** holds the updated `KAPSO_API_KEY`, the new
+`KAPSO_WEBHOOK_SECRET`, and the verified `WHATSAPP_BUSINESS_PORTFOLIO_ID`. The environment's
+`WHATSAPP_SANDBOX_PHONE_NUMBER_ID` override was removed. Never place those credentials in Git,
+chat, command arguments, or this evidence file. The temporary webhook-secret capture was removed
+after storage in GitHub. The old sandbox webhook has not been disabled yet; it cannot be treated
+as verification of the new number.
+
+Fidy obtains its business phone endpoint from authenticated inbound evidence and retains it for
+the corresponding delivery; no unused global `KAPSO_PHONE_NUMBER_ID` binding was added. The new
+number is not the sandbox endpoint, so ordinary BSUID delivery applies. Existing identity and
+Consent associations are not migrated by changing configuration.
+
+Local verification passed **31 WhatsApp adapter checks** and **89 native Worker checks**, including
+onboarding Consent and WhatsApp provider association. A bounded unsigned POST to the deployed
+callback returned **401**. These checks do not establish delivery through the new webhook or
+validate the newly stored API key against Kapso. No WhatsApp message was sent during setup, and
+Kapso returned no approved templates for the new number.
+
+After a successful Production deployment consumes the new environment values:
+
+1. Verify the deployed revision and normal account reads before admitting a test message.
+2. Activate the new webhook and disable the old sandbox webhook using their exact number IDs.
+3. Use an authorized test sender to message the dedicated number. Verify signature admission,
+   disclosure delivery, the explicit Consent/provider association journey, and delivery status.
+   Preserve the same-User and BSUID guards; a phone number is not identity authority.
+4. Record live evidence and any remaining limits. Keep proactive delivery disabled until its
+   approved template and opt-in checks pass; no template is currently available.
+
+This staged cutover does not close the separate provider/legal launch evidence below.
+
+## Provider launch evidence
+
 The operator has accepted Kapso's indefinite Free-plan retention for the MVP; this is **not** approval of the real-user launch conditions in #713. Ordinary MVP deployments do not run this check. Before claiming the #713 launch gate is satisfied, run `bash infra/cloudflare/scripts/check-kapso-launch.sh` and complete `kapso-launch-evidence.json`. The checked-in file is intentionally **PENDING** for account-specific checks. The public Terms and DPA identify Kapso, Inc. and are effective September 17, 2026; the published subprocessor list is effective September 1, 2026. On September 28, 2026, the authenticated `kapso` CLI confirmed access to the `fiidy` project and exactly one WhatsApp number of kind `sandbox`. This does **not** establish that the current Terms were accepted for this account, that a production number is ready, or which transcript vendor is enabled. The operator reports that the project's dashboard says the Free plan keeps WhatsApp history indefinitely and requires an upgrade for automatic retention. The MVP accepts that setting with the published disclosure; it cannot satisfy the separate finite-retention requirement of #713. Prior messaging tests and `kapso status` prove neither retention nor deletion. Never put credentials, customer content, or private agreements in Git; evidence references must point to access-restricted records. The CI check validates completeness, **not** whether a dashboard claim is true. An operator must compare it with the live account at enablement and after provider changes.
 
 1. In the Kapso account, identify the contracting entity and retain the accepted Terms and DPA versions, acceptance evidence, and the current subprocessor list. Verify which provider and configuration actually produce voice transcripts; list conditional AI/speech subprocessors in the restricted record. The public list alone does not prove which service is enabled for this project.

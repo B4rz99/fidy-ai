@@ -1,3 +1,9 @@
+import {
+  documentedSqlBlock,
+  schemaDefinition,
+  schemaObjectName,
+  schemaStatements,
+} from "../schema-cutover.test-fixture";
 import { UserId } from "../../src/core/identity/contract";
 import { afterAll, expect, it } from "vitest";
 import { Cause, Data, Effect, Option, Schema } from "effect";
@@ -15,33 +21,10 @@ afterAll(() => databases.dispose());
 const current = 1_800_000_000_123;
 const id = (ordinal: number): string =>
   `14400000-0000-4000-8000-${String(ordinal).padStart(12, "0")}`;
-const objects = (source: string): ReadonlyArray<string> =>
-  source
-    .split("--> statement-breakpoint")
-    .map((sql) => sql.trim())
-    .filter((sql) => sql.length > 0);
-const name = (sql: string): string =>
-  /^CREATE (?:UNIQUE )?(?:TABLE|INDEX|TRIGGER|VIEW) "?(\w+)"?/u.exec(sql)?.[1] ?? "";
-const definition = (source: ReadonlyArray<string>, target: string): string => {
-  const found = source.find((sql) => name(sql) === target);
-  if (found === undefined) throw Error("Missing credential cutover source definition");
-  return found;
-};
 const fences = (source: ReadonlyArray<string>): ReadonlyArray<string> =>
-  source.filter((sql) => name(sql).startsWith("verified_email_credentials_field_fence_"));
-const block = (guide: string, section: string): ReadonlyArray<string> => {
-  const value = guide.match(
-    new RegExp(
-      `<!-- email-credential-${section}:start -->\\s*\x60\x60\x60sql\\s*([\\s\\S]*?)\x60\x60\x60\\s*<!-- email-credential-${section}:end -->`,
-      "u"
-    )
-  )?.[1];
-  if (value === undefined) throw Error("Missing documented email credential cutover");
-  return value
-    .split(";")
-    .map((sql) => sql.trim())
-    .filter((sql) => sql.length > 0);
-};
+  source.filter((sql) =>
+    schemaObjectName(sql).startsWith("verified_email_credentials_field_fence_")
+  );
 const seed = (db: D1Database): Promise<ReadonlyArray<D1Result>> =>
   db.batch([
     ...[1, 2, 3].map((ordinal) =>
@@ -209,12 +192,12 @@ it.each(cases)(
       Effect.gen(function* () {
         const db = yield* native(() => databases.acquire());
         yield* native(() => installTestSchema({ db }));
-        const baseline = objects(
+        const baseline = schemaStatements(
           yield* native(() =>
             Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
           )
         );
-        const source = objects(
+        const source = schemaStatements(
           yield* native(() =>
             Bun.file(new URL("./credentials-before-1440.fixture.sql", import.meta.url)).text()
           )
@@ -231,14 +214,14 @@ it.each(cases)(
           db.batch(
             [
               "PRAGMA defer_foreign_keys=ON",
-              ...targetFences.map((sql) => `DROP TRIGGER ${name(sql)}`),
+              ...targetFences.map((sql) => `DROP TRIGGER ${schemaObjectName(sql)}`),
               ...userDependents.map(
                 (sql) =>
-                  `DROP ${sql.startsWith("CREATE TRIGGER") ? "TRIGGER" : "VIEW"} ${name(sql)}`
+                  `DROP ${sql.startsWith("CREATE TRIGGER") ? "TRIGGER" : "VIEW"} ${schemaObjectName(sql)}`
               ),
               "DROP TABLE verified_email_credentials",
               "DROP TABLE users",
-              definition(source, "users"),
+              schemaDefinition({ source, target: "users" }),
               ...userIndexes,
               ...userDependents,
               ...source.filter((sql) => !sql.startsWith("CREATE TABLE")),
@@ -268,15 +251,15 @@ it.each(cases)(
           native(() =>
             db.batch(
               [
-                ...block(guide, "preflight"),
-                definition(baseline, "verified_email_credentials"),
-                ...block(guide, "copy"),
+                ...documentedSqlBlock({ guide, marker: "email-credential-preflight" }),
+                schemaDefinition({ source: baseline, target: "verified_email_credentials" }),
+                ...documentedSqlBlock({ guide, marker: "email-credential-copy" }),
                 ...injectFault(fixture, "AfterCopy"),
-                ...sourceFences.map((sql) => `DROP TRIGGER ${name(sql)}`),
-                ...block(guide, "remove-source"),
+                ...sourceFences.map((sql) => `DROP TRIGGER ${schemaObjectName(sql)}`),
+                ...documentedSqlBlock({ guide, marker: "email-credential-remove-source" }),
                 ...targetFences,
                 ...injectFault(fixture, "AfterRemove"),
-                ...block(guide, "verify"),
+                ...documentedSqlBlock({ guide, marker: "email-credential-verify" }),
               ].map((sql) => db.prepare(sql))
             )
           )

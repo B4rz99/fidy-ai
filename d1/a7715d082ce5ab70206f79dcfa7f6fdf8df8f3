@@ -1,0 +1,25 @@
+apps/web/src/features/budgets/FEATURE.md
+  s_241024bc81d268::t_31971938636b43 3-10
+apps/web/src/features/agent/FEATURE.md
+  s_241024bc81d268::t_31971938636b43 3-10
+apps/web/src/features/pats/FEATURE.md
+  s_241024bc81d268::t_31971938636b43 3-10
+apps/web/src/features/recurring/FEATURE.md
+  s_241024bc81d268::t_31971938636b43 3-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d1a7715d082ce5ab70206f79dcfa7f6fdf8df8f3",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -13,6 +13,16 @@ Each active axis runs as a **parallel native Codex subagent** so the reviews don
 
 The issue tracker should have been provided to you — read `docs/agents/issue-tracker.md` for the configured tracker. If it is missing, ask which tracker to use.
 
+## Review posture: Zero-Trust
+
+Treat the implementation as flawed until its claims survive examination.
+
+- Treat comments, names, commit messages, and passing tests as claims, not proof. Verify them against executable behavior and authoritative sources.
+- For each changed behavior relevant to your axis, attempt to construct a counterexample: an input, state, sequence, or caller that breaks its contract.
+- Read surrounding code and trace relevant callers, dependencies, and trust boundaries. The diff locates the change; it does not bound the investigation.
+- Report evidence-backed findings: identify the violated rule or requirement, the concrete mismatch or failure path, and its consequence. Distinguish documented violations from heuristic concerns.
+- A clean report is earned by investigation, not required by convention. Report no findings when none survive verification; never manufacture one to satisfy the adversarial posture.
+
 ## Process
 
 ### 1. Pin the fixed point
@@ -70,15 +80,19 @@ Spawn one independent, read-only Codex subagent per active axis in parallel, usi
 
 Give each subagent a self-contained task with the full diff command, commit list, named source paths or excerpts, and its axis brief below. Include the smell baseline in full in the Standards task, plus a literal `Standards sources` block. The Security task carries a literal `Security sources` block with `SECURITY_STANDARDS.md` and asks the subagent to read it before reviewing. Include the spec path or fetched contents in the Spec task.
 
+Include the **Review posture: Zero-Trust** section verbatim in every worker's task. Each worker applies it within its assigned axis.
+
 Tell each subagent to perform its assigned review itself, at one delegation level only. Keep it read-only: do not edit files, create worktrees, commit, spawn or prompt other agents, or invoke another review skill.
 
 Start all active reviewers before waiting for results. Collect their completed reports through the native subagent tools. A missing, blocked, or failed report remains unresolved; it does not count as a passing axis.
 
-**Standards worker brief** — first read every path in the prompt's `Standards sources` block. Review documented coding and architecture standards and the smell baseline only. Report per file/hunk where relevant (a) every place the diff violates a documented standard, citing the source file and rule; and (b) any baseline smell, naming it and quoting the hunk. Distinguish hard documented-standard breaches from judgement calls. A documented repo standard overrides the baseline. Skip tooling-enforced issues. Report exactly "No standards findings." when none qualify. Stay under 400 words.
+**Standards worker brief** — first read every path in the prompt's `Standards sources` block. Review documented coding and architecture standards and the smell baseline only. Report per file/hunk where relevant (a) every place the diff violates a documented standard, citing the source file and rule; and (b) any baseline smell, naming it and quoting the hunk. Distinguish hard documented-standard breaches from judgement calls. A documented repo standard overrides the baseline. Skip tooling-enforced issues. Report exactly "No standards findings." when none qualify. Keep findings concise. Include every qualifying finding; completeness takes precedence over a word limit.
 
-**Security worker brief** — first read every path in the prompt's `Security sources` block. Apply the policy's Finding standard and severity rubric. Report each qualifying finding with its file/hunk, policy section, attack path, impact, remediation, and severity. A missing required negative test qualifies when the policy requires one. Report exactly "No security findings." when none qualify. Stay under 400 words.
+**Security worker brief** — first read every path in the prompt's `Security sources` block. Apply the policy's Finding standard and severity rubric. Report each qualifying finding with its file/hunk, policy section, attack path, impact, remediation, and severity. A missing required negative test qualifies when the policy requires one. Report exactly "No security findings." when none qualify. Keep findings concise. Include every qualifying finding; completeness takes precedence over a word limit.
 
-**Spec worker brief** — report (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that was not asked for (scope creep); and (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line for each finding. Report exactly "No spec findings." when none qualify. Stay under 400 words.
+**Spec worker brief** — report (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that was not asked for (scope creep); and (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line for each finding. Report exactly "No spec findings." when none qualify. Keep findings concise. Include every qualifying finding; completeness takes precedence over a word limit.
+
+Before returning a no-findings result, verify that every changed file relevant to your axis was examined and that plausible counterexamples were checked against the implementation. If missing sources, inaccessible dependencies, or other blockers prevent that examination, report the limitation as unresolved instead of returning the no-findings result. Include this completion criterion in every worker's task.
 
 If the spec is missing, skip the Spec worker and note this in the final report.
 

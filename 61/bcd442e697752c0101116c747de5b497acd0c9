@@ -1,0 +1,41 @@
+apps/web/e2e/agent-recovery.spec.ts
+  s_241024bc81d268::t_9e9eacc8e4a395 27-56,99-114,159,162,198-228,250,253-256,271,274,281
+  s_241024bc81d268::t_878e8e0d437b16 146,193
+  s_241024bc81d268::t_3e94083a6aa6bd 290-294
+  s_241024bc81d268::t_da6c20359eeb9d 17-19,21-23,26,151-158,160-161,163-167,175-180,192,194-195,339-341,348-350
+  s_241024bc81d268::t_2fd6be25d9dc93 115-145,288-289,295-312,326
+  s_241024bc81d268::t_baab223305d2ec 197
+  s_241024bc81d268::t_0bf70826bfe4df 1-16,20,24-25,196,229-249,251-252,257-270,272-273,275-280,282-287
+  s_241024bc81d268::t_e31c6b00db216a 313-325
+  s_241024bc81d268::t_44acdcef2f0148 327-338,342-347,351-362
+  s_241024bc81d268::t_9c84ad97a67838 147-150,168-174,181-191
+  s_241024bc81d268::t_c4a00952196472 58-97
+  s_241024bc81d268::t_d4cbe4b4c17974 57,98
+apps/web/src/app/application-frame.tsx
+  s_241024bc81d268::t_9e9eacc8e4a395 46-50
+  s_241024bc81d268::t_eb08a310be4d81 5,29-31,34
+apps/web/src/features/agent/FEATURE.md
+  s_241024bc81d268::t_9c3fabdea00184 11-21,73
+  s_241024bc81d268::t_4a7f7a5b808301 74,76
+apps/web/ARCHITECTURE.md
+  s_241024bc81d268::t_9c3fabdea00184 54-57
+apps/web/src/features/agent/feature.tsx
+  s_241024bc81d268::t_eb08a310be4d81 3-4,17-26,34-45
+  s_241024bc81d268::t_9e9eacc8e4a395 27-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "61bcd442e697752c0101116c747de5b497acd0c9",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

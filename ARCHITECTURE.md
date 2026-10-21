@@ -1,197 +1,89 @@
 # Architecture
 
+Fidy is one domain model served through web, CLI, MCP and a hosted agent. This document describes
+system ownership, runtime topology and cross-application boundaries. Feature specifications, schema
+fields and operational procedures live in their linked references.
+
 ## System ownership
 
-This private Bun workspace owns the lockfile, CI, and repository-wide checks. Its packages have
-separate responsibilities:
-
-- [`@fidy/server`](apps/server/ARCHITECTURE.md) owns the domain model, canonical operations and
-  schemas, provider-neutral contracts, and Cloudflare Worker adapters.
-- [`@fidy/cli`](apps/cli/ARCHITECTURE.md) owns the Bun executable, local credential storage,
-  PATPairing presentation and server-derived direct client. Its native store is the deliberate
-  recoverable-bearer exception; server persistence remains digest-only.
-- [`@fidy/web`](apps/web/ARCHITECTURE.md) owns the React/Vite browser application and static artifact.
-- [`@fidy/cloudflare-infra`](infra/cloudflare/) owns the Alchemy stack, resource wiring, and edge
-  policy, but no domain model or Worker implementation.
-
-Cloudflare is the sole Production runtime authority. The public ingress Worker has no D1 binding;
-the private Core Worker owns the User-scoped data API and primary D1 authority. The unrouted Email
-Worker has a narrow D1 binding for forwarded-mail admission and retention. Core and Email also bind a separate private
-Titular-erasure registry bucket. Reviewed erasure checkpoints and restricted retained copies survive
-D1 recovery independently; the public Ingress has no database or registry binding. Ordinary native
-data units fail closed when the registry generation disagrees with D1. Dedicated operator Access
-owns review and controlled recovery release; it does not reuse browser, recovery or billing authority.
-Durable Objects coordinate
-per-User work, Queues redeliver bounded identities, Workflows execute durable steps, R2 retains
-private bytes, Email Workers admit forwarded mail, and Workers AI handles Fidy-controlled inference.
-An unimplemented seam returns a typed unavailable result rather than falling back to process-local
-state or a different provider. Railway,
-PostgreSQL, and the Bun process runtime were superseded by
-[ADR 0026](docs/adr/0026-cloudflare-native-production-replatform.md).
-
-## Owner publication
-
-The server uses optional Published Trio interfaces: `contract.ts` declares schemas and meaning,
-`operations.ts` owns substantive behavior, and `runtime.ts` owns construction and fixed-policy
-runtime authority. Implementation remains visibly private under its owner. Cross-module dependencies
-use earned publications; source, tests, scripts, tools and infrastructure obey the same resolved
-boundary. Core purity and the explicit Cloudflare compositions remain separate requirements.
-See [ADR 0031](docs/adr/0031-published-owner-interfaces-and-visible-internals.md).
-
-### Public-surface review
-
-A published interface must not forward private implementation identities or private storage/provider
-shapes through aliases, object members, factories, inferred return values, or exported types. Review
-what callers can actually obtain, including indirect exports: renaming a private function or returning
-it from a factory does not make it a public operation. A substantive public wrapper that owns its
-behavior and a deliberate public data projection are allowed; they may invoke private implementation
-without exposing it. Automated dependency and export checks cover bounded syntactic patterns, not
-all semantic leakage. During code review, agents must inspect the public surface and trace forwarded
-values and types to their owners, even when every automated check passes.
-
-For each changed published interface, reviewers check:
-
-- **Forbidden forwarding:** `export { privateRead as read }`, `export const api = { privateRead }`,
-  or `export const makeApi = () => privateRead` exposes the private function itself. The same rule
-  applies through intermediate aliases, mutations, computed members, class members and type aliases.
-- **Forbidden type exposure:** publishing an internal row/provider type, or an API signature that
-  exposes that implementation shape, couples callers to private representation even without a value export.
-- **Allowed boundary:** an owner operation invokes `privateRead`, applies its domain policy and
-  returns a deliberate public result defined by its contract. Runtime construction may return its
-  intended public service, keeping private adapters and implementation handles enclosed. Reusing
-  another owner's published declaration is allowed without copying or exposing its private model.
-- **Finding evidence:** name the exported symbol, trace the private value or type it exposes and
-  explain which implementation detail the caller can now depend on. An unsupported hypothetical
-  syntax form in the checker is not itself a violation; a concrete leak in the changed public surface is.
-
-## Cross-application contract
-
-The server declares canonical operations once for HTTP, typed clients, MCP, and the hosted agent.
-The web derives its typed client from the browser-safe server declaration, without importing server
-implementations or copying the contract. The server generates OpenAPI and operation-policy artifacts
-as review evidence, not competing declarations. The project-reference build orders server before
-CLI and web; the root gate checks generated artifact freshness, not compatibility with older revisions.
-See [Server contract artifacts](docs/server-contract-artifacts.md).
-
-Dedicated transports sit outside the stable-User canonical operation surface: proof-bearing credential
-bootstrap before a stable User exists, bounded User-authenticated statement-byte staging before a
-canonical mutation publishes the bytes, the browser-only hosted Turn conversation channel, and
-fresh-session reusable payment-source enrollment, and authenticated privacy-purpose controls.
-Privacy requests remain independent of withdrawn processing Consent and commercial access.
-Their exact browser declarations, origin checks and same-User credential proof do not confer
-canonical or agent authority. Transaction access requires fresh proof rechecked atomically with
-its bounded owner result and metadata-only Audit; the browser is the verified delivery destination.
-The bootstrap establishes authority only after proof exchange; staging returns no readable content,
-grants no authority, and expires if unpublished. The bootstrap's direct-client contract is checked
-separately; staging's limits and publication boundary are specified in
-[ADR 0028](docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md). Payment enrollment
-isolates transient authorization from canonical clients under
-[ADR 0021](docs/adr/0021-browser-only-payment-credential-enrollment.md).
-
-The hosted Turn channel (`/web/hosted-turns` and `/web/hosted-turns/delivery`) accepts one User message
-and a separate visible-delivery receipt. Neither endpoint is a tool-callable operation or belongs in
-an atomic batch. Its browser-safe typed API is server-declared in
-`apps/server/src/shell/agent/contract.ts`; public and Core Worker adapters enforce cookie,
-origin, CSRF, D1, and per-User Durable Object policy. Completion requires an exact authenticated
-receipt after visible rendering. A Durable Object alarm interrupts abandoned proposals, with an
-independent private Core cron sweep for missing alarms and bounded retention. This channel never
-bypasses canonical operation policy for tools.
-
-## Hosted MCP design and installed query slice
-
-[ADR 0033](docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md) supersedes only ADR 0016's
-remote-MCP/OAuth exclusion. The `https://api.fidyapp.com/mcp` Streamable HTTP surface uses
-Effect stable's protocol implementation and a distinct OAuth User-owned-agent caller, projecting
-canonical declarations and invoking the same private Core owners and User coordinator. Ingress
-retains no D1 binding. Browser authorization/token transports are not tools or atomic-batch children.
-The installed slice approves separately identifiable OAuthConnection grants with fixed absolute
-expiration, atomically retained Consent and single-use S256 codes, and digest-only finite access/refresh
-credentials. Installed eligible canonical queries, ordinary mutations and authorized atomic batches execute through declaration-derived MCP tools;
-account-security operations remain unavailable, and canonical confirmation metadata requires exact OAuth-native confirmation for sensitive mutations (including batch children). Refresh executes through the same User coordinator with finite, scope-preserving
-credentials, atomic digest rotation and metadata-only lifecycle evidence. Recognized replay revokes
-the whole connection family, including a concurrent winner; lost delivery requires fresh browser
-approval, with no grace window or recoverable replacement cache. Live first-party browser sessions list separately identifiable connections with bounded canonical activity. Fresh sessions can atomically revoke one or all owned grants under the original User coordinator. Activity is metadata-only Audit evidence, never credential material or financial content. Browser logout, PAT revocation and OAuth revocation remain independent. Discovery is scope-private and catalog-derived; OAuth callers never become PATs, WebSessions or Hosted Agent Sessions.
-
-The installed #988 implementation trusts OAuth-authorized client-native confirmation for an exact
-server-owned sensitive intent, with atomic single-use consumption; it does not attest human
-presence. Current supported hosts are **Claude Code and Codex only**;
-there is no browser confirmation fallback or adapter extension. Initial browser OAuth approval
-and fresh-session connection revocation are unchanged. See ADR 0033 for the explicitly accepted
-client-automation risk and bounded ingress/Core/D1 implementation evidence.
-
-OAuth MCP shares #35's stable-User canonical-call allowance and retry semantics with PAT/API/CLI
-through Canonical Admission, including mutation attempts, whole atomic batches and native continuation.
-Exact-host interoperability, real Core/D1 security evidence and operator approval remain separate gates.
-See the [Spanish connection guide](docs/guides/hosted-mcp.md) and
-[controlled-proof procedure](docs/operations/hosted-mcp-release.md).
+| Package                                                      | Responsibility                                                                             |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| [Server](apps/server/ARCHITECTURE.md)                        | Domain model, canonical operations, provider contracts and Cloudflare application adapters |
+| [Web](apps/web/ARCHITECTURE.md)                              | React product application and browser interactions                                         |
+| [CLI](apps/cli/ARCHITECTURE.md)                              | Bun executable, server-derived client and native credential storage                        |
+| [Site](apps/site/ARCHITECTURE.md)                            | Public marketing, legal documents and discovery                                            |
+| [Cloudflare infrastructure](infra/cloudflare/alchemy.run.ts) | Deployment topology, resource wiring and edge policy                                       |
+| Workspace                                                    | Dependencies, shared tooling and CI                                                        |
 
 ## Production boundary
 
-[`infra/cloudflare/alchemy.run.ts`](infra/cloudflare/alchemy.run.ts) is the sole Production topology
-authority. One stack deploys an assets-only Astro site Worker at `fidyapp.com`, an assets-only
-React web Worker at `app.fidyapp.com`, and an ingress Worker at `api.fidyapp.com`.
-[`apps/site/ARCHITECTURE.md`](apps/site/ARCHITECTURE.md) owns public marketing, legal documents
-and discovery; [`apps/web/ARCHITECTURE.md`](apps/web/ARCHITECTURE.md) owns product behavior. The Core Worker is private behind the
-ingress service binding and owns the primary D1 binding; the unrouted Email Worker has a narrow
-D1 binding for forwarded-mail admission and retention. The ingress has no direct database access.
-The static artifact contains no server implementation or Secrets. Local development uses the same
-entrypoints, D1 migrations, and binding graph; other remote stages are rejected before resource
-creation.
+Cloudflare is the sole Production runtime. The public ingress Worker forwards to a private Core
+Worker and has no D1 binding. Core owns the User-scoped data API; the unrouted Email Worker has
+narrow forwarded-mail admission and retention authority. Static site and web Workers serve the
+marketing and product applications separately.
 
-The application combines synchronous D1 commits with durable asynchronous execution.
-Browser-pairing and replacement email, and billing collection use transactional outboxes, Queues,
-and versioned Workflows. Statement extraction also uses a durable outbox and a Queue/Workflow path
-through the User coordinator. Prompt email/billing publication follows a commit; cron recovers missed offers and runs
-independent reconciliation and retention activities. Shared dead letters and bounded operational
-signals expose delivery and execution failures; see the
-[background-work runbook](docs/operations/cloudflare-background-work.md). The server architecture
-records incomplete execution paths separately from their declared contracts.
+```mermaid
+flowchart LR
+  Clients[Web / CLI / MCP clients] --> Ingress[Public ingress]
+  Ingress --> Core[Private Core]
+  Core --> Coordinator[Per-User Durable Objects]
+  Coordinator --> D1[(D1)]
+  Core --> Background[Queues / Workflows]
+  Background --> Coordinator
+  Email[Private Email Worker] --> D1
+```
 
-GitHub Actions rechecks trunk immediately before deploying an exact source revision. It applies
-forward-only additive D1 migrations, smokes exact zero-traffic Worker versions, and promotes only
-the verified pair. Rollback can restore compatible Worker code traffic, never D1 or other state.
-Workstation and provider-controlled source deployments are not release paths. See the [Production runbook](docs/operations/production-releases.md).
+D1 retains application state; Durable Objects coordinate per-User work; Queues redeliver bounded
+identities; Workflows execute durable steps; R2 retains private bytes; Workers AI supplies
+Fidy-controlled inference. An independent private erasure registry protects deletion across D1
+restoration. Local development uses the same Worker entrypoints and binding graph.
+See [ADR 0026](docs/adr/0026-cloudflare-native-production-replatform.md).
 
-## Database redesign contracts
+## Cross-application contract
 
-The accepted feature storage redesign is indexed in [#1394](https://github.com/B4rz99/fidy-ai/issues/1394).
-Its [implementation checklist](docs/operations/database-cutover-1428.md) records table ownership,
-typed relationships, coupled cutovers and historical-data gates. The accepted full-deletion target
-supersedes selective archive/hold behavior only when its implementation and restore prerequisites
-pass. Descriptions of installed retention/erasure above remain current implementation evidence;
-design acceptance does not claim that migrations have run. The newly identified WhatsApp recipient
-table remains proposed pending explicit review.
+The server declares canonical operations once. HTTP, typed clients, MCP and the hosted agent derive
+from those declarations and share authorization and owner behavior. Web and CLI consume browser-safe
+server contracts; server implementations stay private. OpenAPI and operation-policy artifacts are
+generated evidence. See [contract generation](docs/server-contract-artifacts.md).
 
-## Identity and verification
+Credential bootstrap, statement-byte staging, hosted conversation/delivery, payment enrollment and
+privacy controls have dedicated transports with their own proof boundaries. They do not gain
+canonical or agent authority merely by being reachable. OAuth agent grants, browser sessions and
+PATs remain separate credentials; the hosted agent uses the same canonical tools as external agents.
 
-Browser login retains a private verifier in the browser. Google or Microsoft provider authentication, WhatsApp approval, verified email, or
-support recovery can approve a pairing for the same stable User, but cannot establish a session
-without that verifier. One approved pairing bootstraps one web session. The server verifies proof
-and owns session authority; the web keeps private material out of URLs, public references, and
-unrelated application state.
+## Owner publication
 
-The root gate combines generated contract freshness, portable behavior tests, built-browser tests,
-and Cloudflare adapter tests. Browser acceptance runs a built production-mode static artifact and real
-public/Core Workers on separate loopback HTTPS origins with isolated Miniflare D1. Loopback operator
-fixtures simulate external proof/approval delivery and provider responses; focused browser HTTP
-fixtures cover presentation and failure cases without substituting for the real-Core journeys.
-Cloudflare integration tests exercise the relevant Worker and platform boundaries locally; live
-Workers AI behavior is verified separately through an explicit operator-run conformance check, outside
-CI. Application-specific test seams belong in the application architecture documents.
+Owners publish only the interfaces they earn: `contract.ts` for declarations, `operations.ts` for
+behavior and `runtime.ts` for construction. Private implementation stays with its owner. These
+boundaries apply to application code, tests, tooling and infrastructure. Portable domain code
+remains independent of native adapters. See
+[ADR 0031](docs/adr/0031-published-owner-interfaces-and-visible-internals.md).
 
-Google and Microsoft web signup/login are implemented under #1089 and #1090. It creates a stable User by canonical issuer/subject,
-atomically retaining web Consent, TrialPeriod and digest-only recovery without a WhatsAppIdentity.
-Contact email grants no ownership. Provider approval and Browser Login session issuance remain
-separate authorities; deployed provider verification remains an operator gate.
+### Public-surface review
 
-#1091 adds WhatsApp-led signup through the same provider owner. A ten-minute public handoff binds one
-browser pairing to the authenticated originating Consent exchange. The chat reviews the provider
-account and matching association identifier, and replies to the exact review message. Completion
-atomically creates all new-User records and the initial WhatsAppIdentity, or adds only that association
-to an existing provider User. Established associations refuse replacement. Browser Login retains sole
-WebSession ownership. Superseded mailbox-code signup has been removed under #1093; optional
-mailbox login/replacement requires independently established VerifiedEmailCredential authority.
+Review changed publications for leaked private functions, types and storage/provider shapes,
+including indirect exports. Dependency checks complement this semantic review; the detailed
+[review criteria](docs/adr/0031-published-owner-interfaces-and-visible-internals.md#public-surface-review)
+live with the publication decision.
 
-Recurring planning is a separate User-maintained expectation model from historical charge
-pattern detection. Its server-owned schedules and tracking are shared by web and authorized
-agents; no planning action moves Money. See [ADR 0036](docs/adr/0036-recurring-planning.md).
+## State and delivery
+
+User-scoped D1 units commit owner changes, live authority checks and accountability together.
+Durable Object serialization complements database guards. External calls and object storage cannot
+participate in that database commit: retained intent, bounded dispatch and verified outcomes bridge
+those boundaries. A successful handoff is distinct from completed delivery or provider settlement.
+
+## Deployment and evolution
+
+GitHub Actions deploys an exact trunk revision, applies migrations and verifies staged Worker
+versions before promotion. Code rollback changes traffic, not database or external state. The
+[Production runbook](docs/operations/production-releases.md) owns the release procedure.
+
+Accepted schema designs are indexed in [#1394](https://github.com/B4rz99/fidy-ai/issues/1394).
+Their [cutover checklist](docs/operations/database-cutover-1428.md) owns migration dependencies,
+historical-data preservation and unresolved design gates. Acceptance is distinct from implementation
+or deployment; architecture documents are not migration histories or feature-status logs.
+
+Domain terms belong in [GLOSSARY.md](GLOSSARY.md), coding and storage conventions in
+[CODING_STANDARDS.md](CODING_STANDARDS.md), security invariants in
+[SECURITY_STANDARDS.md](SECURITY_STANDARDS.md), and durable design rationale in [ADRs](docs/adr/).

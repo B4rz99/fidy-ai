@@ -54,8 +54,8 @@ Published interfaces declare their surface instead of aliasing private values, s
 provider shapes or types. Published Trio files contain direct declarations rather than TypeScript
 namespace or module blocks; those wrappers cannot become a second publication surface. Resolved dependency checks and bounded export-provenance checks reject supported direct,
 local, namespace and type re-export patterns. They do not prove absence of all semantic leakage;
-code review applies the public-surface rule in root `ARCHITECTURE.md`. Public declaration assembly may reuse another published
-schema; it never makes that owner's implementation public. Browser publication and deployed Worker
+code review applies the public-surface criteria below. Public declaration assembly may reuse another
+published schema; it never makes that owner's implementation public. Browser publication and deployed Worker
 export identities remain explicit outward compositions. There are no compatibility `reference.ts`
 files, runtime barrels or generic shell helper paths.
 
@@ -72,6 +72,32 @@ output and installed dependencies are not independent source roots. Missing sour
 coverage, unresolved imports and an empty graph cannot count as successful enforcement. Negative
 probes must identify the precise rejected edge, while positive probes preserve legitimate owner
 implementation and composition.
+
+## Public-surface review
+
+A published interface must not forward private implementation identities or private storage/provider
+shapes through aliases, object members, factories, inferred return values, or exported types. Review
+what callers can actually obtain, including indirect exports: renaming a private function or returning
+it from a factory does not make it a public operation. A substantive public wrapper that owns its
+behavior and a deliberate public data projection are allowed; they may invoke private implementation
+without exposing it. Automated dependency and export checks cover bounded syntactic patterns, not
+all semantic leakage. During code review, agents must inspect the public surface and trace forwarded
+values and types to their owners, even when every automated check passes.
+
+For each changed published interface, reviewers check:
+
+- **Forbidden forwarding:** `export { privateRead as read }`, `export const api = { privateRead }`,
+  or `export const makeApi = () => privateRead` exposes the private function itself. The same rule
+  applies through intermediate aliases, mutations, computed members, class members and type aliases.
+- **Forbidden type exposure:** publishing an internal row/provider type, or an API signature that
+  exposes that implementation shape, couples callers to private representation even without a value export.
+- **Allowed boundary:** an owner operation invokes `privateRead`, applies its domain policy and
+  returns a deliberate public result defined by its contract. Runtime construction may return its
+  intended public service, keeping private adapters and implementation handles enclosed. Reusing
+  another owner's published declaration is allowed without copying or exposing its private model.
+- **Finding evidence:** name the exported symbol, trace the private value or type it exposes and
+  explain which implementation detail the caller can now depend on. An unsupported hypothetical
+  syntax form in the checker is not itself a violation; a concrete leak in the changed public surface is.
 
 ## Consequences
 

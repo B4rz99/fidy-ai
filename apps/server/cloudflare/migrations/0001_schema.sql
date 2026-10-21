@@ -236,7 +236,6 @@ CREATE TABLE budgets (
 
 CREATE TABLE "canonical_child_guard" (
   child_index INTEGER PRIMARY KEY NOT NULL CHECK (child_index BETWEEN 0 AND 11),
-  operation TEXT NOT NULL,
   accepted INTEGER NOT NULL,
   capacity_ok INTEGER NOT NULL DEFAULT 1,
   CONSTRAINT canonical_child_guard_0 CHECK (child_index != 0 OR accepted = 1),

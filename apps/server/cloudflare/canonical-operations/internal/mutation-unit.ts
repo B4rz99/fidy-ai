@@ -57,9 +57,6 @@ export type CanonicalMutationUnitExecution =
   | Readonly<{ _tag: "Aborted" }>
   | Readonly<{ _tag: "ConfirmationReview"; review: OAuthNativeReview }>;
 
-/** A child's canonical identity is fixed by its owner's prepared outcome, never by D1's error. */
-const mutationOperation = (mutation: PreparedCanonicalMutation): string =>
-  mutation.outcome.operation;
 const commitInstant = (
   subject: TransactionCaller | HostedCanonicalCaller,
   admitted: number
@@ -68,13 +65,12 @@ const commitInstant = (
     ? Clock.currentTimeMillis
     : Effect.succeed(admitted);
 
-const childCompletion = (db: D1Database, index: number, operation: string): D1PreparedStatement =>
+const childCompletion = (db: D1Database, index: number): D1PreparedStatement =>
   db
-    .prepare(`INSERT INTO canonical_child_guard (child_index, operation, accepted)
-    VALUES (?, ?, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-    ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
-      accepted = excluded.accepted`)
-    .bind(index, operation);
+    .prepare(`INSERT INTO canonical_child_guard (child_index, accepted)
+    VALUES (?, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
+    ON CONFLICT(child_index) DO UPDATE SET accepted = excluded.accepted`)
+    .bind(index);
 
 /** Decode only a known CHECK failure; a trigger with similar prose is not proof of a child. */
 const childGuardMarker = (
@@ -268,10 +264,10 @@ const oauthChildStatements = ({
   });
   return [
     db
-      .prepare(`INSERT INTO canonical_child_guard (child_index, operation, accepted)
-    SELECT ?, ?, CASE WHEN EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) THEN 1 ELSE 0 END
-    ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation, accepted = excluded.accepted`)
-      .bind(index, mutationOperation(mutation), ...authority.bindings),
+      .prepare(`INSERT INTO canonical_child_guard (child_index, accepted)
+    SELECT ?, CASE WHEN EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) THEN 1 ELSE 0 END
+    ON CONFLICT(child_index) DO UPDATE SET accepted = excluded.accepted`)
+      .bind(index, ...authority.bindings),
   ];
 };
 
@@ -289,15 +285,14 @@ const childStatements = ({
   index: number;
 }>): ReadonlyArray<D1PreparedStatement> => {
   const userId = subject.userId;
-  const operation = mutationOperation(mutation);
   return [
     ...oauthChildStatements({ db, subject, current, mutation, index }),
     ...Option.match(mutation.commitGuards, {
       onNone: (): ReadonlyArray<D1PreparedStatement> => [],
-      onSome: (guards) => guards({ db, userId, current, index, operation }),
+      onSome: (guards) => guards({ db, userId, current, index }),
     }),
     ...mutation.statements,
-    childCompletion(db, index, operation),
+    childCompletion(db, index),
   ];
 };
 

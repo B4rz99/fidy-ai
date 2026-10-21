@@ -74,7 +74,6 @@ export type PreparedCanonicalMutation = Readonly<{
         userId: string;
         current: number;
         index: number;
-        operation: string;
       }>
     ) => ReadonlyArray<D1PreparedStatement>
   >;

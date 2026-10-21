@@ -2,6 +2,13 @@
 
 One `executeCanonicalMutationUnit` D1 batch contains all ordered children. `canonical_child_guard` CHECK failures prove a **child index**, never an untrusted SQL message. The prepared outcome supplies that child's operation; its owner-supplied `guardRefusal` retains its own premises. The unit delegates domain classification and records only the attributable child's metadata-only refusal after rollback. An unproved child, ambiguous trigger, or forged CHECK text answers `unavailable` without attributing an Audit.
 
+The guard stores only `child_index`, `accepted` and `capacity_ok` in reusable slots 0–11.
+Operation identity comes from the prepared outcome; it is not copied into a guard slot.
+Completion observes the immediately preceding statement’s `changes()` result. Owner and OAuth
+guards retain their original ordering, named CHECK constraints and post-rollback classification.
+The pre-release clean-install schema remains in the sole `0001_schema.sql` baseline; existing
+disposable development databases must be recreated when that baseline changes.
+
 | Owner / child                      | In-unit write and abort source                                                                               | Trusted child proof                                                                                                             | Refusal and refusal Audit                                                                                                                                                                                         |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Transaction capture                | Daily movement limit (`transaction_manual_daily_budget`); guarded insert; shared success Audit cap           | Indexed pre-insert movement and shared Audit CHECK; indexed `changes()` completion CHECK                                        | Owner `resource_limit` or `rate_limited` (spent cap: no extra Audit); skipped insert uses retained owner facts, including stale/repeated revision where applicable; Transaction refusal Audit only after rollback |

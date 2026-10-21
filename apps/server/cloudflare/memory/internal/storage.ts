@@ -139,26 +139,22 @@ export const memoryCapacityGuards =
     db,
     userId,
     index,
-    operation,
   }: Readonly<{
     db: D1Database;
     userId: string;
     index: number;
-    operation: string;
   }>): ReadonlyArray<D1PreparedStatement> => [
     db
-      .prepare(`INSERT INTO canonical_child_guard (child_index,operation,accepted,capacity_ok)
-      SELECT ?,?,1,CASE WHEN
+      .prepare(`INSERT INTO canonical_child_guard (child_index,accepted,capacity_ok)
+      SELECT ?,1,CASE WHEN
         (SELECT COALESCE(SUM(length(CAST(json_object('id', id, 'text', text) AS BLOB))), 0)
           FROM memories WHERE user_id = ? AND id <> ?)
         + length(CAST(json_object('id', ?, 'text', ?) AS BLOB))
         + (SELECT count(*) FROM memories WHERE user_id = ? AND id <> ?) <= ?
         THEN 1 ELSE 0 END
-      ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
-        accepted = excluded.accepted, capacity_ok = excluded.capacity_ok`)
+      ON CONFLICT(child_index) DO UPDATE SET accepted = excluded.accepted, capacity_ok = excluded.capacity_ok`)
       .bind(
         index,
-        operation,
         userId,
         candidate.id,
         candidate.id,

@@ -225,17 +225,16 @@ const preparedRuleWrite = (
 
     commitGuards:
       write.outcome.operation === "categories.createKeywordRule"
-        ? Option.some(({ db, userId, index, operation }) => [
+        ? Option.some(({ db, userId, index }) => [
             db
               .prepare(
                 `INSERT INTO canonical_child_guard
-          (child_index,operation,accepted,capacity_ok)
-          SELECT ?,?,1,CASE WHEN (SELECT count(*) FROM keyword_rules WHERE user_id = ?) < ?
+          (child_index,accepted,capacity_ok)
+          SELECT ?,1,CASE WHEN (SELECT count(*) FROM keyword_rules WHERE user_id = ?) < ?
             THEN 1 ELSE 0 END
-          ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
-            accepted = excluded.accepted, capacity_ok = excluded.capacity_ok`
+          ON CONFLICT(child_index) DO UPDATE SET accepted = excluded.accepted, capacity_ok = excluded.capacity_ok`
               )
-              .bind(index, operation, userId, maximumKeywordRulesPerUser),
+              .bind(index, userId, maximumKeywordRulesPerUser),
           ])
         : Option.none(),
     statements: writeStatements({

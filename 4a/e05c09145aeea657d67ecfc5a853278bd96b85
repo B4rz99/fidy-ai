@@ -1,0 +1,31 @@
+apps/server/src/shell/mcp/FEATURE.md
+  s_241024bc81d268::t_1dc435efb6656b 81-88
+  s_241024bc81d268::t_529aab42e78b30 110-127
+  s_241024bc81d268::t_bfa634df8d6b74 89-98
+  s_241024bc81d268::t_547d91de6d7546 99-109
+apps/web/src/features/pats/FEATURE.md
+  s_241024bc81d268::t_1dc435efb6656b 133-144
+  s_241024bc81d268::t_bfa634df8d6b74 145-149
+  s_241024bc81d268::t_529aab42e78b30 150-155
+apps/web/src/features/recurring/FEATURE.md
+  s_241024bc81d268::t_529aab42e78b30 379-384
+  s_241024bc81d268::t_bfa634df8d6b74 371-378
+apps/web/src/features/agent/FEATURE.md
+  s_241024bc81d268::t_1dc435efb6656b 184-192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ae05c09145aeea657d67ecfc5a853278bd96b85",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

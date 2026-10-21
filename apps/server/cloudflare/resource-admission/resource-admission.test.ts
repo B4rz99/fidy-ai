@@ -74,7 +74,7 @@ const makeMiniflare = (resourcePersistencePath?: string): Promise<Miniflare> =>
 const migrateDatabase = (database: D1Database): Promise<void> =>
   installCurrentTestObjects({
     db: database,
-    tables: ["resource_admission_events", "resource_admission_grants"],
+    tables: ["resource_admission_events", "users", "web_sessions", "resource_admission_grants"],
   });
 
 const prepareDatabase = (miniflare: Miniflare): Promise<D1Database> =>

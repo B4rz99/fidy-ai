@@ -52,3 +52,13 @@ telemetry observes only closed outcome/status/latency, including these refusals;
 proof, query, or body is added to telemetry. Provider maintenance deletes at most 3,000 expired
 standalone grants per tick using the owner-prefix index, exceeding the maximum 2,400 admitted
 request/poll grants per minute. It preserves active and foreign-owner accounting.
+
+## PAT pairing/review (#1433)
+
+Anonymous PAT pairing source windows use the shared `pat.pairing.source.v1` counter with the original
+keyed digest, twenty requests per anchored ten minutes and no fabricated User. The 4000 recent-pairing
+capacity predicate and source charge remain atomic with pairing creation. Browser review uses
+`pat.review.session.v1` events: ten attempts per WebSession per rolling ten minutes, charged before
+body decoding. Resource Admission preserves exact session/User ownership, credential erasure and
+bounded retention. These security controls are independent of commercial tier; token issuance's
+existing authoritative PAT-row checks remain separate.

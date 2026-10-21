@@ -318,11 +318,17 @@ export const admitResourceWithAttemptPressure = dual<
   admitResource(config, attempt).pipe(Effect.flatMap(() => admitResource(config, work)))
 );
 
-const emailCounters = {
+const patWindowMs = 600_000;
+const patRetentionMs = patWindowMs * 2;
+const anchoredCounters = {
   email_pairing_user: { key: "email.pairing.user.v1", duration: 3_600_000 },
   email_pairing_global: { key: "email.pairing.global.v1", duration: 3_600_000 },
   email_replacement: { key: "email.replacement.user.v1", duration: 86_400_000 },
-} as const satisfies Record<EmailCounterKind, { key: string; duration: number }>;
+  pat_pairing_source: { key: "pat.pairing.source.v1", duration: patWindowMs },
+} as const satisfies Record<
+  EmailCounterKind | "pat_pairing_source",
+  { key: string; duration: number }
+>;
 
 /** Observe a closed counter inside an owner's query; absence means no accepted window yet. */
 export const resourceCounterQuery = (input: ResourceCounterQuery): OwnedStatement => ({
@@ -333,7 +339,7 @@ export const resourceCounterQuery = (input: ResourceCounterQuery): OwnedStatemen
         : `(SELECT user_id FROM (${input.subject.sql}))`
     }`,
   params: [
-    emailCounters[input.kind].key,
+    anchoredCounters[input.kind].key,
     ...(input.kind === "email_pairing_global" ? [] : input.subject.params),
   ],
 });
@@ -342,21 +348,25 @@ export const resourceCounterQuery = (input: ResourceCounterQuery): OwnedStatemen
  * pairing's final bounded-count constraint aborts an over-capacity owner commit.
  */
 export const prepareResourceCounter = (input: ResourceCounterRequest): D1PreparedStatement => {
-  const policy = emailCounters[input.kind];
+  const policy = anchoredCounters[input.kind];
   const global = input.kind === "email_pairing_global";
+  const source = input.kind === "pat_pairing_source";
+  const scope = source ? "lower(hex(?))" : "user_id";
   return input.db
     .prepare(`INSERT INTO resource_admission_counters
     (policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id)
-    SELECT ?,${global ? "'global'" : "user_id"},'anchored',?,?,1,?,${global ? "NULL" : "user_id"}
+    SELECT ?,${global ? "'global'" : scope},'anchored',?,?,1,?,${global || source ? "NULL" : "user_id"}
     FROM (${input.subject.sql}) WHERE true
     ON CONFLICT(policy_key,scope_key) WHERE window_kind='anchored' DO UPDATE SET
       window_start_ms=CASE WHEN window_ends_ms<=? THEN excluded.window_start_ms ELSE window_start_ms END,
       window_ends_ms=CASE WHEN window_ends_ms<=? THEN excluded.window_ends_ms ELSE window_ends_ms END,
       used=CASE WHEN window_ends_ms<=? THEN 1 ELSE used+1 END,
       last_work_id=excluded.last_work_id
-    WHERE excluded.policy_key<>'email.replacement.user.v1' OR used<5 OR window_ends_ms<=?`)
+    WHERE window_ends_ms<=? OR excluded.policy_key NOT IN('email.replacement.user.v1','pat.pairing.source.v1')
+      OR used<CASE excluded.policy_key WHEN 'pat.pairing.source.v1' THEN 20 ELSE 5 END`)
     .bind(
       policy.key,
+      ...(source ? [input.sourceDigest] : []),
       input.current,
       input.current + policy.duration,
       input.kind === "email_replacement" ? input.workId : null,
@@ -366,4 +376,79 @@ export const prepareResourceCounter = (input: ResourceCounterRequest): D1Prepare
       input.current,
       input.current
     );
+};
+
+/** Charge a PAT public-code review before decoding its body, under exact live-session ownership.
+ * A full rolling window spends nothing. Keep event and one-claim grant together in one batch.
+ */
+export const preparePATReviewAdmission = (
+  input: Readonly<{
+    db: D1Database;
+    id: string;
+    sessionId: string;
+    userId: string;
+    current: number;
+    eligible: OwnedStatement;
+  }>
+): ReadonlyArray<D1PreparedStatement> => [
+  input.db
+    .prepare(`INSERT INTO resource_admission_events
+    (grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,
+     window_start_epoch_ms,expires_at_epoch_ms,owner_user_id,owner_session_id)
+    SELECT ?,'pat.review.session.v1','source',?,'rolling_window',1,?,?,?, ?,?
+    WHERE (${input.eligible.sql}) AND
+      (SELECT coalesce(sum(units),0) FROM resource_admission_events
+       WHERE policy_key='pat.review.session.v1' AND dimension='source' AND scope_key=?
+       AND released_at_epoch_ms IS NULL AND expires_at_epoch_ms>? AND admitted_at_epoch_ms>?)<10`)
+    .bind(
+      input.id,
+      input.sessionId,
+      input.current,
+      Math.max(0, input.current - patWindowMs),
+      input.current + patWindowMs,
+      input.userId,
+      input.sessionId,
+      ...input.eligible.params,
+      input.sessionId,
+      input.current,
+      input.current - patWindowMs
+    ),
+  input.db
+    .prepare(`INSERT INTO resource_admission_grants(id,admitted_at_epoch_ms,claim_count)
+    SELECT ?,?,1 WHERE changes()=1`)
+    .bind(input.id, input.current),
+];
+
+/** Original bounded retention for anonymous anchored sources, with no fabricated User owner. */
+export const sweepPATSourceCounters = (
+  input: Readonly<{ current: number; limit: number }>
+): OwnedStatement => ({
+  sql: `DELETE FROM resource_admission_counters WHERE policy_key='pat.pairing.source.v1'
+    AND scope_key IN(SELECT scope_key FROM resource_admission_counters
+      WHERE policy_key='pat.pairing.source.v1' AND window_start_ms<=?
+      ORDER BY window_start_ms LIMIT ?)`,
+  params: [input.current - patRetentionMs, input.limit],
+});
+
+/** Delete only expired PAT review charges and their unshared grants, in one native batch. */
+export const sweepPATReviewEvents = (
+  input: Readonly<{ current: number; limit: number }>
+): ReadonlyArray<OwnedStatement> => {
+  const candidates = `SELECT grant_id FROM resource_admission_events
+    WHERE policy_key='pat.review.session.v1' AND admitted_at_epoch_ms<=?
+    ORDER BY admitted_at_epoch_ms LIMIT ?`;
+  const params = [input.current - patRetentionMs, input.limit];
+  return [
+    {
+      sql: `DELETE FROM resource_admission_grants WHERE id IN(${candidates})
+      AND NOT EXISTS(SELECT 1 FROM resource_admission_events e WHERE e.grant_id=resource_admission_grants.id
+        AND e.policy_key<>'pat.review.session.v1')`,
+      params,
+    },
+    {
+      sql: `DELETE FROM resource_admission_events WHERE policy_key='pat.review.session.v1'
+      AND grant_id IN(${candidates})`,
+      params,
+    },
+  ];
 };

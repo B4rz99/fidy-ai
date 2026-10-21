@@ -1,4 +1,7 @@
-import { prepareResourceCounter } from "../resource-admission/operations";
+import {
+  preparePATReviewAdmission,
+  prepareResourceCounter,
+} from "../resource-admission/operations";
 import { it as effectIt } from "@effect/vitest";
 import { deletionDecision } from "./erasure.test-fixture";
 import { expect } from "vitest";
@@ -53,6 +56,20 @@ const verifyNewStoreGuards = (db: D1Database): Effect.Effect<void, Cause.Unknown
         ).rejects.toThrow("erasure_fenced")
       );
     }
+    yield* Effect.tryPromise(() =>
+      expect(
+        db.batch([
+          ...preparePATReviewAdmission({
+            db,
+            id: "14330000-0000-4000-8000-000000000099",
+            sessionId: userId,
+            userId,
+            current,
+            eligible: { sql: "SELECT 1", params: [] },
+          }),
+        ])
+      ).rejects.toThrow("erasure_fenced")
+    );
     for (const recordType of ["processing_withdrawal", "processing_renewal"]) {
       yield* Effect.tryPromise(() =>
         expect(
@@ -71,6 +88,82 @@ const verifyNewStoreGuards = (db: D1Database): Effect.Effect<void, Cause.Unknown
           .run()
       ).rejects.toThrow("erasure_fenced")
     );
+  });
+
+const seedReviewAdmission = (
+  db: D1Database,
+  current: number
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    for (const id of [userId, foreignUser]) {
+      const prepared = preparePATReviewAdmission({
+        db,
+        id,
+        sessionId: id,
+        userId: id,
+        current,
+        eligible: { sql: "SELECT 1", params: [] },
+      });
+      const otherCharge =
+        id === userId
+          ? [
+              db
+                .prepare(
+                  "INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms) VALUES(?,'foreign-owned','stable_user',?,'rolling_window',1,?,?,?)"
+                )
+                .bind(id, foreignUser, current, current, current + 600000),
+              db
+                .prepare(
+                  "INSERT INTO resource_admission_grants(id,admitted_at_epoch_ms,claim_count) VALUES(?,?,2)"
+                )
+                .bind(id, current),
+            ]
+          : prepared.slice(1);
+      yield* Effect.tryPromise(() => db.batch([...prepared.slice(0, 1), ...otherCharge]));
+    }
+    yield* Effect.tryPromise(() =>
+      expect(
+        db.batch([
+          ...preparePATReviewAdmission({
+            db,
+            id: reference,
+            sessionId: foreignUser,
+            userId,
+            current,
+            eligible: { sql: "SELECT 1", params: [] },
+          }),
+        ])
+      ).rejects.toThrow("resource_admission_owner_mismatch")
+    );
+  });
+
+const verifyRetainedReviews = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT owner_user_id FROM resource_admission_events WHERE policy_key='pat.review.session.v1'"
+          )
+          .all()
+      )).results
+    ).toEqual([{ owner_user_id: foreignUser }]);
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT count(*) AS total FROM resource_admission_grants WHERE id=?")
+          .bind(userId)
+          .first()
+      ))?.total
+    ).toBe(1);
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT scope_key FROM resource_admission_events WHERE grant_id=?")
+          .bind(userId)
+          .first()
+      ))?.scope_key
+    ).toBe(foreignUser);
   });
 
 const verifyNativeErasure = Effect.gen(function* () {
@@ -130,6 +223,7 @@ const verifyNativeErasure = Effect.gen(function* () {
       })
     );
   }
+  yield* seedReviewAdmission(db, current);
   yield* Effect.tryPromise(() =>
     db.batch([
       ...[userId, foreignUser].flatMap((id) => {
@@ -268,6 +362,7 @@ const verifyNativeErasure = Effect.gen(function* () {
     { owner_user_id: null, retained: 1 },
     { owner_user_id: foreignUser, retained: 2 },
   ]);
+  yield* verifyRetainedReviews(db);
   for (const table of [
     "ingestion_review_state",
     "(SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)",

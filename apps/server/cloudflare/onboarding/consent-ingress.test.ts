@@ -80,6 +80,7 @@ const setup = (
             tables: [
               "resource_admission_grants",
               "resource_admission_events",
+              "web_sessions",
               "whatsapp_event_records",
               "pending_consent_exchanges",
               "hosted_whatsapp_windows",

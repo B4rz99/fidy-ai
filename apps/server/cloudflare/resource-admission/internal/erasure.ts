@@ -33,29 +33,61 @@ const counterProjection = (
   };
 };
 
+const reviewOwnerSql =
+  "r.policy_key='pat.review.session.v1' AND r.dimension='source' AND r.scope_key IN(SELECT id FROM web_sessions WHERE user_id=?) AND r.owner_user_id=?";
+const reviewOwnerParams = (userId: string): ReadonlyArray<string> => [userId, userId];
+
 export const projections: ReadonlyArray<ErasureProjection> = [
   counterProjection("browser_pairing_email_user_limits", "email.pairing.user.v1"),
   counterProjection("email_replacement_limits", "email.replacement.user.v1"),
+  {
+    id: "pat_review_attempts",
+    dataClass: "credentials",
+    dependencies: [],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM resource_admission_events r WHERE ${reviewOwnerSql}`,
+      params: reviewOwnerParams(userId),
+    }),
+    candidates: (userId) => ({
+      sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef FROM resource_admission_events r WHERE ${reviewOwnerSql}`,
+      params: reviewOwnerParams(userId),
+    }),
+    remaining: (userId) => ({
+      sql: `SELECT 1 FROM resource_admission_events r WHERE ${reviewOwnerSql}`,
+      params: reviewOwnerParams(userId),
+    }),
+    remove: (scope) => [
+      {
+        sql: `DELETE FROM resource_admission_grants WHERE id IN(SELECT r.grant_id FROM resource_admission_events r WHERE ${reviewOwnerSql} AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)) AND NOT EXISTS(SELECT 1 FROM resource_admission_events e WHERE e.grant_id=resource_admission_grants.id AND e.policy_key<>'pat.review.session.v1')`,
+        params: [...reviewOwnerParams(scope.userId), scope.reference],
+      },
+      {
+        sql: `DELETE FROM resource_admission_events AS r WHERE ${reviewOwnerSql} AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
+        params: [...reviewOwnerParams(scope.userId), scope.reference],
+      },
+    ],
+  },
   {
     id: "resource_admission_events",
     dataClass: "schedules",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('grant_id',r.\"grant_id\",'policy_key',r.\"policy_key\",'dimension',r.\"dimension\",'scope_key',r.\"scope_key\",'policy_kind',r.\"policy_kind\",'units',r.\"units\",'admitted_at_epoch_ms',r.\"admitted_at_epoch_ms\",'window_start_epoch_ms',r.\"window_start_epoch_ms\",'expires_at_epoch_ms',r.\"expires_at_epoch_ms\",'released_at_epoch_ms',r.\"released_at_epoch_ms\") AS body FROM resource_admission_events r WHERE r.scope_key=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('grant_id',r.\"grant_id\",'policy_key',r.\"policy_key\",'dimension',r.\"dimension\",'scope_key',r.\"scope_key\",'policy_kind',r.\"policy_kind\",'units',r.\"units\",'admitted_at_epoch_ms',r.\"admitted_at_epoch_ms\",'window_start_epoch_ms',r.\"window_start_epoch_ms\",'expires_at_epoch_ms',r.\"expires_at_epoch_ms\",'released_at_epoch_ms',r.\"released_at_epoch_ms\") AS body FROM resource_admission_events r WHERE r.policy_key<>'pat.review.session.v1' AND r.scope_key=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM resource_admission_events r WHERE r.scope_key=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM resource_admission_events r WHERE r.policy_key<>'pat.review.session.v1' AND r.scope_key=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM resource_admission_events r WHERE r.scope_key=?",
+      sql: "SELECT 1 FROM resource_admission_events r WHERE r.policy_key<>'pat.review.session.v1' AND r.scope_key=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM resource_admission_events AS r WHERE r.scope_key=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM resource_admission_events AS r WHERE r.policy_key<>'pat.review.session.v1' AND r.scope_key=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

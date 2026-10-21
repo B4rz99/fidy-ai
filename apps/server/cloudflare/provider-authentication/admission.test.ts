@@ -114,7 +114,7 @@ it("atomically enforces global capacity across distinct sources and fails closed
         db.batch([
           db
             .prepare(
-              `INSERT INTO resource_admission_events VALUES ('fixture','provider.global.v1','operation','all','rolling_window',1199,?,?,?,NULL)`
+              `INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms) VALUES ('fixture','provider.global.v1','operation','all','rolling_window',1199,?,?,?,NULL)`
             )
             .bind(now, now - 60000, now + 60000),
           db.prepare("INSERT INTO resource_admission_grants VALUES ('fixture',?,1)").bind(now),
@@ -151,7 +151,7 @@ it("removes only expired provider admission evidence during owner maintenance", 
         db.batch([
           db
             .prepare(
-              `INSERT INTO resource_admission_events VALUES ('foreign','foreign','operation','all','rolling_window',1,?,?,?,NULL)`
+              `INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms) VALUES ('foreign','foreign','operation','all','rolling_window',1,?,?,?,NULL)`
             )
             .bind(now - 120000, now - 180000, now - 60000),
           db

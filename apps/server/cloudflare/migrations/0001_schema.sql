@@ -531,21 +531,23 @@ CREATE TABLE email_replacements (
 
 CREATE TABLE resource_admission_counters (
   policy_key TEXT NOT NULL CHECK(policy_key IN (
-    'email.pairing.user.v1','email.pairing.global.v1','email.replacement.user.v1'
+    'email.pairing.user.v1','email.pairing.global.v1','email.replacement.user.v1','pat.pairing.source.v1'
   )),
   scope_key TEXT NOT NULL CHECK(length(scope_key) BETWEEN 1 AND 256),
   window_kind TEXT NOT NULL CHECK(window_kind='anchored'),
   window_start_ms INTEGER NOT NULL,
   window_ends_ms INTEGER NOT NULL,
   used INTEGER NOT NULL CHECK(used BETWEEN 1 AND CASE policy_key
-    WHEN 'email.pairing.global.v1' THEN 1000 ELSE 5 END),
+    WHEN 'email.pairing.global.v1' THEN 1000 WHEN 'pat.pairing.source.v1' THEN 20 ELSE 5 END),
   last_work_id TEXT CHECK(last_work_id IS NULL OR length(last_work_id)=36),
   owner_user_id TEXT REFERENCES users(id),
   CHECK(window_ends_ms=window_start_ms+CASE policy_key
-    WHEN 'email.replacement.user.v1' THEN 86400000 ELSE 3600000 END),
+    WHEN 'email.replacement.user.v1' THEN 86400000 WHEN 'pat.pairing.source.v1' THEN 600000 ELSE 3600000 END),
   CHECK((policy_key='email.pairing.global.v1' AND scope_key='global' AND owner_user_id IS NULL)
     OR (policy_key IN ('email.pairing.user.v1','email.replacement.user.v1')
-      AND owner_user_id IS NOT NULL AND scope_key=owner_user_id)),
+      AND owner_user_id IS NOT NULL AND scope_key=owner_user_id)
+    OR (policy_key='pat.pairing.source.v1' AND owner_user_id IS NULL
+      AND length(scope_key)=64 AND scope_key NOT GLOB '*[^0-9a-f]*')),
   CHECK((policy_key='email.replacement.user.v1' AND last_work_id IS NOT NULL)
     OR (policy_key<>'email.replacement.user.v1' AND last_work_id IS NULL))
 ) STRICT;
@@ -972,13 +974,6 @@ CREATE TABLE operational_health_view (
 , last_succeeded_ms INTEGER CHECK(last_succeeded_ms IS NULL OR (last_succeeded_ms>=0 AND operation IN ('queueExecution','workflowExecution')))) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE pat_pairing_admission (
-  source_digest BLOB PRIMARY KEY NOT NULL CHECK (length(source_digest) = 32),
-  window_start_ms INTEGER NOT NULL,
-  started_count INTEGER NOT NULL CHECK (started_count BETWEEN 1 AND 20)
-) STRICT;
---> statement-breakpoint
-
 CREATE TABLE pat_pairings (
   id TEXT PRIMARY KEY NOT NULL,
   public_code TEXT NOT NULL UNIQUE,
@@ -997,13 +992,6 @@ CREATE TABLE pat_pairings (
   minimum_poll_seconds INTEGER NOT NULL DEFAULT 5 CHECK (minimum_poll_seconds BETWEEN 5 AND 60),
   CHECK ((state = 'pending_approval' AND user_id IS NULL AND approved_at_ms IS NULL AND pat_expires_at_ms IS NULL) OR state <> 'pending_approval'),
   CHECK ((state IN ('approved_awaiting_claim','claimed') AND user_id IS NOT NULL AND approved_at_ms IS NOT NULL AND pat_expires_at_ms IS NOT NULL AND pat_expires_at_ms = approved_at_ms + lifetime_days * 86400000) OR state NOT IN ('approved_awaiting_claim','claimed'))
-) STRICT;
---> statement-breakpoint
-
-CREATE TABLE pat_review_attempts (
-  id TEXT PRIMARY KEY NOT NULL,
-  session_id TEXT NOT NULL REFERENCES web_sessions(id),
-  occurred_at_ms INTEGER NOT NULL
 ) STRICT;
 --> statement-breakpoint
 
@@ -1240,7 +1228,16 @@ CREATE TABLE resource_admission_events (
   window_start_epoch_ms INTEGER,
   expires_at_epoch_ms INTEGER NOT NULL,
   released_at_epoch_ms INTEGER,
+  owner_user_id TEXT REFERENCES users(id),
+  owner_session_id TEXT REFERENCES web_sessions(id),
   PRIMARY KEY (grant_id, policy_key),
+  CHECK ((policy_key='pat.review.session.v1' AND owner_user_id IS NOT NULL
+    AND owner_session_id IS NOT NULL AND scope_key=owner_session_id
+    AND dimension='source' AND policy_kind='rolling_window' AND units=1
+    AND expires_at_epoch_ms=admitted_at_epoch_ms+600000
+    AND window_start_epoch_ms=max(0,admitted_at_epoch_ms-600000)
+    AND released_at_epoch_ms IS NULL)
+    OR (policy_key<>'pat.review.session.v1' AND owner_user_id IS NULL AND owner_session_id IS NULL)),
   CHECK (expires_at_epoch_ms > admitted_at_epoch_ms),
   CHECK (
     (policy_kind = 'outstanding' AND window_start_epoch_ms IS NULL) OR
@@ -2126,16 +2123,7 @@ CREATE INDEX pairing_email_pending_health ON browser_login_pairings(email_last_r
 CREATE INDEX pairing_email_rejected_health ON browser_login_pairings(email_last_requested_at_ms) WHERE email_state = 'rejected' AND email_work_id IS NOT NULL;
 --> statement-breakpoint
 
-CREATE INDEX pat_pairing_admission_expiry ON pat_pairing_admission(window_start_ms);
---> statement-breakpoint
-
 CREATE INDEX pat_pairings_capacity ON pat_pairings(created_at_ms);
---> statement-breakpoint
-
-CREATE INDEX pat_review_expiry ON pat_review_attempts(occurred_at_ms);
---> statement-breakpoint
-
-CREATE INDEX pat_review_rate ON pat_review_attempts(session_id,occurred_at_ms);
 --> statement-breakpoint
 
 CREATE INDEX pats_user_active ON pats(user_id,revoked_at_ms,expires_at_ms);
@@ -4451,18 +4439,18 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingRevie
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_pat_review_attempts_delete BEFORE DELETE ON pat_review_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=OLD.session_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
+CREATE TRIGGER erasure_fence_pat_review_attempts_delete BEFORE DELETE ON resource_admission_events
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.policy_key='pat.review.session.v1' AND OLD.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_pat_review_attempts_insert BEFORE INSERT ON pat_review_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=NEW.session_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
+CREATE TRIGGER erasure_fence_pat_review_attempts_insert BEFORE INSERT ON resource_admission_events
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.policy_key='pat.review.session.v1' AND NEW.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_pat_review_attempts_update BEFORE UPDATE ON pat_review_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=NEW.session_id AND p.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=OLD.session_id AND p.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
+CREATE TRIGGER erasure_fence_pat_review_attempts_update BEFORE UPDATE ON resource_admission_events
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.policy_key='pat.review.session.v1' AND NEW.owner_user_id=q.user_id) OR (OLD.policy_key='pat.review.session.v1' AND OLD.owner_user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -4815,17 +4803,17 @@ BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_resource_admission_events_delete BEFORE DELETE ON resource_admission_events
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.scope_key=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.policy_key<>'pat.review.session.v1' AND OLD.scope_key=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_resource_admission_events_insert BEFORE INSERT ON resource_admission_events
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.scope_key=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.policy_key<>'pat.review.session.v1' AND NEW.scope_key=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_resource_admission_events_update BEFORE UPDATE ON resource_admission_events
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.scope_key=q.user_id) OR (OLD.scope_key=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.policy_key<>'pat.review.session.v1' AND NEW.scope_key=q.user_id) OR (OLD.policy_key<>'pat.review.session.v1' AND OLD.scope_key=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -6247,13 +6235,13 @@ END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_resource_admission_events_delete BEFORE DELETE ON resource_admission_events
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.scope_key=q.user_id)
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.policy_key<>'pat.review.session.v1' AND OLD.scope_key=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
   SELECT q.id,'resource_admission_events','drain:'||lower(hex(randomblob(16))),json_object('grant_id',OLD."grant_id",'policy_key',OLD."policy_key",'dimension',OLD."dimension",'scope_key',OLD."scope_key",'policy_kind',OLD."policy_kind",'units',OLD."units",'admitted_at_epoch_ms',OLD."admitted_at_epoch_ms",'window_start_epoch_ms',OLD."window_start_epoch_ms",'expires_at_epoch_ms',OLD."expires_at_epoch_ms",'released_at_epoch_ms',OLD."released_at_epoch_ms")
-  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.scope_key=q.user_id)
+  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.policy_key<>'pat.review.session.v1' AND OLD.scope_key=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
@@ -8171,4 +8159,30 @@ AND NOT EXISTS(
 BEGIN
  SELECT RAISE(ABORT,'whatsapp_provider_confirmation_invalid');
 END;
+--> statement-breakpoint
+
+CREATE INDEX resource_counter_source_expiry ON resource_admission_counters(window_start_ms,scope_key)
+WHERE policy_key='pat.pairing.source.v1';
+--> statement-breakpoint
+
+CREATE INDEX resource_admission_review_retention ON resource_admission_events(admitted_at_epoch_ms,grant_id)
+WHERE policy_key='pat.review.session.v1';
+--> statement-breakpoint
+
+CREATE TRIGGER resource_admission_review_owner_insert BEFORE INSERT ON resource_admission_events
+WHEN NEW.policy_key='pat.review.session.v1' AND NOT EXISTS(
+ SELECT 1 FROM web_sessions WHERE id=NEW.owner_session_id AND user_id=NEW.owner_user_id)
+BEGIN SELECT RAISE(ABORT,'resource_admission_owner_mismatch'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER resource_admission_review_owner_update BEFORE UPDATE ON resource_admission_events
+WHEN NEW.policy_key='pat.review.session.v1' AND NOT EXISTS(
+ SELECT 1 FROM web_sessions WHERE id=NEW.owner_session_id AND user_id=NEW.owner_user_id)
+BEGIN SELECT RAISE(ABORT,'resource_admission_owner_mismatch'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER resource_admission_review_session_owner BEFORE UPDATE OF id,user_id ON web_sessions
+WHEN EXISTS(SELECT 1 FROM resource_admission_events WHERE policy_key='pat.review.session.v1'
+ AND owner_session_id=OLD.id AND (owner_session_id IS NOT NEW.id OR owner_user_id IS NOT NEW.user_id))
+BEGIN SELECT RAISE(ABORT,'resource_admission_owner_mismatch'); END;
 --> statement-breakpoint

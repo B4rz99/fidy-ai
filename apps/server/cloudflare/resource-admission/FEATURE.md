@@ -42,9 +42,9 @@ replace its last accepted work binding. Native constraints retain the five-per-h
 
 Resource Admission owns the two credential erasure projections under their original logical store
 IDs. Indexed policy/scope selection also checks explicit User ownership; global capacity has no User.
-The current store accepts only the three installed email policies. #1433 and #1435 extend that same
-store with PAT source and calendar policies when their production consumers, constraints and
-conversion checks land. Explicit event ownership remains part of those following slices. The
+The counter store now accepts the three email policies and the hashed PAT source policy. #1435
+adds calendar accounting with its production consumer and populated conversion. PAT review events
+retain exact WebSession/User ownership; anonymous source counters have neither owner. The
 [cutover guide](../../../../docs/operations/database-cutover-1428.md#email-admission-counters-1432)
 contains the populated conversion for existing databases.
 
@@ -121,3 +121,39 @@ Native populated conversion checks retain sparse row references, exact original 
 ownership and replacement bindings; they also execute an injected failure after dropping the source
 and reject an unrepresentable historical deadline. The erasure integration verifies both counter
 policies are fenced, removes the target User's records and retains another User and global capacity.
+
+## PAT conversion and cost (#1433)
+
+Tokens supplies global pending-pairing eligibility and commits the shared source counter with actual
+pairing creation. The twenty-per-source ten-minute window resets at its original stored deadline;
+the 4000 recent-pairing constraint remains inside that same native batch. A failed pairing insert
+rolls back admission. Scope is lowercase hex of the original keyed digest, with no raw address.
+
+Public-code review charges before decoding even malformed bodies, under a live same-User WebSession.
+Ten admitted attempts occupy an exact rolling ten-minute window; individual events expire at their
+original instant plus ten minutes. An event and its complete one-claim grant commit together;
+refusal creates neither. Review ownership cannot be reassigned independently of its WebSession.
+
+Resource Admission owns bounded twenty-minute source/review retention and the original credential
+erasure projection. It uses the existing session lookup and active-scope index for User selection;
+other shared events retain their original schedule-purpose projection. Retention/erasure delete an
+unshared review grant with its event, preserving any unrelated charges on a shared grant.
+
+| Existing native journey                                      | Previous reads / writes | Shared reads / writes |
+| ------------------------------------------------------------ | ----------------------- | --------------------- |
+| Twenty source contenders, first refusal and unrelated source | ≤441 / 44               | ≤441 / 44             |
+| Same source immediately before/at original deadline          | ≤25 / 2                 | ≤29 / 2               |
+| Review under either fresh or live session                    | 3 / 4                   | 9 / 7                 |
+
+This is a measured tradeoff: review adds its shared grant, claim-cardinality verification and exact
+ownership check. It removes two specialized stores and their counting/retention SQL from Tokens,
+reuses anchored transitions and preserves one persistence/erasure owner. The increased review cost
+is bounded to at most ten admitted attempts per WebSession per ten minutes; refused events do not
+add grants. Source writes and global atomic capacity are unchanged. This is storage consolidation,
+not a claim of reduced D1 spend. The original read ceilings remain recorded above for comparison.
+
+The populated [PAT cutover](../../../../docs/operations/database-cutover-1428.md#pat-admission-1433)
+retains original keyed sources, anchors, counts, review identities and session ownership alongside
+existing email counters and shared events. Native checks prove exact cutoffs, rollback after source
+drops and refusal of corrupt deadlines. Public integration covers mixed-age rolling attempts,
+malformed admitted bodies, independent sessions, concurrent global capacity and failed creation.

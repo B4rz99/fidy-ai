@@ -1,16 +1,20 @@
 import {
-  admitPairingReview,
-  admitPairingSource,
+  preparePATReviewAdmission,
+  prepareResourceCounter,
+  sweepPATReviewEvents,
+  sweepPATSourceCounters,
+} from "../../resource-admission/operations";
+import { liveSessionConditions } from "../../../src/shell/web-session/operations";
+import {
   approvePairingGrant,
   expireApprovedPairings,
   expireFixedPATs,
   expiredPATGrants,
   expiredPairingGrants,
+  pairingCapacityQuery,
   pairingExpiryCompletion,
   patExpiryCompletion,
   startPairingGrant,
-  sweepPairingAdmission,
-  sweepPairingReviews,
   sweepUnapprovedPairings,
 } from "../../../src/shell/tokens/operations";
 import { recordSessionPATTransition } from "../../../src/shell/audit/operations";
@@ -126,8 +130,8 @@ export const sweepExpiredPATPairings = (db: D1Database): Effect.Effect<void, Cau
           expireFixedPATs(current),
           patExpiryCompletion(current),
           sweepUnapprovedPairings({ current, limit: scheduledSweepLimit }),
-          sweepPairingAdmission({ current, limit: scheduledSweepLimit }),
-          sweepPairingReviews({ current, limit: scheduledSweepLimit }),
+          sweepPATSourceCounters({ current, limit: scheduledSweepLimit }),
+          ...sweepPATReviewEvents({ current, limit: scheduledSweepLimit }),
         ].map(({ sql, params }) => db.prepare(sql).bind(...params))
       )
     );
@@ -148,23 +152,29 @@ const reservePairing = (
   Effect.gen(function* () {
     const { source, payload, current, code, privateCode, pairingId, expires } = start;
     const proofDigest = yield* Effect.tryPromise(() => digest(privateCode));
+    const cleanup = sweepPATSourceCounters({ current, limit: scheduledSweepLimit });
+    const pairing = startPairingGrant({
+      id: pairingId,
+      publicCode: code,
+      proofDigest,
+      recipientLabel: payload.recipientLabel,
+      scopes: payload.scopes,
+      lifetimeDays: payload.lifetimeDays,
+      current,
+      expires,
+    });
     const committed = yield* Effect.tryPromise(() =>
-      db.batch(
-        [
-          sweepPairingAdmission({ current, limit: scheduledSweepLimit }),
-          admitPairingSource({ sourceDigest: source, current }),
-          startPairingGrant({
-            id: pairingId,
-            publicCode: code,
-            proofDigest,
-            recipientLabel: payload.recipientLabel,
-            scopes: payload.scopes,
-            lifetimeDays: payload.lifetimeDays,
-            current,
-            expires,
-          }),
-        ].map(({ sql, params }) => db.prepare(sql).bind(...params))
-      )
+      db.batch([
+        db.prepare(cleanup.sql).bind(...cleanup.params),
+        prepareResourceCounter({
+          db,
+          kind: "pat_pairing_source",
+          sourceDigest: source,
+          current,
+          subject: pairingCapacityQuery(current),
+        }),
+        db.prepare(pairing.sql).bind(...pairing.params),
+      ])
     );
     return committed[2]?.meta.changes === 1;
   });
@@ -214,23 +224,22 @@ export const startPATPairing = ({
 
 const admitReview = (
   db: D1Database,
-  sessionId: string,
+  session: SessionRow,
   current: number
 ): Effect.Effect<boolean, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const result = yield* Effect.tryPromise(() => {
-      const reviewStatement = admitPairingReview({
+  Effect.tryPromise(() =>
+    db.batch([
+      ...preparePATReviewAdmission({
+        db,
         id: newId(),
-        sessionId,
+        sessionId: session.id,
+        userId: session.user_id,
         current,
-      });
-      return db
-        .prepare(reviewStatement.sql)
-        .bind(...reviewStatement.params)
-        .run();
-    });
-    return result.meta.changes === 1;
-  });
+        eligible: liveSessionConditions({ session, current }),
+      }),
+    ])
+  ).pipe(Effect.map((results) => results[1]?.meta.changes === 1));
+
 /** Inspect a public code only for an authenticated browser User, with bounded guessing. */
 export const inspectPATPairing = ({
   request,
@@ -243,7 +252,7 @@ export const inspectPATPairing = ({
     const session = yield* webSession({ request, db, fresh: false });
     if (Option.isNone(session)) return unauthorized();
     const current = yield* Clock.currentTimeMillis;
-    if (!(yield* admitReview(db, session.value.id, current))) return rateLimited();
+    if (!(yield* admitReview(db, session.value, current))) return rateLimited();
     const input = yield* decodeBody({
       request,
       schema: Schema.Struct({ publicCode: Schema.String }),

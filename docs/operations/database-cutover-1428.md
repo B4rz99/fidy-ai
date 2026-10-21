@@ -444,3 +444,110 @@ before aligning the sole-baseline ledger. A quota refusal leaves this cutover pe
 reason to deploy new SQL against the old schema. #1433 and #1435 extend the same target store only when
 their PAT/calendar consumers and populated conversions land; their unused indexes are not installed
 in advance.
+
+## PAT admission (#1433)
+
+PAT pairing sources now use `pat.pairing.source.v1` anchored counters. The scope is the lowercase
+hex encoding of the original 32-byte keyed digest, never an address or a fabricated User. Reviews
+use `pat.review.session.v1` rolling events with the original review identity as the one-claim grant
+identity, original millisecond instant, and exact WebSession and User. Resource Admission owns
+retention and the credential erasure projection under the unchanged `pat_review_attempts` logical
+store ID. Ordinary shared schedule erasure excludes this credential policy. Erasing one review
+never deletes another policy's charge or its still-shared grant.
+
+For a populated database, fence PAT creation/review, admission writers, retention and erasure and
+back up D1. Complete #1432 first. Refuse unexplained foreign keys, target policy collisions,
+missing/foreign sessions, unrepresentable deadlines or an unfinished erasure chunk. Drain that
+recoverable chunk with the old code before retrying; never reuse its old row selections against the
+new physical store. Historical credential archives retain their original request/store/reference
+and `{}` payload; credentials have no archived-content restoration. Shared existing event and email
+counter rowids remain exact. PAT review IDs remain exact; their new physical rowids are not grant
+identities or references to previously archived content.
+
+Assemble **one native D1 batch**, with no intermediate commits:
+
+1. Create `resource_admission_counters_next` and `resource_admission_events_next` using the current
+   baseline's two table declarations with only their declared table names changed. Keep the events'
+   deferred grant reference pointing to the real `resource_admission_grants`.
+2. Execute the following copy and guarded swap block. Existing grants stay in place; the grant
+   cardinality trigger is removed only inside this fenced atomic conversion.
+3. Install all current baseline indexes/triggers owned by the two final tables, plus
+   `resource_admission_require_every_claim` and `resource_admission_review_session_owner`.
+4. Execute the final grant/verification block. Publish matching code and align the single-baseline
+   ledger only after the entire batch succeeds. Any failure, including one after source drops,
+   rolls back DDL and data together. Baseline replay alone cannot upgrade an already applied schema.
+
+<!-- pat-admission-copy:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'pat_admission_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM resource_admission_events WHERE policy_key='pat.review.session.v1')
+ AND NOT EXISTS(SELECT 1 FROM resource_admission_counters WHERE policy_key='pat.pairing.source.v1')
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+
+INSERT INTO resource_admission_counters_next
+ (rowid,policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id)
+SELECT rowid,policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id
+FROM resource_admission_counters;
+INSERT INTO resource_admission_counters_next
+ (policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used)
+SELECT 'pat.pairing.source.v1',lower(hex(source_digest)),'anchored',window_start_ms,
+ window_start_ms+600000,started_count FROM pat_pairing_admission;
+
+INSERT INTO resource_admission_events_next
+ (rowid,grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,
+ window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms)
+SELECT rowid,grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,
+ window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms FROM resource_admission_events;
+INSERT INTO resource_admission_events_next
+ (grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,
+ window_start_epoch_ms,expires_at_epoch_ms,owner_user_id,owner_session_id)
+SELECT r.id,'pat.review.session.v1','source',r.session_id,'rolling_window',1,r.occurred_at_ms,
+ max(0,r.occurred_at_ms-600000),r.occurred_at_ms+600000,s.user_id,r.session_id
+FROM pat_review_attempts r JOIN web_sessions s ON s.id=r.session_id;
+
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'pat_admission_cutover',CASE WHEN
+ (SELECT count(*) FROM resource_admission_events_next)=
+ (SELECT count(*) FROM resource_admission_events)+(SELECT count(*) FROM pat_review_attempts)
+ AND (SELECT count(*) FROM resource_admission_counters_next)=
+ (SELECT count(*) FROM resource_admission_counters)+(SELECT count(*) FROM pat_pairing_admission)
+ AND NOT EXISTS(SELECT 1 FROM pat_review_attempts r
+  LEFT JOIN resource_admission_events_next n ON n.grant_id=r.id AND n.policy_key='pat.review.session.v1'
+  LEFT JOIN web_sessions s ON s.id=r.session_id
+  WHERE n.grant_id IS NULL OR n.owner_session_id IS NOT r.session_id OR n.owner_user_id IS NOT s.user_id
+   OR n.admitted_at_epoch_ms IS NOT r.occurred_at_ms OR n.expires_at_epoch_ms IS NOT r.occurred_at_ms+600000)
+ AND NOT EXISTS(SELECT 1 FROM pat_pairing_admission r
+  LEFT JOIN resource_admission_counters_next n ON n.policy_key='pat.pairing.source.v1' AND n.scope_key=lower(hex(r.source_digest))
+  WHERE n.scope_key IS NULL OR n.used IS NOT r.started_count OR n.window_start_ms IS NOT r.window_start_ms
+   OR n.window_ends_ms IS NOT r.window_start_ms+600000)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+
+DROP TRIGGER resource_admission_require_every_claim;
+DROP TABLE pat_review_attempts;
+DROP TABLE pat_pairing_admission;
+DROP TABLE resource_admission_events;
+DROP TABLE resource_admission_counters;
+ALTER TABLE resource_admission_events_next RENAME TO resource_admission_events;
+ALTER TABLE resource_admission_counters_next RENAME TO resource_admission_counters;
+```
+
+<!-- pat-admission-copy:end -->
+
+<!-- pat-admission-grants:start -->
+
+```sql
+INSERT INTO resource_admission_grants(id,admitted_at_epoch_ms,claim_count)
+SELECT grant_id,admitted_at_epoch_ms,1 FROM resource_admission_events WHERE policy_key='pat.review.session.v1';
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'pat_admission_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM resource_admission_events e
+  WHERE e.policy_key='pat.review.session.v1' AND NOT EXISTS(
+   SELECT 1 FROM web_sessions s WHERE s.id=e.owner_session_id AND s.user_id=e.owner_user_id))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='pat_admission_cutover';
+```
+
+<!-- pat-admission-grants:end -->

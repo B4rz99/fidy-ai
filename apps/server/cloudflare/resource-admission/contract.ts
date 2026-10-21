@@ -240,7 +240,8 @@ export type EmailCounterKind = Extract<
   }
 >["kind"];
 
-/** The owner query yields zero or one user_id under its exact proof/eligibility guard.
+/** Email eligibility yields zero or one user_id under the owner's exact proof guard.
+ * PAT source eligibility yields zero or one row under the global pairing-capacity guard.
  * Zero rows spend no capacity. Execute this statement in that owner's atomic commit.
  */
 export type ResourceCounterRequest = Readonly<{
@@ -251,6 +252,7 @@ export type ResourceCounterRequest = Readonly<{
   (
     | Readonly<{ kind: "email_pairing_user" | "email_pairing_global" }>
     | Readonly<{ kind: "email_replacement"; workId: string }>
+    | Readonly<{ kind: "pat_pairing_source"; sourceDigest: Uint8Array }>
   );
 
 export type ResourceCounterQuery =

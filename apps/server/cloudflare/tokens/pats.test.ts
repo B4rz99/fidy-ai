@@ -724,10 +724,14 @@ it.each(["fresh", "live"] as const)(
         ).not.toBe(issued.bearer);
         const admissionCosts = observed
           .statements()
-          .filter(({ sql }) => sql.includes("INSERT INTO pat_review_attempts"))
+          .filter(
+            ({ sql }) =>
+              sql.includes("INSERT INTO resource_admission_events") ||
+              sql.includes("INSERT INTO resource_admission_grants")
+          )
           .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
-        expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(3);
-        expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(4);
+        expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(9);
+        expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(7);
       })
     )
 );
@@ -844,7 +848,7 @@ it("refuses a source's PAT pairing burst without denying an unrelated client", (
       expect((yield* awaitPromise(attempt("203.0.113.20"))).status).toBe(200);
       const admissionCosts = observed
         .statements()
-        .filter(({ sql }) => sql.includes("INSERT INTO pat_pairing_admission"))
+        .filter(({ sql }) => sql.includes("INSERT INTO resource_admission_counters"))
         .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
       expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(441);
       expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(44);
@@ -854,12 +858,125 @@ it("refuses a source's PAT pairing burst without denying an unrelated client", (
       expect((yield* awaitPromise(attempt("198.51.100.10"))).status).toBe(200);
       const boundaryCosts = observed
         .statements()
-        .filter(({ sql }) => sql.includes("INSERT INTO pat_pairing_admission"))
+        .filter(({ sql }) => sql.includes("INSERT INTO resource_admission_counters"))
         .slice(admissionCosts.length);
-      expect(boundaryCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(25);
+      expect(boundaryCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(29);
       expect(boundaryCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(2);
     })
   ));
+it("commits global pairing capacity with source admission and rolls both back on failed creation", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send } = yield* awaitPromise(setup());
+      const attempt = (source: string): Promise<Response> =>
+        send({
+          path: "/pat-pairings",
+          method: "POST",
+          source,
+          payload: { recipientLabel: "Desktop agent", scopes: ["read"] },
+        });
+      yield* awaitPromise(
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_pairing BEFORE INSERT ON pat_pairings BEGIN SELECT RAISE(ABORT,'fixture_refusal'); END"
+          )
+          .run()
+      );
+      expect((yield* awaitPromise(attempt("198.51.100.10"))).status).toBe(503);
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM resource_admission_counters WHERE policy_key='pat.pairing.source.v1'"
+            )
+            .first()
+        ))?.total
+      ).toBe(0);
+      yield* awaitPromise(db.prepare("DROP TRIGGER refuse_pairing").run());
+      const current = clock();
+      yield* awaitPromise(
+        db
+          .prepare(`WITH RECURSIVE n(i) AS(SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<3999)
+    INSERT INTO pat_pairings(id,public_code,proof_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,expires_at_ms)
+    SELECT 'capacity-'||i,'capacity-'||i,zeroblob(32),'Fixture','["read"]',7,?,? FROM n`)
+          .bind(current, current + 600_000)
+          .run()
+      );
+      const results = yield* awaitPromise(
+        Promise.all([attempt("198.51.100.10"), attempt("203.0.113.20")])
+      );
+      expect(
+        results.map((response) => response.status).toSorted((left, right) => left - right)
+      ).toEqual([200, 429]);
+      expect(
+        (yield* awaitPromise(db.prepare("SELECT count(*) AS total FROM pat_pairings").first()))
+          ?.total
+      ).toBe(4000);
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT sum(used) AS total FROM resource_admission_counters WHERE policy_key='pat.pairing.source.v1'"
+            )
+            .first()
+        ))?.total
+      ).toBe(1);
+    })
+  ));
+
+it("charges malformed reviews per live WebSession and refills only each expired rolling attempt", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions, scheduled } = yield* awaitPromise(setup());
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const start = clock();
+      const inspect = (session: string): Promise<Response> =>
+        send({
+          path: "/pats/pairings/inspect",
+          method: "POST",
+          session,
+          payload: { publicCode: "invalid" },
+        });
+      for (const offset of [0, 100_000]) {
+        vi.setSystemTime(start + offset);
+        const burst = yield* awaitPromise(
+          Promise.all(Array.from({ length: 5 }, () => inspect(sessions[0])))
+        );
+        expect(burst.map((response) => response.status)).toEqual([400, 400, 400, 400, 400]);
+      }
+      expect((yield* awaitPromise(inspect(sessions[0]))).status).toBe(429);
+      expect((yield* awaitPromise(inspect(sessions[1]))).status).toBe(400);
+      vi.setSystemTime(start + 599_999);
+      expect((yield* awaitPromise(inspect(sessions[0]))).status).toBe(429);
+      vi.setSystemTime(start + 600_000);
+      const refill = yield* awaitPromise(
+        Promise.all(Array.from({ length: 6 }, () => inspect(sessions[0])))
+      );
+      expect(refill.filter((response) => response.status === 400)).toHaveLength(5);
+      expect(refill.filter((response) => response.status === 429)).toHaveLength(1);
+      vi.setSystemTime(start + 1_200_000);
+      yield* awaitPromise(scheduled());
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM resource_admission_events WHERE policy_key='pat.review.session.v1'"
+            )
+            .first()
+        ))?.total
+      ).toBe(11);
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM resource_admission_grants WHERE id NOT IN(SELECT grant_id FROM resource_admission_events)"
+            )
+            .first()
+        ))?.total
+      ).toBe(0);
+    })
+  ));
+
 it("sweeps expired anonymous pairing metadata but preserves approved grant evidence", () =>
   runTest(
     Effect.gen(function* () {

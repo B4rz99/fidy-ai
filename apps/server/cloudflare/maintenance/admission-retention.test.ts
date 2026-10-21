@@ -36,7 +36,12 @@ const prepareDatabase = (): Effect.Effect<D1Database> =>
       yield* fromPromise(() =>
         installCurrentTestObjects({
           db,
-          tables: ["resource_admission_grants", "resource_admission_events"],
+          tables: [
+            "resource_admission_grants",
+            "resource_admission_events",
+            "users",
+            "web_sessions",
+          ],
         })
       );
     }
@@ -56,7 +61,7 @@ const seedGrants = (
     db.batch([
       db
         .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?)
-      INSERT INTO resource_admission_events
+      INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms)
       SELECT ?||i, 'test', 'operation', 'test', 'rolling_window', 1, ?, ?, ?, NULL FROM n`)
         .bind(count, prefix, admitted, admitted, expires),
       db

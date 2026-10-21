@@ -1,5 +1,18 @@
 # Recurrentes
 
+### Deployed reset continuation, 20-10-2026 Bogotá
+
+[Deployment 39525764609](https://github.com/B4rz99/fidy-ai/actions/runs/39525764609)
+passed and public API health reported `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`. This deploys the discovery follow-up
+from PR #1389 and closes its earlier release blocker. Fresh November reads succeeded after D1's
+reset. The ordinary-language stop request supplied the fixture name and local date only; it
+returned HTTP 429 with provider-quota feedback before any host approval was displayed. The draft
+remained editable and survived signed-in navigation without automatic resubmission. A separate
+fresh page still showed `PRUEBA QA CHAT RECURRENTE 20261017` as Activo and its 18 November
+occurrence as upcoming with unknown Money. No stopped-state or cleanup success is claimed.
+Live host approval, stop persistence and historical preservation remain pending AI availability;
+ordinary database reads are no longer the blocker.
+
 User-maintained recurring expectations, separate from historical RecurringSeries and the User's
 paid Subscription. The workspace does not execute payments or cancel services. Specification:
 [#1320](https://github.com/B4rz99/fidy-ai/issues/1320); design:

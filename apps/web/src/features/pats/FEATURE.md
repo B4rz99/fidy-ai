@@ -1,5 +1,16 @@
 # Accesos
 
+Production D1-reset read verification, 20-10-2026 Bogotá, release
+`da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`: the existing session loaded the combined
+Accesos page successfully before promotion. After promotion, PAT metadata remained available;
+the first MCP GET was aborted without an HTTP response and the page showed its unavailable
+state. Explicit Actualizar lista then returned HTTP 200 and restored the successful empty MCP
+page without signing in again. No token, connection, permission or session was created or revoked.
+This establishes explicit recovery from the observed transient read failure, not a proven
+freshness regression or uninterrupted availability. Live Microsoft completion, intentional
+changed-User restoration, external MCP planning confirmation and populated production MCP
+continuation are not established by an empty metadata page.
+
 Current-artifact identity-resumption audit, 2026-10-14, Effect 4.0.2: two new production-build browser checks seed only the bounded non-secret identity-confirmation draft and resolve the authenticated User through controlled HTTP. The same User returns to the exact name, Lectura-only permission and seven-day review without a PAT mutation. A different User receives a blank form, no review and no PAT mutation. Both checks assert that the saved draft is consumed from session storage. This closes the mounted browser handoff gap locally; it does not establish an actual production provider account switch or Microsoft popup completion.
 
 Production read regression, 2026-10-14, release `30f585ceb1a811a97c523251ea6bd0bee13fc07f`: the existing signed-in session loaded both retained PAT metadata rows with date-only fields and a successful empty MCP page, without an identity-confirmation prompt or load error. No token or connection was created, revoked or altered. This confirms current read-only authority, not changed-account restoration, bearer use or production MCP continuation beyond 25 records.

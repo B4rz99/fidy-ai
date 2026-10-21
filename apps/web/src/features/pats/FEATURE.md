@@ -220,7 +220,7 @@ Post-deployment regression, 21-10-2026, release `f2c42e319a`: ordinary signed-in
 and `/web/oauth/connections` returned HTTP 503, including explicit UI retries. The PAT response
 reported the closed code `unavailable` (trace `e8ebb72ccd0fea4d2403b7e8a1f99557`); the connections
 trace was `1f0b71fb44f6dad492b70ac92842b918`. Background `/ingestion/review-workspace` also returned
-503, while Dashboard, Budgets and Recurrentes loaded. The User was notified because a D1 change
+503, while Dashboard, Budgets and Recurrentes rendered previously loaded data. The User was notified because a D1 change
 was being deployed. Read-only schema inspection found every checked-in schema object present;
 that does not establish the cause of these failures. No new grant or access mutation was attempted,
 and current list visibility remains an open production regression.
@@ -241,3 +241,10 @@ a separate 401 regression preserves sign-in recovery. The existing public error 
 through the browser client boundary, with no endpoint or authorization-policy change. All seven
 Accesos browser journeys pass locally, including retry restoring MCP metadata beside retained PAT
 metadata. This presentation fix does not establish that the underlying Production 503 is resolved.
+
+A subsequent uncached November read returned HTTP 503 from `/recurring-plans` (trace
+`a4360d682e28cbd319419680a4cd7450`), with the correct error state rather than a false empty
+workspace. `/ingestion/review-workspace` also returned 503 (trace
+`15127635bd02bdf4ff389137a094249f`). The earlier populated October view was retained browser
+state and is not evidence of current backend availability. Live financial/access mutations
+remain paused; fresh recurring reads and the post-deployment hosted lookup rerun are blocked.

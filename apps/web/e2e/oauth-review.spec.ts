@@ -12,6 +12,7 @@ import {
 const { test, expect } = playwright;
 const { api, app, operator } = browserAcceptanceTopology();
 const firstPoll = 5000;
+const cancelledMessage = "Solicitud cancelada. No se autorizó ningún acceso.";
 const completeOAuthJourneyMilliseconds = 60_000;
 const created = 201;
 const found = 302;
@@ -130,11 +131,7 @@ test("built browser returns from established sign-in to a text-only request revi
       yield* loginFromReview(page, request, path);
       yield* assertReview(page);
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("status")).toHaveText(
-          "Solicitud cancelada. No se autorizó ningún acceso."
-        )
-      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("status")).toHaveText(cancelledMessage));
       expect(yield* Effect.tryPromise(() => page.evaluate(browserStorageCount))).toBe(0);
       expect(page.url()).not.toContain("code=");
     })
@@ -603,6 +600,48 @@ const malformedManagement = (route: Route): Promise<void> =>
     contentType: "application/json",
     body: '{"connections":[],"nextCursor":"malformed"}',
   });
+test("expired identity proof keeps Accesos visible and returns from identity confirmation without replaying revocation", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInFirstCardThroughCore({ page, request }));
+      let revocations = 0;
+      const requireIdentity = (route: Route): Promise<void> => {
+        revocations += 1;
+        return route.fulfill({
+          status: forbidden,
+          contentType: "application/json",
+          body: '{"error":"reauthentication_required"}',
+        });
+      };
+      yield* Effect.tryPromise(() => page.route("**/web/oauth/revoke-all", requireIdentity));
+      yield* Effect.tryPromise(() => page.goto("/settings/access"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Revocar todos los agentes conectados" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("Confirma tu identidad para revocar")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Accesos", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Confirmar mi identidad", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/login\?resume=access$/));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Confirma tu identidad" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.goto("/settings/access"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Accesos", exact: true })).toBeVisible()
+      );
+      expect(revocations).toBe(1);
+    })
+  ));
+
 test("built agent settings report unavailable or malformed state without a false empty list or successful revocation", ({
   page,
   request,
@@ -612,6 +651,7 @@ test("built agent settings report unavailable or malformed state without a false
       const path = yield* beginReview(request, yield* authorization(request));
       yield* loginFromReview(page, request, path);
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
+      yield* Effect.tryPromise(() => expect(page.getByRole("status")).toHaveText(cancelledMessage));
       yield* Effect.tryPromise(() => page.route("**/web/oauth/connections", unavailableManagement));
       yield* Effect.tryPromise(() => page.goto("/settings/access"));
       yield* Effect.tryPromise(() =>
@@ -622,8 +662,13 @@ test("built agent settings report unavailable or malformed state without a false
       );
       yield* Effect.tryPromise(() => page.unroute("**/web/oauth/connections"));
       yield* Effect.tryPromise(() => page.route("**/web/oauth/connections", malformedManagement));
+      const malformedResponse = page.waitForResponse("**/web/oauth/connections");
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Actualizar lista" }).click()
+      );
+      yield* Effect.tryPromise(() => malformedResponse);
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Actualizar lista" })).toBeEnabled()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toContainText("No pudimos consultar los agentes")

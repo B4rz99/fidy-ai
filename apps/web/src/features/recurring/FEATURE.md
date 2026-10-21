@@ -354,3 +354,17 @@ editing resumes. The same resume invalidation refreshes the current date, so a r
 Unchanged retained review and recurring displays are memoized so showing them does not rebuild their
 forms or calendars. The browser navigation benchmark uses independent Users and keeps its 10 ms
 median target while withholding fresh network results; stale editing remains disabled.
+
+External MCP continuation, 20 October 2026, release `eb9374c92dd97a63f45a6a108a8660b0cfe39842`:
+the approved seven-day Inspector connection read the November workspace and its existing synthetic
+monthly plan. Exact stop-tracking elicitation appeared, but client decline/acceptance timed out;
+independent reads still showed document revision 1 and the active plan. A later mutation returned
+safe unavailability. Tracking changes, client cancellation and retained history are therefore not
+claimed as live passes. The owning [MCP audit](../../../../server/src/shell/mcp/FEATURE.md) records
+the transport observations and pending grant cleanup. No Transaction deletion or external service
+cancellation was performed.
+
+The 20 October production browser follow-up also selected 15 July and 15 August 2026 in the
+Transactions date picker. Both dates showed zero records in the current audit account, as did
+15 September in the earlier check. This narrows fixture discovery to another account; it does not
+prove that the three historical fixtures were deleted or are absent from all accounts.

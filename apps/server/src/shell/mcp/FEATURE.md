@@ -54,3 +54,27 @@ the failure cases without exhausting or corrupting the Production fixture:
 
 Run all nine files with `bun run --cwd apps/server test:cloudflare cloudflare/oauth-agents`.
 Canonical financial behavior remains the owning feature's testing responsibility.
+
+## Production audit, 20 October 2026
+
+Release `eb9374c92dd97a63f45a6a108a8660b0cfe39842` accepted the official MCP Inspector
+2.10.1 registration, completed Google-backed browser approval for seven days with only `read write`,
+negotiated `2025-11-25`, discovered tools, and read the November recurring workspace. The client
+performed automatic access-token refresh; reconnecting restored reads after the old caller-bound
+transport returned 404. This establishes this Inspector journey, not the separate Claude Code/Codex
+Production runner or continuous transport recovery across refresh.
+
+Live recurring lifecycle calls displayed the exact native elicitation, but both decline and acceptance
+attempts timed out at the client. Independent workspace reads still returned revision 1 with the
+synthetic plan active. A later call returned declared `unavailable` before review. Closed Worker
+observations for that later run showed successful ingress/DO outcomes without CPU termination;
+they do not diagnose the earlier timeout. The same Inspector's decline completed against the isolated
+local Worker/D1 confirmation bridge, leaving its disposable Budget and accepted-mutation count unchanged.
+The 14 confirmation integration checks passed. Production mutation completion and cancellation remain
+open; neither a displayed review nor a local pass establishes them.
+
+Temporary-grant revocation was attempted after browser freshness expired and returned 401 while the
+same live cookie still permitted listing. Issue #1422 distinguishes that refusal and offers identity
+confirmation. The grant has not yet been confirmed revoked; native provider-popup completion is
+required before cleanup and subsequent access/refresh refusal can be verified. No production
+Transaction was deleted during this run.

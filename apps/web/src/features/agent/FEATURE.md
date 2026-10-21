@@ -172,3 +172,12 @@ then exposed an informal question followed by an internal JSON/CONFIRMAR challen
 follow-up adds structured, host-issued browser lifecycle approval with a readable owner-supplied
 summary, preserves exact confirmation authority and stage/recovery semantics, and prevents model
 prose from creating an approval button. Live write verification remains pending its deployment.
+
+Live channel continuation, 20 October 2026: computer use sent exactly one non-mutating audit greeting
+in the existing Kapso Sandbox WhatsApp conversation. WhatsApp marked it delivered, and Kapso recorded
+the matching inbound message. Its first Fidy callback returned 429 with the closed status
+`provider_quota_exceeded`; Kapso retried and recorded 200. No outbound assistant reply appeared in the
+observed conversation. This establishes inbound delivery and callback retry, not a successful
+back-and-forth or a fix for the earlier intermittent failures. D1 availability did not establish
+Workers AI availability. No raw provider payload, credential or unrelated conversation is retained
+as audit evidence. Hosted recurring lifecycle approval remains unverified in Production.

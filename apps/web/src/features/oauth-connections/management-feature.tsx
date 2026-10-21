@@ -1,18 +1,24 @@
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { type AsyncResult, Atom, Reactivity } from "effect/reactivity";
 import { type JSX, useState } from "react";
-import type { OAuthConnectionId, OAuthConnectionList, WebAuthClient } from "@/transport/client";
+import {
+  type OAuthConnectionId,
+  type OAuthConnectionList,
+  OAuthReauthenticationRequired,
+  type WebAuthClient,
+} from "@/transport/client";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { OAuthManagementView } from "./management-view";
 
 const connectionKey = "oauth-connections";
+type RevocationResult = "revoked" | "identity-required" | "failed";
 const makeRevocation = (
   client: WebAuthClient
-): Atom.AtomResultFn<Option.Option<OAuthConnectionId>, boolean, never> =>
+): Atom.AtomResultFn<Option.Option<OAuthConnectionId>, RevocationResult, never> =>
   client.runtime.fn<Option.Option<OAuthConnectionId>>()((id) =>
     client.pipe(
       Effect.flatMap((api) =>
@@ -22,8 +28,15 @@ const makeRevocation = (
         })
       ),
       Effect.andThen(Reactivity.invalidate([connectionKey])),
-      Effect.as(true),
-      Effect.catchCause(() => Effect.succeed(false))
+      Effect.as("revoked" as const),
+      Effect.catch((error) =>
+        Effect.succeed(
+          Schema.is(OAuthReauthenticationRequired)(error)
+            ? ("identity-required" as const)
+            : ("failed" as const)
+        )
+      ),
+      Effect.catchCause(() => Effect.succeed("failed" as const))
     )
   );
 const ManagementContent = ({
@@ -70,11 +83,26 @@ const ManagementContent = ({
 };
 const RevocationFeedback = ({
   result,
-}: Readonly<{ result: AsyncResult.AsyncResult<boolean, never> }>): JSX.Element => {
+}: Readonly<{ result: AsyncResult.AsyncResult<RevocationResult, never> }>): JSX.Element => {
   if (result._tag !== "Success" || result.waiting) return <></>;
+  if (result.value === "identity-required") {
+    return (
+      <section className="flex flex-col items-start gap-3">
+        <p role="alert">
+          Confirma tu identidad para revocar el acceso. Después vuelve a seleccionar el agente.
+        </p>
+        <Button
+          variant="outline"
+          render={<Link to="/login" search={{ resume: "access" }} reloadDocument />}
+        >
+          Confirmar mi identidad
+        </Button>
+      </section>
+    );
+  }
   return (
-    <p role={result.value ? "status" : "alert"}>
-      {result.value
+    <p role={result.value === "revoked" ? "status" : "alert"}>
+      {result.value === "revoked"
         ? "Acceso revocado. Las acciones ya realizadas se conservan."
         : "No pudimos confirmar la revocación. Actualiza la lista antes de intentar de nuevo."}
     </p>
@@ -123,11 +151,11 @@ export const ManagementPage = ({
       <RevocationFeedback result={result} />
       <ManagementContent
         listing={listing}
-        busy={result.waiting || (result._tag === "Success" && !result.value)}
+        busy={result.waiting || (result._tag === "Success" && result.value !== "revoked")}
         revoke={revoke}
         next={next}
       />
-      {needsRetry(listing) || (result._tag === "Success" && !result.value) ? (
+      {needsRetry(listing) || (result._tag === "Success" && result.value === "failed") ? (
         <RefreshButton
           type="button"
           variant="outline"

@@ -1,0 +1,34 @@
+apps/server/src/shell/mcp/FEATURE.md
+  s_241024bc81d268::t_5556bd9574c2a0 8-13
+apps/server/cloudflare/oauth-agents/internal/bootstrap.ts
+  s_241024bc81d268::t_59b9c5d845f0f4 27,42,49-53
+  s_241024bc81d268::t_bfee55eb0fc5f3 25
+apps/web/src/features/pats/FEATURE.md
+  s_241024bc81d268::t_fbff9dc4232165 101-103
+  s_241024bc81d268::t_5556bd9574c2a0 91-100,104
+apps/server/cloudflare/oauth-agents/internal/review.ts
+  s_241024bc81d268::t_59b9c5d845f0f4 71-72
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_241024bc81d268::t_f9f322f3328026 984-991,993-1015,1021-1025,1029-1033
+  s_241024bc81d268::t_bfee55eb0fc5f3 992,1026-1028
+  s_241024bc81d268::t_3484f6da4bfad1 1016-1020
+apps/server/cloudflare/oauth-agents/internal/management.ts
+  s_241024bc81d268::t_59b9c5d845f0f4 128-131,137
+  s_241024bc81d268::t_2f261b1a5f4bb6 132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "816f17c6fa4c3741b9e7ca1bf9ea2c735c6e2748",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

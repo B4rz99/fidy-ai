@@ -609,9 +609,7 @@ test("expired identity proof keeps Accesos visible and returns from identity con
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const path = yield* beginReview(request, yield* authorization(request));
-      yield* loginFromReview(page, request, path);
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
+      yield* Effect.tryPromise(() => signInFirstCardThroughCore({ page, request }));
       let revocations = 0;
       const requireIdentity = (route: Route): Promise<void> => {
         revocations += 1;
@@ -656,6 +654,11 @@ test("built agent settings report unavailable or malformed state without a false
       const path = yield* beginReview(request, yield* authorization(request));
       yield* loginFromReview(page, request, path);
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toHaveText(
+          "Solicitud cancelada. No se autorizó ningún acceso."
+        )
+      );
       yield* Effect.tryPromise(() => page.route("**/web/oauth/connections", unavailableManagement));
       yield* Effect.tryPromise(() => page.goto("/settings/access"));
       yield* Effect.tryPromise(() =>
@@ -666,9 +669,12 @@ test("built agent settings report unavailable or malformed state without a false
       );
       yield* Effect.tryPromise(() => page.unroute("**/web/oauth/connections"));
       yield* Effect.tryPromise(() => page.route("**/web/oauth/connections", malformedManagement));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Actualizar lista" }).click()
-      );
+      yield* Effect.tryPromise(async () => {
+        const response = page.waitForResponse("**/web/oauth/connections");
+        await page.getByRole("button", { name: "Actualizar lista" }).click();
+        await response;
+        await expect(page.getByRole("button", { name: "Actualizar lista" })).toBeEnabled();
+      });
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toContainText("No pudimos consultar los agentes")
       );

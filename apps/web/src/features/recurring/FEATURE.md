@@ -363,3 +363,8 @@ safe unavailability. Tracking changes, client cancellation and retained history 
 claimed as live passes. The owning [MCP audit](../../../../server/src/shell/mcp/FEATURE.md) records
 the transport observations and pending grant cleanup. No Transaction deletion or external service
 cancellation was performed.
+
+The 20 October production browser follow-up also selected 15 July and 15 August 2026 in the
+Transactions date picker. Both dates showed zero records in the current audit account, as did
+15 September in the earlier check. This narrows fixture discovery to another account; it does not
+prove that the three historical fixtures were deleted or are absent from all accounts.

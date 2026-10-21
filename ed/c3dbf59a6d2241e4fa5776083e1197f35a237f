@@ -1,0 +1,32 @@
+apps/web/e2e/acceptance-clock.spec.ts
+  s_6d017cc65783af::t_367ecc97327f36 5,7,81,96-98,100-109
+  s_6d017cc65783af::t_1caf9a66cb6644 2,82-95,99,110
+  s_6d017cc65783af::t_9195c1a44c9f27 111-115
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_6d017cc65783af::t_80310b2da626a7 444-446
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_353d496e7feb74 367-377
+apps/web/playwright.config.ts
+  s_6d017cc65783af::t_81a505be31583b 34
+apps/web/e2e/oauth-review.spec.ts
+  s_6d017cc65783af::t_616e6e6f807c94 14-16,22-23
+  s_6d017cc65783af::t_b0c527ced35b1c 17-21
+  s_6d017cc65783af::t_1caf9a66cb6644 517
+  s_6d017cc65783af::t_20462e2d07f29a 24-26,518-520
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "edc3dbf59a6d2241e4fa5776083e1197f35a237f",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -4,6 +4,8 @@ import type { ErasureStore } from "../erasure-store/contract";
 import { Effect } from "effect";
 import { CanonicalAdmissionUnavailable } from "./contract";
 
+import { canonicalRetryLifetimeMs } from "../../src/core/quotas/contract";
+
 const retentionBatchSize = 1024;
 const acceptanceLifetimeMs = 8_035_200_000;
 const refilledBucketIdleMs = 60_000;
@@ -21,9 +23,9 @@ export const sweepCanonicalAdmission = ({
       db.batch([
         db
           .prepare(
-            `DELETE FROM canonical_request_replays WHERE (user_id,retry_key_digest) IN (SELECT user_id,retry_key_digest FROM canonical_request_replays WHERE expires_at_ms <= ? ORDER BY expires_at_ms LIMIT ${retentionBatchSize})`
+            `DELETE FROM canonical_request_replays WHERE (user_id,retry_key_digest) IN (SELECT user_id,retry_key_digest FROM canonical_request_replays WHERE accepted_at_ms <= ? ORDER BY accepted_at_ms LIMIT ${retentionBatchSize})`
           )
-          .bind(current),
+          .bind(current - canonicalRetryLifetimeMs),
         db
           .prepare(
             `DELETE FROM audit_entries WHERE record_type='request_admission' AND id IN (SELECT id FROM audit_entries WHERE record_type='request_admission' AND accepted_at_ms <= ? ORDER BY accepted_at_ms LIMIT ${retentionBatchSize})`

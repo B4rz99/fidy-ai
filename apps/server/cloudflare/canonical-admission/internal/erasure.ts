@@ -61,7 +61,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'operation',r.\"operation\",'identity',r.\"identity\",'accepted_at_ms',r.\"accepted_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'state',r.\"state\",'status',r.\"status\",'body',r.\"body\",'content_type',r.\"content_type\") AS body FROM canonical_request_replays r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'operation',r.\"operation\",'identity',r.\"identity\",'accepted_at_ms',r.\"accepted_at_ms\",'state',r.\"state\",'status',r.\"status\",'body',r.\"body\",'content_type',r.\"content_type\") AS body FROM canonical_request_replays r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({

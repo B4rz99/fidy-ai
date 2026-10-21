@@ -7,7 +7,7 @@ const Replay = Schema.Struct({
   operation: Schema.String,
   inputHash: Schema.String,
   state: Schema.Literals(["pending", "completed"]),
-  expiresAt: Schema.Int,
+  acceptedAt: Schema.Int,
   status: Schema.OptionFromNullOr(Schema.Int),
   body: Schema.OptionFromNullOr(Schema.String),
   contentType: Schema.OptionFromNullOr(Schema.String),
@@ -28,9 +28,9 @@ export const retainedReplay = ({
     try: () =>
       db
         .prepare(
-          `SELECT identity,operation,input_digest AS inputHash,state,expires_at_ms AS expiresAt,status,body,content_type AS contentType FROM canonical_request_replays WHERE user_id = ? AND retry_key_digest = ? AND expires_at_ms > ?`
+          `SELECT identity,operation,input_digest AS inputHash,state,accepted_at_ms AS acceptedAt,status,body,content_type AS contentType FROM canonical_request_replays WHERE user_id = ? AND retry_key_digest = ? AND accepted_at_ms > ?`
         )
-        .bind(userId, retryKey, current)
+        .bind(userId, retryKey, current - canonicalRetryLifetimeMs)
         .first<unknown>(),
     catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
   }).pipe(
@@ -59,22 +59,14 @@ export const claimReplay = ({
 }>): ReadonlyArray<D1PreparedStatement> => [
   db
     .prepare(
-      "DELETE FROM canonical_request_replays WHERE user_id = ? AND retry_key_digest = ? AND expires_at_ms <= ?"
+      "DELETE FROM canonical_request_replays WHERE user_id = ? AND retry_key_digest = ? AND accepted_at_ms <= ?"
     )
-    .bind(userId, retryKey, current),
+    .bind(userId, retryKey, current - canonicalRetryLifetimeMs),
   db
     .prepare(
-      "INSERT INTO canonical_request_replays (user_id,retry_key_digest,operation,input_digest,identity,accepted_at_ms,expires_at_ms,state) VALUES (?,?,?,?,?,?,?,'pending')"
+      "INSERT INTO canonical_request_replays (user_id,retry_key_digest,operation,input_digest,identity,accepted_at_ms,state) VALUES (?,?,?,?,?,?,'pending')"
     )
-    .bind(
-      userId,
-      retryKey,
-      operation,
-      inputHash,
-      identity,
-      current,
-      current + canonicalRetryLifetimeMs
-    ),
+    .bind(userId, retryKey, operation, inputHash, identity, current),
 ];
 
 /** Finishing never extends the original 24-hour window. Pending claims cannot execute fresh work. */

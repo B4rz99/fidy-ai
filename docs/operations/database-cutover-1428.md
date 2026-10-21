@@ -357,3 +357,25 @@ This prerequisite records contracts and leaves runtime/migration work with the t
 runtime behavior changes here, so no new behavior test or migration is justified for #1428 itself.
 The routing review remains open; do not close #1428 or release its dependent route extraction as
 fully resolved until that decision is recorded.
+
+## Replay acceptance cutover (#1430)
+
+Canonical Admission derives the retry deadline from `accepted_at_ms + 86400000`. A record is live
+only while `accepted_at_ms > current - 86400000`; equality expires it, permits key reuse and makes
+it eligible for bounded cleanup. Neither completion nor disclosure restarts the window. The
+acceptance index supports cleanup without scanning live response bodies. This changes no authority,
+allowance, pending-work or response-preservation policy.
+
+The single baseline contains the final shape. An existing development database needs a fenced,
+transactional table rebuild before the matching Worker becomes active; editing the applied baseline
+alone does not perform that conversion. Back up first and refuse conversion if any original
+`expires_at_ms` differs from `accepted_at_ms + 86400000`. Keep the original `accepted_at_ms` exactly;
+do not reconstruct it from deployment time or retry time. Copy `rowid` along with all ten retained
+columns so existing erasure selection references remain stable. Preserve pending/completed state,
+response bytes, status and content type, both digests, User, operation and execution identity.
+Recreate the acceptance index and all replay erasure triggers from the target baseline in the same
+transaction. Existing retained erasure snapshots remain historical evidence; newly captured snapshots
+use acceptance time without the redundant expiry. Verify foreign keys and retained values before
+aligning the applied ledger. Roll back the whole conversion on any discrepancy, and keep ordinary
+admissions fenced through the code/schema cutover rather than serving old replay SQL against the
+new table.

@@ -406,7 +406,7 @@ const seedExpiredAdmission = ({
   db.batch([
     db
       .prepare(
-        "INSERT INTO canonical_request_replays VALUES (?,?,?,?,?, ?,?,'completed',200,?, 'application/json')"
+        "INSERT INTO canonical_request_replays VALUES (?,?,?,?,?, ?,'completed',200,?, 'application/json')"
       )
       .bind(
         userId,
@@ -415,12 +415,11 @@ const seedExpiredAdmission = ({
         "categories.listCategories",
         `expired-${userId}`,
         current - 86400001,
-        current - 1,
         '{"private":"expired snapshot"}'
       ),
     db
       .prepare(
-        "INSERT INTO canonical_request_replays VALUES (?,?,?,?,?, ?,?,'completed',200,?, 'application/json')"
+        "INSERT INTO canonical_request_replays VALUES (?,?,?,?,?, ?,'completed',200,?, 'application/json')"
       )
       .bind(
         userId,
@@ -429,7 +428,6 @@ const seedExpiredAdmission = ({
         "categories.listCategories",
         `live-${userId}`,
         current,
-        current + 86400000,
         '{"private":"live snapshot"}'
       ),
     db

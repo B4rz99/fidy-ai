@@ -18,7 +18,11 @@ import {
   prepareCanonicalReplayAccess,
   recordedPATReplayCallProof,
 } from "../../src/shell/audit/operations";
-import { CanonicalRetryKey, type QuotaStatus } from "../../src/core/quotas/contract";
+import {
+  CanonicalRetryKey,
+  type QuotaStatus,
+  canonicalRetryLifetimeMs,
+} from "../../src/core/quotas/contract";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import {
   bindConsumptionRetry,
@@ -395,15 +399,15 @@ const auditReplay = <E, R>({
         current,
         outcome: accepted ? "accepted" : "rejected",
         retainedResponseProof: {
-          sql: "SELECT 1 FROM canonical_request_replays WHERE user_id = ? AND retry_key_digest = ? AND identity = ? AND operation = ? AND input_digest = ? AND state = 'completed' AND expires_at_ms = ? AND expires_at_ms > ?",
+          sql: "SELECT 1 FROM canonical_request_replays WHERE user_id = ? AND retry_key_digest = ? AND identity = ? AND operation = ? AND input_digest = ? AND state = 'completed' AND accepted_at_ms = ? AND accepted_at_ms > ?",
           params: [
             caller.value.userId,
             retryKey.value,
             replay.identity,
             operation.id,
             call.inputHash,
-            replay.expiresAt,
-            current,
+            replay.acceptedAt,
+            current - canonicalRetryLifetimeMs,
           ],
         },
       }),

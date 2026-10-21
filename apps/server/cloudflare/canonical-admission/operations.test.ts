@@ -12,6 +12,7 @@ import { UserId } from "../../src/core/identity/contract";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { executeCanonicalQuery } from "../canonical-operations/operations";
 import { protectCanonicalRequest, protectCanonicalSource } from "./operations";
+import { sweepCanonicalAdmission } from "./runtime";
 import "../../src/shell/api";
 
 class TestFailure extends Data.TaggedError("TestFailure")<{ cause: unknown }> {}
@@ -496,15 +497,12 @@ it("rechecks revoked authority before disclosing replay and never restarts its e
       const fixture = yield* setup;
       const { db, current } = fixture;
       yield* read(fixture, Option.some("same"));
-      const before = yield* io(() =>
-        db.prepare("SELECT expires_at_ms AS expiry FROM canonical_request_replays").first()
-      );
-      yield* read({ ...fixture, current: current + 1000 }, Option.some("same"));
-      expect(
-        yield* io(() =>
-          db.prepare("SELECT expires_at_ms AS expiry FROM canonical_request_replays").first()
-        )
-      ).toEqual(before);
+      const before = yield* read(fixture, Option.some("same"));
+      const body = yield* io(() => before.text());
+      const retry = yield* read({ ...fixture, current: current + 1000 }, Option.some("same"));
+      expect(yield* io(() => retry.text())).toBe(body);
+      expect(retry.status).toBe(before.status);
+      expect(retry.headers.get("content-type")).toBe(before.headers.get("content-type"));
       yield* io(() =>
         db.prepare("UPDATE pats SET revoked_at_ms = ? WHERE id = ?").bind(current, patId).run()
       );
@@ -513,19 +511,25 @@ it("rechecks revoked authority before disclosing replay and never restarts its e
     })
   ));
 
-it("admits a new metered request after the absolute retry window expires", () =>
+it("replays until the exact original deadline and permits key reuse at that deadline", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* setup;
-      yield* read(fixture, Option.some("same"));
-      yield* io(() =>
-        fixture.db
-          .prepare("UPDATE canonical_request_replays SET accepted_at_ms = ?,expires_at_ms = ?")
-          .bind(fixture.current - 86400001, fixture.current - 1)
-          .run()
+      const first = yield* read(fixture, Option.some("same"));
+      const originalBody = yield* io(() => first.text());
+      const retry = yield* read(
+        { ...fixture, current: fixture.current + 86_399_999 },
+        Option.some("same")
       );
-      const fresh = yield* read(fixture, Option.some("same"));
-      expect(fresh.headers.get("Fidy-Canonical-Remaining")).toBe("48");
+      expect(retry.status).toBe(first.status);
+      expect(retry.headers.get("content-type")).toBe(first.headers.get("content-type"));
+      expect(yield* io(() => retry.text())).toBe(originalBody);
+      expect(yield* effects(fixture.db)).toEqual({ total: 1 });
+      const fresh = yield* read(
+        { ...fixture, current: fixture.current + 86_400_000 },
+        Option.some("same")
+      );
+      expect(fresh.status).toBe(first.status);
       expect(yield* effects(fixture.db)).toEqual({ total: 2 });
     })
   ));
@@ -657,5 +661,54 @@ it("bounds unresolved credentials by a trusted keyed source without using commer
       const refusal = Option.getOrThrow(yield* protectCanonicalSource({ ...fixture, request }));
       expect(refusal.status).toBe(429);
       expect(refusal.headers.get("retry-after")).toBe("1");
+    })
+  ));
+
+it("expires replay bodies at the original deadline in indexed bounded batches", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, current } = yield* setup;
+      yield* io(() =>
+        db.batch([
+          db
+            .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<1025)
+            INSERT INTO canonical_request_replays(user_id,retry_key_digest,input_digest,operation,identity,accepted_at_ms,state,status,body,content_type)
+            SELECT ?, 'expired-'||i, 'input', 'transactions.getTransaction', 'expired-'||i, ?, 'completed', 200, 'private response', 'application/json' FROM n`)
+            .bind(userId, current - 86_400_000),
+          db
+            .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<3000)
+            INSERT INTO canonical_request_replays(user_id,retry_key_digest,input_digest,operation,identity,accepted_at_ms,state)
+            SELECT ?, 'live-'||i, 'input', 'transactions.getTransaction', 'live-'||i, ?, 'pending' FROM n`)
+            .bind(userId, current - 86_399_999),
+        ])
+      );
+      let rowsRead = 0;
+      const observed: D1Database = {
+        prepare: db.prepare.bind(db),
+        exec: db.exec.bind(db),
+        dump: db.dump.bind(db),
+        withSession: db.withSession.bind(db),
+        batch: <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
+          db.batch<Row>(statements).then((results) => {
+            rowsRead = results.reduce((sum, result) => sum + result.meta.rows_read, 0);
+            return results;
+          }),
+      };
+      const count = (): Promise<number> =>
+        db
+          .prepare("SELECT count(*) AS total FROM canonical_request_replays")
+          .first<number>("total")
+          .then((value) => Option.getOrThrow(Option.fromNullOr(value)));
+      yield* sweepCanonicalAdmission({ db: observed, current: current - 1 });
+      expect(yield* io(count)).toBe(4025);
+      expect(rowsRead).toBeLessThanOrEqual(10);
+      yield* sweepCanonicalAdmission({ db: observed, current });
+      expect(yield* io(count)).toBe(3001);
+      expect(rowsRead).toBeLessThanOrEqual(6000);
+      yield* sweepCanonicalAdmission({ db: observed, current });
+      expect(yield* io(count)).toBe(3000);
+      expect(rowsRead).toBeLessThanOrEqual(16);
+      yield* sweepCanonicalAdmission({ db, current: current + 1 });
+      expect(yield* io(count)).toBe(1976);
     })
   ));

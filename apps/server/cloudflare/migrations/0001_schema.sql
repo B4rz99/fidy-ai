@@ -285,12 +285,10 @@ CREATE TABLE canonical_request_replays (
   operation TEXT NOT NULL,
   identity TEXT NOT NULL,
   accepted_at_ms INTEGER NOT NULL,
-  expires_at_ms INTEGER NOT NULL,
   state TEXT NOT NULL CHECK (state IN ('pending','completed')),
   status INTEGER,
   body TEXT CHECK (length(CAST(body AS BLOB)) <= 1048576),
   content_type TEXT,
-  CHECK (expires_at_ms = accepted_at_ms + 86400000),
   PRIMARY KEY (user_id, retry_key_digest),
   CHECK ((state = 'pending' AND status IS NULL AND body IS NULL) OR (state = 'completed' AND status IS NOT NULL AND body IS NOT NULL))
 );
@@ -1752,7 +1750,7 @@ CREATE INDEX canonical_request_global_lease_expiry ON canonical_request_leases(e
 CREATE INDEX canonical_request_lease_expiry ON canonical_request_leases(user_id,expires_at_ms);
 --> statement-breakpoint
 
-CREATE INDEX canonical_request_replay_expiry ON canonical_request_replays(expires_at_ms);
+CREATE INDEX canonical_request_replay_expiry ON canonical_request_replays(accepted_at_ms);
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX card_enrollment_active_user ON card_enrollments(user_id)
@@ -5554,7 +5552,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'canonical_request_replays','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'operation',OLD."operation",'identity',OLD."identity",'accepted_at_ms',OLD."accepted_at_ms",'expires_at_ms',OLD."expires_at_ms",'state',OLD."state",'status',OLD."status",'body',OLD."body",'content_type',OLD."content_type")
+  SELECT q.id,'canonical_request_replays','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'operation',OLD."operation",'identity',OLD."identity",'accepted_at_ms',OLD."accepted_at_ms",'state',OLD."state",'status',OLD."status",'body',OLD."body",'content_type',OLD."content_type")
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;

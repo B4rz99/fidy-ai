@@ -1,0 +1,31 @@
+apps/web/e2e/consent-navigation.spec.ts
+  s_6d017cc65783af::t_546f0d863b028f 15
+  s_6d017cc65783af::t_6c58c0b56ed39e 41-43,47,52-56,58,65-67
+  s_6d017cc65783af::t_7445727a47b4c5 1,9,11-13,17-19,24-37,46,48-51,57,60
+  s_6d017cc65783af::t_68d86b0f023d46 20-23
+  s_6d017cc65783af::t_64431e1b8a970e 2-8,10,38-40,44-45,59,61-64
+  s_6d017cc65783af::t_fe633c5417896b 14,16
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_2f7c87fb98cc9e 325-327
+  s_6d017cc65783af::t_040c3b5959d2a6 315,318-324
+apps/web/e2e/real-core-fixture.ts
+  s_6d017cc65783af::t_e29bd3931aa001 41-42,44
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_6d017cc65783af::t_8bca8e9aeac202 3-4,826,846,875
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "60138c369a6f2f2a5ef54ae157988190fa1e964d",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+apps/web/e2e/access-management.spec.ts
+  s_241024bc81d268::t_f41ef1f2d67002 298-300,303-304,306-307,309-310,312,314-315,317-318,320-327,329-341
+  s_241024bc81d268::t_1b07557e3967a3 25-46,296-297,301-302,305,308,311,313,316,319,328
+apps/server/src/client.ts
+  s_241024bc81d268::t_94e2da3288cbba 37
+apps/server/src/shell/oauth-agents/contract.ts
+  s_241024bc81d268::t_d5c5bdd3392697 170-172
+apps/web/e2e/oauth-review.spec.ts
+  s_241024bc81d268::t_7ef26333a082e8 795-805
+apps/web/src/features/oauth-connections/management-feature.tsx
+  s_241024bc81d268::t_27346b89690b08 11,14-18,60,79-98
+apps/web/src/features/pats/FEATURE.md
+  s_241024bc81d268::t_420131141cb9c1 235-243
+apps/web/src/transport/client.ts
+  s_241024bc81d268::t_8c2f1f70e83013 53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f092d43d8f53a18e96ea39ab7e41991ab19cc6b9",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

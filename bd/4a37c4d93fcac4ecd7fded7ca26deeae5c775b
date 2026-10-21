@@ -1,0 +1,19 @@
+apps/web/e2e/oauth-review.spec.ts
+  s_241024bc81d268::t_719f86df93fe39 662-674,687,698
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bd4a37c4d93fcac4ecd7fded7ca26deeae5c775b",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

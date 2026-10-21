@@ -350,7 +350,7 @@ that Fidy already retained that exact verified decline but had no original check
 no support confirmation and no retry clearance. Dashboard evidence was not written into billing
 state and no payment was submitted.
 
-The forward migration `0002_billing_decline_recovery.sql` permits a fresh, explicitly authorized
+The baseline `billing_retry_clearances` view permits a fresh, explicitly authorized
 PaymentEnrollment after a failed sent attempt has exactly one verified, finalized decline past the
 existing three-minute retry opportunity. A captured original response must still match when present;
 a lost response stays absent. Pending, approved, unverified, conflicting, missing/future-finalization
@@ -360,8 +360,8 @@ before retirement. No provider case, response, outcome or historical record is f
 Local public enrollment/Core/native-D1 regressions cover card, Nequi and DaviPlata replacement after
 a lost response, original evidence retention, no repeated POST on the old arm, and exactly one paid
 period for the newly authorized attempt. Negative cases preserve source/enrollment state and cause
-no extra provider work. The populated migration test first reproduces refusal with the baseline
-view, applies the actual forward SQL to the retained history and completes replacement. Separate
+no extra provider work. The populated conversion test first reproduces refusal with the historical
+view, installs the current baseline view over the retained history and completes replacement. Separate
 local infrastructure checks cover clean install and populated redeployment. These results do not
 establish deployed recovery or live wallet authorization; those remain pending release verification.
 

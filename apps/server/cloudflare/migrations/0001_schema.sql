@@ -2469,13 +2469,15 @@ CREATE VIEW billing_callback_hints AS SELECT COALESCE(event_row_ref,'callback:'|
 
 CREATE VIEW billing_retry_clearances AS
 SELECT a.id AS attempt_id FROM billing_attempts a
-JOIN (SELECT rowid,id AS attempt_id,checkout_transaction_id AS transaction_id FROM billing_attempts WHERE checkout_transaction_id IS NOT NULL) response ON response.attempt_id=a.id
-JOIN (SELECT rowid,transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) evidence ON evidence.transaction_id=response.transaction_id AND evidence.attempt_id=a.id
-WHERE a.status='failed' AND evidence.status='DECLINED' AND evidence.finalized_at_ms IS NOT NULL
+JOIN billing_provider_transactions evidence ON evidence.attempt_id=a.id
+WHERE a.status='failed' AND a.collection_state='sent'
+  AND evidence.status='DECLINED' AND evidence.finalized_at_ms IS NOT NULL
+  AND evidence.finalized_at_ms<=a.finalized_at_ms
   AND evidence.negative_observed_at_ms<=a.finalized_at_ms-180000
-  AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,transaction_id,attempt_id,lookup_attempts,last_checked_at_ms FROM billing_provider_transactions) candidate
-    WHERE candidate.attempt_id=a.id AND candidate.transaction_id<>response.transaction_id)
-  AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) paid WHERE paid.attempt_id=a.id);
+  AND (a.checkout_transaction_id IS NULL OR a.checkout_transaction_id=evidence.transaction_id)
+  AND NOT EXISTS (SELECT 1 FROM billing_provider_transactions candidate
+    WHERE candidate.attempt_id=a.id AND candidate.transaction_id<>evidence.transaction_id)
+  AND a.paid_starts_at_ms IS NULL;
 --> statement-breakpoint
 
 CREATE VIEW dashboard_effective_source AS

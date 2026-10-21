@@ -3,9 +3,9 @@ import { webSessionCredentialAuthority } from "../../../src/shell/web-session/op
 
 export const onboardingEvidence = (input: OnboardingConsentInput): D1PreparedStatement =>
   input.db
-    .prepare(`INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, occurred_at_ms) SELECT 'processing_grant',d.exchange_id, ?, d.disclosure_json, d.disclosure_message_id,
-      d.decision_message_id, d.received_at_ms, d.occurred_at_ms FROM (SELECT rowid,id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) d
-    WHERE d.exchange_id = ? AND d.decision = 'accepted'`)
+    .prepare(`INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, occurred_at_ms) SELECT 'processing_grant',id, ?, disclosure_json, disclosure_message_id,
+      decision_message_id, decision_received_at_ms, decision_occurred_at_ms
+    FROM pending_consent_exchanges WHERE id = ? AND decision_value = 'accepted'`)
     .bind(input.userId, input.exchangeId);
 
 export const revocationEvidence = (input: ConsentRevocationInput): D1PreparedStatement => {

@@ -301,8 +301,8 @@ const findRecordedDecision = (
 ): Effect.Effect<Option.Option<Response>, void> =>
   attempt(() =>
     db
-      .prepare(`SELECT decision_message_id, body_sha256, decision
-    FROM (SELECT rowid,id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions WHERE portfolio_id = ? AND decision_message_id = ?`)
+      .prepare(`SELECT decision_message_id, decision_body_sha256 AS body_sha256, decision_value AS decision
+    FROM pending_consent_exchanges WHERE decision_value IS NOT NULL AND portfolio_id = ? AND decision_message_id = ?`)
       .bind(input.event.caller.businessPortfolioId, input.event.messageEvidence.providerMessageId)
       .first()
   ).pipe(
@@ -335,7 +335,7 @@ const persistDecision = ({
   Effect.gen(function* () {
     const statement = db
       .prepare(
-        `UPDATE pending_consent_exchanges SET decision_portfolio_id=incoming.portfolio_id,decision_bsuid=incoming.bsuid,decision_phone_number_id=incoming.phone_number_id,decision_value=incoming.decision,decision_disclosure_json=incoming.disclosure_json,decision_disclosure_message_id=incoming.disclosure_message_id,decision_message_id=incoming.decision_message_id,decision_delivery_key=incoming.delivery_key,decision_body_sha256=incoming.body_sha256,decision_occurred_at_ms=incoming.occurred_at_ms,decision_received_at_ms=incoming.received_at_ms FROM (SELECT ? AS exchange_id,? AS portfolio_id,? AS bsuid,? AS phone_number_id,? AS decision,? AS disclosure_json,? AS disclosure_message_id,? AS decision_message_id,? AS delivery_key,? AS body_sha256,? AS occurred_at_ms,? AS received_at_ms) AS incoming WHERE pending_consent_exchanges.id=incoming.exchange_id AND pending_consent_exchanges.decision_value IS NULL`
+        `UPDATE pending_consent_exchanges SET decision_value=incoming.decision,decision_message_id=incoming.decision_message_id,decision_delivery_key=incoming.delivery_key,decision_body_sha256=incoming.body_sha256,decision_occurred_at_ms=incoming.occurred_at_ms,decision_received_at_ms=incoming.received_at_ms FROM (SELECT ? AS exchange_id,? AS portfolio_id,? AS bsuid,? AS phone_number_id,? AS decision,? AS disclosure_json,? AS disclosure_message_id,? AS decision_message_id,? AS delivery_key,? AS body_sha256,? AS occurred_at_ms,? AS received_at_ms) AS incoming WHERE pending_consent_exchanges.id=incoming.exchange_id AND pending_consent_exchanges.decision_value IS NULL AND pending_consent_exchanges.portfolio_id IS incoming.portfolio_id AND pending_consent_exchanges.bsuid IS incoming.bsuid AND pending_consent_exchanges.phone_number_id IS incoming.phone_number_id AND pending_consent_exchanges.disclosure_json IS incoming.disclosure_json AND pending_consent_exchanges.disclosure_message_id IS incoming.disclosure_message_id`
       )
       .bind(
         pending.id,
@@ -354,7 +354,13 @@ const persistDecision = ({
     const committed = yield* Effect.exit(
       releaseOutstandingResource(admission(db, input.receivedAtMs), {
         grantId: ResourceAdmissionGrantId.make(pending.id),
-        statements: [statement],
+        statements: [
+          statement,
+          db
+            .prepare("INSERT INTO sql_assertions(scope,accepted) VALUES(?,changes()=1)")
+            .bind(pending.id),
+          db.prepare("DELETE FROM sql_assertions WHERE scope=?").bind(pending.id),
+        ],
       })
     );
     if (Exit.isSuccess(committed)) {

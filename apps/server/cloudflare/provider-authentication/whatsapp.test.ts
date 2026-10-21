@@ -1,3 +1,4 @@
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { whatsappMessages } from "./whatsapp-messages.test-fixture";
 import { Clock, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
@@ -544,24 +545,36 @@ it("isolates two callers during interrupted sandbox disclosure recovery and neve
           });
         })
       );
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", { phone: "573001234567" })).status
-      ).toBe(200);
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", {
-          phone: "573009876543",
-          caller: "CO.Person2",
-        })).status
-      ).toBe(200);
-      const prepared = [...outbound];
-      yield* Effect.tryPromise(() =>
-        journey.db
-          .prepare(
-            "UPDATE pending_consent_exchanges SET state = 'awaiting_delivery', disclosure_message_id = NULL"
-          )
-          .run()
+      const current = yield* Clock.currentTimeMillis;
+      const disclosure = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+        currentDisclosureFor()
       );
-      outbound.length = 0;
+      yield* Effect.tryPromise(() =>
+        journey.db.batch(
+          [
+            { ordinal: 1, caller: "CO.Person1", phone: "+573001234567" },
+            { ordinal: 2, caller: "CO.Person2", phone: "+573009876543" },
+          ].map(({ ordinal, caller, phone }) => {
+            const token = `14390000-0000-4000-8000-${String(ordinal).padStart(12, "0")}`;
+            return journey.db
+              .prepare(`INSERT INTO pending_consent_exchanges
+            (id,portfolio_id,bsuid,phone_number_id,initiating_message_id,initiating_body_sha256,
+              correlation_token,disclosure_json,created_at_ms,expires_at_ms,state,sandbox_phone)
+            VALUES(?,'portfolio',?,'123456789012345',?,?, ?,?,?,?,'awaiting_delivery',?)`)
+              .bind(
+                token,
+                caller,
+                `first-${ordinal}`,
+                "a".repeat(64),
+                token,
+                disclosure,
+                current,
+                current + 86400000,
+                phone
+              );
+          })
+        )
+      );
       yield* recoverPendingDisclosures({
         db: journey.db,
         apiKey: "fixture",
@@ -573,7 +586,12 @@ it("isolates two callers during interrupted sandbox disclosure recovery and neve
         sandboxPhoneNumberId: Option.some("123456789012345"),
       });
       expect(outbound).toHaveLength(2);
-      expect(new Set(outbound)).toEqual(new Set(prepared));
+      expect(
+        outbound.filter((body) => body.includes("14390000-0000-4000-8000-000000000001"))
+      ).toHaveLength(1);
+      expect(
+        outbound.filter((body) => body.includes("14390000-0000-4000-8000-000000000002"))
+      ).toHaveLength(1);
       expect(outbound.filter((body) => body.includes('"to":"573001234567"'))).toHaveLength(1);
       expect(outbound.filter((body) => body.includes('"to":"573009876543"'))).toHaveLength(1);
     })

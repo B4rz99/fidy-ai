@@ -970,3 +970,113 @@ missing timestamps, parent links, anonymous-ID OAuth revocations, sequence high-
 and offer rows, archives, constraint rejection, and interruption after the destructive swap. Historical
 source DDL lives only in a test fixture; it is not another migration or a runtime compatibility path.
 Changes stay local until quota permits a separately authorized deployment.
+
+## Pre-User Consent exchanges (#1439)
+
+`pending_consent_exchanges` keeps 27 stored fields. The five decision recipient/disclosure snapshots
+are represented by the exchange's immutable portfolio, recipient, business number, exact disclosure
+and established disclosure-message identity. An absent decision still has absent decision evidence;
+erasure projections and drain archives reconstruct the original five keys as NULL in that case.
+Already written archives keep their exact original representation.
+
+The atomic decision write compares authenticated inbound recipient/business-number evidence and the
+read disclosure against that immutable basis. A zero-row write aborts the same batch as the admission
+release. Replay identities, exact occurrence/receipt times, 24-hour expiry, callback-versus-applied
+state, sandbox handling, and atomic provider-verified signup remain unchanged. No workflow per
+exchange or initial financial-message content is introduced.
+
+### Fenced populated cutover
+
+Back up D1 and fence WhatsApp callbacks, disclosure send/recovery, provider onboarding, maintenance
+and erasure writers. The single edited baseline installs fresh databases; an existing database needs
+this coordinated schema/code cutover. Drain active erasure chunks. Capture every trigger/view that
+directly references `pending_consent_exchanges`, including objects owned by other tables, plus every trigger/view referencing the two cascading
+children `whatsapp_provider_handoffs` and `provider_authentication_attempts`, and all explicit indexes
+on the exchange table. Inspect the live FK graph: these must be the only cascading descendants; stop
+on an unexplained additional descendant. Match each source object to its final baseline destination; stop on unknown
+objects or an unexpected pre-existing destination. Keep handoff rows and their incoming references.
+
+Submit one native D1 batch, without intermediate commits:
+
+1. `PRAGMA defer_foreign_keys=ON`, then `consent-exchanges-preflight`. Exact binary text equality
+   and original NULL missingness must hold for all five snapshots. A mismatch blocks conversion;
+   inspect the evidence and review its representation before proceeding, never overwrite it.
+2. Drop the captured dependent triggers/views. Create `pending_consent_exchanges_next` using the
+   final baseline declaration with only the CREATE name changed. Copy with `consent-exchanges-copy`.
+   Preserve rowids as well as explicit exchange/replay identities and exact original bytes/instants.
+   Stage both cascading child sets in the same batch before DROP. FK deferral does not suppress
+   ON DELETE CASCADE; all dependent guards and side-effect triggers must be absent during the swap.
+3. Run `consent-exchanges-swap`, restoring the original child rowids/columns in parent-first order
+   and checking their exact values before removing staging. Then reinstall final baseline indexes
+   and mapped triggers/views. Unrelated provider attempts with no handoff remain untouched.
+4. Run `consent-exchanges-verify`: whole-database FK verification precedes resuming immediate
+   checking. Only then publish matching code and align the one-file baseline ledger.
+
+Failure at any stage rolls back the whole native batch, including the destructive swap. Retained
+archives, User/Consent history, provider handoffs and other owner records are not rewritten.
+
+<!-- consent-exchanges-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_exchanges_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM pending_consent_exchanges WHERE
+   (decision_value IS NULL AND (decision_portfolio_id IS NOT NULL OR decision_bsuid IS NOT NULL OR decision_phone_number_id IS NOT NULL OR decision_disclosure_json IS NOT NULL OR decision_disclosure_message_id IS NOT NULL))
+   OR (decision_value IS NOT NULL AND (decision_portfolio_id IS NOT portfolio_id OR decision_bsuid IS NOT bsuid OR decision_phone_number_id IS NOT phone_number_id OR decision_disclosure_json IS NOT disclosure_json OR decision_disclosure_message_id IS NOT disclosure_message_id)))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- consent-exchanges-preflight:end -->
+
+<!-- consent-exchanges-copy:start -->
+
+```sql
+CREATE TABLE whatsapp_provider_handoffs_consent_cutover AS SELECT rowid AS source_rowid, * FROM whatsapp_provider_handoffs WHERE 1;
+CREATE TABLE provider_authentication_attempts_consent_cutover AS SELECT rowid AS source_rowid, * FROM provider_authentication_attempts WHERE handoff_id IS NOT NULL;
+INSERT INTO pending_consent_exchanges_next (rowid, id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256, correlation_token, disclosure_json, disclosure_message_id, created_at_ms, disclosed_at_ms, decision_not_before_ms, expires_at_ms, state, rejected_at_ms, sandbox_phone, delivery_phone_number_id, delivery_message_id, delivery_occurred_at_ms, delivery_received_at_ms, delivery_not_before_ms, decision_value, decision_message_id, decision_delivery_key, decision_body_sha256, decision_occurred_at_ms, decision_received_at_ms)
+SELECT rowid, id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256, correlation_token, disclosure_json, disclosure_message_id, created_at_ms, disclosed_at_ms, decision_not_before_ms, expires_at_ms, state, rejected_at_ms, sandbox_phone, delivery_phone_number_id, delivery_message_id, delivery_occurred_at_ms, delivery_received_at_ms, delivery_not_before_ms, decision_value, decision_message_id, decision_delivery_key, decision_body_sha256, decision_occurred_at_ms, decision_received_at_ms FROM pending_consent_exchanges ORDER BY rowid;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_exchanges_cutover',CASE WHEN
+ (SELECT count(*) FROM pending_consent_exchanges)=(SELECT count(*) FROM pending_consent_exchanges_next)
+ AND NOT EXISTS(SELECT rowid, id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256, correlation_token, disclosure_json, disclosure_message_id, created_at_ms, disclosed_at_ms, decision_not_before_ms, expires_at_ms, state, rejected_at_ms, sandbox_phone, delivery_phone_number_id, delivery_message_id, delivery_occurred_at_ms, delivery_received_at_ms, delivery_not_before_ms, decision_value, decision_message_id, decision_delivery_key, decision_body_sha256, decision_occurred_at_ms, decision_received_at_ms FROM pending_consent_exchanges
+   EXCEPT SELECT rowid, id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256, correlation_token, disclosure_json, disclosure_message_id, created_at_ms, disclosed_at_ms, decision_not_before_ms, expires_at_ms, state, rejected_at_ms, sandbox_phone, delivery_phone_number_id, delivery_message_id, delivery_occurred_at_ms, delivery_received_at_ms, delivery_not_before_ms, decision_value, decision_message_id, decision_delivery_key, decision_body_sha256, decision_occurred_at_ms, decision_received_at_ms FROM pending_consent_exchanges_next)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- consent-exchanges-copy:end -->
+
+<!-- consent-exchanges-swap:start -->
+
+```sql
+DROP TABLE pending_consent_exchanges;
+ALTER TABLE pending_consent_exchanges_next RENAME TO pending_consent_exchanges;
+INSERT INTO whatsapp_provider_handoffs (rowid, id, exchange_id, created_at_ms, expires_at_ms, handoff_send_started_ms, pairing_id, review_code, review_started_ms, review_message_id, decision, decision_message_id, confirmed_at_ms, consumed_at_ms) SELECT source_rowid, id, exchange_id, created_at_ms, expires_at_ms, handoff_send_started_ms, pairing_id, review_code, review_started_ms, review_message_id, decision, decision_message_id, confirmed_at_ms, consumed_at_ms FROM whatsapp_provider_handoffs_consent_cutover;
+INSERT INTO sql_assertions(scope,accepted) SELECT 'consent_exchanges_cutover',CASE WHEN
+ NOT EXISTS(SELECT source_rowid, id, exchange_id, created_at_ms, expires_at_ms, handoff_send_started_ms, pairing_id, review_code, review_started_ms, review_message_id, decision, decision_message_id, confirmed_at_ms, consumed_at_ms FROM whatsapp_provider_handoffs_consent_cutover
+ EXCEPT SELECT rowid, id, exchange_id, created_at_ms, expires_at_ms, handoff_send_started_ms, pairing_id, review_code, review_started_ms, review_message_id, decision, decision_message_id, confirmed_at_ms, consumed_at_ms FROM whatsapp_provider_handoffs) THEN 1 ELSE 0 END
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DROP TABLE whatsapp_provider_handoffs_consent_cutover;
+INSERT INTO provider_authentication_attempts (rowid, id, pairing_id, cookie_digest, nonce, intent, disclosure_json, consent_at_ms, created_at_ms, expires_at_ms, state, issuer, subject, contact_email, user_id, provider, handoff_id, completed_at_ms, created_user) SELECT source_rowid, id, pairing_id, cookie_digest, nonce, intent, disclosure_json, consent_at_ms, created_at_ms, expires_at_ms, state, issuer, subject, contact_email, user_id, provider, handoff_id, completed_at_ms, created_user FROM provider_authentication_attempts_consent_cutover;
+INSERT INTO sql_assertions(scope,accepted) SELECT 'consent_exchanges_cutover',CASE WHEN
+ NOT EXISTS(SELECT source_rowid, id, pairing_id, cookie_digest, nonce, intent, disclosure_json, consent_at_ms, created_at_ms, expires_at_ms, state, issuer, subject, contact_email, user_id, provider, handoff_id, completed_at_ms, created_user FROM provider_authentication_attempts_consent_cutover
+ EXCEPT SELECT rowid, id, pairing_id, cookie_digest, nonce, intent, disclosure_json, consent_at_ms, created_at_ms, expires_at_ms, state, issuer, subject, contact_email, user_id, provider, handoff_id, completed_at_ms, created_user FROM provider_authentication_attempts) THEN 1 ELSE 0 END
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DROP TABLE provider_authentication_attempts_consent_cutover;
+```
+
+<!-- consent-exchanges-swap:end -->
+
+<!-- consent-exchanges-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_exchanges_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+PRAGMA defer_foreign_keys=OFF;
+DELETE FROM sql_assertions WHERE scope='consent_exchanges_cutover';
+```
+
+<!-- consent-exchanges-verify:end -->

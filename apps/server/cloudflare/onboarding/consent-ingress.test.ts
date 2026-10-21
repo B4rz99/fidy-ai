@@ -282,7 +282,7 @@ it("refuses image work while extraction is unavailable without treating its capt
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT exchange_id FROM (SELECT rowid,id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+              "SELECT exchange_id FROM (SELECT rowid,id AS exchange_id,portfolio_id,bsuid,phone_number_id,decision_value AS decision,disclosure_json,disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
             )
             .all()
         )).results
@@ -742,7 +742,7 @@ it("records only one origin-qualified pending acceptance despite duplicate and l
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+              "SELECT * FROM (SELECT id AS exchange_id,portfolio_id,bsuid,phone_number_id,decision_value AS decision,disclosure_json,disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
             )
             .all()
         )).results
@@ -778,10 +778,27 @@ it("records only one origin-qualified pending acceptance despite duplicate and l
           send(inbound("wamid.decision-2", "No acepto", String(nowSeconds - 10)))
         )).status
       ).toBe(409);
+      for (const mutation of [
+        "portfolio_id='another-portfolio'",
+        "bsuid='another-recipient'",
+        "phone_number_id='987654321'",
+        "disclosure_json='{}'",
+        "disclosure_message_id='another-disclosure'",
+      ]) {
+        expect(
+          Exit.isFailure(
+            yield* Effect.exit(
+              Effect.tryPromise(() =>
+                db.prepare(`UPDATE pending_consent_exchanges SET ${mutation}`).run()
+              )
+            )
+          )
+        ).toBe(true);
+      }
       const { results } = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT decision, disclosure_json, disclosure_message_id, decision_message_id FROM (SELECT rowid,id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+            "SELECT decision, disclosure_json, disclosure_message_id, decision_message_id FROM (SELECT rowid,id AS exchange_id,portfolio_id,bsuid,phone_number_id,decision_value AS decision,disclosure_json,disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
           )
           .all()
       );
@@ -847,7 +864,7 @@ it("never treats a pre-disclosure acceptance replay as a Consent decision", () =
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+              "SELECT * FROM (SELECT id AS exchange_id,portfolio_id,bsuid,phone_number_id,decision_value AS decision,disclosure_json,disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
             )
             .all()
         )).results
@@ -890,7 +907,7 @@ it("rejects replay of a pre-delivery reply with a future-dated Kapso timestamp",
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+              "SELECT * FROM (SELECT id AS exchange_id,portfolio_id,bsuid,phone_number_id,decision_value AS decision,disclosure_json,disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
             )
             .all()
         )).results
@@ -968,7 +985,7 @@ it("fails closed on an impossible stored decision lifecycle", () =>
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+              "SELECT * FROM (SELECT id AS exchange_id,portfolio_id,bsuid,phone_number_id,decision_value AS decision,disclosure_json,disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
             )
             .all()
         )).results
@@ -1121,7 +1138,7 @@ it("settles simultaneous conflicting decisions at most once", () =>
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT decision FROM (SELECT rowid,id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+              "SELECT decision FROM (SELECT rowid,id AS exchange_id,portfolio_id,bsuid,phone_number_id,decision_value AS decision,disclosure_json,disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
             )
             .all()
         )).results
@@ -1199,7 +1216,7 @@ it("rejects forged, mismatched, and reordered delivery evidence without opening 
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+              "SELECT * FROM (SELECT id AS exchange_id,portfolio_id,bsuid,phone_number_id,decision_value AS decision,disclosure_json,disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
             )
             .all()
         )).results
@@ -1215,8 +1232,9 @@ it("rejects forged, mismatched, and reordered delivery evidence without opening 
 it("recovers a committed pre-send disclosure once without resending a started attempt", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
+      const { db } = yield* Effect.tryPromise(() => setup());
+      const token = "14390000-0000-4000-8000-000000000001";
+      const current = yield* Clock.currentTimeMillis;
       const provider = vi.fn((_url: string, _init: RequestInit) =>
         Promise.resolve(
           Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.recovered" }] })
@@ -1226,7 +1244,19 @@ it("recovers a committed pre-send disclosure once without resending a started at
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "UPDATE pending_consent_exchanges SET state = 'awaiting_delivery', disclosure_message_id = NULL"
+            `INSERT INTO pending_consent_exchanges(id,portfolio_id,bsuid,phone_number_id,
+              initiating_message_id,initiating_body_sha256,correlation_token,disclosure_json,
+              created_at_ms,expires_at_ms,state) VALUES(?,?,?,'123456789012345','first',?,?,?,?,?,'awaiting_delivery')`
+          )
+          .bind(
+            token,
+            portfolio,
+            bsuid,
+            "a".repeat(64),
+            token,
+            encodeJson(currentDisclosureFor()),
+            current,
+            current + dayMs
           )
           .run()
       );
@@ -1353,7 +1383,7 @@ it("records refusal without financial work and rejects a decision before verifie
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+              "SELECT * FROM (SELECT id AS exchange_id,portfolio_id,bsuid,phone_number_id,decision_value AS decision,disclosure_json,disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
             )
             .all()
         )).results
@@ -1366,7 +1396,7 @@ it("records refusal without financial work and rejects a decision before verifie
       const { results } = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT decision FROM (SELECT rowid,id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+            "SELECT decision FROM (SELECT rowid,id AS exchange_id,portfolio_id,bsuid,phone_number_id,decision_value AS decision,disclosure_json,disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
           )
           .all()
       );

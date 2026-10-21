@@ -1030,7 +1030,31 @@ CREATE TABLE pending_consent_exchanges (
   expires_at_ms INTEGER NOT NULL,
   state TEXT NOT NULL CHECK (state IN ('awaiting_delivery', 'outbound_started', 'awaiting_decision', 'accepted', 'declined')), rejected_at_ms INTEGER
   CHECK (rejected_at_ms IS NULL OR rejected_at_ms BETWEEN created_at_ms AND expires_at_ms), sandbox_phone TEXT
-  CHECK (sandbox_phone IS NULL OR length(sandbox_phone) BETWEEN 8 AND 16), delivery_phone_number_id TEXT, delivery_message_id TEXT, delivery_occurred_at_ms INTEGER, delivery_received_at_ms INTEGER, delivery_not_before_ms INTEGER, decision_portfolio_id TEXT, decision_bsuid TEXT, decision_phone_number_id TEXT, decision_value TEXT, decision_disclosure_json TEXT, decision_disclosure_message_id TEXT, decision_message_id TEXT, decision_delivery_key TEXT, decision_body_sha256 TEXT, decision_occurred_at_ms INTEGER, decision_received_at_ms INTEGER CHECK((delivery_message_id IS NULL AND delivery_phone_number_id IS NULL AND delivery_message_id IS NULL AND delivery_occurred_at_ms IS NULL AND delivery_received_at_ms IS NULL AND delivery_not_before_ms IS NULL) OR (delivery_message_id IS NOT NULL AND delivery_phone_number_id IS NOT NULL AND (length(delivery_phone_number_id) BETWEEN 1 AND 32) AND delivery_message_id IS NOT NULL AND (length(delivery_message_id) BETWEEN 1 AND 256) AND delivery_occurred_at_ms IS NOT NULL AND delivery_received_at_ms IS NOT NULL AND delivery_not_before_ms IS NOT NULL AND (delivery_not_before_ms >= delivery_received_at_ms))) CHECK((decision_value IS NULL AND decision_portfolio_id IS NULL AND decision_bsuid IS NULL AND decision_phone_number_id IS NULL AND decision_value IS NULL AND decision_disclosure_json IS NULL AND decision_disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_delivery_key IS NULL AND decision_body_sha256 IS NULL AND decision_occurred_at_ms IS NULL AND decision_received_at_ms IS NULL) OR (decision_value IS NOT NULL AND decision_portfolio_id IS NOT NULL AND decision_bsuid IS NOT NULL AND decision_phone_number_id IS NOT NULL AND (length(decision_phone_number_id) BETWEEN 1 AND 32) AND decision_value IS NOT NULL AND (decision_value IN ('accepted', 'declined')) AND decision_disclosure_json IS NOT NULL AND decision_disclosure_message_id IS NOT NULL AND decision_message_id IS NOT NULL AND decision_delivery_key IS NOT NULL AND (length(decision_delivery_key) BETWEEN 1 AND 256) AND decision_body_sha256 IS NOT NULL AND (length(decision_body_sha256) = 64) AND decision_occurred_at_ms IS NOT NULL AND decision_received_at_ms IS NOT NULL)),
+  CHECK (sandbox_phone IS NULL OR length(sandbox_phone) BETWEEN 8 AND 16),
+  delivery_phone_number_id TEXT,
+  delivery_message_id TEXT,
+  delivery_occurred_at_ms INTEGER,
+  delivery_received_at_ms INTEGER,
+  delivery_not_before_ms INTEGER,
+  decision_value TEXT,
+  decision_message_id TEXT,
+  decision_delivery_key TEXT,
+  decision_body_sha256 TEXT,
+  decision_occurred_at_ms INTEGER,
+  decision_received_at_ms INTEGER,
+  CHECK ((delivery_message_id IS NULL AND delivery_phone_number_id IS NULL
+    AND delivery_occurred_at_ms IS NULL AND delivery_received_at_ms IS NULL AND delivery_not_before_ms IS NULL)
+    OR (delivery_message_id IS NOT NULL AND delivery_phone_number_id IS NOT NULL
+    AND length(delivery_phone_number_id) BETWEEN 1 AND 32 AND length(delivery_message_id) BETWEEN 1 AND 256
+    AND delivery_occurred_at_ms IS NOT NULL AND delivery_received_at_ms IS NOT NULL
+    AND delivery_not_before_ms IS NOT NULL AND delivery_not_before_ms >= delivery_received_at_ms)),
+  CHECK ((decision_value IS NULL AND decision_message_id IS NULL AND decision_delivery_key IS NULL
+    AND decision_body_sha256 IS NULL AND decision_occurred_at_ms IS NULL AND decision_received_at_ms IS NULL)
+    OR (decision_value IS NOT NULL AND decision_value IN ('accepted','declined')
+    AND disclosure_message_id IS NOT NULL AND decision_message_id IS NOT NULL
+    AND decision_delivery_key IS NOT NULL AND length(decision_delivery_key) BETWEEN 1 AND 256
+    AND decision_body_sha256 IS NOT NULL AND length(decision_body_sha256)=64
+    AND decision_occurred_at_ms IS NOT NULL AND decision_received_at_ms IS NOT NULL)),
   UNIQUE (portfolio_id, initiating_message_id),
   CHECK (expires_at_ms = created_at_ms + 86400000),
   CHECK (disclosed_at_ms IS NULL OR disclosed_at_ms BETWEEN (created_at_ms / 1000) * 1000 AND expires_at_ms)
@@ -2141,7 +2165,7 @@ CREATE UNIQUE INDEX payment_source_record_reference ON card_enrollments(source_r
 CREATE INDEX payment_sources_by_owner ON card_enrollments(user_id) WHERE payment_source_id IS NOT NULL;
 --> statement-breakpoint
 
-CREATE UNIQUE INDEX pending_consent_decisions_identity_0 ON pending_consent_exchanges(decision_portfolio_id,decision_message_id) WHERE decision_value IS NOT NULL;
+CREATE UNIQUE INDEX pending_consent_decisions_identity_0 ON pending_consent_exchanges(portfolio_id,decision_message_id) WHERE decision_value IS NOT NULL;
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX pending_consent_one_caller ON pending_consent_exchanges(portfolio_id, bsuid)
@@ -5954,7 +5978,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (EXIST
   AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'pending_consent_exchanges','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'portfolio_id',OLD."portfolio_id",'bsuid',OLD."bsuid",'phone_number_id',OLD."phone_number_id",'initiating_message_id',OLD."initiating_message_id",'initiating_body_sha256',OLD."initiating_body_sha256",'disclosure_json',OLD."disclosure_json",'disclosure_message_id',OLD."disclosure_message_id",'created_at_ms',OLD."created_at_ms",'disclosed_at_ms',OLD."disclosed_at_ms",'decision_not_before_ms',OLD."decision_not_before_ms",'expires_at_ms',OLD."expires_at_ms",'state',OLD."state",'rejected_at_ms',OLD."rejected_at_ms",'sandbox_phone',OLD."sandbox_phone",'delivery_phone_number_id',OLD.delivery_phone_number_id,'delivery_message_id',OLD.delivery_message_id,'delivery_occurred_at_ms',OLD.delivery_occurred_at_ms,'delivery_received_at_ms',OLD.delivery_received_at_ms,'delivery_not_before_ms',OLD.delivery_not_before_ms,'decision_portfolio_id',OLD.decision_portfolio_id,'decision_bsuid',OLD.decision_bsuid,'decision_phone_number_id',OLD.decision_phone_number_id,'decision_value',OLD.decision_value,'decision_disclosure_json',OLD.decision_disclosure_json,'decision_disclosure_message_id',OLD.decision_disclosure_message_id,'decision_message_id',OLD.decision_message_id,'decision_delivery_key',OLD.decision_delivery_key,'decision_body_sha256',OLD.decision_body_sha256,'decision_occurred_at_ms',OLD.decision_occurred_at_ms,'decision_received_at_ms',OLD.decision_received_at_ms)
+  SELECT q.id,'pending_consent_exchanges','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'portfolio_id',OLD."portfolio_id",'bsuid',OLD."bsuid",'phone_number_id',OLD."phone_number_id",'initiating_message_id',OLD."initiating_message_id",'initiating_body_sha256',OLD."initiating_body_sha256",'disclosure_json',OLD."disclosure_json",'disclosure_message_id',OLD."disclosure_message_id",'created_at_ms',OLD."created_at_ms",'disclosed_at_ms',OLD."disclosed_at_ms",'decision_not_before_ms',OLD."decision_not_before_ms",'expires_at_ms',OLD."expires_at_ms",'state',OLD."state",'rejected_at_ms',OLD."rejected_at_ms",'sandbox_phone',OLD."sandbox_phone",'delivery_phone_number_id',OLD.delivery_phone_number_id,'delivery_message_id',OLD.delivery_message_id,'delivery_occurred_at_ms',OLD.delivery_occurred_at_ms,'delivery_received_at_ms',OLD.delivery_received_at_ms,'delivery_not_before_ms',OLD.delivery_not_before_ms,'decision_portfolio_id',CASE WHEN OLD.decision_value IS NOT NULL THEN OLD.portfolio_id END,'decision_bsuid',CASE WHEN OLD.decision_value IS NOT NULL THEN OLD.bsuid END,'decision_phone_number_id',CASE WHEN OLD.decision_value IS NOT NULL THEN OLD.phone_number_id END,'decision_value',OLD.decision_value,'decision_disclosure_json',CASE WHEN OLD.decision_value IS NOT NULL THEN OLD.disclosure_json END,'decision_disclosure_message_id',CASE WHEN OLD.decision_value IS NOT NULL THEN OLD.disclosure_message_id END,'decision_message_id',OLD.decision_message_id,'decision_delivery_key',OLD.decision_delivery_key,'decision_body_sha256',OLD.decision_body_sha256,'decision_occurred_at_ms',OLD.decision_occurred_at_ms,'decision_received_at_ms',OLD.decision_received_at_ms)
   FROM erasure_requests q WHERE q.state='Draining' AND (EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) w WHERE w.user_id=q.user_id AND w.portfolio_id=OLD.portfolio_id AND w.bsuid=OLD.bsuid))
     AND json_extract(q.decision_json,'$.dispositions.consent.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000;
@@ -7037,12 +7061,18 @@ BEGIN SELECT RAISE(ABORT, 'payment_enrollment_method_immutable'); END;
 CREATE TRIGGER payment_source_method_guard BEFORE UPDATE ON card_enrollments WHEN OLD.payment_source_id IS NULL AND NEW.payment_source_id IS NOT NULL AND (NEW.source_method<>OLD.method OR (OLD.wompi_environment IS NULL AND OLD.method<>'card')) BEGIN SELECT RAISE(ABORT,'payment_source_method_mismatch'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER pending_consent_decision_requires_delivery BEFORE UPDATE OF decision_portfolio_id,decision_bsuid,decision_phone_number_id,decision_value,decision_disclosure_json,decision_disclosure_message_id,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
+CREATE TRIGGER pending_consent_exchange_basis_immutable BEFORE UPDATE ON pending_consent_exchanges
+WHEN NEW.id IS NOT OLD.id OR NEW.portfolio_id IS NOT OLD.portfolio_id OR NEW.bsuid IS NOT OLD.bsuid
+ OR NEW.phone_number_id IS NOT OLD.phone_number_id OR NEW.disclosure_json IS NOT OLD.disclosure_json
+ OR ((OLD.decision_value IS NOT NULL OR OLD.disclosure_message_id IS NOT NULL)
+   AND NEW.disclosure_message_id IS NOT OLD.disclosure_message_id)
+BEGIN SELECT RAISE(ABORT,'pending_consent_exchange_basis_immutable'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER pending_consent_decision_requires_delivery BEFORE UPDATE OF decision_value,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
 WHEN OLD.decision_value IS NULL AND NEW.decision_value IS NOT NULL AND (NOT EXISTS (
   SELECT 1 FROM pending_consent_exchanges AS e
-  WHERE e.id = NEW.id AND e.portfolio_id = NEW.decision_portfolio_id AND e.bsuid = NEW.decision_bsuid
-    AND e.phone_number_id = NEW.decision_phone_number_id AND e.state = 'awaiting_decision' AND e.disclosure_json = NEW.decision_disclosure_json
-    AND e.disclosure_message_id = NEW.decision_disclosure_message_id
+  WHERE e.id = NEW.id AND e.state = 'awaiting_decision' AND e.disclosure_message_id IS NOT NULL
     AND NEW.decision_message_id <> e.initiating_message_id
     -- Kapso timestamps have second precision: equal timestamps cannot prove reply order.
     AND NEW.decision_occurred_at_ms > e.disclosed_at_ms AND NEW.decision_occurred_at_ms > e.decision_not_before_ms
@@ -7054,15 +7084,15 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER pending_consent_decision_settles AFTER UPDATE OF decision_portfolio_id,decision_bsuid,decision_phone_number_id,decision_value,decision_disclosure_json,decision_disclosure_message_id,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
+CREATE TRIGGER pending_consent_decision_settles AFTER UPDATE OF decision_value,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
 WHEN OLD.decision_value IS NULL AND NEW.decision_value IS NOT NULL
 BEGIN
  UPDATE pending_consent_exchanges SET state = NEW.decision_value WHERE id = NEW.id;
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER pending_consent_decisions_no_update BEFORE UPDATE OF decision_portfolio_id,decision_bsuid,decision_phone_number_id,decision_value,decision_disclosure_json,decision_disclosure_message_id,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
-WHEN OLD.decision_value IS NOT NULL AND (NEW.decision_portfolio_id IS NOT OLD.decision_portfolio_id OR NEW.decision_bsuid IS NOT OLD.decision_bsuid OR NEW.decision_phone_number_id IS NOT OLD.decision_phone_number_id OR NEW.decision_value IS NOT OLD.decision_value OR NEW.decision_disclosure_json IS NOT OLD.decision_disclosure_json OR NEW.decision_disclosure_message_id IS NOT OLD.decision_disclosure_message_id OR NEW.decision_message_id IS NOT OLD.decision_message_id OR NEW.decision_delivery_key IS NOT OLD.decision_delivery_key OR NEW.decision_body_sha256 IS NOT OLD.decision_body_sha256 OR NEW.decision_occurred_at_ms IS NOT OLD.decision_occurred_at_ms OR NEW.decision_received_at_ms IS NOT OLD.decision_received_at_ms) AND NEW.decision_value IS NOT NULL
+CREATE TRIGGER pending_consent_decisions_no_update BEFORE UPDATE OF decision_value,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
+WHEN OLD.decision_value IS NOT NULL AND (NEW.decision_value IS NOT OLD.decision_value OR NEW.decision_message_id IS NOT OLD.decision_message_id OR NEW.decision_delivery_key IS NOT OLD.decision_delivery_key OR NEW.decision_body_sha256 IS NOT OLD.decision_body_sha256 OR NEW.decision_occurred_at_ms IS NOT OLD.decision_occurred_at_ms OR NEW.decision_received_at_ms IS NOT OLD.decision_received_at_ms)
 BEGIN
  SELECT RAISE(ABORT, 'pending_consent_append_only');
 END;
@@ -7097,7 +7127,7 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER pending_consent_exchanges_companions_initial BEFORE INSERT ON pending_consent_exchanges WHEN NEW.delivery_phone_number_id IS NOT NULL OR NEW.delivery_message_id IS NOT NULL OR NEW.delivery_occurred_at_ms IS NOT NULL OR NEW.delivery_received_at_ms IS NOT NULL OR NEW.delivery_not_before_ms IS NOT NULL OR NEW.decision_portfolio_id IS NOT NULL OR NEW.decision_bsuid IS NOT NULL OR NEW.decision_phone_number_id IS NOT NULL OR NEW.decision_value IS NOT NULL OR NEW.decision_disclosure_json IS NOT NULL OR NEW.decision_disclosure_message_id IS NOT NULL OR NEW.decision_message_id IS NOT NULL OR NEW.decision_delivery_key IS NOT NULL OR NEW.decision_body_sha256 IS NOT NULL OR NEW.decision_occurred_at_ms IS NOT NULL OR NEW.decision_received_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'pending_consent_exchanges_companions_initial'); END;
+CREATE TRIGGER pending_consent_exchanges_companions_initial BEFORE INSERT ON pending_consent_exchanges WHEN NEW.delivery_phone_number_id IS NOT NULL OR NEW.delivery_message_id IS NOT NULL OR NEW.delivery_occurred_at_ms IS NOT NULL OR NEW.delivery_received_at_ms IS NOT NULL OR NEW.delivery_not_before_ms IS NOT NULL OR NEW.decision_value IS NOT NULL OR NEW.decision_message_id IS NOT NULL OR NEW.decision_delivery_key IS NOT NULL OR NEW.decision_body_sha256 IS NOT NULL OR NEW.decision_occurred_at_ms IS NOT NULL OR NEW.decision_received_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'pending_consent_exchanges_companions_initial'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER pending_consent_rejected_delivery BEFORE UPDATE OF delivery_phone_number_id,delivery_message_id,delivery_occurred_at_ms,delivery_received_at_ms,delivery_not_before_ms ON pending_consent_exchanges

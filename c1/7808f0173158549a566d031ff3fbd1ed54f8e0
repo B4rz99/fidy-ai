@@ -1,0 +1,49 @@
+apps/server/src/shell/hosted-inference/conformance.test.ts
+  s_241024bc81d268::t_62bbc05c7e7109 201-207,210-213,341
+  s_241024bc81d268::t_0f27faf312ad41 152-153
+  s_241024bc81d268::t_664d6431732b02 28-33,36,42,47,209,242,270,288,306,334
+  s_241024bc81d268::t_e7166ac44328b5 56-63,66-70,208,320-327,333
+  s_241024bc81d268::t_49a037d65b8150 147-151,316-319,328-332,335-340
+  s_241024bc81d268::t_30e4872a63a41f 53-55,71-83,315
+  s_241024bc81d268::t_f03a771cdf0146 35,64-65
+  s_241024bc81d268::t_d4135c70d32141 34
+apps/server/src/shell/hosted-inference/contract.ts
+  s_241024bc81d268::t_f558b7be919755 351
+infra/cloudflare/scripts/check-workers-ai-conformance.sh
+  s_241024bc81d268::t_d32fcc88ab2d84 109,123
+apps/server/src/shell/hosted-inference/operations.ts
+  s_241024bc81d268::t_f558b7be919755 17,52-53
+apps/server/src/shell/hosted-inference/internal/workers-ai.ts
+  s_241024bc81d268::t_c9acc55eac6a7f 265
+apps/web/src/features/agent/FEATURE.md
+  s_241024bc81d268::t_743a3acf8fff64 193-214
+infra/cloudflare/workers-ai-conformance-script.test.ts
+  s_241024bc81d268::t_30e4872a63a41f 261
+apps/server/src/shell/hosted-inference/internal/prompt.ts
+  s_241024bc81d268::t_a322f44799180e 42-48
+apps/web/src/features/pats/FEATURE.md
+  s_241024bc81d268::t_f69bad15788ae3 218-226
+  s_241024bc81d268::t_fc1a604affa222 227-234
+apps/server/src/shell/hosted-inference/internal/conformance.ts
+  s_241024bc81d268::t_ad51d9388a1539 212,258,310-312
+  s_241024bc81d268::t_1164d199fc8795 264,274,277-306,309
+  s_241024bc81d268::t_f558b7be919755 209-211,259-263,265-273,275-276,307-308,313,315,344
+  s_241024bc81d268::t_49a037d65b8150 213-230,232-257
+  s_241024bc81d268::t_f476d2a348770c 314
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c17808f0173158549a566d031ff3fbd1ed54f8e0",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

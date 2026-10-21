@@ -603,6 +603,50 @@ const malformedManagement = (route: Route): Promise<void> =>
     contentType: "application/json",
     body: '{"connections":[],"nextCursor":"malformed"}',
   });
+test("expired identity proof keeps Accesos visible and returns from identity confirmation without replaying revocation", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const path = yield* beginReview(request, yield* authorization(request));
+      yield* loginFromReview(page, request, path);
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
+      let revocations = 0;
+      const requireIdentity = (route: Route): Promise<void> => {
+        revocations += 1;
+        return route.fulfill({
+          status: forbidden,
+          contentType: "application/json",
+          body: '{"error":"reauthentication_required"}',
+        });
+      };
+      yield* Effect.tryPromise(() => page.route("**/web/oauth/revoke-all", requireIdentity));
+      yield* Effect.tryPromise(() => page.goto("/settings/access"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Revocar todos los agentes conectados" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("Confirma tu identidad para revocar")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Accesos", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Confirmar mi identidad", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/login\?resume=access$/));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Confirma tu identidad" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.goto("/settings/access"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Accesos", exact: true })).toBeVisible()
+      );
+      expect(revocations).toBe(1);
+    })
+  ));
+
 test("built agent settings report unavailable or malformed state without a false empty list or successful revocation", ({
   page,
   request,

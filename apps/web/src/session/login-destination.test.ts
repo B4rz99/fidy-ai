@@ -11,6 +11,7 @@ describe("login continuation", () => {
     [{ connectionAttempt: request }, `/connections/continue?attempt=${request}`],
     [{ resume: "pat" }, "/settings/access?resume=pat"],
     [{ resume: "account" }, "/settings/account"],
+    [{ resume: "access" }, "/settings/access"],
   ])("preserves the fixed pending task for %o", (search, destination) => {
     expect(destinationAfterLogin(search)).toBe(destination);
   });

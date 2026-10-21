@@ -33,6 +33,7 @@ export {
   OAuthConnectionList,
   OAuthConnectionListQuery,
   OAuthConnectionMetadata,
+  OAuthReauthenticationRequired,
   OAuthRequestId,
   OAuthReview,
   OAuthOperationReview,

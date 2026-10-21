@@ -114,3 +114,19 @@ explicit retry identity, storage refusal, late completion and disclosure cleanup
 decisions are exercised in `reauthentication-draft.test.ts`; mounted workflows use browser journeys.
 Metadata listing/revocation and CLI pairing retain their independent ownership. Existing storage,
 clipboard, combined-page and native provider browser journeys remain applicable.
+
+Production external-client audit, 20 October 2026, release `eb9374c92dd97a63f45a6a108a8660b0cfe39842`:
+Google sign-in and the explicitly approved seven-day MCP Inspector grant completed with Lectura and
+Escritura, excluding Tablero. Accesos displayed the active connection and the external client read
+canonical recurring state. Later revocation exposed a distinct freshness bug: 401 disposed Accesos,
+but reloading with the same cookie restored metadata. The test grant remains pending verified
+revocation and subsequent external access/refresh refusal; starting a provider popup did not refresh
+identity without its completion.
+
+Issue #1422 changes individual and aggregate MCP revocation to distinguish a live session needing
+identity confirmation (declared 403 `reauthentication_required`) from an invalid/revoked session
+(401). Accesos retains metadata and offers an explicit identity-confirmation link returning to this
+page. Return never replays a mutation: the User must select the agent again. Origin, binding,
+consent, ownership and atomic freshness guards remain enforced. Worker/D1 regression coverage checks
+both refusals without revocation; the built-browser regression checks retained Accesos, the fixed
+identity destination and no replay. Production verification of this follow-up is pending deployment.

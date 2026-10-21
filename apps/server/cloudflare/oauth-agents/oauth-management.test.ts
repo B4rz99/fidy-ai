@@ -115,7 +115,8 @@ it("lists connections after freshness expires while refusing both access mutatio
             ),
           })
         );
-        expect(response.status).toBe(401);
+        expect(response.status).toBe(403);
+        expect(yield* wait(response.json())).toEqual({ error: "reauthentication_required" });
       }
       expect(
         yield* wait(
@@ -278,7 +279,7 @@ it.each(["wrong-user", "forged-session", "stale-session", "csrf", "oauth-bearer"
           "wrong-user": 400,
           csrf: 403,
           "forged-session": 401,
-          "stale-session": 401,
+          "stale-session": 403,
           "oauth-bearer": 401,
         };
         expect(response.status).toBe(statuses[kind]);

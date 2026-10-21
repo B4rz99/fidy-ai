@@ -178,6 +178,15 @@ export const manageConnections = (
       })
     );
     if (Option.isNone(session)) {
+      if (!listing) {
+        const live = yield* dbWork(() =>
+          browserSession({ ...input, input: { current: input.current, fresh: false } })
+        );
+        if (Option.isSome(live)) {
+          yield* input.admitUser(live.value.user_id);
+          return oauthResponse({ body: { error: "reauthentication_required" }, status: 403 });
+        }
+      }
       return oauthResponse({ body: { error: "unauthenticated" }, status: 401 });
     }
     yield* input.admitUser(session.value.user_id);

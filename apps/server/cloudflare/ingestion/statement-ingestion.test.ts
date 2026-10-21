@@ -2378,7 +2378,7 @@ it("captures a same-session exact-confirmed hosted row without a browser credent
           runtime.db.batch([
             ...prepared.mutation.statements,
             runtime.db.prepare(
-              "INSERT INTO canonical_child_guard (child_index,operation,accepted) VALUES (1,'rollback',0)"
+              "INSERT INTO canonical_child_guard (child_index,accepted) VALUES (1,0)"
             ),
           ])
         ).rejects.toThrow("canonical_child_guard_1")

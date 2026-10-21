@@ -1,0 +1,21 @@
+bun.lock
+  s_241024bc81d268::t_c38aa84b866acf 165,168,627,1437,2189
+package.json
+  s_241024bc81d268::t_ffea5f2c912b57 80,83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3ef2c31b46197f8822bd5273bb4c7970500c5ef0",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

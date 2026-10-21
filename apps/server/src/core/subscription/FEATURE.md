@@ -295,6 +295,47 @@ DaviPlata runs timed out; two focused diagnostic runs and the final clean run pa
 definitive cause was established. Temporary diagnostics were removed; no waits, test retries or
 timeout increases were retained. This is local verification, not deployed wallet proof.
 
+Release verification, 2026-10-20: [PR #1364](https://github.com/B4rz99/fidy-ai/pull/1364)
+merged as `d179bc162ebc15213b5e1f1e29f1cd2aa7f05c47` after all required checks passed.
+The [Production deployment](https://github.com/B4rz99/fidy-ai/actions/runs/39424387530)
+passed all three full smoke probes without quota deferral. Public API health, web metadata and
+landing metadata independently reported that revision; API and web reported matching contract
+digest `43da8b6e7f0bfbed827ab4d6675978f04b5436e9f014bc406b05d673d1c3815e`.
+The fresh real-provider [Nequi](https://github.com/B4rz99/fidy-ai/actions/runs/39424452791)
+and [DaviPlata](https://github.com/B4rz99/fidy-ai/actions/runs/39424457614) Sandbox workflows
+passed all four selected cases each on that revision with Effect 4.0.4. DaviPlata verified actual
+Sandbox OTP and reusable source authorization. These workflows exercise real provider responses
+with isolated local D1/activity execution; they do not establish a deployed wallet journey or
+Queue/Workflow recovery behavior. No real money or deployed QA account was involved.
+
+Remaining deployed checks: wallet authorization through settlement and cancellation on an eligible
+account; scheduled renewal/grace at real due dates; isolated Queue/Workflow interruption/replay;
+and isolated Price-change notification. Reusing the historical Gmail card still requires genuine,
+attributable Wompi no-charge confirmation under the [ambiguity runbook](../../../../../docs/runbooks/billing-ambiguity.md).
+No new sign-in is requested while that prerequisite remains unresolved.
+The [follow-up CI rerun](https://github.com/B4rz99/fidy-ai/actions/runs/39429914340/attempts/2)
+reproduced the sixty-second DaviPlata browser timeout, alongside a Google connection reset.
+The deployed release and real-provider protocol results above remain valid. Follow-up diagnosis
+reproduced a browser-fixture hang twice: the readiness observer selected an outgoing page's Consent
+request, then waited indefinitely for its response after navigation and abort, despite Upgrade
+receiving a real Core 200 response. Observing completed GET responses instead passed the controlled
+case, without adding waits, retries or timeout increases. The regression uses real browser →
+Ingress → Core/local D1 and aborts only the outgoing read. This establishes the reproduced race's
+cause; the earlier CI timeout lacked stage evidence, so attribution to that same race remains
+unproven. The combined regression, reused-source Subscription, first-card and DaviPlata browser
+run passed all 14 checks including shared prerequisites. Temporary stage diagnostics were removed.
+Deployed wallet coverage remains separate.
+
+The [next CI run](https://github.com/B4rz99/fidy-ai/actions/runs/39438032993) passed DaviPlata
+and the navigation regression but failed an existing Transactions loading assertion. Its full local
+shard passed with a real 200 response, so that CI failure was not reproduced locally. The loading
+test now holds its request until loading is observed, then requires the real Core response to be
+200 before checking that loading ends; the former one-second sleep is removed. That stronger
+observation reproduced a real 429 under parallel load: unrelated journeys shared the primary
+fixture User's admission budget. The loading and Consent regression journeys now each own a
+separate seeded User through the same public pairing flow. The resulting full local shard passed
+91 checks, with three pre-existing skips. No counters, limits, deadlines or admission guards changed.
+
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),
 [AccessTier guard](../../shell/access-tier/operations.ts), and

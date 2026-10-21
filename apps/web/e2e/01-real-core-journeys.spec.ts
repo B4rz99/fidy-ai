@@ -11,6 +11,7 @@ import {
   reloadTransactionsThroughCore,
   signInFirstCardThroughCore,
   signInFirstDaviplataThroughCore,
+  signInNavigationThroughCore,
   signInThroughCore,
   signInWithVerifiedEmailThroughCore,
 } from "./real-core-fixture";
@@ -37,8 +38,18 @@ const RetrySeconds = Schema.NumberFromString.check(
 
 const fromPlaywright = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
-const continueAfterDelay = (route: Route): Promise<void> =>
-  Effect.runPromise(Effect.sleep("1 second")).then(() => route.continue());
+const holdTransactionRead = (
+  page: Page,
+  release: Promise<void>
+): Promise<Readonly<{ received: Promise<Route> }>> => {
+  const received = Promise.withResolvers<Route>();
+  return page
+    .route(`${api}/transactions?*`, (route) => {
+      received.resolve(route);
+      return release.then(() => route.continue());
+    })
+    .then(() => ({ received: received.promise }));
+};
 
 // Playwright serializes this function into the browser; Effect is not present there.
 const fetchWithBearer = ({
@@ -419,16 +430,18 @@ test("a browser cannot render or fetch another User's private Transaction throug
       );
     })
   ));
-test("renders loading until the real Core answers Transactions", ({ page, request }) =>
-  Effect.runPromise(
+test("renders loading until the real Core answers Transactions", ({ page, request }) => {
+  const release = Promise.withResolvers<void>();
+  return Effect.runPromise(
     Effect.gen(function* () {
       yield* fromPlaywright(
-        signInThroughCore({
+        signInNavigationThroughCore({
           page,
           request,
+          identity: "navigationLoading",
         })
       );
-      yield* fromPlaywright(page.route(`${api}/transactions?*`, continueAfterDelay));
+      const held = yield* fromPlaywright(holdTransactionRead(page, release.promise));
       yield* fromPlaywright(reloadTransactionsThroughCore(page));
       yield* fromPlaywright(
         expect(
@@ -437,6 +450,10 @@ test("renders loading until the real Core answers Transactions", ({ page, reques
           })
         ).toBeVisible()
       );
+      const route = yield* fromPlaywright(held.received);
+      release.resolve();
+      const response = yield* fromPlaywright(route.request().response());
+      expect(response?.status()).toBe(ok);
       yield* fromPlaywright(
         expect(
           page.getByRole("region", {
@@ -444,8 +461,9 @@ test("renders loading until the real Core answers Transactions", ({ page, reques
           })
         ).toHaveCount(0)
       );
-    })
-  ));
+    }).pipe(Effect.ensuring(Effect.sync(() => release.resolve())))
+  );
+});
 test("approves a browser pairing through the real verified-email public route", ({
   page,
   request,

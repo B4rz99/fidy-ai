@@ -130,3 +130,26 @@ page. Return never replays a mutation: the User must select the agent again. Ori
 consent, ownership and atomic freshness guards remain enforced. Worker/D1 regression coverage checks
 both refusals without revocation; the built-browser regression checks retained Accesos, the fixed
 identity destination and no replay. Production verification of this follow-up is pending deployment.
+
+Production continuation, 21 October 2026, release `d50938e433193ba07e0207f0193f4f8881526f5a`:
+the User completed the fresh Google identity popup from `/login?resume=access` and returned to
+the same Accesos account. No revocation was replayed automatically. Explicitly selecting the
+existing MCP Inspector connection then displayed the server-confirmed revocation message and
+changed its state from Activo to Revocado. The client could not reconnect with its retained
+credentials: it required a new OAuth authorization. That replacement request was explicitly
+cancelled without granting access; Inspector remained disconnected and displayed
+`Re-authentication required`. This closes live identity-return and original test-grant cleanup.
+It does not independently establish the exact refresh-token error response or successful MCP
+mutation confirmation. A later proposed seven-day retest is separate authority and requires
+its own action-time approval.
+
+The separately approved 21 October retest grant was issued after Google identity completion,
+then explicitly revoked after the native confirmation test stalled. Accesos showed both Inspector
+grants as Revocado. Reconnection required new authorization and did not restore tool access.
+This closes cleanup for both grants; the external mutation result remains unverified.
+
+The separately approved traced test also completed seven-day read/write issuance after the expired
+OAuth request was renewed. Its Google identity completion was reused successfully. After capturing
+the stalled decline transport, explicit revocation succeeded before freshness expired. All three
+Inspector connection rows displayed Revocado. No additional production access remains from these
+Inspector tests.

@@ -368,3 +368,17 @@ The 20 October production browser follow-up also selected 15 July and 15 August 
 Transactions date picker. Both dates showed zero records in the current audit account, as did
 15 September in the earlier check. This narrows fixture discovery to another account; it does not
 prove that the three historical fixtures were deleted or are absent from all accounts.
+
+Production retest, 21 October 2026, release `d50938e433193ba07e0207f0193f4f8881526f5a`:
+Inspector read revision 1 and requested stopping the existing synthetic monthly plan. Decline
+and acceptance both closed their native review, but neither produced a completed parent tool
+result. Independent browser readback still displayed the November occurrence as upcoming.
+The new seven-day test grant was revoked and both Inspector grant rows displayed Revocado.
+Native cancellation/completion and the synthetic tracking change remain open; no Transaction
+was deleted or external service cancelled.
+
+A subsequent separately approved traced Inspector call again read revision 1 and displayed the
+exact synthetic stop review. Decline started a reply fetch which received no headers until transport
+disconnection, then returned 404; a subsequent native read was also delayed and returned 404.
+The traced grant was revoked successfully. This identifies a transport symptom, not a completed
+tracking change or a diagnosed production cause.

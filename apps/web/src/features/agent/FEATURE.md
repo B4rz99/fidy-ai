@@ -181,3 +181,12 @@ observed conversation. This establishes inbound delivery and callback retry, not
 back-and-forth or a fix for the earlier intermittent failures. D1 availability did not establish
 Workers AI availability. No raw provider payload, credential or unrelated conversation is retained
 as audit evidence. Hosted recurring lifecycle approval remains unverified in Production.
+
+Production morning retry, 21-10-2026 Bogotá, release
+`d50938e433193ba07e0207f0193f4f8881526f5a`: a single no-data greeting explicitly requested no
+financial reads or writes. The browser again displayed the daily-limit feedback, removed the
+failed message from successful history, and preserved the exact editable draft. This presentation
+is selected only by the declared `HostedTurnQuotaExceeded` response with
+`status: provider_quota_exceeded`; the separate capacity refusal does not select it. Successful
+inference and remaining natural-language mutation checks are still unverified. No automatic retry
+or financial mutation was requested.

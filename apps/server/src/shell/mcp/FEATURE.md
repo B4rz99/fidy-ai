@@ -78,3 +78,50 @@ same live cookie still permitted listing. Issue #1422 distinguishes that refusal
 confirmation. The grant has not yet been confirmed revoked; native provider-popup completion is
 required before cleanup and subsequent access/refresh refusal can be verified. No production
 Transaction was deleted during this run.
+
+Cleanup continuation, 21 October 2026, release `d50938e433193ba07e0207f0193f4f8881526f5a`:
+after the User completed same-account Google identity confirmation, the original Inspector grant
+was explicitly revoked in Accesos. The page reported successful revocation and retained the row
+as Revocado. Inspector's reconnect could not restore access using its stored credentials; it
+started a new OAuth review, which was cancelled. The client remained disconnected with
+`Re-authentication required`. This establishes the observed client denial and original-grant
+cleanup, not a separately captured refresh-token error or a successful live mutation.
+
+Production retest, 21 October 2026, same release: after separate action-time approval and Google
+identity completion, Inspector connected with a new seven-day read/write grant. It read the
+November recurring workspace at revision 1. Both the exact synthetic stop-tracking decline and
+acceptance closed the native form but left the parent tool call pending. Inspector recorded the
+decline result; reconnecting and independently reading the workspace still showed revision 1
+and the active plan. Acceptance was not confirmed as committed. The new grant was explicitly
+revoked before freshness expired; Accesos displayed both test grants as Revocado. Reconnection
+with retained credentials again required new authorization and remained disconnected. No new
+replacement grant was approved. Production native mutation completion remains open.
+
+Local diagnostic follow-up on the same revision used a temporary native workerd composition:
+real ingress-to-Core service binding, real User Durable Object, and isolated D1. The existing
+legacy delayed-acceptance case passed through that composition. Inspector 2.10.1 also completed
+decline through the complete local chain, retaining the disposable Budget with zero accepted
+deletions. A loopback-only synthetic OAuth provider then exercised Inspector's token-backed
+transport: decline completed, and acceptance against a separate explicitly approved disposable
+fixture completed with zero remaining Budgets and exactly one accepted deletion. These are
+manual diagnostic probes, not committed regression tests or production confirmation evidence.
+Temporary harnesses and local servers were removed/stopped after the run. The live stall is
+still unresolved; another traced live call is needed before selecting a production fix.
+
+A separately approved traced production grant on 21 October connected after renewing the expired
+authorization request; the completed Google identity was recognized without another popup. The
+seven-day read/write grant read revision 1 and displayed the exact synthetic stop review. On
+decline, closed client instrumentation recorded the reply fetch starting with no response headers.
+A subsequent workspace read also remained pending. Disconnecting the original transport released
+the outstanding fetches: the decline reply returned 404 after approximately 242 seconds, and the
+subsequent read returned 404 after approximately 165 seconds. A separate unauthenticated MCP
+probe returned 401 in less than one second. Bounded Core observations showed successful MCP
+invocations with roughly one-second processing times, but were attached late and do not prove
+when the stalled reply first reached Core or isolate its cause. The client had no proxy environment
+settings. No speculative production fix was deployed. The grant was explicitly revoked, with all
+three Inspector rows displayed as Revocado; the traced client and tail were stopped.
+
+Further temporary local probes passed delayed legacy acceptance through a real HTTP listener
+and through the production-required erasure registry guard with native R2 and D1. This narrows
+configuration differences without reproducing the live stall. Client-native production completion
+remains open; the supported Codex/Claude Code host journey is separate from Inspector evidence.

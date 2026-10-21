@@ -1,4 +1,4 @@
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { Clock, Data, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { makeAudit } from "../../src/shell/audit/runtime";
 import { PATActivity } from "../../src/shell/tokens/contract";
@@ -204,7 +204,8 @@ type Send = Readonly<{
     }>
   >;
 const setup = (
-  beforeCoordinate?: (db: D1Database) => Promise<void>
+  beforeCoordinate?: (db: D1Database) => Promise<void>,
+  database: (db: D1Database) => D1Database = (db) => db
 ): Promise<{
   db: D1Database;
   send: (input: Send) => Promise<Response>;
@@ -213,9 +214,9 @@ const setup = (
 }> =>
   runTest(
     Effect.gen(function* () {
-      const db = yield* awaitPromise(databases.acquire());
-
-      yield* awaitPromise(installTestSchema({ db }));
+      const native = yield* awaitPromise(databases.acquire());
+      yield* awaitPromise(installTestSchema({ db: native }));
+      const db = database(native);
       const createSession = (user: string, index: number): Promise<string> =>
         runTest(
           Effect.gen(function* () {
@@ -580,7 +581,15 @@ it.each(["fresh", "live"] as const)(
   (sessionAge) =>
     runTest(
       Effect.gen(function* () {
-        const { db, send, sessions } = yield* awaitPromise(setup());
+        const measures: Array<ReturnType<typeof observeRetentionCost>> = [];
+        const { db, send, sessions } = yield* awaitPromise(
+          setup(undefined, (db) => {
+            const observed = observeRetentionCost(db);
+            measures.push(observed);
+            return observed.database;
+          })
+        );
+        const observed = Option.getOrThrow(Option.fromUndefinedOr(measures[0]));
         if (sessionAge === "live") {
           vi.useFakeTimers({ toFake: ["Date"] });
           vi.setSystemTime(clock() + 600_001);
@@ -713,6 +722,12 @@ it.each(["fresh", "live"] as const)(
               .first()
           ))?.bearer_digest
         ).not.toBe(issued.bearer);
+        const admissionCosts = observed
+          .statements()
+          .filter(({ sql }) => sql.includes("INSERT INTO pat_review_attempts"))
+          .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
+        expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(3);
+        expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(4);
       })
     )
 );
@@ -785,7 +800,18 @@ it.each(["revoked", "idle-expired"] as const)(
 it("refuses a source's PAT pairing burst without denying an unrelated client", () =>
   runTest(
     Effect.gen(function* () {
-      const { send } = yield* awaitPromise(setup());
+      const measures: Array<ReturnType<typeof observeRetentionCost>> = [];
+      const { send } = yield* awaitPromise(
+        setup(undefined, (db) => {
+          const observed = observeRetentionCost(db);
+          measures.push(observed);
+          return observed.database;
+        })
+      );
+      const observed = Option.getOrThrow(Option.fromUndefinedOr(measures[0]));
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const started = clock();
+      vi.setSystemTime(started);
       const attempt = (source: string): Promise<Response> =>
         send({
           path: "/pat-pairings",
@@ -816,6 +842,22 @@ it("refuses a source's PAT pairing burst without denying an unrelated client", (
       );
       expect((yield* awaitPromise(attempt("198.51.100.10"))).status).toBe(429);
       expect((yield* awaitPromise(attempt("203.0.113.20"))).status).toBe(200);
+      const admissionCosts = observed
+        .statements()
+        .filter(({ sql }) => sql.includes("INSERT INTO pat_pairing_admission"))
+        .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(441);
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(44);
+      vi.setSystemTime(started + 599_999);
+      expect((yield* awaitPromise(attempt("198.51.100.10"))).status).toBe(429);
+      vi.setSystemTime(started + 600_000);
+      expect((yield* awaitPromise(attempt("198.51.100.10"))).status).toBe(200);
+      const boundaryCosts = observed
+        .statements()
+        .filter(({ sql }) => sql.includes("INSERT INTO pat_pairing_admission"))
+        .slice(admissionCosts.length);
+      expect(boundaryCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(25);
+      expect(boundaryCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(2);
     })
   ));
 it("sweeps expired anonymous pairing metadata but preserves approved grant evidence", () =>

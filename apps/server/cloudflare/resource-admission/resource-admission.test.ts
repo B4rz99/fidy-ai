@@ -15,7 +15,7 @@ import {
   ResourceAdmissionUnavailable,
   ResourceAdmissionUnits,
 } from "./contract";
-import { installCurrentTestObjects } from "../d1-test-fixture";
+import { installCurrentTestObjects, observeRetentionCost } from "../d1-test-fixture";
 import {
   admitResource,
   admitResourceWithAttemptPressure,
@@ -415,21 +415,43 @@ describe("Cloudflare resource admission", () => {
           }
         );
 
+        const baseline = observeRetentionCost(database);
+        yield* admit(
+          { ...authority, database: baseline.database },
+          "atomic-baseline",
+          [charge("source:atomic:v1", "source:baseline")],
+          [
+            baseline.database
+              .prepare("INSERT INTO test_outbox (id, admission_grant_id) VALUES (?, ?)")
+              .bind("work-baseline", "atomic-baseline"),
+          ]
+        );
+        yield* fromTestPromise(() =>
+          database.batch([
+            database.prepare("DELETE FROM test_outbox"),
+            database.prepare("DELETE FROM resource_admission_events"),
+            database.prepare("DELETE FROM resource_admission_grants"),
+          ])
+        );
         const prepared = prepareResourceAdmission(authority, {
           grantId: grantId("atomic-admitted"),
           charges: ResourceAdmissionCharges.make([charge("source:atomic:v1", "source:atomic")]),
         });
         const committed = yield* fromTestPromise(() =>
           database.batch([
+            ...prepared.statements,
             database
               .prepare("INSERT INTO test_outbox (id, admission_grant_id) VALUES (?, ?)")
               .bind("work-admitted", "atomic-admitted"),
-            ...prepared.statements,
           ])
         );
-        expect(
-          committed.reduce((sum, result) => sum + result.meta.rows_written, 0)
-        ).toBeLessThanOrEqual(8);
+        const composedCost = {
+          rowsRead: committed.reduce((sum, result) => sum + result.meta.rows_read, 0),
+          rowsWritten: committed.reduce((sum, result) => sum + result.meta.rows_written, 0),
+        };
+        expect(composedCost).toEqual(baseline.cost());
+        expect(composedCost.rowsWritten).toBeLessThanOrEqual(8);
+        expect(composedCost.rowsRead).toBeLessThanOrEqual(7);
 
         const refusedAdmission = prepareResourceAdmission(authority, {
           grantId: grantId("atomic-refused"),

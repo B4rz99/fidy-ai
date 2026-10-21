@@ -14,6 +14,7 @@ import {
   installAuditTestSchema,
   installTestSchema,
   isolatedTestDatabases,
+  observeRetentionCost,
 } from "../d1-test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { approveBrowserPairing, startBrowserPairing } from "../browser-login/operations";
@@ -1085,7 +1086,19 @@ it("preserves global mailbox ownership when another User claims the candidate af
 it("bounds replacement delivery across rejected proofs for the same User", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      const measures: Array<ReturnType<typeof observeRetentionCost>> = [];
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() =>
+        setup(undefined, undefined, {
+          worker: coreWorker,
+          accessIssuer: "https://example.cloudflareaccess.com",
+          publication: Option.none(),
+          database: (db) => {
+            const observed = observeRetentionCost(db);
+            measures.push(observed);
+            return observed.database;
+          },
+        })
+      );
       expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const token = "J".repeat(43);
       yield* Effect.tryPromise(() => seedWebSession(db, token));
@@ -1157,6 +1170,12 @@ it("bounds replacement delivery across rejected proofs for the same User", () =>
             .first()
         ))?.email_address
       ).toBe("person@example.test");
+      const admissionCosts = measures
+        .flatMap((observed) => observed.statements())
+        .filter(({ sql }) => sql.includes("INSERT INTO email_security_limits"))
+        .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(25);
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(6);
     })
   ));
 
@@ -2087,7 +2106,19 @@ const emailAdmissionRequest = (
 it("bounds concurrent email sends across pairings and preserves admission after pairing deletion", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      const measures: Array<ReturnType<typeof observeRetentionCost>> = [];
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() =>
+        setup(undefined, undefined, {
+          worker: coreWorker,
+          accessIssuer: "https://example.cloudflareaccess.com",
+          publication: Option.none(),
+          database: (db) => {
+            const observed = observeRetentionCost(db);
+            measures.push(observed);
+            return observed.database;
+          },
+        })
+      );
       yield* Effect.tryPromise(seedUser);
       const pairings = yield* Effect.all(
         Array.from({ length: 8 }, () => emailAdmissionPairing(sendRequest))
@@ -2173,6 +2204,12 @@ it("bounds concurrent email sends across pairings and preserves admission after 
             .first()
         )
       ).toEqual({ requests: 1 });
+      const admissionCosts = measures
+        .flatMap((observed) => observed.statements())
+        .filter(({ sql }) => sql.includes("INSERT INTO email_security_limits"))
+        .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(71);
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(15);
     })
   ));
 

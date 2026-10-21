@@ -7,7 +7,7 @@ import { deepStrictEqual } from "node:assert";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { UserId } from "../../src/core/identity/contract";
 import { startBrowserPairing } from "../browser-login/operations";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import {
   handleSupportRecovery,
   issueInitialBackupRecoveryCode,
@@ -140,10 +140,11 @@ it("admits only five concurrent operator commands per rolling minute before body
         issuedAt: current / 1000,
         expiresAt: current / 1000 + 300,
       });
+      const observed = observeRetentionCost(fixture.db);
       const invoke = (): Effect.Effect<Response> =>
         handleSupportRecovery({
           request: new Request(fixture.request(assertion), { method: "POST", body: "{}" }),
-          db: fixture.db,
+          db: observed.database,
           config: fixture.config,
         }).pipe(
           Effect.provideService(HttpClient.HttpClient, fixture.httpClient),
@@ -155,8 +156,10 @@ it("admits only five concurrent operator commands per rolling minute before body
       expect(
         results.map((response) => response.status).sort((left, right) => left - right)
       ).toEqual([400, 400, 400, 400, 400, 429]);
+      expect(observed.cost()).toEqual({ rowsRead: 59, rowsWritten: 20 });
       current += 60_000;
       expect((yield* invoke()).status).toBe(400);
+      expect(observed.cost()).toEqual({ rowsRead: 73, rowsWritten: 24 });
     }).pipe(Effect.scoped)
   ));
 

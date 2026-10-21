@@ -1,3 +1,4 @@
+import { observeRetentionCost } from "../d1-test-fixture";
 import {
   HostedAgentSessionId,
   TranscriptText,
@@ -435,7 +436,8 @@ it("does not replace continuity when Consent is revoked during Compaction genera
 it("charges aborted pre-admission Compaction attempts against one User's daily capacity", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => setup());
+      const observed = observeRetentionCost(yield* Effect.tryPromise(() => setup()));
+      const db = observed.database;
       const awaited24 = yield* Effect.tryPromise(() => subject(0));
       const awaited25 = yield* Effect.tryPromise(() => inference(() => Promise.resolve(reply())));
       const first = yield* Effect.tryPromise(() =>
@@ -503,6 +505,12 @@ it("charges aborted pre-admission Compaction attempts against one User's daily c
           .first<{ used: number }>()
       );
       expect(attempts?.used).toBe(3);
+      const admissionCosts = observed
+        .statements()
+        .filter(({ sql }) => sql.includes("INSERT INTO hosted_compaction_attempts"))
+        .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(19);
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(5);
     })
   ));
 

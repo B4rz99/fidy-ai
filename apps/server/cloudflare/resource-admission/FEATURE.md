@@ -42,7 +42,8 @@ cutover. Do not create an empty target table or remove an old store in advance o
 
 The existing native Resource Admission integration seam verifies exact rolling/calendar boundaries,
 concurrent admission, complete grant cardinality, rollback, release, interruption and restart. The
-owner-controlled one-charge/outbox commit has a ceiling of eight D1 row writes, including indexes;
+owner-controlled one-charge/outbox commit matches the standalone path at seven row reads and eight
+D1 row writes, including indexes, against equal empty history;
 preparation adds no SQL query or preliminary commit. Consent's signed webhook integration covers the
 production composition and refusal without disclosure/provider effects.
 
@@ -60,3 +61,35 @@ reset, concurrent contenders and bounded retention; compare equal retained histo
 A smaller table count does not waive the cost gate. In particular, do not replace one recovery event
 with four generic writes unless measurements demonstrate a concrete code/behavior benefit. Keep a
 specialized representation and revisit the target if the shared representation fails that gate.
+
+### Native baselines
+
+The following measurements use the existing `observeRetentionCost` fixture around the actual D1
+binding passed into existing operation tests. They include indexes. Counter/event-only rows below
+filter the observer's executed statement measurements; they do not claim to measure every query in
+an authentication or hosted Turn. Tests retain public outcomes alongside the measured budgets.
+
+| Existing scenario                                                              | Row reads | Row writes | Measurement scope                                                          |
+| ------------------------------------------------------------------------------ | --------: | ---------: | -------------------------------------------------------------------------- |
+| One rolling admission plus outbox, standalone and owner-controlled             |    7 each |     8 each | Complete native batch, equal empty retained history                        |
+| Email pairing: eight contenders, throttle/unknown mailbox, then anchored reset |        71 |         15 | User/global counter statements across the existing journey                 |
+| Email replacement: five admitted generations, sixth suppressed                 |        25 |          6 | Replacement counter statements; wrong proofs remain covered by the journey |
+| PAT source: twenty same-source contenders, refusal, one unrelated source       |       441 |         44 | Source counter statements, including original pending-pairing predicates   |
+| Same PAT source immediately before/at its 600000 ms boundary                   |        25 |          2 | No write before cutoff; reset writes at equality                           |
+| PAT review under either fresh or live WebSession                               |         3 |          4 | Rolling review event statement                                             |
+| Recovery: six concurrent malformed verified requests, five admitted            |        59 |         20 | Full admission work, including cleanup and four predicates per event       |
+| Recovery after the exact minute refill, cumulative with burst                  |        73 |         24 | Full admission work; malformed admitted body still consumes capacity       |
+| Compaction: three aborted admitted attempts, fourth refused                    |        19 |          5 | Daily counter statements; fourth attempt writes nothing                    |
+
+Read budgets are ceilings where native query ordering can affect work. Run these six files through
+`bun run --cwd apps/server test:cloudflare --` to reproduce behavior and cost checks:
+`cloudflare/resource-admission/resource-admission.test.ts`,
+`cloudflare/onboarding/consent-ingress.test.ts`,
+`cloudflare/onboarding/browser-authentication.test.ts`, `cloudflare/tokens/pats.test.ts`,
+`cloudflare/recovery/support-recovery.test.ts`, and `cloudflare/agent/hosted-continuity.test.ts`.
+
+These are baselines for the installed consumers, not evidence that their future conversions are
+already equivalent. Their conversion tickets must repeat the same scenarios and historical-window
+checks on the target representation. Native failed batches return an error without per-statement
+row metadata; do not interpret absent metadata as zero-cost rejection. Atomic rollback and public
+refusal are verified independently of those measurements.

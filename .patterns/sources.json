@@ -61,25 +61,25 @@
   },
   "react": {
     "repository": "https://github.com/facebook/react",
-    "verifiedOn": "2026-10-12",
+    "verifiedOn": "2026-10-21",
     "snapshot": {
       "manifest": ".repos/react/packages/react/package.json",
       "version": "19.2.8",
       "revision": "1dd4ecbdabf826f527fc9a58c05ea70375b7d170",
       "revisionKind": "upstream-commit",
-      "provenance": "Historical v19.2.8 import recorded in docs/research/react-shadcn-agent-guidance.md and restored by 274f64ecdb1ff2d2997ecc52202d9e446e361653. Published 19.3.0 gitHead is 1d34f91dfde6bba84d08b683aaba164c7194dacb; runtime/types verified against bun.lock.",
+      "provenance": "Historical v19.2.8 import recorded in docs/research/react-shadcn-agent-guidance.md and restored by 274f64ecdb1ff2d2997ecc52202d9e446e361653. Published 19.3.1 gitHead is 61aa00df822d0eb76d0362eb8b6fdd3527693efe; runtime tarball integrities verified against bun.lock on 2026-10-21. Types remain 19.3.0.",
       "status": "historical"
     },
     "packages": [
       {
         "name": "react",
         "manifest": "apps/web/package.json",
-        "version": "19.3.0"
+        "version": "19.3.1"
       },
       {
         "name": "react-dom",
         "manifest": "apps/web/package.json",
-        "version": "19.3.0"
+        "version": "19.3.1"
       },
       {
         "name": "@types/react",

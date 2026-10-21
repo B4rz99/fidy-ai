@@ -538,7 +538,7 @@ const runLogin = (input: NativeInput, signal: AbortSignal): LoginEffect =>
           },
           signal
         );
-        if (child.exitCode !== 0 || !state.urlWritten || !state.callbackSent) {
+        if (child.exitCode !== 0 || !state.urlWritten) {
           throw new Error("login incomplete");
         }
         return {
@@ -555,7 +555,7 @@ const runLogin = (input: NativeInput, signal: AbortSignal): LoginEffect =>
       );
     })
   );
-/** Starts isolated native OAuth. The caller concurrently approves the private authorization URL and writes the host callback file. */
+/** Starts isolated native OAuth. The caller approves its authorization URL; a manually returned callback is optional when the native listener completes login. */
 export const nativeLogin = ({
   host,
   binary,

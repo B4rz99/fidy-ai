@@ -1,5 +1,8 @@
 # MCP verification
 
+For the isolated Inspector HTTP/2 cancellation reproduction and process-local dispatcher workaround,
+see [Inspector transport diagnostics](../../tools/mcp-inspector/README.md).
+
 Run the local runner regressions and the complete OAuth/MCP integration suite:
 
 ```sh

@@ -340,3 +340,27 @@ Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscriptio
 [native billing](../../../cloudflare/subscription/operations.ts),
 [AccessTier guard](../../shell/access-tier/operations.ts), and
 [commercial allowances](../../../../../docs/operations/commercial-allowances.md).
+
+## Verified-decline recovery (2026-10-21)
+
+The Wompi merchant Sandbox dashboard located reference
+`fidy-37aabbcd-b40a-434b-9777-94be61e186f3` as transaction
+`12146167-1792088273-64642`, declined and finalized. A bounded read-only Production check found
+that Fidy already retained that exact verified decline but had no original checkout response ID,
+no support confirmation and no retry clearance. Dashboard evidence was not written into billing
+state and no payment was submitted.
+
+The forward migration `0002_billing_decline_recovery.sql` permits a fresh, explicitly authorized
+PaymentEnrollment after a failed sent attempt has exactly one verified, finalized decline past the
+existing three-minute retry opportunity. A captured original response must still match when present;
+a lost response stays absent. Pending, approved, unverified, conflicting, missing/future-finalization
+and paid-period evidence do not qualify. Every attempt on a source remains checked atomically
+before retirement. No provider case, response, outcome or historical record is fabricated.
+
+Local public enrollment/Core/native-D1 regressions cover card, Nequi and DaviPlata replacement after
+a lost response, original evidence retention, no repeated POST on the old arm, and exactly one paid
+period for the newly authorized attempt. Negative cases preserve source/enrollment state and cause
+no extra provider work. The populated migration test first reproduces refusal with the baseline
+view, applies the actual forward SQL to the retained history and completes replacement. Separate
+local infrastructure checks cover clean install and populated redeployment. These results do not
+establish deployed recovery or live wallet authorization; those remain pending release verification.

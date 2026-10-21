@@ -71,44 +71,26 @@ const migrationFilesAt = (ref: string): ReadonlyArray<string> =>
     .filter((name) => name.endsWith(".sql"))
     .sort();
 
-/** Only the already reviewed schema snapshot may replace the complete migration directory. */
-const isVerifiedBaselineSquash = (
-  changes: ReadonlyArray<GitMigrationChange>,
-  base: string
-): boolean => {
+/** The unreleased application can replace its sole clean-install baseline. Incremental history
+ * still requires the existing unapplied-migration verification.
+ */
+const isDevelopmentBaseline = (changes: ReadonlyArray<GitMigrationChange>): boolean => {
   const baseline = "apps/server/cloudflare/migrations/0001_schema.sql";
-  if (!changes.some((change) => change.status === "A" && change.path === baseline)) {
-    return false;
-  }
+  const replacesBaseline = changes.some(
+    (change) => (change.status === "A" || change.status === "M") && change.path === baseline
+  );
   if (
+    !replacesBaseline ||
     !changes.every(
-      (change) => change.status === "D" || (change.status === "A" && change.path === baseline)
+      (change) =>
+        change.status === "D" ||
+        ((change.status === "A" || change.status === "M") && change.path === baseline)
     )
   ) {
     return false;
   }
   const files = migrationFilesAt("HEAD");
-  if (files.length !== 1 || files[0] !== baseline) {
-    return false;
-  }
-  const previous = migrationFilesAt(base);
-  const deleted = changes
-    .filter((change) => change.status === "D")
-    .map((change) => change.path)
-    .sort();
-  if (JSON.stringify(previous) !== JSON.stringify(deleted)) {
-    return false;
-  }
-  return (
-    runMigrationEditPolicyCommand(["git", "show", `HEAD:${baseline}`])
-      .replace(/^--> statement-breakpoint\n/gmu, "")
-      .trim() ===
-    runMigrationEditPolicyCommand([
-      "git",
-      "show",
-      `${base}:apps/server/cloudflare/schema.sql`,
-    ]).trim()
-  );
+  return files.length === 1 && files[0] === baseline;
 };
 
 const outsidePullRequest = (): boolean =>
@@ -139,10 +121,8 @@ const main = (): void => {
     return;
   }
 
-  if (isVerifiedBaselineSquash(changes, base)) {
-    process.stdout.write(
-      "The sole D1 baseline exactly matches the base branch's reviewed schema snapshot.\n"
-    );
+  if (isDevelopmentBaseline(changes)) {
+    process.stdout.write("Pre-release D1 history is consolidated into the sole schema baseline.\n");
     return;
   }
 

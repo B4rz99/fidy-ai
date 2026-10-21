@@ -98,13 +98,17 @@ const recordSamples = (
   development: number
 ): Promise<void> => {
   const median = samples.toSorted((left, right) => left - right)[Math.floor(samples.length / 2)];
-  if (development === 0 && name !== "Transacciones") {
-    expect(median).toBeLessThanOrEqual(targetMilliseconds);
-  }
-  return test.info().attach("workspace-switch-duration", {
-    body: `${name}: median ${median} ms; samples ${samples.join(", ")} ms`,
-    contentType: "text/plain",
-  });
+  return test
+    .info()
+    .attach("workspace-switch-duration", {
+      body: `${name}: median ${median} ms; samples ${samples.join(", ")} ms`,
+      contentType: "text/plain",
+    })
+    .then(() => {
+      if (development === 0 && name !== "Transacciones") {
+        expect(median).toBeLessThanOrEqual(targetMilliseconds);
+      }
+    });
 };
 
 const openWorkspace = (page: Page, name: string): Promise<void> =>

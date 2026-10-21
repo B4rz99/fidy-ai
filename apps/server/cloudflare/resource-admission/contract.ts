@@ -1,4 +1,6 @@
 import { Data, Schema } from "effect";
+import type { UserId } from "../../src/core/identity/contract";
+import type { WebSessionId } from "../../src/core/web-session/contract";
 
 const maximumCharges = 16;
 const maximumPolicies = 64;
@@ -148,16 +150,28 @@ export type ResourceAdmissionGrant = Readonly<{
   readonly grantId: ResourceAdmissionGrantId;
 }>;
 
-/** Complete atomic admission attempt assembled by the internal Worker adapter. */
-export type ResourceAdmissionRequest = Readonly<{
-  readonly charges: ResourceAdmissionCharges;
-  readonly grantId: ResourceAdmissionGrantId;
-  /**
-   * D1 statements that must commit with admission, such as a proof/replay record or bounded outbox
-   * publication. They execute after the grant exists and roll the complete admission back on error.
-   */
-  readonly statements: ReadonlyArray<D1PreparedStatement>;
+/** Prepared admission never spends capacity until all statements commit in the owner's batch.
+ * Keep every statement together, on the configured binding, without provider I/O in between.
+ */
+export type PreparedResourceAdmission = ResourceAdmissionGrant &
+  Readonly<{
+    statements: ReadonlyArray<D1PreparedStatement>;
+  }>;
+
+export type ResourceAdmissionTransition = Readonly<{
+  charges: ResourceAdmissionCharges;
+  grantId: ResourceAdmissionGrantId;
 }>;
+
+/** Complete atomic admission attempt assembled by the internal Worker adapter. */
+export type ResourceAdmissionRequest = ResourceAdmissionTransition &
+  Readonly<{
+    /**
+     * D1 statements that must commit with admission, such as a proof/replay record or bounded outbox
+     * publication. They execute after the grant exists and roll the complete admission back on error.
+     */
+    readonly statements: ReadonlyArray<D1PreparedStatement>;
+  }>;
 
 /**
  * One bounded attempt before an expensive work claim. The attempt is charged even when work is
@@ -185,3 +199,35 @@ export type ResourceAdmissionAuthorityConfig = Readonly<{
   /** Worker clock seam. Request callers cannot select decision time. */
   readonly nowEpochMs: () => ResourceAdmissionEpochMs;
 }>;
+
+/** Explicit ownership for migrated charges; anonymous and global scopes have no fabricated User.
+ * A WebSession owner must be resolved to the same User inside the admitting operation.
+ */
+export type ResourceAdmissionEventOwner =
+  | Readonly<{ kind: "user"; userId: UserId }>
+  | Readonly<{ kind: "web_session"; userId: UserId; sessionId: WebSessionId }>;
+
+/** Closed counter transitions for #1432, #1433 and #1435. Their owner supplies proof and charge
+ * eligibility in the same atomic commit. No caller can select a limit, duration or algorithm.
+ * Anchored resets use the original start <= cutoff; calendar accounting retains each UTC day.
+ */
+export type ResourceAdmissionCounterTransition =
+  | Readonly<{
+      kind: "email_pairing_user";
+      userId: UserId;
+    }>
+  | Readonly<{ kind: "email_pairing_global" }>
+  | Readonly<{
+      kind: "email_replacement";
+      userId: UserId;
+      workId: string;
+    }>
+  | Readonly<{
+      kind: "pat_pairing_source";
+      /** Original 32-byte keyed source digest, never the raw source address. */
+      sourceDigest: Uint8Array;
+    }>
+  | Readonly<{
+      kind: "hosted_compaction";
+      userId: UserId;
+    }>;

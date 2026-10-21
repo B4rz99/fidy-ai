@@ -1,6 +1,7 @@
 import { dual } from "effect/Function";
-import { Data, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 import {
+  type PreparedResourceAdmission,
   type ReleaseOutstandingWorkRequest,
   type ResourceAdmissionAttempt,
   type ResourceAdmissionAuthorityConfig,
@@ -15,6 +16,7 @@ import {
   ResourceAdmissionRefused,
   type ResourceAdmissionRequest,
   type ResourceAdmissionScopeKey,
+  type ResourceAdmissionTransition,
   ResourceAdmissionUnavailable,
   type ResourceAdmissionUnits,
 } from "./contract";
@@ -95,7 +97,7 @@ const resolveCharge = (
 
 const resolveCharges = (
   policies: ReadonlyArray<ResourceAdmissionPolicy>,
-  request: ResourceAdmissionRequest,
+  request: ResourceAdmissionTransition,
   nowEpochMs: ResourceAdmissionEpochMs
 ): Option.Option<ReadonlyArray<ResolvedCharge>> => {
   if (!isSafeEpoch(nowEpochMs)) return Option.none();
@@ -174,36 +176,67 @@ const grantStatement = (
     )
     .bind(input.grantId, input.nowEpochMs, input.chargeCount);
 
-class D1BatchFailure extends Data.TaggedError("D1BatchFailure")<{
-  readonly cause: unknown;
-}> {}
-
 const executeBatch = (
   database: D1Database,
   statements: ReadonlyArray<D1PreparedStatement>
-): Effect.Effect<ReadonlyArray<D1Result<unknown>>, D1BatchFailure> =>
+): Effect.Effect<
+  ReadonlyArray<D1Result<unknown>>,
+  ResourceAdmissionRefused | ResourceAdmissionUnavailable
+> =>
   // D1 batch has no cancellation API. Shield it through settlement so interruption cannot detach a
   // still-running authority transaction from its caller and leave the durable outcome ambiguous.
   Effect.uninterruptible(
     Effect.tryPromise({
       try: () => database.batch([...statements]),
-      catch: (cause) => new D1BatchFailure({ cause }),
+      catch: classifyResourceAdmissionFailure,
     })
   );
 
 /** D1 exposes trigger provenance through this canonical SQLite extended-code error shape. */
-const classifyAdmissionFailure = (
-  failure: D1BatchFailure
+export const classifyResourceAdmissionFailure = (
+  cause: unknown
 ): ResourceAdmissionRefused | ResourceAdmissionUnavailable =>
-  refusalFailurePattern.test(String(failure.cause))
+  refusalFailurePattern.test(String(cause))
     ? new ResourceAdmissionRefused({ reason: "resource_limit" })
     : new ResourceAdmissionUnavailable({ reason: "authority_unavailable" });
 
-/**
- * Atomically claims installed resource policy and caller-owned statements against the same D1
- * binding. Unknown policy, excess charges, or unsafe derived timestamps die before SQL begins.
- * Batches settle before interruption completes; no process-local usage state grants admission.
+/** Prepare complete admission for an owner-controlled atomic D1 commit; performs no I/O.
+ * Unknown policies and unsafe timestamps are defects before any statements execute.
  */
+export const prepareResourceAdmission = dual<
+  (
+    request: ResourceAdmissionTransition
+  ) => (config: ResourceAdmissionAuthorityConfig) => PreparedResourceAdmission,
+  (
+    config: ResourceAdmissionAuthorityConfig,
+    request: ResourceAdmissionTransition
+  ) => PreparedResourceAdmission
+>(2, (config, request) => {
+  const nowEpochMs = config.nowEpochMs();
+  const charges = resolveCharges(config.policies, request, nowEpochMs);
+  if (Option.isNone(charges)) throw new TypeError("Invalid resource admission request");
+  return {
+    grantId: request.grantId,
+    statements: [
+      ...charges.value.map((charge) =>
+        claimStatement({
+          charge,
+          database: config.database,
+          grantId: request.grantId,
+          nowEpochMs,
+        })
+      ),
+      grantStatement({
+        chargeCount: charges.value.length,
+        database: config.database,
+        grantId: request.grantId,
+        nowEpochMs,
+      }),
+    ],
+  };
+});
+
+/** Commit admission and caller statements together, waiting for D1 settlement on interruption. */
 export const admitResource = dual<
   (
     request: ResourceAdmissionRequest
@@ -220,30 +253,14 @@ export const admitResource = dual<
     ResourceAdmissionGrant,
     ResourceAdmissionRefused | ResourceAdmissionUnavailable
   >
->(2, (config, request) => {
-  const nowEpochMs = config.nowEpochMs();
-  return Option.match(resolveCharges(config.policies, request, nowEpochMs), {
-    onNone: invalidRequestDefect,
-    onSome: (charges) =>
-      executeBatch(config.database, [
-        ...charges.map((charge) =>
-          claimStatement({
-            charge,
-            database: config.database,
-            grantId: request.grantId,
-            nowEpochMs,
-          })
-        ),
-        grantStatement({
-          chargeCount: charges.length,
-          database: config.database,
-          grantId: request.grantId,
-          nowEpochMs,
-        }),
-        ...request.statements,
-      ]).pipe(Effect.mapError(classifyAdmissionFailure), Effect.as({ grantId: request.grantId })),
-  });
-});
+>(2, (config, request) =>
+  Effect.suspend(() => {
+    const prepared = prepareResourceAdmission(config, request);
+    return executeBatch(config.database, [...prepared.statements, ...request.statements]).pipe(
+      Effect.as({ grantId: prepared.grantId })
+    );
+  })
+);
 
 /** Release outstanding occupancy with the caller's completion statements in the same D1 batch. */
 export const releaseOutstandingResource = dual<

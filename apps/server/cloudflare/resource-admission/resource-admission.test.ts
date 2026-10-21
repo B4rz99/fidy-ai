@@ -19,6 +19,8 @@ import { installCurrentTestObjects } from "../d1-test-fixture";
 import {
   admitResource,
   admitResourceWithAttemptPressure,
+  classifyResourceAdmissionFailure,
+  prepareResourceAdmission,
   releaseOutstandingResource,
 } from "./operations";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -400,7 +402,7 @@ describe("Cloudflare resource admission", () => {
             .prepare(
               `CREATE TABLE test_outbox (
           id TEXT PRIMARY KEY NOT NULL,
-          admission_grant_id TEXT NOT NULL REFERENCES resource_admission_grants(id)
+          admission_grant_id TEXT NOT NULL REFERENCES resource_admission_grants(id) DEFERRABLE INITIALLY DEFERRED
         ) STRICT`
             )
             .run()
@@ -413,28 +415,37 @@ describe("Cloudflare resource admission", () => {
           }
         );
 
-        yield* admit(
-          authority,
-          "atomic-admitted",
-          [charge("source:atomic:v1", "source:atomic")],
-          [
+        const prepared = prepareResourceAdmission(authority, {
+          grantId: grantId("atomic-admitted"),
+          charges: ResourceAdmissionCharges.make([charge("source:atomic:v1", "source:atomic")]),
+        });
+        const committed = yield* fromTestPromise(() =>
+          database.batch([
             database
               .prepare("INSERT INTO test_outbox (id, admission_grant_id) VALUES (?, ?)")
               .bind("work-admitted", "atomic-admitted"),
-          ]
+            ...prepared.statements,
+          ])
         );
+        expect(
+          committed.reduce((sum, result) => sum + result.meta.rows_written, 0)
+        ).toBeLessThanOrEqual(8);
 
+        const refusedAdmission = prepareResourceAdmission(authority, {
+          grantId: grantId("atomic-refused"),
+          charges: ResourceAdmissionCharges.make([charge("source:atomic:v1", "source:atomic")]),
+        });
         const refused = yield* Effect.result(
-          admit(
-            authority,
-            "atomic-refused",
-            [charge("source:atomic:v1", "source:atomic")],
-            [
-              database
-                .prepare("INSERT INTO test_outbox (id, admission_grant_id) VALUES (?, ?)")
-                .bind("work-refused", "atomic-refused"),
-            ]
-          )
+          Effect.tryPromise({
+            try: () =>
+              database.batch([
+                database
+                  .prepare("INSERT INTO test_outbox (id, admission_grant_id) VALUES (?, ?)")
+                  .bind("work-refused", "atomic-refused"),
+                ...refusedAdmission.statements,
+              ]),
+            catch: classifyResourceAdmissionFailure,
+          })
         );
 
         const rows = yield* fromTestPromise(() =>
@@ -444,6 +455,9 @@ describe("Cloudflare resource admission", () => {
         );
 
         expect(Result.isFailure(refused)).toBe(true);
+        if (Result.isFailure(refused)) {
+          expect(refused.failure).toBeInstanceOf(ResourceAdmissionRefused);
+        }
         expect(rows.results).toEqual([
           { admission_grant_id: "atomic-admitted", id: "work-admitted" },
         ]);
@@ -467,13 +481,21 @@ describe("Cloudflare resource admission", () => {
           { read: () => epochMs(10_000) }
         );
 
+        const prepared = prepareResourceAdmission(authority, {
+          grantId: grantId("rolled-back-grant"),
+          charges: ResourceAdmissionCharges.make([
+            charge("operation:rollback:v1", "operation:rollback"),
+          ]),
+        });
         const failed = yield* Effect.result(
-          admit(
-            authority,
-            "rolled-back-grant",
-            [charge("operation:rollback:v1", "operation:rollback")],
-            [database.prepare("INSERT INTO unique_proof (id) VALUES (?)").bind("duplicate")]
-          )
+          Effect.tryPromise({
+            try: () =>
+              database.batch([
+                ...prepared.statements,
+                database.prepare("INSERT INTO unique_proof (id) VALUES (?)").bind("duplicate"),
+              ]),
+            catch: classifyResourceAdmissionFailure,
+          })
         );
 
         const retry = yield* admit(authority, "successful-after-rollback", [

@@ -1,4 +1,8 @@
-import { admitResource, releaseOutstandingResource } from "../../../resource-admission/operations";
+import {
+  classifyResourceAdmissionFailure,
+  prepareResourceAdmission,
+  releaseOutstandingResource,
+} from "../../../resource-admission/operations";
 import {
   ConsentIngressExchange,
   type ConsentIngressMessage,
@@ -481,28 +485,36 @@ const admitExchange = (
     const sourceHash = Hex.encode(
       yield* cryptoService.digest("SHA-256", new TextEncoder().encode(caller))
     );
+    const prepared = prepareResourceAdmission(admission(db, input.receivedAtMs), {
+      charges: consentCharges(sourceHash),
+      grantId: ResourceAdmissionGrantId.make(id),
+    });
     const claim = yield* Effect.result(
-      admitResource(admission(db, input.receivedAtMs), {
-        charges: consentCharges(sourceHash),
-        grantId: ResourceAdmissionGrantId.make(id),
-        statements: [
-          db
-            .prepare(`DELETE FROM pending_consent_exchanges
+      Effect.uninterruptible(
+        Effect.tryPromise({
+          try: () =>
+            db.batch([
+              ...prepared.statements,
+              db
+                .prepare(`DELETE FROM pending_consent_exchanges
             WHERE portfolio_id = ? AND bsuid = ? AND COALESCE(rejected_at_ms, expires_at_ms) <= ?`)
-            .bind(
-              input.event.caller.businessPortfolioId,
-              input.event.caller.businessScopedUserId,
-              input.receivedAtMs
-            ),
-          db
-            .prepare(`DELETE FROM pending_consent_exchanges WHERE id IN (
+                .bind(
+                  input.event.caller.businessPortfolioId,
+                  input.event.caller.businessScopedUserId,
+                  input.receivedAtMs
+                ),
+              db
+                .prepare(`DELETE FROM pending_consent_exchanges WHERE id IN (
             SELECT id FROM pending_consent_exchanges WHERE expires_at_ms <= ?
             ORDER BY expires_at_ms LIMIT ?)`)
-            .bind(input.receivedAtMs, expiredExchangeSweepLimit),
-          statement,
-        ],
-      })
+                .bind(input.receivedAtMs, expiredExchangeSweepLimit),
+              statement,
+            ]),
+          catch: classifyResourceAdmissionFailure,
+        })
+      )
     );
+
     if (Result.isSuccess(claim)) return answer(HTTP_OK);
     return answer(
       claim.failure instanceof ResourceAdmissionRefused ? HTTP_CONFLICT : HTTP_UNAVAILABLE

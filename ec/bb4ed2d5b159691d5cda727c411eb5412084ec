@@ -1,0 +1,31 @@
+.github/workflows/ci.yml
+  s_241024bc81d268::t_3d37bfad642bd4 100-101
+apps/site/package.json
+  s_241024bc81d268::t_24238c4ad0c6b9 17-18
+.patterns/INDEX.md
+  s_241024bc81d268::t_d706657459624e 9
+.patterns/sources.json
+  s_241024bc81d268::t_24238c4ad0c6b9 64,70,77,82
+apps/web/package.json
+  s_241024bc81d268::t_24238c4ad0c6b9 36,38
+.patterns/react.md
+  s_241024bc81d268::t_d706657459624e 4-6,10
+bun.lock
+  s_241024bc81d268::t_e31a307173c102 79-80,109,111,1785,1789
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ecbb4ed2d5b159691d5cda727c411eb5412084ec",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

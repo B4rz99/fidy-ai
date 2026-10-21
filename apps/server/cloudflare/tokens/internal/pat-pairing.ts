@@ -131,7 +131,7 @@ export const sweepExpiredPATPairings = (db: D1Database): Effect.Effect<void, Cau
           patExpiryCompletion(current),
           sweepUnapprovedPairings({ current, limit: scheduledSweepLimit }),
           sweepPATSourceCounters({ current, limit: scheduledSweepLimit }),
-          ...sweepPATReviewEvents({ current, limit: scheduledSweepLimit }),
+          sweepPATReviewEvents({ current, limit: scheduledSweepLimit }),
         ].map(({ sql, params }) => db.prepare(sql).bind(...params))
       )
     );

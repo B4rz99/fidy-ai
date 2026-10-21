@@ -8186,3 +8186,9 @@ WHEN EXISTS(SELECT 1 FROM resource_admission_events WHERE policy_key='pat.review
  AND owner_session_id=OLD.id AND (owner_session_id IS NOT NEW.id OR owner_user_id IS NOT NEW.user_id))
 BEGIN SELECT RAISE(ABORT,'resource_admission_owner_mismatch'); END;
 --> statement-breakpoint
+
+CREATE TRIGGER resource_admission_review_grant_cleanup AFTER DELETE ON resource_admission_events
+WHEN OLD.policy_key='pat.review.session.v1'
+ AND NOT EXISTS(SELECT 1 FROM resource_admission_events WHERE grant_id=OLD.grant_id)
+BEGIN DELETE FROM resource_admission_grants WHERE id=OLD.grant_id; END;
+--> statement-breakpoint

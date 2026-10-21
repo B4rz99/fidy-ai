@@ -424,31 +424,19 @@ export const sweepPATSourceCounters = (
   input: Readonly<{ current: number; limit: number }>
 ): OwnedStatement => ({
   sql: `DELETE FROM resource_admission_counters WHERE policy_key='pat.pairing.source.v1'
-    AND scope_key IN(SELECT scope_key FROM resource_admission_counters
+    AND window_kind='anchored' AND scope_key IN(SELECT scope_key FROM resource_admission_counters
       WHERE policy_key='pat.pairing.source.v1' AND window_start_ms<=?
       ORDER BY window_start_ms LIMIT ?)`,
   params: [input.current - patRetentionMs, input.limit],
 });
 
-/** Delete only expired PAT review charges and their unshared grants, in one native batch. */
+/** Remove a bounded expired review batch; orphan grant cleanup is atomic with each event deletion. */
 export const sweepPATReviewEvents = (
   input: Readonly<{ current: number; limit: number }>
-): ReadonlyArray<OwnedStatement> => {
-  const candidates = `SELECT grant_id FROM resource_admission_events
+): OwnedStatement => ({
+  sql: `DELETE FROM resource_admission_events WHERE rowid IN(
+    SELECT rowid FROM resource_admission_events INDEXED BY resource_admission_review_retention
     WHERE policy_key='pat.review.session.v1' AND admitted_at_epoch_ms<=?
-    ORDER BY admitted_at_epoch_ms LIMIT ?`;
-  const params = [input.current - patRetentionMs, input.limit];
-  return [
-    {
-      sql: `DELETE FROM resource_admission_grants WHERE id IN(${candidates})
-      AND NOT EXISTS(SELECT 1 FROM resource_admission_events e WHERE e.grant_id=resource_admission_grants.id
-        AND e.policy_key<>'pat.review.session.v1')`,
-      params,
-    },
-    {
-      sql: `DELETE FROM resource_admission_events WHERE policy_key='pat.review.session.v1'
-      AND grant_id IN(${candidates})`,
-      params,
-    },
-  ];
-};
+    ORDER BY admitted_at_epoch_ms LIMIT ?)`,
+  params: [input.current - patRetentionMs, input.limit],
+});

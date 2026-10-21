@@ -137,7 +137,8 @@ refusal creates neither. Review ownership cannot be reassigned independently of 
 Resource Admission owns bounded twenty-minute source/review retention and the original credential
 erasure projection. It uses the existing session lookup and active-scope index for User selection;
 other shared events retain their original schedule-purpose projection. Retention/erasure delete an
-unshared review grant with its event, preserving any unrelated charges on a shared grant.
+unshared review grant atomically through the event-deletion trigger, preserving unrelated charges
+on a shared grant. The review sweep selects rowids through its retention index once.
 
 | Existing native journey                                      | Previous reads / writes | Shared reads / writes |
 | ------------------------------------------------------------ | ----------------------- | --------------------- |
@@ -157,3 +158,26 @@ retains original keyed sources, anchors, counts, review identities and session o
 existing email counters and shared events. Native checks prove exact cutoffs, rollback after source
 drops and refusal of corrupt deadlines. Public integration covers mixed-age rolling attempts,
 malformed admitted bodies, independent sessions, concurrent global capacity and failed creation.
+
+### Native retention comparison
+
+`pat-admission-retention.test.ts` runs the frozen specialized delete statements with their original
+expiry/rate indexes and erasure guard, and the installed shared sweeps against equivalent four-source/four-review
+histories. Two records are exactly twenty minutes old; another source/review is one millisecond
+newer under a different User, and one remains inside the admission window. A separate shared policy
+and an email counter remain present. Each sweep is limited to one record, proving bounded progress
+without deleting active or foreign history. The cutoff is the original anchor/admission plus twenty
+minutes, unchanged by conversion.
+
+| Cleanup at the native boundary                | Specialized reads / writes | Shared reads / writes |
+| --------------------------------------------- | -------------------------- | --------------------- |
+| Source immediately before expiry; no deletion | 2 / 0                      | 2 / 0                 |
+| Review immediately before expiry; no deletion | 2 / 0                      | 2 / 0                 |
+| One source at exact expiry                    | 4 / 1                      | 5 / 1                 |
+| One review at exact expiry                    | 6 / 1                      | 6 / 2                 |
+
+These are native D1 result metadata, including the atomic orphan-grant deletion; they are separate
+from insert costs above. Cleanup now avoids repeated review-candidate discovery. Shared review
+cleanup adds the grant deletion while retaining the original read cost; source cleanup adds one lookup.
+Idle cleanup has the same measured cost. Existing owner erasure proves that a multi-policy grant
+and its foreign charge survive deleting the addressed User's review.

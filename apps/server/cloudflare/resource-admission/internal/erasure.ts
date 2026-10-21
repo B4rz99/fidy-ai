@@ -59,10 +59,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: `DELETE FROM resource_admission_grants WHERE id IN(SELECT r.grant_id FROM resource_admission_events r WHERE ${reviewOwnerSql} AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)) AND NOT EXISTS(SELECT 1 FROM resource_admission_events e WHERE e.grant_id=resource_admission_grants.id AND e.policy_key<>'pat.review.session.v1')`,
-        params: [...reviewOwnerParams(scope.userId), scope.reference],
-      },
-      {
         sql: `DELETE FROM resource_admission_events AS r WHERE ${reviewOwnerSql} AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
         params: [...reviewOwnerParams(scope.userId), scope.reference],
       },

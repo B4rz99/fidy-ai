@@ -1,5 +1,12 @@
 # Transactions
 
+Production D1-reset read verification, 20-10-2026 Bogotá, release
+`da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`: the current session loaded both October Transactions and the complete two-row
+summary, with COP 0 income and COP 10,103 spending. First/last dates displayed 01-10-2026 and
+11-10-2026; the summary matched Dashboard and Budgets. No Transaction was captured, corrected or
+deleted. The three older recurring-detection fixtures still require account-local verification and
+action-time deletion approval; this read does not establish their cleanup.
+
 Historical-date audit, 2026-10-16: production displayed an empty October history even after selecting
 15-09-2026, although the recurring fixture had a retained September Transaction. The calendar only
 filtered already-loaded current-month records. The follow-up makes the selected calendar date own

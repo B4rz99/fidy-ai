@@ -981,12 +981,61 @@ it("requires a fresh same-User session and CSRF-safe origin for review and cance
     })
   ));
 
+it("accepts external client registration while discarding unsupported metadata before storage", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { send, db } = yield* setup();
+      const response = yield* wait(
+        send("/oauth/register", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+            redirect_uris: ["http://127.0.0.1:6274/oauth/callback"],
+            token_endpoint_auth_method: "none",
+            grant_types: ["authorization_code", "refresh_token"],
+            response_types: ["code"],
+            client_name: "MCP Inspector",
+            client_uri: "https://github.com/modelcontextprotocol/inspector",
+            scope: "read",
+            application_type: "native",
+            logo_uri: "http://169.254.169.254/metadata",
+            user_id: "not-authority",
+          }),
+        })
+      );
+      expect(response.status).toBe(201);
+      const expected = {
+        redirect_uris: ["http://127.0.0.1:6274/oauth/callback"],
+        token_endpoint_auth_method: "none",
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        client_name: "MCP Inspector",
+        scope: "read",
+        application_type: "native",
+      };
+      const registration: unknown = yield* wait(response.json());
+      expect(registration).toMatchObject(expected);
+      for (const field of ["client_uri", "logo_uri", "user_id"]) {
+        expect(registration).not.toHaveProperty(field);
+      }
+      const retained = yield* wait(
+        db.prepare("SELECT metadata_json FROM oauth_public_clients").first<string>("metadata_json")
+      );
+      expect(retained).not.toBeNull();
+      expect(
+        yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(retained)
+      ).toEqual(expected);
+      expect(
+        yield* wait(db.prepare("SELECT count(*) FROM oauth_connections").first<number>("count(*)"))
+      ).toBe(0);
+    })
+  ));
+
 it("rejects hostile registration metadata and actual oversized streamed bytes without retaining a client", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { send, db } = yield* setup();
       for (const [index, body] of [
-        '{"client_name":"Agente","redirect_uris":["https://example.com/cb"],"client_uri":"http://169.254.169.254/metadata"}',
         '{"client_name":"Agente","redirect_uris":["https://user:secret@example.com/cb"]}',
         '{"client_name":"Agente","redirect_uris":["http://192.168.1.1/cb"]}',
         '{"client_name":"Agente","redirect_uris":["http://localhost.evil.example/cb"]}',

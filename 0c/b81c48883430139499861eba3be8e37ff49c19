@@ -1,0 +1,20 @@
+apps/web/e2e/workspace-navigation.spec.ts
+  s_241024bc81d268::t_abafc7973ad225 104-107
+  s_241024bc81d268::t_8896ed0a1f0b16 101-103,108-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0cb81c48883430139499861eba3be8e37ff49c19",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

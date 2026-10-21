@@ -1,0 +1,29 @@
+apps/server/package.json
+  s_241024bc81d268::t_9f7a0e9f21f3ef 308,311
+apps/site/package.json
+  s_241024bc81d268::t_0a7a633513ad93 22
+apps/web/package.json
+  s_241024bc81d268::t_62d5765c5855b2 49,56-57,62
+bun.lock
+  s_241024bc81d268::t_92067179cccdd3 13,66,69,84,122,129-130,135,152,335,337,339,341,343,713,803,835,837,839,841,843,845,847,849,851,853,855,857,859,861,863,871,1103,1119,1131,1247,1289,1663,1693,1745,1747,1755,1831,1861,2013,2053,2055,2063,2127-2128,2317,2383-2392,2645-2646,2650-2659
+infra/cloudflare/package.json
+  s_241024bc81d268::t_1ac2aeed572ac9 26
+package.json
+  s_241024bc81d268::t_08d1a620d5a3d5 63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3c8c8c611e8f593f8f26419860890872563bdc69",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

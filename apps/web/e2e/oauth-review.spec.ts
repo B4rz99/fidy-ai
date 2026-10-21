@@ -659,6 +659,19 @@ test("expired identity proof keeps Accesos visible and returns from identity con
     })
   ));
 
+const assertUnavailableConnections = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("alert")).toContainText("No pudimos cargar tus conexiones")
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("Iniciar sesión de nuevo", { exact: true })).toHaveCount(0)
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("No hay conexiones en esta página.")).toHaveCount(0)
+    );
+  });
+
 test("built agent settings report unavailable or malformed state without a false empty list or successful revocation", ({
   page,
   request,
@@ -671,12 +684,7 @@ test("built agent settings report unavailable or malformed state without a false
       yield* Effect.tryPromise(() => expect(page.getByRole("status")).toHaveText(cancelledMessage));
       yield* Effect.tryPromise(() => page.route("**/web/oauth/connections", unavailableManagement));
       yield* Effect.tryPromise(() => page.goto("/settings/access"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("alert")).toContainText("No pudimos consultar los agentes")
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText("No hay conexiones en esta página.")).toHaveCount(0)
-      );
+      yield* assertUnavailableConnections(page);
       yield* Effect.tryPromise(() => page.unroute("**/web/oauth/connections"));
       yield* Effect.tryPromise(() => page.route("**/web/oauth/connections", malformedManagement));
       const malformedResponse = page.waitForResponse("**/web/oauth/connections");
@@ -687,12 +695,7 @@ test("built agent settings report unavailable or malformed state without a false
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Actualizar lista" })).toBeEnabled()
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("alert")).toContainText("No pudimos consultar los agentes")
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText("No hay conexiones en esta página.")).toHaveCount(0)
-      );
+      yield* assertUnavailableConnections(page);
       yield* Effect.tryPromise(() => page.unroute("**/web/oauth/connections"));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Actualizar lista" }).click()

@@ -12,6 +12,7 @@ import {
 const { test, expect } = playwright;
 const { api, app, operator } = browserAcceptanceTopology();
 const firstPoll = 5000;
+const cancelledMessage = "Solicitud cancelada. No se autorizó ningún acceso.";
 const completeOAuthJourneyMilliseconds = 60_000;
 const created = 201;
 const found = 302;
@@ -130,11 +131,7 @@ test("built browser returns from established sign-in to a text-only request revi
       yield* loginFromReview(page, request, path);
       yield* assertReview(page);
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("status")).toHaveText(
-          "Solicitud cancelada. No se autorizó ningún acceso."
-        )
-      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("status")).toHaveText(cancelledMessage));
       expect(yield* Effect.tryPromise(() => page.evaluate(browserStorageCount))).toBe(0);
       expect(page.url()).not.toContain("code=");
     })
@@ -654,11 +651,7 @@ test("built agent settings report unavailable or malformed state without a false
       const path = yield* beginReview(request, yield* authorization(request));
       yield* loginFromReview(page, request, path);
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("status")).toHaveText(
-          "Solicitud cancelada. No se autorizó ningún acceso."
-        )
-      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("status")).toHaveText(cancelledMessage));
       yield* Effect.tryPromise(() => page.route("**/web/oauth/connections", unavailableManagement));
       yield* Effect.tryPromise(() => page.goto("/settings/access"));
       yield* Effect.tryPromise(() =>
@@ -669,12 +662,14 @@ test("built agent settings report unavailable or malformed state without a false
       );
       yield* Effect.tryPromise(() => page.unroute("**/web/oauth/connections"));
       yield* Effect.tryPromise(() => page.route("**/web/oauth/connections", malformedManagement));
-      yield* Effect.tryPromise(async () => {
-        const response = page.waitForResponse("**/web/oauth/connections");
-        await page.getByRole("button", { name: "Actualizar lista" }).click();
-        await response;
-        await expect(page.getByRole("button", { name: "Actualizar lista" })).toBeEnabled();
-      });
+      const malformedResponse = page.waitForResponse("**/web/oauth/connections");
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Actualizar lista" }).click()
+      );
+      yield* Effect.tryPromise(() => malformedResponse);
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Actualizar lista" })).toBeEnabled()
+      );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toContainText("No pudimos consultar los agentes")
       );

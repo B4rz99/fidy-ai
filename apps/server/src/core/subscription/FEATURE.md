@@ -364,3 +364,14 @@ no extra provider work. The populated migration test first reproduces refusal wi
 view, applies the actual forward SQL to the retained history and completes replacement. Separate
 local infrastructure checks cover clean install and populated redeployment. These results do not
 establish deployed recovery or live wallet authorization; those remain pending release verification.
+
+The follow-up browser gate exposed two fixture hazards. A real OAuth discovery flood exhausted the
+shared synthetic source and made an independent browser read return 429; per-review source routing
+now preserves both the flood refusal and the independent 200 without changing CORS or admission
+policy. A controlled document-replacement journey reproduced the polling helper's destroyed-context
+error. Removing its unnecessary page evaluation lets Playwright's navigation-safe clock operation
+advance polling across all forty real navigations. The existing Transactions loading check also
+waits for its initial read to render before intercepting the reload, so an outgoing read cannot be
+mistaken for the response under test. The combined focused run passed fourteen checks including
+Google signup, the flood, loading and navigation regressions. These are local fixture results, not
+additional deployed payment evidence.

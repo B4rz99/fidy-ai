@@ -73,7 +73,6 @@ export const advanceAcceptancePoll = ({
     .then((response) => {
       if (response.status() !== successStatus) throw new Error("Acceptance clock advance failed");
     })
-    .then(() => page.evaluate(() => Promise.resolve()))
     .then(() => page.clock.fastForward(milliseconds));
 
 const advanceBrowserRetry = (response: Response, page: Page, scope: ClockScope): Promise<void> => {

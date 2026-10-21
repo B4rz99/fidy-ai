@@ -441,6 +441,9 @@ test("renders loading until the real Core answers Transactions", ({ page, reques
           identity: "navigationLoading",
         })
       );
+      yield* fromPlaywright(
+        expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
+      );
       const held = yield* fromPlaywright(holdTransactionRead(page, release.promise));
       yield* fromPlaywright(reloadTransactionsThroughCore(page));
       yield* fromPlaywright(

@@ -314,161 +314,197 @@ it("rolls back native intent consumption with failed Audit and allows only one c
     })
   ));
 
-it("resumes the original legacy native tool call after server-requested form acceptance", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* pendingBudgetDeletion();
-      yield* approveFirstPartyOperation(fixture, fixture.reference);
-      const headers = {
-        authorization: `Bearer ${fixture.bearer}`,
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-      };
-      const initialized = yield* wait(
-        fixture.send("/mcp", {
-          method: "POST",
-          headers: { ...headers, accept: "text/event-stream, application/json" },
-          body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-            jsonrpc: "2.0",
-            id: "init-native-review",
-            method: "initialize",
-            params: {
-              protocolVersion: "2025-06-18",
-              capabilities: { elicitation: { form: {} } },
-              clientInfo: { name: "native-form-fixture", version: "1" },
+it.each([
+  {
+    action: "accept",
+    delay: 6_000,
+    response: explicitNativeAccept,
+    count: 0,
+    expected: { isError: false, structuredContent: {} },
+  },
+  {
+    action: "cancel",
+    delay: 6_000,
+    response: { action: "cancel" },
+    count: 1,
+    expected: { isError: true, structuredContent: { error: { code: "user_action_required" } } },
+  },
+  {
+    action: "cancel",
+    delay: 30_000,
+    response: { action: "cancel" },
+    count: 1,
+    expected: { isError: true, structuredContent: { error: { code: "user_action_required" } } },
+  },
+  {
+    action: "decline",
+    delay: 30_000,
+    response: { action: "decline" },
+    count: 1,
+    expected: { isError: true, structuredContent: { error: { code: "user_action_required" } } },
+  },
+] as const)(
+  "settles legacy $action after $delay ms without confusing refusal and unavailability",
+  ({ delay, response, count, expected }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* pendingBudgetDeletion();
+        yield* approveFirstPartyOperation(fixture, fixture.reference);
+        const headers = {
+          authorization: `Bearer ${fixture.bearer}`,
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        };
+        const initialized = yield* wait(
+          fixture.send("/mcp", {
+            method: "POST",
+            headers: { ...headers, accept: "text/event-stream, application/json" },
+            body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+              jsonrpc: "2.0",
+              id: "init-native-review",
+              method: "initialize",
+              params: {
+                protocolVersion: "2025-06-18",
+                capabilities: { elicitation: { form: {} } },
+                clientInfo: { name: "native-form-fixture", version: "1" },
+              },
+            }),
+          })
+        );
+        const session = initialized.headers.get("mcp-session-id") ?? "";
+        const initializedReader = Option.getOrThrow(
+          Option.fromNullOr(initialized.body)
+        ).getReader();
+        yield* wait(initializedReader.read());
+        yield* wait(initializedReader.cancel());
+        const sessionHeaders = {
+          ...headers,
+          "mcp-protocol-version": "2025-11-25",
+          "mcp-session-id": session,
+        };
+        const notified = yield* wait(
+          fixture.send("/mcp", {
+            method: "POST",
+            headers: sessionHeaders,
+            body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+              jsonrpc: "2.0",
+              method: "notifications/initialized",
+            }),
+          })
+        );
+        expect(notified.status).toBe(202);
+        yield* wait(notified.text());
+        vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+        const invoked = yield* wait(
+          fixture.send("/mcp", {
+            method: "POST",
+            headers: {
+              ...sessionHeaders,
+              "mcp-method": "tools/call",
+              "mcp-name": "budgets.deleteBudget",
             },
-          }),
-        })
-      );
-      const session = initialized.headers.get("mcp-session-id") ?? "";
-      const initializedReader = Option.getOrThrow(Option.fromNullOr(initialized.body)).getReader();
-      yield* wait(initializedReader.read());
-      yield* wait(initializedReader.cancel());
-      const sessionHeaders = {
-        ...headers,
-        "mcp-protocol-version": "2025-11-25",
-        "mcp-session-id": session,
-      };
-      const notified = yield* wait(
-        fixture.send("/mcp", {
-          method: "POST",
-          headers: sessionHeaders,
-          body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-            jsonrpc: "2.0",
-            method: "notifications/initialized",
-          }),
-        })
-      );
-      expect(notified.status).toBe(202);
-      yield* wait(notified.text());
-      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
-      const invoked = yield* wait(
-        fixture.send("/mcp", {
-          method: "POST",
-          headers: {
-            ...sessionHeaders,
-            "mcp-method": "tools/call",
-            "mcp-name": "budgets.deleteBudget",
-          },
-          body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-            jsonrpc: "2.0",
-            id: "delete-legacy",
-            method: "tools/call",
-            params: { name: "budgets.deleteBudget", arguments: { params: { id: fixture.id } } },
-          }),
-        })
-      );
-      expect(invoked.headers.get("content-type")).toContain("text/event-stream");
-      const reader = Option.getOrThrow(Option.fromNullOr(invoked.body)).getReader();
-      const requested = yield* wait(reader.read());
-      const requestedBytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(requested.value);
-      const data =
-        new TextDecoder()
-          .decode(requestedBytes)
-          .split("\n")
-          .find((line) => line.startsWith("data: "))
-          ?.slice("data: ".length) ?? "";
-      const form = yield* Schema.decodeEffect(
-        Schema.fromJsonString(
-          Schema.Struct({
-            id: Schema.Union([Schema.String, Schema.Finite]),
-            method: Schema.Literal("elicitation/create"),
+            body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+              jsonrpc: "2.0",
+              id: "delete-legacy",
+              method: "tools/call",
+              params: { name: "budgets.deleteBudget", arguments: { params: { id: fixture.id } } },
+            }),
           })
-        )
-      )(data);
-      expect(
-        yield* wait(
-          fixture.db
-            .prepare("SELECT count(*) FROM budgets WHERE id = ?")
-            .bind(fixture.id)
-            .first<number>("count(*)")
-        )
-      ).toBe(1);
-      const legacyReference = yield* wait(
-        fixture.db
-          .prepare(
-            "SELECT reference FROM oauth_operation_intents WHERE reference <> ? ORDER BY created_at_ms DESC LIMIT 1"
+        );
+        expect(invoked.headers.get("content-type")).toContain("text/event-stream");
+        const reader = Option.getOrThrow(Option.fromNullOr(invoked.body)).getReader();
+        const requested = yield* wait(reader.read());
+        const requestedBytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(
+          requested.value
+        );
+        const data =
+          new TextDecoder()
+            .decode(requestedBytes)
+            .split("\n")
+            .find((line) => line.startsWith("data: "))
+            ?.slice("data: ".length) ?? "";
+        const form = yield* Schema.decodeEffect(
+          Schema.fromJsonString(
+            Schema.Struct({
+              id: Schema.Union([Schema.String, Schema.Finite]),
+              method: Schema.Literal("elicitation/create"),
+            })
           )
-          .bind(fixture.reference)
-          .first<string>("reference")
-      );
-      yield* approveFirstPartyOperation(
-        fixture,
-        Option.getOrThrow(Option.fromNullOr(legacyReference))
-      );
-      const reviewedAt = yield* Clock.currentTimeMillis;
-      yield* wait(vi.advanceTimersByTimeAsync(6_000));
-      expect((yield* Clock.currentTimeMillis) - reviewedAt).toBeGreaterThanOrEqual(6_000);
-      expect(
-        yield* wait(
+        )(data);
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare("SELECT count(*) FROM budgets WHERE id = ?")
+              .bind(fixture.id)
+              .first<number>("count(*)")
+          )
+        ).toBe(1);
+        const legacyReference = yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM budgets WHERE id = ?")
-            .bind(fixture.id)
-            .first<number>("count(*)")
-        )
-      ).toBe(1);
-      const replied = yield* wait(
-        fixture.send("/mcp", {
-          method: "POST",
-          headers: sessionHeaders,
-          body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-            jsonrpc: "2.0",
-            id: form.id,
-            result: explicitNativeAccept,
-          }),
-        })
-      );
-      yield* wait(replied.text());
-      const completion = yield* wait(reader.read());
-      const completionBytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(
-        completion.value
-      );
-      const completedData =
-        new TextDecoder()
-          .decode(completionBytes)
-          .split("\n")
-          .find((line) => line.startsWith("data: "))
-          ?.slice("data: ".length) ?? "";
-      const result = yield* Schema.decodeEffect(
-        Schema.fromJsonString(
-          Schema.Struct({
-            id: Schema.Literal("delete-legacy"),
-            result: Schema.Struct({ isError: Schema.Boolean }),
+            .prepare(
+              "SELECT reference FROM oauth_operation_intents WHERE reference <> ? ORDER BY created_at_ms DESC LIMIT 1"
+            )
+            .bind(fixture.reference)
+            .first<string>("reference")
+        );
+        yield* approveFirstPartyOperation(
+          fixture,
+          Option.getOrThrow(Option.fromNullOr(legacyReference))
+        );
+        const reviewedAt = yield* Clock.currentTimeMillis;
+        yield* wait(vi.advanceTimersByTimeAsync(delay));
+        expect((yield* Clock.currentTimeMillis) - reviewedAt).toBeGreaterThanOrEqual(delay);
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare("SELECT count(*) FROM budgets WHERE id = ?")
+              .bind(fixture.id)
+              .first<number>("count(*)")
+          )
+        ).toBe(1);
+        const replied = yield* wait(
+          fixture.send("/mcp", {
+            method: "POST",
+            headers: sessionHeaders,
+            body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+              jsonrpc: "2.0",
+              id: form.id,
+              result: response,
+            }),
           })
-        )
-      )(completedData);
-      expect(result.result.isError).toBe(false);
-      yield* wait(reader.cancel());
-      expect(
-        yield* wait(
-          fixture.db
-            .prepare("SELECT count(*) FROM budgets WHERE id = ?")
-            .bind(fixture.id)
-            .first<number>("count(*)")
-        )
-      ).toBe(0);
-    })
-  ));
+        );
+        yield* wait(replied.text());
+        const completion = yield* wait(reader.read());
+        const completionBytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(
+          completion.value
+        );
+        const completedData =
+          new TextDecoder()
+            .decode(completionBytes)
+            .split("\n")
+            .find((line) => line.startsWith("data: "))
+            ?.slice("data: ".length) ?? "";
+        const result = yield* Schema.decodeEffect(
+          Schema.fromJsonString(
+            Schema.Struct({
+              id: Schema.Literal("delete-legacy"),
+              result: Schema.Struct({ isError: Schema.Boolean, structuredContent: Schema.Json }),
+            })
+          )
+        )(completedData);
+        expect(result.result).toMatchObject(expected);
+        yield* wait(reader.cancel());
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare("SELECT count(*) FROM budgets WHERE id = ?")
+              .bind(fixture.id)
+              .first<number>("count(*)")
+          )
+        ).toBe(count);
+      })
+    )
+);
 
 it("reviews the complete ordered sensitive batch and commits all children once, not a substituted batch", () =>
   Effect.runPromise(

@@ -1,0 +1,17 @@
+{
+  "name": "fidy-ai-mcp-inspector-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Isolated Inspector transport diagnostics; never installed in Fidy production bundles.",
+  "type": "module",
+  "scripts": {
+    "start": "node --import ./fetch-dispatcher.mjs ./node_modules/@modelcontextprotocol/inspector/clients/web/build/index.js",
+    "test": "node --test transport.test.mjs",
+    "check": "tsc --project tsconfig.json"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/inspector": "2.11.0",
+    "undici": "8.12.3"
+  }
+}

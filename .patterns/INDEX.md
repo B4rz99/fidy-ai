@@ -6,7 +6,7 @@ For Effect/Alchemy, first read [the selected stable source map](effect-4-stable.
 API authority is the integrity-locked published TypeScript source in the installed 4.0.4 / beta.80
 packages, including Fidy's Alchemy patch. `.repos/effect` is a refreshed upstream-main reference;
 it is not byte-identical to the pinned release. `.repos/alchemy` remains an older snapshot.
-React's application contract is 19.3.0; `.repos/react` remains a historical 19.2.8 snapshot.
+React's application runtime is 19.3.1 with 19.3.0 types; `.repos/react` remains a historical 19.2.8 snapshot.
 Use installed public exports/types and official React documentation for application APIs. The
 [source manifest](sources.json) records all four snapshots, selected versions, provenance, patch
 digests and verification dates. A matching version alone does not prove byte-identical source.

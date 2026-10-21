@@ -235,13 +235,15 @@ const retainHistoricalConfirmation = Effect.fn(function* (
 
 const restoreOriginalClearance = Effect.fn(function* (db: D1Database, enabled: boolean) {
   if (!enabled) return;
-  const baseline = yield* fromTestPromise(() =>
-    Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-  );
-  const oldView = baseline
-    .split("--> statement-breakpoint")
-    .find((statement) => statement.trim().startsWith("CREATE VIEW billing_retry_clearances AS"));
-  if (oldView === undefined) throw new Error("Expected original billing clearance view");
+  const oldView = `CREATE VIEW billing_retry_clearances AS
+SELECT a.id AS attempt_id FROM billing_attempts a
+JOIN (SELECT rowid,id AS attempt_id,checkout_transaction_id AS transaction_id FROM billing_attempts WHERE checkout_transaction_id IS NOT NULL) response ON response.attempt_id=a.id
+JOIN (SELECT rowid,transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) evidence ON evidence.transaction_id=response.transaction_id AND evidence.attempt_id=a.id
+WHERE a.status='failed' AND evidence.status='DECLINED' AND evidence.finalized_at_ms IS NOT NULL
+  AND evidence.negative_observed_at_ms<=a.finalized_at_ms-180000
+  AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,transaction_id,attempt_id,lookup_attempts,last_checked_at_ms FROM billing_provider_transactions) candidate
+    WHERE candidate.attempt_id=a.id AND candidate.transaction_id<>response.transaction_id)
+  AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) paid WHERE paid.attempt_id=a.id);`;
   yield* fromTestPromise(() =>
     db.batch([db.prepare("DROP VIEW billing_retry_clearances"), db.prepare(oldView)])
   );
@@ -257,11 +259,18 @@ const upgradeRetryClearance = Effect.fn(function* (
   if (!input.enabled) return;
   const before = yield* fromTestPromise(input.before);
   expect(before.status).not.toBe(200);
-  const migration = yield* fromTestPromise(() =>
-    Bun.file(new URL("../migrations/0002_billing_decline_recovery.sql", import.meta.url)).text()
+  const baseline = yield* fromTestPromise(() =>
+    Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
   );
+  const targetView = baseline
+    .split("--> statement-breakpoint")
+    .find((statement) => statement.trim().startsWith("CREATE VIEW billing_retry_clearances AS"));
+  if (targetView === undefined) throw new Error("Expected current billing clearance view");
   yield* fromTestPromise(() =>
-    input.db.batch(migration.split("--> statement-breakpoint").map((sql) => input.db.prepare(sql)))
+    input.db.batch([
+      input.db.prepare("DROP VIEW billing_retry_clearances"),
+      input.db.prepare(targetView),
+    ])
   );
 });
 

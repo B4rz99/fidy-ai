@@ -453,10 +453,14 @@ test("renders loading until the real Core answers Transactions", ({ page, reques
           })
         ).toBeVisible()
       );
-      const route = yield* fromPlaywright(held.received);
+      yield* fromPlaywright(held.received);
+      // Observe logical success after any bounded native-admission retries.
+      const completed = page.waitForResponse(
+        (response) => response.url().startsWith(`${api}/transactions?`) && response.status() === ok,
+        { timeout: canonicalRecoveryMilliseconds }
+      );
       release.resolve();
-      const response = yield* fromPlaywright(route.request().response());
-      expect(response?.status()).toBe(ok);
+      yield* fromPlaywright(completed);
       yield* fromPlaywright(
         expect(
           page.getByRole("region", {

@@ -1,6 +1,4 @@
-import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
-import { Hex } from "effect/encoding";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
@@ -35,21 +33,6 @@ const WranglerQueryResult = Schema.Struct({
 });
 const WranglerQueryOutput = Schema.Tuple([WranglerQueryResult]);
 
-export type MigrationSource = {
-  readonly name: string;
-  readonly source: string;
-};
-
-export type HashedMigrationSource = {
-  readonly name: string;
-  readonly hash: string;
-};
-
-export type AppliedMigrationDrift =
-  | { readonly _tag: "DuplicateAppliedName"; readonly name: string }
-  | { readonly _tag: "MissingSourceFile"; readonly name: string }
-  | { readonly _tag: "HashMismatch"; readonly name: string };
-
 const hasCompleteMigrationRowCount = (
   rows: ReadonlyArray<typeof WranglerLedgerRow.Type>
 ): boolean => {
@@ -74,43 +57,6 @@ export const decodeWranglerMigrationRows = (json: string): ReadonlyArray<Applied
 };
 
 export const maximumAppliedMigrationRows = 1_000;
-
-export const hashMigrationSources = Effect.fn("hashMigrationSources")(function* (
-  sources: ReadonlyArray<MigrationSource>
-) {
-  const crypto = yield* Crypto.Crypto;
-  return yield* Effect.forEach(sources, ({ name, source }) =>
-    crypto
-      .digest("SHA-256", new TextEncoder().encode(source))
-      .pipe(Effect.map((digest) => ({ name, hash: Hex.encode(digest) })))
-  );
-});
-
-export const compareAppliedMigrationRows = Effect.fn("compareAppliedMigrationRows")(
-  (applied: ReadonlyArray<AppliedMigration>, checkedIn: ReadonlyArray<HashedMigrationSource>) =>
-    Effect.sync((): ReadonlyArray<AppliedMigrationDrift> => {
-      const checkedInByName = new Map(checkedIn.map(({ name, hash }) => [name, hash]));
-      const seenNames = new Set<string>();
-      const drift: Array<AppliedMigrationDrift> = [];
-
-      for (const migration of applied) {
-        if (seenNames.has(migration.name)) {
-          drift.push({ _tag: "DuplicateAppliedName", name: migration.name });
-          continue;
-        }
-        seenNames.add(migration.name);
-
-        const hash = checkedInByName.get(migration.name);
-        if (hash === undefined) {
-          drift.push({ _tag: "MissingSourceFile", name: migration.name });
-        } else if (hash !== migration.hash) {
-          drift.push({ _tag: "HashMismatch", name: migration.name });
-        }
-      }
-
-      return drift;
-    })
-);
 
 export type GitMigrationChange = {
   readonly status: "A" | "M" | "D" | "T";

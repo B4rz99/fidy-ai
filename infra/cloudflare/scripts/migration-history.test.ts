@@ -1,4 +1,3 @@
-import * as BunCrypto from "@effect/platform-bun/BunCrypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -6,13 +5,11 @@ import { describe, expect, it } from "vitest";
 import {
   MigrationRepairCommitSha,
   MigrationRepairRepository,
-  compareAppliedMigrationRows,
   containsRepairableMigrationChange,
   decodeLatestProductionWorkflowRun,
   decodeMigrationRepairStatuses,
   decodePullRequestFiles,
   decodeWranglerMigrationRows,
-  hashMigrationSources,
   parseGitMigrationChanges,
   unapprovedMigrationChanges,
 } from "./migration-history";
@@ -21,7 +18,6 @@ const migrationDirectory = "apps/server/cloudflare/migrations/";
 const firstMigration = "0001_users.sql";
 const secondMigration = "0002_categories.sql";
 const firstMigrationHash = "6869107c4910d8df4680ee89aff9924b65ae79c81b5b78478f2b12f90254f6c5";
-const firstMigrationSource = "CREATE TABLE users (id INTEGER PRIMARY KEY);\n";
 const repairRunUrl = "https://github.com/B4rz99/fidy-ai/actions/runs/42";
 const completedProductionRun = Option.some({
   status: "completed",
@@ -82,51 +78,6 @@ describe("D1 migration history policy", () => {
     expect(() =>
       Schema.decodeUnknownSync(MigrationRepairRepository)("owner/repository/extra")
     ).toThrow();
-  });
-
-  it("accepts applied hashes and leaves a newly checked-in migration pending", () => {
-    expect(
-      Effect.runSync(
-        compareAppliedMigrationRows(
-          [{ name: firstMigration, hash: firstMigrationHash }],
-          [
-            { name: firstMigration, hash: firstMigrationHash },
-            { name: secondMigration, hash: "0".repeat(64) },
-          ]
-        )
-      )
-    ).toEqual([]);
-  });
-
-  it("detects source edits and missing files for applied migration names", () => {
-    expect(
-      Effect.runSync(
-        compareAppliedMigrationRows(
-          [
-            { name: firstMigration, hash: firstMigrationHash },
-            { name: secondMigration, hash: firstMigrationHash },
-          ],
-          [{ name: firstMigration, hash: "0".repeat(64) }]
-        )
-      )
-    ).toEqual([
-      { _tag: "HashMismatch", name: firstMigration },
-      { _tag: "MissingSourceFile", name: secondMigration },
-    ]);
-  });
-
-  it("rejects duplicate names in the applied migration ledger", () => {
-    expect(
-      Effect.runSync(
-        compareAppliedMigrationRows(
-          [
-            { name: firstMigration, hash: firstMigrationHash },
-            { name: firstMigration, hash: firstMigrationHash },
-          ],
-          [{ name: firstMigration, hash: firstMigrationHash }]
-        )
-      )
-    ).toEqual([{ _tag: "DuplicateAppliedName", name: firstMigration }]);
   });
 
   it("decodes only successful Wrangler query results with valid migration hashes", () => {
@@ -336,15 +287,5 @@ describe("D1 migration history policy", () => {
     expect(Effect.runSync(containsRepairableMigrationChange(firstMigration, modified))).toBe(true);
     expect(Effect.runSync(containsRepairableMigrationChange(firstMigration, renamed))).toBe(true);
     expect(Effect.runSync(containsRepairableMigrationChange(firstMigration, added))).toBe(false);
-  });
-
-  it("hashes the exact checked-in SQL bytes with SHA-256", async () => {
-    const hashes = await Effect.runPromise(
-      hashMigrationSources([{ name: firstMigration, source: firstMigrationSource }]).pipe(
-        Effect.provide(BunCrypto.layer)
-      )
-    );
-
-    expect(hashes).toEqual([{ name: firstMigration, hash: firstMigrationHash }]);
   });
 });

@@ -6,7 +6,7 @@ import { Data, Effect, FileSystem, Path, Schedule } from "effect";
 import { expect } from "vitest";
 
 const sourceDirectory = `${process.cwd()}/scripts`;
-const initialGates = ["static-artifact", "migration"];
+const initialGates = ["static-artifact", "bootstrap"];
 
 class FixtureIoFailed extends Data.TaggedError("FixtureIoFailed")<{}> {}
 const fixturePromise = <A>(work: () => Promise<A>): Effect.Effect<A, FixtureIoFailed> =>
@@ -42,20 +42,19 @@ const fixtureCommand = `#!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
   *build:production) gate=static-artifact ;;
-  *check-applied-migration-drift.ts) gate=migration ;;
   *'provider cloudflare bootstrap'*) gate=bootstrap ;;
   *'drift --config'*) gate=drift ;;
   *) exit 99 ;;
 esac
 printf '%s\\n' "$gate" >> "$FIXTURE_DIRECTORY/calls"
 case "$gate" in
-  static-artifact|migration)
+  static-artifact|bootstrap)
     if [[ -f "$FIXTURE_DIRECTORY/$gate.finished" ]]; then exit 0; fi
     touch "$FIXTURE_DIRECTORY/$gate.started"
     concurrent=false
     for attempt in {1..100}; do
       if [[ -f "$FIXTURE_DIRECTORY/static-artifact.started" &&
-            -f "$FIXTURE_DIRECTORY/migration.started" ]]; then
+            -f "$FIXTURE_DIRECTORY/bootstrap.started" ]]; then
         concurrent=true
         break
       fi
@@ -149,13 +148,14 @@ const runPreflight = Effect.fn(function* (failedGate: string = "") {
   } satisfies PreflightResult;
 });
 layer(BunServices.layer, { excludeTestServices: true })("Production preflight barrier", (it) => {
-  it.effect("overlaps both lanes while keeping migration, bootstrap and drift ordered", () =>
+  it.effect("overlaps both lanes while keeping bootstrap and drift ordered", () =>
     Effect.gen(function* () {
       const result = yield* runPreflight();
       expect(result.exitCode, result.stderr).toBe(0);
-      expect(
-        result.calls.filter((gate) => ["migration", "bootstrap", "drift"].includes(gate))
-      ).toEqual(["migration", "bootstrap", "drift"]);
+      expect(result.calls.filter((gate) => ["bootstrap", "drift"].includes(gate))).toEqual([
+        "bootstrap",
+        "drift",
+      ]);
       expect(result.buildFinished).toBe(true);
       expect(result.stdout).toContain("cloudflare-state (passed)");
     })
@@ -166,11 +166,11 @@ layer(BunServices.layer, { excludeTestServices: true })("Production preflight ba
       const result = yield* runPreflight("interrupted");
       expect(result.exitCode).toBe(143);
       expect(result.stopped).toEqual([true, true]);
-      expect(result.calls).not.toContain("bootstrap");
+      expect(result.calls).not.toContain("drift");
     })
   );
 
-  it.effect.each(["static-artifact", "migration", "bootstrap", "drift"])(
+  it.effect.each(["static-artifact", "bootstrap", "drift"])(
     "blocks release after %s fails and drains the other gates",
     (gate) =>
       Effect.gen(function* () {
@@ -178,8 +178,7 @@ layer(BunServices.layer, { excludeTestServices: true })("Production preflight ba
         expect(result.exitCode, result.stderr).toBe(1);
         expect(result.stdout).toContain("(failed)");
         expect(result.buildFinished).toBe(true);
-        if (gate === "migration") expect(result.calls).not.toContain("bootstrap");
-        if (gate === "migration" || gate === "bootstrap") {
+        if (gate === "bootstrap") {
           expect(result.calls).not.toContain("drift");
         }
       })

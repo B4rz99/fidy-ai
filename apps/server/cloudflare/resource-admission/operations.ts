@@ -390,7 +390,7 @@ export const preparePATReviewAdmission = (
     current: number;
     eligible: OwnedStatement;
   }>
-): ReadonlyArray<D1PreparedStatement> => [
+): readonly [D1PreparedStatement, D1PreparedStatement] => [
   input.db
     .prepare(`INSERT INTO resource_admission_events
     (grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,

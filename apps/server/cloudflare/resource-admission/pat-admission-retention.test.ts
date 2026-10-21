@@ -30,7 +30,7 @@ BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;`,
 ];
 const legacySweep = (
   input: Readonly<{ db: D1Database; current: number; limit: number }>
-): ReadonlyArray<D1PreparedStatement> => [
+): readonly [D1PreparedStatement, D1PreparedStatement] => [
   input.db
     .prepare(`DELETE FROM pat_pairing_admission WHERE source_digest IN(
   SELECT source_digest FROM pat_pairing_admission WHERE window_start_ms<=? ORDER BY window_start_ms LIMIT ?)`)

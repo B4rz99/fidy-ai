@@ -526,7 +526,7 @@ it("shares three atomic Compaction attempts across sessions and resets only at U
       const db = yield* Effect.tryPromise(() => setup());
       const credential = yield* Effect.tryPromise(() => subject(0));
       const foreign = yield* Effect.tryPromise(() => subject(1));
-      const sessionIds = [
+      const sessionIds: readonly [HostedAgentSessionId, HostedAgentSessionId] = [
         HostedAgentSessionId.make("14350000-0000-4000-8000-000000000001"),
         HostedAgentSessionId.make("14350000-0000-4000-8000-000000000002"),
       ];
@@ -542,14 +542,13 @@ it("shares three atomic Compaction attempts across sessions and resets only at U
         )
       );
       const sessionId = sessionIds[0];
-      if (sessionId === undefined) throw Error("missing session");
       expect(yield* reserveHostedCompaction({ db, subject: foreign, sessionId })).toBe(false);
       const contenders = yield* Effect.all(
         Array.from({ length: 8 }, (_, index) =>
           reserveHostedCompaction({
             db,
             subject: credential,
-            sessionId: sessionIds[index % 2] ?? sessionId,
+            sessionId: index % 2 === 0 ? sessionIds[0] : sessionIds[1],
           })
         ),
         { concurrency: "unbounded" }

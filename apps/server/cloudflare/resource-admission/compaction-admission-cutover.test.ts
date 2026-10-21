@@ -281,15 +281,15 @@ BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;`;
             .prepare("INSERT INTO hosted_compaction_attempts VALUES(?,0,3),(?,86400000,2),(?,0,1)")
             .bind(owner, owner, foreign),
           ...[
-            [owner, 0],
-            [owner, 86400000],
-            [foreign, 0],
-          ].map(([id, day]) =>
+            { userId: owner, day: 0 },
+            { userId: owner, day: 86400000 },
+            { userId: foreign, day: 0 },
+          ].map(({ userId, day }) =>
             prepareResourceCounter({
               db,
               kind: "hosted_compaction",
-              current: Number(day),
-              subject: { sql: "SELECT ? AS user_id", params: [String(id)] },
+              current: day,
+              subject: { sql: "SELECT ? AS user_id", params: [userId] },
             })
           ),
           prepareResourceCounter({

@@ -1,8 +1,10 @@
 import { ResourceLimited } from "@fidy/server/client";
-import type { APIResponse } from "@playwright/test";
+import type { APIResponse, Page } from "@playwright/test";
 import { Effect, Option, Schema } from "effect";
 import {
+  advanceAcceptancePoll,
   advanceRefusedRequest,
+  installAcceptanceClock,
   installAcceptanceClockWithNativePerformance,
 } from "./acceptance-clock";
 import { apiOrigin } from "./http-fixtures";
@@ -74,5 +76,40 @@ test("virtual waiting preserves native high-resolution browser performance timin
       yield* Effect.tryPromise(() => page.clock.fastForward(virtualWaitMilliseconds));
       const after = yield* Effect.tryPromise(() => page.evaluate(browserPerformance));
       expect(after - before).toBeLessThan(virtualWaitMilliseconds);
+    })
+  ));
+
+const navigationCount = 40;
+const replaceActiveDocument = (page: Page): Promise<() => number> => {
+  let navigations = 0;
+  return page
+    .route("**/acceptance-clock-navigation?step=*", (route) => {
+      const next = ++navigations;
+      return route.fulfill({
+        contentType: "text/html",
+        body:
+          next < navigationCount
+            ? `<meta http-equiv="refresh" content="0;url=/acceptance-clock-navigation?step=${next}">`
+            : "<p>Clock navigation complete</p>",
+      });
+    })
+    .then(() => () => navigations);
+};
+
+test("fixture polling advances while the browser replaces its active document", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const navigations = yield* Effect.tryPromise(() => replaceActiveDocument(page));
+      yield* Effect.tryPromise(() => installAcceptanceClock(page));
+      yield* Effect.tryPromise(() =>
+        page.goto("/acceptance-clock-navigation?step=0", { waitUntil: "commit" })
+      );
+      for (let index = 0; index < navigationCount; index++) {
+        yield* Effect.tryPromise(() => advanceAcceptancePoll({ page, milliseconds: 1 }));
+      }
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Clock navigation complete")).toBeVisible()
+      );
+      expect(navigations()).toBe(navigationCount);
     })
   ));

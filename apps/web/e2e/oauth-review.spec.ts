@@ -11,6 +11,19 @@ import {
 
 const { test, expect } = playwright;
 const { api, app, operator } = browserAcceptanceTopology();
+const isolateReviewSource = (page: Page): Promise<void> => {
+  const info = test.info();
+  const source = `${info.testId}-${info.repeatEachIndex}-review`;
+  return page
+    .context()
+    .route(`${api}/**`, (route) =>
+      route.fallback({
+        headers: { ...route.request().headers(), "x-acceptance-source": source },
+      })
+    )
+    .then(() => undefined);
+};
+test.beforeEach(({ page }) => isolateReviewSource(page));
 const firstPoll = 5000;
 const cancelledMessage = "Solicitud cancelada. No se autorizó ningún acceso.";
 const completeOAuthJourneyMilliseconds = 60_000;
@@ -501,6 +514,10 @@ const assertFloodBounds = ({
         }
       }
       expect(discoveryStatuses).toContain(rateLimited);
+      const independent = yield* Effect.tryPromise(() =>
+        page.goto(`${api}/.well-known/oauth-authorization-server`)
+      );
+      expect(independent?.status()).toBe(ok);
       yield* Effect.tryPromise(() => page.goto("/oauth/review/not-a-reference"));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toHaveText("La solicitud no es válida.")

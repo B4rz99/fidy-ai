@@ -416,17 +416,22 @@ The legal term under Ley 1581 for the person a piece of personal data is about. 
 speaking about data-protection rights, never as a synonym for User.
 
 **ErasureDecision**:
-An explicitly reviewed disposition of one verified Titular case, bound to the precise User, current
-MVP scope, permissible class actions, withdrawal handoff and verified final response route. It
-stops new admissions at approval while exact pre-cutoff work may finish within its original bounds.
-It is neither ordinary Transaction deletion nor a processing-Consent withdrawal.
+An authenticated decision to delete one stable User's application data in full, with deletion
+reapplied if a backup restores it. It stops new admissions while exact pre-cutoff work drains within
+its original bounds. Completion requires verified local deletion and applicable external cleanup;
+acceptance by a processor alone is insufficient. It is neither ordinary Transaction deletion nor
+a processing-Consent withdrawal. This is the accepted full-deletion meaning in #1425; the earlier
+selective-disposition model remains only until its cutover prerequisites pass.
 _Avoid_: Delete-account flag, automatic wipe, withdrawal receipt.
 
 **ErasureRetention**:
-A restricted exception to an ErasureDecision, tied to a reviewed legal or contractual source, exact
-data scope, limited purpose, finite expiry, review instant and terminal deletion. A reference only
+The superseded selective-disposition model's restricted exception, tied to a reviewed legal or
+contractual source, exact data scope, limited purpose, finite expiry, review instant and terminal
+deletion. A reference only
 addresses the source evidence; it is not itself a retention basis. Linked/pseudonymous copies remain
-personal data and remain visible in the disposition receipt.
+personal data and remain visible in the legacy disposition receipt. The accepted full-deletion
+design has no selective retention of deleted User content; ordinary feature retention remains a
+separate purpose.
 _Avoid_: Keep for audit, indefinite legal hold, anonymized identifier.
 
 **ErasureCustodyEvidence**:

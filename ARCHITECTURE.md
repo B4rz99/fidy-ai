@@ -152,6 +152,16 @@ forward-only additive D1 migrations, smokes exact zero-traffic Worker versions, 
 the verified pair. Rollback can restore compatible Worker code traffic, never D1 or other state.
 Workstation and provider-controlled source deployments are not release paths. See the [Production runbook](docs/operations/production-releases.md).
 
+## Database redesign contracts
+
+The accepted feature storage redesign is indexed in [#1394](https://github.com/B4rz99/fidy-ai/issues/1394).
+Its [implementation checklist](docs/operations/database-cutover-1428.md) records table ownership,
+typed relationships, coupled cutovers and historical-data gates. The accepted full-deletion target
+supersedes selective archive/hold behavior only when its implementation and restore prerequisites
+pass. Descriptions of installed retention/erasure above remain current implementation evidence;
+design acceptance does not claim that migrations have run. The newly identified WhatsApp recipient
+table remains proposed pending explicit review.
+
 ## Identity and verification
 
 Browser login retains a private verifier in the browser. Google or Microsoft provider authentication, WhatsApp approval, verified email, or

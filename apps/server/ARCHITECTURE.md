@@ -109,6 +109,11 @@ retention, safe delivery and operator approval remain gates in the
 
 ### Whole-Titular erasure
 
+The following describes the installed selective-retention implementation. The accepted full-deletion
+target in #1425 has separate [cutover contracts](../../docs/operations/database-cutover-1428.md),
+including existing archive disposal, independent restore markers and file-write safety gates.
+Do not remove installed safeguards based on target table counts or design acceptance alone.
+
 `cloudflare/erasure` composes current owners' published native erasure stores under the existing
 User coordinator. `POST /web/privacy/erasure` uses exact Origin, bounded confirmation and fresh
 WebSession authority to record one intention. Dedicated issuer-verified operator Access binds the

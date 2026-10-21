@@ -1,0 +1,32 @@
+apps/web/src/features/transactions/FEATURE.md
+  s_241024bc81d268::t_26c5cbcf9f7f6e 3-6,9
+  s_241024bc81d268::t_31f049158f0818 7-8
+apps/web/src/features/agent/FEATURE.md
+  s_241024bc81d268::t_26c5cbcf9f7f6e 3-14,16-17
+  s_241024bc81d268::t_951c314f978f94 15
+apps/web/src/features/budgets/FEATURE.md
+  s_241024bc81d268::t_26c5cbcf9f7f6e 3-9
+apps/web/src/features/recurring/FEATURE.md
+  s_241024bc81d268::t_26c5cbcf9f7f6e 3-15
+apps/web/src/features/dashboard/FEATURE.md
+  s_241024bc81d268::t_26c5cbcf9f7f6e 3-12
+apps/web/src/features/pats/FEATURE.md
+  s_241024bc81d268::t_26c5cbcf9f7f6e 3-4,11-13
+  s_241024bc81d268::t_79f4c22bb2f864 5-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "204f694bd96a838d85fb38b326130d9b544bb2e3",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

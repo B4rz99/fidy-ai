@@ -57,7 +57,7 @@ it("reads mixed browser/PAT/hosted attribution and enforces append-only and same
       }
       yield* Effect.tryPromise(() =>
         db
-          .prepare("INSERT INTO audit_retention_permits(user_id,cutoff_ms) VALUES (?,?)")
+          .prepare("UPDATE users SET audit_retention_cutoff_ms=?2 WHERE id=?1")
           .bind(proactivityTestUsers[1], current + 1)
           .run()
       );
@@ -80,7 +80,9 @@ it("reads mixed browser/PAT/hosted attribution and enforces append-only and same
             .all()
         )).results
       ).toEqual(before.results);
-      yield* Effect.tryPromise(() => db.prepare("DELETE FROM audit_retention_permits").run());
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE users SET audit_retention_cutoff_ms=NULL").run()
+      );
       const caller = yield* proactivityHostedCaller({ db, userIndex: 0 });
       expect(
         (yield* executeHostedStatementQuery({
@@ -112,8 +114,13 @@ it("reads mixed browser/PAT/hosted attribution and enforces append-only and same
       ).toBe(3);
       expect(yield* audit.query({ userId: browser.userId, limit: 10 })).toEqual([]);
       expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM audit_retention_permits").all()))
-          .results
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT * FROM (SELECT rowid,id AS user_id,audit_retention_cutoff_ms AS cutoff_ms FROM users WHERE audit_retention_cutoff_ms IS NOT NULL)"
+            )
+            .all()
+        )).results
       ).toEqual([]);
     })
   ));

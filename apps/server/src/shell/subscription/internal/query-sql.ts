@@ -50,9 +50,9 @@ export const subscriptionStandingQuery = ({
         WHERE adjustment.adjusted_attempt_id=a.id),a.paid_ends_at_ms)) AS ends_at_ms,
       a.paid_renewal_anchor_ms AS renewal_anchor_ms,
       ${paidAccessEndSql} AS access_ends_at_ms
-      FROM (${trial.sql}) AS t LEFT JOIN subscriptions AS s ON s.user_id = ?
+      FROM (${trial.sql}) AS t LEFT JOIN subscription_standing AS s ON s.user_id = ?
       LEFT JOIN billing_attempts AS a ON a.id = s.attempt_id AND a.user_id = s.user_id
-      LEFT JOIN card_payment_sources AS source ON source.id = a.payment_source_id AND source.user_id = a.user_id
+      LEFT JOIN verified_payment_sources AS source ON source.id = a.payment_source_id AND source.user_id = a.user_id
       WHERE TRUE${guard(authority)} LIMIT 1`,
     params: [...trial.params, userId, ...bindings(authority)],
   };

@@ -22,7 +22,7 @@ export const findGroupCurrency = ({
   Effect.gen(function* () {
     const raw = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT currency FROM budget_group_currencies
+        .prepare(`SELECT currency FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency')
     WHERE user_id=? AND group_name=? AND month<=? ORDER BY month DESC LIMIT 1`)
         .bind(userId, groupName, month)
         .first()
@@ -105,7 +105,7 @@ export const acceptsGroupCapPrecision = ({
       db
         .prepare(
           `SELECT cap FROM budgets WHERE ${selection}
-       UNION ALL SELECT m.cap FROM budget_month_caps m JOIN budgets b ON b.id=m.budget_id AND b.user_id=m.user_id
+       UNION ALL SELECT m.cap FROM (SELECT rowid,user_id,budget_id,month,cap FROM budget_month_plan_records WHERE kind='cap') m JOIN budgets b ON b.id=m.budget_id AND b.user_id=m.user_id
        WHERE b.${selection.replaceAll("group_name", "b.group_name").replaceAll("category_id", "b.category_id")} AND m.month>=?`
         )
         .bind(userId, payload.groupName, ...ids, userId, payload.groupName, ...ids, payload.month)
@@ -141,11 +141,10 @@ export const prepareGroupCurrency = ({
       ? []
       : [
           db
-            .prepare(`INSERT INTO budget_group_currencies(user_id,group_name,month,currency)
-      SELECT g.user_id,?,g.month,g.currency FROM budget_group_currencies g
+            .prepare(`INSERT INTO budget_month_plan_records(kind,user_id,group_name,month,currency) SELECT 'currency',g.user_id,?,g.month,g.currency FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency') g
       WHERE g.user_id=? AND g.group_name IN (SELECT group_name FROM budgets WHERE user_id=? AND category_id IN (${groupCategoryIds.map(() => "?").join(",")}))
       AND g.group_name<>? AND EXISTS(SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
-      ON CONFLICT(user_id,group_name,month) DO NOTHING`)
+      ON CONFLICT(user_id,group_name,month) WHERE kind='currency' DO NOTHING`)
             .bind(
               payload.groupName,
               subject.userId,
@@ -156,9 +155,8 @@ export const prepareGroupCurrency = ({
             ),
         ]),
     db
-      .prepare(`INSERT INTO budget_group_currencies(user_id,group_name,month,currency)
-      SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
-      ON CONFLICT(user_id,group_name,month) ${groupCurrency === undefined ? "DO NOTHING" : "DO UPDATE SET currency=excluded.currency"}`)
+      .prepare(`INSERT INTO budget_month_plan_records(kind,user_id,group_name,month,currency) SELECT 'currency',?,?,?,? WHERE EXISTS(SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
+      ON CONFLICT(user_id,group_name,month) WHERE kind='currency' ${groupCurrency === undefined ? "DO NOTHING" : "DO UPDATE SET currency=excluded.currency"}`)
       .bind(
         subject.userId,
         payload.groupName,

@@ -3,7 +3,11 @@ import { it } from "@effect/vitest";
 import { afterAll, expect } from "vitest";
 import { installCurrentTestObjects, isolatedTestDatabases } from "../../d1-test-fixture";
 import { makeCoreRejectionObserver } from "./runtime";
-import { decideOperationalAlerts, observeCoreRejections, sweepCoreRejections } from "./operations";
+import {
+  decideOperationalAlerts,
+  observeCoreRejections,
+  sweepOperationalEventBuckets,
+} from "./operations";
 import { OperationalAlert } from "./contract";
 
 const databases = isolatedTestDatabases();
@@ -12,7 +16,7 @@ const database = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
     yield* Effect.tryPromise(() =>
-      installCurrentTestObjects({ db, tables: ["operational_core_rejection_burst"] })
+      installCurrentTestObjects({ db, tables: ["operational_event_buckets"] })
     );
     return db;
   });
@@ -60,7 +64,11 @@ it.effect(
       ).toBe(false);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+          db
+            .prepare(
+              "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
+            )
+            .all()
         )
       ).toMatchObject({
         results: [{ id: 1, observed_at_ms: now }],
@@ -69,16 +77,24 @@ it.effect(
       expect((yield* observeCoreRejections({ db, now: now - 1 })).state).toBe("unavailable");
       expect((yield* observeCoreRejections({ db, now: now + 299_999 })).state).toBe("attention");
       expect((yield* observeCoreRejections({ db, now: now + 300_000 })).state).toBe("healthy");
-      yield* sweepCoreRejections({ db, now: now + 86_399_999 });
+      yield* sweepOperationalEventBuckets({ db, now: now + 86_399_999 });
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+          db
+            .prepare(
+              "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
+            )
+            .all()
         )).results
       ).toHaveLength(1);
-      yield* sweepCoreRejections({ db, now: now + 86_400_000 });
+      yield* sweepOperationalEventBuckets({ db, now: now + 86_400_000 });
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+          db
+            .prepare(
+              "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
+            )
+            .all()
         )).results
       ).toEqual([]);
     })
@@ -178,7 +194,11 @@ it.effect("counts only admitted boundary statuses while sharing one bounded pres
     expect((yield* observeCoreRejections({ db, now })).state).toBe("attention");
     expect(
       (yield* Effect.tryPromise(() =>
-        db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+        db
+          .prepare(
+            "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
+          )
+          .all()
       )).results
     ).toEqual([{ id: 1, observed_at_ms: now }]);
   })

@@ -62,8 +62,8 @@ const prepareRenewalClaim = (
       created_at_ms, previous_paid_attempt_id, period_starts_at_ms, period_ends_at_ms, renewal_attempt_number, calendar_anchor_ms)
       SELECT ?, a.user_id, a.enrollment_id, ?, a.payment_source_id, price.id, price.amount, price.currency,
       price.billing_period, price.service_market, price.tax_treatment, a.time_zone, a.wompi_environment, ?, ?, a.id, ?, ?, 1, COALESCE(a.calendar_anchor_ms, a.paid_starts_at_ms)
-      FROM subscriptions s JOIN billing_attempts a ON a.id = s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id = s.user_id
-      JOIN card_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
+      FROM subscription_standing s JOIN billing_attempts a ON a.id = s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id = s.user_id
+      JOIN verified_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
       JOIN subscription_prices price ON price.published_order IS NOT NULL AND price.billing_period = a.billing_period AND price.service_market = a.service_market
       WHERE s.user_id = ? AND a.id = ?
         AND a.wompi_environment = ? AND a.status = 'succeeded'
@@ -98,7 +98,7 @@ const prepareRetryClaim = (input: RenewalClaimInput & Readonly<{ id: string }>):
           first.billing_period,first.service_market,first.tax_treatment,first.time_zone,first.wompi_environment,?,?,
           first.previous_paid_attempt_id,first.period_starts_at_ms,first.period_ends_at_ms,last.renewal_attempt_number+1,first.calendar_anchor_ms
           FROM billing_attempts first JOIN billing_attempts last ON last.previous_paid_attempt_id=first.previous_paid_attempt_id
-          JOIN subscriptions sub ON sub.attempt_id=first.previous_paid_attempt_id AND sub.user_id=first.user_id
+          JOIN subscription_standing sub ON sub.attempt_id=first.previous_paid_attempt_id AND sub.user_id=first.user_id
           WHERE first.user_id=? AND first.previous_paid_attempt_id=? AND first.renewal_attempt_number=1
             AND first.wompi_environment=? AND last.status='failed' AND last.renewal_attempt_number<3
             AND ? >= first.period_starts_at_ms + last.renewal_attempt_number * 86400000
@@ -128,7 +128,7 @@ export const claimSubscriptionRenewal = (
     const row = yield* fromPromise(() =>
       input.db
         .prepare(`SELECT a.paid_ends_at_ms AS ends_at_ms, a.time_zone, a.billing_period, COALESCE(a.calendar_anchor_ms, a.paid_starts_at_ms) AS calendar_anchor_ms
-    FROM subscriptions s JOIN billing_attempts a ON a.id = s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id = s.user_id
+    FROM subscription_standing s JOIN billing_attempts a ON a.id = s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id = s.user_id
     WHERE s.user_id = ? AND a.id = ? AND a.status = 'succeeded'
     AND a.wompi_environment = ? AND a.paid_ends_at_ms <= ?`)
         .bind(input.userId, input.previousPaidAttemptId, input.environment, input.now)
@@ -173,10 +173,9 @@ export const dispatchSubscriptionRenewals = (
       requirement: "active",
       statement: {
         sql: `SELECT a.user_id, a.id
-    FROM (SELECT rowid,id AS attempt_id,followup_kind AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_kind IS NOT NULL) due JOIN subscriptions s ON s.attempt_id = due.attempt_id
-    JOIN billing_attempts a ON a.id = s.attempt_id AND a.user_id = s.user_id
-    JOIN card_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
-    WHERE due.due_at_ms <= ?
+    FROM billing_attempts a JOIN subscription_standing s ON s.attempt_id = a.id AND a.user_id = s.user_id
+    JOIN verified_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
+    WHERE a.followup_due_at_ms <= ?
       AND a.wompi_environment = ?
       AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id = s.user_id)
       AND (NOT EXISTS (SELECT 1 FROM billing_attempts r WHERE r.previous_paid_attempt_id = a.id)
@@ -191,7 +190,7 @@ export const dispatchSubscriptionRenewals = (
       },
     });
     const result = yield* fromPromise(() =>
-      input.DB.prepare(`${discovery.sql} ORDER BY due.due_at_ms, a.id LIMIT 32`)
+      input.DB.prepare(`${discovery.sql} ORDER BY a.followup_due_at_ms, a.id LIMIT 32`)
         .bind(...discovery.params)
         .all()
     );

@@ -19,12 +19,11 @@ const loadSchemaStatements = (): Promise<ReadonlyArray<string>> => {
   if (previous !== undefined) return previous;
   const loaded = Bun.file(baseline)
     .text()
-    .then((sql) =>
-      sql
-        .replace(/^--.*$/gmu, "")
-        .trim()
-        .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |UPDATE |INSERT |DROP |$)/u)
-        .filter((statement) => statement.trim().length > 0)
+    .then((source) =>
+      source
+        .split("--> statement-breakpoint")
+        .map((statement) => statement.trim())
+        .filter((statement) => statement.length > 0 && !statement.startsWith("PRAGMA "))
     );
   schemaStatements.set(baseline.href, loaded);
   return loaded;

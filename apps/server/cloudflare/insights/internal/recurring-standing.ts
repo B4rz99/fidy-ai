@@ -24,7 +24,7 @@ export const findInstruction = (
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT id,version,enabled,grant_id,context_json,acceptance_from_ms FROM recurring_digest_instructions WHERE user_id=?"
+          "SELECT id,version,enabled,grant_id,context_json,acceptance_from_ms FROM (SELECT rowid,user_id,id,version,enabled,consent_grant_id AS grant_id,snapshot_json AS context_json,acceptance_from_ms,accepted_at_ms,last_source_identity,next_closed_at_ms,last_evaluated_at_ms,source_checkpoint,source_cursor,source_cutoff_at_ms,source_complete FROM schedules WHERE kind='digest') WHERE user_id=?"
         )
         .bind(input.userId)
         .first()
@@ -63,9 +63,9 @@ export const prepareActivation = (
         },
       }),
       input.db
-        .prepare(`INSERT INTO recurring_digest_instructions(user_id,id,version,enabled,grant_id,context_json,acceptance_from_ms,accepted_at_ms)
- SELECT ?,?,?,1,?,?,?,? WHERE coalesce((SELECT version FROM recurring_digest_instructions WHERE user_id=?),0)=?
- ON CONFLICT(user_id) DO UPDATE SET version=excluded.version,enabled=1,grant_id=excluded.grant_id,context_json=excluded.context_json,acceptance_from_ms=excluded.acceptance_from_ms,accepted_at_ms=excluded.accepted_at_ms`)
+        .prepare(`INSERT INTO schedules(kind,user_id,id,version,enabled,consent_grant_id,snapshot_json,acceptance_from_ms,accepted_at_ms)
+ SELECT 'digest',?,?,?,1,?,?,?,? WHERE coalesce((SELECT version FROM (SELECT rowid,user_id,id,version,enabled,consent_grant_id AS grant_id,snapshot_json AS context_json,acceptance_from_ms,accepted_at_ms,last_source_identity,next_closed_at_ms,last_evaluated_at_ms,source_checkpoint,source_cursor,source_cutoff_at_ms,source_complete FROM schedules WHERE kind='digest') WHERE user_id=?),0)=?
+ ON CONFLICT(kind,user_id) DO UPDATE SET version=excluded.version,enabled=1,consent_grant_id=excluded.consent_grant_id,snapshot_json=excluded.snapshot_json,acceptance_from_ms=excluded.acceptance_from_ms,accepted_at_ms=excluded.accepted_at_ms`)
         .bind(
           input.userId,
           id,
@@ -84,6 +84,6 @@ export const prepareActivation = (
 export const prepareDisable = (input: Scope): D1PreparedStatement =>
   input.db
     .prepare(
-      "UPDATE recurring_digest_instructions SET enabled=0,version=version+1 WHERE user_id=? AND enabled=1"
+      "UPDATE schedules SET enabled=0,version=version+1 WHERE kind='digest' AND user_id=? AND enabled=1"
     )
     .bind(input.userId);

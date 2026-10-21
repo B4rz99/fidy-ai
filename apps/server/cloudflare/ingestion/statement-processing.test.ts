@@ -105,7 +105,7 @@ const setup = (
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "UPDATE statement_submissions SET work_user_id=?2,work_revision=1,work_published_at_ms=?3 WHERE id=?1 AND work_revision IS NULL"
+            "UPDATE statement_submissions SET work_published_at_ms=?3 WHERE id=?1 AND user_id=?2 AND work_published_at_ms IS NULL"
           )
           .bind(submissionId, userA, current)
           .run()
@@ -371,7 +371,7 @@ effectIt.effect(
       const outbox = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT user_id, revision FROM (SELECT rowid,id AS submission_id,work_user_id AS user_id,work_revision AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_revision IS NOT NULL) AS statement_ingestion_outbox WHERE submission_id = ?"
+            "SELECT user_id, revision FROM (SELECT rowid,id AS submission_id,user_id AS user_id,1 AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_published_at_ms IS NOT NULL) AS statement_ingestion_outbox WHERE submission_id = ?"
           )
           .bind(submissionId)
           .first()
@@ -1101,7 +1101,7 @@ it.each(["completed", "failed"] as const)(
         yield* fromTestPromise(() =>
           db
             .prepare(`CREATE TRIGGER reject_statement_ack
-      BEFORE UPDATE OF work_revision ON statement_submissions WHEN OLD.work_revision IS NOT NULL AND NEW.work_revision IS NULL
+      BEFORE UPDATE OF work_published_at_ms ON statement_submissions WHEN OLD.work_published_at_ms IS NOT NULL AND NEW.work_published_at_ms IS NULL
       BEGIN SELECT RAISE(ABORT, 'ack unavailable'); END`)
             .run()
         );
@@ -1116,7 +1116,7 @@ it.each(["completed", "failed"] as const)(
         const pending = yield* fromTestPromise(() =>
           db
             .prepare(`SELECT status,
-      (SELECT count(*) FROM (SELECT rowid,id AS submission_id,work_user_id AS user_id,work_revision AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_revision IS NOT NULL) AS statement_ingestion_outbox WHERE submission_id = ?) AS pending
+      (SELECT count(*) FROM (SELECT rowid,id AS submission_id,user_id AS user_id,1 AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_published_at_ms IS NOT NULL) AS statement_ingestion_outbox WHERE submission_id = ?) AS pending
       FROM statement_submissions WHERE id = ?`)
             .bind(submissionId, submissionId)
             .first()
@@ -1131,7 +1131,7 @@ it.each(["completed", "failed"] as const)(
         const finished = yield* fromTestPromise(() =>
           db
             .prepare(`SELECT status,
-      (SELECT count(*) FROM (SELECT rowid,id AS submission_id,work_user_id AS user_id,work_revision AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_revision IS NOT NULL) AS statement_ingestion_outbox WHERE submission_id = ?) AS pending,
+      (SELECT count(*) FROM (SELECT rowid,id AS submission_id,user_id AS user_id,1 AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_published_at_ms IS NOT NULL) AS statement_ingestion_outbox WHERE submission_id = ?) AS pending,
       (SELECT count(*) FROM source_attestations WHERE statement_submission_id = ?) AS attestations
       FROM statement_submissions WHERE id = ?`)
             .bind(submissionId, submissionId, submissionId)
@@ -1276,7 +1276,7 @@ effectIt.effect("deleting an interrupted submission reclaims its owned derived p
       db.batch([
         db
           .prepare(
-            "UPDATE statement_submissions AS statement_ingestion_outbox SET work_user_id=NULL,work_revision=NULL,work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_revision IS NOT NULL AND work_user_id=?"
+            "UPDATE statement_submissions AS statement_ingestion_outbox SET work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_published_at_ms IS NOT NULL AND user_id=?"
           )
           .bind(userA),
         db
@@ -1348,7 +1348,7 @@ effectIt.effect(
 );
 
 effectIt.effect(
-  "refuses changed interpretation context without reinterpreting partial captures",
+  "rejects changing retained interpretation context without reinterpreting partial captures",
   () =>
     Effect.gen(function* () {
       const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
@@ -1356,12 +1356,13 @@ effectIt.effect(
       const input = { DB: db, STATEMENT_STAGING_BUCKET: reads.bucket, userId: userA, submissionId };
       expect(yield* processStatementSubmission(input)).toBe("continue");
       yield* fromTestPromise(() =>
-        db
-          .prepare("UPDATE statement_submissions SET time_zone='America/New_York' WHERE id=?")
-          .bind(submissionId)
-          .run()
+        expect(
+          db
+            .prepare("UPDATE statement_submissions SET time_zone='America/New_York' WHERE id=?")
+            .bind(submissionId)
+            .run()
+        ).rejects.toThrow("statement_interpretation_context_immutable")
       );
-      expect(yield* processStatementSubmission(input)).toBe("completed");
       expect(
         yield* fromTestPromise(() =>
           db
@@ -1372,11 +1373,14 @@ effectIt.effect(
             .first()
         )
       ).toEqual({
-        status: "failed",
-        failure_reason: "malformed-file",
+        status: "processing",
+        failure_reason: null,
         attestations: 32,
         captures: 32,
       });
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      expect(yield* processStatementSubmission(input)).toBe("completed");
       expect(reads.observed.gets).toBe(1);
     })
 );
@@ -1657,7 +1661,7 @@ effectIt.effect(
         yield* fromTestPromise(() =>
           db
             .prepare(`SELECT count(*) AS count
-      FROM (SELECT rowid,id AS submission_id,work_user_id AS user_id,work_revision AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_revision IS NOT NULL) AS statement_ingestion_outbox WHERE submission_id=?`)
+      FROM (SELECT rowid,id AS submission_id,user_id AS user_id,1 AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_published_at_ms IS NOT NULL) AS statement_ingestion_outbox WHERE submission_id=?`)
             .bind(submissionId)
             .first()
         )
@@ -2704,7 +2708,7 @@ effectIt.effect(
       (SELECT count(*) FROM statement_needs_review) AS reviews,
       (SELECT count(*) FROM statement_submissions WHERE material_state IS NOT NULL) AS manifests,
       (SELECT count(*) FROM statement_materialization_parts) AS parts,
-      (SELECT count(*) FROM (SELECT rowid,id AS submission_id,work_user_id AS user_id,work_revision AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_revision IS NOT NULL) AS statement_ingestion_outbox) AS outbox,
+      (SELECT count(*) FROM (SELECT rowid,id AS submission_id,user_id AS user_id,1 AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_published_at_ms IS NOT NULL) AS statement_ingestion_outbox) AS outbox,
       (SELECT status FROM statement_staging_objects WHERE id=?) AS staging,
       (SELECT submission_id FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id=?) AS reserved,
       (SELECT consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id=?) AS consumed

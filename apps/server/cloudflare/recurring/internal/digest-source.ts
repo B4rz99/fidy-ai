@@ -37,7 +37,7 @@ const guards = (
   evaluationGuard({ ...input, revision: position.revision }),
   input.db
     .prepare(`INSERT INTO sql_assertions (scope, accepted) VALUES ('recurring',CASE WHEN EXISTS (
- SELECT 1 FROM recurring_progress WHERE user_id=? AND phase='complete' AND evaluated_at=?
+ SELECT 1 FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id=? AND phase='complete' AND evaluated_at=?
  AND (SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL)=? AND (SELECT count(*) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL)=?
  ) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted`)
     .bind(
@@ -64,7 +64,7 @@ const readPosition = (
       const raw = yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            "SELECT evaluated_at,(SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL) AS maximum,(SELECT count(*) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL) AS total FROM recurring_progress WHERE user_id=? AND phase='complete' AND evaluated_revision=?"
+            "SELECT evaluated_at,(SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL) AS maximum,(SELECT count(*) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL) AS total FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id=? AND phase='complete' AND evaluated_revision=?"
           )
           .bind(input.userId, input.userId, input.userId, facts.value.revision)
           .first()

@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "~/shell/sql-assertions/operations";
 import { Effect, Schema } from "effect";
 import { UserId } from "~/core/identity/contract";
 import { AuditUnavailable, auditRetentionDays, utcDayMilliseconds } from "~/shell/audit/contract";
@@ -24,19 +25,22 @@ export const retainEvidence = ({
     const result = yield* Effect.tryPromise(() =>
       database.batch([
         database
-          .prepare("INSERT INTO audit_retention_permits(user_id,cutoff_ms) VALUES (?,?)")
+          .prepare(
+            "UPDATE users SET audit_retention_cutoff_ms=?2 WHERE id=?1 AND audit_retention_cutoff_ms IS NULL"
+          )
           .bind(request.userId, request.now - retentionMilliseconds),
+        prepareChangedRowAssertion({ db: database, scope: "audit_retention" }),
         database
           .prepare(
             `DELETE FROM audit_entries WHERE sequence IN (SELECT sequence FROM audit_entries WHERE user_id=? AND ${retainedKinds} AND occurred_at_ms<? ORDER BY occurred_at_ms,id LIMIT ?)`
           )
           .bind(request.userId, request.now - retentionMilliseconds, maximumRows),
         database
-          .prepare("DELETE FROM audit_retention_permits WHERE user_id=?")
+          .prepare("UPDATE users SET audit_retention_cutoff_ms=NULL WHERE id=?")
           .bind(request.userId),
       ])
     );
-    return result[1]?.meta.changes ?? 0;
+    return result[2]?.meta.changes ?? 0;
   }).pipe(Effect.mapError(() => new AuditUnavailable()));
 
 /** Select only bounded subject metadata, then apply the same subject-owned retention operation. */

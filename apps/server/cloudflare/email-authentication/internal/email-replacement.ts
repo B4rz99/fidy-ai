@@ -1,3 +1,4 @@
+import { prepareEmailSecurityLimit } from "./email-security-limit";
 import { freshSessionQuery } from "../../../src/shell/web-session/operations";
 import { prepareEmailReplacementEvidence } from "../../../src/shell/audit/operations";
 import {
@@ -53,7 +54,6 @@ const digestLength = 32;
 const proofPublicLength = 9;
 const proofSecretOffset = 10;
 const proofLifetimeMilliseconds = 600_000;
-const admissionWindowMilliseconds = 86_400_000;
 const json = (body: object, status: number): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 const invalid = (): Response => json(emailReplacementInvalidBody, HTTP_INVALID);
@@ -159,8 +159,8 @@ const startProof = (db: D1Database, input: ReplacementRequest): Promise<void> =>
        state, created_at_ms, expires_at_ms)
       SELECT v.user_id, ?, ?, ?, v.email_address, v.verified_at_ms, 'awaiting_delivery', ?, ?
       FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v WHERE v.user_id = ? AND v.email_address <> ?
-        AND EXISTS (SELECT 1 FROM email_replacement_limits AS l
-          WHERE l.user_id = v.user_id AND l.last_work_id = ?)
+        AND EXISTS (SELECT 1 FROM email_security_limits AS l
+          WHERE l.kind='replacement' AND l.user_id = v.user_id AND l.last_work_id = ?)
         AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) WHERE email_address = ?)
         AND NOT EXISTS (SELECT 1 FROM email_replacements AS r WHERE r.user_id = v.user_id
           AND r.expires_at_ms > ? AND r.state IN ('awaiting_delivery', 'sending', 'awaiting_proof'))
@@ -192,25 +192,14 @@ const startProof = (db: D1Database, input: ReplacementRequest): Promise<void> =>
 const admissionStatement = (
   db: D1Database,
   input: { userId: string; workId: string; current: number }
-): D1PreparedStatement => {
-  const { userId, workId, current } = input;
-  return db
-    .prepare(`INSERT INTO email_replacement_limits
-    (user_id, window_started_at_ms, requests, last_work_id) VALUES (?, ?, 1, ?)
-    ON CONFLICT(user_id) DO UPDATE SET
-      window_started_at_ms = CASE WHEN window_started_at_ms <= ? THEN excluded.window_started_at_ms ELSE window_started_at_ms END,
-      requests = CASE WHEN window_started_at_ms <= ? THEN 1 ELSE requests + 1 END,
-      last_work_id = excluded.last_work_id
-    WHERE requests < 5 OR window_started_at_ms <= ?`)
-    .bind(
-      userId,
-      current,
-      workId,
-      current - admissionWindowMilliseconds,
-      current - admissionWindowMilliseconds,
-      current - admissionWindowMilliseconds
-    );
-};
+): D1PreparedStatement =>
+  prepareEmailSecurityLimit({
+    db,
+    kind: "replacement",
+    current: input.current,
+    workId: input.workId,
+    subject: { sql: "SELECT ? AS user_id", params: [input.userId] },
+  });
 
 const recordMalformedInput = (
   request: globalThis.Request,

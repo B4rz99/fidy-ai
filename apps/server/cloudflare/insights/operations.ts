@@ -1,3 +1,4 @@
+import { readAssociatedProactiveTranscript } from "../agent/operations";
 import { ProactivityWorkObservations } from "./contract";
 import {
   PendingDeliveryObservations,
@@ -96,6 +97,11 @@ import {
   prepareInsightTransition as prepare,
   insightRefusal as refuse,
 } from "./internal/insight-store";
+
+import {
+  prepareTranscriptAssociations,
+  transcriptAssociationQuery,
+} from "./internal/transcript-associations";
 
 /** Apply only an authenticated exact current-question continue/stop choice; operational state never grants or revokes legal Consent. */
 export const controlManualReminders: typeof controlReminderOwned = (input) =>
@@ -412,3 +418,13 @@ export const observeProactivityWork = (
     );
     return yield* Schema.decodeEffect(Schema.toType(ProactivityWorkObservations))(observations);
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
+
+/** Compose same-User transcript evidence without granting Agent access to private event writes. */
+export const prepareInsightTranscriptAssociations: typeof prepareTranscriptAssociations = (input) =>
+  prepareTranscriptAssociations(input);
+
+/** Compose the Insights-owned event association with Agent-owned retained Transcript and current Consent. */
+export const readProactiveTranscript = (
+  input: Readonly<{ db: D1Database; userId: UserId; insightEventId: InsightEventId; now: number }>
+): ReturnType<typeof readAssociatedProactiveTranscript> =>
+  readAssociatedProactiveTranscript({ ...input, association: transcriptAssociationQuery(input) });

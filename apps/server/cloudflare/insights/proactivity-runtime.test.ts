@@ -22,6 +22,7 @@ import {
   findReminderSchedule,
   materializeReminder,
   prepareReminderRevision,
+  readProactiveTranscript,
   recordProactivityDecision,
   requestProactivityConsent,
 } from "./operations";
@@ -52,11 +53,7 @@ import {
 } from "./runtime";
 import type { WorkflowStep } from "cloudflare:workers";
 import { expireDeliveryWork, recoverDeliveryWork } from "./internal/proactivity-delivery-work";
-import {
-  readContextualProactiveReply,
-  readProactiveMessageTranscript,
-  readProactiveTranscript,
-} from "../agent/operations";
+import { readContextualProactiveReply, readProactiveMessageTranscript } from "../agent/operations";
 
 const configuration = (db: D1Database): ProactivityEnvironment => ({
   DB: db,
@@ -469,7 +466,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT (SELECT count(*) FROM insight_events WHERE delivery_receipt_id IS NOT NULL AND user_id=?) AS attempts,(SELECT count(*) FROM proactive_transcript_event_links WHERE user_id=?) AS transcript_links,(SELECT count(*) FROM proactive_transcript_entries WHERE kind='message' AND user_id=?) AS control_transcripts"
+              "SELECT (SELECT count(*) FROM insight_events WHERE delivery_receipt_id IS NOT NULL AND user_id=?) AS attempts,(SELECT count(*) FROM (SELECT rowid,user_id AS user_id,transcript_id AS transcript_id,id AS insight_event_id,transcript_kind AS transcript_kind FROM insight_events WHERE transcript_id IS NOT NULL) WHERE user_id=?) AS transcript_links,(SELECT count(*) FROM proactive_transcript_entries WHERE kind='message' AND user_id=?) AS control_transcripts"
             )
             .bind(proactivityTestUsers[0], proactivityTestUsers[0], proactivityTestUsers[0])
             .first()
@@ -1107,7 +1104,7 @@ it("sixteen unserviceable contextual offers cannot starve an eligible reminder d
               .bind(userId, now.epochMilliseconds),
             db
               .prepare(
-                "INSERT INTO proactivity_offer_requests(id,user_id,kind,request_message_id,created_at_ms) VALUES(?,?,'manual-entry-reminder','request-offer',?)"
+                "INSERT INTO insight_reports(kind,delivery_id,user_id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms) VALUES('offer-request',?,?,'manual-entry-reminder','request-offer',?,0)"
               )
               .bind(newId(), userId, now.epochMilliseconds),
           ])
@@ -1591,7 +1588,9 @@ it.each(["paused", "stopped"] as const)(
               expect(
                 yield* Effect.tryPromise(() =>
                   db
-                    .prepare("SELECT count(*) AS n FROM reminder_control_receipts WHERE user_id=?")
+                    .prepare(
+                      "SELECT count(*) AS n FROM (SELECT user_id,json_extract(id,'$[1]') AS message_id,outcome AS choice FROM audit_entries WHERE record_type='reminder_control') WHERE user_id=?"
+                    )
                     .bind(userId)
                     .first()
                 )

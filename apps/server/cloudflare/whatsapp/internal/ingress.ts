@@ -140,8 +140,8 @@ const sendVoiceRefusal = (
       Effect.withSpan("whatsapp.voice.refusal")
     );
     const settled = yield* attempt(() =>
-      environment.DB.prepare(`UPDATE hosted_voice_refusals SET outcome = ?
-        WHERE portfolio_id = ? AND message_id = ? AND user_id = ? AND outcome = 'started'`)
+      environment.DB.prepare(`UPDATE whatsapp_event_records SET outcome = ?
+        WHERE kind='voice-refusal' AND portfolio_id = ? AND message_id = ? AND user_id = ? AND outcome = 'started'`)
         .bind(
           Exit.isSuccess(sent) ? "accepted" : "failed",
           input.event.caller.businessPortfolioId,
@@ -162,11 +162,11 @@ const prepareVoiceRefusal = (
     subject: { _tag: "User", userId },
     requirement: "active",
     statement: {
-      sql: `INSERT INTO hosted_voice_refusals
-        (portfolio_id, message_id, user_id, claimed_at_ms)
-        SELECT ?, ?, w.userId, ? FROM identity_associations AS w
+      sql: `INSERT INTO whatsapp_event_records
+        (kind,portfolio_id,message_id,user_id,claimed_at_ms,outcome)
+        SELECT 'voice-refusal',?,?,w.userId,?,'started' FROM identity_associations AS w
         WHERE w.userId = ? AND w.businessPortfolioId = ? AND w.businessScopedUserId = ?
-          AND (SELECT count(*) FROM hosted_voice_refusals
+          AND (SELECT count(*) FROM (SELECT rowid,portfolio_id,message_id,user_id,claimed_at_ms,outcome FROM whatsapp_event_records WHERE kind='voice-refusal')
             WHERE user_id = w.userId AND claimed_at_ms > ?) < 5`,
       params: [
         input.event.caller.businessPortfolioId,
@@ -183,7 +183,7 @@ const prepareVoiceRefusal = (
     db: environment.DB,
     userId,
     statement: {
-      sql: `${protectedClaim.sql} ON CONFLICT (portfolio_id, message_id) DO NOTHING`,
+      sql: `${protectedClaim.sql} ON CONFLICT (portfolio_id, message_id) WHERE kind='voice-refusal' DO NOTHING`,
       params: protectedClaim.params,
     },
   });
@@ -199,7 +199,7 @@ const refuseVoice = (
     const claimed = yield* attempt(() => prepareVoiceRefusal(environment, input, userId).run());
     if (claimed.meta.changes !== 1) {
       const replay = yield* attempt(() =>
-        environment.DB.prepare(`SELECT outcome FROM hosted_voice_refusals
+        environment.DB.prepare(`SELECT outcome FROM (SELECT rowid,portfolio_id,message_id,user_id,claimed_at_ms,outcome FROM whatsapp_event_records WHERE kind='voice-refusal')
           WHERE portfolio_id = ? AND message_id = ? AND user_id = ?`)
           .bind(
             input.event.caller.businessPortfolioId,

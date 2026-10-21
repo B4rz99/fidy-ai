@@ -114,9 +114,9 @@ const commitReview = (
               ON CONFLICT(request_id,store_id) DO NOTHING`)
               .bind(inventory, decision.reference, admission.userId, encoded),
             db
-              .prepare(`INSERT INTO erasure_custody_evidence(request_id,custodian,state)
-              SELECT q.id,p.value,'Pending' FROM erasure_requests q,json_each('["Cloudflare","Kapso","Meta","Resend","Wompi","SupportInbox","CaseRegister","CaseEvidence"]') p
-              WHERE q.id=? AND q.user_id=? AND q.decision_json=? ON CONFLICT(request_id,custodian) DO NOTHING`)
+              .prepare(`INSERT INTO erasure_custody_records(record_type,request_id,custodian,state)
+              SELECT 'current',q.id,p.value,'Pending' FROM erasure_requests q,json_each('["Cloudflare","Kapso","Meta","Resend","Wompi","SupportInbox","CaseRegister","CaseEvidence"]') p
+              WHERE q.id=? AND q.user_id=? AND q.decision_json=? ON CONFLICT(request_id,custodian) WHERE record_type='current' DO NOTHING`)
               .bind(decision.reference, admission.userId, encoded),
             db
               .prepare(

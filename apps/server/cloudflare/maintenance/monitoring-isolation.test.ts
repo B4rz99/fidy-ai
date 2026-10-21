@@ -105,7 +105,13 @@ it("a stalled canary offer cannot skip later Core retention or manufacture execu
           )
         ).toEqual({ count: 0 });
         expect(
-          yield* Effect.tryPromise(() => db.prepare("SELECT * FROM operational_canary").all())
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT operation AS kind,last_succeeded_ms FROM operational_health_view WHERE last_succeeded_ms IS NOT NULL"
+              )
+              .all()
+          )
         ).toMatchObject({
           results: [],
         });
@@ -113,7 +119,13 @@ it("a stalled canary offer cannot skip later Core retention or manufacture execu
         held.resolve({ metadata: { metrics: { backlogCount: 1, backlogBytes: 34 } } });
       }
       expect(
-        yield* Effect.tryPromise(() => db.prepare("SELECT * FROM operational_canary").all())
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT operation AS kind,last_succeeded_ms FROM operational_health_view WHERE last_succeeded_ms IS NOT NULL"
+            )
+            .all()
+        )
       ).toMatchObject({ results: [] });
       expect(send).toHaveBeenCalledOnce();
     })
@@ -277,7 +289,7 @@ it.each([
             .bind(userId, deliveryId, now - 600_000),
           db
             .prepare(
-              "INSERT INTO weekly_question_intents(id,user_id,origin,created_at_ms) VALUES (?,?,'requested',?)"
+              "INSERT INTO insight_reports(kind,delivery_id,user_id,origin,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('weekly-question',?,?,'requested',?,'ready',?3,0,0)"
             )
             .bind(questionId, userId, now - 300_000),
         ])

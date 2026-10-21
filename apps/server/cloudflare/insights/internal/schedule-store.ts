@@ -37,7 +37,7 @@ export const prepareActivation = (
   prepareChangedRowAssertion({ db: input.db, scope: `${input.kind}_schedule` }),
   input.db
     .prepare(
-      "INSERT INTO schedule_revisions(kind,user_id,schedule_id,version,snapshot_json) VALUES (?,?,?,?,?)"
+      "INSERT INTO schedule_history(record_type,kind,user_id,schedule_id,version,snapshot_json) VALUES ('revision',?,?,?,?,?)"
     )
     .bind(input.kind, input.userId, input.snapshot.id, input.snapshot.version, input.json),
 ];
@@ -64,7 +64,7 @@ export const prepareAdvance = (
   const completion = prepareChangedRowAssertion({ db: input.db, scope: `${input.kind}_schedule` });
   return [
     input.guard({
-      sql: "INSERT INTO schedule_executions(kind,user_id,schedule_id,schedule_version,scheduled_at,outcome) SELECT ?,?,?,?,?,? WHERE 1=1",
+      sql: "INSERT INTO schedule_history(record_type,kind,user_id,schedule_id,version,scheduled_at,outcome) SELECT 'execution',?,?,?,?,?,? WHERE 1=1",
       params: [
         input.kind,
         snapshot.userId,

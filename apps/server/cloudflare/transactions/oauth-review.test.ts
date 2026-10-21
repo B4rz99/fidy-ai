@@ -134,8 +134,9 @@ const setup = (): Effect.Effect<D1Database, TestAdapterFailure> =>
           .bind(userId, first, second, first),
         ...[first, second].map((id) =>
           db
-            .prepare(`INSERT INTO transaction_reconciliation_members
-      (user_id,transaction_id,first_transaction_id,second_transaction_id) VALUES (?,?,?,?)`)
+            .prepare(
+              `UPDATE transactions SET reconciliation_first_id=incoming.first_transaction_id,reconciliation_second_id=incoming.second_transaction_id FROM (SELECT column1 AS user_id,column2 AS transaction_id,column3 AS first_transaction_id,column4 AS second_transaction_id FROM (VALUES (?,?,?,?))) incoming WHERE transactions.user_id=incoming.user_id AND transactions.id=incoming.transaction_id`
+            )
             .bind(userId, id, first, second)
         ),
       ])
@@ -194,7 +195,7 @@ const persistedState = (
     const counts = yield* Effect.forEach(
       [
         "transaction_corrections",
-        "transaction_reconciliation_members",
+        "reconciled_transactions",
         "(SELECT * FROM audit_entries WHERE record_type='credential_call')",
         "oauth_operation_intents",
       ],
@@ -330,7 +331,9 @@ const changedPremises: ReadonlyArray<
     name: "Reconciliation membership",
     change: (db) =>
       db
-        .prepare("DELETE FROM transaction_reconciliation_members WHERE transaction_id = ?")
+        .prepare(
+          "UPDATE transactions SET reconciliation_row_ref=NULL,reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE reconciliation_first_id IS NOT NULL AND id = ?"
+        )
         .bind(second)
         .run(),
   },

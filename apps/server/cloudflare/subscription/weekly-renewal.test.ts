@@ -88,7 +88,7 @@ const fixture = (
   Effect.runPromise(
     Effect.gen(function* () {
       const created = yield* makePaymentEnrollmentD1([
-        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
+        "CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,audit_retention_cutoff_ms INTEGER,id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
         consentHistoryTestSchema,
         "",
       ]);
@@ -119,9 +119,9 @@ const fixture = (
         VALUES (?, ?, ?, 'payer@example.com', 'creating', 'create', '{}', '{}', 0, 900000, ?, 3891, ?, 'sandbox')`)
             .bind(enrollmentId, userId, selectedPriceId, paymentRequestId, method),
           db
-            .prepare(`INSERT INTO card_payment_sources
-        (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms, method)
-        VALUES (?, ?, ?, 3891, 'payer@example.com', 0, ?)`)
+            .prepare(
+              `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 3891, 'payer@example.com', 0, ?))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+            )
             .bind(sourceId, userId, enrollmentId, method),
           db
             .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")
@@ -161,7 +161,9 @@ const fixture = (
               Date.parse(calendar.endsAt)
             ),
           db
-            .prepare("INSERT INTO subscriptions VALUES (?, ?, ?, ?, ?)")
+            .prepare(
+              "UPDATE users SET paid_attempt_id=?2,paid_price_id=?3,paid_period_ends_at_ms=?4,paid_renewal_anchor_ms=?5 WHERE id=?1"
+            )
             .bind(
               userId,
               attemptId,
@@ -171,7 +173,7 @@ const fixture = (
             ),
           db
             .prepare(
-              "UPDATE billing_attempts SET followup_kind=incoming.kind,followup_due_at_ms=incoming.due_at_ms FROM (SELECT ? AS attempt_id,'renewal_due' AS kind,? AS due_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.followup_kind IS NULL"
+              "UPDATE billing_attempts SET followup_due_at_ms=incoming.due_at_ms FROM (SELECT ? AS attempt_id,'renewal_due' AS kind,? AS due_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.followup_due_at_ms IS NULL"
             )
             .bind(attemptId, Date.parse(calendar.endsAt)),
         ])
@@ -316,7 +318,7 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,followup_kind AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_kind IS NOT NULL) AS billing_followup_outbox"
+              "SELECT * FROM (SELECT id AS attempt_id,'renewal_due' AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_due_at_ms IS NOT NULL) AS billing_followup_outbox"
             )
             .all()
         )).results
@@ -676,7 +678,7 @@ it("aborts an interrupted renewal coordinator dispatch", () =>
       yield* fromPromise(() =>
         db
           .prepare(
-            "UPDATE billing_attempts AS billing_followup_outbox SET followup_due_at_ms=0 WHERE followup_kind IS NOT NULL "
+            "UPDATE billing_attempts AS billing_followup_outbox SET followup_due_at_ms=0 WHERE followup_due_at_ms IS NOT NULL "
           )
           .run()
       );
@@ -1227,7 +1229,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
         expect(
           yield* fromPromise(() =>
             db
-              .prepare("SELECT paid_period_ends_at_ms FROM subscriptions WHERE user_id = ?")
+              .prepare("SELECT paid_period_ends_at_ms FROM subscription_standing WHERE user_id = ?")
               .bind(userId)
               .first()
           )
@@ -1677,7 +1679,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
         expect(
           yield* fromPromise(() =>
             db
-              .prepare("SELECT renewal_anchor_ms FROM subscriptions WHERE user_id=?")
+              .prepare("SELECT renewal_anchor_ms FROM subscription_standing WHERE user_id=?")
               .bind(userId)
               .first()
           )
@@ -1759,7 +1761,11 @@ it("refuses a borrowed or revoked browser credential before cancellation and rol
       expect((yield* cancel(db, dueAt - 1000)).status).toBe(503);
       expect(
         (yield* fromPromise(() =>
-          db.prepare("SELECT user_id FROM subscription_cancellations").all()
+          db
+            .prepare(
+              "SELECT user_id FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL)"
+            )
+            .all()
         )).results
       ).toHaveLength(0);
       yield* admission(db, dueAt);
@@ -2006,7 +2012,7 @@ const cancellationEffects = (db: D1Database): Effect.Effect<unknown, Cause.Unkno
   fromPromise(() =>
     db
       .prepare(`SELECT
-  (SELECT COUNT(*) FROM subscription_cancellations) AS cancellations,
+  (SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL)) AS cancellations,
   (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
   (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE state='armed') AS armed,
   (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work) AS offers,

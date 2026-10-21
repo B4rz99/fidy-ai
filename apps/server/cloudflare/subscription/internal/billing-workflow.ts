@@ -142,7 +142,7 @@ const snapshot = (
         .prepare(`SELECT a.id, a.user_id, a.amount, a.currency, a.billing_period, a.time_zone,
           a.wompi_environment, a.wompi_reference, s.billing_email, s.wompi_source_id, s.method,
           a.previous_paid_attempt_id, a.period_starts_at_ms, a.period_ends_at_ms
-        FROM billing_attempts AS a JOIN card_payment_sources AS s ON s.id = a.payment_source_id
+        FROM billing_attempts AS a JOIN verified_payment_sources AS s ON s.id = a.payment_source_id
         WHERE a.id = ? AND a.user_id = s.user_id`)
         .bind(id)
         .first()
@@ -409,8 +409,8 @@ const reconcileEventCandidate = (
     yield* reconcileBillingTransaction({ db: environment.DB, client, transactionId });
     const now = yield* Clock.currentTimeMillis;
     yield* attempt(() =>
-      environment.DB.prepare(`UPDATE billing_event_candidates
-      SET resolved_at_ms = ? WHERE transaction_id = ? AND resolved_at_ms IS NULL
+      environment.DB.prepare(`UPDATE billing_provider_transactions
+      SET event_resolved_at_ms = ? WHERE transaction_id = ? AND event_received_at_ms IS NOT NULL AND event_resolved_at_ms IS NULL
       AND EXISTS (SELECT 1 FROM billing_provider_transactions AS e
         JOIN billing_attempts AS a ON a.id = e.attempt_id
         WHERE e.transaction_id = ? AND a.status IN ('succeeded', 'failed'))`)
@@ -449,18 +449,17 @@ export const receiveWompiBillingEvent = (
     const now = yield* Clock.currentTimeMillis;
     const retained = yield* Effect.exit(
       attempt(() =>
-        input.environment.DB.prepare(`INSERT INTO billing_event_candidates
-      (transaction_id, received_at_ms, signed_at, signed_status) VALUES (?, ?, ?, ?)
-      ON CONFLICT(transaction_id) DO UPDATE SET received_at_ms = excluded.received_at_ms,
-        signed_at = excluded.signed_at, signed_status = excluded.signed_status,
-        lookup_attempts = 0, last_checked_at_ms = NULL, resolved_at_ms = NULL
-      WHERE (excluded.signed_at > billing_event_candidates.signed_at OR
-        (excluded.signed_at = billing_event_candidates.signed_at
-          AND excluded.signed_status = 'APPROVED'
-          AND billing_event_candidates.signed_status <> 'APPROVED'))
+        input.environment.DB.prepare(`INSERT INTO billing_provider_transactions
+      (transaction_id,event_received_at_ms,event_signed_at,event_signed_status,event_lookup_attempts) VALUES (?, ?, ?, ?,0) ON CONFLICT(transaction_id) DO UPDATE SET event_received_at_ms = excluded.event_received_at_ms,
+        event_signed_at = excluded.event_signed_at, event_signed_status = excluded.event_signed_status,
+        event_lookup_attempts = 0, event_last_checked_at_ms = NULL, event_resolved_at_ms = NULL
+      WHERE billing_provider_transactions.event_received_at_ms IS NULL OR ((excluded.event_signed_at > billing_provider_transactions.event_signed_at OR
+        (excluded.event_signed_at = billing_provider_transactions.event_signed_at
+          AND excluded.event_signed_status = 'APPROVED'
+          AND billing_provider_transactions.event_signed_status <> 'APPROVED'))
         AND NOT EXISTS (SELECT 1 FROM billing_provider_transactions AS e
           JOIN billing_attempts AS a ON a.id = e.attempt_id
-          WHERE e.transaction_id = excluded.transaction_id AND a.status = 'succeeded')`)
+          WHERE e.transaction_id = excluded.transaction_id AND a.status = 'succeeded'))`)
           .bind(transactionId, now, signedAt, signedStatus)
           .run()
       )
@@ -488,7 +487,7 @@ const claimCollection = (
         requirement: "active",
         statement: {
           sql: `${collectionClaim.sql}
-            AND EXISTS (SELECT 1 FROM subscriptions WHERE user_id = ? AND attempt_id = ?)
+            AND EXISTS (SELECT 1 FROM subscription_standing WHERE user_id = ? AND attempt_id = ?)
             AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences WHERE user_id = ?)
             AND EXISTS (SELECT 1 FROM billing_attempts due WHERE due.id=? AND
               (due.renewal_attempt_number=1 OR due.period_starts_at_ms + ${renewalGraceMs} > ?))`,
@@ -552,8 +551,10 @@ const collect = (
     const candidate = created.value.transactionId;
     yield* attempt(() =>
       environment.DB.batch([
-        environment.DB.prepare(`INSERT OR IGNORE INTO billing_provider_transactions
-      (transaction_id, attempt_id) VALUES (?, ?)`).bind(candidate, attemptId),
+        environment.DB.prepare(`INSERT INTO billing_provider_transactions
+      (transaction_id, attempt_id) VALUES (?, ?)
+      ON CONFLICT(transaction_id) DO UPDATE SET attempt_id=excluded.attempt_id
+      WHERE billing_provider_transactions.attempt_id IS NULL`).bind(candidate, attemptId),
         ...(captured.method === "card" && Option.isNone(captured.previous_paid_attempt_id)
           ? [
               environment.DB.prepare(
@@ -655,12 +656,12 @@ const offerBillingLookup = (
       db.batch([
         db
           .prepare(
-            "UPDATE billing_provider_transactions SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND lookup_attempts < ? AND (last_checked_at_ms IS NULL OR last_checked_at_ms < ?)"
+            "UPDATE billing_provider_transactions SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND attempt_id IS NOT NULL AND lookup_attempts < ? AND (last_checked_at_ms IS NULL OR last_checked_at_ms < ?)"
           )
           .bind(now, transactionId, maximumCandidateLookupAttempts, now - candidateCooldownMs),
         db
           .prepare(
-            "UPDATE billing_event_candidates SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND lookup_attempts < ? AND resolved_at_ms IS NULL AND (last_checked_at_ms IS NULL OR last_checked_at_ms < ?)"
+            "UPDATE billing_provider_transactions SET event_last_checked_at_ms = ?, event_lookup_attempts = event_lookup_attempts + 1 WHERE transaction_id = ? AND event_lookup_attempts < ? AND event_resolved_at_ms IS NULL AND (event_last_checked_at_ms IS NULL OR event_last_checked_at_ms < ?)"
           )
           .bind(now, transactionId, maximumCandidateLookupAttempts, now - candidateCooldownMs),
       ])
@@ -699,7 +700,7 @@ export const reconcileBillingCandidates = (
           AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
       UNION
       SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, c.received_at_ms) AS priority,
-        c.signed_at, c.signed_status FROM billing_event_candidates AS c
+        c.signed_at, c.signed_status FROM billing_callback_hints AS c
         LEFT JOIN billing_provider_transactions AS e ON e.transaction_id = c.transaction_id
         LEFT JOIN billing_attempts AS a ON a.id = e.attempt_id
         WHERE c.resolved_at_ms IS NULL AND c.lookup_attempts < ?

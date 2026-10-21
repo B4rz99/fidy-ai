@@ -125,7 +125,11 @@ export const readCanaryHealth = ({
       ];
       const rows = yield* Effect.exit(
         Effect.tryPromise(() =>
-          db.prepare("SELECT kind, last_succeeded_ms FROM operational_canary").all()
+          db
+            .prepare(
+              "SELECT operation AS kind,last_succeeded_ms FROM operational_health_view WHERE last_succeeded_ms IS NOT NULL"
+            )
+            .all()
         ).pipe(
           Effect.flatMap((response) =>
             Schema.decodeUnknownEffect(Schema.Array(Check))(response.results)
@@ -303,7 +307,8 @@ export const sweepOperationalEventBuckets = ({
   Effect.tryPromise(() =>
     db
       .prepare(`DELETE FROM operational_event_buckets
-  WHERE rowid IN (SELECT rowid FROM operational_event_buckets WHERE bucket_ms < ? LIMIT ?)`)
+  WHERE rowid IN (SELECT rowid FROM operational_event_buckets WHERE kind <> 'core_rejection' AND bucket_ms < ?1
+    UNION ALL SELECT rowid FROM operational_event_buckets WHERE kind = 'core_rejection' AND observed_at_ms <= ?1 LIMIT ?2)`)
       .bind(now - bucketRetentionMs, maximumSweepRows)
       .run()
   ).pipe(
@@ -464,7 +469,7 @@ export const observeCoreRejections = ({
   Effect.tryPromise(() =>
     db
       .prepare(
-        "SELECT observed_at_ms AS observedAtMs FROM operational_core_rejection_burst WHERE id = 1"
+        "SELECT observed_at_ms AS observedAtMs FROM operational_event_buckets WHERE kind='core_rejection' AND bucket_ms=0"
       )
       .all()
   ).pipe(
@@ -484,23 +489,4 @@ export const observeCoreRejections = ({
       operation: "coreRejectionBursts",
       state: "unavailable",
     }))
-  );
-
-/** Expire the single metadata-only presence row; storage remains bounded if maintenance stops. */
-export const sweepCoreRejections = ({
-  db,
-  now,
-}: Readonly<{
-  db: D1Database;
-  now: number;
-}>): Effect.Effect<void, void> =>
-  Effect.tryPromise(() =>
-    db
-      .prepare("DELETE FROM operational_core_rejection_burst WHERE observed_at_ms <= ?")
-      .bind(now - bucketRetentionMs)
-      .run()
-  ).pipe(
-    Effect.timeout("2 seconds"),
-    Effect.asVoid,
-    Effect.mapError(() => undefined)
   );

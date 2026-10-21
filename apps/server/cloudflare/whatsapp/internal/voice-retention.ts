@@ -11,8 +11,8 @@ export const expireVoiceRefusals = ({
 }: Readonly<{ db: D1Database; now: number }>): Effect.Effect<void, void> =>
   attempt(() =>
     db
-      .prepare(`DELETE FROM hosted_voice_refusals WHERE rowid IN (
-        SELECT rowid FROM hosted_voice_refusals WHERE claimed_at_ms < ?
+      .prepare(`DELETE FROM whatsapp_event_records WHERE kind='voice-refusal' AND rowid IN (
+        SELECT rowid FROM (SELECT rowid,portfolio_id,message_id,user_id,claimed_at_ms,outcome FROM whatsapp_event_records WHERE kind='voice-refusal') WHERE claimed_at_ms < ?
         ORDER BY claimed_at_ms LIMIT ?
       )`)
       .bind(now - voiceRefusalRetentionMs, voiceRefusalSweepLimit)

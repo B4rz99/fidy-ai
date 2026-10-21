@@ -104,7 +104,7 @@ const submissionClaim = (
     return Effect.tryPromise(() =>
       db
         .prepare(`SELECT id FROM refund_attempts WHERE id=?
-      AND submission_claimed_at_ms IS NOT NULL AND work_version IS NOT NULL AND verification_attempts>=?`)
+      AND submission_claimed_at_ms IS NOT NULL AND verification_attempts IS NOT NULL AND verification_attempts>=?`)
         .bind(id, work.verification)
         .first()
     ).pipe(Effect.map((row) => (row === null ? ("absent" as const) : ("existing" as const))));
@@ -148,7 +148,7 @@ const execute = (
     const raw = yield* Effect.tryPromise(() =>
       environment.DB.prepare(`SELECT r.id,r.kind,r.transaction_id,r.amount_in_cents,
     r.original_cents,a.wompi_reference,s.wompi_source_id FROM refund_attempts r
-    JOIN billing_attempts a ON a.id=r.billing_attempt_id JOIN card_payment_sources s ON s.id=a.payment_source_id
+    JOIN billing_attempts a ON a.id=r.billing_attempt_id JOIN verified_payment_sources s ON s.id=a.payment_source_id
     WHERE r.id=? AND r.status='pending' AND a.wompi_environment='sandbox'
       AND (SELECT COUNT(*) FROM billing_provider_transactions WHERE attempt_id=a.id AND status='APPROVED')=1`)
         .bind(work.refundAttemptId)
@@ -196,7 +196,7 @@ export const dispatchRefunds = (
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* Effect.tryPromise(() =>
       input.DB.prepare(`SELECT id AS refund_id FROM refund_attempts
-      WHERE work_version IS NOT NULL AND status='pending' AND progress='queued'
+      WHERE verification_attempts IS NOT NULL AND status='pending' AND progress='queued'
       AND submission_claimed_at_ms IS NULL
       AND (dispatch_last_attempt_at_ms IS NULL OR dispatch_last_attempt_at_ms<=?) ORDER BY created_at_ms LIMIT ?`)
         .bind(now - publicationCooldownMs, pendingLimit)
@@ -208,7 +208,7 @@ export const dispatchRefunds = (
     for (const row of pending) {
       yield* Effect.tryPromise(() =>
         input.DB.prepare(
-          "UPDATE refund_attempts AS refund_outbox SET dispatch_last_attempt_at_ms=? WHERE work_version IS NOT NULL AND id=?"
+          "UPDATE refund_attempts AS refund_outbox SET dispatch_last_attempt_at_ms=? WHERE verification_attempts IS NOT NULL AND id=?"
         )
           .bind(now, row.refund_id)
           .run()
@@ -223,7 +223,7 @@ export const dispatchRefunds = (
       );
       yield* Effect.tryPromise(() =>
         input.DB.prepare(
-          "UPDATE refund_attempts AS refund_outbox SET published_at_ms=? WHERE work_version IS NOT NULL AND id=?"
+          "UPDATE refund_attempts AS refund_outbox SET published_at_ms=? WHERE verification_attempts IS NOT NULL AND id=?"
         )
           .bind(now, row.refund_id)
           .run()
@@ -239,7 +239,7 @@ export const dispatchVoidVerification = (
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* Effect.tryPromise(() =>
       input.DB.prepare(`SELECT id FROM refund_attempts
-      WHERE work_version IS NOT NULL AND submission_claimed_at_ms IS NOT NULL
+      WHERE verification_attempts IS NOT NULL AND submission_claimed_at_ms IS NOT NULL
       AND status='pending' AND kind='card-void' AND verification_attempts<?
       AND (last_verification_at_ms IS NULL OR last_verification_at_ms<=?) ORDER BY created_at_ms LIMIT ?`)
         .bind(maximumVerificationAttempts, now - publicationCooldownMs, pendingLimit)
@@ -251,7 +251,7 @@ export const dispatchVoidVerification = (
     for (const row of pending) {
       const advanced = yield* Effect.tryPromise(() =>
         input.DB.prepare(`UPDATE refund_attempts AS refund_outbox SET verification_attempts=verification_attempts+1,
-      last_verification_at_ms=? WHERE work_version IS NOT NULL AND id=? AND verification_attempts<?
+      last_verification_at_ms=? WHERE verification_attempts IS NOT NULL AND id=? AND verification_attempts<?
       AND (last_verification_at_ms IS NULL OR last_verification_at_ms<=?) RETURNING verification_attempts`)
           .bind(now, row.id, maximumVerificationAttempts, now - publicationCooldownMs)
           .first()

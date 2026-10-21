@@ -115,10 +115,9 @@ const markFailed = ({
       WHERE id = ? AND user_id = ? AND status IN ('queued', 'processing')`)
           .bind(current, current, reason, submissionId, userId),
         db
-          .prepare(`UPDATE statement_submissions AS statement_ingestion_outbox SET work_user_id=NULL,work_revision=NULL,work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_revision IS NOT NULL AND id = ? AND work_user_id = ? AND work_revision = 1
-            AND EXISTS (SELECT 1 FROM statement_submissions
-              WHERE id = ? AND work_user_id = ? AND status IN ('completed', 'failed'))`)
-          .bind(submissionId, userId, submissionId, userId),
+          .prepare(`UPDATE statement_submissions SET work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_published_at_ms IS NOT NULL AND id = ? AND user_id = ?
+            AND status IN ('completed', 'failed')`)
+          .bind(submissionId, userId),
       ])
     ).pipe(Effect.asVoid, Effect.uninterruptible);
   });
@@ -491,14 +490,8 @@ const completeSubmission = (
           submissionId,
           submissionId
         ),
-        DB.prepare(`UPDATE statement_submissions AS statement_ingestion_outbox SET work_user_id=NULL,work_revision=NULL,work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_revision IS NOT NULL AND id = ? AND work_user_id = ? AND work_revision = 1
-            AND EXISTS (SELECT 1 FROM statement_submissions
-              WHERE id = ? AND work_user_id = ? AND status = 'completed')`).bind(
-          submissionId,
-          userId,
-          submissionId,
-          userId
-        ),
+        DB.prepare(`UPDATE statement_submissions SET work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_published_at_ms IS NOT NULL AND id = ? AND user_id = ?
+            AND status = 'completed'`).bind(submissionId, userId),
       ])
     );
     if ((finished[0]?.meta.changes ?? 0) < 1) {

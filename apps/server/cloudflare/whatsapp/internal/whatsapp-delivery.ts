@@ -61,7 +61,7 @@ export const stageWhatsAppDelivery = ({
         userId,
         statement: {
           sql: `INSERT INTO whatsapp_deliveries AS hosted_whatsapp_delivery(kind,turn_id, user_id, text, correlation_token, business_phone_number_id, proposed_at_ms, state) SELECT 'hosted', t.id, t.user_id, ?, ?, i.business_phone_number_id, ?, 'sending'
-        FROM channel_turns AS t JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
+        FROM channel_turns AS t JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
           ON i.turn_id = t.id AND i.user_id = t.user_id
         WHERE t.id = ? AND t.user_id = ? AND t.status = 'pending'`,
           params: [text, token, now, turnId, userId],
@@ -98,7 +98,7 @@ export const startWhatsAppSend = ({
         AND state = 'sending' AND send_started_at_ms IS NULL
         AND EXISTS (SELECT 1 FROM (${turns.sql}) AS t
           WHERE t.id = hosted_whatsapp_delivery.turn_id AND t.user_id = ? AND t.status = 'pending')
-        AND EXISTS (SELECT 1 FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
+        AND EXISTS (SELECT 1 FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
           JOIN hosted_whatsapp_windows AS w ON w.user_id = i.user_id
             AND w.portfolio_id = i.portfolio_id AND w.bsuid = i.bsuid
           JOIN identity_associations AS identity ON identity.userId = i.user_id
@@ -189,9 +189,9 @@ const prepareStatusEvidence = ({
   const phoneId = evidence.businessPhoneNumberId;
   const status = evidence.outcome;
   return db
-    .prepare(`INSERT OR IGNORE INTO hosted_whatsapp_delivery_events
-      (correlation_token, provider_message_id, status, occurred_at_ms, received_at_ms)
-      SELECT ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery
+    .prepare(`INSERT OR IGNORE INTO whatsapp_event_records
+      (kind,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms)
+      SELECT 'delivery-status',?,?,?,?,? WHERE EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery
         WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
           AND (provider_message_id IS NULL OR provider_message_id = ?))`)
     .bind(
@@ -343,7 +343,7 @@ export const reconcileWhatsAppStatus = ({
         userId: admission.userId,
         statement: {
           sql: `SELECT t.started_at_ms, i.portfolio_id, i.bsuid
-        FROM channel_turns AS t JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i ON i.turn_id = t.id
+        FROM channel_turns AS t JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i ON i.turn_id = t.id
         WHERE t.id = ? AND t.user_id = ?`,
           params: [matched.value.turnId, admission.userId],
         },

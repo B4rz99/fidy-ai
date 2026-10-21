@@ -72,7 +72,7 @@ export const isWhatsAppWindowOpen = ({
         db,
         userId,
         statement: {
-          sql: `SELECT 1 AS open FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
+          sql: `SELECT 1 AS open FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
       JOIN hosted_whatsapp_windows AS w ON w.user_id = i.user_id
         AND w.portfolio_id = i.portfolio_id AND w.bsuid = i.bsuid
       JOIN identity_associations AS identity ON identity.userId = i.user_id
@@ -125,7 +125,7 @@ export const findWhatsAppReplay = ({
     const entries = hostedChannelUserEntryQuery(userId);
     const row = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT i.user_id, i.bsuid, e.text FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
+        .prepare(`SELECT i.user_id, i.bsuid, e.text FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
         LEFT JOIN (${entries.sql}) AS e ON e.turn_id = i.turn_id AND e.user_id = i.user_id
         WHERE i.portfolio_id = ? AND i.message_id = ?`)
         .bind(...entries.params, portfolioId, messageId)
@@ -189,8 +189,8 @@ export const readWhatsAppPendingWork = ({
       EXISTS (SELECT 1 FROM identity_associations AS w
         WHERE w.userId = t.user_id AND w.businessPortfolioId = i.portfolio_id AND w.businessScopedUserId = i.bsuid)
         AS association_current
-      FROM (${continuation.sql}) AS t JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i ON i.turn_id = t.id
-      JOIN (SELECT rowid,turn_id,dispatch_user_id AS user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) WHERE dispatch_created_at_ms IS NOT NULL) AS o ON o.turn_id = t.id AND o.user_id = t.user_id
+      FROM (${continuation.sql}) AS t JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i ON i.turn_id = t.id
+      JOIN (SELECT rowid,id AS turn_id,user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL AND dispatch_created_at_ms IS NOT NULL) AS o ON o.turn_id = t.id AND o.user_id = t.user_id
       WHERE t.id = ? AND t.user_id = ? AND t.status = 'pending'
         AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE turn_id = t.id)`,
           params: [...continuation.params, turnId, userId],

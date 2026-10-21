@@ -44,7 +44,7 @@ it.effect("measures Workflow failures without requiring paid Tail Worker telemet
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "CREATE TABLE operational_event_buckets (kind TEXT NOT NULL, bucket_ms INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY (kind, bucket_ms))"
+                "CREATE TABLE operational_event_buckets (kind TEXT NOT NULL, bucket_ms INTEGER NOT NULL, count INTEGER NOT NULL, observed_at_ms INTEGER, PRIMARY KEY (kind, bucket_ms))"
               )
               .run()
           );
@@ -61,16 +61,24 @@ it.effect("measures Workflow failures without requiring paid Tail Worker telemet
           yield* Effect.tryPromise(() =>
             db.batch([
               db
-                .prepare("INSERT INTO operational_event_buckets VALUES ('heartbeat', ?, 1)")
+                .prepare(
+                  "INSERT INTO operational_event_buckets(kind,bucket_ms,count) VALUES ('heartbeat', ?, 1)"
+                )
                 .bind(now),
               db
-                .prepare("INSERT INTO operational_event_buckets VALUES ('worker_exception', ?, 12)")
+                .prepare(
+                  "INSERT INTO operational_event_buckets(kind,bucket_ms,count) VALUES ('worker_exception', ?, 12)"
+                )
                 .bind(now),
               db
-                .prepare("INSERT INTO operational_event_buckets VALUES ('workflow_failure', ?, 6)")
+                .prepare(
+                  "INSERT INTO operational_event_buckets(kind,bucket_ms,count) VALUES ('workflow_failure', ?, 6)"
+                )
                 .bind(now - 60_000),
               db
-                .prepare("INSERT INTO operational_event_buckets VALUES ('workflow_failure', ?, 4)")
+                .prepare(
+                  "INSERT INTO operational_event_buckets(kind,bucket_ms,count) VALUES ('workflow_failure', ?, 4)"
+                )
                 .bind(now - 600_000),
             ])
           );
@@ -85,7 +93,9 @@ it.effect("measures Workflow failures without requiring paid Tail Worker telemet
           ]);
           yield* Effect.tryPromise(() =>
             db
-              .prepare("INSERT INTO operational_event_buckets VALUES ('workflow_failure', ?, 1)")
+              .prepare(
+                "INSERT INTO operational_event_buckets(kind,bucket_ms,count) VALUES ('workflow_failure', ?, 1)"
+              )
               .bind(0)
               .run()
           );

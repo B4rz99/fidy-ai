@@ -17,7 +17,7 @@ afterEach(() => {
 const setup = Effect.fnUntraced(function* () {
   const number = ++counter;
   const made = yield* makePaymentEnrollmentD1([
-    "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL ,service_market TEXT,locale TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
+    "CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,audit_retention_cutoff_ms INTEGER,id TEXT PRIMARY KEY, time_zone TEXT NOT NULL ,service_market TEXT,locale TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
   ]);
 
   const keys = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
@@ -200,12 +200,12 @@ it.each([
       const retained = yield* Effect.tryPromise(() =>
         prepared.environment.DB.prepare(`SELECT
     (SELECT COUNT(*) FROM refund_attempts) AS attempts,
-    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL) AS refund_outbox) AS outbox,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,1 AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE verification_attempts IS NOT NULL) AS refund_outbox) AS outbox,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) AS refund_submission_claims) AS claims,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL) AS refund_outcome_evidence) AS outcomes,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments) AS adjustments,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
-    (SELECT COUNT(*) FROM subscriptions) AS subscriptions`).first()
+    (SELECT COUNT(*) FROM subscription_standing) AS subscriptions`).first()
       );
       expect(retained).toEqual({
         attempts: 0,
@@ -256,12 +256,12 @@ it.each(["missing", "recovery-audience", "expired", "mismatched-user"])(
             db.batch(
               [
                 "refund_attempts",
-                "(SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL)",
+                "(SELECT rowid,id AS refund_id,1 AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE verification_attempts IS NOT NULL)",
                 "(SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL)",
                 "(SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL)",
                 "(SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL)",
                 "(SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL)",
-                "subscriptions",
+                "subscription_standing",
                 "billing_attempts",
                 "(SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL)",
                 "(SELECT transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL)",

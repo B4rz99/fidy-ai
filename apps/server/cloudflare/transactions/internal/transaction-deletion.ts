@@ -103,7 +103,7 @@ const preparedDeletion = ({
         db
           .prepare(`UPDATE transactions SET deleted_at_ms = ?
         WHERE user_id = ? AND id = ? AND revision = ? AND deleted_at_ms IS NULL
-        AND NOT EXISTS (SELECT 1 FROM transaction_reconciliation_members WHERE user_id = ? AND transaction_id = ?)
+        AND NOT EXISTS (SELECT 1 FROM reconciled_transactions WHERE user_id = ? AND transaction_id = ?)
         AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
           .bind(
             current,
@@ -163,7 +163,7 @@ export const prepareDeletion = ({
       try: () =>
         db
           .prepare(
-            "SELECT COUNT(*) AS total FROM transaction_reconciliation_members WHERE user_id = ? AND transaction_id = ?"
+            "SELECT COUNT(*) AS total FROM reconciled_transactions WHERE user_id = ? AND transaction_id = ?"
           )
           .bind(subject.userId, id)
           .first(),

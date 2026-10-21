@@ -80,7 +80,7 @@ const setup = (
             tables: [
               "resource_admission_grants",
               "resource_admission_events",
-              "hosted_voice_refusals",
+              "whatsapp_event_records",
               "pending_consent_exchanges",
               "hosted_whatsapp_windows",
             ],
@@ -107,7 +107,7 @@ const setup = (
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "CREATE TABLE whatsapp_deliveries (kind TEXT,user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, proposed_at_ms INTEGER, state TEXT,send_started_at_ms INTEGER)"
+              "CREATE TABLE whatsapp_deliveries (kind TEXT,user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, proposed_at_ms INTEGER, state TEXT,send_started_at_ms INTEGER,hosted_correlation_token TEXT GENERATED ALWAYS AS(CASE WHEN kind='hosted' THEN correlation_token END) VIRTUAL UNIQUE)"
             )
             .run()
         );
@@ -394,7 +394,7 @@ it.each([
           (yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT d.user_id, i.message_id, d.text, d.provider_message_id, d.state FROM (SELECT * FROM whatsapp_deliveries WHERE kind='hosted') d JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) i ON i.turn_id = d.turn_id"
+                "SELECT d.user_id, i.message_id, d.text, d.provider_message_id, d.state FROM (SELECT * FROM whatsapp_deliveries WHERE kind='hosted') d JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) i ON i.turn_id = d.turn_id"
               )
               .all()
           )).results
@@ -528,8 +528,8 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
       expect(calls).not.toHaveBeenCalled();
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`INSERT INTO hosted_voice_refusals
-          (portfolio_id, message_id, user_id, claimed_at_ms) VALUES (?, ?, ?, ?)`)
+          .prepare(`INSERT INTO whatsapp_event_records
+          (kind,portfolio_id,message_id,user_id,claimed_at_ms,outcome) VALUES ('voice-refusal',?,?,?,?,'started')`)
           .bind(portfolio, "wamid.expired", userId, nowSeconds * 1_000 - 8 * dayMs)
           .run()
       );
@@ -537,7 +537,7 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
       const expired = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT message_id FROM hosted_voice_refusals WHERE message_id = 'wamid.expired'"
+            "SELECT message_id FROM (SELECT rowid,portfolio_id,message_id,user_id,claimed_at_ms,outcome FROM whatsapp_event_records WHERE kind='voice-refusal') WHERE message_id = 'wamid.expired'"
           )
           .first()
       );

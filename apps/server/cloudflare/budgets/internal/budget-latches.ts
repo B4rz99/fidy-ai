@@ -143,7 +143,7 @@ export const reconcileStatus = ({
       ),
       db
         .prepare(
-          "INSERT OR IGNORE INTO budget_crossing_publications(user_id,delivery_group_id,detected_at_ms) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM budget_threshold_alerts WHERE user_id=? AND delivery_group_id=?)"
+          "INSERT OR IGNORE INTO budget_state(kind,user_id,record_id,detected_at_ms,version) SELECT 'publication',?,?,?,NULL WHERE EXISTS (SELECT 1 FROM budget_threshold_alerts WHERE user_id=? AND delivery_group_id=?)"
         )
         .bind(userId, groupId, detectedAt.epochMilliseconds, userId, groupId),
     ];

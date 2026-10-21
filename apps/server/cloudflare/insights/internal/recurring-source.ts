@@ -38,7 +38,7 @@ const stageConfirmation = (
     const context = yield* Schema.encodeEffect(ContextJson)(source.context);
     return input.db
       .prepare(
-        "INSERT INTO recurring_digest_staging(user_id,confirmation_id,confirmed_at_ms,context_json,item_json,eligible) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id,confirmation_id) DO UPDATE SET item_json=excluded.item_json,eligible=excluded.eligible"
+        "INSERT INTO recurring_digest_items(user_id,confirmation_id,confirmed_at_ms,context_json,item_json,eligible) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id,confirmation_id) DO UPDATE SET confirmed_at_ms=coalesce(confirmed_at_ms,excluded.confirmed_at_ms),context_json=coalesce(context_json,excluded.context_json),item_json=excluded.item_json,eligible=excluded.eligible"
       )
       .bind(
         input.userId,
@@ -56,7 +56,7 @@ const readCursor = (
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT cursor,complete FROM (SELECT rowid,user_id,source_checkpoint AS checkpoint,source_cursor AS cursor,source_cutoff_at_ms AS cutoff_at_ms,source_complete AS complete FROM recurring_digest_instructions WHERE source_checkpoint IS NOT NULL) AS recurring_digest_scans WHERE user_id=?"
+          "SELECT cursor,complete FROM (SELECT rowid,user_id,source_checkpoint AS checkpoint,source_cursor AS cursor,source_cutoff_at_ms AS cutoff_at_ms,source_complete AS complete FROM (SELECT rowid,user_id,id,version,enabled,consent_grant_id AS grant_id,snapshot_json AS context_json,acceptance_from_ms,accepted_at_ms,last_source_identity,next_closed_at_ms,last_evaluated_at_ms,source_checkpoint,source_cursor,source_cutoff_at_ms,source_complete FROM schedules WHERE kind='digest') WHERE source_checkpoint IS NOT NULL) AS recurring_digest_scans WHERE user_id=?"
         )
         .bind(input.userId)
         .first()
@@ -68,6 +68,13 @@ const readCursor = (
     );
     return cursor;
   });
+const prepareSourceCompleteness = (input: Scope, total: number): D1PreparedStatement =>
+  input.db
+    .prepare(
+      "INSERT INTO sql_assertions(scope,accepted) VALUES('proactivity_message',CASE WHEN (SELECT count(*) FROM recurring_digest_items WHERE confirmed_at_ms IS NOT NULL AND user_id=?)=? THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted"
+    )
+    .bind(input.userId, total);
+
 export const stageSource = (
   input: Scope
 ): Effect.Effect<
@@ -81,7 +88,7 @@ export const stageSource = (
         Effect.tryPromise(() =>
           input.db
             .prepare(
-              "UPDATE recurring_digest_instructions AS recurring_digest_scans SET source_checkpoint=NULL,source_cursor=NULL,source_cutoff_at_ms=NULL,source_complete=NULL WHERE source_checkpoint IS NOT NULL AND user_id=?"
+              "UPDATE schedules AS recurring_digest_scans SET source_checkpoint=NULL,source_cursor=NULL,source_cutoff_at_ms=NULL,source_complete=NULL WHERE kind='digest' AND source_checkpoint IS NOT NULL AND user_id=?"
             )
             .bind(input.userId)
             .run()
@@ -93,7 +100,16 @@ export const stageSource = (
     ];
     if (Option.isNone(cursor)) {
       statements.push(
-        input.db.prepare("DELETE FROM recurring_digest_staging WHERE user_id=?").bind(input.userId)
+        input.db
+          .prepare(
+            "DELETE FROM recurring_digest_items WHERE user_id=? AND confirmed_at_ms IS NOT NULL AND disposition IS NULL"
+          )
+          .bind(input.userId),
+        input.db
+          .prepare(
+            "UPDATE recurring_digest_items SET confirmed_at_ms=NULL,context_json=NULL,item_json=NULL,eligible=NULL WHERE user_id=? AND confirmed_at_ms IS NOT NULL AND disposition IS NOT NULL"
+          )
+          .bind(input.userId)
       );
     }
     statements.push(
@@ -102,7 +118,7 @@ export const stageSource = (
     statements.push(
       input.db
         .prepare(
-          "UPDATE recurring_digest_instructions SET source_checkpoint=?2,source_cursor=?3,source_cutoff_at_ms=?4,source_complete=?5 WHERE user_id=?1"
+          "UPDATE schedules SET source_checkpoint=?2,source_cursor=?3,source_cutoff_at_ms=?4,source_complete=?5 WHERE kind='digest' AND user_id=?1"
         )
         .bind(
           input.userId,
@@ -112,15 +128,7 @@ export const stageSource = (
           page.complete ? 1 : 0
         )
     );
-    if (page.complete) {
-      statements.push(
-        input.db
-          .prepare(
-            "INSERT INTO sql_assertions (scope, accepted) VALUES ('proactivity_message',CASE WHEN (SELECT count(*) FROM recurring_digest_staging WHERE user_id=?)=? THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted"
-          )
-          .bind(input.userId, page.total)
-      );
-    }
+    if (page.complete) statements.push(prepareSourceCompleteness(input, page.total));
     yield* Effect.tryPromise(() => input.db.batch(statements));
     return page;
   });
@@ -138,7 +146,7 @@ export const consumeEarlierDays = (
         kind: "new-recurring-series",
         grantId: instruction.grant_id,
         statement: {
-          sql: "INSERT OR IGNORE INTO recurring_digest_consumption(user_id,confirmation_id,disposition) SELECT user_id,confirmation_id,'excluded' FROM recurring_digest_staging WHERE user_id=? AND confirmed_at_ms<? AND EXISTS(SELECT 1 FROM recurring_digest_instructions WHERE user_id=? AND version=? AND enabled=1)",
+          sql: "UPDATE recurring_digest_items SET disposition='excluded' WHERE user_id=? AND confirmed_at_ms IS NOT NULL AND confirmed_at_ms<? AND disposition IS NULL AND EXISTS(SELECT 1 FROM (SELECT rowid,user_id,id,version,enabled,consent_grant_id AS grant_id,snapshot_json AS context_json,acceptance_from_ms,accepted_at_ms,last_source_identity,next_closed_at_ms,last_evaluated_at_ms,source_checkpoint,source_cursor,source_cutoff_at_ms,source_complete FROM schedules WHERE kind='digest') WHERE user_id=? AND version=? AND enabled=1)",
           params: [input.userId, instruction.acceptance_from_ms, input.userId, instruction.version],
         },
       })

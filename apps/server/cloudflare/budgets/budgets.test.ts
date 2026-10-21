@@ -37,11 +37,15 @@ import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
-import { readProactiveMessageTranscript, readProactiveTranscript } from "../agent/operations";
+import { readProactiveMessageTranscript } from "../agent/operations";
 import { InsightEventId } from "../../src/core/insights/contract";
 import { FetchHttpClient } from "effect/http";
 import { executeProactivityWork } from "../insights/runtime";
-import { findProactivityReport, recordProactivityDecision } from "../insights/operations";
+import {
+  findProactivityReport,
+  readProactiveTranscript,
+  recordProactivityDecision,
+} from "../insights/operations";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
@@ -2521,7 +2525,7 @@ it(
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT 1 FROM budget_group_currencies WHERE user_id=? AND group_name='Rejected'"
+                "SELECT 1 FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency') WHERE user_id=? AND group_name='Rejected'"
               )
               .bind(users[0])
               .first()
@@ -2531,7 +2535,9 @@ it(
         expect(
           yield* Effect.tryPromise(() =>
             db
-              .prepare("SELECT 1 FROM budget_plan_months WHERE user_id=? AND month='2026-12'")
+              .prepare(
+                "SELECT 1 FROM (SELECT rowid,user_id,month FROM budget_month_plan_records WHERE kind='plan') WHERE user_id=? AND month='2026-12'"
+              )
               .bind(users[0])
               .first()
           )
@@ -2539,7 +2545,9 @@ it(
         expect(
           yield* Effect.tryPromise(() =>
             db
-              .prepare("SELECT 1 FROM budget_month_caps WHERE user_id=? AND month='2026-12'")
+              .prepare(
+                "SELECT 1 FROM (SELECT rowid,user_id,budget_id,month,cap FROM budget_month_plan_records WHERE kind='cap') WHERE user_id=? AND month='2026-12'"
+              )
               .bind(users[0])
               .first()
           )
@@ -2696,7 +2704,9 @@ it("refuses group currency precision loss including previously saved future caps
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT 1 FROM budget_plan_months WHERE user_id=? AND month='2026-11'")
+            .prepare(
+              "SELECT 1 FROM (SELECT rowid,user_id,month FROM budget_month_plan_records WHERE kind='plan') WHERE user_id=? AND month='2026-11'"
+            )
             .bind(users[0])
             .first()
         )

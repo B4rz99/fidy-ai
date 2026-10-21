@@ -270,7 +270,7 @@ it("rolls retention back and leaves ordinary deletion forbidden when a later pro
       yield* attempt(() =>
         db
           .prepare(
-            "CREATE TRIGGER audit_retention_failure BEFORE DELETE ON audit_retention_permits BEGIN SELECT RAISE(ABORT, 'private database detail'); END"
+            "CREATE TRIGGER audit_retention_failure BEFORE UPDATE OF audit_retention_cutoff_ms ON users WHEN OLD.audit_retention_cutoff_ms IS NOT NULL AND NEW.audit_retention_cutoff_ms IS NULL BEGIN SELECT RAISE(ABORT, 'private database detail'); END"
           )
           .run()
       );

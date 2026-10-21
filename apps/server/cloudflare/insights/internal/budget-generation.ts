@@ -47,7 +47,7 @@ const messageWrites = (
       ),
     input.db
       .prepare(
-        "INSERT INTO proactivity_message_events(user_id,delivery_id,insight_event_id) SELECT user_id,delivery_group_id,insight_event_id FROM (SELECT rowid,user_id,budget_delivery_group_id AS delivery_group_id,budget_threshold AS threshold,id AS insight_event_id,budget_crossing_json AS crossing_json FROM insight_events WHERE budget_delivery_group_id IS NOT NULL) WHERE user_id=? AND delivery_group_id=?"
+        "UPDATE insight_events SET report_delivery_id=?2 WHERE user_id=?1 AND budget_delivery_group_id=?2 AND report_delivery_id IS NULL"
       )
       .bind(input.userId, group.id),
   ];

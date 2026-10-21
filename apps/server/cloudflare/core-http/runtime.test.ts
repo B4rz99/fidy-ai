@@ -12,7 +12,7 @@ const database = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
     yield* Effect.tryPromise(() =>
-      installCurrentTestObjects({ db, tables: ["operational_core_rejection_burst"] })
+      installCurrentTestObjects({ db, tables: ["operational_event_buckets"] })
     );
     return db;
   });
@@ -66,18 +66,28 @@ it.live("preserves actual Core callback refusals and never stores attacker reque
       expect(body).toBe(original);
     }
     const rows = yield* Effect.tryPromise(() =>
-      db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+      db
+        .prepare(
+          "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
+        )
+        .all()
     );
     expect(rows.results).toHaveLength(1);
     expect(Object.keys(rows.results[0] ?? {}).sort()).toEqual(["id", "observed_at_ms"]);
     expect(rows.results[0]).toEqual({ id: 1, observed_at_ms: 1_800_000 });
-    yield* Effect.tryPromise(() => db.prepare("DROP TABLE operational_core_rejection_burst").run());
+    yield* Effect.tryPromise(() => db.prepare("DROP TABLE operational_event_buckets").run());
     let failedWrites = 0;
     const failed = new Proxy(db, {
       get(target, key, receiver): unknown {
         if (key !== "prepare") return Reflect.get(target, key, receiver);
         return (sql: string) => {
-          if (sql.startsWith("INSERT INTO operational_core_rejection_burst")) failedWrites += 1;
+          if (
+            sql.startsWith(
+              "INSERT INTO operational_event_buckets(kind,bucket_ms,count,observed_at_ms)"
+            )
+          ) {
+            failedWrites += 1;
+          }
           return db.prepare(sql);
         };
       },
@@ -123,7 +133,11 @@ it.live(
       }
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+          db
+            .prepare(
+              "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
+            )
+            .all()
         )).results
       ).toEqual([]);
       for (let index = 0; index < 100; index += 1) {
@@ -133,7 +147,11 @@ it.live(
       }
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+          db
+            .prepare(
+              "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
+            )
+            .all()
         )).results
       ).toEqual([{ id: 1, observed_at_ms: 1_800_000 }]);
     })

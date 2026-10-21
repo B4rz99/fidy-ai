@@ -96,7 +96,7 @@ const snapshot = (db: D1Database): Effect.Effect<ReadonlyArray<ReadonlyArray<unk
   Effect.forEach(
     [
       "(SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL)",
-      "weekly_question_intents",
+      "insight_reports",
       "whatsapp_deliveries",
       "consent_offers",
       "consent_history",
@@ -116,7 +116,7 @@ const seedQuestion = (
     yield* promise(() =>
       input.db
         .prepare(
-          "INSERT INTO weekly_question_intents(id,user_id,origin,created_at_ms) VALUES (?,?,'requested',?)"
+          "INSERT INTO insight_reports(kind,delivery_id,user_id,origin,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('weekly-question',?,?,'requested',?,'ready',?3,0,0)"
         )
         .bind(questionId, userId, input.created)
         .run()
@@ -525,7 +525,9 @@ it("cumulative Workflow restarts terminalize ready work and stop future Maintena
       expect(
         yield* promise(() =>
           db
-            .prepare("SELECT state FROM weekly_question_intents WHERE id=?")
+            .prepare(
+              "SELECT state FROM (SELECT rowid,delivery_id AS id,user_id,origin,request_message_id,rejection_offer_id,dispatch_state AS state,created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE kind='weekly-question') WHERE id=?"
+            )
             .bind(questionId)
             .first("state")
         )
@@ -572,7 +574,9 @@ it("withdrawn expired question purposes terminate without content reads or furth
       expect(
         yield* promise(() =>
           db
-            .prepare("SELECT state FROM weekly_question_intents WHERE id=?")
+            .prepare(
+              "SELECT state FROM (SELECT rowid,delivery_id AS id,user_id,origin,request_message_id,rejection_offer_id,dispatch_state AS state,created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE kind='weekly-question') WHERE id=?"
+            )
             .bind(questionId)
             .first("state")
         )

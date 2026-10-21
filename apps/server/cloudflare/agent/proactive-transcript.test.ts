@@ -15,6 +15,7 @@ import {
   findWeeklySummaryReport,
   materializeWeeklySummary,
   prepareWeeklyDeliverySettlement,
+  readProactiveTranscript,
   weeklyReportDeliveryQuery,
 } from "../insights/operations";
 import { makeInsightTemplateSender } from "../../src/shell/channels/whatsapp/runtime";
@@ -41,7 +42,7 @@ import {
   weeklySummaryTestUser,
   withdrawWeeklyFixtureConsent,
 } from "../weekly-summary.test-fixture";
-import { prepareProactiveTranscript, readProactiveTranscript } from "./operations";
+import { prepareProactiveTranscript } from "./operations";
 import { readContextualProactiveReply } from "./internal/proactive-transcript";
 import { makeAgentRetention } from "./runtime";
 

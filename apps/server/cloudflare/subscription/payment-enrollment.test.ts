@@ -85,7 +85,7 @@ const setup = (): Promise<{
   Effect.runPromise(
     Effect.gen(function* () {
       const { db } = yield* makePaymentEnrollmentD1([
-        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO', trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
+        "CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,audit_retention_cutoff_ms INTEGER,id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO', trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
         "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)",
         consentHistoryTestSchema,
 
@@ -621,7 +621,7 @@ it.each(
           expect(
             yield* fromTestPromise(() =>
               environment.DB.prepare(
-                "SELECT count(*) AS count FROM card_payment_sources WHERE retired_at_ms IS NOT NULL"
+                "SELECT count(*) AS count FROM verified_payment_sources WHERE retired_at_ms IS NOT NULL"
               ).first("count")
             )
           ).toBe(0);
@@ -684,7 +684,7 @@ it.each(
         ).toBe(1);
         expect(
           yield* fromTestPromise(() =>
-            environment.DB.prepare("SELECT count(*) AS count FROM card_payment_sources").first(
+            environment.DB.prepare("SELECT count(*) AS count FROM verified_payment_sources").first(
               "count"
             )
           )
@@ -1297,7 +1297,7 @@ it.each(Object.values(SubscriptionEnrollmentGroup.endpoints))(
           }
         }
         expect(provider).not.toHaveBeenCalled();
-        for (const table of ["card_enrollments", "card_payment_sources", "billing_attempts"]) {
+        for (const table of ["card_enrollments", "verified_payment_sources", "billing_attempts"]) {
           expect(
             yield* fromTestPromise(() =>
               fixture.db.prepare(`SELECT count(*) AS count FROM ${table}`).first()
@@ -1475,7 +1475,7 @@ it.each([
       });
       expect(
         yield* fromTestPromise(() =>
-          fixture.db.prepare("SELECT count(*) AS count FROM card_payment_sources").first()
+          fixture.db.prepare("SELECT count(*) AS count FROM verified_payment_sources").first()
         )
       ).toEqual({ count: 0 });
       expect(
@@ -1581,7 +1581,7 @@ it.each(Object.entries(forbiddenDaviplataSubmissions))(
         ).toEqual({ status: "prepared", authorization_digest: null, payment_request_id: null });
         expect(
           yield* fromTestPromise(() =>
-            fixture.db.prepare("SELECT count(*) AS count FROM card_payment_sources").first()
+            fixture.db.prepare("SELECT count(*) AS count FROM verified_payment_sources").first()
           )
         ).toEqual({ count: 0 });
         expect(
@@ -1802,7 +1802,7 @@ it.each([
         const retained = yield* fromTestPromise(() =>
           environment.DB.batch([
             environment.DB.prepare("SELECT * FROM card_enrollments"),
-            environment.DB.prepare("SELECT * FROM card_payment_sources"),
+            environment.DB.prepare("SELECT * FROM verified_payment_sources"),
             environment.DB.prepare("SELECT * FROM billing_attempts"),
             environment.DB.prepare(
               "SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
@@ -2052,7 +2052,7 @@ it("does not schedule a Nequi charge when the fresh session is revoked during so
       ).toEqual({ count: 0 });
       expect(
         yield* fromTestPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM card_payment_sources").first()
+          db.prepare("SELECT count(*) AS count FROM verified_payment_sources").first()
         )
       ).toEqual({ count: 0 });
     })
@@ -2087,7 +2087,7 @@ it.each(["missing-consent", "revoked-consent", "stale-session"] as const)(
         expect(provider).not.toHaveBeenCalled();
         expect(
           yield* fromTestPromise(() =>
-            db.prepare("SELECT count(*) AS count FROM card_payment_sources").first()
+            db.prepare("SELECT count(*) AS count FROM verified_payment_sources").first()
           )
         ).toEqual({ count: 0 });
       })
@@ -2179,7 +2179,7 @@ it.each([
       expect(response.status).toBe(scenario.stage === "source" ? 503 : 400);
       expect(posts).toBe(scenario.stage === "source" ? 1 : 0);
       for (const table of [
-        "card_payment_sources",
+        "verified_payment_sources",
         "billing_attempts",
         "(SELECT id FROM billing_attempts WHERE collection_state IS NOT NULL)",
       ]) {
@@ -2845,7 +2845,7 @@ it("prepares a Price and creates exactly one provider source and pending Billing
         status: "payment-pending",
       });
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM card_payment_sources").all()))
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
           .results
       ).toHaveLength(1);
       expect(
@@ -2934,7 +2934,7 @@ it.each([8_640_000_000_000_001, 1_800_000_000_000.5])(
           yield* fromTestPromise(() => db.prepare("SELECT status FROM card_enrollments").first())
         ).toEqual({ status: "prepared" });
         for (const table of [
-          "card_payment_sources",
+          "verified_payment_sources",
           "billing_attempts",
           "(SELECT id FROM billing_attempts WHERE collection_state IS NOT NULL)",
         ]) {
@@ -3158,7 +3158,7 @@ it.each(["contracts", "source", "commit"] as const)(
         ).toEqual({ count: stage === "commit" ? 1 : 0 });
         expect(
           yield* fromTestPromise(() =>
-            db.prepare("SELECT count(*) AS count FROM card_payment_sources").first()
+            db.prepare("SELECT count(*) AS count FROM verified_payment_sources").first()
           )
         ).toEqual({ count: stage === "commit" ? 1 : 0 });
         const replay = yield* fromTestPromise(() =>
@@ -3306,7 +3306,7 @@ it("never repeats a source POST after a provider timeout without a known candida
       });
       expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM card_payment_sources").all()))
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
           .results
       ).toHaveLength(0);
       expect(
@@ -3394,7 +3394,7 @@ it("resolves a pending provider source by authenticated lookup without another s
         status: "source-verifying",
       });
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM card_payment_sources").all()))
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
           .results
       ).toHaveLength(0);
       available = true;
@@ -3425,7 +3425,7 @@ it("resolves a pending provider source by authenticated lookup without another s
         status: "source-verifying",
       });
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM card_payment_sources").all()))
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
           .results
       ).toHaveLength(0);
       expect(
@@ -3444,7 +3444,7 @@ it("resolves a pending provider source by authenticated lookup without another s
       });
       expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM card_payment_sources").all()))
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
           .results
       ).toHaveLength(1);
       expect(

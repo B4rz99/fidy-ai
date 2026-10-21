@@ -894,7 +894,7 @@ const expectCanonicalState = (
 
 const relationSql = (relation: string): string => {
   if (relation === "statement_ingestion_outbox") {
-    return "(SELECT * FROM statement_submissions WHERE work_revision IS NOT NULL)";
+    return "(SELECT * FROM statement_submissions WHERE work_published_at_ms IS NOT NULL)";
   }
   if (relation === "publication" || relation === "session_call") {
     return `(SELECT * FROM audit_entries WHERE record_type='${relation}')`;
@@ -1223,7 +1223,7 @@ it("offers eligible statement identities in publication order even after an earl
         yield* fromTestPromise(() =>
           runtime.db
             .prepare(
-              `UPDATE statement_submissions AS statement_ingestion_outbox SET work_published_at_ms = ?, work_last_attempt_at_ms = ? WHERE work_revision IS NOT NULL AND id = ?`
+              `UPDATE statement_submissions AS statement_ingestion_outbox SET work_published_at_ms = ?, work_last_attempt_at_ms = ? WHERE work_published_at_ms IS NOT NULL AND id = ?`
             )
             .bind(1000 + index, index === 0 ? 1 : null, submission.id)
             .run()
@@ -1503,7 +1503,7 @@ it(
         yield* fromTestPromise(() =>
           runtime.db
             .prepare(
-              "UPDATE statement_submissions AS statement_ingestion_outbox SET work_last_attempt_at_ms = 0 WHERE work_revision IS NOT NULL AND id = ?"
+              "UPDATE statement_submissions AS statement_ingestion_outbox SET work_last_attempt_at_ms = 0 WHERE work_published_at_ms IS NOT NULL AND id = ?"
             )
             .bind(submission.id)
             .run()
@@ -2883,7 +2883,7 @@ it("settles an errored Workflow when its final failure-report activity also exha
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            `UPDATE statement_submissions AS statement_ingestion_outbox SET work_published_at_ms = ? WHERE work_revision IS NOT NULL AND id = ?`
+            `UPDATE statement_submissions AS statement_ingestion_outbox SET work_published_at_ms = ? WHERE work_published_at_ms IS NOT NULL AND id = ?`
           )
           .bind(now, submission.id)
           .run()

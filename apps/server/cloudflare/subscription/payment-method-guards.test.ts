@@ -53,8 +53,9 @@ const enrollment = (
     );
 const source = (db: D1Database, index: number, method: string): D1PreparedStatement =>
   db
-    .prepare(`INSERT INTO card_payment_sources (id, user_id, enrollment_id, wompi_source_id,
-    billing_email, created_at_ms, method) VALUES (?, ?, ?, ?, 'payer@example.test', 300, ?)`)
+    .prepare(
+      `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, ?, 'payer@example.test', 300, ?))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+    )
     .bind(identity(3, index), identity(1, index), identity(2, index), index, method);
 const attempt = (
   db: D1Database,
@@ -196,11 +197,11 @@ it("rejects invalid methods, unclaimed or mismatched sources and authorization r
           enrollment(db, 4, { ...enrollmentSeed(4, "daviplata"), userIndex: 3 }),
           db
             .prepare(
-              `INSERT INTO card_payment_sources(id,user_id,enrollment_id,wompi_source_id,billing_email,created_at_ms,method) VALUES (?, ?, ?, 4, 'payer@example.test', 300, 'daviplata')`
+              `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 4, 'payer@example.test', 300, 'daviplata'))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
             )
             .bind(identity(3, 4), identity(1, 3), identity(2, 4)),
         ],
-        "UNIQUE constraint failed: card_payment_sources.user_id"
+        "UNIQUE constraint failed: card_enrollments.user_id"
       );
       yield* rejectsAtomically(
         db,
@@ -214,11 +215,11 @@ it("rejects invalid methods, unclaimed or mismatched sources and authorization r
             .bind(identity(2, 4)),
           db
             .prepare(
-              `INSERT INTO card_payment_sources(id,user_id,enrollment_id,wompi_source_id,billing_email,created_at_ms,method) VALUES (?, ?, ?, 1, 'payer@example.test', 300, 'daviplata')`
+              `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 1, 'payer@example.test', 300, 'daviplata'))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
             )
             .bind(identity(3, 4), identity(1, 4), identity(2, 4)),
         ],
-        "UNIQUE constraint failed: card_payment_sources.wompi_source_id"
+        "UNIQUE constraint failed: card_enrollments.source_wompi_id"
       );
       yield* rejectsAtomically(
         db,
@@ -226,11 +227,11 @@ it("rejects invalid methods, unclaimed or mismatched sources and authorization r
           enrollment(db, 4, enrollmentSeed(4, "daviplata")),
           db
             .prepare(
-              `INSERT INTO card_payment_sources(id,user_id,enrollment_id,wompi_source_id,billing_email,created_at_ms,method) VALUES (?, ?, ?, 4, 'payer@example.test', 300, 'daviplata')`
+              `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 4, 'payer@example.test', 300, 'daviplata'))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
             )
             .bind(identity(3, 1), identity(1, 4), identity(2, 4)),
         ],
-        "UNIQUE constraint failed: card_payment_sources.id"
+        "UNIQUE constraint failed: card_enrollments.payment_source_id"
       );
       for (const field of [
         "method = 'card'",
@@ -258,7 +259,9 @@ it("rejects invalid methods, unclaimed or mismatched sources and authorization r
         db,
         [
           db
-            .prepare("UPDATE card_payment_sources SET method = 'card' WHERE id = ?")
+            .prepare(
+              "UPDATE card_enrollments SET source_method = 'card' WHERE payment_source_id = ?"
+            )
             .bind(identity(3, 3)),
         ],
         "card_source_immutable"

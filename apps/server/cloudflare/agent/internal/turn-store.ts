@@ -176,7 +176,7 @@ export const readHostedSnapshot = ({
       db
         .prepare(`SELECT id, started_at_ms,
       COALESCE(
-        (SELECT proposed_at_ms FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = hosted_turns.id),
+        hosted_turns.proposed_at_ms,
         (SELECT proposedAtMs FROM (${channelProposals.sql}) WHERE turnId = hosted_turns.id)
       ) AS proposed_at_ms
       FROM hosted_turns WHERE user_id = ? AND status = 'pending'`)
@@ -266,7 +266,7 @@ export const recoverHostedTurn = ({
           .bind(timestamp, turn.id, userId),
         db
           .prepare(
-            `UPDATE hosted_turns AS hosted_delivery_proposals SET proposal_user_id=NULL,proposal_receipt_digest=NULL,proposed_at_ms=NULL,proposal_text=NULL WHERE proposed_at_ms IS NOT NULL AND id = ? AND proposal_user_id = ?`
+            `UPDATE hosted_turns SET proposal_receipt_digest=NULL,proposed_at_ms=NULL,proposal_text=NULL WHERE proposed_at_ms IS NOT NULL AND id = ? AND user_id = ?`
           )
           .bind(turn.id, userId),
         prepareWhatsAppWorkCleanup({ db, turnId: turn.id, userId, requireTerminal: false }),
@@ -920,7 +920,7 @@ export const stageHostedDelivery = ({
     const current = DateTime.toEpochMillis(yield* DateTime.now);
     const write = yield* Effect.tryPromise(() =>
       db
-        .prepare(`UPDATE hosted_turns SET proposal_user_id=user_id,proposal_receipt_digest=?,proposed_at_ms=?,proposal_text=?
+        .prepare(`UPDATE hosted_turns SET proposal_receipt_digest=?,proposed_at_ms=?,proposal_text=?
     WHERE id=? AND user_id=? AND status='pending' AND proposed_at_ms IS NULL`)
         .bind(digest, current, text, turnId, userId)
         .run()
@@ -958,8 +958,8 @@ export const refreshHostedDelivery = ({
     }
     const row = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT text FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals
-    WHERE turn_id = ? AND user_id = ?`)
+        .prepare(`SELECT proposal_text AS text FROM hosted_turns
+    WHERE id = ? AND user_id = ? AND proposed_at_ms IS NOT NULL`)
         .bind(turnId, subject.userId)
         .first()
     );
@@ -973,17 +973,9 @@ export const refreshHostedDelivery = ({
     const current = DateTime.toEpochMillis(yield* DateTime.now);
     const written = yield* Effect.tryPromise(() =>
       db
-        .prepare(`UPDATE hosted_turns AS hosted_delivery_proposals SET proposal_receipt_digest = ?
-    WHERE proposed_at_ms IS NOT NULL AND id = ? AND proposal_user_id = ? AND proposed_at_ms > ? AND EXISTS
-      (SELECT 1 FROM hosted_turns WHERE id = ? AND proposal_user_id = ? AND status = 'pending')`)
-        .bind(
-          digest,
-          turnId,
-          subject.userId,
-          current - deliveryAcknowledgmentWindowMs,
-          turnId,
-          subject.userId
-        )
+        .prepare(`UPDATE hosted_turns SET proposal_receipt_digest = ?
+    WHERE proposed_at_ms IS NOT NULL AND id = ? AND user_id = ? AND proposed_at_ms > ? AND status = 'pending'`)
+        .bind(digest, turnId, subject.userId, current - deliveryAcknowledgmentWindowMs)
         .run()
     );
     return written.meta.changes === 1 ? Option.some({ text, receipt }) : Option.none();
@@ -1015,10 +1007,9 @@ export const acknowledgeHostedDelivery = ({
     const authority = webSessionCredentialAuthority({ subject, current });
     const raw = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT p.text, p.proposed_at_ms, t.started_at_ms FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS p
-    JOIN hosted_turns AS t ON t.id = p.turn_id AND t.user_id = p.user_id
-    WHERE p.user_id = ? AND p.turn_id = ? AND p.receipt_digest = ?
-      AND t.status = 'pending' AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
+        .prepare(`SELECT proposal_text AS text, proposed_at_ms, started_at_ms FROM hosted_turns
+    WHERE user_id = ? AND id = ? AND proposal_receipt_digest = ?
+      AND proposed_at_ms IS NOT NULL AND status = 'pending' AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
         .bind(subject.userId, turnId, digest, ...authority.bindings)
         .first()
     );
@@ -1079,8 +1070,8 @@ const sweepHostedTranscript = (
       db
         .prepare(`DELETE FROM hosted_mutation_commits WHERE rowid IN
     (SELECT m.rowid FROM
-      (SELECT turn_id, user_id FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention
-        WHERE user_id = ? AND terminal_at_ms < ? ORDER BY terminal_at_ms, turn_id LIMIT ?) AS r
+      (SELECT id AS turn_id, user_id FROM hosted_turns
+        WHERE user_id = ? AND retention_terminal_at_ms < ? ORDER BY retention_terminal_at_ms, id LIMIT ?) AS r
       CROSS JOIN hosted_mutation_commits AS m
       WHERE m.user_id = r.user_id AND m.turn_id = r.turn_id LIMIT ?)`)
         .bind(userId, cutoff, maximumRetentionRows, maximumRetentionRows)
@@ -1091,8 +1082,8 @@ const sweepHostedTranscript = (
       db
         .prepare(`DELETE FROM transcript_entries WHERE sequence IN
     (SELECT e.sequence FROM
-      (SELECT turn_id, user_id FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention
-        WHERE user_id = ? AND terminal_at_ms < ? ORDER BY terminal_at_ms, turn_id LIMIT ?) AS r
+      (SELECT id AS turn_id, user_id FROM hosted_turns
+        WHERE user_id = ? AND retention_terminal_at_ms < ? ORDER BY retention_terminal_at_ms, id LIMIT ?) AS r
       CROSS JOIN transcript_entries AS e
       WHERE e.user_id = r.user_id AND e.turn_id = r.turn_id LIMIT ?)`)
         .bind(userId, cutoff, maximumRetentionRows, maximumRetainedEntries)
@@ -1129,8 +1120,8 @@ const readHostedRetentionDeadline = (
     const row = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT MIN(due_ms) AS due_ms FROM (
-        SELECT * FROM (SELECT terminal_at_ms + ? AS due_ms FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention
-          WHERE user_id=? ORDER BY terminal_at_ms LIMIT 1)
+        SELECT * FROM (SELECT retention_terminal_at_ms + ? AS due_ms FROM hosted_turns
+          WHERE user_id=? AND retention_terminal_at_ms IS NOT NULL ORDER BY retention_terminal_at_ms LIMIT 1)
         UNION ALL
         SELECT * FROM (SELECT updated_at_ms + ? AS due_ms FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations
           WHERE user_id=? ORDER BY updated_at_ms LIMIT 1)
@@ -1178,7 +1169,7 @@ export const expireHostedPending = ({
       db
         .prepare(`SELECT id, started_at_ms,
     COALESCE(
-      (SELECT proposed_at_ms FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = hosted_turns.id),
+      hosted_turns.proposed_at_ms,
       (SELECT proposedAtMs FROM (${channelProposals.sql}) WHERE turnId = hosted_turns.id)
     ) AS proposed_at_ms
     FROM hosted_turns WHERE user_id = ? AND status = 'pending'`)
@@ -1253,9 +1244,9 @@ const hostedFinishStatements = ({
       WHERE id = ? AND user_id = ? AND status = 'pending' ${guard.sql} RETURNING id`)
       .bind(status, time, reason, turnId, userId, ...guard.bindings),
     db
-      .prepare(`UPDATE hosted_turns AS hosted_delivery_proposals SET proposal_user_id=NULL,proposal_receipt_digest=NULL,proposed_at_ms=NULL,proposal_text=NULL WHERE proposed_at_ms IS NOT NULL AND id = ? AND proposal_user_id = ?
-      AND EXISTS (SELECT 1 FROM hosted_turns WHERE id = ? AND proposal_user_id = ? AND status <> 'pending')`)
-      .bind(turnId, userId, turnId, userId),
+      .prepare(`UPDATE hosted_turns SET proposal_receipt_digest=NULL,proposed_at_ms=NULL,proposal_text=NULL WHERE proposed_at_ms IS NOT NULL AND id = ? AND user_id = ?
+      AND status <> 'pending'`)
+      .bind(turnId, userId),
     prepareWhatsAppWorkCleanup({ db, turnId, userId, requireTerminal: true }),
     prepareReminderPauseNoticeCompletion({
       db,

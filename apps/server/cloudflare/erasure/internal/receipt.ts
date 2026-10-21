@@ -40,7 +40,7 @@ export const receipt = (
       FROM erasure_steps s JOIN erasure_requests q ON q.id=s.request_id WHERE q.id=? AND q.user_id=? GROUP BY s.data_class`)
           .bind(scope.reference, scope.userId),
         db
-          .prepare(`SELECT p.custodian,p.state AS status,p.evidence_json AS evidence FROM erasure_custody_evidence p JOIN erasure_requests q ON q.id=p.request_id
+          .prepare(`SELECT p.custodian,p.state AS status,p.evidence_json AS evidence FROM (SELECT c.rowid,c.request_id,c.custodian,c.state,e.evidence_json FROM erasure_custody_records c LEFT JOIN erasure_custody_records e ON e.event_identity=c.current_event_id WHERE c.record_type='current') p JOIN erasure_requests q ON q.id=p.request_id
       WHERE q.id=? AND q.user_id=? ORDER BY custodian`)
           .bind(scope.reference, scope.userId),
       ])

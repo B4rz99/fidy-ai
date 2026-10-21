@@ -77,6 +77,16 @@ Unions are cheap to handle safely because a missing case is a build failure.
 **This binds the model, not the storage.** A discriminated union rarely maps cleanly onto relational
 columns, so the row schema may be flatter, and the repo's decode is where the two reconcile.
 
+### Feature storage ownership
+
+Each feature owns a small, coherent set of tables, and every separate table must justify its existence.
+
+A separate table earns its place through independent identity, one-to-many cardinality, a distinct
+lifecycle or retention requirement, or measured query needs. Keep its owner and purpose clear.
+Consolidation should reduce duplicated state and code; moving unrelated feature state into a wide
+row or generic payload does not establish cohesion. Shared storage must have an explicit owner and
+preserve each feature's invariants.
+
 ### Tuples
 
 - **Fixed arity — yes.** If there are exactly three of something, do not type it as an array of

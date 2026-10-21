@@ -938,7 +938,7 @@ it("recovers abandoned Pending once, then refuses new work after Consent withdra
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            `UPDATE hosted_turns SET proposal_user_id=incoming.user_id,proposal_receipt_digest=incoming.receipt_digest,proposed_at_ms=incoming.proposed_at_ms,proposal_text=incoming.text FROM (SELECT ? AS turn_id,? AS user_id,? AS receipt_digest,? AS proposed_at_ms,? AS text) AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.proposed_at_ms IS NULL`
+            `UPDATE hosted_turns SET proposal_receipt_digest=incoming.receipt_digest,proposed_at_ms=incoming.proposed_at_ms,proposal_text=incoming.text FROM (SELECT ? AS turn_id,? AS user_id,? AS receipt_digest,? AS proposed_at_ms,? AS text) AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id AND hosted_turns.proposed_at_ms IS NULL`
           )
           .bind(pending, users[0], new Uint8Array(32), timestamp - 121_000, "Unacknowledged answer")
           .run()
@@ -975,7 +975,7 @@ it("recovers abandoned Pending once, then refuses new work after Consent withdra
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE user_id = ?"
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE user_id = ?"
             )
             .bind(users[0])
             .all()
@@ -1030,7 +1030,7 @@ it("recovers an abandoned staged reply by durable alarm without another User req
             ),
           db
             .prepare(
-              "UPDATE hosted_turns SET proposal_user_id=incoming.user_id,proposal_receipt_digest=incoming.receipt_digest,proposed_at_ms=incoming.proposed_at_ms,proposal_text=incoming.text FROM (SELECT ? AS turn_id,? AS user_id,? AS receipt_digest,? AS proposed_at_ms,? AS text) AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.proposed_at_ms IS NULL"
+              "UPDATE hosted_turns SET proposal_receipt_digest=incoming.receipt_digest,proposed_at_ms=incoming.proposed_at_ms,proposal_text=incoming.text FROM (SELECT ? AS turn_id,? AS user_id,? AS receipt_digest,? AS proposed_at_ms,? AS text) AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id AND hosted_turns.proposed_at_ms IS NULL"
             )
             .bind(id, users[0], new Uint8Array(32), timestamp - 121_000, "Undelivered"),
         ])
@@ -1067,7 +1067,7 @@ it("recovers an abandoned staged reply by durable alarm without another User req
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
             )
             .bind(id)
             .all()
@@ -1110,7 +1110,7 @@ it("expires only one User's eligible channel evidence while preserving pending, 
           .batch([
             db
               .prepare(
-                "SELECT * FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) WHERE turn_id = ?"
+                "SELECT * FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) WHERE turn_id = ?"
               )
               .bind(turnId),
             db
@@ -1119,7 +1119,7 @@ it("expires only one User's eligible channel evidence while preserving pending, 
               )
               .bind(turnId),
             db
-              .prepare(`SELECT e.* FROM hosted_whatsapp_delivery_events AS e
+              .prepare(`SELECT e.* FROM (SELECT rowid,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms FROM whatsapp_event_records WHERE kind='delivery-status') AS e
             JOIN (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d ON d.correlation_token = e.correlation_token
             WHERE d.turn_id = ?`)
               .bind(turnId),
@@ -1165,9 +1165,9 @@ it("expires only one User's eligible channel evidence while preserving pending, 
                 entry.terminalAt - 1
               ),
             db
-              .prepare(`INSERT INTO hosted_whatsapp_delivery_events
-            (correlation_token, provider_message_id, status, occurred_at_ms, received_at_ms)
-            VALUES (?, ?, 'delivered', ?, ?)`)
+              .prepare(`INSERT INTO whatsapp_event_records
+            (kind,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms)
+            VALUES ('delivery-status',?,?,'delivered',?,?)`)
               .bind(
                 entry.token,
                 `wamid.answer.${entry.turnId}`,
@@ -1693,7 +1693,7 @@ it("expires a proposed reply at its original deadline despite repeated authentic
       const original = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT proposed_at_ms FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
+            "SELECT proposed_at_ms FROM (SELECT rowid,id AS turn_id,user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
           )
           .bind(visible.turnId)
           .first<{ proposed_at_ms: number }>()
@@ -1726,7 +1726,7 @@ it("expires a proposed reply at its original deadline despite repeated authentic
             const saved = yield* Effect.tryPromise(() =>
               db
                 .prepare(
-                  "SELECT proposed_at_ms FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
+                  "SELECT proposed_at_ms FROM (SELECT rowid,id AS turn_id,user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
                 )
                 .bind(visible.turnId)
                 .first<{ proposed_at_ms: number }>()
@@ -1747,7 +1747,7 @@ it("expires a proposed reply at its original deadline despite repeated authentic
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
             )
             .bind(visible.turnId)
             .all()

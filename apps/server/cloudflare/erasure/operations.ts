@@ -165,8 +165,8 @@ export const resumeErasureCases = (
         input.db
           .prepare(`SELECT id AS reference,user_id AS userId,operator_ref AS operatorRef
     FROM erasure_requests WHERE state NOT IN('AwaitingReview','Complete') AND decision_json IS NOT NULL AND next_continuation_at_ms<=?
-    AND (EXISTS(SELECT 1 FROM erasure_generation WHERE id=1 AND generation=?) OR EXISTS(SELECT 1 FROM erasure_restore_sessions r
-      JOIN erasure_restore_members m ON m.generation=r.generation WHERE r.id=1 AND r.scanned=1 AND r.generation=?
+    AND (EXISTS(SELECT 1 FROM erasure_control WHERE kind='published' AND generation=?) OR EXISTS(SELECT 1 FROM erasure_control r
+      JOIN erasure_restore_members m ON m.generation=r.generation WHERE r.kind='restore' AND r.scanned=1 AND r.generation=?
       AND m.request_id=erasure_requests.id AND m.user_id=erasure_requests.user_id AND erasure_requests.restore_generation=r.generation))
     ORDER BY last_continued_at_ms,requested_at_ms LIMIT ?`)
           .bind(current, generation.generation, generation.generation, maximumResumedCases)

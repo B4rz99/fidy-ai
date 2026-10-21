@@ -38,8 +38,8 @@ const persistEvidence = (
   return io(() =>
     db.batch([
       db
-        .prepare(`INSERT INTO erasure_custody_events(id,request_id,custodian,evidence_json,recorded_at_ms,operator_ref)
-      VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING`)
+        .prepare(`INSERT INTO erasure_custody_records(record_type,id,request_id,custodian,evidence_json,recorded_at_ms,operator_ref)
+      VALUES('event',?,?,?,?,?,?) ON CONFLICT(event_identity) DO NOTHING`)
         .bind(
           admission.evidence.evidenceRef,
           admission.reference,
@@ -49,23 +49,23 @@ const persistEvidence = (
           admission.authority.operatorRef
         ),
       db
-        .prepare(`UPDATE erasure_custody_evidence SET state=?,evidence_json=? WHERE request_id=? AND custodian=?
-      AND EXISTS(SELECT 1 FROM erasure_custody_events WHERE id=? AND request_id=? AND evidence_json=?
-        AND (erasure_custody_evidence.custodian<>'Cloudflare' OR recorded_at_ms>=(SELECT last_erased_at_ms FROM erasure_requests WHERE id=erasure_custody_evidence.request_id)))
-      AND (state NOT IN('Verified','NotApplicable') OR evidence_json=?)`)
+        .prepare(`UPDATE erasure_custody_records SET state=?,current_event_id=? WHERE record_type='current' AND request_id=? AND custodian=?
+      AND EXISTS(SELECT 1 FROM (SELECT rowid,id,request_id,custodian,evidence_json,recorded_at_ms,operator_ref FROM erasure_custody_records WHERE record_type='event') WHERE id=? AND request_id=? AND evidence_json=?
+        AND (erasure_custody_records.custodian<>'Cloudflare' OR recorded_at_ms>=(SELECT last_erased_at_ms FROM erasure_requests WHERE id=erasure_custody_records.request_id)))
+      AND (state NOT IN('Verified','NotApplicable') OR current_event_id=?)`)
         .bind(
           admission.evidence.outcome.status,
-          encoded,
+          admission.evidence.evidenceRef,
           admission.reference,
           admission.evidence.custodian,
           admission.evidence.evidenceRef,
           admission.reference,
           encoded,
-          encoded
+          admission.evidence.evidenceRef
         ),
       db
         .prepare(
-          `SELECT EXISTS(SELECT 1 FROM erasure_custody_evidence WHERE request_id=? AND custodian=? AND evidence_json=?) AS recorded`
+          `SELECT EXISTS(SELECT 1 FROM (SELECT c.rowid,c.request_id,c.custodian,c.state,e.evidence_json FROM erasure_custody_records c LEFT JOIN erasure_custody_records e ON e.event_identity=c.current_event_id WHERE c.record_type='current') WHERE request_id=? AND custodian=? AND evidence_json=?) AS recorded`
         )
         .bind(admission.reference, admission.evidence.custodian, encoded),
     ])

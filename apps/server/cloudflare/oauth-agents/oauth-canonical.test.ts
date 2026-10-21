@@ -1292,7 +1292,7 @@ it("refuses a foreign Transaction child after preparing an owned child without c
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM transaction_reconciliation_members")
+            .prepare("SELECT count(*) FROM reconciled_transactions")
             .first<number>("count(*)")
         )
       ).toBe(0);
@@ -1372,7 +1372,7 @@ it("links and unlinks exact owned Transactions through ordinary OAuth mutations 
         expect(
           yield* wait(
             fixture.db
-              .prepare("SELECT count(*) FROM transaction_reconciliation_members")
+              .prepare("SELECT count(*) FROM reconciled_transactions")
               .first<number>("count(*)")
           )
         ).toBe(name === "transactions.linkTransactions" ? 2 : 0);

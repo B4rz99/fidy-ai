@@ -87,11 +87,14 @@ export const initialize = ({
     db: work.db,
     statements: [
       prepareRecurringFactGuard({ ...work, revision: snapshot.revision }),
-      work.db.prepare("DELETE FROM recurring_facts WHERE user_id = ?").bind(work.userId),
-      work.db.prepare("DELETE FROM recurring_proposals WHERE user_id = ?").bind(work.userId),
       work.db
         .prepare(
-          `INSERT INTO recurring_progress (user_id, revision, phase, first_captured_at, time_zone) VALUES (?, ?, 'scan', ?, ?) ON CONFLICT(user_id) DO UPDATE SET revision = excluded.revision, phase = 'scan', cursor_at = '', cursor_id = '', group_key = '', first_captured_at = excluded.first_captured_at, time_zone = excluded.time_zone`
+          "DELETE FROM recurring_evaluation_records WHERE kind IN ('fact','proposal') AND user_id = ?"
+        )
+        .bind(work.userId),
+      work.db
+        .prepare(
+          `INSERT INTO recurring_evaluation_records (kind,id,user_id,revision,phase,first_captured_at,time_zone,cursor_at,cursor_id,group_key,evaluated_revision) VALUES ('progress','progress',?,?,'scan',?,?,'','','',0) ON CONFLICT(user_id,kind,id) DO UPDATE SET revision = excluded.revision, phase = 'scan', cursor_at = '', cursor_id = '', group_key = '', first_captured_at = excluded.first_captured_at, time_zone = excluded.time_zone`
         )
         .bind(
           work.userId,
@@ -121,7 +124,7 @@ export const scan = ({
       statements.push(
         work.db
           .prepare(
-            "INSERT INTO recurring_facts (user_id, id, group_key, occurred_at, fact_json) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, id) DO NOTHING"
+            "INSERT INTO recurring_evaluation_records (kind,user_id,id,group_key,occurred_at,fact_json) VALUES ('fact',?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO NOTHING"
           )
           .bind(
             work.userId,
@@ -135,7 +138,7 @@ export const scan = ({
     statements.push(
       work.db
         .prepare(
-          "UPDATE recurring_progress SET cursor_at = ?, cursor_id = ?, phase = ? WHERE user_id = ? AND revision = ?"
+          "UPDATE recurring_evaluation_records SET cursor_at = ?, cursor_id = ?, phase = ? WHERE kind='progress' AND user_id = ? AND revision = ?"
         )
         .bind(
           read.value.cursor.occurredAt,
@@ -159,7 +162,7 @@ export const processGroup = ({
   Effect.gen(function* () {
     const raw = yield* query({
       db: work.db,
-      sql: `SELECT fact_json AS value FROM recurring_facts WHERE user_id = ? AND group_key = ? ORDER BY occurred_at, id LIMIT ${maximumGroupFacts + 1}`,
+      sql: `SELECT fact_json AS value FROM (SELECT rowid,user_id,id,group_key,occurred_at,fact_json FROM recurring_evaluation_records WHERE kind='fact') WHERE user_id = ? AND group_key = ? ORDER BY occurred_at, id LIMIT ${maximumGroupFacts + 1}`,
       values: [work.userId, group],
     });
     if (raw.length > maximumGroupFacts) return yield* new RecurringUnavailable();
@@ -177,14 +180,16 @@ export const processGroup = ({
       statements.push(
         work.db
           .prepare(
-            "INSERT INTO recurring_proposals (user_id, proposal_key, proposal_json) VALUES (?, ?, ?) ON CONFLICT(user_id, proposal_key) DO UPDATE SET proposal_json = excluded.proposal_json"
+            "INSERT INTO recurring_evaluation_records (kind,user_id,id,proposal_json) VALUES ('proposal',?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET proposal_json = excluded.proposal_json"
           )
           .bind(work.userId, key, encoded)
       );
     }
     statements.push(
       work.db
-        .prepare("UPDATE recurring_progress SET group_key = ? WHERE user_id = ? AND revision = ?")
+        .prepare(
+          "UPDATE recurring_evaluation_records SET group_key = ? WHERE kind='progress' AND user_id = ? AND revision = ?"
+        )
         .bind(group, work.userId, progress.revision)
     );
     yield* batch({ db: work.db, statements });
@@ -346,7 +351,7 @@ export const cutover = ({
   Effect.gen(function* () {
     const rows = yield* query({
       db: work.db,
-      sql: `SELECT proposal_json AS value FROM recurring_proposals WHERE user_id = ? ORDER BY proposal_key LIMIT ${maximumSeries + 1}`,
+      sql: `SELECT proposal_json AS value FROM (SELECT rowid,user_id,id AS proposal_key,proposal_json FROM recurring_evaluation_records WHERE kind='proposal') WHERE user_id = ? ORDER BY proposal_key LIMIT ${maximumSeries + 1}`,
       values: [work.userId],
     });
     if (rows.length > maximumSeries) return yield* new RecurringUnavailable();
@@ -381,11 +386,14 @@ export const cutover = ({
     statements.push(
       work.db
         .prepare(
-          "UPDATE recurring_progress SET phase = 'complete', evaluated_at = ?, evaluated_revision = revision WHERE user_id = ? AND revision = ?"
+          "UPDATE recurring_evaluation_records SET phase = 'complete', evaluated_at = ?, evaluated_revision = revision WHERE kind='progress' AND user_id = ? AND revision = ?"
         )
         .bind(DateTime.formatIso(current), work.userId, progress.revision),
-      work.db.prepare("DELETE FROM recurring_facts WHERE user_id = ?").bind(work.userId),
-      work.db.prepare("DELETE FROM recurring_proposals WHERE user_id = ?").bind(work.userId)
+      work.db
+        .prepare(
+          "DELETE FROM recurring_evaluation_records WHERE kind IN ('fact','proposal') AND user_id = ?"
+        )
+        .bind(work.userId)
     );
     yield* batch({ db: work.db, statements });
   });

@@ -231,19 +231,17 @@ export const prepareMonthlyPlan = ({
   const authority = callerAuthority({ subject, current });
   return [
     db
-      .prepare(`INSERT INTO budget_month_caps(user_id,budget_id,month,cap)
-      SELECT b.user_id,b.id,?,COALESCE((SELECT p.cap FROM budget_month_caps p
+      .prepare(`INSERT INTO budget_month_plan_records(kind,user_id,budget_id,month,cap) SELECT 'cap',b.user_id,b.id,?,COALESCE((SELECT p.cap FROM (SELECT rowid,user_id,budget_id,month,cap FROM budget_month_plan_records WHERE kind='cap') p
         WHERE p.user_id=b.user_id AND p.budget_id=b.id AND p.month < ?
         ORDER BY p.month DESC LIMIT 1),b.cap)
       FROM budgets b WHERE b.user_id=? AND (b.starts_month IS NULL OR b.starts_month<=?)
-        AND NOT EXISTS(SELECT 1 FROM budget_plan_months WHERE user_id=? AND month=?)
+        AND NOT EXISTS(SELECT 1 FROM (SELECT rowid,user_id,month FROM budget_month_plan_records WHERE kind='plan') WHERE user_id=? AND month=?)
         AND EXISTS(SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
-      ON CONFLICT(user_id,budget_id,month) DO NOTHING`)
+      ON CONFLICT(user_id,budget_id,month) WHERE kind='cap' DO NOTHING`)
       .bind(month, month, subject.userId, month, subject.userId, month, ...authority.bindings),
     db
-      .prepare(`INSERT INTO budget_plan_months(user_id,month)
-      SELECT ?,? WHERE EXISTS(SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
-      ON CONFLICT(user_id,month) DO NOTHING`)
+      .prepare(`INSERT INTO budget_month_plan_records(kind,user_id,month) SELECT 'plan',?,? WHERE EXISTS(SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
+      ON CONFLICT(user_id,month) WHERE kind='plan' DO NOTHING`)
       .bind(subject.userId, month, ...authority.bindings),
   ];
 };
@@ -294,10 +292,9 @@ export const prepareMonthlyCap = ({
   const authority = callerAuthority({ subject, current });
   return [
     db
-      .prepare(`INSERT INTO budget_month_caps(user_id,budget_id,month,cap)
-    SELECT user_id,id,?,? FROM budgets WHERE user_id=? AND id=?
+      .prepare(`INSERT INTO budget_month_plan_records(kind,user_id,budget_id,month,cap) SELECT 'cap',user_id,id,?,? FROM budgets WHERE user_id=? AND id=?
       AND EXISTS(SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
-    ON CONFLICT(user_id,budget_id,month) DO UPDATE SET cap=excluded.cap`)
+    ON CONFLICT(user_id,budget_id,month) WHERE kind='cap' DO UPDATE SET cap=excluded.cap`)
       .bind(
         payload.month,
         encodeMoneyAmount(payload.cap.amount),
@@ -375,7 +372,7 @@ export const reviewBudget = (
                 : JSON.stringify({ budget: revision, group: groupRevision }),
             guard: {
               sql:
-                "SELECT 1 FROM budgets WHERE user_id = ? AND id = ? AND category_id = ? AND COALESCE((SELECT g.currency FROM budget_group_currencies g WHERE g.user_id=budgets.user_id AND g.group_name=budgets.group_name ORDER BY g.month DESC LIMIT 1),currency) = ? AND cap = ? AND created_at = ? AND updated_at = ?" +
+                "SELECT 1 FROM budgets WHERE user_id = ? AND id = ? AND category_id = ? AND COALESCE((SELECT g.currency FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency') g WHERE g.user_id=budgets.user_id AND g.group_name=budgets.group_name ORDER BY g.month DESC LIMIT 1),currency) = ? AND cap = ? AND created_at = ? AND updated_at = ?" +
                 groupSql,
               params: [
                 input.userId,

@@ -562,7 +562,6 @@ it("retains recovery evidence until its calendar deadline then removes it withou
       for (const table of [
         "support_recovery_cases",
         "(SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')",
-        "support_recovery_operator_limits",
       ]) {
         expect(
           yield* wait(() => fixture.db.prepare(`SELECT count(*) AS count FROM ${table}`).first())
@@ -641,7 +640,6 @@ const expectUnchanged = ({
     for (const table of [
       "support_recovery_cases",
       "(SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')",
-      "support_recovery_operator_limits",
       "support_recovery_admissions",
       "web_sessions",
     ]) {

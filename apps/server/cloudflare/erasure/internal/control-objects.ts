@@ -28,7 +28,7 @@ const sweepBucket = (input: ControlSweep): Effect.Effect<void, ErasureUnavailabl
   Effect.gen(function* () {
     const stored = yield* io(() =>
       input.db
-        .prepare("SELECT cursor FROM erasure_control_sweeps WHERE bucket=?")
+        .prepare("SELECT cursor FROM erasure_control WHERE kind=?")
         .bind(input.id)
         .first<string>("cursor")
     );
@@ -54,7 +54,7 @@ const sweepBucket = (input: ControlSweep): Effect.Effect<void, ErasureUnavailabl
     yield* io(() =>
       input.db
         .prepare(
-          "INSERT INTO erasure_control_sweeps(bucket,cursor) VALUES(?,?) ON CONFLICT(bucket) DO UPDATE SET cursor=excluded.cursor WHERE cursor <> excluded.cursor"
+          "INSERT INTO erasure_control(kind,cursor) VALUES(?,?) ON CONFLICT(kind) DO UPDATE SET cursor=excluded.cursor WHERE cursor <> excluded.cursor"
         )
         .bind(input.id, nextCursor)
         .run()

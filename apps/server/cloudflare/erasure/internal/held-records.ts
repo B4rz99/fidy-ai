@@ -199,7 +199,7 @@ const purgeRecord = (
           .bind(current, input.scope.reference, input.scope.userId),
         input.configuration.db
           .prepare(
-            "UPDATE erasure_custody_evidence SET state='Pending',evidence_json=NULL WHERE request_id=? AND custodian='Cloudflare'"
+            "UPDATE erasure_custody_records SET state='Pending',current_event_id=NULL WHERE record_type='current' AND request_id=? AND custodian='Cloudflare'"
           )
           .bind(input.scope.reference),
       ])
@@ -303,7 +303,7 @@ const markPurgePending = (input: ArchiveInput): Effect.Effect<void, ErasureUnava
         .bind(input.scope.reference, input.scope.userId),
       input.configuration.db
         .prepare(
-          "UPDATE erasure_custody_evidence SET state='Pending',evidence_json=NULL WHERE request_id=? AND custodian='Cloudflare'"
+          "UPDATE erasure_custody_records SET state='Pending',current_event_id=NULL WHERE record_type='current' AND request_id=? AND custodian='Cloudflare'"
         )
         .bind(input.scope.reference),
     ])

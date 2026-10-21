@@ -74,7 +74,7 @@ export const recoverWhatsAppDelivery = ({
     const raw = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT d.text, d.state, d.send_started_at_ms, i.portfolio_id, i.bsuid
-        FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
+        FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
           ON i.turn_id = d.turn_id AND i.user_id = d.user_id
         WHERE d.turn_id = ? AND d.user_id = ?`)
         .bind(turnId, userId)
@@ -145,7 +145,7 @@ export const prepareWhatsAppInbound = ({
     },
   }),
   db
-    .prepare(`UPDATE hosted_turns SET dispatch_user_id=user_id,dispatch_created_at_ms=?
+    .prepare(`UPDATE hosted_turns SET dispatch_created_at_ms=?
       WHERE id=? AND user_id=? AND dispatch_created_at_ms IS NULL`)
     .bind(now, id, subject.userId),
   prepareWhatsAppIdentity({
@@ -156,7 +156,7 @@ export const prepareWhatsAppInbound = ({
       (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms, closes_at_ms)
       SELECT i.user_id, i.portfolio_id, i.bsuid, MIN(i.occurred_at_ms, i.received_at_ms),
         MIN(i.occurred_at_ms, i.received_at_ms) + 86400000
-      FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
+      FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
       JOIN identity_associations AS w ON w.userId = i.user_id AND w.businessPortfolioId = i.portfolio_id
         AND w.businessScopedUserId = i.bsuid
       WHERE i.turn_id = ? AND i.user_id = ?
@@ -169,8 +169,8 @@ export const prepareWhatsAppInbound = ({
   }),
 ];
 
-const expiredChannelOutbox = `UPDATE hosted_turns AS hosted_whatsapp_outbox SET dispatch_user_id=NULL,dispatch_offered_at_ms=NULL,dispatch_created_at_ms=NULL WHERE dispatch_created_at_ms IS NOT NULL AND rowid IN (
-  SELECT o.rowid FROM channel_retention_turns AS t CROSS JOIN (SELECT rowid,turn_id,dispatch_user_id AS user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) WHERE dispatch_created_at_ms IS NOT NULL) AS o
+const expiredChannelOutbox = `UPDATE hosted_turns AS hosted_whatsapp_outbox SET dispatch_offered_at_ms=NULL,dispatch_created_at_ms=NULL WHERE dispatch_created_at_ms IS NOT NULL AND rowid IN (
+  SELECT o.rowid FROM channel_retention_turns AS t CROSS JOIN (SELECT rowid,id AS turn_id,user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL AND dispatch_created_at_ms IS NOT NULL) AS o
   WHERE o.user_id=t.user_id AND o.turn_id=t.id LIMIT 100)`;
 
 /** Expire only terminal channel evidence older than the approved thirty-day retention, for one explicit User. */
@@ -189,8 +189,8 @@ export const expireWhatsAppEvidence = ({
         userId,
         now,
         statement: {
-          sql: `DELETE FROM hosted_whatsapp_delivery_events WHERE rowid IN (
-        SELECT e.rowid FROM channel_retention_turns AS t CROSS JOIN (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d CROSS JOIN hosted_whatsapp_delivery_events AS e
+          sql: `DELETE FROM whatsapp_event_records WHERE kind='delivery-status' AND rowid IN (
+        SELECT e.rowid FROM channel_retention_turns AS t CROSS JOIN (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d CROSS JOIN (SELECT rowid,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms FROM whatsapp_event_records WHERE kind='delivery-status') AS e
         WHERE d.user_id=t.user_id AND d.turn_id=t.id AND e.correlation_token=d.correlation_token
         LIMIT 200)`,
           params: [],
@@ -204,7 +204,7 @@ export const expireWhatsAppEvidence = ({
           sql: `DELETE FROM whatsapp_deliveries WHERE kind='hosted' AND rowid IN (
         SELECT d.rowid FROM channel_retention_turns AS t CROSS JOIN (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d
         WHERE d.user_id=t.user_id AND d.turn_id=t.id AND NOT EXISTS (
-          SELECT 1 FROM hosted_whatsapp_delivery_events AS e WHERE e.correlation_token=d.correlation_token)
+          SELECT 1 FROM (SELECT rowid,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms FROM whatsapp_event_records WHERE kind='delivery-status') AS e WHERE e.correlation_token=d.correlation_token)
         LIMIT 100)`,
           params: [],
         },
@@ -223,11 +223,11 @@ export const expireWhatsAppEvidence = ({
         userId,
         now,
         statement: {
-          sql: `UPDATE hosted_turns SET inbound_portfolio_id=NULL,inbound_bsuid=NULL,inbound_message_id=NULL,inbound_business_phone_number_id=NULL,inbound_occurred_at_ms=NULL,inbound_received_at_ms=NULL,inbound_reply_to_message_id=NULL,inbound_sandbox_phone=NULL,dispatch_user_id=NULL,dispatch_offered_at_ms=NULL,dispatch_created_at_ms=NULL WHERE rowid IN (
-        SELECT i.rowid FROM channel_retention_turns AS t CROSS JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
+          sql: `UPDATE hosted_turns SET inbound_portfolio_id=NULL,inbound_bsuid=NULL,inbound_message_id=NULL,inbound_business_phone_number_id=NULL,inbound_occurred_at_ms=NULL,inbound_received_at_ms=NULL,inbound_reply_to_message_id=NULL,inbound_sandbox_phone=NULL,dispatch_offered_at_ms=NULL,dispatch_created_at_ms=NULL WHERE rowid IN (
+        SELECT i.rowid FROM channel_retention_turns AS t CROSS JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
         WHERE i.user_id=t.user_id AND i.turn_id=t.id AND NOT EXISTS (
           SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d WHERE d.user_id=i.user_id AND d.turn_id=i.turn_id)
-        AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,turn_id,dispatch_user_id AS user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) WHERE dispatch_created_at_ms IS NOT NULL) AS o WHERE o.turn_id=i.turn_id)
+        AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS turn_id,user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL AND dispatch_created_at_ms IS NOT NULL) AS o WHERE o.turn_id=i.turn_id)
         LIMIT 100)`,
           params: [],
         },
@@ -270,17 +270,17 @@ export const prepareWhatsAppWorkCleanup = ({
         db,
         userId,
         statement: {
-          sql: `UPDATE hosted_turns AS hosted_whatsapp_outbox SET dispatch_user_id=NULL,dispatch_offered_at_ms=NULL,dispatch_created_at_ms=NULL WHERE dispatch_created_at_ms IS NOT NULL AND id = ? AND dispatch_user_id = ?
+          sql: `UPDATE hosted_turns AS hosted_whatsapp_outbox SET dispatch_offered_at_ms=NULL,dispatch_created_at_ms=NULL WHERE dispatch_created_at_ms IS NOT NULL AND id = ? AND user_id = ?
       AND EXISTS (SELECT 1 FROM channel_turns WHERE id = ? AND user_id = ? AND status <> 'pending')`,
           params: [turnId, userId, turnId, userId],
         },
       })
     : db
         .prepare(
-          "UPDATE hosted_turns AS hosted_whatsapp_outbox SET dispatch_user_id=NULL,dispatch_offered_at_ms=NULL,dispatch_created_at_ms=NULL WHERE dispatch_created_at_ms IS NOT NULL AND id = ? AND dispatch_user_id = ?"
+          "UPDATE hosted_turns AS hosted_whatsapp_outbox SET dispatch_offered_at_ms=NULL,dispatch_created_at_ms=NULL WHERE dispatch_created_at_ms IS NOT NULL AND id = ? AND user_id = ?"
         )
         .bind(turnId, userId);
 
 /** Bounded sweep ordering for its enclosing hosted_turns alias t; the caller keeps its due predicates and limit. */
 export const whatsAppRecoveryPriority = (): string =>
-  `COALESCE((SELECT created_at_ms FROM (SELECT rowid,turn_id,dispatch_user_id AS user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) WHERE dispatch_created_at_ms IS NOT NULL) AS hosted_whatsapp_outbox WHERE turn_id = t.id AND user_id = t.user_id), t.started_at_ms)`;
+  `COALESCE((SELECT created_at_ms FROM (SELECT rowid,id AS turn_id,user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL AND dispatch_created_at_ms IS NOT NULL) AS hosted_whatsapp_outbox WHERE turn_id = t.id AND user_id = t.user_id), t.started_at_ms)`;

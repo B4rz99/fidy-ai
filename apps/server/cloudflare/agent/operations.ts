@@ -25,7 +25,7 @@ import {
 export const prepareProactiveTranscript: typeof prepareProactiveTranscriptOwned = (input) =>
   prepareProactiveTranscriptOwned(input);
 /** Read one same-User, unexpired proactive Transcript entry under current processing Consent for an ordinary correlated reply. */
-export const readProactiveTranscript = (
+export const readAssociatedProactiveTranscript = (
   input: Parameters<typeof readProactiveTranscriptOwned>[0]
 ): Effect.Effect<
   Effect.Success<ReturnType<typeof readProactiveTranscriptOwned>>,
@@ -81,8 +81,8 @@ export const prepareHostedChannelRetention = ({
 }>): D1PreparedStatement =>
   db
     .prepare(`WITH channel_retention_turns AS (
-    SELECT turn_id AS id,user_id FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention
-    WHERE user_id=? AND terminal_at_ms < ? ORDER BY terminal_at_ms,turn_id LIMIT 100
+    SELECT id,user_id FROM hosted_turns
+    WHERE user_id=? AND retention_terminal_at_ms < ? ORDER BY retention_terminal_at_ms,id LIMIT 100
   ) ${statement.sql}`)
     .bind(userId, now - hostedTranscriptRetentionMs, ...statement.params);
 

@@ -108,11 +108,12 @@ const seedReconciliation = ({
       );
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO transaction_reconciliation_members
-      SELECT user_id, first_transaction_id, first_transaction_id, second_transaction_id
+          .prepare(`UPDATE transactions SET reconciliation_first_id=incoming.first_transaction_id,reconciliation_second_id=incoming.second_transaction_id FROM (
+      SELECT user_id, first_transaction_id AS transaction_id, first_transaction_id, second_transaction_id
         FROM transaction_reconciliation_decisions WHERE user_id = ?
       UNION ALL SELECT user_id, second_transaction_id, first_transaction_id, second_transaction_id
-        FROM transaction_reconciliation_decisions WHERE user_id = ?`)
+        FROM transaction_reconciliation_decisions WHERE user_id = ?
+      ) incoming WHERE transactions.user_id=incoming.user_id AND transactions.id=incoming.transaction_id`)
           .bind(subject, subject)
           .run()
       );

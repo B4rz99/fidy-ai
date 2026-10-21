@@ -18,7 +18,17 @@ const entryProjection = ({
       : "r.user_id=?";
   const scope = owner + " AND r.record_type='" + recordType + "'";
   const body =
-    "json_object(" + archiveFields.map((field) => `'${field}',r."${field}"`).join(",") + ")";
+    "json_object(" +
+    archiveFields
+      .map((field) => {
+        if (recordType === "reminder_control" && field === "message_id") {
+          return "'message_id',json_extract(r.id,'$[1]')";
+        }
+        if (recordType === "reminder_control" && field === "choice") return "'choice',r.outcome";
+        return `'${field}',r."${field}"`;
+      })
+      .join(",") +
+    ")";
   return {
     id,
     dataClass,
@@ -46,6 +56,12 @@ const entryProjection = ({
 };
 
 export const projections: ReadonlyArray<ErasureProjection> = [
+  entryProjection({
+    id: "reminder_control_receipts",
+    recordType: "reminder_control",
+    dataClass: "schedules",
+    archiveFields: ["user_id", "message_id", "choice"],
+  }),
   entryProjection({
     id: "canonical_request_acceptances",
     recordType: "request_admission",
@@ -115,20 +131,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'cutoff_ms',r.\"cutoff_ms\") AS body FROM audit_retention_permits r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'cutoff_ms',r.\"cutoff_ms\") AS body FROM (SELECT rowid,id AS user_id,audit_retention_cutoff_ms AS cutoff_ms FROM users WHERE audit_retention_cutoff_ms IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM audit_retention_permits r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,id AS user_id,audit_retention_cutoff_ms AS cutoff_ms FROM users WHERE audit_retention_cutoff_ms IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM audit_retention_permits r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,id AS user_id,audit_retention_cutoff_ms AS cutoff_ms FROM users WHERE audit_retention_cutoff_ms IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM audit_retention_permits AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE users AS r SET audit_retention_cutoff_ms=NULL WHERE r.id=? AND audit_retention_cutoff_ms IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

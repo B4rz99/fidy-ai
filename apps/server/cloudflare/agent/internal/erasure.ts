@@ -121,7 +121,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       }),
     },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'hosted_session_id',r.\"hosted_session_id\",'started_at_ms',r.\"started_at_ms\",'terminal_at_ms',r.\"terminal_at_ms\",'status',r.\"status\",'failure_reason',r.\"failure_reason\",'proposal_user_id',r.proposal_user_id,'proposed_at_ms',r.proposed_at_ms,'proposal_text',r.proposal_text,'retention_user_id',r.retention_user_id,'retention_terminal_at_ms',r.retention_terminal_at_ms) AS body FROM hosted_turns r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'hosted_session_id',r.\"hosted_session_id\",'started_at_ms',r.\"started_at_ms\",'terminal_at_ms',r.\"terminal_at_ms\",'status',r.\"status\",'failure_reason',r.\"failure_reason\",'proposal_user_id',CASE WHEN r.proposed_at_ms IS NOT NULL THEN r.user_id END,'proposed_at_ms',r.proposed_at_ms,'proposal_text',r.proposal_text,'retention_user_id',CASE WHEN r.retention_terminal_at_ms IS NOT NULL THEN r.user_id END,'retention_terminal_at_ms',r.retention_terminal_at_ms) AS body FROM hosted_turns r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -169,20 +169,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('transcript_kind',r.\"transcript_kind\",'user_id',r.\"user_id\",'transcript_id',r.\"transcript_id\",'insight_event_id',r.\"insight_event_id\") AS body FROM proactive_transcript_event_links r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('transcript_kind',r.\"transcript_kind\",'user_id',r.\"user_id\",'transcript_id',r.\"transcript_id\",'insight_event_id',r.\"insight_event_id\") AS body FROM (SELECT rowid,user_id AS user_id,transcript_id AS transcript_id,id AS insight_event_id,transcript_kind AS transcript_kind FROM insight_events WHERE transcript_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM proactive_transcript_event_links r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id AS user_id,transcript_id AS transcript_id,id AS insight_event_id,transcript_kind AS transcript_kind FROM insight_events WHERE transcript_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM proactive_transcript_event_links r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,user_id AS user_id,transcript_id AS transcript_id,id AS insight_event_id,transcript_kind AS transcript_kind FROM insight_events WHERE transcript_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM proactive_transcript_event_links AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE insight_events AS r SET transcript_id=NULL,transcript_kind=NULL WHERE r.user_id=? AND transcript_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

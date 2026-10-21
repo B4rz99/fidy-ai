@@ -9,28 +9,18 @@ is missing evidence, not a reason to repeat collection or fabricate a checkout r
 
 1. Identify the BillingAttempt's exact reference and provider environment in privileged D1. The
    Wompi merchant dashboard can search by reference in the matching environment. If it finds a
-   transaction, retain its ID as a lookup hint. A screenshot, browser redirect, local failure or
+   transaction, retain its ID as investigation context. A screenshot, browser redirect, local failure or
    signed callback alone cannot authorize settlement or replacement.
 
 2. Check retained `billing_provider_transactions` for that attempt. If Fidy already verified the
    matching transaction, use that evidence; no additional callback or provider request is needed.
-   Otherwise, offer only the transaction ID to the existing reconciler through a privileged,
-   parameterized D1 session:
-
-   ```sql
-   INSERT OR IGNORE INTO billing_provider_transactions(transaction_id,event_received_at_ms)
-   SELECT :transaction_id, unixepoch('now') * 1000
-   WHERE EXISTS (
-     SELECT 1 FROM billing_attempts
-     WHERE wompi_reference=:reference AND wompi_environment=:environment
-       AND status IN ('pending','failed') AND collection_state='sent'
-   );
-   ```
-
-   This does not associate the hint with an attempt or alter its outcome. Only the reconciler's
-   authenticated provider GET, matching reference, environment, exact Money and source when
-   supplied, can publish verified evidence. Do not reset an exhausted lookup budget or repeatedly
-   offer a failed lookup; investigate the provider failure.
+   The automatic reconciler discovers retained pending transaction candidates and authenticated
+   callback hints. Its authenticated provider GET must match reference, environment, exact Money
+   and source when supplied before publishing verified evidence. The signed callback store is not
+   an unsigned operator ingress: do not invent callback metadata, bind an unverified ID to an
+   attempt, or copy dashboard status into provider evidence. If the discovered ID has no supported
+   retained lookup path, escalate for a reviewed authenticated lookup or support investigation.
+   Do not reset an exhausted lookup budget or repeatedly offer a failed lookup.
 
 3. A failed, sent BillingAttempt qualifies for `billing_retry_clearances` when exactly one retained
    transaction has a verified `DECLINED` status and finalization no later than the attempt's failure,

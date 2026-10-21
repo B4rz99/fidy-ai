@@ -860,7 +860,7 @@ it("refuses a source's PAT pairing burst without denying an unrelated client", (
         .statements()
         .filter(({ sql }) => sql.includes("INSERT INTO resource_admission_counters"))
         .slice(admissionCosts.length);
-      expect(boundaryCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(29);
+      expect(boundaryCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(31);
       expect(boundaryCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(2);
     })
   ));

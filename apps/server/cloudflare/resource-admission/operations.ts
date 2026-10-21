@@ -318,6 +318,7 @@ export const admitResourceWithAttemptPressure = dual<
   admitResource(config, attempt).pipe(Effect.flatMap(() => admitResource(config, work)))
 );
 
+const calendarDayMs = 86_400_000;
 const patWindowMs = 600_000;
 const patRetentionMs = patWindowMs * 2;
 const anchoredCounters = {
@@ -344,10 +345,21 @@ export const resourceCounterQuery = (input: ResourceCounterQuery): OwnedStatemen
   ],
 });
 
-/** Anchored capacity advances with the owner proof; replacement at capacity is a no-op, while
- * pairing's final bounded-count constraint aborts an over-capacity owner commit.
+/** Advance a closed counter with its owner proof. Calendar compaction retains every UTC day;
+ * anchored policies keep their original reset and refusal rules. Zero changes spend no capacity.
  */
 export const prepareResourceCounter = (input: ResourceCounterRequest): D1PreparedStatement => {
+  if (input.kind === "hosted_compaction") {
+    const day = Math.floor(input.current / calendarDayMs) * calendarDayMs;
+    return input.db
+      .prepare(`INSERT INTO resource_admission_counters
+      (policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,owner_user_id)
+      SELECT 'hosted.compaction.user.v1',user_id,'calendar',?,?,1,user_id
+      FROM (${input.subject.sql}) WHERE true
+      ON CONFLICT(policy_key,scope_key,window_start_ms) WHERE window_kind='calendar'
+      DO UPDATE SET used=used+1 WHERE used<3`)
+      .bind(day, day + calendarDayMs, ...input.subject.params);
+  }
   const policy = anchoredCounters[input.kind];
   const global = input.kind === "email_pairing_global";
   const source = input.kind === "pat_pairing_source";
@@ -439,4 +451,35 @@ export const sweepPATReviewEvents = (
     WHERE policy_key='pat.review.session.v1' AND admitted_at_epoch_ms<=?
     ORDER BY admitted_at_epoch_ms LIMIT ?)`,
   params: [input.current - patRetentionMs, input.limit],
+});
+
+/** Bounded compaction retention discovery, ordered by each original UTC accounting day. */
+export const expiredCompactionCounterUsers = (
+  input: Readonly<{ cutoff: number; limit: number }>
+): OwnedStatement => ({
+  sql: `SELECT owner_user_id AS user_id,window_start_ms AS due_ms FROM resource_admission_counters
+    WHERE policy_key='hosted.compaction.user.v1' AND window_start_ms<?
+    ORDER BY window_start_ms,scope_key LIMIT ?`,
+  params: [input.cutoff, input.limit],
+});
+
+/** Retention is owned by Hosted execution, not by the calendar window's admission expiry. */
+export const sweepCompactionCounters = (
+  input: Readonly<{ userId: string; cutoff: number; limit: number }>
+): OwnedStatement => ({
+  sql: `DELETE FROM resource_admission_counters WHERE rowid IN (
+    SELECT rowid FROM resource_admission_counters
+    WHERE policy_key='hosted.compaction.user.v1' AND window_kind='calendar'
+      AND scope_key=? AND window_start_ms<? ORDER BY window_start_ms LIMIT ?)`,
+  params: [input.userId, input.cutoff, input.limit],
+});
+
+/** Earliest retained day keeps hosted retention discoverable after Turns have been removed. */
+export const compactionCounterDeadline = (
+  input: Readonly<{ userId: string; retentionMs: number }>
+): OwnedStatement => ({
+  sql: `SELECT window_start_ms+? AS due_ms FROM resource_admission_counters
+    WHERE policy_key='hosted.compaction.user.v1' AND window_kind='calendar' AND scope_key=?
+    ORDER BY window_start_ms LIMIT 1`,
+  params: [input.retentionMs + 1, input.userId],
 });

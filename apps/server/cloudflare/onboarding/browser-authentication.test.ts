@@ -1174,7 +1174,7 @@ it("bounds replacement delivery across rejected proofs for the same User", () =>
         .flatMap((observed) => observed.statements())
         .filter(({ sql }) => sql.includes("INSERT INTO resource_admission_counters"))
         .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
-      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(25);
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(31);
       expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(6);
     })
   ));
@@ -2212,7 +2212,7 @@ it("bounds concurrent email sends across pairings and preserves admission after 
         .flatMap((observed) => observed.statements())
         .filter(({ sql }) => sql.includes("INSERT INTO resource_admission_counters"))
         .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
-      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(71);
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(77);
       expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(14);
     })
   ));

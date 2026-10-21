@@ -531,23 +531,25 @@ CREATE TABLE email_replacements (
 
 CREATE TABLE resource_admission_counters (
   policy_key TEXT NOT NULL CHECK(policy_key IN (
-    'email.pairing.user.v1','email.pairing.global.v1','email.replacement.user.v1','pat.pairing.source.v1'
+    'email.pairing.user.v1','email.pairing.global.v1','email.replacement.user.v1','pat.pairing.source.v1','hosted.compaction.user.v1'
   )),
   scope_key TEXT NOT NULL CHECK(length(scope_key) BETWEEN 1 AND 256),
-  window_kind TEXT NOT NULL CHECK(window_kind='anchored'),
+  window_kind TEXT NOT NULL CHECK((policy_key='hosted.compaction.user.v1' AND window_kind='calendar')
+    OR (policy_key<>'hosted.compaction.user.v1' AND window_kind='anchored')),
   window_start_ms INTEGER NOT NULL,
   window_ends_ms INTEGER NOT NULL,
   used INTEGER NOT NULL CHECK(used BETWEEN 1 AND CASE policy_key
-    WHEN 'email.pairing.global.v1' THEN 1000 WHEN 'pat.pairing.source.v1' THEN 20 ELSE 5 END),
+    WHEN 'email.pairing.global.v1' THEN 1000 WHEN 'pat.pairing.source.v1' THEN 20 WHEN 'hosted.compaction.user.v1' THEN 3 ELSE 5 END),
   last_work_id TEXT CHECK(last_work_id IS NULL OR length(last_work_id)=36),
   owner_user_id TEXT REFERENCES users(id),
   CHECK(window_ends_ms=window_start_ms+CASE policy_key
-    WHEN 'email.replacement.user.v1' THEN 86400000 WHEN 'pat.pairing.source.v1' THEN 600000 ELSE 3600000 END),
+    WHEN 'email.replacement.user.v1' THEN 86400000 WHEN 'pat.pairing.source.v1' THEN 600000 WHEN 'hosted.compaction.user.v1' THEN 86400000 ELSE 3600000 END),
   CHECK((policy_key='email.pairing.global.v1' AND scope_key='global' AND owner_user_id IS NULL)
-    OR (policy_key IN ('email.pairing.user.v1','email.replacement.user.v1')
+    OR (policy_key IN ('email.pairing.user.v1','email.replacement.user.v1','hosted.compaction.user.v1')
       AND owner_user_id IS NOT NULL AND scope_key=owner_user_id)
     OR (policy_key='pat.pairing.source.v1' AND owner_user_id IS NULL
       AND length(scope_key)=64 AND scope_key NOT GLOB '*[^0-9a-f]*')),
+  CHECK(policy_key<>'hosted.compaction.user.v1' OR window_start_ms%86400000=0),
   CHECK((policy_key='email.replacement.user.v1' AND last_work_id IS NOT NULL)
     OR (policy_key<>'email.replacement.user.v1' AND last_work_id IS NULL))
 ) STRICT;
@@ -698,14 +700,6 @@ CREATE TABLE hosted_agent_sessions (
   last_activity_at_ms INTEGER,
   status TEXT NOT NULL CHECK (status IN ('active','idle-ended','revoked')), compacted_text TEXT, compacted_through_sequence INTEGER, compacted_revision INTEGER, compacted_nonce TEXT, compacted_at_ms INTEGER CHECK((compacted_revision IS NULL AND compacted_text IS NULL AND compacted_through_sequence IS NULL AND compacted_revision IS NULL AND compacted_nonce IS NULL AND compacted_at_ms IS NULL) OR (compacted_revision IS NOT NULL AND compacted_text IS NOT NULL AND (length(compacted_text) > 0) AND compacted_through_sequence IS NOT NULL AND (compacted_through_sequence >= 0) AND compacted_revision IS NOT NULL AND (compacted_revision > 0) AND compacted_nonce IS NOT NULL AND compacted_at_ms IS NOT NULL)),
   UNIQUE (user_id, id)
-) STRICT;
---> statement-breakpoint
-
-CREATE TABLE hosted_compaction_attempts (
-  user_id TEXT NOT NULL REFERENCES users(id),
-  day_ms INTEGER NOT NULL,
-  used INTEGER NOT NULL CHECK (used BETWEEN 1 AND 3),
-  PRIMARY KEY (user_id, day_ms)
 ) STRICT;
 --> statement-breakpoint
 
@@ -1927,9 +1921,6 @@ CREATE INDEX hosted_compacted_retention_due ON hosted_agent_sessions(compacted_a
 --> statement-breakpoint
 
 CREATE INDEX hosted_compacted_retention_user ON hosted_agent_sessions(user_id, compacted_at_ms) WHERE compacted_revision IS NOT NULL;
---> statement-breakpoint
-
-CREATE INDEX hosted_compaction_attempts_due ON hosted_compaction_attempts(day_ms, user_id);
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX hosted_confirmations_one_consumption ON hosted_confirmations(consumed_turn_id)
@@ -4097,18 +4088,18 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_hosted_compaction_attempts_delete BEFORE DELETE ON hosted_compaction_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
+CREATE TRIGGER erasure_fence_hosted_compaction_attempts_delete BEFORE DELETE ON resource_admission_counters
+WHEN (OLD.policy_key='hosted.compaction.user.v1') AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_hosted_compaction_attempts_insert BEFORE INSERT ON hosted_compaction_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
+CREATE TRIGGER erasure_fence_hosted_compaction_attempts_insert BEFORE INSERT ON resource_admission_counters
+WHEN (NEW.policy_key='hosted.compaction.user.v1') AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_hosted_compaction_attempts_update BEFORE UPDATE ON hosted_compaction_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
+CREATE TRIGGER erasure_fence_hosted_compaction_attempts_update BEFORE UPDATE ON resource_admission_counters
+WHEN (OLD.policy_key='hosted.compaction.user.v1' OR NEW.policy_key='hosted.compaction.user.v1') AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.owner_user_id=q.user_id) OR (OLD.owner_user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -5731,14 +5722,14 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_hosted_compaction_attempts_delete BEFORE DELETE ON hosted_compaction_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+CREATE TRIGGER erasure_preserve_hosted_compaction_attempts_delete BEFORE DELETE ON resource_admission_counters
+WHEN (OLD.policy_key='hosted.compaction.user.v1') AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.owner_user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'hosted_compaction_attempts','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'day_ms',OLD."day_ms",'used',OLD."used")
-  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+  SELECT q.id,'hosted_compaction_attempts','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."owner_user_id",'day_ms',OLD."window_start_ms",'used',OLD."used")
+  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.owner_user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
@@ -8191,4 +8182,12 @@ CREATE TRIGGER resource_admission_review_grant_cleanup AFTER DELETE ON resource_
 WHEN OLD.policy_key='pat.review.session.v1'
  AND NOT EXISTS(SELECT 1 FROM resource_admission_events WHERE grant_id=OLD.grant_id)
 BEGIN DELETE FROM resource_admission_grants WHERE id=OLD.grant_id; END;
+--> statement-breakpoint
+
+CREATE INDEX resource_counter_compaction_due ON resource_admission_counters(window_start_ms,scope_key)
+ WHERE policy_key='hosted.compaction.user.v1';
+--> statement-breakpoint
+
+CREATE UNIQUE INDEX resource_counter_calendar_identity
+ ON resource_admission_counters(policy_key,scope_key,window_start_ms) WHERE window_kind='calendar';
 --> statement-breakpoint

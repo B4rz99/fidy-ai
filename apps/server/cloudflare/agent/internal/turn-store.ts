@@ -1,3 +1,8 @@
+import {
+  compactionCounterDeadline,
+  prepareResourceCounter,
+  sweepCompactionCounters,
+} from "../../resource-admission/operations";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { loadsSavedHistory } from "./history-allowance";
 import { prepareConsumption, quotaFailure } from "../../quotas/operations";
@@ -553,17 +558,17 @@ export const reserveHostedCompaction = ({
   Effect.gen(function* () {
     const current = DateTime.toEpochMillis(yield* DateTime.now);
     const authority = hostedAuthority({ subject, current });
-    const day = Math.floor(current / millisecondsPerDay) * millisecondsPerDay;
     const reserved = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`INSERT INTO hosted_compaction_attempts (user_id, day_ms, used)
-    SELECT ?, ?, 1 WHERE EXISTS
-      (SELECT 1 FROM hosted_agent_sessions WHERE user_id = ? AND id = ? AND status = 'active')
-    AND EXISTS (${authority.sql})
-    ON CONFLICT(user_id, day_ms) DO UPDATE SET used = used + 1
-    WHERE hosted_compaction_attempts.used < 3`)
-        .bind(subject.userId, day, subject.userId, sessionId, ...authority.params)
-        .run()
+      prepareResourceCounter({
+        db,
+        kind: "hosted_compaction",
+        current,
+        subject: {
+          sql: `SELECT user_id FROM hosted_agent_sessions
+            WHERE user_id=? AND id=? AND status='active' AND EXISTS (${authority.sql})`,
+          params: [subject.userId, sessionId, ...authority.params],
+        },
+      }).run()
     );
     return reserved.meta.changes === 1;
   });
@@ -1098,12 +1103,11 @@ const sweepHostedTranscript = (
         .bind(userId, cutoff, maximumRetentionRows)
         .run()
     );
+    const attempts = sweepCompactionCounters({ userId, cutoff, limit: maximumRetentionRows });
     yield* Effect.tryPromise(() =>
       db
-        .prepare(`DELETE FROM hosted_compaction_attempts WHERE rowid IN
-    (SELECT rowid FROM hosted_compaction_attempts WHERE user_id = ? AND day_ms < ?
-      ORDER BY day_ms LIMIT ?)`)
-        .bind(userId, cutoff, maximumRetentionRows)
+        .prepare(attempts.sql)
+        .bind(...attempts.params)
         .run()
     );
     return yield* readHostedRetentionDeadline(db, userId);
@@ -1117,6 +1121,10 @@ const readHostedRetentionDeadline = (
   Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
 > =>
   Effect.gen(function* () {
+    const attempts = compactionCounterDeadline({
+      userId,
+      retentionMs: hostedTranscriptRetentionMs,
+    });
     const row = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT MIN(due_ms) AS due_ms FROM (
@@ -1129,8 +1137,7 @@ const readHostedRetentionDeadline = (
         SELECT * FROM (SELECT expires_at_ms + 1 AS due_ms FROM hosted_confirmations
           WHERE user_id=? ORDER BY expires_at_ms LIMIT 1)
         UNION ALL
-        SELECT * FROM (SELECT day_ms + ? AS due_ms FROM hosted_compaction_attempts
-          WHERE user_id=? ORDER BY day_ms LIMIT 1)
+        SELECT * FROM (${attempts.sql})
       )`)
         .bind(
           hostedTranscriptRetentionMs + 1,
@@ -1138,8 +1145,7 @@ const readHostedRetentionDeadline = (
           hostedTranscriptRetentionMs + 1,
           userId,
           userId,
-          hostedTranscriptRetentionMs + 1,
-          userId
+          ...attempts.params
         )
         .first()
     );

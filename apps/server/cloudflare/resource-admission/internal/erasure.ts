@@ -38,6 +38,31 @@ const reviewOwnerSql =
 const reviewOwnerParams = (userId: string): ReadonlyArray<string> => [userId, userId];
 
 export const projections: ReadonlyArray<ErasureProjection> = [
+  {
+    id: "hosted_compaction_attempts",
+    dataClass: "conversation",
+    dependencies: [],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"owner_user_id\",'day_ms',r.\"window_start_ms\",'used',r.\"used\") AS body FROM resource_admission_counters r WHERE r.policy_key='hosted.compaction.user.v1' AND r.window_kind='calendar' AND r.scope_key=?",
+      params: [userId],
+    }),
+    candidates: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM resource_admission_counters r WHERE r.policy_key='hosted.compaction.user.v1' AND r.window_kind='calendar' AND r.scope_key=?",
+      params: [userId],
+    }),
+    remaining: (userId) => ({
+      sql: "SELECT 1 FROM resource_admission_counters r WHERE r.policy_key='hosted.compaction.user.v1' AND r.window_kind='calendar' AND r.scope_key=?",
+      params: [userId],
+    }),
+    remove: (scope) => [
+      {
+        sql: "DELETE FROM resource_admission_counters AS r WHERE r.policy_key='hosted.compaction.user.v1' AND r.window_kind='calendar' AND r.scope_key=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        params: [scope.userId, scope.reference],
+      },
+    ],
+  },
+
   counterProjection("browser_pairing_email_user_limits", "email.pairing.user.v1"),
   counterProjection("email_replacement_limits", "email.replacement.user.v1"),
   {

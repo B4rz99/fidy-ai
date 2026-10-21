@@ -195,3 +195,42 @@ explicit cost-gate exception. No shared recovery policy or schema conversion is 
 its native measurements, exact cutoff and foreign-operator preservation, and why the conditional
 mapping must be revisited before migration. The existing public recovery test now also checks
 cleanup immediately before and at the one-hour cutoff; production limits and accounting are unchanged.
+
+## Hosted compaction counters (#1435)
+
+`hosted.compaction.user.v1` uses the calendar branch of the shared counter transition. Each User's
+UTC accounting day admits at most three attempts across all hosted sessions. Hosted execution
+supplies active same-User session and current authority eligibility inside the increment statement;
+no preliminary admission commit or follow-up authority check is introduced. Refusal changes no row.
+An admitted attempt remains charged after cancellation, model failure or abandoned work.
+
+Retained older day windows coexist under the calendar identity index. Admission does not delete them
+at midnight. Hosted execution supplies its original retention cutoff and bound to Resource Admission's
+published discovery, cleanup and deadline statements. The conversation-erasure projection retains
+logical ID `hosted_compaction_attempts`, original archive JSON, fence permissions and User dependency;
+email credentials, source counters and other Users retain independent purposes.
+
+| Native journey                                   | Specialized reads / writes | Shared reads / writes |
+| ------------------------------------------------ | -------------------------- | --------------------- |
+| Three aborted admitted attempts, then refusal    | 19 / 5                     | 27 / 5                |
+| One-User cleanup just before expiry; no deletion | 2 / 0                      | 2 / 0                 |
+| One expired accounting day, bounded cleanup      | 5 / 1                      | 5 / 1                 |
+
+Shared checks add eight reads to the four-attempt journey; writes and measured cleanup are unchanged.
+This bounded tradeoff removes a specialized store and gives calendar counters one persistence/erasure
+owner. It is not a claim that consolidation lowers all query costs. Existing hosted retention tests
+also retain their backlog, fairness and idle-work budgets. The public hosted journey preserves failed
+attempt charging; native integrated admission covers concurrent sessions, exact UTC boundaries,
+foreign ownership and revoked credentials. Populated native conversion checks cover historical days,
+counts, unrelated shared counters, archives, invalid history, collision, in-progress erasure and
+rollback after dropping the sources. See the [cutover runbook](../../../../docs/operations/database-cutover-1428.md#compaction-admission-1435).
+
+The same regression journeys also measure the cost carried by existing anchored consumers after
+installing the calendar index and conversation-erasure guards: email login uses 77 reads/14 writes
+(previously 71/14), email replacement uses 31/6 (25/6), and PAT's exact source-window boundary uses
+31/2 (29/2). Their original write counts, refusal, proof composition and cutoff behavior remain
+unchanged. Read ceilings were updated to these measured totals; the earlier ticket tables above
+remain historical comparisons. An alternative single expression identity index was measured and
+rejected: it did not remove these read increases and raised the PAT burst from 44 to 63 writes by
+reindexing anchored resets/updates. The final shape keeps distinct partial identity indexes so this
+conversion adds no admission writes to anchored consumers.

@@ -242,6 +242,7 @@ export type EmailCounterKind = Extract<
 
 /** Email eligibility yields zero or one user_id under the owner's exact proof guard.
  * PAT source eligibility yields zero or one row under the global pairing-capacity guard.
+ * Hosted compaction eligibility yields the same live User's active session owner.
  * Zero rows spend no capacity. Execute this statement in that owner's atomic commit.
  */
 export type ResourceCounterRequest = Readonly<{
@@ -253,6 +254,7 @@ export type ResourceCounterRequest = Readonly<{
     | Readonly<{ kind: "email_pairing_user" | "email_pairing_global" }>
     | Readonly<{ kind: "email_replacement"; workId: string }>
     | Readonly<{ kind: "pat_pairing_source"; sourceDigest: Uint8Array }>
+    | Readonly<{ kind: "hosted_compaction" }>
   );
 
 export type ResourceCounterQuery =

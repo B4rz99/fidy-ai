@@ -92,8 +92,8 @@ it("keeps repeated idle sweeps independent of permanent terminal history", () =>
             .bind(now),
           db
             .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<4000)
-      INSERT INTO hosted_compaction_attempts SELECT ?, ?+i*86400000, 1 FROM n`)
-            .bind(userId, now),
+      INSERT INTO resource_admission_counters(policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,owner_user_id) SELECT 'hosted.compaction.user.v1',?,'calendar',?+i*86400000,?+(i+1)*86400000,1,? FROM n`)
+            .bind(userId, now, now, userId),
           db
             .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<4000)
       INSERT INTO hosted_confirmations
@@ -222,8 +222,8 @@ it("bounds every due branch before grouping a large retained backlog", () =>
           ),
           db
             .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<4000)
-        INSERT INTO hosted_compaction_attempts SELECT ?, -i*86400000, 1 FROM n`)
-            .bind(userId),
+        INSERT INTO resource_admission_counters(policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,owner_user_id) SELECT 'hosted.compaction.user.v1',?,'calendar',-i*86400000,(1-i)*86400000,1,? FROM n`)
+            .bind(userId, userId),
           db
             .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<4000)
         INSERT INTO hosted_confirmations

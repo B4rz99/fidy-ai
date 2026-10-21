@@ -26,30 +26,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
   },
   {
-    id: "hosted_compaction_attempts",
-    dataClass: "conversation",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'day_ms',r.\"day_ms\",'used',r.\"used\") AS body FROM hosted_compaction_attempts r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_compaction_attempts r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM hosted_compaction_attempts r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM hosted_compaction_attempts AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
     id: "hosted_confirmations",
     dataClass: "conversation",
     dependencies: [],

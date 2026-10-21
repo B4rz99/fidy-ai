@@ -91,7 +91,7 @@ class-wide hold. Stop review until the actual source and executable scope agree.
 | `subscription`            | `billing_history`                       | billing      | `billing_attempts`                                                              |
 | `oauth-confirmation`      | `oauth_operation_intents`               | credentials  | `oauth_operation_intents`                                                       |
 | `agent`                   | `hosted_agent_sessions`                 | conversation | `hosted_agent_sessions`                                                         |
-| `agent`                   | `hosted_compaction_attempts`            | conversation | `hosted_compaction_attempts`                                                    |
+| `resource-admission`      | `resource_admission_counters`           | conversation | `hosted_compaction_attempts`                                                    |
 | `agent`                   | `hosted_confirmations`                  | conversation | `hosted_confirmations`                                                          |
 | `agent`                   | `hosted_mutation_commits`               | conversation | `hosted_mutation_commits`                                                       |
 | `agent`                   | `hosted_turns`                          | conversation | `hosted_turns`                                                                  |

@@ -564,3 +564,89 @@ quota-only deployment. No schema or migration ledger adjustment belongs to this 
 hour cutoffs and a fresh foreign operator. A future target revision must demonstrate equivalence
 and a concrete cost/code benefit before any conversion or source-table removal. The current one-hour
 accounting and original admission identities remain authoritative.
+
+## Compaction admission (#1435)
+
+Hosted execution supplies its same-User active session and live authority predicate to Resource
+Admission's `hosted.compaction.user.v1` calendar transition. Three attempts per User per UTC day
+remain charged even if subsequent model work fails or is abandoned. Different sessions share the
+same day; midnight starts another retained window without resetting or removing older windows.
+Resource Admission owns persistence and the `hosted_compaction_attempts` logical conversation-erasure
+projection. Hosted execution still owns retention cadence and duration, via published discovery,
+cleanup and deadline statements. Archives retain the original `{user_id,day_ms,used}` body.
+
+For a populated database, complete #1433 first, back up D1 and fence all admission writers, Hosted
+execution, retention and erasure. Assemble **one native D1 batch**:
+
+1. Create `resource_admission_counters_next` from the final baseline table declaration, changing only
+   its declared name. Do not install indexes/triggers before the copy and guarded swap below.
+2. Execute `compaction-counter-copy`. Existing shared rowids remain exact. New compaction rowids use
+   the original source rowid plus the maximum existing counter rowid (or zero); identity remains
+   the original User and day. An overflow, policy collision, invalid count/day, orphan User or
+   unrepresentable deadline aborts the whole batch. Never round inconsistent historical days.
+3. Install every final baseline index/trigger owned by `resource_admission_counters`.
+4. Execute `compaction-counter-verify`. Publish matching code and align the sole-baseline ledger
+   only after success. Any failure after either source drop rolls back schema and data together.
+
+Do not convert an unfinished erasure chunk, a restoring request, or live source rows belonging to an
+unfinished erasure request. Finish that work under the old representation first. Historical archives
+keep their exact request/store/reference/body and recovery-written marker; their opaque references
+address archived snapshots, not new physical rowids. No archived-content restoration is introduced.
+This prevents an in-progress archive generation from reselecting its original live rows under new
+physical references. Existing source erasure triggers disappear with the source table; their logical
+IDs and conversation safeguards are installed on the shared destination in the same batch.
+
+<!-- compaction-counter-copy:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'compaction_counter_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM resource_admission_counters WHERE policy_key='hosted.compaction.user.v1')
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.restoring=1 OR
+   (q.state<>'Complete' AND EXISTS(SELECT 1 FROM hosted_compaction_attempts r WHERE r.user_id=q.user_id)))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+
+INSERT INTO resource_admission_counters_next
+ (rowid,policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id)
+SELECT rowid,policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id
+FROM resource_admission_counters;
+INSERT INTO resource_admission_counters_next
+ (rowid,policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,owner_user_id)
+SELECT r.rowid+(SELECT coalesce(max(rowid),0) FROM resource_admission_counters),
+ 'hosted.compaction.user.v1',r.user_id,'calendar',r.day_ms,r.day_ms+86400000,r.used,r.user_id
+FROM hosted_compaction_attempts r;
+
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'compaction_counter_cutover',CASE WHEN
+ (SELECT count(*) FROM resource_admission_counters_next)=
+ (SELECT count(*) FROM resource_admission_counters)+(SELECT count(*) FROM hosted_compaction_attempts)
+ AND NOT EXISTS(SELECT 1 FROM hosted_compaction_attempts r
+  LEFT JOIN resource_admission_counters_next n ON n.policy_key='hosted.compaction.user.v1'
+   AND n.scope_key=r.user_id AND n.window_start_ms=r.day_ms
+  WHERE n.scope_key IS NULL OR n.owner_user_id IS NOT r.user_id OR n.used IS NOT r.used
+   OR n.window_ends_ms IS NOT r.day_ms+86400000)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+
+DROP TABLE hosted_compaction_attempts;
+DROP TABLE resource_admission_counters;
+ALTER TABLE resource_admission_counters_next RENAME TO resource_admission_counters;
+```
+
+<!-- compaction-counter-copy:end -->
+
+<!-- compaction-counter-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'compaction_counter_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='compaction_counter_cutover';
+```
+
+<!-- compaction-counter-verify:end -->
+
+The sole baseline is the fresh-database shape, not an upgrade script for an already-applied schema.
+This conversion and its matching Worker publication remain local and undeployed until remote quota
+permits the fenced cutover. Recovery #1434's failed conversion remains excluded.

@@ -43,7 +43,7 @@ const verifyRenewalFence = (
 const verifyNewStoreGuards = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
-    for (const kind of ["email_pairing_user", "email_replacement"] as const) {
+    for (const kind of ["email_pairing_user", "email_replacement", "hosted_compaction"] as const) {
       yield* Effect.tryPromise(() =>
         expect(
           prepareResourceCounter({
@@ -230,6 +230,7 @@ const verifyNativeErasure = Effect.gen(function* () {
         const subject = { sql: "SELECT ? AS user_id", params: [id] };
         return [
           prepareResourceCounter({ db, kind: "email_pairing_user", subject, current }),
+          prepareResourceCounter({ db, kind: "hosted_compaction", subject, current }),
           prepareResourceCounter({ db, kind: "email_replacement", subject, current, workId: id }),
         ];
       }),
@@ -360,7 +361,7 @@ const verifyNativeErasure = Effect.gen(function* () {
     )).results
   ).toEqual([
     { owner_user_id: null, retained: 1 },
-    { owner_user_id: foreignUser, retained: 2 },
+    { owner_user_id: foreignUser, retained: 3 },
   ]);
   yield* verifyRetainedReviews(db);
   for (const table of [

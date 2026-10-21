@@ -286,7 +286,7 @@ it.live(
       const deadline = DateTime.toEpochMillis(DateTime.add(input.now, { days: 30 }));
       expect(Option.isNone(yield* readProactiveTranscript({ ...scope, now: deadline }))).toBe(true);
       yield* Effect.tryPromise(() =>
-        input.db.prepare("DROP TABLE hosted_compaction_attempts").run()
+        input.db.prepare("DROP TABLE resource_admission_counters").run()
       );
       const sweep = yield* Effect.exit(makeAgentRetention({ db: input.db }).sweep(deadline));
       expect(sweep._tag).toBe("Failure");

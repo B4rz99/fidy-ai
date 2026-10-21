@@ -1,0 +1,49 @@
+apps/web/src/session/login-destination.test.ts
+  s_241024bc81d268::t_63e1c9d15357f4 14
+apps/web/src/transport/client.ts
+  s_241024bc81d268::t_ed708d8b56f20d 52
+apps/web/e2e/oauth-review.spec.ts
+  s_241024bc81d268::t_fe31607e55b821 636
+  s_241024bc81d268::t_3fae7807e2acc0 616-623
+  s_241024bc81d268::t_5bb3f503a383a8 624
+  s_241024bc81d268::t_d8c34dfd0ae42c 606-615,625-635,637-649
+apps/web/src/features/pats/FEATURE.md
+  s_241024bc81d268::t_083adaed79cf0d 117-132
+apps/server/cloudflare/oauth-agents/internal/management.ts
+  s_241024bc81d268::t_ed708d8b56f20d 181-189
+apps/web/src/features/oauth-connections/management-feature.tsx
+  s_241024bc81d268::t_0bb4717a6aaad6 94-97
+  s_241024bc81d268::t_ae3185f080fa5a 4,7-12,18,21,31-39,86,88-93,98-102,104-105,154,158
+apps/server/cloudflare/oauth-agents/oauth-management.test.ts
+  s_241024bc81d268::t_63e1c9d15357f4 118-119
+  s_241024bc81d268::t_1fcc8a7a944249 282
+apps/server/src/shell/mcp/FEATURE.md
+  s_241024bc81d268::t_083adaed79cf0d 57-80
+apps/server/src/shell/oauth-agents/contract.ts
+  s_241024bc81d268::t_ed708d8b56f20d 176-178,229,236
+apps/web/src/features/agent/FEATURE.md
+  s_241024bc81d268::t_083adaed79cf0d 175-183
+apps/web/src/features/recurring/FEATURE.md
+  s_241024bc81d268::t_083adaed79cf0d 357-365
+apps/server/src/client.ts
+  s_241024bc81d268::t_ed708d8b56f20d 36
+apps/web/src/session/login-destination.ts
+  s_241024bc81d268::t_3fae7807e2acc0 17-21,27
+  s_241024bc81d268::t_ed708d8b56f20d 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "de48581c7f5ca3b9c3e3d9f8cb2eefbf716e9717",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -44,3 +44,12 @@ rejects any retained old User cutoff and unfinished erasure chunk, preserves Use
 fields, Audit sequences/contents, session relationships and archive references, and proves native
 rollback after column removal. Other Audit extraction tickets retain their own migration obligations.
 The fresh baseline remains one migration file; this slice is local and undeployed.
+
+## Recovery case evidence
+
+Recovery owns the immutable operator, terminal decision and timing on `support_recovery_cases`.
+Approval commits that case with credential consumption and pairing approval; Audit no longer stores
+`support_recovery` rows or their four dedicated columns. Other Audit variants retain their shape,
+sequence ordering, retention and erasure permissions. Historical event IDs/archive references remain
+bounded Case metadata under the original credential-erasure purpose. See the
+[validated cutover](../../../../docs/operations/database-cutover-1428.md#recovery-case-evidence-1442).

@@ -347,28 +347,39 @@ it("approves a valid assertion on the supplied Clock even when native JWT time c
             .first()
         )
       ).toEqual({ consumed_at_ms: current });
-      expect(
-        (yield* wait(() =>
+      const evidence = yield* wait(() =>
+        fixture.db
+          .prepare(
+            "SELECT user_id,operator_issuer,operator_subject,opened_at_ms,state,closed_at_ms FROM support_recovery_cases"
+          )
+          .first()
+      );
+      expect(evidence).toEqual({
+        user_id: userId,
+        operator_issuer: fixture.config.CLOUDFLARE_ACCESS_ISSUER,
+        operator_subject: "support-clock-operator",
+        opened_at_ms: current,
+        state: "approved",
+        closed_at_ms: current,
+      });
+      yield* wait(() =>
+        expect(
           fixture.db
             .prepare(
-              "SELECT action,at_ms,user_id,operator_subject FROM (SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery') ORDER BY action"
+              "UPDATE support_recovery_cases SET operator_subject='replacement-operator',closed_at_ms=closed_at_ms+1"
             )
-            .all()
-        )).results
-      ).toEqual([
-        {
-          action: "approved",
-          at_ms: current,
-          user_id: userId,
-          operator_subject: "support-clock-operator",
-        },
-        {
-          action: "opened",
-          at_ms: current,
-          user_id: userId,
-          operator_subject: "support-clock-operator",
-        },
-      ]);
+            .run()
+        ).rejects.toThrow("recovery_case_immutable")
+      );
+      expect(
+        yield* wait(() =>
+          fixture.db
+            .prepare(
+              "SELECT user_id,operator_issuer,operator_subject,opened_at_ms,state,closed_at_ms FROM support_recovery_cases"
+            )
+            .first()
+        )
+      ).toEqual(evidence);
       expect(
         yield* wait(() => fixture.db.prepare("SELECT count(*) AS count FROM web_sessions").first())
       ).toEqual({ count: 0 });
@@ -454,11 +465,7 @@ it.each(["owning Effect", "native Request"])(
               .first()
           )
         ).toEqual({ attempts: 1 });
-        for (const table of [
-          "support_recovery_cases",
-          "(SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')",
-          "web_sessions",
-        ]) {
+        for (const table of ["support_recovery_cases", "web_sessions"]) {
           expect(
             yield* wait(() => fixture.db.prepare(`SELECT count(*) AS count FROM ${table}`).first())
           ).toEqual({ count: 0 });
@@ -580,15 +587,6 @@ it("starts a new browser pairing after an approved recovery expires without brow
           fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_cases").first()
         )
       ).toEqual({ count: 1 });
-      expect(
-        yield* wait(() =>
-          fixture.db
-            .prepare(
-              "SELECT count(*) AS count FROM (SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')"
-            )
-            .first()
-        )
-      ).toEqual({ count: 2 });
     }).pipe(Effect.scoped)
   ));
 
@@ -613,25 +611,28 @@ it("retains recovery evidence until its calendar deadline then removes it withou
       );
       expect(approved.status).toBe(200);
       const credential = yield* credentialSnapshot(fixture);
-      yield* sweepRecoveryEvidence({ db: fixture.db, nowEpochMs: Date.UTC(2026, 1, 28, 12) - 1 });
+      const retainedCleanup = observeRetentionCost(fixture.db);
+      yield* sweepRecoveryEvidence({
+        db: retainedCleanup.database,
+        nowEpochMs: Date.UTC(2026, 1, 28, 12) - 1,
+      });
       expect(
         yield* wait(() =>
           fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_cases").first()
         )
       ).toEqual({ count: 1 });
       yield* sweepRecoveryEvidence({ db: fixture.db, nowEpochMs: Date.UTC(2026, 1, 28, 12) });
-      for (const table of [
-        "support_recovery_cases",
-        "(SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')",
-      ]) {
+      for (const table of ["support_recovery_cases"]) {
         expect(
           yield* wait(() => fixture.db.prepare(`SELECT count(*) AS count FROM ${table}`).first())
         ).toEqual({ count: 0 });
       }
+      const plans = yield* wait(retainedCleanup.plans);
+      expect(plans.some((plan) => plan.includes("support_recovery_cases_retention"))).toBe(true);
       expect(yield* credentialSnapshot(fixture)).toEqual(credential);
     }).pipe(Effect.scoped)
   ));
-it("rolls back recovery event deletion when its terminal case cannot be removed", () =>
+it("preserves recovery decision evidence when its terminal case cannot be removed", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const current = Date.UTC(2024, 0, 1);
@@ -668,15 +669,6 @@ it("rolls back recovery event deletion when its terminal case cannot be removed"
       deepStrictEqual(exit, Exit.fail(new RecoveryRetentionUnavailable()));
       expect(
         yield* wait(() =>
-          fixture.db
-            .prepare(
-              "SELECT count(*) AS count FROM (SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')"
-            )
-            .first()
-        )
-      ).toEqual({ count: 2 });
-      expect(
-        yield* wait(() =>
           fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_cases").first()
         )
       ).toEqual({ count: 1 });
@@ -698,12 +690,7 @@ const expectUnchanged = ({
           .first()
       )
     ).toEqual({ state: "pending_approval", user_id: null });
-    for (const table of [
-      "support_recovery_cases",
-      "(SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')",
-      "support_recovery_admissions",
-      "web_sessions",
-    ]) {
+    for (const table of ["support_recovery_cases", "support_recovery_admissions", "web_sessions"]) {
       expect(
         yield* wait(() => fixture.db.prepare(`SELECT count(*) AS count FROM ${table}`).first())
       ).toEqual({ count: 0 });

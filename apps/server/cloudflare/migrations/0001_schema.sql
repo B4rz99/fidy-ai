@@ -41,12 +41,7 @@ CREATE TABLE "audit_entries" (
  refresh_connection_id TEXT REFERENCES oauth_connections(id),
  consumed_refresh_id TEXT UNIQUE REFERENCES oauth_credentials(refresh_id),
  issued_refresh_id TEXT UNIQUE REFERENCES oauth_credentials(refresh_id),
- recovery_case_id TEXT REFERENCES support_recovery_cases(id),
- operator_issuer TEXT,
- operator_subject TEXT,
- recovery_action TEXT CHECK(recovery_action IS NULL OR recovery_action IN ('opened','approved','rejected')),
  CHECK((record_type='oauth_refresh' AND refresh_connection_id IS NOT NULL AND consumed_refresh_id IS NOT NULL AND issued_refresh_id IS NOT NULL) OR (record_type<>'oauth_refresh' AND refresh_connection_id IS NULL AND consumed_refresh_id IS NULL AND issued_refresh_id IS NULL)),
- CHECK((record_type='support_recovery' AND recovery_case_id IS NOT NULL AND operator_issuer IS NOT NULL AND operator_subject IS NOT NULL AND recovery_action IS NOT NULL) OR (record_type<>'support_recovery' AND recovery_case_id IS NULL AND operator_issuer IS NULL AND operator_subject IS NULL AND recovery_action IS NULL)),
  UNIQUE(record_type,id), UNIQUE(attempt_id,transition),
  FOREIGN KEY(user_id) REFERENCES users(id),
  FOREIGN KEY(pat_id) REFERENCES pats(id),
@@ -56,7 +51,7 @@ CREATE TABLE "audit_entries" (
  FOREIGN KEY(attempt_id) REFERENCES billing_attempts(id),
  CHECK(
   (record_type='reminder_control' AND id IS NOT NULL AND json_valid(id) AND json_array_length(id)=2 AND json_extract(id,'$[0]')=user_id AND json_type(id,'$[1]')='text' AND user_id IS NOT NULL AND outcome IS NOT NULL AND session_id IS NULL AND operation IS NULL AND occurred_at_ms IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL AND oauth_credential_id IS NULL AND hosted_turn_id IS NULL AND attempt_id IS NULL AND transition IS NULL AND accepted_at_ms IS NULL) OR
-  (record_type IN ('oauth_refresh','support_recovery') AND id IS NOT NULL AND user_id IS NOT NULL AND occurred_at_ms IS NOT NULL AND session_id IS NULL AND operation IS NULL AND outcome IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL AND oauth_credential_id IS NULL AND hosted_turn_id IS NULL AND attempt_id IS NULL AND transition IS NULL AND accepted_at_ms IS NULL) OR
+  (record_type='oauth_refresh' AND id IS NOT NULL AND user_id IS NOT NULL AND occurred_at_ms IS NOT NULL AND session_id IS NULL AND operation IS NULL AND outcome IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL AND oauth_credential_id IS NULL AND hosted_turn_id IS NULL AND attempt_id IS NULL AND transition IS NULL AND accepted_at_ms IS NULL) OR
   (record_type='session_call' AND id IS NOT NULL AND user_id IS NOT NULL AND session_id IS NOT NULL AND operation IS NOT NULL AND outcome IS NOT NULL AND occurred_at_ms IS NOT NULL AND ((operation IN ('transactions.createTransaction','transactions.listTransactions','transactions.getTransaction','transactions.updateTransaction','transactions.deleteTransaction','transactions.searchTransactions','transactions.linkTransactions','transactions.unlinkTransactions','operations.executeAtomicBatch') AND outcome IN ('success','not_found','validation_failed','resource_limit'))
  OR (operation IN ('categories.listCategories','categories.listKeywordRules','categories.createKeywordRule','categories.updateKeywordRule','categories.deleteKeywordRule') AND outcome IN ('success','validation_failed'))
  OR (operation IN ('memory.remember','memory.recall','memory.revise','memory.forget') AND outcome IN ('success','not_found','validation_failed','resource_limit'))
@@ -1491,7 +1486,13 @@ CREATE TABLE support_recovery_cases (
   expires_at_ms INTEGER NOT NULL,
   state TEXT NOT NULL CHECK (state IN ('approved', 'rejected')),
   closed_at_ms INTEGER NOT NULL,
-  CHECK (expires_at_ms > opened_at_ms)
+  opened_event_id TEXT,
+  opened_event_row_ref TEXT,
+  decision_event_id TEXT,
+  decision_event_row_ref TEXT,
+  CHECK (expires_at_ms > opened_at_ms),
+  CHECK((opened_event_id IS NULL)=(opened_event_row_ref IS NULL)),
+  CHECK((decision_event_id IS NULL)=(decision_event_row_ref IS NULL))
 );
 --> statement-breakpoint
 
@@ -1701,8 +1702,6 @@ CREATE INDEX audit_entries_oauth_activity ON audit_entries(user_id,oauth_connect
 CREATE INDEX audit_entries_pat_activity ON audit_entries(user_id,pat_id,occurred_at_ms DESC,id DESC) WHERE record_type='credential_call';
 --> statement-breakpoint
 
-CREATE INDEX audit_entries_recovery_case ON audit_entries(recovery_case_id,occurred_at_ms) WHERE record_type='support_recovery';
---> statement-breakpoint
 
 CREATE INDEX audit_entries_refresh_connection ON audit_entries(refresh_connection_id) WHERE refresh_connection_id IS NOT NULL;
 --> statement-breakpoint
@@ -2735,7 +2734,6 @@ WHEN OLD.record_type IN ('session_call','credential_call','insight_call','public
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
  WHEN 'oauth_refresh' THEN 'oauth_refresh_events'
- WHEN 'support_recovery' THEN 'support_recovery_events'
  WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
@@ -3600,7 +3598,6 @@ WHEN EXISTS (
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
  WHEN 'oauth_refresh' THEN 'oauth_refresh_events'
- WHEN 'support_recovery' THEN 'support_recovery_events'
  WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
@@ -3627,7 +3624,6 @@ WHEN EXISTS (
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
  WHEN 'oauth_refresh' THEN 'oauth_refresh_events'
- WHEN 'support_recovery' THEN 'support_recovery_events'
  WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
@@ -3654,7 +3650,6 @@ WHEN EXISTS (
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
  WHEN 'oauth_refresh' THEN 'oauth_refresh_events'
- WHEN 'support_recovery' THEN 'support_recovery_events'
  WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
@@ -5063,7 +5058,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingRevie
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_support_recovery_cases_update BEFORE UPDATE ON support_recovery_cases
+CREATE TRIGGER erasure_fence_support_recovery_cases_update BEFORE UPDATE OF id,user_id,pairing_id,operator_issuer,operator_subject,credential_revision,opened_at_ms,expires_at_ms,state,closed_at_ms ON support_recovery_cases
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='support_recovery_cases'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
@@ -8252,4 +8247,45 @@ CREATE INDEX resource_counter_compaction_due ON resource_admission_counters(wind
 
 CREATE UNIQUE INDEX resource_counter_calendar_identity
  ON resource_admission_counters(policy_key,scope_key,window_start_ms) WHERE window_kind='calendar';
+--> statement-breakpoint
+
+CREATE TRIGGER support_recovery_case_immutable BEFORE UPDATE ON support_recovery_cases
+WHEN NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.pairing_id IS NOT OLD.pairing_id
+ OR NEW.operator_issuer IS NOT OLD.operator_issuer OR NEW.operator_subject IS NOT OLD.operator_subject
+ OR NEW.credential_revision IS NOT OLD.credential_revision OR NEW.opened_at_ms IS NOT OLD.opened_at_ms
+ OR NEW.expires_at_ms IS NOT OLD.expires_at_ms OR NEW.state IS NOT OLD.state OR NEW.closed_at_ms IS NOT OLD.closed_at_ms
+BEGIN SELECT RAISE(ABORT,'recovery_case_immutable'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER support_recovery_event_metadata_immutable BEFORE UPDATE OF opened_event_id,opened_event_row_ref,decision_event_id,decision_event_row_ref ON support_recovery_cases
+WHEN (NEW.opened_event_id IS NOT OLD.opened_event_id OR NEW.opened_event_row_ref IS NOT OLD.opened_event_row_ref
+ OR NEW.decision_event_id IS NOT OLD.decision_event_id OR NEW.decision_event_row_ref IS NOT OLD.decision_event_row_ref)
+ AND NOT (((NEW.opened_event_id IS OLD.opened_event_id AND NEW.opened_event_row_ref IS OLD.opened_event_row_ref)
+ OR (NEW.opened_event_id IS NULL AND NEW.opened_event_row_ref IS NULL))
+ AND ((NEW.decision_event_id IS OLD.decision_event_id AND NEW.decision_event_row_ref IS OLD.decision_event_row_ref)
+ OR (NEW.decision_event_id IS NULL AND NEW.decision_event_row_ref IS NULL))
+ AND EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id
+ WHERE p.user_id=OLD.user_id AND q.user_id=OLD.user_id AND q.state='Erasing' AND p.store_id='support_recovery_events'))
+BEGIN SELECT RAISE(ABORT,'recovery_case_immutable'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER support_recovery_case_owner BEFORE INSERT ON support_recovery_cases
+WHEN NOT EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=NEW.pairing_id AND p.user_id=NEW.user_id)
+BEGIN SELECT RAISE(ABORT,'recovery_case_owner'); END;
+--> statement-breakpoint
+
+CREATE UNIQUE INDEX support_recovery_opened_event_id ON support_recovery_cases(opened_event_id) WHERE opened_event_id IS NOT NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX support_recovery_opened_event_ref ON support_recovery_cases(opened_event_row_ref) WHERE opened_event_row_ref IS NOT NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX support_recovery_decision_event_id ON support_recovery_cases(decision_event_id) WHERE decision_event_id IS NOT NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX support_recovery_decision_event_ref ON support_recovery_cases(decision_event_row_ref) WHERE decision_event_row_ref IS NOT NULL;
+--> statement-breakpoint
+
+CREATE TRIGGER support_recovery_event_metadata_delete BEFORE DELETE ON support_recovery_cases
+WHEN (OLD.opened_event_id IS NOT NULL OR OLD.decision_event_id IS NOT NULL)
+ AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=OLD.user_id AND q.state NOT IN('AwaitingReview','Draining','Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.request_id=q.id AND p.user_id=q.user_id AND p.store_id='support_recovery_events'))
+BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint

@@ -1261,3 +1261,131 @@ DELETE FROM sql_assertions WHERE scope='recovery_credential_cutover';
 ```
 
 <!-- recovery-credential-verify:end -->
+
+## Recovery case evidence (#1442)
+
+The ten logical fields of `support_recovery_cases` own the immutable operator and terminal decision.
+New approvals no longer create duplicate `support_recovery` Audit rows. Four nullable metadata fields
+retain migrated opening/decision event IDs and their original Audit sequence-based archive addresses;
+they do not repeat actor, action or time. New cases leave this historical metadata absent. The original
+`support_recovery_events` erasure purpose clears only this migrated identity metadata before case deletion.
+Existing `{}` archives retain their exact store IDs, generation-qualified row references and bodies.
+Ordinary retention remains 24 calendar months after closure, including the referenced browser pairing.
+Recovery never supplies the independent browser-private verifier.
+
+Apply #1441 first. Back up and fence all recovery approval/rotation, Audit writers/retention, browser
+pairing cleanup and erasure. Capture the original Audit table, its sequence watermark, every dependent
+index/trigger/view and all Case dependencies. Map each to the final baseline; stop on unknown objects
+or incoming Audit foreign keys. No temporary table may already exist. The batch below rebuilds only
+Audit, which currently has no incoming foreign keys; it never rebuilds User, Case or Pairing.
+
+Execute one native D1 batch:
+
+1. Run `recovery-evidence-preflight`. Require exactly one opening and one matching terminal event
+   per case. Reject orphan, missing, repeated, differently attributed or timed events, a decision
+   inconsistent with case state, foreign ownership, foreign-key violations or active erasure.
+   Matching rejected decisions are preserved as rejected cases; exceptional history blocks conversion
+   for investigation rather than being discarded or rewritten.
+2. Drop captured Audit triggers/views before rebuilding. Create `audit_entries_1442` using the final
+   baseline Audit declaration with only its table name changed. Run `recovery-evidence-copy`: preserve
+   all unrelated writable Audit fields and sequences, its AUTOINCREMENT high-water mark and every
+   case field/rowid. Keep generated columns derived by the unchanged final expressions.
+3. Run `recovery-evidence-replace`, then reinstall mapped final baseline Audit dependencies and the
+   final Case indexes/guards. The existing Case indexes and erasure insert/delete fences stay;
+   replace its update fence with the final field-specific one. Metadata may only be cleared under
+   its original same-User erasure permit; ordinary updates cannot change case evidence.
+4. Run `recovery-evidence-verify`. Publish matching code and align the one-baseline ledger only after
+   the batch succeeds. The baseline alone does not convert an existing database.
+
+Every failure rolls back both event extraction and Audit replacement. Do not disable foreign keys,
+reassign IDs, reset sequence ordering, infer an operator from current data or invent absent events.
+The native cutover fixture executes these exact blocks and final baseline definitions.
+
+For every captured application table, render `__TABLE_NAME__` below as its exact trusted schema
+name (including application tables outside the baseline, excluding SQLite internals and Cloudflare's
+platform-owned `_cf_METADATA`) and append the assertion to the same preflight batch.
+D1 requires a literal table name for this pragma; a dynamic pragma join is refused by its authorizer.
+Any incoming Audit foreign key must stop the rebuild and be designed explicitly.
+
+<!-- recovery-evidence-references:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_evidence_cutover',CASE WHEN NOT EXISTS(
+ SELECT 1 FROM pragma_foreign_key_list('__TABLE_NAME__') WHERE "table"='audit_entries')
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recovery-evidence-references:end -->
+
+<!-- recovery-evidence-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_evidence_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM support_recovery_cases c WHERE
+   NOT EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=c.pairing_id AND p.user_id=c.user_id)
+   OR (SELECT count(*) FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id)<>2
+   OR (SELECT count(*) FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id AND e.recovery_action='opened')<>1
+   OR (SELECT count(*) FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id AND e.recovery_action=c.state)<>1)
+ AND NOT EXISTS(SELECT 1 FROM audit_entries e LEFT JOIN support_recovery_cases c ON c.id=e.recovery_case_id
+   WHERE e.record_type='support_recovery' AND (c.id IS NULL OR e.user_id IS NOT c.user_id
+   OR e.operator_issuer IS NOT c.operator_issuer OR e.operator_subject IS NOT c.operator_subject
+   OR (e.recovery_action='opened' AND e.occurred_at_ms IS NOT c.opened_at_ms)
+   OR (e.recovery_action<>'opened' AND (e.recovery_action IS NOT c.state OR e.occurred_at_ms IS NOT c.closed_at_ms))))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recovery-evidence-preflight:end -->
+
+<!-- recovery-evidence-copy:start -->
+
+```sql
+ALTER TABLE support_recovery_cases ADD COLUMN opened_event_id TEXT;
+ALTER TABLE support_recovery_cases ADD COLUMN opened_event_row_ref TEXT CHECK((opened_event_id IS NULL)=(opened_event_row_ref IS NULL));
+ALTER TABLE support_recovery_cases ADD COLUMN decision_event_id TEXT;
+ALTER TABLE support_recovery_cases ADD COLUMN decision_event_row_ref TEXT CHECK((decision_event_id IS NULL)=(decision_event_row_ref IS NULL));
+UPDATE support_recovery_cases AS c SET
+ opened_event_id=(SELECT id FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id AND e.recovery_action='opened'),
+ opened_event_row_ref=(SELECT CAST(sequence AS TEXT) FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id AND e.recovery_action='opened'),
+ decision_event_id=(SELECT id FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id AND e.recovery_action=c.state),
+ decision_event_row_ref=(SELECT CAST(sequence AS TEXT) FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id AND e.recovery_action=c.state);
+INSERT INTO audit_entries_1442(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms,refresh_connection_id,consumed_refresh_id,issued_refresh_id)
+SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms,refresh_connection_id,consumed_refresh_id,issued_refresh_id FROM audit_entries WHERE record_type<>'support_recovery';
+UPDATE sqlite_sequence SET seq=max(seq,COALESCE((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)) WHERE name='audit_entries_1442';
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_evidence_cutover',CASE WHEN
+ (SELECT count(*) FROM audit_entries_1442)=(SELECT count(*) FROM audit_entries WHERE record_type<>'support_recovery')
+ AND NOT EXISTS(SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms,refresh_connection_id,consumed_refresh_id,issued_refresh_id FROM audit_entries WHERE record_type<>'support_recovery'
+ EXCEPT SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms,refresh_connection_id,consumed_refresh_id,issued_refresh_id FROM audit_entries_1442)
+ AND NOT EXISTS(SELECT 1 FROM audit_entries e JOIN support_recovery_cases c ON c.id=e.recovery_case_id WHERE e.record_type='support_recovery'
+   AND ((e.recovery_action='opened' AND (c.opened_event_id IS NOT e.id OR c.opened_event_row_ref IS NOT CAST(e.sequence AS TEXT)))
+   OR (e.recovery_action=c.state AND (c.decision_event_id IS NOT e.id OR c.decision_event_row_ref IS NOT CAST(e.sequence AS TEXT)))))
+ AND (SELECT seq FROM sqlite_sequence WHERE name='audit_entries_1442')=(SELECT seq FROM sqlite_sequence WHERE name='audit_entries')
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recovery-evidence-copy:end -->
+
+<!-- recovery-evidence-replace:start -->
+
+```sql
+DROP TABLE audit_entries;
+ALTER TABLE audit_entries_1442 RENAME TO audit_entries;
+```
+
+<!-- recovery-evidence-replace:end -->
+
+<!-- recovery-evidence-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_evidence_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='recovery_evidence_cutover';
+```
+
+<!-- recovery-evidence-verify:end -->

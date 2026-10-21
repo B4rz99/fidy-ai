@@ -71,11 +71,6 @@ const seed = (db: D1Database): Promise<ReadonlyArray<D1Result>> =>
       .bind(id(5), id(2), id(4), current - 50, current + 597000, current - 50),
     db
       .prepare(
-        "INSERT INTO audit_entries(record_type,id,recovery_case_id,user_id,operator_issuer,operator_subject,recovery_action,occurred_at_ms) VALUES('support_recovery',?,?,?,'original-issuer','original-operator','approved',?)"
-      )
-      .bind(id(6), id(5), id(2), current - 50),
-    db
-      .prepare(
         "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES('past','removed',?,'Complete')"
       )
       .bind(current),

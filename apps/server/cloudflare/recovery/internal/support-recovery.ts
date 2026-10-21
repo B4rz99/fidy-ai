@@ -201,11 +201,6 @@ const supportCaseInsert = ({
     WHERE b.consumed_at_ms = ? AND changes() = 1`,
   params: [caseId, operator.issuer, operator.subject, now, now, ...ready.params, now],
 });
-const supportCaseOpened = `INSERT INTO audit_entries(record_type,id,recovery_case_id,user_id,operator_issuer,operator_subject,recovery_action,occurred_at_ms) SELECT 'support_recovery',?, id, user_id, operator_issuer, operator_subject, 'opened', ?
-  FROM support_recovery_cases WHERE id = ? AND changes() = 1`;
-const supportCaseApproved = `INSERT INTO audit_entries(record_type,id,recovery_case_id,user_id,operator_issuer,operator_subject,recovery_action,occurred_at_ms) VALUES ('support_recovery',?, ?, (SELECT user_id FROM support_recovery_cases WHERE id = ?),
-    ?, ?, 'approved', ?)`;
-
 type CaseDecision = Readonly<{
   operator: { issuer: string; subject: string };
   codeDigest: Uint8Array;
@@ -215,8 +210,7 @@ type CaseDecision = Readonly<{
 
 const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
   const caseId = newId();
-  const openedId = newId();
-  const approvedId = newId();
+  const assertionScope = `support-recovery:${caseId}`;
   const { operator, codeDigest, publicCode, now } = input;
   const ready = approvedRecoveryBrowserPairingQuery({ publicCode, current: now });
   const credentialStatement = recoveryCredentialConsume({ ready, codeDigest, now });
@@ -230,10 +224,10 @@ const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
       }),
       db.prepare(credentialStatement.sql).bind(...credentialStatement.params),
       db.prepare(caseStatement.sql).bind(...caseStatement.params),
-      db.prepare(supportCaseOpened).bind(openedId, now, caseId),
       db
-        .prepare(supportCaseApproved)
-        .bind(approvedId, caseId, caseId, operator.issuer, operator.subject, now),
+        .prepare("INSERT INTO sql_assertions(scope,accepted) VALUES(?,changes()=1)")
+        .bind(assertionScope),
+      db.prepare("DELETE FROM sql_assertions WHERE scope=?").bind(assertionScope),
     ])
     .then((pairing) => pairing.every((entry) => entry.meta.changes === 1));
 };

@@ -1410,8 +1410,8 @@ it("rejects the old recovery code after rotation and redeems its single-use repl
       ).toBe(400);
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`CREATE TRIGGER reject_recovery_evidence BEFORE INSERT ON audit_entries
-          WHEN NEW.record_type='support_recovery' AND NEW.recovery_action = 'approved' BEGIN SELECT RAISE(ABORT, 'recovery evidence unavailable'); END`)
+          .prepare(`CREATE TRIGGER reject_recovery_evidence BEFORE INSERT ON support_recovery_cases
+          WHEN NEW.state='approved' BEGIN SELECT RAISE(IGNORE); END`)
           .run()
       );
       expect((yield* Effect.tryPromise(() => approve(created.backupRecoveryCode))).status).toBe(
@@ -1433,15 +1433,6 @@ it("rejects the old recovery code after rotation and redeems its single-use repl
       expect(
         yield* Effect.tryPromise(() =>
           db.prepare("SELECT count(*) AS count FROM support_recovery_cases").first()
-        )
-      ).toEqual({ count: 0 });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM (SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')"
-            )
-            .first()
         )
       ).toEqual({ count: 0 });
       yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER reject_recovery_evidence").run());
@@ -1491,15 +1482,6 @@ it("rejects the old recovery code after rotation and redeems its single-use repl
             .first<{ count: number }>()
         ))?.count
       ).toBe(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM (SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')"
-            )
-            .first<{ count: number }>()
-        ))?.count
-      ).toBe(2);
       const subject = yield* Effect.tryPromise(() =>
         db
           .prepare(`SELECT p.user_id AS paired_user, b.user_id AS proof_user,
@@ -1543,11 +1525,7 @@ it("rejects the old recovery code after rotation and redeems its single-use repl
         yield* Effect.tryPromise(() => db.prepare("SELECT count(*) AS count FROM users").first())
       ).toEqual({ count: 2 });
       const caseEvidence = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT * FROM (SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')"
-          )
-          .all()
+        db.prepare("SELECT * FROM support_recovery_cases").all()
       );
       expect(encodeJson(caseEvidence.results)).not.toContain(created.backupRecoveryCode);
       expect(encodeJson(caseEvidence.results)).not.toContain(pairing.privateVerifier);

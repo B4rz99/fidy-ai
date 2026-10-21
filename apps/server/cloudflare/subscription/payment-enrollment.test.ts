@@ -197,8 +197,19 @@ const retainHistoricalConfirmation = Effect.fn(function* (
     now: number;
     supportConfirmed: boolean;
     lateEvidence: "none" | "PENDING" | "APPROVED";
+    additionalCandidate: boolean;
   }>
 ) {
+  if (input.additionalCandidate) {
+    yield* fromTestPromise(() =>
+      input.db
+        .prepare(
+          "INSERT INTO billing_provider_transactions(transaction_id,attempt_id) VALUES (?,?)"
+        )
+        .bind("unverified-alternate-transaction", input.attemptId)
+        .run()
+    );
+  }
   if (input.supportConfirmed) {
     yield* fromTestPromise(() =>
       input.db
@@ -222,10 +233,63 @@ const retainHistoricalConfirmation = Effect.fn(function* (
   }
 });
 
-const retainUnclearedRetry = Effect.fn(function* (
-  fixture: Awaited<ReturnType<typeof setup>>,
-  advanceRetryWindow: () => void
+const restoreOriginalClearance = Effect.fn(function* (db: D1Database, enabled: boolean) {
+  if (!enabled) return;
+  const baseline = yield* fromTestPromise(() =>
+    Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+  );
+  const oldView = baseline
+    .split("--> statement-breakpoint")
+    .find((statement) => statement.trim().startsWith("CREATE VIEW billing_retry_clearances AS"));
+  if (oldView === undefined) throw new Error("Expected original billing clearance view");
+  yield* fromTestPromise(() =>
+    db.batch([db.prepare("DROP VIEW billing_retry_clearances"), db.prepare(oldView)])
+  );
+});
+
+const upgradeRetryClearance = Effect.fn(function* (
+  input: Readonly<{
+    db: D1Database;
+    enabled: boolean;
+    before: () => Promise<Response>;
+  }>
 ) {
+  if (!input.enabled) return;
+  const before = yield* fromTestPromise(input.before);
+  expect(before.status).not.toBe(200);
+  const migration = yield* fromTestPromise(() =>
+    Bun.file(new URL("../migrations/0002_billing_decline_recovery.sql", import.meta.url)).text()
+  );
+  yield* fromTestPromise(() =>
+    input.db.batch(migration.split("--> statement-breakpoint").map((sql) => input.db.prepare(sql)))
+  );
+});
+
+const expectOriginalBillingEvidence = Effect.fn(function* (
+  input: Readonly<{
+    db: D1Database;
+    attemptId: string;
+    creationLost: boolean;
+    supportConfirmed: boolean;
+    now: number;
+  }>
+) {
+  expect(
+    yield* fromTestPromise(() =>
+      input.db
+        .prepare(
+          "SELECT checkout_transaction_id,no_charge_confirmed_at_ms FROM billing_attempts WHERE id=?"
+        )
+        .bind(input.attemptId)
+        .first()
+    )
+  ).toEqual({
+    checkout_transaction_id: input.creationLost ? null : "checkout-declined-1",
+    no_charge_confirmed_at_ms: input.supportConfirmed ? input.now : null,
+  });
+});
+
+const retainUnclearedRetry = Effect.fn(function* (fixture: Awaited<ReturnType<typeof setup>>) {
   const preparedResponse = yield* fromTestPromise(() =>
     handlePaymentEnrollment({
       environment: fixture.environment,
@@ -266,22 +330,13 @@ const retainUnclearedRetry = Effect.fn(function* (
       payload: { version: 1, attemptId: payment.billingAttempt.id },
     })
   );
-  const lookup = (): Promise<void> =>
-    runBillingCollectionWorkflow({
-      environment: fixture.environment,
-      activity,
-      payload: { version: 1, kind: "lookup", transactionId: "checkout-declined-2" },
-    });
-  yield* fromTestPromise(lookup);
-  advanceRetryWindow();
-  yield* fromTestPromise(lookup);
   const standing = yield* fromTestPromise(() =>
     handlePaymentEnrollment({
       environment: fixture.environment,
       request: fixture.request(`/web/subscription/billing-attempts/${payment.billingAttempt.id}`),
     })
   );
-  expect(yield* fromTestPromise(() => standing.json())).toMatchObject({ status: "failed" });
+  expect(yield* fromTestPromise(() => standing.json())).toMatchObject({ status: "pending" });
   const retained = yield* fromTestPromise(() =>
     handlePaymentEnrollment({
       environment: fixture.environment,
@@ -338,6 +393,40 @@ it.each(
       },
       {
         replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: true,
+        replacementMethod: "daviplata",
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: true,
+        replacementMethod: "nequi",
+        migrationUpgrade: true,
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: true,
+        replacementMethod: "nequi",
+        missingFinalization: true,
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: true,
+        replacementMethod: "nequi",
+        futureFinalization: true,
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: true,
+        replacementMethod: "nequi",
+        additionalCandidate: true,
+      },
+      {
+        replaceFailedSource: true,
         outcome: "PENDING",
         creationLost: false,
         replacementMethod: "nequi",
@@ -385,10 +474,14 @@ it.each(
     supportConfirmed: false,
     lateEvidence: "none" as const,
     unclearedRetry: false,
+    missingFinalization: false,
+    futureFinalization: false,
+    additionalCandidate: false,
+    migrationUpgrade: false,
     ...testCase,
   }))
 )(
-  "guards explicit card retry: $outcome, replacement $replaceFailedSource, lost response $creationLost, method $replacementMethod, confirmed $supportConfirmed, later $lateEvidence, uncleared retry $unclearedRetry",
+  "guards explicit card retry: $outcome, replacement $replaceFailedSource, lost response $creationLost, method $replacementMethod, confirmed $supportConfirmed, later $lateEvidence, uncleared retry $unclearedRetry, missing finalization $missingFinalization, future finalization $futureFinalization, additional candidate $additionalCandidate, migration upgrade $migrationUpgrade",
   ({
     replaceFailedSource,
     outcome,
@@ -397,12 +490,18 @@ it.each(
     supportConfirmed,
     lateEvidence,
     unclearedRetry,
+    missingFinalization,
+    futureFinalization,
+    additionalCandidate,
+    migrationUpgrade,
   }) => {
     const expectedToProceed =
       outcome === "DECLINED" &&
-      (!creationLost || supportConfirmed) &&
       lateEvidence === "none" &&
-      !unclearedRetry;
+      !unclearedRetry &&
+      !missingFinalization &&
+      !futureFinalization &&
+      !additionalCandidate;
     const lostCreationResponses = new Set([
       ...(creationLost ? [1] : []),
       ...(unclearedRetry ? [2] : []),
@@ -411,6 +510,7 @@ it.each(
       Effect.gen(function* () {
         vi.useFakeTimers({ toFake: ["Date"] });
         const fixture = yield* fromTestPromise(setup);
+        yield* restoreOriginalClearance(fixture.db, migrationUpgrade);
         const { request } = fixture;
         const environment = {
           ...fixture.environment,
@@ -418,6 +518,7 @@ it.each(
           WOMPI_DAVIPLATA_OTP_CONFIRM_URL: "https://sandbox.wompi.co/otp/confirm",
         };
         let now = yield* Clock.currentTimeMillis;
+        let finalizedAt = now - 1000;
         let reference = "";
         let sourceCreations = 0;
         let collections = 0;
@@ -431,9 +532,11 @@ it.each(
               amount_in_cents: 990000,
               currency: "COP",
               finalized_at:
-                currentOutcome === "PENDING"
+                currentOutcome === "PENDING" || missingFinalization
                   ? null
-                  : DateTime.formatIso(DateTime.makeUnsafe(now - 1000)),
+                  : DateTime.formatIso(
+                      DateTime.makeUnsafe(finalizedAt + (futureFinalization ? 601_000 : 0))
+                    ),
             },
           });
         };
@@ -444,6 +547,7 @@ it.each(
                   body
                 ).reference;
                 collections += 1;
+                finalizedAt = now - 1000;
                 if (lostCreationResponses.has(collections)) {
                   throw new Error("Synthetic lost creation response");
                 }
@@ -585,14 +689,26 @@ it.each(
           now,
           supportConfirmed,
           lateEvidence,
+          additionalCandidate,
         });
         if (unclearedRetry) {
-          pendingEnrollment = yield* retainUnclearedRetry({ ...fixture, environment }, () => {
-            now += 181_000;
-            vi.setSystemTime(now);
-          });
+          pendingEnrollment = yield* retainUnclearedRetry({ ...fixture, environment });
         }
         const providerCallsBeforeReplacement = provider.mock.calls.length;
+        yield* upgradeRetryClearance({
+          db: environment.DB,
+          enabled: migrationUpgrade,
+          before: () =>
+            handlePaymentEnrollment({
+              environment,
+              request: request("/web/subscription/payment-enrollments/prepare", "POST", {
+                priceId,
+                replaceFailedSource,
+                method: replacementMethod,
+              }),
+            }),
+        });
+        expect(provider.mock.calls).toHaveLength(providerCallsBeforeReplacement);
         const next = yield* fromTestPromise(() =>
           handlePaymentEnrollment({
             environment,
@@ -628,6 +744,13 @@ it.each(
           return;
         }
         expect(next.status).toBe(200);
+        yield* expectOriginalBillingEvidence({
+          db: environment.DB,
+          attemptId: payment.billingAttempt.id,
+          creationLost,
+          supportConfirmed,
+          now,
+        });
         const nextEnrollment = yield* Schema.decodeUnknownEffect(
           Schema.toCodecJson(PaymentEnrollment)
         )(yield* fromTestPromise(() => next.json()));

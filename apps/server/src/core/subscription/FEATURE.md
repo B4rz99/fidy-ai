@@ -340,3 +340,38 @@ Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscriptio
 [native billing](../../../cloudflare/subscription/operations.ts),
 [AccessTier guard](../../shell/access-tier/operations.ts), and
 [commercial allowances](../../../../../docs/operations/commercial-allowances.md).
+
+## Verified-decline recovery (2026-10-21)
+
+The Wompi merchant Sandbox dashboard located reference
+`fidy-37aabbcd-b40a-434b-9777-94be61e186f3` as transaction
+`12146167-1792088273-64642`, declined and finalized. A bounded read-only Production check found
+that Fidy already retained that exact verified decline but had no original checkout response ID,
+no support confirmation and no retry clearance. Dashboard evidence was not written into billing
+state and no payment was submitted.
+
+The forward migration `0002_billing_decline_recovery.sql` permits a fresh, explicitly authorized
+PaymentEnrollment after a failed sent attempt has exactly one verified, finalized decline past the
+existing three-minute retry opportunity. A captured original response must still match when present;
+a lost response stays absent. Pending, approved, unverified, conflicting, missing/future-finalization
+and paid-period evidence do not qualify. Every attempt on a source remains checked atomically
+before retirement. No provider case, response, outcome or historical record is fabricated.
+
+Local public enrollment/Core/native-D1 regressions cover card, Nequi and DaviPlata replacement after
+a lost response, original evidence retention, no repeated POST on the old arm, and exactly one paid
+period for the newly authorized attempt. Negative cases preserve source/enrollment state and cause
+no extra provider work. The populated migration test first reproduces refusal with the baseline
+view, applies the actual forward SQL to the retained history and completes replacement. Separate
+local infrastructure checks cover clean install and populated redeployment. These results do not
+establish deployed recovery or live wallet authorization; those remain pending release verification.
+
+The follow-up browser gate exposed two fixture hazards. A real OAuth discovery flood exhausted the
+shared synthetic source and made an independent browser read return 429; per-review source routing
+now preserves both the flood refusal and the independent 200 without changing CORS or admission
+policy. A controlled document-replacement journey reproduced the polling helper's destroyed-context
+error. Removing its unnecessary page evaluation lets Playwright's navigation-safe clock operation
+advance polling across all forty real navigations. The existing Transactions loading check also
+waits for its initial read to render before intercepting the reload, so an outgoing read cannot be
+mistaken for the response under test. The combined focused run passed fourteen checks including
+Google signup, the flood, loading and navigation regressions. These are local fixture results, not
+additional deployed payment evidence.

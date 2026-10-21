@@ -17,13 +17,27 @@ const baseline = new URL("./migrations/0001_schema.sql", import.meta.url);
 const loadSchemaStatements = (): Promise<ReadonlyArray<string>> => {
   const previous = schemaStatements.get(baseline.href);
   if (previous !== undefined) return previous;
-  const loaded = Bun.file(baseline)
-    .text()
-    .then((source) =>
-      source
+  const migrations = Array.from(
+    new Bun.Glob("*.sql").scanSync({ cwd: new URL("./migrations/", import.meta.url).pathname })
+  ).sort();
+  const loaded = Promise.all(
+    migrations.map((name) => Bun.file(new URL(`./migrations/${name}`, import.meta.url)).text())
+  )
+    .then((sources) =>
+      sources
+        .join("\n--> statement-breakpoint\n")
         .split("--> statement-breakpoint")
         .map((statement) => statement.trim())
         .filter((statement) => statement.length > 0 && !statement.startsWith("PRAGMA "))
+    )
+    .then((statements) =>
+      statements.filter(
+        (statement, index) =>
+          !statement.startsWith("DROP VIEW ") &&
+          (!statement.startsWith("CREATE VIEW ") ||
+            statements.findLastIndex((other) => objectName(other) === objectName(statement)) ===
+              index)
+      )
     );
   schemaStatements.set(baseline.href, loaded);
   return loaded;

@@ -5,6 +5,12 @@ canonical operations. Financial behavior belongs to the operation's owner; MCP
 owns discovery, transport and native confirmation. OAuth grants belong to
 [OAuth Agents](../oauth-agents/contract.ts).
 
+Public client registration validates supported redirects, grants and scopes under the existing
+16 KiB body limit. Unsupported self-asserted metadata is discarded before response or persistence,
+as required by [RFC 7591 section 2](https://www.rfc-editor.org/rfc/rfc7591.html#section-2).
+Metadata URLs are not fetched or displayed. Browser decisions retain strict excess-field rejection;
+registration does not create an OAuth connection or authorize canonical operations.
+
 ## Execution
 
 Native client → public ingress Worker → authenticated Core → SQLite User Durable

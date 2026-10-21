@@ -88,6 +88,20 @@ Production completion, 2026-10-12: on the explicitly approved current User, subm
 
 ## Manual issuance ownership
 
+External-client continuation, 2026-10-20 Bogotá, release
+`ce8c9b51f096e8a93e601af7fd9db595bc3589ff`: MCP Inspector 2.10.1 discovered both OAuth metadata
+documents successfully but its registration returned HTTP 400 `invalid_client_metadata` before
+browser review. Its standard `client_uri` field hit the registration parser's excess-field rejection.
+The Worker/D1 regression reproduces the 400 and requires 201 with only supported metadata retained
+and no OAuth connection created. The fix discards unsupported registration metadata, retaining
+strict validation of supported fields and browser decisions. Live registration and external planning
+confirmation still require the follow-up deployment and explicit access approval; no grant was issued
+during this failure. Kapso currently exposes one sandbox number; the five most recent conversations
+were ended, so a live WhatsApp planning check requires an active handset test conversation.
+The complete OAuth Worker/D1 rerun passed 224 checks with one optional native-host bridge skipped.
+The initial parallel run encountered local `EADDRNOTAVAIL` failures; the serial rerun passed all
+twelve files without changing their assertions.
+
 `creation.tsx` owns the mounted manual PAT flow and same-User draft continuation. Its private
 `issuance.ts` implementation owns review, request identity, canonical outcomes, explicit retry,
 identity handoff and disclosure cleanup. `view.tsx` receives display state and User actions;

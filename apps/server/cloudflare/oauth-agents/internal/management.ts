@@ -125,13 +125,16 @@ const requestRevocation = (
   Effect.gen(function* () {
     const all = new URL(input.request.url).pathname === oauthPaths.revokeAll;
     const connectionId = all
-      ? yield* decodePayload({ request: input.request, schema: OAuthConnectionRevokeAll }).pipe(
-          Effect.as(Option.none<OAuthConnectionId>())
-        )
+      ? yield* decodePayload({
+          request: input.request,
+          schema: OAuthConnectionRevokeAll,
+          onExcessProperty: "error",
+        }).pipe(Effect.as(Option.none<OAuthConnectionId>()))
       : Option.some(
           (yield* decodePayload({
             request: input.request,
             schema: OAuthConnectionRevoke,
+            onExcessProperty: "error",
           })).connectionId
         );
     const admission = yield* Schema.decodeUnknownEffect(Schema.toType(OAuthRevocationAdmission))({

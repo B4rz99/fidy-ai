@@ -68,8 +68,8 @@ const readReference = (
     );
   }
   return path === oauthPaths.cancel
-    ? decodePayload({ request, schema: Reference })
-    : decodePayload({ request, schema: OAuthReviewChoice });
+    ? decodePayload({ request, schema: Reference, onExcessProperty: "error" })
+    : decodePayload({ request, schema: OAuthReviewChoice, onExcessProperty: "error" });
 };
 const bindPending = (
   input: ReviewInput & Readonly<{ requestId: string; session: FreshSessionSubject }>

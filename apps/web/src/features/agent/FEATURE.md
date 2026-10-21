@@ -8,6 +8,17 @@ and private-provider coverage but still needs a deployed, fresh canonical-read c
 natural-language lifecycle approval and Dashboard edit/restore remain live gaps. No production
 write or access grant is needed for the continuing local tests.
 
+Local chat-lifetime fix, 21 October 2026: a new built-browser check reproduced a lost closed-chat
+reply when navigating from Transactions to Budgets. Those routes mounted different conversation
+owners. The application frame now retains one provider while independently authorized routes
+continue to control chat visibility. The exact check failed before the fix and passed afterward.
+All 23 combined chat/Accesos/OAuth/session browser checks passed, including closed-reply visibility,
+Privacy and authentication-replacement disposal, failed and quota-refused drafts across sibling-route
+navigation, consecutive replies,
+uncertain progress and identical receipt retry without replaying the original message. Hosted
+responses are controlled HTTP evidence; these checks neither execute model-driven financial
+changes nor establish production recovery during the D1 outage.
+
 Production D1-reset continuation, 20-10-2026 in Bogotá (21-10-2026 UTC):
 [deployment 39525764609](https://github.com/B4rz99/fidy-ai/actions/runs/39525764609)
 passed and API health reported release `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`. Before promotion, explicitly retrying
@@ -59,9 +70,10 @@ Effect 4.0.2 retest, 2026-10-14, production `6708a0e76cf9e0c82157c0caa5e3fe12b22
 
 ## Owners
 
-- `program.ts` composes the chat window, messages, composer and recovery actions.
+- `feature.tsx` composes the chat window, messages, composer and recovery actions. Its provider
+  retains the conversation, draft and popup state across product routes inside `ApplicationFrame`.
 - `conversation.ts` owns submission, bounded history, pending state and exact delivery receipts.
-- `mounts.ts` reports committed visible replies; presentation does not decide receipt transitions.
+- `visible-reply.tsx` reports committed visible replies; presentation does not decide receipt transitions.
 - Server HostedTurn owns admission, inference, canonical tool execution, confirmation and retained delivery evidence. Workers AI is a provider boundary, not browser authority.
 
 ## Evidence and remaining checks

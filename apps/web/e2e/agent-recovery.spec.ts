@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import { Effect } from "effect";
+import { type Cause, Effect } from "effect";
 import { apiOrigin } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 import { signInRecurringThroughCore } from "./real-core-fixture";
@@ -112,7 +112,7 @@ const failureThenReplies =
           receipt: "a".repeat(nonceHexLength),
         });
 
-const discardAtPrivacy = (page: Page): Effect.Effect<void, unknown> =>
+const discardAtPrivacy = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar chat" }).click());
     yield* Effect.tryPromise(() =>
@@ -194,7 +194,7 @@ test("a reply received with chat closed is acknowledged only after it becomes vi
     })
   ));
 
-const retryAndContinue = (page: Page, draft: string): Effect.Effect<void, unknown> =>
+const retryAndContinue = (page: Page, draft: string): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     const history = page.getByRole("log", { name: "Conversación con Fidy" });
     yield* Effect.tryPromise(() =>
@@ -292,7 +292,7 @@ const installRecovery = (
     progress,
     receipts,
   }: Readonly<{ submissions: Requests; progress: Requests; receipts: Requests }>
-): Effect.Effect<void, unknown> =>
+): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() =>
       page.route(`${apiOrigin}/web/hosted-turns`, recordRequests(submissions, processingReply))

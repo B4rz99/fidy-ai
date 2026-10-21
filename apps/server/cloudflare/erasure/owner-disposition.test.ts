@@ -1,3 +1,4 @@
+import { makeEmailAuthenticationErasureStores } from "../email-authentication/runtime";
 import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Schema } from "effect";
 import { installRetentionTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
@@ -149,5 +150,103 @@ it("expires ordinary review drafts while a sealed User remains under erasure dis
           .all()
       );
       expect(expired.results).toEqual([{ draft_json: null }]);
+    })
+  ));
+
+it("erases only the selected User's email credential and retries a rolled-back deletion independently of Identity", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          ...[userId, foreignUser].map((id) =>
+            db
+              .prepare(
+                "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+              )
+              .bind(id)
+          ),
+          db
+            .prepare(
+              "INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) VALUES(?,'target@example.test',101),(?,'foreign@example.test',202)"
+            )
+            .bind(userId, foreignUser),
+          db
+            .prepare(
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,'AwaitingReview',?)"
+            )
+            .bind(reference, userId, '{"dispositions":{"credentials":{"action":"Delete"}}}'),
+          db
+            .prepare(
+              "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'verified_email_credentials','credentials')"
+            )
+            .bind(reference),
+          db.prepare("UPDATE erasure_requests SET state='Archiving' WHERE id=?").bind(reference),
+        ])
+      );
+      const before = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT rowid,* FROM verified_email_credentials ORDER BY user_id").all()
+      );
+      const store = makeEmailAuthenticationErasureStores(db).find(
+        (item) => item.id === "verified_email_credentials"
+      );
+      if (store === undefined) throw Error("Missing email credential erasure owner");
+      expect(yield* store.archive(scope)).toBe(true);
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference).run()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          db
+            .prepare(
+              "UPDATE verified_email_credentials SET address='changed@example.test' WHERE user_id=?"
+            )
+            .bind(userId)
+            .run()
+        ).rejects.toThrow("erasure_fenced")
+      );
+      expect((yield* Effect.result(store.remove({ reference, userId: foreignUser })))._tag).toBe(
+        "Failure"
+      );
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO erasure_chunk(request_id,row_ref) SELECT ?,CAST(rowid AS TEXT) FROM verified_email_credentials WHERE user_id=?"
+            )
+            .bind(reference, foreignUser),
+          db.prepare(`CREATE TRIGGER interrupt_email_credential_delete AFTER DELETE ON verified_email_credentials
+          BEGIN SELECT RAISE(ABORT,'interrupted credential deletion'); END`),
+        ])
+      );
+      expect((yield* Effect.result(store.remove(scope)))._tag).toBe("Failure");
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT rowid,* FROM verified_email_credentials ORDER BY user_id").all()
+        )).results
+      ).toEqual(before.results);
+      yield* Effect.tryPromise(() =>
+        db.prepare("DROP TRIGGER interrupt_email_credential_delete").run()
+      );
+      const resumed = makeEmailAuthenticationErasureStores(db).find(
+        (item) => item.id === "verified_email_credentials"
+      );
+      if (resumed === undefined) throw Error("Missing resumed email credential erasure owner");
+      expect(yield* resumed.remove(scope)).toBe(true);
+      expect(yield* resumed.remove(scope)).toBe(true);
+      expect(yield* resumed.remove(scope)).toBe(true);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT user_id,address,verified_at_ms FROM verified_email_credentials").all()
+        )).results
+      ).toEqual([{ user_id: foreignUser, address: "foreign@example.test", verified_at_ms: 202 }]);
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("SELECT id FROM users ORDER BY id").all()))
+          .results
+      ).toEqual([{ id: userId }, { id: foreignUser }]);
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM erasure_permits").all())).results
+      ).toEqual([]);
     })
   ));

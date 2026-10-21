@@ -289,6 +289,9 @@ const projectionRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement>
 ];
 const credentialRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> => [
   input.db
+    .prepare("INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) VALUES(?,?,?)")
+    .bind(input.userId, `person${input.index}@example.test`, input.current),
+  input.db
     .prepare(
       "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES(?,?,?,?,?,?,?,?)"
     )

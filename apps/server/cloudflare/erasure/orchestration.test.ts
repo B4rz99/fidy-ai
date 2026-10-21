@@ -70,6 +70,16 @@ const verifyNewStoreGuards = (db: D1Database): Effect.Effect<void, Cause.Unknown
         ])
       ).rejects.toThrow("erasure_fenced")
     );
+    yield* Effect.tryPromise(() =>
+      expect(
+        db
+          .prepare(
+            "UPDATE verified_email_credentials SET address='replacement@example.test' WHERE user_id=?"
+          )
+          .bind(userId)
+          .run()
+      ).rejects.toThrow("erasure_fenced")
+    );
     for (const recordType of ["processing_withdrawal", "processing_renewal"]) {
       yield* Effect.tryPromise(() =>
         expect(
@@ -324,11 +334,21 @@ const verifyNativeErasure = Effect.gen(function* () {
       )
     ))._tag
   ).toBe("Failure");
+  let restartedAfterCredentialDeletion = false;
+  const restartAfterCredentialDeletion = Effect.gen(function* () {
+    if (restartedAfterCredentialDeletion) return;
+    const credential = yield* Effect.tryPromise(() =>
+      db
+        .prepare("SELECT user_id FROM verified_email_credentials WHERE user_id=?")
+        .bind(userId)
+        .first()
+    );
+    if (credential !== null) return;
+    native = yield* Effect.tryPromise(() => platform.restart());
+    db = native.db;
+    restartedAfterCredentialDeletion = true;
+  });
   for (let count = 0; count < 450; count++) {
-    if (count === 100) {
-      native = yield* Effect.tryPromise(() => platform.restart());
-      db = native.db;
-    }
     const response = yield* send("erasure-continue", {
       userId,
       reference,
@@ -343,6 +363,7 @@ const verifyNativeErasure = Effect.gen(function* () {
     const state = yield* Effect.tryPromise(() =>
       db.prepare("SELECT state FROM erasure_requests WHERE id=?").bind(reference).first("state")
     );
+    yield* restartAfterCredentialDeletion;
     if (state === "ExternalPending") break;
   }
   expect(
@@ -372,6 +393,12 @@ const verifyNativeErasure = Effect.gen(function* () {
     { owner_user_id: null, retained: 1 },
     { owner_user_id: foreignUser, retained: 3 },
   ]);
+  expect(restartedAfterCredentialDeletion).toBe(true);
+  expect(
+    (yield* Effect.tryPromise(() =>
+      db.prepare("SELECT user_id,address,verified_at_ms FROM verified_email_credentials").all()
+    )).results
+  ).toEqual([{ user_id: foreignUser, address: "person1@example.test", verified_at_ms: current }]);
   yield* verifyRetainedReviews(db);
   expect(
     (yield* Effect.tryPromise(() =>

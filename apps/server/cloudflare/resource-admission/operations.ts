@@ -1,6 +1,8 @@
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { dual } from "effect/Function";
 import { Effect, Option } from "effect";
 import {
+  type EmailCounterKind,
   type PreparedResourceAdmission,
   type ReleaseOutstandingWorkRequest,
   type ResourceAdmissionAttempt,
@@ -19,6 +21,8 @@ import {
   type ResourceAdmissionTransition,
   ResourceAdmissionUnavailable,
   type ResourceAdmissionUnits,
+  type ResourceCounterQuery,
+  type ResourceCounterRequest,
 } from "./contract";
 
 const refusalMarker = "resource_admission_refused";
@@ -313,3 +317,53 @@ export const admitResourceWithAttemptPressure = dual<
 >(2, (config, { attempt, work }) =>
   admitResource(config, attempt).pipe(Effect.flatMap(() => admitResource(config, work)))
 );
+
+const emailCounters = {
+  email_pairing_user: { key: "email.pairing.user.v1", duration: 3_600_000 },
+  email_pairing_global: { key: "email.pairing.global.v1", duration: 3_600_000 },
+  email_replacement: { key: "email.replacement.user.v1", duration: 86_400_000 },
+} as const satisfies Record<EmailCounterKind, { key: string; duration: number }>;
+
+/** Observe a closed counter inside an owner's query; absence means no accepted window yet. */
+export const resourceCounterQuery = (input: ResourceCounterQuery): OwnedStatement => ({
+  sql: `SELECT used,window_start_ms,window_ends_ms,last_work_id FROM resource_admission_counters
+    WHERE policy_key=? AND window_kind='anchored' AND scope_key=${
+      input.kind === "email_pairing_global"
+        ? "'global'"
+        : `(SELECT user_id FROM (${input.subject.sql}))`
+    }`,
+  params: [
+    emailCounters[input.kind].key,
+    ...(input.kind === "email_pairing_global" ? [] : input.subject.params),
+  ],
+});
+
+/** Anchored capacity advances with the owner proof; replacement at capacity is a no-op, while
+ * pairing's final bounded-count constraint aborts an over-capacity owner commit.
+ */
+export const prepareResourceCounter = (input: ResourceCounterRequest): D1PreparedStatement => {
+  const policy = emailCounters[input.kind];
+  const global = input.kind === "email_pairing_global";
+  return input.db
+    .prepare(`INSERT INTO resource_admission_counters
+    (policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id)
+    SELECT ?,${global ? "'global'" : "user_id"},'anchored',?,?,1,?,${global ? "NULL" : "user_id"}
+    FROM (${input.subject.sql}) WHERE true
+    ON CONFLICT(policy_key,scope_key) WHERE window_kind='anchored' DO UPDATE SET
+      window_start_ms=CASE WHEN window_ends_ms<=? THEN excluded.window_start_ms ELSE window_start_ms END,
+      window_ends_ms=CASE WHEN window_ends_ms<=? THEN excluded.window_ends_ms ELSE window_ends_ms END,
+      used=CASE WHEN window_ends_ms<=? THEN 1 ELSE used+1 END,
+      last_work_id=excluded.last_work_id
+    WHERE excluded.policy_key<>'email.replacement.user.v1' OR used<5 OR window_ends_ms<=?`)
+    .bind(
+      policy.key,
+      input.current,
+      input.current + policy.duration,
+      input.kind === "email_replacement" ? input.workId : null,
+      ...input.subject.params,
+      input.current,
+      input.current,
+      input.current,
+      input.current
+    );
+};

@@ -33,10 +33,20 @@ work binding. Each owner retains proof, eligibility, refusal and charging-point 
 anonymous scopes do not acquire fabricated ownership. Source identity remains its original keyed
 32-byte digest. Opaque scope keys are not authorization.
 
-These are the preparatory contracts for #1432–#1435, not migrated consumers. Those slices install the
-counter store and explicit event ownership together with their production callers, erasure adapters,
-constraints and populated conversion. #1431 changes no persisted representation and needs no database
-cutover. Do not create an empty target table or remove an old store in advance of its owning slice.
+Email login and replacement now use `resource_admission_counters` through `prepareResourceCounter`
+and `resourceCounterQuery`. Email supplies the exact eligible User projection and commits capacity
+with its proof. The store preserves original anchored deadlines, bounded counts and replacement work
+bindings. A login proof that is suppressed spends no capacity; a replacement at capacity does not
+replace its last accepted work binding. Native constraints retain the five-per-hour User and
+1000-per-hour global login limits and five-per-24-hour replacement limit.
+
+Resource Admission owns the two credential erasure projections under their original logical store
+IDs. Indexed policy/scope selection also checks explicit User ownership; global capacity has no User.
+The current store accepts only the three installed email policies. #1433 and #1435 extend that same
+store with PAT source and calendar policies when their production consumers, constraints and
+conversion checks land. Explicit event ownership remains part of those following slices. The
+[cutover guide](../../../../docs/operations/database-cutover-1428.md#email-admission-counters-1432)
+contains the populated conversion for existing databases.
 
 ## Equivalence and cost gates
 
@@ -93,3 +103,21 @@ already equivalent. Their conversion tickets must repeat the same scenarios and 
 checks on the target representation. Native failed batches return an error without per-statement
 row metadata; do not interpret absent metadata as zero-cost rejection. Atomic rollback and public
 refusal are verified independently of those measurements.
+
+### Email counter conversion measurements (#1432)
+
+The same public email journeys and native observation seam retain the #1431 comparison below.
+No separate preliminary counter commit or additional observation query was added. The shared store
+needs one anchored identity index; adding a future calendar index before its consumer exists caused
+extra reads and was removed before acceptance.
+
+| Journey                                                           | Previous row reads / writes | Shared counter row reads / writes |
+| ----------------------------------------------------------------- | --------------------------- | --------------------------------- |
+| Concurrent login, suppression, unknown mailbox and anchored reset | 71 / 15                     | 71 / 14                           |
+| Five replacement generations and sixth suppressed attempt         | 25 / 6                      | 25 / 6                            |
+
+Existing proof rollback, aggregate contention and non-enumeration coverage runs unchanged in intent.
+Native populated conversion checks retain sparse row references, exact original windows, counts,
+ownership and replacement bindings; they also execute an injected failure after dropping the source
+and reject an unrepresentable historical deadline. The erasure integration verifies both counter
+policies are fenced, removes the target User's records and retains another User and global capacity.

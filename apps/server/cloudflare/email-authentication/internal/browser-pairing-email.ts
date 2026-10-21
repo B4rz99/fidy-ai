@@ -1,4 +1,4 @@
-import { prepareEmailSecurityLimit } from "./email-security-limit";
+import { prepareResourceCounter, resourceCounterQuery } from "../../resource-admission/operations";
 import {
   pendingBrowserPairingQuery,
   prepareProvedBrowserPairingApproval,
@@ -47,7 +47,6 @@ const workerCrypto = Crypto.make({
 const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
 const digestLength = 32;
 const emailCooldownMilliseconds = 60_000;
-const emailAdmissionWindowMilliseconds = 3_600_000;
 const emailUserRequestsPerWindow = 5;
 const emailGlobalRequestsPerWindow = 1_000;
 const publicCodeLength = 9;
@@ -111,26 +110,15 @@ const prepareEmailAdmission = (
   db: D1Database,
   current: number,
   workId: string
-): ReadonlyArray<D1PreparedStatement> => [
-  prepareEmailSecurityLimit({
-    db,
-    kind: "pairing",
-    current,
-    subject: {
-      sql: "SELECT email_user_id AS user_id FROM browser_login_pairings WHERE email_work_id=?",
-      params: [workId],
-    },
-  }),
-  prepareEmailSecurityLimit({
-    db,
-    kind: "pairing-global",
-    current,
-    subject: {
-      sql: "SELECT email_user_id AS user_id FROM browser_login_pairings WHERE email_work_id=?",
-      params: [workId],
-    },
-  }),
-];
+): ReadonlyArray<D1PreparedStatement> => {
+  const subject = {
+    sql: "SELECT email_user_id AS user_id FROM browser_login_pairings WHERE email_work_id=?",
+    params: [workId],
+  };
+  return (["email_pairing_user", "email_pairing_global"] as const).map((kind) =>
+    prepareResourceCounter({ db, current, kind, subject })
+  );
+};
 
 type PairingEmailIntent = Readonly<{
   db: D1Database;
@@ -151,6 +139,11 @@ const startPairingEmailIntent = ({
       subject: { sql: "SELECT ? AS pairingId", params: [proof.pairingId] },
       current,
     });
+    const userCounter = resourceCounterQuery({
+      kind: "email_pairing_user",
+      subject: { sql: "SELECT v.user_id AS user_id", params: [] },
+    });
+    const globalCounter = resourceCounterQuery({ kind: "email_pairing_global" });
     yield* attempt(() =>
       db.batch([
         db
@@ -164,10 +157,10 @@ const startPairingEmailIntent = ({
           p.expiresAt AS expires_at_ms,? AS requested_at_ms
           FROM (${pairing.sql}) AS p JOIN (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v ON v.email_address=?
           WHERE p.expiresAt=?
-          AND NOT EXISTS(SELECT 1 FROM email_security_limits l
-            WHERE l.kind='pairing' AND l.user_id=v.user_id AND l.window_started_at_ms>? AND l.requests>=?)
-          AND NOT EXISTS(SELECT 1 FROM email_security_limits l
-            WHERE l.kind='pairing-global' AND l.window_started_at_ms>? AND l.requests>=?)) AS incoming
+          AND NOT EXISTS(SELECT 1 FROM (${userCounter.sql}) l
+            WHERE l.window_ends_ms>? AND l.used>=?)
+          AND NOT EXISTS(SELECT 1 FROM (${globalCounter.sql}) l
+            WHERE l.window_ends_ms>? AND l.used>=?)) AS incoming
         WHERE browser_login_pairings.id=incoming.pairing_id
           AND (email_work_id IS NULL OR(email_state NOT IN('approved','sending')
             AND email_generation<5 AND email_last_requested_at_ms<=?))`)
@@ -177,9 +170,11 @@ const startPairingEmailIntent = ({
             ...pairing.params,
             proof.email,
             expiresAt,
-            current - emailAdmissionWindowMilliseconds,
+            ...userCounter.params,
+            current,
             emailUserRequestsPerWindow,
-            current - emailAdmissionWindowMilliseconds,
+            ...globalCounter.params,
+            current,
             emailGlobalRequestsPerWindow,
             current - emailCooldownMilliseconds
           ),

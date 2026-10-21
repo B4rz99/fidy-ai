@@ -111,8 +111,8 @@ class-wide hold. Stop review until the actual source and executable scope agree.
 | `recurring-plans`         | `recurring_plan_documents`              | schedules    | `user_documents (kind=recurring-plan)`                                          |
 | `memory`                  | `memories`                              | memory       | `memories`                                                                      |
 | `email-authentication`    | `browser_pairing_email_proofs`          | credentials  | `browser_login_pairings`                                                        |
-| `email-authentication`    | `browser_pairing_email_user_limits`     | credentials  | `browser_pairing_email_user_limits`                                             |
-| `email-authentication`    | `email_replacement_limits`              | credentials  | `email_replacement_limits`                                                      |
+| `resource-admission`      | `browser_pairing_email_user_limits`     | credentials  | `resource_admission_counters`                                                   |
+| `resource-admission`      | `email_replacement_limits`              | credentials  | `resource_admission_counters`                                                   |
 | `email-authentication`    | `email_replacements`                    | credentials  | `email_replacements`                                                            |
 | `email-authentication`    | `verified_email_credentials`            | credentials  | `users (verified email fields)`                                                 |
 | `ingestion`               | `ingestion_review_state`                | ingestion    | `ingestion_review_state`                                                        |

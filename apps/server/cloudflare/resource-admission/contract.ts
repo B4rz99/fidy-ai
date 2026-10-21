@@ -1,3 +1,4 @@
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { Data, Schema } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
 import type { WebSessionId } from "../../src/core/web-session/contract";
@@ -231,3 +232,27 @@ export type ResourceAdmissionCounterTransition =
       kind: "hosted_compaction";
       userId: UserId;
     }>;
+
+export type EmailCounterKind = Extract<
+  ResourceAdmissionCounterTransition,
+  {
+    kind: "email_pairing_user" | "email_pairing_global" | "email_replacement";
+  }
+>["kind"];
+
+/** The owner query yields zero or one user_id under its exact proof/eligibility guard.
+ * Zero rows spend no capacity. Execute this statement in that owner's atomic commit.
+ */
+export type ResourceCounterRequest = Readonly<{
+  db: D1Database;
+  subject: OwnedStatement;
+  current: number;
+}> &
+  (
+    | Readonly<{ kind: "email_pairing_user" | "email_pairing_global" }>
+    | Readonly<{ kind: "email_replacement"; workId: string }>
+  );
+
+export type ResourceCounterQuery =
+  | Readonly<{ kind: "email_pairing_global" }>
+  | Readonly<{ kind: "email_pairing_user" | "email_replacement"; subject: OwnedStatement }>;

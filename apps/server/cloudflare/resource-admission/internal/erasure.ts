@@ -1,6 +1,41 @@
 import type { ErasureProjection } from "../../erasure-store/contract";
 
+const counterProjection = (
+  id: "browser_pairing_email_user_limits" | "email_replacement_limits",
+  policyKey: "email.pairing.user.v1" | "email.replacement.user.v1"
+): ErasureProjection => {
+  const where = "policy_key=? AND window_kind='anchored' AND scope_key=? AND owner_user_id=?";
+  const params = (userId: string): ReadonlyArray<string> => [policyKey, userId, userId];
+  return {
+    id,
+    dataClass: "credentials",
+    dependencies: [],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: `SELECT CAST(rowid AS TEXT) AS rowRef,'{}' AS body FROM resource_admission_counters WHERE ${where}`,
+      params: params(userId),
+    }),
+    candidates: (userId) => ({
+      sql: `SELECT CAST(rowid AS TEXT) AS rowRef FROM resource_admission_counters WHERE ${where}`,
+      params: params(userId),
+    }),
+    remaining: (userId) => ({
+      sql: `SELECT 1 FROM resource_admission_counters WHERE ${where}`,
+      params: params(userId),
+    }),
+    remove: (scope) => [
+      {
+        sql: `DELETE FROM resource_admission_counters WHERE ${where}
+        AND CAST(rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
+        params: [...params(scope.userId), scope.reference],
+      },
+    ],
+  };
+};
+
 export const projections: ReadonlyArray<ErasureProjection> = [
+  counterProjection("browser_pairing_email_user_limits", "email.pairing.user.v1"),
+  counterProjection("email_replacement_limits", "email.replacement.user.v1"),
   {
     id: "resource_admission_events",
     dataClass: "schedules",

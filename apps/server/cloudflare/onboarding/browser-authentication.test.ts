@@ -1142,7 +1142,7 @@ it("bounds replacement delivery across rejected proofs for the same User", () =>
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests,last_work_id AS last_work_id FROM email_security_limits WHERE kind='replacement')"
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.replacement.user.v1'"
             )
             .first<{ requests: number }>()
         ))?.requests
@@ -1172,7 +1172,7 @@ it("bounds replacement delivery across rejected proofs for the same User", () =>
       ).toBe("person@example.test");
       const admissionCosts = measures
         .flatMap((observed) => observed.statements())
-        .filter(({ sql }) => sql.includes("INSERT INTO email_security_limits"))
+        .filter(({ sql }) => sql.includes("INSERT INTO resource_admission_counters"))
         .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
       expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(25);
       expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(6);
@@ -2148,7 +2148,7 @@ it("bounds concurrent email sends across pairings and preserves admission after 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests FROM email_security_limits WHERE kind='pairing')"
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.user.v1'"
             )
             .first()
         )
@@ -2173,17 +2173,19 @@ it("bounds concurrent email sends across pairings and preserves admission after 
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT requests FROM email_security_limits WHERE kind='pairing-global'")
+            .prepare(
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.global.v1'"
+            )
             .first()
         )
       ).toEqual({ requests: 5 });
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
-            "UPDATE email_security_limits SET window_started_at_ms=window_started_at_ms-3600000 WHERE kind='pairing'"
+            "UPDATE resource_admission_counters SET window_start_ms=window_start_ms-3600000,window_ends_ms=window_ends_ms-3600000 WHERE policy_key='email.pairing.user.v1'"
           ),
           db.prepare(
-            "UPDATE email_security_limits SET window_started_at_ms = window_started_at_ms - 3600000 WHERE kind='pairing-global'"
+            "UPDATE resource_admission_counters SET window_start_ms=window_start_ms-3600000,window_ends_ms=window_ends_ms-3600000 WHERE policy_key='email.pairing.global.v1'"
           ),
         ])
       );
@@ -2192,7 +2194,7 @@ it("bounds concurrent email sends across pairings and preserves admission after 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests FROM email_security_limits WHERE kind='pairing')"
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.user.v1'"
             )
             .first()
         )
@@ -2200,16 +2202,18 @@ it("bounds concurrent email sends across pairings and preserves admission after 
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT requests FROM email_security_limits WHERE kind='pairing-global'")
+            .prepare(
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.global.v1'"
+            )
             .first()
         )
       ).toEqual({ requests: 1 });
       const admissionCosts = measures
         .flatMap((observed) => observed.statements())
-        .filter(({ sql }) => sql.includes("INSERT INTO email_security_limits"))
+        .filter(({ sql }) => sql.includes("INSERT INTO resource_admission_counters"))
         .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
       expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(71);
-      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(15);
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(14);
     })
   ));
 
@@ -2225,7 +2229,7 @@ it("does not spend email capacity for same-pairing cooldown or exhausted aggrega
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests FROM email_security_limits WHERE kind='pairing')"
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.user.v1'"
             )
             .first()
         )
@@ -2233,13 +2237,17 @@ it("does not spend email capacity for same-pairing cooldown or exhausted aggrega
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT requests FROM email_security_limits WHERE kind='pairing-global'")
+            .prepare(
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.global.v1'"
+            )
             .first()
         )
       ).toEqual({ requests: 1 });
       yield* Effect.tryPromise(() =>
         db
-          .prepare("UPDATE email_security_limits SET requests = 999 WHERE kind='pairing-global'")
+          .prepare(
+            "UPDATE resource_admission_counters SET used = 999 WHERE policy_key='email.pairing.global.v1'"
+          )
           .run()
       );
       const competing = yield* Effect.all([
@@ -2254,7 +2262,9 @@ it("does not spend email capacity for same-pairing cooldown or exhausted aggrega
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT requests FROM email_security_limits WHERE kind='pairing-global'")
+            .prepare(
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.global.v1'"
+            )
             .first()
         )
       ).toEqual({ requests: 1000 });
@@ -2264,7 +2274,7 @@ it("does not spend email capacity for same-pairing cooldown or exhausted aggrega
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests FROM email_security_limits WHERE kind='pairing')"
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.user.v1'"
             )
             .first()
         )
@@ -2296,8 +2306,8 @@ it("rolls email admission back when recording its proof fails", () =>
       const pairing = yield* emailAdmissionPairing(sendRequest);
       expect((yield* emailAdmissionRequest(sendRequest, pairing)).status).toBe(503);
       for (const table of [
-        "(SELECT user_id FROM email_security_limits WHERE kind='pairing')",
-        "(SELECT requests FROM email_security_limits WHERE kind='pairing-global')",
+        "(SELECT owner_user_id FROM resource_admission_counters WHERE policy_key='email.pairing.user.v1')",
+        "(SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.global.v1')",
         "(SELECT id FROM browser_login_pairings WHERE email_work_id IS NOT NULL)",
       ]) {
         expect(

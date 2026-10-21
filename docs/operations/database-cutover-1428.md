@@ -379,3 +379,68 @@ use acceptance time without the redundant expiry. Verify foreign keys and retain
 aligning the applied ledger. Roll back the whole conversion on any discrepancy, and keep ordinary
 admissions fenced through the code/schema cutover rather than serving old replay SQL against the
 new table.
+
+## Email admission counters (#1432)
+
+The single baseline now installs `resource_admission_counters` instead of `email_security_limits`.
+Resource Admission owns the shared counter statements, projections and erasure adapters. Email owns
+eligibility, proof creation, non-enumerating refusal and delivery. Existing logical erasure store IDs
+`browser_pairing_email_user_limits` and `email_replacement_limits` remain unchanged, including their
+credential disposition and row references. Global capacity has no fabricated User and is not erased
+with an individual User.
+
+For an existing database, fence email login/replacement and erasure first and back up the database.
+Refuse a pre-existing target table or any unexplained foreign-key inconsistency. Assemble **one native
+transactional batch**: create the target table from the current baseline; execute the copy/verification
+below; drop the old table; then install the target index and its six erasure triggers from that same
+baseline. Dropping the source removes its original index and same-named triggers. Do not install new
+triggers over those names before dropping the source. Do not publish matching Workers until the whole
+batch succeeds. Ordinary database migration deployment does not rewrite an already applied baseline.
+
+Copy original `rowid`, User, count, anchor and replacement work binding exactly. Compute the original
+one-hour or 24-hour deadline from that original anchor, never from cutover time. The target constraints
+reject unsupported policies, counts, scope/owner mismatches, lost work bindings, orphan Users and
+unrepresentable deadlines. The following block is exercised against populated native D1 by the
+Resource Admission conversion tests.
+
+<!-- email-counter-copy:start -->
+
+```sql
+INSERT INTO resource_admission_counters
+  (rowid,policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id)
+SELECT rowid,
+  CASE kind WHEN 'pairing' THEN 'email.pairing.user.v1'
+    WHEN 'pairing-global' THEN 'email.pairing.global.v1'
+    WHEN 'replacement' THEN 'email.replacement.user.v1' END,
+  CASE WHEN kind='pairing-global' THEN 'global' ELSE user_id END,
+  'anchored',window_started_at_ms,
+  window_started_at_ms+CASE WHEN kind='replacement' THEN 86400000 ELSE 3600000 END,
+  requests,last_work_id,user_id
+FROM email_security_limits;
+
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email_counter_cutover',CASE WHEN
+  (SELECT count(*) FROM email_security_limits)=(SELECT count(*) FROM resource_admission_counters)
+  AND NOT EXISTS (
+    SELECT 1 FROM email_security_limits old
+    LEFT JOIN resource_admission_counters next ON next.rowid=old.rowid
+    WHERE next.rowid IS NULL OR next.owner_user_id IS NOT old.user_id
+      OR next.used IS NOT old.requests OR next.last_work_id IS NOT old.last_work_id
+      OR next.window_start_ms IS NOT old.window_started_at_ms
+      OR next.window_ends_ms IS NOT (old.window_started_at_ms+
+        CASE WHEN old.kind='replacement' THEN 86400000 ELSE 3600000 END)
+  ) AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+  THEN 1 ELSE 0 END
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='email_counter_cutover';
+DROP TABLE email_security_limits;
+```
+
+<!-- email-counter-copy:end -->
+
+If copying, verification, dropping the old table or installing any target object fails, roll back the
+whole batch. Verify foreign keys, both original logical erasure permissions and stored anchors/counts
+before aligning the sole-baseline ledger. A quota refusal leaves this cutover pending; it is not a
+reason to deploy new SQL against the old schema. #1433 and #1435 extend the same target store only when
+their PAT/calendar consumers and populated conversions land; their unused indexes are not installed
+in advance.

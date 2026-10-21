@@ -529,16 +529,25 @@ CREATE TABLE email_replacements (
 ) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE "email_security_limits" (
- kind TEXT NOT NULL CHECK(kind IN ('pairing','replacement','pairing-global')),
- user_id TEXT REFERENCES users(id),
- window_started_at_ms INTEGER NOT NULL,
- requests INTEGER NOT NULL CHECK(requests>=1 AND requests<=CASE WHEN kind='pairing-global' THEN 1000 ELSE 5 END),
- last_work_id TEXT CHECK(last_work_id IS NULL OR length(last_work_id)=36),
- CHECK((kind='pairing-global' AND user_id IS NULL AND last_work_id IS NULL)
- OR (kind='pairing' AND user_id IS NOT NULL AND last_work_id IS NULL)
- OR (kind='replacement' AND user_id IS NOT NULL AND last_work_id IS NOT NULL)),
- UNIQUE(kind,user_id)
+CREATE TABLE resource_admission_counters (
+  policy_key TEXT NOT NULL CHECK(policy_key IN (
+    'email.pairing.user.v1','email.pairing.global.v1','email.replacement.user.v1'
+  )),
+  scope_key TEXT NOT NULL CHECK(length(scope_key) BETWEEN 1 AND 256),
+  window_kind TEXT NOT NULL CHECK(window_kind='anchored'),
+  window_start_ms INTEGER NOT NULL,
+  window_ends_ms INTEGER NOT NULL,
+  used INTEGER NOT NULL CHECK(used BETWEEN 1 AND CASE policy_key
+    WHEN 'email.pairing.global.v1' THEN 1000 ELSE 5 END),
+  last_work_id TEXT CHECK(last_work_id IS NULL OR length(last_work_id)=36),
+  owner_user_id TEXT REFERENCES users(id),
+  CHECK(window_ends_ms=window_start_ms+CASE policy_key
+    WHEN 'email.replacement.user.v1' THEN 86400000 ELSE 3600000 END),
+  CHECK((policy_key='email.pairing.global.v1' AND scope_key='global' AND owner_user_id IS NULL)
+    OR (policy_key IN ('email.pairing.user.v1','email.replacement.user.v1')
+      AND owner_user_id IS NOT NULL AND scope_key=owner_user_id)),
+  CHECK((policy_key='email.replacement.user.v1' AND last_work_id IS NOT NULL)
+    OR (policy_key<>'email.replacement.user.v1' AND last_work_id IS NULL))
 ) STRICT;
 --> statement-breakpoint
 
@@ -1886,7 +1895,8 @@ CREATE UNIQUE INDEX delivery_status_identity ON whatsapp_event_records(correlati
 CREATE INDEX email_replacement_dispatch_due ON email_replacements(dispatch_attempted_at_ms,created_at_ms,work_id) WHERE state='awaiting_delivery';
 --> statement-breakpoint
 
-CREATE UNIQUE INDEX email_security_global_identity ON email_security_limits(kind) WHERE kind='pairing-global';
+CREATE UNIQUE INDEX resource_counter_anchored_identity
+  ON resource_admission_counters(policy_key,scope_key) WHERE window_kind='anchored';
 --> statement-breakpoint
 
 CREATE INDEX erasure_writers_by_user ON erasure_writers(user_id);
@@ -3697,13 +3707,13 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_delete BEFORE DELETE ON email_security_limits WHEN (OLD.kind='pairing') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_delete BEFORE DELETE ON resource_admission_counters WHEN (OLD.policy_key='email.pairing.user.v1') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_insert BEFORE INSERT ON email_security_limits WHEN (NEW.kind='pairing') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_insert BEFORE INSERT ON resource_admission_counters WHEN (NEW.policy_key='email.pairing.user.v1') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_update BEFORE UPDATE ON email_security_limits WHEN ((NEW.user_id IS NOT OLD.user_id OR NEW.requests IS NOT OLD.requests OR NEW.window_started_at_ms IS NOT OLD.window_started_at_ms OR NEW.kind IS NOT OLD.kind) AND (OLD.kind='pairing' OR NEW.kind='pairing')) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_update BEFORE UPDATE ON resource_admission_counters WHEN ((NEW.owner_user_id IS NOT OLD.owner_user_id OR NEW.used IS NOT OLD.used OR NEW.window_start_ms IS NOT OLD.window_start_ms OR NEW.window_ends_ms IS NOT OLD.window_ends_ms OR NEW.policy_key IS NOT OLD.policy_key) AND (OLD.policy_key='email.pairing.user.v1' OR NEW.policy_key='email.pairing.user.v1')) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.owner_user_id=q.user_id) OR (OLD.owner_user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_crossing_publications_delete BEFORE DELETE ON budget_state WHEN (OLD.kind='publication') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_crossing_publications'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
@@ -4033,13 +4043,13 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingRevie
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_email_replacement_limits_delete BEFORE DELETE ON email_security_limits WHEN (OLD.kind='replacement') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_email_replacement_limits_delete BEFORE DELETE ON resource_admission_counters WHEN (OLD.policy_key='email.replacement.user.v1') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_email_replacement_limits_insert BEFORE INSERT ON email_security_limits WHEN (NEW.kind='replacement') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_email_replacement_limits_insert BEFORE INSERT ON resource_admission_counters WHEN (NEW.policy_key='email.replacement.user.v1') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_email_replacement_limits_update BEFORE UPDATE ON email_security_limits WHEN ((NEW.user_id IS NOT OLD.user_id OR NEW.last_work_id IS NOT OLD.last_work_id OR NEW.requests IS NOT OLD.requests OR NEW.window_started_at_ms IS NOT OLD.window_started_at_ms OR NEW.kind IS NOT OLD.kind) AND (OLD.kind='replacement' OR NEW.kind='replacement')) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_email_replacement_limits_update BEFORE UPDATE ON resource_admission_counters WHEN ((NEW.owner_user_id IS NOT OLD.owner_user_id OR NEW.last_work_id IS NOT OLD.last_work_id OR NEW.used IS NOT OLD.used OR NEW.window_start_ms IS NOT OLD.window_start_ms OR NEW.window_ends_ms IS NOT OLD.window_ends_ms OR NEW.policy_key IS NOT OLD.policy_key) AND (OLD.policy_key='email.replacement.user.v1' OR NEW.policy_key='email.replacement.user.v1')) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.owner_user_id=q.user_id) OR (OLD.owner_user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_email_replacements_delete BEFORE DELETE ON email_replacements

@@ -193,12 +193,11 @@ describe("Production release workflow policy", () => {
     expect(preflight).toContain("bun run --cwd apps/web build:production");
   });
 
-  it("rejects migration and provider drift before planning and approves the non-interactive deploy", () => {
+  it("rejects provider drift before planning and approves the non-interactive deploy", () => {
     const profile = workflow.indexOf(
       "uses: ./.github/actions/configure-alchemy-cloudflare-profile"
     );
     const preflightGate = workflow.indexOf("bash infra/cloudflare/scripts/production-preflight.sh");
-    const migrationDriftGate = preflight.indexOf("bun scripts/check-applied-migration-drift.ts");
     const bootstrap = preflight.indexOf("provider cloudflare bootstrap");
     const providerDriftGate = preflight.indexOf("bash scripts/check-topology-drift.sh");
     const plan = workflow.indexOf("alchemy plan");
@@ -206,8 +205,7 @@ describe("Production release workflow policy", () => {
     expect(profile).toBeGreaterThan(0);
     expect(preflightGate).toBeGreaterThan(profile);
     expect(preflightGate).toBeLessThan(plan);
-    expect(migrationDriftGate).toBeGreaterThan(0);
-    expect(migrationDriftGate).toBeLessThan(bootstrap);
+    expect(bootstrap).toBeGreaterThan(0);
     expect(bootstrap).toBeLessThan(providerDriftGate);
     expect(preflight).toContain(
       "../../node_modules/alchemy/bin/alchemy.js provider cloudflare bootstrap"

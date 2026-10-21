@@ -1,19 +1,13 @@
-import { readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as Schema from "effect/Schema";
 import {
   type AppliedMigration,
-  type MigrationSource,
   decodeWranglerMigrationRows,
   maximumAppliedMigrationRows,
 } from "./migration-history";
 import { runMigrationCommand } from "./run-migration-command";
 
 const infrastructureDirectory = fileURLToPath(new URL("../", import.meta.url));
-const migrationDirectory = fileURLToPath(
-  new URL("../../../apps/server/cloudflare/migrations/", import.meta.url)
-);
 const statePath = "FidyCloudflare/production/Database";
 const maximumDatabaseNameCharacters = 64;
 const ledgerTable = "__alchemy_migrations";
@@ -76,7 +70,7 @@ export const readProductionDatabaseName = (): string => {
 };
 
 /** Run a metadata-only query or an explicitly reviewed migration-ledger update. */
-export const queryProductionDatabase = (databaseName: string, sql: string): string =>
+const queryProductionDatabase = (databaseName: string, sql: string): string =>
   runMigrationHistoryCommand([
     "bun",
     "run",
@@ -98,27 +92,3 @@ export const queryProductionMigrationLedger = (
 
 export const readProductionMigrationLedger = (): ReadonlyArray<AppliedMigration> =>
   queryProductionMigrationLedger(readProductionDatabaseName());
-
-const collectSqlFiles = async (
-  directory: string,
-  prefix = ""
-): Promise<ReadonlyArray<MigrationSource>> => {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files: ReadonlyArray<ReadonlyArray<MigrationSource>> = await Promise.all(
-    entries.map(async (entry): Promise<ReadonlyArray<MigrationSource>> => {
-      const name = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) return collectSqlFiles(path, name);
-      if (entry.isFile() && entry.name.endsWith(".sql")) {
-        return [{ name, source: await readFile(path, "utf8") }];
-      }
-      return [];
-    })
-  );
-  return files.flat();
-};
-
-export const readCheckedInMigrationSources = async (): Promise<ReadonlyArray<MigrationSource>> =>
-  [...(await collectSqlFiles(migrationDirectory))].sort((left, right) =>
-    left.name.localeCompare(right.name)
-  );

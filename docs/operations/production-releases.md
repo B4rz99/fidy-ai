@@ -6,7 +6,7 @@ provider repository integration or from a workstation.
 
 Before enabling real onboarding, complete the [Production launch proof](production-launch.md).
 An ordinary passing release is not launch approval; that checklist records live evidence, synthetic
-cleanup, and the explicit operator decision without relaxing applied-migration guards.
+cleanup, and the explicit operator decision under the current pre-release baseline policy.
 
 ## Authority and provider setup
 
@@ -91,12 +91,10 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
    `infra/cloudflare` with the approved `HOSTED_AI_MODEL` and Cloudflare credentials. It consumes
    the account's Workers AI allowance and remains strict by default. Deterministic tests do not
    establish live model conformance; provider quota never substitutes for launch approval.
-5. In the Cloudflare lane, compare Production's applied D1 migration names and hashes with checked-in
-   SQL before bootstrapping; fail closed on any missing file, hash mismatch, incomplete history, or
-   inability to query the ledger.
-6. Only after the migration check succeeds, idempotently bootstrap the persistent Cloudflare state
-   authority with `alchemy provider cloudflare bootstrap`, then reject topology drift. These three
-   checks remain sequential.
+5. In the Cloudflare lane, idempotently bootstrap the persistent Cloudflare state authority with
+   `alchemy provider cloudflare bootstrap`, then reject topology drift. Keep those operations ordered.
+6. Alchemy applies pending migrations during resource deployment. The pre-release baseline policy
+   below governs an edited clean-install baseline; there is no separate applied-file hash checker.
 7. Wait for every preflight lane to finish, failing the release if any lane failed. Runner cancellation
    terminates their process groups. Grouped logs retain each lane's outcome and elapsed seconds;
    GitHub step timing observes the complete barrier. No extra telemetry or provider payload capture
@@ -297,17 +295,21 @@ metadata before creating resources.
 
 ## D1 migration history
 
-Treat every SQL migration as immutable once its name appears in Alchemy's `__alchemy_migrations`
-ledger. PR validation rejects edits, deletions, and renames of existing migrations; add a new
-forward-only migration for an already-applied schema change. If a migration failed before being
-recorded and must be corrected in place, run **Verify unapplied D1 migration repair** from `trunk`
-with the PR number and the original migration filename. The protected `production` environment
-checks that exact migration against Production and issues a commit-status approval only while it is
-unapplied. PR workflows receive no Cloudflare credentials. PR validation accepts that approval
-only when its verification began after the latest Production workflow run completed; an overlapping
-or newer Production run makes the approval stale, so rerun the repair workflow after a release. The
-deploy workflow independently rechecks every applied migration hash before bootstrapping or
-planning, so an earlier approval cannot bypass current Production history.
+The unreleased application keeps one clean-install baseline, `0001_schema.sql`. PR validation allows
+replacing that sole baseline. Alchemy identifies applied migrations by name: editing an already
+applied baseline does **not** upgrade an existing database.
+
+Before deploying a changed baseline against an existing development database, apply and verify the
+corresponding schema changes or deliberately recreate the disposable database. Compare the actual
+schema with the target and check foreign keys before aligning its migration ledger. Never update a
+ledger hash without applying the schema changes. The October 21 consolidation repair preserved
+retained development records and applied the reviewed consolidation SQL before aligning the ledger.
+The standalone applied-file hash checker and baseline-adoption machinery have been removed.
+
+Additional incremental migrations retain the existing PR immutability policy. The **Verify unapplied
+D1 migration repair** workflow remains available for a failed, unrecorded incremental migration;
+its approval stays bound to the exact PR commit and latest completed deployment. PR workflows receive
+no Cloudflare credentials. Before real onboarding, adopt an immutable forward-migration policy.
 
 The GitHub `production` environment must use a custom deployment-branch policy that allows only the
 protected `trunk` branch. The dispatch workflow's YAML branch guard is defense in depth; the

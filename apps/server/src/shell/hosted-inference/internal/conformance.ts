@@ -206,51 +206,114 @@ const expectedRecurringLifecycle = Schema.Struct({
   }),
 });
 
-const representativeRecurringWorkspace = Effect.gen(function* () {
-  const document = yield* Schema.decodeEffect(RecurringDocument)({
-    revision: 2,
-    plans: [
-      {
-        id: representativePlanId,
-        revisions: [
-          {
-            from: "2026-09-22",
-            plan: {
-              name: "Plan de prueba",
-              kind: "expense",
-              currency: "COP",
-              amountMode: "unknown",
-              frequency: "monthly",
-              firstDate: "2026-09-22",
-              timeZone: "America/Bogota",
+const representativeRecurringWorkspace = (
+  month: "2026-09" | "2026-10" = "2026-09",
+  firstDate: "2026-09-18" | "2026-09-22" = "2026-09-22"
+): Effect.Effect<Schema.Json, HostedInferenceError> =>
+  Effect.gen(function* () {
+    const document = yield* Schema.decodeEffect(RecurringDocument)({
+      revision: 2,
+      plans: [
+        {
+          id: representativePlanId,
+          revisions: [
+            {
+              from: firstDate,
+              plan: {
+                name: "Plan de prueba",
+                kind: "expense",
+                currency: "COP",
+                amountMode: "unknown",
+                frequency: "monthly",
+                firstDate,
+                timeZone: "America/Bogota",
+              },
             },
-          },
-        ],
-        pauses: [],
-      },
-    ],
-    exceptions: [],
-    fulfillments: [],
-    excludedTransactionIds: [],
-    suggestions: [],
+          ],
+          pauses: [],
+        },
+      ],
+      exceptions: [],
+      fulfillments: [],
+      excludedTransactionIds: [],
+      suggestions: [],
+    });
+    const occurrences = projectRecurringMonth({
+      document,
+      month,
+      now: DateTime.makeUnsafe("2026-09-22T12:00:00Z"),
+    });
+    return yield* Schema.encodeEffect(Schema.toCodecJson(RecurringWorkspace))({
+      document,
+      month,
+      today: "2026-09-22",
+      occurrences,
+      previous: [],
+      summary: summarizeRecurring(occurrences),
+      invalidFulfillmentIds: [],
+      matches: [],
+      matchesComplete: true,
+    });
+  }).pipe(Effect.mapError(conformanceFailure));
+
+/** A maintained plan is distinct from both historical detection and a past occurrence's state. */
+export const verifyRecurringPlanRead = (
+  inference: HostedInferenceService
+): Effect.Effect<void, HostedInferenceError> =>
+  Effect.gen(function* () {
+    const maximumReads = 2;
+    const prepared = yield* inference.prepareText({
+      context: context(
+        "Consulta el recurrente «Plan de prueba» de la vista Recurrentes en septiembre de 2026 y dime el estado del plan y su próxima fecha posterior a hoy en formato AAAA-MM-DD. Responde solo JSON sin bloques de código: state (active, paused o stopped) y nextDate (AAAA-MM-DD). No cambies nada."
+      ),
+      availableOperations: [
+        CanonicalOperationId.make("recurring.listRecurringSeries"),
+        CanonicalOperationId.make("recurringPlans.getRecurringWorkspace"),
+      ],
+      toolChoice: "auto",
+      maximumToolCalls: HostedToolCallMaximum.make(maximumReads),
+    });
+    let result = yield* prepared.execute;
+    let reads = 0;
+    for (let round = 0; round < maximumReads && result.toolCalls.length > 0; round++) {
+      const outputs = yield* Effect.forEach(result.toolCalls, (call) =>
+        Effect.gen(function* () {
+          if (call.operation !== "recurringPlans.getRecurringWorkspace") {
+            return yield* conformanceFailure();
+          }
+          const args = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({
+              query: Schema.Struct({
+                month: Schema.optionalKey(Schema.Literals(["2026-09", "2026-10"])),
+              }),
+            })
+          )(call.params).pipe(Effect.mapError(conformanceFailure));
+          const output = yield* representativeRecurringWorkspace(
+            args.query.month ?? "2026-09",
+            "2026-09-18"
+          );
+          return {
+            _tag: "ToolResult" as const,
+            toolCallId: yield* Schema.decodeEffect(ToolCallId)(call.id).pipe(
+              Effect.mapError(conformanceFailure)
+            ),
+            operation: call.operation,
+            outcome: { _tag: "Succeeded" as const, output: { data: output, next: [] } },
+          };
+        })
+      );
+      reads += outputs.length;
+      const next = yield* result.continuation.prepare(outputs);
+      result = yield* next.execute;
+    }
+    if (reads === 0 || result.toolCalls.length !== 0) return yield* conformanceFailure();
+    yield* Schema.decodeUnknownEffect(
+      Schema.fromJsonString(
+        Schema.Struct({ state: Schema.Literal("active"), nextDate: Schema.Literal("2026-10-18") })
+      ),
+      { onExcessProperty: "error" }
+    )(result.text).pipe(Effect.mapError(conformanceFailure));
   });
-  const occurrences = projectRecurringMonth({
-    document,
-    month: "2026-09",
-    now: DateTime.makeUnsafe("2026-09-22T12:00:00Z"),
-  });
-  return yield* Schema.encodeEffect(Schema.toCodecJson(RecurringWorkspace))({
-    document,
-    month: "2026-09",
-    today: "2026-09-22",
-    occurrences,
-    previous: [],
-    summary: summarizeRecurring(occurrences),
-    invalidFulfillmentIds: [],
-    matches: [],
-    matchesComplete: true,
-  });
-}).pipe(Effect.mapError(conformanceFailure));
 
 export const verifyRecurringLifecycle = (
   inference: HostedInferenceService
@@ -278,7 +341,7 @@ export const verifyRecurringLifecycle = (
     yield* Schema.decodeUnknownEffect(
       Schema.Struct({ query: Schema.Struct({ month: Schema.Literal("2026-09") }) })
     )(query.params).pipe(Effect.mapError(conformanceFailure));
-    const output = yield* representativeRecurringWorkspace;
+    const output = yield* representativeRecurringWorkspace();
     const next = yield* discovery.continuation.prepare([
       {
         _tag: "ToolResult",

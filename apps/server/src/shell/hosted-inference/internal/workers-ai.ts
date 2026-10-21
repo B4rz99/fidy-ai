@@ -262,7 +262,7 @@ const makeTextRequest = (
     content:
       tools.length === 0
         ? "No hay herramientas disponibles en esta ronda. Responde usando solamente la evidencia suministrada; no prometas consultas adicionales como si pudieras ejecutarlas aquí."
-        : `Herramientas disponibles en esta ronda: ${JSON.stringify(tools.map(({ function: tool }) => tool.name))}. ` +
+        : "Usa solo las herramientas adjuntas a esta ronda. " +
           "Sus descripciones y esquemas definen las consultas posibles. No atribuyas capacidades adicionales a una herramienta; listar Transactions no consulta un Balance bancario.",
   };
   const request = makeRequest([capabilityFrame, ...messages]);

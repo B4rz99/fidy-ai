@@ -215,3 +215,20 @@ test passed. Immediate explicit individual revocation returned the server succes
 changed the new row to Revocado; all eight audit connection rows were revoked. The disconnected
 Inspector process was stopped and its local revoked-credential state removed. No retained-token
 reconnect was attempted for this grant, so this run does not independently prove refresh refusal.
+
+Post-deployment regression, 21-10-2026, release `f2c42e319a`: ordinary signed-in reads of `/pats`
+and `/web/oauth/connections` returned HTTP 503, including explicit UI retries. The PAT response
+reported the closed code `unavailable` (trace `e8ebb72ccd0fea4d2403b7e8a1f99557`); the connections
+trace was `1f0b71fb44f6dad492b70ac92842b918`. Background `/ingestion/review-workspace` also returned
+503, while Dashboard, Budgets and Recurrentes loaded. The User was notified because a D1 change
+was being deployed. Read-only schema inspection found every checked-in schema object present;
+that does not establish the cause of these failures. No new grant or access mutation was attempted,
+and current list visibility remains an open production regression.
+
+Read-only D1 query analytics in a 12-hour window wholly within 21 October reported at least
+171,324 rows written across its five largest query groups; 146,676 were attributed to `ALTER`
+operations. This exceeds the documented Free-plan daily 100,000-row write allowance and supports
+quota exhaustion following schema work as a hypothesis. Analytics is not the closed provider
+failure for an individual request, so the 503 root cause remains unconfirmed. Metadata queries
+and read-only `EXPLAIN` compilation succeeded; no direct production data/schema write was used
+to diagnose it. See [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/).

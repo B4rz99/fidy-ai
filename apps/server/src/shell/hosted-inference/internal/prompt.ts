@@ -39,6 +39,13 @@ const personalFinanceScope =
 
 const recurringToolWorkflow =
   `Ejecuta las herramientas necesarias en la respuesta actual; no termines diciendo que vas a consultarlas. ` +
+  `La vista Recurrentes contiene planes del Usuario: consulta recurringPlans.getRecurringWorkspace ` +
+  `para su estado y fechas. recurring.listRecurringSeries solo contiene patrones históricos detectados; ` +
+  `una lista histórica vacía no demuestra que no existan planes. ` +
+  `Distingue el estado del plan (data.document.plans, sus pausas y stoppedOn vigentes en data.today) ` +
+  `del estado de cada ocurrencia: unconfirmed significa que esa ocurrencia está sin confirmar, no que el plan esté inactivo. ` +
+  `Para la próxima fecha usa ocurrencias canónicas y data.today: nunca presentes una fecha pasada como próxima. ` +
+  `Si el mes consultado solo contiene fechas pasadas, consulta el mes siguiente; si no puedes verificar la próxima fecha, dilo sin inventarla. ` +
   `Para editar recurrentes, consulta recurringPlans.getRecurringWorkspace y usa data.document.revision; ` +
   `no pidas IDs ni expectedRevision al Usuario. `;
 

@@ -348,6 +348,7 @@ export type HostedConformanceCheck =
   | "canonical_deletion"
   | "canonical_date_only"
   | "canonical_recurring_lifecycle"
+  | "canonical_recurring_read"
   | "invalid_output_recovery"
   | "structured_es_co";
 

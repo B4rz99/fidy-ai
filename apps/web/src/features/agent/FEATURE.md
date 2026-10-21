@@ -190,3 +190,25 @@ is selected only by the declared `HostedTurnQuotaExceeded` response with
 `status: provider_quota_exceeded`; the separate capacity refusal does not select it. Successful
 inference and remaining natural-language mutation checks are still unverified. No automatic retry
 or financial mutation was requested.
+
+Production continuation, 21-10-2026, releases `6f2a14e8cd` and `f2c42e319a`: the no-data greeting
+returned exactly one User message and one assistant greeting, with the composer cleared and
+available for the next message. Workers AI was available. A read-only request for the visible
+`PRUEBA QA CHAT RECURRENTE 20261017` plan first substituted historical recurring detection and
+reported no match. An explicit maintained-plan query then described an occurrence as
+`unconfirmed` and reported overdue 18 October as its next date; the Recurrentes UI independently
+showed an active plan and the upcoming 18 November occurrence. No mutation was approved or executed.
+
+The follow-up guidance distinguishes maintained plans from historical detection and plan lifecycle
+from occurrence status, and requires future dates relative to canonical `today`. A new synthetic
+live-provider conformance case includes a past unconfirmed occurrence and a future monthly date.
+An initial free-prose checker comparison failed with the previous guidance and passed with the
+corrected guidance. Review then exposed ambiguous substring acceptance, so the final synthetic
+probe uses an exact two-field JSON answer contract and rejects contradictory or extra evidence.
+Both previous and corrected guidance passed that final live probe; it is regression coverage,
+not causal proof that the intermittent natural-language failure is fixed. The corrected guidance
+passed the complete live Workers AI conformance suite. The checker
+accepts a future date derived from the complete canonical schedule without requiring an unnecessary
+second read. Deterministic regressions reject historical substitution, an overdue next date,
+occurrence status as plan lifecycle, and inactive text masquerading as active. These are private
+provider/local checks; the corrected behavior still needs deployment and a production browser rerun.

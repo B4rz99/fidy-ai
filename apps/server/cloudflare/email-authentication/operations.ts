@@ -40,7 +40,7 @@ export const completeEmailReplacement = (input: EmailProofRequest): Promise<Resp
  * the same statement before releasing the mailbox. This query is not a reusable authorization.
  */
 export const verifiedEmailQuery = ({ userId }: VerifiedEmailQueryInput): OwnedStatement => ({
-  sql: "SELECT user_id AS userId, email_address AS emailAddress FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) WHERE user_id = ?",
+  sql: "SELECT user_id AS userId, address AS emailAddress FROM verified_email_credentials WHERE user_id = ?",
   params: [userId],
 });
 /** Observe at most eight pending work identities and deadlines; no User, mailbox or proof is released. */

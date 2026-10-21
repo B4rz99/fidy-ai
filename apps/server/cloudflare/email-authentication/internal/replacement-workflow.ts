@@ -156,8 +156,8 @@ const findDeliverable = (
       attempt(() =>
         db
           .prepare(`SELECT r.candidate_email, r.expires_at_ms, r.state
-    FROM email_replacements AS r JOIN (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v ON v.user_id = r.user_id
-      AND v.email_address = r.prior_email AND v.verified_at_ms = r.prior_verified_at_ms
+    FROM email_replacements AS r JOIN verified_email_credentials AS v ON v.user_id = r.user_id
+      AND v.address = r.prior_email AND v.verified_at_ms = r.prior_verified_at_ms
     WHERE r.work_id = ? AND EXISTS (${session.sql})`)
           .bind(id, ...session.params)
           .first()
@@ -220,8 +220,8 @@ export const deliverEmailReplacement =
           db
             .prepare(`UPDATE email_replacements SET state = 'sending', public_code = ?,
       proof_digest = ?, proof_expires_at_ms = ? WHERE work_id = ? AND state = 'awaiting_delivery'
-        AND expires_at_ms > ? AND EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v
-          WHERE v.user_id = email_replacements.user_id AND v.email_address = prior_email
+        AND expires_at_ms > ? AND EXISTS (SELECT 1 FROM verified_email_credentials AS v
+          WHERE v.user_id = email_replacements.user_id AND v.address = prior_email
             AND v.verified_at_ms = prior_verified_at_ms)
         AND EXISTS (${session.sql})`)
             .bind(

@@ -26,11 +26,13 @@ it("rechecks one User's current mailbox, fresh session and Consent in the protec
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
-      yield* Effect.tryPromise(() => installCurrentTestObjects({ db, tables: [] }));
+      yield* Effect.tryPromise(() =>
+        installCurrentTestObjects({ db, tables: ["verified_email_credentials"] })
+      );
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
-            "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
+            "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
           ),
           db.prepare(
             "CREATE TABLE web_sessions (id TEXT, user_id TEXT, revoked_at_ms INTEGER, fresh_until_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER)"
@@ -38,7 +40,12 @@ it("rechecks one User's current mailbox, fresh session and Consent in the protec
           db.prepare(consentHistoryTestSchema),
           db
             .prepare(
-              "WITH incoming(user_id,email_address) AS (VALUES (?, 'current@example.com'), (?, 'foreign@example.com')) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,0 FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',0),(?,'CO','es-CO','America/Bogota',0)"
+            )
+            .bind(userA, userB),
+          db
+            .prepare(
+              "INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) VALUES(?,'current@example.com',0),(?,'foreign@example.com',0)"
             )
             .bind(userA, userB),
           db
@@ -75,7 +82,7 @@ it("rechecks one User's current mailbox, fresh session and Consent in the protec
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "UPDATE users SET verified_email_address = 'replacement@example.com' WHERE id = ?"
+            "UPDATE verified_email_credentials SET address = 'replacement@example.com' WHERE user_id = ?"
           )
           .bind(userA)
           .run()

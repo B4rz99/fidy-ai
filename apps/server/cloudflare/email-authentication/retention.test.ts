@@ -37,7 +37,7 @@ const seedUser = (
         .bind(id(1, index), now - day),
       db
         .prepare(
-          "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+          "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
         )
         .bind(id(1, index), `user${index}@example.test`, now - day),
       db
@@ -151,7 +151,7 @@ it("expires pairing proofs at the exact deadline in bounded sweeps without touch
       const credentials = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT * FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) ORDER BY user_id"
+            "SELECT * FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials) ORDER BY user_id"
           )
           .all()
       );
@@ -182,7 +182,7 @@ it("expires pairing proofs at the exact deadline in bounded sweeps without touch
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) ORDER BY user_id"
+              "SELECT * FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials) ORDER BY user_id"
             )
             .all()
         )).results
@@ -206,7 +206,7 @@ it("expires replacement candidates in bounded sweeps while preserving the curren
       const credentials = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT * FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) ORDER BY user_id"
+            "SELECT * FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials) ORDER BY user_id"
           )
           .all()
       );
@@ -230,7 +230,7 @@ it("expires replacement candidates in bounded sweeps while preserving the curren
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) ORDER BY user_id"
+              "SELECT * FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials) ORDER BY user_id"
             )
             .all()
         )).results
@@ -308,7 +308,7 @@ it("abandons interrupted replacement sends without reusable proof, credential re
       );
       const live = db.prepare("SELECT * FROM email_replacements WHERE user_id = ?").bind(id(1, 34));
       const credentials = db.prepare(
-        "SELECT * FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) ORDER BY user_id"
+        "SELECT * FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials) ORDER BY user_id"
       );
       const sessions = db.prepare("SELECT * FROM web_sessions ORDER BY id");
       const beforeLive = yield* Effect.tryPromise(() => live.first());

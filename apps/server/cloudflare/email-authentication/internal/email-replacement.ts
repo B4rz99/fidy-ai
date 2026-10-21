@@ -150,10 +150,10 @@ const prepareReplacementProof = (
     .prepare(`INSERT INTO email_replacements
       (user_id, work_id, session_id, candidate_email, prior_email, prior_verified_at_ms,
        state, created_at_ms, expires_at_ms)
-      SELECT v.user_id, ?, ?, ?, v.email_address, v.verified_at_ms, 'awaiting_delivery', ?, ?
-      FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v WHERE v.user_id = ? AND v.email_address <> ?
+      SELECT v.user_id, ?, ?, ?, v.address, v.verified_at_ms, 'awaiting_delivery', ?, ?
+      FROM verified_email_credentials AS v WHERE v.user_id = ? AND v.address <> ?
         AND EXISTS (SELECT 1 FROM (${counter.sql}) AS l WHERE l.last_work_id = ?)
-        AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) WHERE email_address = ?)
+        AND NOT EXISTS (SELECT 1 FROM verified_email_credentials WHERE address = ?)
         AND NOT EXISTS (SELECT 1 FROM email_replacements AS r WHERE r.user_id = v.user_id
           AND r.expires_at_ms > ? AND r.state IN ('awaiting_delivery', 'sending', 'awaiting_proof'))
       ON CONFLICT(user_id) DO UPDATE SET work_id = excluded.work_id,
@@ -428,15 +428,15 @@ const commitReplacement = (
     attempt(() =>
       db.batch([
         db
-          .prepare(`UPDATE users SET verified_email_address = (
-          SELECT candidate_email FROM email_replacements WHERE work_id = ?), email_verified_at_ms = ?
-        WHERE id = ? AND EXISTS (SELECT 1 FROM email_replacements AS r
+          .prepare(`UPDATE verified_email_credentials SET address = (
+          SELECT candidate_email FROM email_replacements WHERE work_id = ?), verified_at_ms = ?
+        WHERE user_id = ? AND EXISTS (SELECT 1 FROM email_replacements AS r
           WHERE r.work_id = ? AND r.user_id = ? AND r.session_id = ?
             AND r.state = 'awaiting_proof' AND r.public_code = ?
             AND r.proof_expires_at_ms > ? AND r.expires_at_ms > ?
             AND EXISTS (${session.sql})
-            AND users.verified_email_address = r.prior_email
-            AND users.email_verified_at_ms = r.prior_verified_at_ms)`)
+            AND verified_email_credentials.address = r.prior_email
+            AND verified_email_credentials.verified_at_ms = r.prior_verified_at_ms)`)
           .bind(
             workId,
             current,

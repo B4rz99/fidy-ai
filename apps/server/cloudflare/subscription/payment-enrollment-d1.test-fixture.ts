@@ -47,6 +47,7 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
     installCurrentTestObjects({
       db,
       tables: [
+        "verified_email_credentials",
         "resource_admission_grants",
         "resource_admission_events",
         "billing_attempts",

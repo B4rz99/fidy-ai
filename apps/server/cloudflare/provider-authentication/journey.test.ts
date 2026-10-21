@@ -288,7 +288,7 @@ it("preserves stable Google ownership across changed/missing emails and never me
       expect(
         yield* countRows(
           journey.db,
-          "(SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL)"
+          "(SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials)"
         )
       ).toBe(0);
       expect(

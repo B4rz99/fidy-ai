@@ -186,7 +186,7 @@ const setup = (
                   .bind(userId, bsuid, now),
                 db
                   .prepare(
-                    "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+                    "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
                   )
                   .bind(userId, email, now),
                 db
@@ -596,8 +596,8 @@ it("admits email approval only for a browser-held verifier and an existing verif
       );
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`UPDATE users
-    SET email_verified_at_ms = email_verified_at_ms + 1`)
+          .prepare(`UPDATE verified_email_credentials
+    SET verified_at_ms = verified_at_ms + 1`)
           .run()
       );
       expect(
@@ -605,8 +605,8 @@ it("admits email approval only for a browser-held verifier and an existing verif
       ).toBe(400);
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`UPDATE users
-    SET email_verified_at_ms = email_verified_at_ms - 1`)
+          .prepare(`UPDATE verified_email_credentials
+    SET verified_at_ms = verified_at_ms - 1`)
           .run()
       );
       expect(
@@ -648,7 +648,7 @@ it("rejects each User's email proof at the other browser pairing without consumi
             .bind(otherUser, now),
           db
             .prepare(
-              "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+              "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
             )
             .bind(otherUser, "other@example.test", now),
         ])
@@ -822,7 +822,7 @@ it("replaces one credential only after fresh-session candidate proof and rejects
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT email_address FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL)"
+              "SELECT email_address FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials)"
             )
             .first()
         )
@@ -882,7 +882,7 @@ it("refuses malformed replacement work and revoked or foreign sessions before de
             db.batch([
               db.prepare("SELECT * FROM email_replacements"),
               db.prepare(
-                "SELECT * FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) ORDER BY user_id"
+                "SELECT * FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials) ORDER BY user_id"
               ),
               db.prepare(
                 "SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'emailAuthentication.*'"
@@ -937,7 +937,7 @@ it("refuses malformed replacement work and revoked or foreign sessions before de
             .bind(otherUser, started),
           db
             .prepare(
-              "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+              "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
             )
             .bind(otherUser, "foreign@example.test", started),
           db
@@ -977,7 +977,7 @@ it("keeps the old credential when freshness expires or a candidate is already ow
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+            "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
           )
           .bind("10000000-0000-4000-8000-000000000004", "owned@example.test", started)
           .run()
@@ -1009,7 +1009,7 @@ it("keeps the old credential when freshness expires or a candidate is already ow
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT email_address FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) WHERE email_address = 'person@example.test'"
+              "SELECT email_address FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials) WHERE email_address = 'person@example.test'"
             )
             .first()
         )
@@ -1051,7 +1051,7 @@ it("preserves global mailbox ownership when another User claims the candidate af
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+            "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
           )
           .bind("10000000-0000-4000-8000-000000000004", "claimed@example.test", started)
           .run()
@@ -1065,7 +1065,7 @@ it("preserves global mailbox ownership when another User claims the candidate af
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT email_address FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) WHERE user_id = (SELECT id FROM users WHERE id <> ?)"
+              "SELECT email_address FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials) WHERE user_id = (SELECT id FROM users WHERE id <> ?)"
             )
             .bind("10000000-0000-4000-8000-000000000004")
             .first()
@@ -1165,7 +1165,7 @@ it("bounds replacement delivery across rejected proofs for the same User", () =>
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT email_address FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL)"
+              "SELECT email_address FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials)"
             )
             .first()
         ))?.email_address

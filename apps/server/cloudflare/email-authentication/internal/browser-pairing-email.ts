@@ -153,9 +153,9 @@ const startPairingEmailIntent = ({
           email_generation=coalesce(email_generation,0)+1,email_last_requested_at_ms=incoming.requested_at_ms,
           email_public_code=NULL,email_proof_digest=NULL,email_proof_expires_at_ms=NULL,
           email_wrong_attempts=0,email_dispatch_attempted_at_ms=NULL
-        FROM(SELECT p.pairingId AS pairing_id,? AS work_id,v.user_id,v.email_address,v.verified_at_ms,
+        FROM(SELECT p.pairingId AS pairing_id,? AS work_id,v.user_id,v.address AS email_address,v.verified_at_ms,
           p.expiresAt AS expires_at_ms,? AS requested_at_ms
-          FROM (${pairing.sql}) AS p JOIN (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v ON v.email_address=?
+          FROM (${pairing.sql}) AS p JOIN verified_email_credentials AS v ON v.address=?
           WHERE p.expiresAt=?
           AND NOT EXISTS(SELECT 1 FROM (${userCounter.sql}) l
             WHERE l.window_ends_ms>? AND l.used>=?)
@@ -244,8 +244,8 @@ const approveEmailPairing = (
             current,
             subject: {
               sql: `SELECT e.user_id AS userId FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) AS e
-              JOIN (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v ON v.user_id = e.user_id
-                AND v.email_address = e.email_address AND v.verified_at_ms = e.credential_verified_at_ms
+              JOIN verified_email_credentials AS v ON v.user_id = e.user_id
+                AND v.address = e.email_address AND v.verified_at_ms = e.credential_verified_at_ms
               WHERE e.work_id = ? AND e.pairing_id = ? AND e.state = 'awaiting_proof' AND e.public_code = ?
                 AND e.proof_expires_at_ms > ? AND e.expires_at_ms > ?`,
               params: [workId, pairingId, publicCode, current, current],

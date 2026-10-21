@@ -85,7 +85,7 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
       .bind(identity.userId, "acceptance-portfolio", identity.bsuid, identity.createdAtMs),
     db
       .prepare(
-        "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+        "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?,?,?)) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
       )
       .bind(identity.userId, identity.email, identity.createdAtMs),
     db
@@ -316,7 +316,7 @@ await seedIdentity({
 });
 // Provider-authenticated Users need not establish the optional email-login credential.
 await db
-  .prepare("UPDATE users SET verified_email_address=NULL,email_verified_at_ms=NULL WHERE id = ?")
+  .prepare("DELETE FROM verified_email_credentials WHERE user_id = ?")
   .bind(firstCardUserId)
   .run();
 

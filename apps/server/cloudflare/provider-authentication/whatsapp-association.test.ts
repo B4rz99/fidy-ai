@@ -466,7 +466,7 @@ it("starts in authenticated WhatsApp with provider instructions and creates no m
         (yield* Effect.tryPromise(() =>
           journey.db
             .prepare(
-              "SELECT user_id FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL)"
+              "SELECT user_id FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials)"
             )
             .all()
         )).results

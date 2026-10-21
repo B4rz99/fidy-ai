@@ -1080,3 +1080,96 @@ DELETE FROM sql_assertions WHERE scope='consent_exchanges_cutover';
 ```
 
 <!-- consent-exchanges-verify:end -->
+
+## Verified email credential (#1440)
+
+Email Authentication owns `verified_email_credentials(user_id,address,verified_at_ms)`. One User
+has at most one normalized, case-insensitively unique login email; provider/billing contact email
+is not that credential. Original address bytes and verification milliseconds are preserved. A pending
+replacement retains its fourteen fields, the original credential stays valid until successful proof,
+and both sending and completion recheck the exact prior address/time and fresh session. Pairing's
+credential snapshot, proof generations, ambiguous-send behavior and admission windows are unchanged.
+No raw proof or new wait-for-user Workflow is introduced.
+
+Credential erasure deletes this row independently of the User. Preserve original credential rowrefs
+by copying each source User rowid. Existing credential archives contain only `{}` and keep their
+original identity; they do not restore a usable credential. Other User archives remain untouched.
+An in-progress `erasure_chunk` blocks cutover rather than reinterpreting its active selection.
+
+### Fenced populated cutover
+
+Back up D1 and fence all email pairing/replacement request, dispatch, Workflow and verification
+writers, onboarding and erasure. Capture all triggers/views referring to `verified_email_address` or
+`email_verified_at_ms` from `sqlite_schema`, plus the `users_verified_email` index. The expected three
+field-fence triggers move to the credential table; map every captured object to its final baseline
+destination and stop on unknown objects or a pre-existing target table. No mixed-code/schema release.
+
+Execute one native D1 batch:
+
+1. `email-credential-preflight` rejects partial credentials, non-normalized addresses, duplicate
+   case-insensitive addresses, active erasure chunks and foreign-key violations. Investigate original
+   evidence instead of changing an address or manufacturing a verification time.
+2. Create `verified_email_credentials` from the final baseline declaration, without its triggers.
+   Run `email-credential-copy`, preserving source rowids and comparing all original credential values.
+3. Drop the captured source triggers/views, then run `email-credential-remove-source`. Drop the
+   timestamp column before the address column because its source CHECK refers to the address.
+   This uses ALTER TABLE DROP COLUMN: User rows, rowids, indexes and incoming references stay in place,
+   without DROP/rename or cascading deletion. Do not disable foreign keys.
+4. Install the mapped final baseline triggers/views, then run `email-credential-verify`. Publish the
+   matching code and align the single baseline ledger only after successful verification.
+
+Any failure rolls back the copy and both column removals atomically. The changed baseline alone does
+not migrate an existing database. No runtime fallback reads the old User fields.
+
+<!-- email-credential-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email_credential_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM users WHERE
+   (verified_email_address IS NULL)<>(email_verified_at_ms IS NULL)
+   OR (verified_email_address IS NOT NULL AND verified_email_address COLLATE BINARY<>lower(trim(verified_email_address))))
+ AND (SELECT count(verified_email_address) FROM users)=
+     (SELECT count(DISTINCT verified_email_address COLLATE NOCASE) FROM users)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- email-credential-preflight:end -->
+
+<!-- email-credential-copy:start -->
+
+```sql
+INSERT INTO verified_email_credentials(rowid,user_id,address,verified_at_ms)
+SELECT rowid,id,verified_email_address,email_verified_at_ms FROM users WHERE verified_email_address IS NOT NULL;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email_credential_cutover',CASE WHEN
+ (SELECT count(*) FROM verified_email_credentials)=(SELECT count(*) FROM users WHERE verified_email_address IS NOT NULL)
+ AND NOT EXISTS(SELECT rowid,id,verified_email_address,email_verified_at_ms FROM users WHERE verified_email_address IS NOT NULL
+ EXCEPT SELECT rowid,user_id,address,verified_at_ms FROM verified_email_credentials)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- email-credential-copy:end -->
+
+<!-- email-credential-remove-source:start -->
+
+```sql
+DROP INDEX users_verified_email;
+ALTER TABLE users DROP COLUMN email_verified_at_ms;
+ALTER TABLE users DROP COLUMN verified_email_address;
+```
+
+<!-- email-credential-remove-source:end -->
+
+<!-- email-credential-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email_credential_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='email_credential_cutover';
+```
+
+<!-- email-credential-verify:end -->

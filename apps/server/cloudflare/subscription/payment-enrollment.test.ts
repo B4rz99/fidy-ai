@@ -85,8 +85,8 @@ const setup = (): Promise<{
   Effect.runPromise(
     Effect.gen(function* () {
       const { db } = yield* makePaymentEnrollmentD1([
-        "CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO', trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
-        "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)",
+        "CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO', trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,created_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
+        "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)",
         consentHistoryTestSchema,
 
         `CREATE TABLE web_sessions (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, token_digest BLOB NOT NULL,
@@ -105,7 +105,7 @@ const setup = (): Promise<{
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "WITH incoming(user_id,email_address) AS (VALUES (?, 'payer@example.com'), (?, 'other@example.com')) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,0 FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+            "WITH incoming(user_id,email_address) AS (VALUES (?, 'payer@example.com'), (?, 'other@example.com')) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,0 FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
           )
           .bind(userA, userB)
           .run()
@@ -856,9 +856,7 @@ it("shows enrollment availability to a signed-in User without an optional mailbo
       const fixture = yield* fromTestPromise(setup);
       yield* fromTestPromise(() =>
         fixture.db
-          .prepare(
-            "UPDATE users SET verified_email_address=NULL,email_verified_at_ms=NULL WHERE id = ?"
-          )
+          .prepare("DELETE FROM verified_email_credentials WHERE user_id = ?")
           .bind(userA)
           .run()
       );
@@ -883,18 +881,13 @@ it.each([false, true])(
         const { db, environment, request } = yield* fromTestPromise(setup);
         if (!hasMailboxCredential) {
           yield* fromTestPromise(() =>
-            db
-              .prepare(
-                "UPDATE users SET verified_email_address=NULL,email_verified_at_ms=NULL WHERE id = ?"
-              )
-              .bind(userA)
-              .run()
+            db.prepare("DELETE FROM verified_email_credentials WHERE user_id = ?").bind(userA).run()
           );
         } else {
           yield* fromTestPromise(() =>
             db
               .prepare(
-                "UPDATE users SET verified_email_address = 'verified@example.com' WHERE id = ?"
+                "UPDATE verified_email_credentials SET address = 'verified@example.com' WHERE user_id = ?"
               )
               .bind(userA)
               .run()

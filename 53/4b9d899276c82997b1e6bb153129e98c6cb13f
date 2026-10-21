@@ -1,0 +1,87 @@
+scripts/mcp/README.md
+  s_241024bc81d268::t_252daeab4be1b0 3-5
+apps/server/src/shell/mcp/FEATURE.md
+  s_241024bc81d268::t_d0637cbe8a0fb9 152,161-171
+  s_241024bc81d268::t_fbbe8ecc426289 215-224
+  s_241024bc81d268::t_ecf6b8c1a38bda 225-242
+  s_241024bc81d268::t_252daeab4be1b0 184-186,198-214
+  s_241024bc81d268::t_0755bf877ce294 128-140
+  s_241024bc81d268::t_bfcb17d79218f3 141-151,153-160
+  s_241024bc81d268::t_83a200ef0c2a21 172-183,187-191
+  s_241024bc81d268::t_c0b897747b1d2b 192-197
+scripts/mcp/production-native.test.ts
+  s_241024bc81d268::t_561abe5a138e66 74-79,134-159
+tools/mcp-inspector/README.md
+  s_241024bc81d268::t_252daeab4be1b0 1-2,4-7,9-30,33-41
+  s_241024bc81d268::t_ca6f55b66212b6 8
+  s_241024bc81d268::t_fbbe8ecc426289 3,31-32
+  s_241024bc81d268::t_ecf6b8c1a38bda 42-47
+tools/mcp-inspector/tsconfig.json
+  s_241024bc81d268::t_6d51a2ebe21fdf 1-10,12-15
+  s_241024bc81d268::t_095917ce62ea6a 11
+apps/server/cloudflare/oauth-agents/oauth-confirmation.test.ts
+  s_241024bc81d268::t_8b9d97d08c3322 318-345,348,472,495,504
+  s_241024bc81d268::t_0752043bfd3bd4 317,346-347,349-404,406-411,413-431,433-442,444-471,473,475-494,496-503,505-507
+tools/mcp-inspector/bunfig.toml
+  s_241024bc81d268::t_91b041f8da66be 1-2
+tools/mcp-inspector/fetch-dispatcher.mjs
+  s_241024bc81d268::t_7f032a2cae5d43 1-6
+tools/mcp-inspector/transport-fixture.mjs
+  s_241024bc81d268::t_b1c331641f2d12 11,183
+  s_241024bc81d268::t_6d51a2ebe21fdf 9-10,14,19,21,26,30-31,33,35,38-39,41,55,58-61,76,79,81-82,86-87,95-97,99,111-115,118,121-130,151-152,154,168
+  s_241024bc81d268::t_22e548b9c9aab0 1-8,12-13,15-18,20,22-24,104-110,116-117,131-150,153,155-156,158-167,169-171,177-182,184
+  s_241024bc81d268::t_8b9d97d08c3322 25,32,34,40,42-54,62-75,80,83-85,88-94,98,100-103,172-176
+  s_241024bc81d268::t_63578b5b037dbb 157
+  s_241024bc81d268::t_2f6b8431bc2643 27-29,36-37,56-57,77-78,119-120
+tools/mcp-inspector/package.json
+  s_241024bc81d268::t_7f032a2cae5d43 1-5,7-8,11-12,15-17
+  s_241024bc81d268::t_22e548b9c9aab0 6
+  s_241024bc81d268::t_ca6f55b66212b6 9-10
+  s_241024bc81d268::t_91b041f8da66be 13-14
+apps/web/src/features/pats/FEATURE.md
+  s_241024bc81d268::t_fbbe8ecc426289 200-209
+  s_241024bc81d268::t_252daeab4be1b0 192-199
+  s_241024bc81d268::t_d0637cbe8a0fb9 171-178
+  s_241024bc81d268::t_ecf6b8c1a38bda 210-217
+  s_241024bc81d268::t_bfcb17d79218f3 166-170
+  s_241024bc81d268::t_0755bf877ce294 156-165
+  s_241024bc81d268::t_83a200ef0c2a21 179-185
+  s_241024bc81d268::t_c0b897747b1d2b 186-191
+apps/web/src/features/recurring/FEATURE.md
+  s_241024bc81d268::t_0755bf877ce294 385-395
+  s_241024bc81d268::t_bfcb17d79218f3 396-398
+  s_241024bc81d268::t_252daeab4be1b0 425-432
+  s_241024bc81d268::t_fbbe8ecc426289 433-442
+  s_241024bc81d268::t_ecf6b8c1a38bda 443-453
+  s_241024bc81d268::t_c0b897747b1d2b 419-424
+  s_241024bc81d268::t_d0637cbe8a0fb9 399-408
+  s_241024bc81d268::t_83a200ef0c2a21 409-418
+tools/mcp-inspector/transport.test.mjs
+  s_241024bc81d268::t_6d51a2ebe21fdf 10
+  s_241024bc81d268::t_3751b3345a65b5 37-74
+  s_241024bc81d268::t_22e548b9c9aab0 1-9,11-36
+.github/workflows/ci.yml
+  s_241024bc81d268::t_fbbe8ecc426289 120-122,124
+  s_241024bc81d268::t_ca6f55b66212b6 123
+scripts/mcp/production-native.ts
+  s_241024bc81d268::t_95bfe1da3ff634 541
+  s_241024bc81d268::t_bfcb17d79218f3 558
+tools/mcp-inspector/bun.lock
+  s_241024bc81d268::t_89c65fe8d98089 1-323
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "534b9d899276c82997b1e6bb153129e98c6cb13f",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -23,7 +23,7 @@ it.effect("reports only the failed conformance check and closed error category",
     expect(body).toEqual({
       modelApprovalRevision: "workers-ai-gemma-4-2026-09-22",
       outcome: "non_conforming",
-      check: "canonical_query",
+      check: "canonical_recurring_read",
       category: "InvalidOutput",
     });
   })

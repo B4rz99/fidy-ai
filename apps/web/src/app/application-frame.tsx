@@ -2,6 +2,7 @@ import { Outlet, useRouterState } from "@tanstack/react-router";
 import { type JSX, Suspense, lazy } from "react";
 import { AccessRefused, ApplicationShell } from "@/features/signed-in/feature";
 import { useSession } from "@/session/session-context";
+import { HostedAgentProvider } from "@/features/agent/feature";
 import { RetainedRecurringWorkspace } from "./recurring-workspace";
 import { RetainedReviewWorkspace } from "./review-workspace";
 
@@ -25,9 +26,12 @@ export const ApplicationFrame = (): JSX.Element => {
     },
   });
   const { authentication } = useSession();
+  const privacy = useRouterState({
+    select: (state) => state.location.pathname === "/settings/privacy",
+  });
   if (route === "authenticated" && authentication === "expired") return <AccessRefused />;
   if (route === "standalone") return <Outlet />;
-  return (
+  const shell = (
     <ApplicationShell
       reviewPendingCount={
         <Suspense fallback={null}>
@@ -38,5 +42,10 @@ export const ApplicationFrame = (): JSX.Element => {
       <RetainedReviewWorkspace />
       <RetainedRecurringWorkspace />
     </ApplicationShell>
+  );
+  return privacy || authentication === "expired" ? (
+    shell
+  ) : (
+    <HostedAgentProvider>{shell}</HostedAgentProvider>
   );
 };

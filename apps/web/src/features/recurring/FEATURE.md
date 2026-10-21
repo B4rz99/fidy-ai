@@ -1,5 +1,12 @@
 # Recurrentes
 
+Current audit status, 21 October 2026: the User confirmed that the latest production read failures
+are caused by D1 quota exhaustion. Production testing is paused until database recovery. Native
+Codex, Claude Code and corrected Inspector cancellation returned the declared refusal without an
+accepted edit, and all audit grants were revoked. Hosted maintained-plan lookup still needs a
+deployed fresh-read comparison; accepted hosted lifecycle approval and stopped-state persistence
+remain unverified in production. Private-provider coverage does not close these browser gaps.
+
 ### Deployed reset continuation, 20-10-2026 Bogotá
 
 [Deployment 39525764609](https://github.com/B4rz99/fidy-ai/actions/runs/39525764609)
@@ -451,3 +458,13 @@ Accesos confirmed immediate grant revocation; all eight audit rows were revoked.
 stopped and its local credential state removed. This closes Inspector cancellation for this
 operation through the corrected launcher, alongside the earlier Codex and Claude Code passes.
 No edit was accepted, no Transaction was created/deleted, and no external service was cancelled.
+
+Production availability follow-up, 21 October 2026: opening an uncached November workspace
+returned HTTP 503 from `/recurring-plans` (trace `a4360d682e28cbd319419680a4cd7450`). The browser
+showed its retry/error state without replacing retained data with an empty workspace. The earlier
+populated October view was retained browser state, not proof of a healthy fresh read. Read-only
+schema inspection found the checked-in objects present; same-UTC-day D1 analytics supports write
+quota exhaustion after schema work as a hypothesis, without a classified provider error for this
+request. The User was notified and no financial mutation was attempted. Hosted read guidance and
+synthetic provider coverage are recorded in the [chat audit](../agent/FEATURE.md); its Production
+rerun still requires backend recovery.

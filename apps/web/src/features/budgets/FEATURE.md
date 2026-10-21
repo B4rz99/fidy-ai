@@ -1,5 +1,13 @@
 # Budgets
 
+Current local audit, 21 October 2026: the isolated current Budget Worker/D1 file passed all
+30 checks. Ten repeated built-browser cached-navigation journeys also passed with the existing
+10 ms median limit unchanged. CI separately observed an 11 ms median; the navigation check now
+preserves its five timing samples before asserting that same limit. The local passes do not
+establish the cause or resolution of that CI observation. Production cap creation/editing and
+cross-month inheritance remain unverified, and production testing is paused for the User-confirmed
+D1 quota exhaustion.
+
 Production D1-reset read verification, 20-10-2026 Bogotá, release
 `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`: the October Budget view loaded without a database error and correctly
 retained its no-cap state. Its summary showed COP 0 income and COP 10,103 spending, matching

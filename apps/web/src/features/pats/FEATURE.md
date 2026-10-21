@@ -1,5 +1,13 @@
 # Accesos
 
+Current audit status, 21 October 2026: all eight audit MCP grants were revoked before the latest
+database outage. The User confirmed D1 quota exhaustion; production issuance, revocation and
+read-recovery checks are paused. The latest combined local Accesos/OAuth rerun passed 13 browser
+checks. Temporary connection-read failures offer retry, while only the declared unauthenticated
+response offers sign-in; deployment verification of that presentation remains outstanding.
+Provider account replacement, Microsoft completion and populated production pagination remain
+separate live checks. Earlier pending-grant entries below are superseded by the recorded cleanup.
+
 Production D1-reset read verification, 20-10-2026 Bogotá, release
 `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`: the existing session loaded the combined
 Accesos page successfully before promotion. After promotion, PAT metadata remained available;
@@ -215,3 +223,36 @@ test passed. Immediate explicit individual revocation returned the server succes
 changed the new row to Revocado; all eight audit connection rows were revoked. The disconnected
 Inspector process was stopped and its local revoked-credential state removed. No retained-token
 reconnect was attempted for this grant, so this run does not independently prove refresh refusal.
+
+Post-deployment regression, 21-10-2026, release `f2c42e319a`: ordinary signed-in reads of `/pats`
+and `/web/oauth/connections` returned HTTP 503, including explicit UI retries. The PAT response
+reported the closed code `unavailable` (trace `e8ebb72ccd0fea4d2403b7e8a1f99557`); the connections
+trace was `1f0b71fb44f6dad492b70ac92842b918`. Background `/ingestion/review-workspace` also returned
+503, while Dashboard, Budgets and Recurrentes rendered previously loaded data. The User was notified because a D1 change
+was being deployed. Read-only schema inspection found every checked-in schema object present;
+that does not establish the cause of these failures. No new grant or access mutation was attempted,
+and current list visibility remains an open production regression.
+
+Read-only D1 query analytics in a 12-hour window wholly within 21 October reported at least
+171,324 rows written across its five largest query groups; 146,676 were attributed to `ALTER`
+operations. This exceeds the documented Free-plan daily 100,000-row write allowance and supports
+quota exhaustion following schema work as a hypothesis. Analytics is not the closed provider
+failure for an individual request, so the 503 root cause remains unconfirmed. Metadata queries
+and read-only `EXPLAIN` compilation succeeded; no direct production data/schema write was used
+to diagnose it. See [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/).
+
+The same Production 503 also exposed misleading recovery copy: the MCP list offered sign-in
+for every read failure. A controlled built-browser 503 regression reproduced that prompt and now
+passes after classifying only the declared `OAuthUnauthenticated` error as requiring sign-in.
+Temporary and boundary failures retain explicit list retry without suggesting identity renewal;
+a separate 401 regression preserves sign-in recovery. The existing public error schema is reused
+through the browser client boundary, with no endpoint or authorization-policy change. All seven
+Accesos browser journeys pass locally, including retry restoring MCP metadata beside retained PAT
+metadata. This presentation fix does not establish that the underlying Production 503 is resolved.
+
+A subsequent uncached November read returned HTTP 503 from `/recurring-plans` (trace
+`a4360d682e28cbd319419680a4cd7450`), with the correct error state rather than a false empty
+workspace. `/ingestion/review-workspace` also returned 503 (trace
+`15127635bd02bdf4ff389137a094249f`). The earlier populated October view was retained browser
+state and is not evidence of current backend availability. Live financial/access mutations
+remain paused; fresh recurring reads and the post-deployment hosted lookup rerun are blocked.

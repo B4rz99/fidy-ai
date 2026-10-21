@@ -8,9 +8,14 @@ import {
   type OAuthConnectionId,
   type OAuthConnectionList,
   OAuthReauthenticationRequired,
+  OAuthUnauthenticated,
   type WebAuthClient,
 } from "@/transport/client";
-import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
+import {
+  type CanonicalQueryFailure,
+  type CanonicalQueryState,
+  presentCanonicalQuery,
+} from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { OAuthManagementView } from "./management-view";
 
@@ -52,17 +57,7 @@ const ManagementContent = ({
 }>): JSX.Element => {
   if (listing._tag === "Initial") return <output>Cargando agentes…</output>;
   if (listing._tag === "Failure") {
-    return (
-      <section>
-        <p role="alert">
-          No pudimos consultar los agentes. Puede que necesites iniciar sesión de nuevo; no
-          mostramos una lista vacía ni confirmamos revocaciones.
-        </p>
-        <Button variant="outline" render={<Link to="/login" reloadDocument />}>
-          Iniciar sesión de nuevo
-        </Button>
-      </section>
-    );
+    return <ConnectionReadFailure failure={listing.failure} />;
   }
   return (
     <section className="flex flex-col gap-3">
@@ -78,6 +73,26 @@ const ManagementContent = ({
         revokeAll={() => revoke(Option.none())}
         next={next}
       />
+    </section>
+  );
+};
+const ConnectionReadFailure = ({
+  failure,
+}: Readonly<{ failure: CanonicalQueryFailure<unknown> }>): JSX.Element => {
+  const unauthenticated =
+    failure._tag === "DeclaredFailure" && Schema.is(OAuthUnauthenticated)(failure.error);
+  return (
+    <section>
+      <p role="alert">
+        {unauthenticated
+          ? "Inicia sesión para consultar tus conexiones."
+          : "No pudimos cargar tus conexiones. Intenta actualizar la lista."}
+      </p>
+      {unauthenticated ? (
+        <Button variant="outline" render={<Link to="/login" reloadDocument />}>
+          Iniciar sesión de nuevo
+        </Button>
+      ) : null}
     </section>
   );
 };

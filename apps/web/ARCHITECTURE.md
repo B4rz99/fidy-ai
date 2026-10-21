@@ -51,8 +51,10 @@ there is no standalone Agent route or sidebar link. A mounted conversation modul
 transitions, exact receipt retention, delivery deduplication, submission gating and bounded visible
 history. Presentation receives a receipt-free display projection and actions; draft text, popup state
 and the browser visibility adapter remain with presentation. The feature's mounted state keeps a draft and
-bounded visible conversation through popup dismissal and route navigation, and expires with the
-signed-in layout. AI Elements conversation/message presentation uses Fidy primitives and the existing
+bounded visible conversation through popup dismissal and route navigation. `ApplicationFrame`
+retains one chat provider across independently authorized product routes; each route still gates
+chat visibility. Entering Privacy or ending the authentication lifetime discards that provider.
+AI Elements conversation/message presentation uses Fidy primitives and the existing
 Effect hosted Turn client, without introducing another AI transport. Text is escaped, not executed
 as model-provided HTML. After a proposed reply renders in the open popup in a visible document,
 the browser automatically acknowledges its delivery once. The ordinary conversation shows no

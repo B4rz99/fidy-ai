@@ -25,20 +25,62 @@ const conformanceStub = (
     dateOnly: string;
     recurringDate: string;
     recurring: "observe" | "ask" | "invent" | "ask-after-read" | "stale";
+    recurringRead:
+      | "observe"
+      | "historical"
+      | "past"
+      | "occurrence"
+      | "inactive"
+      | "contradictory"
+      | "extra-evidence"
+      | "derived";
   }> = {
     occurredAt: "2026-09-22T12:00:00Z",
     dateOnly: "2026-09-21T05:00:00Z",
     recurringDate: "2026-09-22",
     recurring: "observe",
+    recurringRead: "observe",
   }
 ): Effect.Effect<HostedInferenceService> =>
   Effect.gen(function* () {
     const recurring = times.recurring;
+    const recurringRead = times.recurringRead;
     const occurredAt = times.occurredAt;
     const dateOnly = times.dateOnly;
     const textRound = yield* Ref.make(0);
     let mutationRound = 0;
     let recurringRound = 0;
+    let recurringReadRound = 0;
+    const recurringReadResult = (): Omit<HostedTextResult, "continuation"> => {
+      recurringReadRound++;
+      const maximumReads = recurringRead === "derived" || recurringRead === "past" ? 1 : 2;
+      if (recurringReadRound > maximumReads) {
+        const replies = {
+          observe: '{"state":"active","nextDate":"2026-10-18"}',
+          historical: '{"state":"active","nextDate":"2026-10-18"}',
+          past: '{"state":"active","nextDate":"2026-09-18"}',
+          occurrence: '{"state":"unconfirmed","nextDate":"2026-10-18"}',
+          inactive: '{"state":"inactive","nextDate":"2026-10-18"}',
+          "extra-evidence":
+            '{"state":"active","nextDate":"2026-10-18","explanation":"El plan no está activo"}',
+          derived: '{"state":"active","nextDate":"2026-10-18"}',
+          contradictory:
+            "El plan no está activo; próxima fecha 2026-09-18; después aparece 2026-10-18",
+        };
+        return result(replies[recurringRead]);
+      }
+      return result("", [
+        {
+          id: `recurring-read-${recurringReadRound}`,
+          operation: CanonicalOperationId.make(
+            recurringRead === "historical"
+              ? "recurring.listRecurringSeries"
+              : "recurringPlans.getRecurringWorkspace"
+          ),
+          params: { query: { month: recurringReadRound === 1 ? "2026-09" : "2026-10" } },
+        },
+      ]);
+    };
     const toolArguments = (operation: CanonicalOperationId): Schema.Json => {
       switch (operation) {
         case "transactions.createTransaction":
@@ -102,6 +144,13 @@ const conformanceStub = (
       countTranscript: () => Effect.succeed(1),
       validate: () => Effect.void,
       generate: (policy) => {
+        if (
+          policy.availableOperations.includes(
+            CanonicalOperationId.make("recurring.listRecurringSeries")
+          )
+        ) {
+          return Effect.sync(recurringReadResult);
+        }
         if (policy.toolChoice === "auto") {
           if (
             policy.availableOperations.includes(
@@ -149,6 +198,19 @@ it.effect(
     })
 );
 
+it.effect("accepts the correct future date derived from the complete canonical plan", () =>
+  Effect.gen(function* () {
+    const inference = yield* conformanceStub("inválido", representativeAmount, {
+      occurredAt: "2026-09-22T12:00:00Z",
+      dateOnly: "2026-09-21T05:00:00Z",
+      recurringDate: "2026-09-22",
+      recurring: "observe",
+      recurringRead: "derived",
+    });
+    yield* verifyHostedInferenceConformanceChecks(inference);
+  })
+);
+
 it.effect("rejects malformed wire Money before checking the requested amount", () =>
   Effect.gen(function* () {
     const inference = yield* conformanceStub("inválido", "not-money");
@@ -177,6 +239,7 @@ it.effect("rejects local wall time when the canonical mutation needs the UTC ins
       dateOnly: "2026-09-21T05:00:00Z",
       recurringDate: "2026-09-22",
       recurring: "observe",
+      recurringRead: "observe",
     });
     assert.deepStrictEqual(
       yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
@@ -204,6 +267,7 @@ it.effect("rejects UTC midnight and an invented daylight-saving offset for a dat
         dateOnly,
         recurringDate: "2026-09-22",
         recurring: "observe",
+        recurringRead: "observe",
       });
       assert.deepStrictEqual(
         yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
@@ -221,6 +285,7 @@ it.effect("rejects timestamps and a different calendar day for recurring lifecyc
         dateOnly: "2026-09-21T05:00:00Z",
         recurringDate,
         recurring: "observe",
+        recurringRead: "observe",
       });
       assert.deepStrictEqual(
         yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
@@ -238,6 +303,7 @@ it.effect("requires a workspace read followed by an edit using the observed revi
         dateOnly: "2026-09-21T05:00:00Z",
         recurringDate: "2026-09-22",
         recurring,
+        recurringRead: "observe",
       });
       assert.deepStrictEqual(
         yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
@@ -245,4 +311,31 @@ it.effect("requires a workspace read followed by an edit using the observed revi
       );
     }
   })
+);
+
+it.effect(
+  "rejects historical-pattern substitution, an overdue next date and occurrence state as plan state",
+  () =>
+    Effect.gen(function* () {
+      for (const recurringRead of [
+        "historical",
+        "past",
+        "occurrence",
+        "inactive",
+        "contradictory",
+        "extra-evidence",
+      ] as const) {
+        const inference = yield* conformanceStub("inválido", representativeAmount, {
+          occurredAt: "2026-09-22T12:00:00Z",
+          dateOnly: "2026-09-21T05:00:00Z",
+          recurringDate: "2026-09-22",
+          recurring: "observe",
+          recurringRead,
+        });
+        assert.deepStrictEqual(
+          yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
+          Exit.fail({ check: "canonical_recurring_read", category: "InvalidOutput" })
+        );
+      }
+    })
 );

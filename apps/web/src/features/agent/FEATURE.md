@@ -1,5 +1,24 @@
 # Hosted Agent chat
 
+Current audit status, 21 October 2026: the latest production greeting and private live-provider
+conformance suite passed, so the earlier AI quota refusals below are historical observations.
+The User confirmed that the current production database failures are caused by D1 quota exhaustion.
+Production testing is paused until database recovery. Maintained-plan lookup guidance has local
+and private-provider coverage but still needs a deployed, fresh canonical-read comparison;
+natural-language lifecycle approval and Dashboard edit/restore remain live gaps. No production
+write or access grant is needed for the continuing local tests.
+
+Local chat-lifetime fix, 21 October 2026: a new built-browser check reproduced a lost closed-chat
+reply when navigating from Transactions to Budgets. Those routes mounted different conversation
+owners. The application frame now retains one provider while independently authorized routes
+continue to control chat visibility. The exact check failed before the fix and passed afterward.
+All 23 combined chat/Accesos/OAuth/session browser checks passed, including closed-reply visibility,
+Privacy and authentication-replacement disposal, failed and quota-refused drafts across sibling-route
+navigation, consecutive replies,
+uncertain progress and identical receipt retry without replaying the original message. Hosted
+responses are controlled HTTP evidence; these checks neither execute model-driven financial
+changes nor establish production recovery during the D1 outage.
+
 Production D1-reset continuation, 20-10-2026 in Bogotá (21-10-2026 UTC):
 [deployment 39525764609](https://github.com/B4rz99/fidy-ai/actions/runs/39525764609)
 passed and API health reported release `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`. Before promotion, explicitly retrying
@@ -51,9 +70,10 @@ Effect 4.0.2 retest, 2026-10-14, production `6708a0e76cf9e0c82157c0caa5e3fe12b22
 
 ## Owners
 
-- `program.ts` composes the chat window, messages, composer and recovery actions.
+- `feature.tsx` composes the chat window, messages, composer and recovery actions. Its provider
+  retains the conversation, draft and popup state across product routes inside `ApplicationFrame`.
 - `conversation.ts` owns submission, bounded history, pending state and exact delivery receipts.
-- `mounts.ts` reports committed visible replies; presentation does not decide receipt transitions.
+- `visible-reply.tsx` reports committed visible replies; presentation does not decide receipt transitions.
 - Server HostedTurn owns admission, inference, canonical tool execution, confirmation and retained delivery evidence. Workers AI is a provider boundary, not browser authority.
 
 ## Evidence and remaining checks
@@ -190,3 +210,25 @@ is selected only by the declared `HostedTurnQuotaExceeded` response with
 `status: provider_quota_exceeded`; the separate capacity refusal does not select it. Successful
 inference and remaining natural-language mutation checks are still unverified. No automatic retry
 or financial mutation was requested.
+
+Production continuation, 21-10-2026, releases `6f2a14e8cd` and `f2c42e319a`: the no-data greeting
+returned exactly one User message and one assistant greeting, with the composer cleared and
+available for the next message. Workers AI was available. A read-only request for the visible
+`PRUEBA QA CHAT RECURRENTE 20261017` plan first substituted historical recurring detection and
+reported no match. An explicit maintained-plan query then described an occurrence as
+`unconfirmed` and reported overdue 18 October as its next date; the Recurrentes UI independently
+showed an active plan and the upcoming 18 November occurrence. No mutation was approved or executed.
+
+The follow-up guidance distinguishes maintained plans from historical detection and plan lifecycle
+from occurrence status, and requires future dates relative to canonical `today`. A new synthetic
+live-provider conformance case includes a past unconfirmed occurrence and a future monthly date.
+An initial free-prose checker comparison failed with the previous guidance and passed with the
+corrected guidance. Review then exposed ambiguous substring acceptance, so the final synthetic
+probe uses an exact two-field JSON answer contract and rejects contradictory or extra evidence.
+Both previous and corrected guidance passed that final live probe; it is regression coverage,
+not causal proof that the intermittent natural-language failure is fixed. The corrected guidance
+passed the complete live Workers AI conformance suite. The checker
+accepts a future date derived from the complete canonical schedule without requiring an unnecessary
+second read. Deterministic regressions reject historical substitution, an overdue next date,
+occurrence status as plan lifecycle, and inactive text masquerading as active. These are private
+provider/local checks; the corrected behavior still needs deployment and a production browser rerun.

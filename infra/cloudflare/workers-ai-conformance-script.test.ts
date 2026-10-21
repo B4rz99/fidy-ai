@@ -258,6 +258,7 @@ describe.concurrent("native conformance lifecycle", () => {
       "canonical_deletion",
       "canonical_date_only",
       "canonical_recurring_lifecycle",
+      "canonical_recurring_read",
     ]) {
       it.effect(`reports the closed ${check} failure without private content`, () =>
         exercise("refused", check)

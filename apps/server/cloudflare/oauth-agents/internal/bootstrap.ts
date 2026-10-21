@@ -22,9 +22,9 @@ export class BootstrapUnavailable extends Data.TaggedError("BootstrapUnavailable
 export const dbWork = <A>(run: () => Promise<A>): Effect.Effect<A, BootstrapUnavailable> =>
   Effect.uninterruptible(Effect.tryPromise({ try: run, catch: () => new BootstrapUnavailable() }));
 
-/** Strict decoding refuses unsupported metadata rather than silently trusting or fetching claims. */
+/** Browser decisions stay strict; public registration discards unsupported, self-asserted metadata. */
 export const decodePayload = <Shape extends Schema.ConstraintDecoder<unknown>>(
-  input: Readonly<{ request: Request; schema: Shape }>
+  input: Readonly<{ request: Request; schema: Shape; onExcessProperty: "ignore" | "error" }>
 ): Effect.Effect<Shape["Type"], BootstrapInvalid> =>
   Effect.gen(function* () {
     if (
@@ -39,14 +39,18 @@ export const decodePayload = <Shape extends Schema.ConstraintDecoder<unknown>>(
       catch: () => undefined,
     });
     return yield* Schema.decodeEffect(Schema.fromJsonString(input.schema), {
-      onExcessProperty: "error",
+      onExcessProperty: input.onExcessProperty,
     })(text);
   }).pipe(Effect.catchCause(() => Effect.fail(new BootstrapInvalid())));
 export const registerClient = (
   input: Readonly<{ request: Request; db: D1Database; current: number }>
 ): Effect.Effect<Response, BootstrapInvalid | BootstrapUnavailable | Schema.SchemaError> =>
   Effect.gen(function* () {
-    const metadata = yield* decodePayload({ request: input.request, schema: OAuthRegistration });
+    const metadata = yield* decodePayload({
+      request: input.request,
+      schema: OAuthRegistration,
+      onExcessProperty: "ignore",
+    });
     if (
       metadata.grant_types !== undefined &&
       !metadata.grant_types.includes("authorization_code")

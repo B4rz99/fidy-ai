@@ -1,5 +1,20 @@
 # Hosted Agent chat
 
+Production D1-reset continuation, 20-10-2026 in Bogotá (21-10-2026 UTC):
+[deployment 39525764609](https://github.com/B4rz99/fidy-ai/actions/runs/39525764609)
+passed and API health reported release `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`. Before promotion, explicitly retrying
+the preserved no-data greeting on the previous release produced one User message and one
+assistant greeting, then unlocked the composer. After promotion, the natural-language request
+to stop only `PRUEBA QA CHAT RECURRENTE 20261017` from 17 October returned HTTP 429 and
+the browser's decoded provider-quota feedback. Its exact draft remained editable; no successful
+assistant entry or approval appeared. Dismissing chat, navigating to Dashboard and reopening chat
+preserved the exact draft without another hosted submission. Dashboard catalog/view returned 200.
+An independent fresh Recurring read still showed the fixture as Activo with its 18 November
+occurrence. The merged discovery fix is now deployed, but live lifecycle approval and Dashboard
+chat edit/restore remain unverified because Workers AI quota is unavailable. D1 recovery does not
+establish AI availability. No financial mutation was approved, and no fixture deletion or access grant was
+submitted in this continuation.
+
 Component-suite references below are historical evidence. Current UI verification uses the browser journeys in the rerun commands; component tests have been removed under the repository test policy.
 
 Rebased live audit, 2026-10-14, production `a387f50fb5`: the remote Workers AI conformance probe passed, after 43 deterministic prerequisite checks. A production greeting produced one visible assistant reply. An ordinary Spanish Dashboard title edit failed on three explicit submissions with its draft retained; the observed retry returned HTTP 503. Closed Core telemetry showed a successful provider request followed by `model_response_rejected` on the first model round, before any canonical tool executed. The title remained unchanged. A separate synthetic request using the same installed tool catalog successfully proposed `dashboard.getDashboard`; it did not execute canonical operations. These results establish intermittent first-round output rejection, not quota exhaustion or a successful live Dashboard edit.
@@ -157,3 +172,21 @@ then exposed an informal question followed by an internal JSON/CONFIRMAR challen
 follow-up adds structured, host-issued browser lifecycle approval with a readable owner-supplied
 summary, preserves exact confirmation authority and stage/recovery semantics, and prevents model
 prose from creating an approval button. Live write verification remains pending its deployment.
+
+Live channel continuation, 20 October 2026: computer use sent exactly one non-mutating audit greeting
+in the existing Kapso Sandbox WhatsApp conversation. WhatsApp marked it delivered, and Kapso recorded
+the matching inbound message. Its first Fidy callback returned 429 with the closed status
+`provider_quota_exceeded`; Kapso retried and recorded 200. No outbound assistant reply appeared in the
+observed conversation. This establishes inbound delivery and callback retry, not a successful
+back-and-forth or a fix for the earlier intermittent failures. D1 availability did not establish
+Workers AI availability. No raw provider payload, credential or unrelated conversation is retained
+as audit evidence. Hosted recurring lifecycle approval remains unverified in Production.
+
+Production morning retry, 21-10-2026 Bogotá, release
+`d50938e433193ba07e0207f0193f4f8881526f5a`: a single no-data greeting explicitly requested no
+financial reads or writes. The browser again displayed the daily-limit feedback, removed the
+failed message from successful history, and preserved the exact editable draft. This presentation
+is selected only by the declared `HostedTurnQuotaExceeded` response with
+`status: provider_quota_exceeded`; the separate capacity refusal does not select it. Successful
+inference and remaining natural-language mutation checks are still unverified. No automatic retry
+or financial mutation was requested.

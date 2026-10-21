@@ -173,6 +173,9 @@ const OAuthUnauthenticated = Schema.Struct({ error: Schema.Literal("unauthentica
 const OAuthForbidden = Schema.Struct({ error: Schema.Literal("forbidden_origin") }).annotate({
   httpApiStatus: forbiddenStatus,
 });
+export const OAuthReauthenticationRequired = Schema.Struct({
+  error: Schema.Literal("reauthentication_required"),
+}).annotate({ httpApiStatus: forbiddenStatus });
 const OAuthRateLimited = Schema.Struct({ error: Schema.Literal("slow_down") }).annotate({
   httpApiStatus: rateLimitedStatus,
 });
@@ -223,14 +226,14 @@ export const OAuthConnectionsGroup = HttpApiGroup.make("oauthConnections")
     HttpApiEndpoint.post("revoke", oauthPaths.revoke, {
       payload: OAuthConnectionRevoke,
       success: Schema.Struct({ revoked: Schema.Literal(true) }),
-      error: managementErrors,
+      error: [...managementErrors, OAuthReauthenticationRequired],
     })
   )
   .add(
     HttpApiEndpoint.post("revokeAll", oauthPaths.revokeAll, {
       payload: OAuthConnectionRevokeAll,
       success: Schema.Struct({ revoked: Schema.Literal(true) }),
-      error: managementErrors,
+      error: [...managementErrors, OAuthReauthenticationRequired],
     })
   );
 /** Browser-only request review: these declarations never enter the canonical tool catalog. */

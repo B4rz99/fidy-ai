@@ -125,13 +125,16 @@ const requestRevocation = (
   Effect.gen(function* () {
     const all = new URL(input.request.url).pathname === oauthPaths.revokeAll;
     const connectionId = all
-      ? yield* decodePayload({ request: input.request, schema: OAuthConnectionRevokeAll }).pipe(
-          Effect.as(Option.none<OAuthConnectionId>())
-        )
+      ? yield* decodePayload({
+          request: input.request,
+          schema: OAuthConnectionRevokeAll,
+          onExcessProperty: "error",
+        }).pipe(Effect.as(Option.none<OAuthConnectionId>()))
       : Option.some(
           (yield* decodePayload({
             request: input.request,
             schema: OAuthConnectionRevoke,
+            onExcessProperty: "error",
           })).connectionId
         );
     const admission = yield* Schema.decodeUnknownEffect(Schema.toType(OAuthRevocationAdmission))({
@@ -175,6 +178,15 @@ export const manageConnections = (
       })
     );
     if (Option.isNone(session)) {
+      if (!listing) {
+        const live = yield* dbWork(() =>
+          browserSession({ ...input, input: { current: input.current, fresh: false } })
+        );
+        if (Option.isSome(live)) {
+          yield* input.admitUser(live.value.user_id);
+          return oauthResponse({ body: { error: "reauthentication_required" }, status: 403 });
+        }
+      }
       return oauthResponse({ body: { error: "unauthenticated" }, status: 401 });
     }
     yield* input.admitUser(session.value.user_id);

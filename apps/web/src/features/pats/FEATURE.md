@@ -1,5 +1,16 @@
 # Accesos
 
+Production D1-reset read verification, 20-10-2026 Bogotá, release
+`da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`: the existing session loaded the combined
+Accesos page successfully before promotion. After promotion, PAT metadata remained available;
+the first MCP GET was aborted without an HTTP response and the page showed its unavailable
+state. Explicit Actualizar lista then returned HTTP 200 and restored the successful empty MCP
+page without signing in again. No token, connection, permission or session was created or revoked.
+This establishes explicit recovery from the observed transient read failure, not a proven
+freshness regression or uninterrupted availability. Live Microsoft completion, intentional
+changed-User restoration, external MCP planning confirmation and populated production MCP
+continuation are not established by an empty metadata page.
+
 Current-artifact identity-resumption audit, 2026-10-14, Effect 4.0.2: two new production-build browser checks seed only the bounded non-secret identity-confirmation draft and resolve the authenticated User through controlled HTTP. The same User returns to the exact name, Lectura-only permission and seven-day review without a PAT mutation. A different User receives a blank form, no review and no PAT mutation. Both checks assert that the saved draft is consumed from session storage. This closes the mounted browser handoff gap locally; it does not establish an actual production provider account switch or Microsoft popup completion.
 
 Production read regression, 2026-10-14, release `30f585ceb1a811a97c523251ea6bd0bee13fc07f`: the existing signed-in session loaded both retained PAT metadata rows with date-only fields and a successful empty MCP page, without an identity-confirmation prompt or load error. No token or connection was created, revoked or altered. This confirms current read-only authority, not changed-account restoration, bearer use or production MCP continuation beyond 25 records.
@@ -77,6 +88,20 @@ Production completion, 2026-10-12: on the explicitly approved current User, subm
 
 ## Manual issuance ownership
 
+External-client continuation, 2026-10-20 Bogotá, release
+`ce8c9b51f096e8a93e601af7fd9db595bc3589ff`: MCP Inspector 2.10.1 discovered both OAuth metadata
+documents successfully but its registration returned HTTP 400 `invalid_client_metadata` before
+browser review. Its standard `client_uri` field hit the registration parser's excess-field rejection.
+The Worker/D1 regression reproduces the 400 and requires 201 with only supported metadata retained
+and no OAuth connection created. The fix discards unsupported registration metadata, retaining
+strict validation of supported fields and browser decisions. Live registration and external planning
+confirmation still require the follow-up deployment and explicit access approval; no grant was issued
+during this failure. Kapso currently exposes one sandbox number; the five most recent conversations
+were ended, so a live WhatsApp planning check requires an active handset test conversation.
+The complete OAuth Worker/D1 rerun passed 224 checks with one optional native-host bridge skipped.
+The initial parallel run encountered local `EADDRNOTAVAIL` failures; the serial rerun passed all
+twelve files without changing their assertions.
+
 `creation.tsx` owns the mounted manual PAT flow and same-User draft continuation. Its private
 `issuance.ts` implementation owns review, request identity, canonical outcomes, explicit retry,
 identity handoff and disclosure cleanup. `view.tsx` receives display state and User actions;
@@ -89,3 +114,42 @@ explicit retry identity, storage refusal, late completion and disclosure cleanup
 decisions are exercised in `reauthentication-draft.test.ts`; mounted workflows use browser journeys.
 Metadata listing/revocation and CLI pairing retain their independent ownership. Existing storage,
 clipboard, combined-page and native provider browser journeys remain applicable.
+
+Production external-client audit, 20 October 2026, release `eb9374c92dd97a63f45a6a108a8660b0cfe39842`:
+Google sign-in and the explicitly approved seven-day MCP Inspector grant completed with Lectura and
+Escritura, excluding Tablero. Accesos displayed the active connection and the external client read
+canonical recurring state. Later revocation exposed a distinct freshness bug: 401 disposed Accesos,
+but reloading with the same cookie restored metadata. The test grant remains pending verified
+revocation and subsequent external access/refresh refusal; starting a provider popup did not refresh
+identity without its completion.
+
+Issue #1422 changes individual and aggregate MCP revocation to distinguish a live session needing
+identity confirmation (declared 403 `reauthentication_required`) from an invalid/revoked session
+(401). Accesos retains metadata and offers an explicit identity-confirmation link returning to this
+page. Return never replays a mutation: the User must select the agent again. Origin, binding,
+consent, ownership and atomic freshness guards remain enforced. Worker/D1 regression coverage checks
+both refusals without revocation; the built-browser regression checks retained Accesos, the fixed
+identity destination and no replay. Production verification of this follow-up is pending deployment.
+
+Production continuation, 21 October 2026, release `d50938e433193ba07e0207f0193f4f8881526f5a`:
+the User completed the fresh Google identity popup from `/login?resume=access` and returned to
+the same Accesos account. No revocation was replayed automatically. Explicitly selecting the
+existing MCP Inspector connection then displayed the server-confirmed revocation message and
+changed its state from Activo to Revocado. The client could not reconnect with its retained
+credentials: it required a new OAuth authorization. That replacement request was explicitly
+cancelled without granting access; Inspector remained disconnected and displayed
+`Re-authentication required`. This closes live identity-return and original test-grant cleanup.
+It does not independently establish the exact refresh-token error response or successful MCP
+mutation confirmation. A later proposed seven-day retest is separate authority and requires
+its own action-time approval.
+
+The separately approved 21 October retest grant was issued after Google identity completion,
+then explicitly revoked after the native confirmation test stalled. Accesos showed both Inspector
+grants as Revocado. Reconnection required new authorization and did not restore tool access.
+This closes cleanup for both grants; the external mutation result remains unverified.
+
+The separately approved traced test also completed seven-day read/write issuance after the expired
+OAuth request was renewed. Its Google identity completion was reused successfully. After capturing
+the stalled decline transport, explicit revocation succeeded before freshness expired. All three
+Inspector connection rows displayed Revocado. No additional production access remains from these
+Inspector tests.

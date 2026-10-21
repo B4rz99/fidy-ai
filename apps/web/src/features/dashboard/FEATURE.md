@@ -1,5 +1,15 @@
 # Dashboard
 
+Production D1-reset read verification, 20-10-2026 Bogotá: successful
+[deployment 39525764609](https://github.com/B4rz99/fidy-ai/actions/runs/39525764609)
+and API health identified release `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`. The existing session loaded catalog and
+view with HTTP 200. The four retained Widgets remained visible, with October COP 0 income and
+COP 10,103 spending. Transactions independently showed two expenses totaling COP 10,103;
+Budgets showed the same uncapped spending. No Widget definition or title was changed.
+The failed recurring chat draft survived route navigation and popup reopening without replay.
+Natural-language Dashboard edit/restore remains unverified because the hosted provider returned
+its daily-quota refusal on the preceding recurring test, independently of the recovered D1 reads.
+
 Audit continuation, 20-10-2026, trunk `ef1005e310151e98ad946858051a0b8cffdaa945`:
 all 69 native Dashboard Worker/D1 checks passed. Catalog, quota/Subscription discovery and
 uninitialized reads now exercise the production recovery wrapper with isolated real R2 storage;

@@ -1,5 +1,18 @@
 # Recurrentes
 
+### Deployed reset continuation, 20-10-2026 Bogotá
+
+[Deployment 39525764609](https://github.com/B4rz99/fidy-ai/actions/runs/39525764609)
+passed and public API health reported `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`. This deploys the discovery follow-up
+from PR #1389 and closes its earlier release blocker. Fresh November reads succeeded after D1's
+reset. The ordinary-language stop request supplied the fixture name and local date only; it
+returned HTTP 429 with provider-quota feedback before any host approval was displayed. The draft
+remained editable and survived signed-in navigation without automatic resubmission. A separate
+fresh page still showed `PRUEBA QA CHAT RECURRENTE 20261017` as Activo and its 18 November
+occurrence as upcoming with unknown Money. No stopped-state or cleanup success is claimed.
+Live host approval, stop persistence and historical preservation remain pending AI availability;
+ordinary database reads are no longer the blocker.
+
 User-maintained recurring expectations, separate from historical RecurringSeries and the User's
 paid Subscription. The workspace does not execute payments or cancel services. Specification:
 [#1320](https://github.com/B4rz99/fidy-ai/issues/1320); design:
@@ -341,3 +354,31 @@ editing resumes. The same resume invalidation refreshes the current date, so a r
 Unchanged retained review and recurring displays are memoized so showing them does not rebuild their
 forms or calendars. The browser navigation benchmark uses independent Users and keeps its 10 ms
 median target while withholding fresh network results; stale editing remains disabled.
+
+External MCP continuation, 20 October 2026, release `eb9374c92dd97a63f45a6a108a8660b0cfe39842`:
+the approved seven-day Inspector connection read the November workspace and its existing synthetic
+monthly plan. Exact stop-tracking elicitation appeared, but client decline/acceptance timed out;
+independent reads still showed document revision 1 and the active plan. A later mutation returned
+safe unavailability. Tracking changes, client cancellation and retained history are therefore not
+claimed as live passes. The owning [MCP audit](../../../../server/src/shell/mcp/FEATURE.md) records
+the transport observations and pending grant cleanup. No Transaction deletion or external service
+cancellation was performed.
+
+The 20 October production browser follow-up also selected 15 July and 15 August 2026 in the
+Transactions date picker. Both dates showed zero records in the current audit account, as did
+15 September in the earlier check. This narrows fixture discovery to another account; it does not
+prove that the three historical fixtures were deleted or are absent from all accounts.
+
+Production retest, 21 October 2026, release `d50938e433193ba07e0207f0193f4f8881526f5a`:
+Inspector read revision 1 and requested stopping the existing synthetic monthly plan. Decline
+and acceptance both closed their native review, but neither produced a completed parent tool
+result. Independent browser readback still displayed the November occurrence as upcoming.
+The new seven-day test grant was revoked and both Inspector grant rows displayed Revocado.
+Native cancellation/completion and the synthetic tracking change remain open; no Transaction
+was deleted or external service cancelled.
+
+A subsequent separately approved traced Inspector call again read revision 1 and displayed the
+exact synthetic stop review. Decline started a reply fetch which received no headers until transport
+disconnection, then returned 404; a subsequent native read was also delayed and returned 404.
+The traced grant was revoked successfully. This identifies a transport symptom, not a completed
+tracking change or a diagnosed production cause.

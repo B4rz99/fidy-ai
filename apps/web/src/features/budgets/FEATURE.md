@@ -1,5 +1,12 @@
 # Budgets
 
+Production D1-reset read verification, 20-10-2026 Bogotá, release
+`da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`: the October Budget view loaded without a database error and correctly
+retained its no-cap state. Its summary showed COP 0 income and COP 10,103 spending, matching
+the two current Transactions and the Dashboard metric; uncapped spending remained included.
+No Budget amount, group or Currency was changed. This is current-release read/aggregation evidence,
+not new production cap mutation or failure-injection evidence.
+
 Capability and verification map for `/app/budgets`. Product requirements remain in GitHub issues #1297 and #1291.
 
 ## Behaviour and owners

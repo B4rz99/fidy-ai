@@ -494,6 +494,19 @@ const openProviderEntry = Effect.fn(function* (page: Page) {
   const protectedResponse = yield* Effect.tryPromise(() => page.request.get("/app/transactions"));
   expect(protectedResponse.headers()["cross-origin-opener-policy"]).toBe("same-origin");
 });
+const expectProviderDenial = Effect.fn(function* (
+  page: Page,
+  configuration: ProviderJourneyConfiguration
+) {
+  const deniedPopup = yield* Effect.tryPromise(() =>
+    Promise.all([
+      page.waitForEvent("popup"),
+      page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click(),
+    ]).then(([opened]) => opened)
+  );
+  yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());
+  yield* Effect.tryPromise(() => expect.poll(() => deniedPopup.isClosed()).toBe(true));
+});
 export const denialAndCancellationJourney = ({
   configuration,
   page,
@@ -523,10 +536,7 @@ export const denialAndCancellationJourney = ({
           page.getByRole("button", { name: "Ya tengo cuenta · Iniciar sesión" }).click()
         );
       }
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
-      );
-      yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());
+      yield* expectProviderDenial(page, configuration);
       expect(
         (yield* Effect.tryPromise(() => context.cookies())).some(
           (cookie) => cookie.name === "__Host-fidy_session"

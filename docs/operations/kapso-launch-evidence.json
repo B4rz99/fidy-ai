@@ -2,7 +2,7 @@
   "publishedTerms": "https://kapso.com/terms (effective 2026-09-17; acceptance in account not verified)",
   "publishedDpa": "https://kapso.com/dpa (effective 2026-09-17; account agreement not verified)",
   "publishedSubprocessors": "https://kapso.com/subprocessors (effective 2026-09-01; enabled routes not verified)",
-  "cliObservation": "2026-09-28: fiidy project accessible; one WhatsApp number, sandbox kind; no production number observed",
+  "cliObservation": "2026-10-21: project e12c802f-113f-4a71-9516-d9c2191392e8 accessible; production number 1397401100120558 connected and healthy with verified business portfolio 3582698951893989; Fidy webhook staged inactive; deployment and live delivery verification pending (see kapso-launch-readiness.md)",
   "operatorReportedRetention": "Free plan keeps WhatsApp history indefinitely; Kapso requires an upgrade to set a retention window (operator-reported dashboard text; effective setting not independently verified)",
   "reviewedAt": "PENDING",
   "reviewer": "PENDING",

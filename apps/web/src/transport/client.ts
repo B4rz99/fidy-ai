@@ -50,6 +50,7 @@ export {
   OAuthConnectionListQuery,
   OAuthConnectionMetadata,
   OAuthReauthenticationRequired,
+  OAuthUnauthenticated,
   OAuthRequestId,
   OAuthReview,
   OAuthOperationReview,

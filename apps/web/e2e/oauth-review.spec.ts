@@ -792,9 +792,17 @@ const exerciseBrowserOperationApproval = (
     const executed = yield* Effect.tryPromise(() =>
       callReviewedOperation(request, bearer, { name: "memory.forget", input: args, continuation })
     );
-    expect(yield* Effect.tryPromise(() => executed.json())).toMatchObject({
-      result: { isError: false },
-    });
+    const executionSummary = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        result: Schema.Struct({
+          isError: Schema.Boolean,
+          structuredContent: Schema.Struct({
+            error: Schema.optionalKey(Schema.Struct({ code: Schema.String })),
+          }),
+        }),
+      })
+    )(yield* Effect.tryPromise(() => executed.json()));
+    expect(executionSummary.result).toEqual({ isError: false, structuredContent: {} });
     const replay = yield* Effect.tryPromise(() =>
       callReviewedOperation(request, bearer, { name: "memory.forget", input: args, continuation })
     );

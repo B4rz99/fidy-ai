@@ -232,3 +232,12 @@ quota exhaustion following schema work as a hypothesis. Analytics is not the clo
 failure for an individual request, so the 503 root cause remains unconfirmed. Metadata queries
 and read-only `EXPLAIN` compilation succeeded; no direct production data/schema write was used
 to diagnose it. See [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/).
+
+The same Production 503 also exposed misleading recovery copy: the MCP list offered sign-in
+for every read failure. A controlled built-browser 503 regression reproduced that prompt and now
+passes after classifying only the declared `OAuthUnauthenticated` error as requiring sign-in.
+Temporary and boundary failures retain explicit list retry without suggesting identity renewal;
+a separate 401 regression preserves sign-in recovery. The existing public error schema is reused
+through the browser client boundary, with no endpoint or authorization-policy change. All seven
+Accesos browser journeys pass locally, including retry restoring MCP metadata beside retained PAT
+metadata. This presentation fix does not establish that the underlying Production 503 is resolved.

@@ -167,7 +167,9 @@ const unavailableStatus = 503;
 const OAuthInvalid = Schema.Struct({ error: Schema.Literal("invalid_request") }).annotate({
   httpApiStatus: invalidStatus,
 });
-const OAuthUnauthenticated = Schema.Struct({ error: Schema.Literal("unauthenticated") }).annotate({
+export const OAuthUnauthenticated = Schema.Struct({
+  error: Schema.Literal("unauthenticated"),
+}).annotate({
   httpApiStatus: unauthorizedStatus,
 });
 const OAuthForbidden = Schema.Struct({ error: Schema.Literal("forbidden_origin") }).annotate({

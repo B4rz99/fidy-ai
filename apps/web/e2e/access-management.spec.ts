@@ -22,6 +22,28 @@ const connection = {
   state: "active",
   recentActivity: [],
 };
+type ConnectionReadState = "unavailable" | "unauthenticated" | "ready";
+const unavailableStatus = 503;
+const unauthenticatedStatus = 401;
+const readyStatus = 200;
+const installConnectionRead = (
+  page: Page,
+  state: Readonly<{ current: ConnectionReadState }>
+): ReturnType<Page["route"]> =>
+  page.route(`${apiOrigin}/web/oauth/connections**`, (route) => {
+    const snapshots = {
+      unavailable: { status: unavailableStatus, body: { error: "temporarily_unavailable" } },
+      unauthenticated: { status: unauthenticatedStatus, body: { error: "unauthenticated" } },
+      ready: { status: readyStatus, body: { connections: [connection], nextCursor: null } },
+    };
+    const snapshot = snapshots[state.current];
+    return route.fulfill({
+      status: snapshot.status,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot.body),
+    });
+  });
+
 const installAccess = (page: Page): Promise<void> =>
   installUser(page)
     .then(() =>
@@ -269,5 +291,51 @@ test("narrow Accesos permits keyboard grant review and restores the draft for ed
       yield* Effect.tryPromise(() => expect(name).toHaveValue("Agente teclado"));
       yield* Effect.tryPromise(() => expect(read).toBeChecked());
       yield* Effect.tryPromise(() => expect(duration).toHaveText("7 días"));
+    })
+  ));
+
+test("temporary MCP list failure offers retry without asking to sign in", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installAccess(page));
+      const state: { current: ConnectionReadState } = { current: "unavailable" };
+      yield* Effect.tryPromise(() => installConnectionRead(page, state));
+      yield* Effect.tryPromise(() => page.goto("/settings/access"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Actualizar lista" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Iniciar sesión de nuevo", { exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() => expect(page.getByText(token.recipientLabel)).toBeVisible());
+      state.current = "ready";
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Actualizar lista" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("table", { name: "Conexiones MCP" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText(connection.claimedClientName)).toBeVisible()
+      );
+    })
+  ));
+
+test("unauthenticated MCP list still offers sign in", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installAccess(page));
+      yield* Effect.tryPromise(() => installConnectionRead(page, { current: "unauthenticated" }));
+      yield* Effect.tryPromise(() => page.goto("/settings/access"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Iniciar sesión de nuevo", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toHaveText("Inicia sesión para consultar tus conexiones.")
+      );
+      yield* Effect.tryPromise(() => expect(page.getByText(token.recipientLabel)).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("table", { name: "Conexiones MCP" })).toHaveCount(0)
+      );
     })
   ));

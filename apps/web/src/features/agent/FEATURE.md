@@ -1,5 +1,13 @@
 # Hosted Agent chat
 
+Current audit status, 21 October 2026: the latest production greeting and private live-provider
+conformance suite passed, so the earlier AI quota refusals below are historical observations.
+The User confirmed that the current production database failures are caused by D1 quota exhaustion.
+Production testing is paused until database recovery. Maintained-plan lookup guidance has local
+and private-provider coverage but still needs a deployed, fresh canonical-read comparison;
+natural-language lifecycle approval and Dashboard edit/restore remain live gaps. No production
+write or access grant is needed for the continuing local tests.
+
 Production D1-reset continuation, 20-10-2026 in Bogotá (21-10-2026 UTC):
 [deployment 39525764609](https://github.com/B4rz99/fidy-ai/actions/runs/39525764609)
 passed and API health reported release `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`. Before promotion, explicitly retrying

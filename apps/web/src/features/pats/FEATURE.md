@@ -1,5 +1,13 @@
 # Accesos
 
+Current audit status, 21 October 2026: all eight audit MCP grants were revoked before the latest
+database outage. The User confirmed D1 quota exhaustion; production issuance, revocation and
+read-recovery checks are paused. The latest combined local Accesos/OAuth rerun passed 13 browser
+checks. Temporary connection-read failures offer retry, while only the declared unauthenticated
+response offers sign-in; deployment verification of that presentation remains outstanding.
+Provider account replacement, Microsoft completion and populated production pagination remain
+separate live checks. Earlier pending-grant entries below are superseded by the recorded cleanup.
+
 Production D1-reset read verification, 20-10-2026 Bogotá, release
 `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`: the existing session loaded the combined
 Accesos page successfully before promotion. After promotion, PAT metadata remained available;

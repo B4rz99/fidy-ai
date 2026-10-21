@@ -1,5 +1,12 @@
 # Recurrentes
 
+Current audit status, 21 October 2026: the User confirmed that the latest production read failures
+are caused by D1 quota exhaustion. Production testing is paused until database recovery. Native
+Codex, Claude Code and corrected Inspector cancellation returned the declared refusal without an
+accepted edit, and all audit grants were revoked. Hosted maintained-plan lookup still needs a
+deployed fresh-read comparison; accepted hosted lifecycle approval and stopped-state persistence
+remain unverified in production. Private-provider coverage does not close these browser gaps.
+
 ### Deployed reset continuation, 20-10-2026 Bogotá
 
 [Deployment 39525764609](https://github.com/B4rz99/fidy-ai/actions/runs/39525764609)

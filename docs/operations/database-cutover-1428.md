@@ -650,3 +650,75 @@ DELETE FROM sql_assertions WHERE scope='compaction_counter_cutover';
 The sole baseline is the fresh-database shape, not an upgrade script for an already-applied schema.
 This conversion and its matching Worker publication remain local and undeployed until remote quota
 permits the fenced cutover. Recovery #1434's failed conversion remains excluded.
+
+## Audit retention permits (#1436)
+
+Ordinary Audit retention now installs a two-field `audit_retention_permits` row instead of mutating
+User. Its exact User and cutoff authorize only `session_call`, `credential_call`, `insight_call` and
+`publication` records strictly older than the existing 365-day boundary. Each bounded unit inserts
+one permit, asserts successful acquisition, deletes up to 64 eligible records, and deletes the permit
+in the same native D1 batch. Any failure rolls back both permission and deletions. An unexpected
+retained permit causes acquisition to fail; ordinary retention never overwrites or adopts its cutoff.
+Investigate that anomaly under fenced maintenance rather than treating it as standing permission.
+
+Independent request-admission cleanup remains 93 days and Recovery remains 24 calendar months after
+terminal closure. This slice moves no other Audit variants or owner evidence. Ordinary permission
+cannot bypass an erasure fence; exact purpose-specific erasure permissions and the logical
+`audit_retention_permits` projection remain independently enforced. Archived permit snapshots retain
+their original request/store/reference/body; snapshots are historical evidence, never live authority.
+
+For an existing development database, back up D1 and fence Audit retention and erasure through the
+code/schema cutover. **Refuse any non-null old cutoff**, including zero: a completed old transaction
+must already have cleared it. Investigate the original anomaly rather than copying it into a live
+permit or silently clearing it. Drain any unfinished erasure chunk with the old code first.
+
+Assemble one native D1 batch with no intermediate commits:
+
+1. Create `audit_retention_permits` using the final baseline declaration. A pre-existing destination
+   is an unexplained collision and must fail, not be reused.
+2. Execute `audit-retention-permit-cutover` below. Only the obsolete User column is dropped; User
+   rowids, every retained User field, Audit sequences/identities/timestamps and related records remain
+   unchanged. No Audit history or archive is copied, relabeled or reconstructed.
+3. Install the final baseline `audit_entries_no_delete` trigger and all indexes/triggers owned by
+   `audit_retention_permits`. The old field-clear preservation trigger has no role on the new table;
+   its delete preservation trigger handles removal directly.
+4. Execute `audit-retention-permit-verify`. Publish matching code and align the single-baseline ledger
+   only after success. A failure after column removal rolls back DDL and data together. The edited
+   baseline alone does not convert an already applied database.
+
+<!-- audit-retention-permit-cutover:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'audit_retention_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM users WHERE audit_retention_cutoff_ms IS NOT NULL)
+ AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DROP TRIGGER audit_entries_no_delete;
+DROP TRIGGER erasure_fence_audit_retention_permits_insert;
+DROP TRIGGER erasure_fence_audit_retention_permits_update;
+DROP TRIGGER erasure_fence_audit_retention_permits_delete;
+DROP TRIGGER erasure_preserve_audit_retention_permits_delete;
+DROP TRIGGER erasure_preserve_audit_retention_permits_delete_clear;
+ALTER TABLE users DROP COLUMN audit_retention_cutoff_ms;
+```
+
+<!-- audit-retention-permit-cutover:end -->
+
+<!-- audit-retention-permit-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'audit_retention_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM audit_retention_permits)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='audit_retention_cutover';
+```
+
+<!-- audit-retention-permit-verify:end -->
+
+The global and User-specific partial ordinary-retention indexes remain in place. Audit owns this
+permission table and its existing erasure dependency; no User-profile write is needed for routine
+cleanup. Changes remain local and undeployed until quota allows the fenced cutover.

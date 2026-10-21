@@ -225,6 +225,15 @@ const verifyNativeErasure = Effect.gen(function* () {
   }
   yield* seedReviewAdmission(db, current);
   yield* Effect.tryPromise(() =>
+    db.batch(
+      [userId, foreignUser].map((id) =>
+        db
+          .prepare("INSERT INTO audit_retention_permits(user_id,cutoff_ms) VALUES(?,?)")
+          .bind(id, current)
+      )
+    )
+  );
+  yield* Effect.tryPromise(() =>
     db.batch([
       ...[userId, foreignUser].flatMap((id) => {
         const subject = { sql: "SELECT ? AS user_id", params: [id] };
@@ -364,6 +373,11 @@ const verifyNativeErasure = Effect.gen(function* () {
     { owner_user_id: foreignUser, retained: 3 },
   ]);
   yield* verifyRetainedReviews(db);
+  expect(
+    (yield* Effect.tryPromise(() =>
+      db.prepare("SELECT user_id,cutoff_ms FROM audit_retention_permits").all()
+    )).results
+  ).toEqual([{ user_id: foreignUser, cutoff_ms: current }]);
   for (const table of [
     "ingestion_review_state",
     "(SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)",

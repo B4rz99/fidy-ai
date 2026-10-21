@@ -14,6 +14,12 @@ CREATE TABLE anonymized_email_samples (
 ) STRICT;
 --> statement-breakpoint
 
+CREATE TABLE audit_retention_permits (
+  user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
+  cutoff_ms INTEGER NOT NULL
+) STRICT;
+--> statement-breakpoint
+
 CREATE TABLE "audit_entries" (
  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
  record_type TEXT NOT NULL,
@@ -1558,7 +1564,7 @@ CREATE TABLE users (
   created_at_ms INTEGER NOT NULL
 , trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER CHECK ((trial_started_at_ms IS NULL AND trial_ends_at_ms IS NULL) OR (trial_started_at_ms IS NOT NULL AND trial_ends_at_ms IS NOT NULL AND trial_ends_at_ms=trial_started_at_ms+604800000)), subscription_id TEXT CHECK(subscription_id IS NULL OR length(subscription_id)=36), forwarding_address_id TEXT CHECK(forwarding_address_id IS NULL OR length(forwarding_address_id)=36), forwarding_local_part TEXT CHECK(forwarding_local_part IS NULL OR length(forwarding_local_part) BETWEEN 24 AND 64), forwarding_issued_at_ms INTEGER
  CHECK((forwarding_address_id IS NULL AND forwarding_local_part IS NULL AND forwarding_issued_at_ms IS NULL)
- OR (forwarding_address_id IS NOT NULL AND forwarding_local_part IS NOT NULL AND forwarding_issued_at_ms IS NOT NULL)), backfill_present INTEGER CHECK(backfill_present IS NULL OR backfill_present=1), backfill_submission_id TEXT REFERENCES statement_submissions(id), backfill_consumed_at_ms INTEGER CHECK(backfill_consumed_at_ms IS NULL OR backfill_consumed_at_ms>=0) CHECK(backfill_present IS NOT NULL OR (backfill_submission_id IS NULL AND backfill_consumed_at_ms IS NULL)), verified_email_address TEXT COLLATE NOCASE CHECK(verified_email_address IS NULL OR verified_email_address=lower(trim(verified_email_address))), email_verified_at_ms INTEGER CHECK((verified_email_address IS NULL)=(email_verified_at_ms IS NULL)), recovery_code_digest BLOB CHECK(recovery_code_digest IS NULL OR length(recovery_code_digest)=32), recovery_created_at_ms INTEGER, recovery_consumed_at_ms INTEGER, recovery_revision INTEGER CHECK((recovery_code_digest IS NULL AND recovery_created_at_ms IS NULL AND recovery_consumed_at_ms IS NULL AND recovery_revision IS NULL) OR (recovery_code_digest IS NOT NULL AND recovery_created_at_ms IS NOT NULL AND recovery_revision IS NOT NULL)), whatsapp_portfolio_id TEXT, whatsapp_bsuid TEXT, whatsapp_verified_at_ms INTEGER CHECK((whatsapp_portfolio_id IS NULL AND whatsapp_bsuid IS NULL AND whatsapp_verified_at_ms IS NULL) OR (whatsapp_portfolio_id IS NOT NULL AND whatsapp_bsuid IS NOT NULL AND whatsapp_verified_at_ms IS NOT NULL)), route_portfolio_id TEXT, route_bsuid TEXT, route_phone_number_id TEXT, route_verified_at_ms INTEGER CHECK((route_portfolio_id IS NULL AND route_bsuid IS NULL AND route_phone_number_id IS NULL AND route_verified_at_ms IS NULL) OR (route_portfolio_id IS NOT NULL AND route_bsuid IS NOT NULL AND route_phone_number_id IS NOT NULL AND route_verified_at_ms IS NOT NULL)), audit_retention_cutoff_ms INTEGER, paid_attempt_id TEXT REFERENCES billing_attempts(id), paid_price_id TEXT REFERENCES subscription_prices(id), paid_period_ends_at_ms INTEGER, paid_renewal_anchor_ms INTEGER CHECK((paid_attempt_id IS NULL AND paid_price_id IS NULL AND paid_period_ends_at_ms IS NULL AND paid_renewal_anchor_ms IS NULL) OR (paid_attempt_id IS NOT NULL AND paid_price_id IS NOT NULL AND paid_period_ends_at_ms IS NOT NULL AND paid_renewal_anchor_ms IS NOT NULL)), cancellation_paid_attempt_id TEXT REFERENCES billing_attempts(paid_attempt_id), cancellation_payment_source_id TEXT REFERENCES "card_enrollments"(payment_source_id), cancellation_cancelled_at_ms INTEGER, cancellation_paid_through_ms INTEGER, cancellation_source_cancellation TEXT CHECK(cancellation_source_cancellation IS NULL OR cancellation_source_cancellation IN ('detached','void-pending','voided')), cancellation_void_started_at_ms INTEGER, cancellation_void_verified_at_ms INTEGER, cancellation_verification_count INTEGER CHECK(cancellation_verification_count IS NULL OR cancellation_verification_count BETWEEN 0 AND 8), cancellation_last_offered_at_ms INTEGER CHECK((cancellation_cancelled_at_ms IS NULL AND cancellation_paid_attempt_id IS NULL AND cancellation_payment_source_id IS NULL AND cancellation_paid_through_ms IS NULL AND cancellation_source_cancellation IS NULL AND cancellation_void_started_at_ms IS NULL AND cancellation_void_verified_at_ms IS NULL AND cancellation_verification_count IS NULL AND cancellation_last_offered_at_ms IS NULL) OR (cancellation_cancelled_at_ms IS NOT NULL AND cancellation_paid_attempt_id IS NOT NULL AND cancellation_payment_source_id IS NOT NULL AND cancellation_paid_through_ms IS NOT NULL AND cancellation_source_cancellation IS NOT NULL AND cancellation_verification_count IS NOT NULL))) STRICT;
+ OR (forwarding_address_id IS NOT NULL AND forwarding_local_part IS NOT NULL AND forwarding_issued_at_ms IS NOT NULL)), backfill_present INTEGER CHECK(backfill_present IS NULL OR backfill_present=1), backfill_submission_id TEXT REFERENCES statement_submissions(id), backfill_consumed_at_ms INTEGER CHECK(backfill_consumed_at_ms IS NULL OR backfill_consumed_at_ms>=0) CHECK(backfill_present IS NOT NULL OR (backfill_submission_id IS NULL AND backfill_consumed_at_ms IS NULL)), verified_email_address TEXT COLLATE NOCASE CHECK(verified_email_address IS NULL OR verified_email_address=lower(trim(verified_email_address))), email_verified_at_ms INTEGER CHECK((verified_email_address IS NULL)=(email_verified_at_ms IS NULL)), recovery_code_digest BLOB CHECK(recovery_code_digest IS NULL OR length(recovery_code_digest)=32), recovery_created_at_ms INTEGER, recovery_consumed_at_ms INTEGER, recovery_revision INTEGER CHECK((recovery_code_digest IS NULL AND recovery_created_at_ms IS NULL AND recovery_consumed_at_ms IS NULL AND recovery_revision IS NULL) OR (recovery_code_digest IS NOT NULL AND recovery_created_at_ms IS NOT NULL AND recovery_revision IS NOT NULL)), whatsapp_portfolio_id TEXT, whatsapp_bsuid TEXT, whatsapp_verified_at_ms INTEGER CHECK((whatsapp_portfolio_id IS NULL AND whatsapp_bsuid IS NULL AND whatsapp_verified_at_ms IS NULL) OR (whatsapp_portfolio_id IS NOT NULL AND whatsapp_bsuid IS NOT NULL AND whatsapp_verified_at_ms IS NOT NULL)), route_portfolio_id TEXT, route_bsuid TEXT, route_phone_number_id TEXT, route_verified_at_ms INTEGER CHECK((route_portfolio_id IS NULL AND route_bsuid IS NULL AND route_phone_number_id IS NULL AND route_verified_at_ms IS NULL) OR (route_portfolio_id IS NOT NULL AND route_bsuid IS NOT NULL AND route_phone_number_id IS NOT NULL AND route_verified_at_ms IS NOT NULL)), paid_attempt_id TEXT REFERENCES billing_attempts(id), paid_price_id TEXT REFERENCES subscription_prices(id), paid_period_ends_at_ms INTEGER, paid_renewal_anchor_ms INTEGER CHECK((paid_attempt_id IS NULL AND paid_price_id IS NULL AND paid_period_ends_at_ms IS NULL AND paid_renewal_anchor_ms IS NULL) OR (paid_attempt_id IS NOT NULL AND paid_price_id IS NOT NULL AND paid_period_ends_at_ms IS NOT NULL AND paid_renewal_anchor_ms IS NOT NULL)), cancellation_paid_attempt_id TEXT REFERENCES billing_attempts(paid_attempt_id), cancellation_payment_source_id TEXT REFERENCES "card_enrollments"(payment_source_id), cancellation_cancelled_at_ms INTEGER, cancellation_paid_through_ms INTEGER, cancellation_source_cancellation TEXT CHECK(cancellation_source_cancellation IS NULL OR cancellation_source_cancellation IN ('detached','void-pending','voided')), cancellation_void_started_at_ms INTEGER, cancellation_void_verified_at_ms INTEGER, cancellation_verification_count INTEGER CHECK(cancellation_verification_count IS NULL OR cancellation_verification_count BETWEEN 0 AND 8), cancellation_last_offered_at_ms INTEGER CHECK((cancellation_cancelled_at_ms IS NULL AND cancellation_paid_attempt_id IS NULL AND cancellation_payment_source_id IS NULL AND cancellation_paid_through_ms IS NULL AND cancellation_source_cancellation IS NULL AND cancellation_void_started_at_ms IS NULL AND cancellation_void_verified_at_ms IS NULL AND cancellation_verification_count IS NULL AND cancellation_last_offered_at_ms IS NULL) OR (cancellation_cancelled_at_ms IS NOT NULL AND cancellation_paid_attempt_id IS NOT NULL AND cancellation_payment_source_id IS NOT NULL AND cancellation_paid_through_ms IS NOT NULL AND cancellation_source_cancellation IS NOT NULL AND cancellation_verification_count IS NOT NULL))) STRICT;
 --> statement-breakpoint
 
 CREATE TABLE web_sessions (
@@ -2688,7 +2694,7 @@ BEGIN SELECT RAISE(ABORT, 'sample_append_only'); END;
 CREATE TRIGGER audit_entries_no_delete BEFORE DELETE ON audit_entries
 WHEN OLD.record_type IN ('session_call','credential_call','insight_call','publication')
  AND NOT EXISTS (
-  SELECT 1 FROM (SELECT rowid,id AS user_id,audit_retention_cutoff_ms AS cutoff_ms FROM users WHERE audit_retention_cutoff_ms IS NOT NULL) WHERE user_id=OLD.user_id AND OLD.occurred_at_ms<cutoff_ms
+  SELECT 1 FROM audit_retention_permits WHERE user_id=OLD.user_id AND OLD.occurred_at_ms<cutoff_ms
  )
  AND NOT EXISTS (
   SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id
@@ -3596,13 +3602,13 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_audit_retention_permits_delete BEFORE DELETE ON users WHEN (OLD.audit_retention_cutoff_ms IS NOT NULL) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_audit_retention_permits_delete BEFORE DELETE ON audit_retention_permits WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_audit_retention_permits_insert BEFORE INSERT ON users WHEN (NEW.audit_retention_cutoff_ms IS NOT NULL) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_audit_retention_permits_insert BEFORE INSERT ON audit_retention_permits WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_audit_retention_permits_update BEFORE UPDATE ON users WHEN ((NEW.id IS NOT OLD.id OR NEW.audit_retention_cutoff_ms IS NOT OLD.audit_retention_cutoff_ms) AND (OLD.audit_retention_cutoff_ms IS NOT NULL OR NEW.audit_retention_cutoff_ms IS NOT NULL)) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.id=q.user_id) OR (OLD.id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_audit_retention_permits_update BEFORE UPDATE ON audit_retention_permits WHEN ((NEW.user_id IS NOT OLD.user_id OR NEW.cutoff_ms IS NOT OLD.cutoff_ms)) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_attempts_delete BEFORE DELETE ON billing_attempts
@@ -5306,25 +5312,13 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_audit_retention_permits_delete BEFORE DELETE ON users WHEN (OLD.audit_retention_cutoff_ms IS NOT NULL) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.id=q.user_id)
+CREATE TRIGGER erasure_preserve_audit_retention_permits_delete BEFORE DELETE ON audit_retention_permits WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'audit_retention_permits','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.id,'cutoff_ms',OLD.audit_retention_cutoff_ms)
-  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.id=q.user_id)
-    AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
-    AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000;
-END;
---> statement-breakpoint
-
-CREATE TRIGGER erasure_preserve_audit_retention_permits_delete_clear BEFORE UPDATE ON users WHEN (OLD.audit_retention_cutoff_ms IS NOT NULL) AND NEW.audit_retention_cutoff_ms IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.id=q.user_id)
-  AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
-  AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000)
-BEGIN
-  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'audit_retention_permits','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.id,'cutoff_ms',OLD.audit_retention_cutoff_ms)
-  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.id=q.user_id)
+  SELECT q.id,'audit_retention_permits','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.user_id,'cutoff_ms',OLD.cutoff_ms)
+  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000;
 END;

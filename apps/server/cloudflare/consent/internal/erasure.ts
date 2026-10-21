@@ -231,15 +231,15 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: ["proactivity_consent_records"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'kind',r.\"kind\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'disclosure_json',r.\"disclosure_json\",'created_at_ms',r.\"created_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'disclosure_message_id',r.\"disclosure_message_id\",'decision_message_id',r.\"decision_message_id\",'decision',r.\"decision\",'replaces_offer_id',r.\"replaces_offer_id\") AS body FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'kind',r.\"kind\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'disclosure_json',r.\"disclosure_json\",'created_at_ms',r.\"created_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'disclosure_message_id',r.\"disclosure_message_id\",'decision_message_id',r.\"decision_message_id\",'decision',r.\"decision\",'replaces_offer_id',r.\"replaces_offer_id\") AS body FROM consent_offers AS r WHERE r.kind<>'weekly-summary' AND r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM consent_offers AS r WHERE r.kind<>'weekly-summary' AND r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM consent_offers AS r WHERE r.kind<>'weekly-summary' AND r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
@@ -260,15 +260,15 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'disclosure_json',r.\"disclosure_json\",'created_at_ms',r.\"created_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'disclosure_message_id',r.\"disclosure_message_id\",'disclosed_at_ms',r.\"disclosed_at_ms\",'decision_message_id',r.\"decision_message_id\",'decision',r.\"decision\",'source_id',r.\"source_id\",'rejection_id',r.\"rejection_id\") AS body FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'disclosure_json',r.\"disclosure_json\",'created_at_ms',r.\"created_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'disclosure_message_id',r.\"disclosure_message_id\",'disclosed_at_ms',r.\"disclosed_at_ms\",'decision_message_id',r.\"decision_message_id\",'decision',r.\"decision\",'source_id',r.\"source_id\",'rejection_id',r.\"rejection_id\") AS body FROM consent_offers AS r WHERE r.kind='weekly-summary' AND r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM consent_offers AS r WHERE r.kind='weekly-summary' AND r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM consent_offers AS r WHERE r.kind='weekly-summary' AND r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [

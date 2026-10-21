@@ -722,3 +722,85 @@ DELETE FROM sql_assertions WHERE scope='audit_retention_cutover';
 The global and User-specific partial ordinary-retention indexes remain in place. Audit owns this
 permission table and its existing erasure dependency; no User-profile write is needed for routine
 cleanup. Changes remain local and undeployed until quota allows the fenced cutover.
+
+## Existing-User Consent offers (#1437)
+
+Weekly and proactive Consent share `consent_offers`: the accepted 15 stored fields and the two
+existing generated typed offer identifiers. Generation, delivery, decisions and erasure query that
+store directly. The two logical erasure projections keep their original field sets and archive
+identities; proactive disclosures still have no recorded disclosure timestamp. No table, column,
+recipient, disclosure, source identity or instant is copied or reconstructed in this slice.
+
+Weekly short offers and proactive offers retain their ten-minute lifetime; weekly Governor-question
+offers retain their 24-hour lifetime. Existing daily admission rules remain unchanged. Weekly source
+replay returns the same still-live source offer and acceptance compares the captured rejection with
+the latest rejection in its authoritative write. A replaced proactive offer cannot acquire delivery
+evidence or be accepted after replacement, including a disclosure prepared before replacement.
+
+New insertion guards require replacement references to identify the same User and category, rejection
+references to identify that User's `weekly_rejection`, and Consent history to reference that User's
+matching offer category. These capture guards deliberately do not create a permanent self-FK: ordinary
+bounded cleanup may delete an expired, undecided replacement ancestor while its newer child remains.
+Existing offer identity/reference immutability prevents subsequent relinking. The extra validation
+also refuses invalid disclosure JSON, nonpositive offer lifetimes and decisions without disclosure.
+
+For an existing development database, back up D1, fence Consent/Insights writers and erasure, and drain
+in-flight work with the old code. Submit this sequence as **one native D1 batch**, without intermediate
+commits:
+
+1. Execute `consent-offers-preflight` below. Any mismatch blocks the cutover. A missing replacement
+   ancestor might be explained by prior expiry cleanup, but its original ownership/category cannot
+   be inferred from absence. Investigate from retained evidence before proceeding; never manufacture
+   a parent, clear a reference or rewrite accepted history to pass the check.
+2. Install the exact final-baseline declarations of `consent_offer_valid_insert`,
+   `consent_offer_valid_update` and `consent_history_offer_owner`. Do not use `IF NOT EXISTS` to adopt
+   unexpected destination objects. Keep all existing typed identifiers, keys, indexes, immutable
+   evidence and erasure guards in place.
+3. Execute `consent-offers-verify`. Only after success publish matching code and align the
+   single-baseline ledger. A failure after any trigger creation rolls back the complete batch.
+
+<!-- consent-offers-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_offers_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM consent_offers o WHERE
+   NOT json_valid(o.disclosure_json) OR o.expires_at_ms<=o.created_at_ms
+   OR (o.decision IS NOT NULL AND o.disclosure_message_id IS NULL)
+   OR (o.rejection_id IS NOT NULL AND NOT EXISTS (
+     SELECT 1 FROM consent_history r WHERE r.user_id=o.user_id
+     AND r.record_type='weekly_rejection' AND r.id=o.rejection_id))
+   OR (o.replaces_offer_id IS NOT NULL AND NOT EXISTS (
+     SELECT 1 FROM consent_offers old WHERE old.user_id=o.user_id AND old.kind=o.kind
+     AND old.id=o.replaces_offer_id AND old.id<>o.id)))
+ AND NOT EXISTS(SELECT 1 FROM consent_history h WHERE
+   (h.weekly_offer_reference IS NOT NULL AND NOT EXISTS (
+     SELECT 1 FROM consent_offers o WHERE o.user_id=h.user_id
+     AND o.kind='weekly-summary' AND o.id=h.weekly_offer_reference))
+   OR (h.proactivity_offer_reference IS NOT NULL AND NOT EXISTS (
+     SELECT 1 FROM consent_offers o WHERE o.user_id=h.user_id
+     AND o.kind=h.kind AND o.id=h.proactivity_offer_reference)))
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- consent-offers-preflight:end -->
+
+<!-- consent-offers-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_offers_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='consent_offers_cutover';
+```
+
+<!-- consent-offers-verify:end -->
+
+The populated native cutover test executes these blocks and the baseline trigger definitions,
+compares exact rows (including rowids, missing timestamps, source/rejection/replacement identities
+and archives), and exercises rollback after trigger installation and refusal of inconsistent history.
+These changes are local and undeployed while D1 quota is exhausted. Editing the applied baseline alone
+does not install the new guards on an existing database. Consent history extraction and pre-User
+exchanges remain separate tickets.

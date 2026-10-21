@@ -3195,6 +3195,34 @@ CREATE TRIGGER consent_history_no_delete BEFORE DELETE ON consent_history WHEN N
 CREATE TRIGGER consent_history_no_update BEFORE UPDATE ON consent_history BEGIN SELECT RAISE(ABORT,'consent_history_immutable'); END;
 --> statement-breakpoint
 
+CREATE TRIGGER consent_offer_valid_insert BEFORE INSERT ON consent_offers
+WHEN NOT json_valid(NEW.disclosure_json) OR NEW.expires_at_ms<=NEW.created_at_ms
+ OR (NEW.decision IS NOT NULL AND NEW.disclosure_message_id IS NULL)
+ OR (NEW.rejection_id IS NOT NULL AND NOT EXISTS (
+   SELECT 1 FROM consent_history r WHERE r.user_id=NEW.user_id
+   AND r.record_type='weekly_rejection' AND r.id=NEW.rejection_id))
+ OR (NEW.replaces_offer_id IS NOT NULL AND NOT EXISTS (
+   SELECT 1 FROM consent_offers old WHERE old.user_id=NEW.user_id
+   AND old.kind=NEW.kind AND old.id=NEW.replaces_offer_id AND old.id<>NEW.id))
+BEGIN SELECT RAISE(ABORT,'consent_offer_invalid'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER consent_offer_valid_update BEFORE UPDATE ON consent_offers
+WHEN NOT json_valid(NEW.disclosure_json) OR NEW.expires_at_ms<=NEW.created_at_ms
+ OR (NEW.decision IS NOT NULL AND NEW.disclosure_message_id IS NULL)
+BEGIN SELECT RAISE(ABORT,'consent_offer_invalid'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER consent_history_offer_owner BEFORE INSERT ON consent_history
+WHEN (NEW.weekly_offer_reference IS NOT NULL AND NOT EXISTS (
+   SELECT 1 FROM consent_offers o WHERE o.user_id=NEW.user_id
+   AND o.kind='weekly-summary' AND o.id=NEW.weekly_offer_reference))
+ OR (NEW.proactivity_offer_reference IS NOT NULL AND NOT EXISTS (
+   SELECT 1 FROM consent_offers o WHERE o.user_id=NEW.user_id
+   AND o.kind=NEW.kind AND o.id=NEW.proactivity_offer_reference))
+BEGIN SELECT RAISE(ABORT,'consent_history_offer_owner'); END;
+--> statement-breakpoint
+
 CREATE TRIGGER consent_offer_kind_immutable BEFORE UPDATE OF kind ON consent_offers WHEN NEW.kind<>OLD.kind BEGIN SELECT RAISE(ABORT,'consent_offer_kind_immutable'); END;
 --> statement-breakpoint
 

@@ -397,11 +397,7 @@ it("rotates the backup recovery proof under a fresh WebSession", () =>
       const token = "R".repeat(43);
       yield* Effect.tryPromise(() => seedWebSession(db, token));
       const before = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT code_digest FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)"
-          )
-          .first()
+        db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()
       );
       const response = yield* Effect.tryPromise(() =>
         sendRequest(
@@ -419,11 +415,7 @@ it("rotates the backup recovery proof under a fresh WebSession", () =>
       yield* Effect.tryPromise(() => response.arrayBuffer());
       expect(
         yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT code_digest FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)"
-            )
-            .first()
+          db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()
         )
       ).not.toEqual(before);
     })
@@ -437,11 +429,7 @@ it("refuses recovery rotation after WebSession freshness expires without changin
       const token = "D".repeat(43);
       const started = yield* Effect.tryPromise(() => seedWebSession(db, token));
       const before = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT code_digest FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)"
-          )
-          .first()
+        db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()
       );
       const rotate = (origin: string): Promise<Response> =>
         sendRequest(
@@ -476,11 +464,7 @@ it("refuses recovery rotation after WebSession freshness expires without changin
       expect(currentUser.status).toBe(200);
       expect(
         yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT code_digest FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)"
-            )
-            .first()
+          db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()
         )
       ).toEqual(before);
       expect(
@@ -1394,11 +1378,7 @@ it("rejects the old recovery code after rotation and redeems its single-use repl
       ).toMatchObject({ state: "pending_approval", user_id: null });
       expect(
         yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT consumed_at_ms FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)"
-            )
-            .first()
+          db.prepare("SELECT consumed_at_ms FROM backup_recovery_credentials").first()
         )
       ).toMatchObject({ consumed_at_ms: null });
       expect(
@@ -1447,11 +1427,7 @@ it("rejects the old recovery code after rotation and redeems its single-use repl
       ).toEqual({ state: "pending_approval", user_id: null });
       expect(
         yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT consumed_at_ms FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)"
-            )
-            .first()
+          db.prepare("SELECT consumed_at_ms FROM backup_recovery_credentials").first()
         )
       ).toEqual({ consumed_at_ms: null });
       expect(
@@ -1528,7 +1504,7 @@ it("rejects the old recovery code after rotation and redeems its single-use repl
         db
           .prepare(`SELECT p.user_id AS paired_user, b.user_id AS proof_user,
     b.consumed_at_ms AS consumed FROM browser_login_pairings AS p
-    JOIN (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL) AS b ON b.user_id = p.user_id WHERE p.id = ?`)
+    JOIN backup_recovery_credentials AS b ON b.user_id = p.user_id WHERE p.id = ?`)
           .bind(pairing.pairingId)
           .first()
       );

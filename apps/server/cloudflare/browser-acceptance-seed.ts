@@ -339,7 +339,7 @@ await seedIdentity({
 });
 await db
   .prepare(
-    "WITH incoming(user_id,code_digest,created_at_ms) AS (VALUES (?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,recovery_code_digest,recovery_created_at_ms,recovery_revision) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.code_digest,incoming.created_at_ms,1 FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET recovery_code_digest=excluded.recovery_code_digest,recovery_created_at_ms=excluded.recovery_created_at_ms,recovery_revision=excluded.recovery_revision"
+    "INSERT INTO backup_recovery_credentials(user_id,code_digest,created_at_ms,revision) VALUES(?,?,?,1) ON CONFLICT(user_id) DO UPDATE SET code_digest=excluded.code_digest,created_at_ms=excluded.created_at_ms,consumed_at_ms=NULL,revision=excluded.revision"
   )
   .bind(recoveryUserId, recoveryDigest, now)
   .run();
@@ -356,7 +356,7 @@ await seedIdentity({
 });
 await db
   .prepare(
-    "WITH incoming(user_id,code_digest,created_at_ms) AS (VALUES (?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,recovery_code_digest,recovery_created_at_ms,recovery_revision) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.code_digest,incoming.created_at_ms,1 FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET recovery_code_digest=excluded.recovery_code_digest,recovery_created_at_ms=excluded.recovery_created_at_ms,recovery_revision=excluded.recovery_revision"
+    "INSERT INTO backup_recovery_credentials(user_id,code_digest,created_at_ms,revision) VALUES(?,?,?,1) ON CONFLICT(user_id) DO UPDATE SET code_digest=excluded.code_digest,created_at_ms=excluded.created_at_ms,consumed_at_ms=NULL,revision=excluded.revision"
   )
   .bind(recoveryDisclosureUserId, recoveryDisclosureDigest, now)
   .run();

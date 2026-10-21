@@ -4,6 +4,7 @@ import { Miniflare } from "miniflare";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 
 const noContentStatus = 204;
+const recoveryDigestBytes = 32;
 const wait = <A>(run: () => Promise<A>): Effect.Effect<A> =>
   Effect.tryPromise(run).pipe(Effect.orDie);
 type NativeBindings = Readonly<{
@@ -288,6 +289,11 @@ const projectionRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement>
     ),
 ];
 const credentialRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> => [
+  input.db
+    .prepare(
+      "INSERT INTO backup_recovery_credentials(user_id,code_digest,created_at_ms,revision) VALUES(?,?,?,1)"
+    )
+    .bind(input.userId, new Uint8Array(recoveryDigestBytes).fill(input.index), input.current),
   input.db
     .prepare("INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) VALUES(?,?,?)")
     .bind(input.userId, `person${input.index}@example.test`, input.current),

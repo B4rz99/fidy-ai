@@ -340,7 +340,7 @@ it("rolls back every new owner record when the origin guard fails, and concurren
       for (const table of [
         "users",
         "provider_credentials",
-        "(SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)",
+        "backup_recovery_credentials",
         "consent_history",
       ]) {
         expect(yield* countRows(journey.db, table)).toBe(0);

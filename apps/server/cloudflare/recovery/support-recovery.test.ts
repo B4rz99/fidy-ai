@@ -312,15 +312,23 @@ it("approves a valid assertion on the supplied Clock even when native JWT time c
         issuedAt: current / 1000,
         expiresAt: current / 1000 + 300,
       });
+      const observed = observeRetentionCost(fixture.db);
       const response = yield* handleSupportRecovery({
         request: fixture.request(assertion),
-        db: fixture.db,
+        db: observed.database,
         config: fixture.config,
       }).pipe(
         Effect.provideService(HttpClient.HttpClient, fixture.httpClient),
         Effect.provideService(Clock.Clock, clock)
       );
       expect(response.status).toBe(200);
+      const plans = yield* wait(observed.plans);
+      const credentialPlans = plans.filter((plan) => plan.includes("backup_recovery_credentials"));
+      expect(credentialPlans.length).toBeGreaterThan(0);
+      expect(credentialPlans.every((plan) => plan.startsWith("SEARCH"))).toBe(true);
+      expect(plans.some((plan) => /SEARCH b USING INDEX .*\(code_digest=\?\)/u.test(plan))).toBe(
+        true
+      );
       expect(yield* wait(() => response.json())).toEqual({ status: "approved" });
       expect(response.headers.get("cache-control")).toBe("no-store");
       expect(
@@ -334,9 +342,7 @@ it("approves a valid assertion on the supplied Clock even when native JWT time c
       expect(
         yield* wait(() =>
           fixture.db
-            .prepare(
-              "SELECT consumed_at_ms FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL) WHERE user_id=?"
-            )
+            .prepare("SELECT consumed_at_ms FROM backup_recovery_credentials WHERE user_id=?")
             .bind(userId)
             .first()
         )
@@ -475,7 +481,7 @@ const credentialSnapshot = (fixture: Fixture): Effect.Effect<unknown, TestFailur
   wait(() =>
     fixture.db
       .prepare(
-        "SELECT code_digest,consumed_at_ms,revision FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL) WHERE user_id=?"
+        "SELECT code_digest,consumed_at_ms,revision FROM backup_recovery_credentials WHERE user_id=?"
       )
       .bind(userId)
       .first()

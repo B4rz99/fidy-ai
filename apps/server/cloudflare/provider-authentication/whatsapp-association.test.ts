@@ -603,7 +603,7 @@ it.each([false, true])(
         const records = yield* Effect.tryPromise(() =>
           journey.db
             .prepare(
-              "SELECT (SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trial,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)) recovery,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent"
+              "SELECT (SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trial,(SELECT COUNT(*) FROM backup_recovery_credentials) recovery,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent"
             )
             .first()
         );
@@ -645,7 +645,7 @@ it.each([false, true])(
           yield* Effect.tryPromise(() =>
             journey.db
               .prepare(
-                "SELECT (SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trial,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)) recovery,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent"
+                "SELECT (SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trial,(SELECT COUNT(*) FROM backup_recovery_credentials) recovery,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent"
               )
               .first()
           )
@@ -786,7 +786,7 @@ it("sweeps expired handoff correlation while preserving committed User and legal
         )).status
       ).toBe(200);
       const durable =
-        "SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM provider_credentials) credentials,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent,(SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trials,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)) recovery,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)) associations";
+        "SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM provider_credentials) credentials,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent,(SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trials,(SELECT COUNT(*) FROM backup_recovery_credentials) recovery,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)) associations";
       const before = yield* Effect.tryPromise(() => journey.db.prepare(durable).first());
       expect(before).toEqual({
         users: 1,

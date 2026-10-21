@@ -1173,3 +1173,91 @@ DELETE FROM sql_assertions WHERE scope='email_credential_cutover';
 ```
 
 <!-- email-credential-verify:end -->
+
+## One-use recovery credential (#1441)
+
+This synchronized cutover replaces the four embedded User recovery fields with the five-field
+`backup_recovery_credentials` record. It preserves the current digest bytes, original creation and
+consumption instants, revision, User identity and source rowid. The rowid remains the credential's
+existing erasure archive address; existing `{}` archives remain unchanged and contain no code or digest.
+No raw code can be recovered or disclosed by this conversion. Support-case history and the existing
+rolling operator admission policy are unchanged.
+
+Back up D1 and fence provider/onboarding completion, credential issuance/rotation, support recovery
+and erasure. Capture every trigger/view referring to `recovery_code_digest`, `recovery_created_at_ms`,
+`recovery_consumed_at_ms` or `recovery_revision`, and the `users_recovery_digest` index. Expected
+objects are the three credential fences and `provider_completion_requires_proof`; map them to the
+final baseline and stop on unknown dependencies or a pre-existing destination. Apply #1440 first
+where both cutovers are pending. Do not publish mixed schema/code.
+
+Execute one native D1 batch:
+
+1. Run `recovery-credential-preflight`. Reject partial groups, invalid digest bytes, duplicate
+   digests, active erasure chunks and foreign-key violations. Investigate inconsistent evidence;
+   never invent issuance instants or revisions, discard credentials or change original digests.
+2. Create the credential table from the final baseline, without its fences. Run
+   `recovery-credential-copy` and compare every original credential value and rowid.
+3. Drop captured dependent triggers/views. Run `recovery-credential-remove-source`: remove the
+   revision column first because its source CHECK references the other credential fields. User
+   rows, rowids, other indexes and incoming references stay intact; do not drop/rename User or disable
+   foreign keys.
+4. Install mapped final baseline dependencies, then run `recovery-credential-verify`. Only after
+   success publish matching code and align the single baseline ledger.
+
+Any failure rolls back both the credential copy and source removal. The editable clean-install
+baseline alone does not convert an existing database. There is no runtime fallback to embedded fields.
+
+<!-- recovery-credential-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_credential_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM users WHERE
+   (recovery_code_digest IS NULL AND (recovery_created_at_ms IS NOT NULL OR recovery_consumed_at_ms IS NOT NULL OR recovery_revision IS NOT NULL))
+   OR (recovery_code_digest IS NOT NULL AND (typeof(recovery_code_digest)<>'blob' OR length(recovery_code_digest)<>32 OR recovery_created_at_ms IS NULL OR recovery_revision IS NULL)))
+ AND (SELECT count(recovery_code_digest) FROM users)=(SELECT count(DISTINCT recovery_code_digest) FROM users)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recovery-credential-preflight:end -->
+
+<!-- recovery-credential-copy:start -->
+
+```sql
+INSERT INTO backup_recovery_credentials(rowid,user_id,code_digest,created_at_ms,consumed_at_ms,revision)
+SELECT rowid,id,recovery_code_digest,recovery_created_at_ms,recovery_consumed_at_ms,recovery_revision
+FROM users WHERE recovery_code_digest IS NOT NULL;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_credential_cutover',CASE WHEN
+ (SELECT count(*) FROM backup_recovery_credentials)=(SELECT count(*) FROM users WHERE recovery_code_digest IS NOT NULL)
+ AND NOT EXISTS(SELECT rowid,id,recovery_code_digest,recovery_created_at_ms,recovery_consumed_at_ms,recovery_revision FROM users WHERE recovery_code_digest IS NOT NULL
+ EXCEPT SELECT rowid,user_id,code_digest,created_at_ms,consumed_at_ms,revision FROM backup_recovery_credentials)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recovery-credential-copy:end -->
+
+<!-- recovery-credential-remove-source:start -->
+
+```sql
+DROP INDEX users_recovery_digest;
+ALTER TABLE users DROP COLUMN recovery_revision;
+ALTER TABLE users DROP COLUMN recovery_consumed_at_ms;
+ALTER TABLE users DROP COLUMN recovery_created_at_ms;
+ALTER TABLE users DROP COLUMN recovery_code_digest;
+```
+
+<!-- recovery-credential-remove-source:end -->
+
+<!-- recovery-credential-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_credential_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='recovery_credential_cutover';
+```
+
+<!-- recovery-credential-verify:end -->

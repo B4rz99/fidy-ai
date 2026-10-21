@@ -28,8 +28,9 @@ export const issueInitialBackupRecoveryCode = ({
     .then((digest) =>
       commit(
         db
-          .prepare(`UPDATE users SET recovery_code_digest=?2,recovery_created_at_ms=?3,recovery_revision=1
-      WHERE id=?1 AND recovery_code_digest IS NULL`)
+          .prepare(
+            `INSERT INTO backup_recovery_credentials(user_id,code_digest,created_at_ms,revision) VALUES(?1,?2,?3,1)`
+          )
           .bind(userId, digest, createdAtMs)
       )
     )

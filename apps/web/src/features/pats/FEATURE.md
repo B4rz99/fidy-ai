@@ -153,3 +153,65 @@ OAuth request was renewed. Its Google identity completion was reused successfull
 the stalled decline transport, explicit revocation succeeded before freshness expired. All three
 Inspector connection rows displayed Revocado. No additional production access remains from these
 Inspector tests.
+
+Supported Codex continuation, 21 October 2026, same deployed release: after same-account Google
+identity confirmation, a fresh native authorization request reused the User's explicit replacement
+approval. The reviewed read/write scopes and seven-day duration were issued successfully and
+Codex completed its localhost callback. Its cancellation-only recurring test completed. Immediate
+individual revocation displayed the success message and changed the new Codex row to Revocado;
+all five audit connection rows were revoked. Native logout removed the isolated client's stored
+OAuth credentials. No retained-credential reconnect was attempted for this grant, so this run
+does not independently prove its refresh-token refusal. Expired CLI callbacks were renewed before
+grant creation; they were not treated as successful authorization.
+
+Claude Code preparation, 21 October: the pinned native client completed automatic localhost OAuth
+against a disposable local provider, and local logout cleared that test credential. The audit
+runner now recognizes successful native callback completion without requiring a pasted callback
+file; failure and missing-authorization cases remain rejected. These tooling checks do not issue
+production access.
+
+Production Claude Code continuation, 21 October, same release: Google identity confirmation
+returned to the exact pending review. The separately approved read/write grant used seven days;
+the pinned client completed its native localhost callback and the cancellation-only test passed.
+Immediate individual revocation displayed the successful revocation message and changed
+`Claude Code (fidy)` to Revocado. All six audit connection rows were revoked, and native logout
+cleared the isolated credential. No reconnect/refresh refusal was captured for this new grant.
+
+Inspector timing comparison, 21 October 2026: the User separately approved another read/write
+connection for seven days, solely for synthetic recurring cancellation. The client was disconnected
+and its isolated diagnostic process stopped after the comparison. Individual revocation returned
+`reauthentication_required` and displayed the identity-confirmation link without losing the access
+list. This newest grant remains active pending same-account provider completion and explicit
+revocation. The prior six audit rows remain revoked; their cleanup does not cover this new grant.
+
+Cleanup continuation, 21 October 2026: after the User completed the same-account Google popup,
+a page refresh restored the authenticated Accesos list. Explicit individual revocation of the
+newest Inspector connection returned “Acceso revocado. Las acciones ya realizadas se conservan.”
+and changed its state to Revocado. All seven audit connection rows were then revoked. This
+closes the pending cleanup above; it does not resolve the Inspector cancellation failure.
+
+Inspector dispatch follow-up, 21 October: a corrected local baseline reproduces the cancellation
+POST queue with Node 26.5.0's bundled dispatcher. The isolated Inspector launcher using pinned
+Undici 8.12.3 passes cancellation-only and concurrent-read HTTP/2 tests with normal TLS verification.
+The original nominal bundled baseline had imported external Undici first and was invalid. Fidy's
+legacy integration separately retains data and returns `user_action_required` for delayed cancel
+and decline. Production UI semantics remain pending a separately approved rerun; the earlier
+HTTP/1.1 `unavailable` result is not a pass. All prior audit grants remain revoked.
+
+The follow-up uses policy-eligible Inspector 2.11.0, MCP client 2.3.1 and Undici 8.12.3 in an
+isolated development tool. Both baseline cases still fail without its preload; both pass with it.
+The actual Inspector web UI also connected to a disposable local TLS HTTP/2 server, displayed the
+native form, and completed Cancel with `user_action_required` (about four seconds including the
+manual click). No production access was created by this local test. The full OAuth/MCP adapter
+suite passed 227 tests with one existing skip; TypeScript, ordinary/type-aware lint, dependency
+policy (zero failures) and both transport regressions passed. The npm bulk advisory endpoint
+reported no advisories for the isolated tool's 118 installed package names. Workspace Gate runs
+the new transport regressions on CI; production verification remains a distinct pending step.
+
+Corrected Inspector production closure, 21 October 2026, 16:19–16:22 UTC: same-account sign-in
+returned to the prepared review. The User-approved new read/write connection used seven days;
+Inspector 2.11.0 with the isolated Undici dispatcher completed OAuth and its cancellation-only
+test passed. Immediate explicit individual revocation returned the server success message and
+changed the new row to Revocado; all eight audit connection rows were revoked. The disconnected
+Inspector process was stopped and its local revoked-credential state removed. No retained-token
+reconnect was attempted for this grant, so this run does not independently prove refresh refusal.

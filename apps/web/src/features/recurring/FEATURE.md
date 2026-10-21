@@ -382,3 +382,72 @@ exact synthetic stop review. Decline started a reply fetch which received no hea
 disconnection, then returned 404; a subsequent native read was also delayed and returned 404.
 The traced grant was revoked successfully. This identifies a transport symptom, not a completed
 tracking change or a diagnosed production cause.
+
+Supported Codex production cancellation, 21 October 2026, same deployed release: the separately
+approved seven-day read/write grant completed native OAuth. Codex 0.160.0 invoked the exact
+synthetic stop-tracking request and cancelled its native confirmation. The parent tool completed
+with `user_action_required`; the diagnostic recorded one expected/received result and native form
+answered. An independent November browser read still displayed
+`PRUEBA QA CHAT RECURRENTE 20261017` as upcoming on 18 November. Accesos confirmed immediate
+grant revocation, and native logout removed its isolated OAuth credentials. This closes the
+Codex cancellation path for this plan, not accepted tracking changes, Claude Code production
+completion, hosted inference, or the separate Inspector transport stall. No Transaction was
+deleted and no payment or external service was cancelled.
+
+The 21 October Inspector follow-up completed a delayed legacy cancellation and a concurrent read
+using its installed SDK/fetch tracker against a synthetic Node server. This local client probe
+does not establish the production Fidy continuation or accepted tracking change. The owning MCP
+audit records the tooling fix and scope limits.
+
+Claude Code production continuation, 21 October, same release: a separately approved seven-day
+read/write connection completed native OAuth. Claude Code 2.1.289 cancelled the exact synthetic
+stop-tracking review, and its parent tool returned `user_action_required`. The diagnostic recorded
+one expected/received result, native form answered, and passed. Independent browser readback still
+showed the November occurrence as upcoming on 18 November. The connection was immediately revoked
+and its local credential removed. This closes cancellation for both supported clients on this
+operation; it does not establish accepted tracking changes or resolve Inspector's legacy stall.
+
+Inspector network comparison, 21 October, same release: another separately approved seven-day
+connection requested only stopping the synthetic plan and cancelled the native review. The default
+HTTP/2 client queued its cancellation POST locally until disconnect. A process-local HTTP/1.1
+comparison dispatched cancellation and received HTTP 202, but its completed parent result was
+`unavailable`; cancellation semantics therefore remain unverified for Inspector. Local synthetic
+HTTP/2 comparisons passed and did not reproduce the live delay. Independent browser readback
+still displayed `PRUEBA QA CHAT RECURRENTE 20261017` as upcoming on 18 November. No edit was
+accepted. The client was stopped; the newest connection still requires identity confirmation for
+revocation, tracked in the Accesos audit. This does not reopen the supported native-client passes.
+
+Cleanup continuation, 21 October 2026: after the User completed the same-account Google popup,
+a page refresh restored the authenticated Accesos list. Explicit individual revocation of the
+newest Inspector connection returned “Acceso revocado. Las acciones ya realizadas se conservan.”
+and changed its state to Revocado. All seven audit connection rows were then revoked. This
+closes the pending cleanup above; it does not resolve the Inspector cancellation failure.
+
+Inspector dispatch follow-up, 21 October: a corrected local baseline reproduces the cancellation
+POST queue with Node 26.5.0's bundled dispatcher. The isolated Inspector launcher using pinned
+Undici 8.12.3 passes cancellation-only and concurrent-read HTTP/2 tests with normal TLS verification.
+The original nominal bundled baseline had imported external Undici first and was invalid. Fidy's
+legacy integration separately retains data and returns `user_action_required` for delayed cancel
+and decline. Production UI semantics remain pending a separately approved rerun; the earlier
+HTTP/1.1 `unavailable` result is not a pass. All prior audit grants remain revoked.
+
+The follow-up uses policy-eligible Inspector 2.11.0, MCP client 2.3.1 and Undici 8.12.3 in an
+isolated development tool. Both baseline cases still fail without its preload; both pass with it.
+The actual Inspector web UI also connected to a disposable local TLS HTTP/2 server, displayed the
+native form, and completed Cancel with `user_action_required` (about four seconds including the
+manual click). No production access was created by this local test. The full OAuth/MCP adapter
+suite passed 227 tests with one existing skip; TypeScript, ordinary/type-aware lint, dependency
+policy (zero failures) and both transport regressions passed. The npm bulk advisory endpoint
+reported no advisories for the isolated tool's 118 installed package names. Workspace Gate runs
+the new transport regressions on CI; production verification remains a distinct pending step.
+
+Corrected Inspector production closure, 21 October 2026: the separately approved seven-day
+read/write connection used Inspector 2.11.0 with the isolated Undici 8.12.3 dispatcher. November
+workspace read returned revision 1. The native review for the exact synthetic stop-tracking
+request was cancelled, and its original parent returned `user_action_required` with no timeout
+or `unavailable` result. Total parent duration was 22,368 ms including manual review. Independent
+browser readback still showed `PRUEBA QA CHAT RECURRENTE 20261017` upcoming on 18 November.
+Accesos confirmed immediate grant revocation; all eight audit rows were revoked. The client was
+stopped and its local credential state removed. This closes Inspector cancellation for this
+operation through the corrected launcher, alongside the earlier Codex and Claude Code passes.
+No edit was accepted, no Transaction was created/deleted, and no external service was cancelled.

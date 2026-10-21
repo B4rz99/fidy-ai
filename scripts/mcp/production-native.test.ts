@@ -71,6 +71,12 @@ await Bun.sleep(1000);
 `;
 const fakeCodex = `#!/usr/bin/env bun
 if(process.argv.includes('--version')){console.log('codex-cli 0.160.0');process.exit(0);}
+if(process.argv.includes('login')){
+ const mode=await Bun.file(process.cwd()+'/mock-mode.json').json();
+ if(mode!=='login-no-authorization')process.stdout.write('https://api.fidyapp.com/oauth/authorize?fixture=synthetic');
+ await Bun.sleep(500);
+ process.exit(mode==='login-failed'?1:0);
+}
 if(process.argv.includes('app-server')){if(process.argv.includes('version'))console.log(JSON.stringify({managedCodexPath:process.env.CODEX_HOME+'/owned/codex',appServerVersion:'0.160.0'}));process.exit(0);}
 const config=await Bun.file(process.env.CODEX_HOME+'/config.toml').text();
 const endpoint=config.match(/base_url="([^"]+)"/)[1]+'/responses';
@@ -125,6 +131,32 @@ const callbackFixture = Effect.fn(function* (root: string) {
   );
 });
 describe("isolated native MCP proof boundary", () => {
+  it("accepts native OAuth completion without requiring a manually pasted callback", () =>
+    run(
+      withClient("login-automatic", ({ root, binary }) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          yield* fs.writeFileString(binary, fakeCodex, { mode: executableMode });
+          const result = yield* nativeLogin({ host: "codex", binary, root });
+          expect(result).toEqual({ host: "codex", passed: true });
+          expect(yield* fs.exists(join(root, "codex-callback-url.txt"))).toBe(false);
+        })
+      )
+    ));
+  it.each(["login-failed", "login-no-authorization"])(
+    "rejects %s without claiming native OAuth completion",
+    (mode) =>
+      run(
+        withClient(mode, ({ root, binary }) =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            yield* fs.writeFileString(binary, fakeCodex, { mode: executableMode });
+            const result = yield* Effect.result(nativeLogin({ host: "codex", binary, root }));
+            expect(result._tag).toBe("Failure");
+          })
+        )
+      )
+  );
   it("requires Fidy before the first Codex model catalog despite delayed startup", () =>
     run(
       withClient("codex-required", ({ root, binary }) =>

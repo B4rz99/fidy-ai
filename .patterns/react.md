@@ -1,13 +1,13 @@
 # React
 
 Use this page for component identity, synchronization adapters, async rendering, and React API
-selection. Fidy pins React, React DOM, and React types **19.3.0** in
-[`apps/web/package.json`](../apps/web/package.json). The exact React and types npm tarballs were
-SHA-512 checked against `bun.lock` on 2026-10-12; public exports/declarations confirm the APIs below.
+selection. Fidy pins React and React DOM **19.3.1**, with **19.3.0** types, in
+[`apps/web/package.json`](../apps/web/package.json). Runtime tarball SHA-512 integrities were
+checked against `bun.lock` on 2026-10-21; public exports/declarations confirm the APIs below.
 
 `.repos/react` is a **historical 19.2.8 reference**, not the application's release source. Existing
 source citations below are relative to that tree and describe its implementation; use the installed
-19.3.0 public declarations and [official React documentation](https://react.dev/reference/react)
+19.3.0 public declarations, 19.3.1 runtime exports and [official React documentation](https://react.dev/reference/react)
 for current contracts. Reverify internals against the application release before relying on them.
 
 ## Public API boundary

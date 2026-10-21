@@ -97,6 +97,8 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
+      - name: Install isolated Inspector dependencies for static analysis
+        run: bun install --cwd tools/mcp-inspector --frozen-lockfile
       - name: Restore compiler-managed project graph
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
@@ -119,7 +121,6 @@ jobs:
           /usr/bin/time -p bun run verify -- --group static
       - name: Inspector transport regressions
         run: |
-          bun install --cwd tools/mcp-inspector --frozen-lockfile
           bun run --cwd tools/mcp-inspector check
           bun run --cwd tools/mcp-inspector test
       - name: Preserve Workspace Gate phase timings

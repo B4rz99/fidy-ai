@@ -215,7 +215,11 @@ it.each(cases)(
               ),
               "DROP TABLE backup_recovery_credentials",
               "DROP TABLE users",
-              schemaDefinition({ source, target: "users" }),
+              // Recovery's historical User fields coexist with the current billing owner.
+              schemaDefinition({ source, target: "users" }).replace(
+                'REFERENCES "card_enrollments"(payment_source_id)',
+                "REFERENCES payment_sources(id)"
+              ),
               ...userIndexes,
               ...userDependents.filter((sql) => !sourceNames.has(schemaObjectName(sql))),
               ...source.filter((sql) => !sql.startsWith("CREATE TABLE")),

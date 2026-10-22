@@ -154,7 +154,7 @@ it("treats lost token delivery as replay, revokes every generation across restar
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM (SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh')"
+              "SELECT count(*) FROM (SELECT * FROM oauth_credentials WHERE replacement_refresh_id IS NOT NULL)"
             )
             .first<number>("count(*)")
         )
@@ -239,7 +239,7 @@ it("persists replay revocation even when independent coordinator instances race 
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM (SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh')"
+              "SELECT count(*) FROM (SELECT * FROM oauth_credentials WHERE replacement_refresh_id IS NOT NULL)"
             )
             .first<number>("count(*)")
         )
@@ -343,7 +343,7 @@ it("keeps refresh admission bounded to the stable User across rotation, sources 
       const before = yield* wait(
         fixture.db
           .prepare(
-            "SELECT (SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='access') AS oauth_credentials) AS access_count,(SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='refresh') AS oauth_credentials) AS refresh_count,(SELECT count(*) FROM (SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh')) AS events,(SELECT count(*) FROM (SELECT * FROM consent_history WHERE record_type='oauth_replay_revocation') AS oauth_revocation_consents) AS revocations,(SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='refresh') AS oauth_credentials WHERE consumed_at_ms IS NOT NULL) AS consumed"
+            "SELECT (SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='access') AS oauth_credentials) AS access_count,(SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='refresh') AS oauth_credentials) AS refresh_count,(SELECT count(*) FROM (SELECT * FROM oauth_credentials WHERE replacement_refresh_id IS NOT NULL)) AS events,(SELECT count(*) FROM (SELECT * FROM consent_history WHERE record_type='oauth_replay_revocation') AS oauth_revocation_consents) AS revocations,(SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='refresh') AS oauth_credentials WHERE consumed_at_ms IS NOT NULL) AS consumed"
           )
           .first()
       );
@@ -363,7 +363,7 @@ it("keeps refresh admission bounded to the stable User across rotation, sources 
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT (SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='access') AS oauth_credentials) AS access_count,(SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='refresh') AS oauth_credentials) AS refresh_count,(SELECT count(*) FROM (SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh')) AS events,(SELECT count(*) FROM (SELECT * FROM consent_history WHERE record_type='oauth_replay_revocation') AS oauth_revocation_consents) AS revocations,(SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='refresh') AS oauth_credentials WHERE consumed_at_ms IS NOT NULL) AS consumed"
+              "SELECT (SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='access') AS oauth_credentials) AS access_count,(SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='refresh') AS oauth_credentials) AS refresh_count,(SELECT count(*) FROM (SELECT * FROM oauth_credentials WHERE replacement_refresh_id IS NOT NULL)) AS events,(SELECT count(*) FROM (SELECT * FROM consent_history WHERE record_type='oauth_replay_revocation') AS oauth_revocation_consents) AS revocations,(SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='refresh') AS oauth_credentials WHERE consumed_at_ms IS NOT NULL) AS consumed"
             )
             .first()
         )
@@ -421,7 +421,7 @@ it("allows one concurrent refresh winner but the recognized loser revokes its en
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM (SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh')"
+              "SELECT count(*) FROM (SELECT * FROM oauth_credentials WHERE replacement_refresh_id IS NOT NULL)"
             )
             .first<number>("count(*)")
         )
@@ -530,9 +530,9 @@ it("clips refresh publication to the supplied Clock without extending absolute a
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT occurred_at_ms FROM (SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh')"
+              "SELECT consumed_at_ms FROM (SELECT * FROM oauth_credentials WHERE replacement_refresh_id IS NOT NULL)"
             )
-            .first("occurred_at_ms")
+            .first("consumed_at_ms")
         )
       ).toBe(current);
     })
@@ -763,7 +763,7 @@ const assertRefreshUnchanged = (
       ).toBe(1);
     }
     for (const table of [
-      "(SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh')",
+      "(SELECT * FROM oauth_credentials WHERE replacement_refresh_id IS NOT NULL)",
       "(SELECT * FROM consent_history WHERE record_type='oauth_replay_revocation')",
     ]) {
       expect(
@@ -905,7 +905,7 @@ it("atomically revokes recognized replay after Consent withdrawal without mintin
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM (SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh')"
+              "SELECT count(*) FROM (SELECT * FROM oauth_credentials WHERE replacement_refresh_id IS NOT NULL)"
             )
             .first<number>("count(*)")
         )
@@ -1070,7 +1070,7 @@ it("clips both new credentials to the immutable grant and rejects at its exact e
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM (SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh')"
+              "SELECT count(*) FROM (SELECT * FROM oauth_credentials WHERE replacement_refresh_id IS NOT NULL)"
             )
             .first<number>("count(*)")
         )
@@ -1085,7 +1085,7 @@ it("clips both new credentials to the immutable grant and rejects at its exact e
     })
   ));
 
-it.each(["access", "refresh", "event"])(
+it.each(["access", "refresh", "lineage"])(
   "rolls back refresh consumption and all credentials when %s publication is skipped",
   (publication) =>
     Effect.runPromise(
@@ -1097,7 +1097,9 @@ it.each(["access", "refresh", "event"])(
         yield* wait(
           fixture.db
             .prepare(
-              `CREATE TRIGGER skip_refresh_publication BEFORE INSERT ON ${publication === "event" ? "audit_entries" : "oauth_credentials"} WHEN ${publication === "event" ? "NEW.record_type='oauth_refresh'" : `NEW.kind='${publication}'`} BEGIN SELECT RAISE(IGNORE); END`
+              publication === "lineage"
+                ? "CREATE TRIGGER skip_refresh_publication BEFORE UPDATE OF replacement_refresh_id ON oauth_credentials BEGIN SELECT RAISE(IGNORE); END"
+                : `CREATE TRIGGER skip_refresh_publication BEFORE INSERT ON oauth_credentials WHEN NEW.kind='${publication}' BEGIN SELECT RAISE(IGNORE); END`
             )
             .run()
         );
@@ -1326,7 +1328,7 @@ it("keeps refresh success/refusal telemetry and persisted lifecycle evidence met
       const metadata: Array<unknown> = [];
       for (const table of [
         "oauth_credentials",
-        "(SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh')",
+        "(SELECT * FROM oauth_credentials WHERE replacement_refresh_id IS NOT NULL)",
         "consent_history",
       ]) {
         metadata.push(yield* wait(fixture.db.prepare(`SELECT * FROM ${table}`).all()));

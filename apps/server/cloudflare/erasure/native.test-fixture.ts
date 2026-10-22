@@ -270,9 +270,7 @@ const projectionRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement>
     .bind(input.userId, input.userId, input.userId),
 
   input.db
-    .prepare(
-      "UPDATE users SET subscription_id=incoming.id FROM (SELECT ? AS user_id,? AS id) AS incoming WHERE users.id=incoming.user_id AND users.subscription_id IS NULL"
-    )
+    .prepare("INSERT OR IGNORE INTO subscriptions(user_id,id) VALUES(?,?)")
     .bind(input.userId, input.userId),
 
   input.db

@@ -8,14 +8,17 @@ export const seedRefundCharge = (db: D1Database): Effect.Effect<void, Cause.Unkn
           "WITH fixture_user(id,time_zone) AS (VALUES (?, 'America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
         )
         .bind("10000000-0000-4000-8000-000000000001"),
-      db.prepare(`INSERT INTO card_enrollments (id,user_id,price_id,billing_email,status,payment_source_mode,
+      db.prepare("INSERT OR IGNORE INTO subscriptions(id,user_id) SELECT id,id FROM users"),
+      db.prepare(`INSERT INTO payment_enrollments (id,subscription_id,price_id,billing_email,status,payment_source_mode,
         contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,payment_request_id,wompi_candidate_source_id,method,wompi_environment)
-        VALUES ('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
+        VALUES ('20000000-0000-4000-8000-000000000001',(SELECT id FROM subscriptions WHERE user_id='10000000-0000-4000-8000-000000000001'),
         '22700000-0000-4000-8000-000000000001','payer@example.com','creating','create','{}','{}',0,900000,
         '50000000-0000-4000-8000-000000000001',3891,'card','sandbox')`),
-      db.prepare(`UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
-        '20000000-0000-4000-8000-000000000001',3891,'payer@example.com',0,'card'))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`),
-      db.prepare("UPDATE card_enrollments SET status='available'"),
+      db.prepare(`INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_source_id,billing_email,verified_at_ms,method,wompi_environment,archive_row_ref)
+ SELECT incoming.id,e.subscription_id,incoming.enrollment_id,incoming.wompi_source_id,incoming.billing_email,incoming.created_at_ms,incoming.method,e.wompi_environment,'source:'||incoming.id FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
+        '20000000-0000-4000-8000-000000000001',3891,'payer@example.com',0,'card'))) incoming
+ JOIN payment_enrollments e ON e.id=incoming.enrollment_id JOIN subscriptions sub ON sub.id=e.subscription_id AND sub.user_id=incoming.user_id`),
+      db.prepare("UPDATE payment_enrollments SET status='available'"),
       db.prepare(`INSERT INTO billing_attempts (id,user_id,enrollment_id,payment_request_id,payment_source_id,price_id,
         amount,currency,billing_period,service_market,tax_treatment,time_zone,wompi_environment,wompi_reference,created_at_ms)
         VALUES ('40000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',

@@ -39,9 +39,9 @@ export const claimPreparedPaymentEnrollment = ({
 }>): Promise<boolean> => {
   const claim = Schema.decodeSync(Claim)(input);
   return db
-    .prepare(`UPDATE card_enrollments SET status = 'creating',
+    .prepare(`UPDATE payment_enrollments SET status = 'creating',
       payment_request_id = ?, accepted_at_ms = ?, authorization_digest = ?, billing_email = ?
-    WHERE id = ? AND user_id = ? AND status = 'prepared' AND expires_at_ms > ?
+    WHERE id = ? AND subscription_id = (SELECT id FROM subscriptions WHERE user_id = ?) AND status = 'prepared' AND expires_at_ms > ?
       AND payment_source_mode = ?
       AND (payment_source_mode = 'create' OR billing_email = ?)
       AND EXISTS (${authorityGuard.sql})`)

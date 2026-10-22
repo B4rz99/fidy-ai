@@ -35,10 +35,10 @@ const enrollment = (
   { method, environment, digest, userIndex, historical, sourceMode }: EnrollmentSeed
 ): D1PreparedStatement =>
   db
-    .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,
+    .prepare(`INSERT INTO payment_enrollments (id,subscription_id, price_id, billing_email, status,
     payment_source_mode, contracts_json, disclosure_json, prepared_at_ms, expires_at_ms,
     accepted_at_ms, payment_request_id, wompi_candidate_source_id, method, wompi_environment,
-    authorization_digest) VALUES (?, ?, ?, 'payer@example.test', 'creating', ?,
+    authorization_digest) VALUES (?, (SELECT id FROM subscriptions WHERE user_id=?), ?, 'payer@example.test', 'creating', ?,
     '{"terms":"retained"}', '{"accepted":"retained"}', 100, 900100, 200, ?, ?, ?, ?, ?)`)
     .bind(
       identity(2, index),
@@ -54,7 +54,9 @@ const enrollment = (
 const source = (db: D1Database, index: number, method: string): D1PreparedStatement =>
   db
     .prepare(
-      `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, ?, 'payer@example.test', 300, ?))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+      `INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_source_id,billing_email,verified_at_ms,method,wompi_environment,archive_row_ref)
+ SELECT incoming.id,e.subscription_id,incoming.enrollment_id,incoming.wompi_source_id,incoming.billing_email,incoming.created_at_ms,incoming.method,e.wompi_environment,'source:'||incoming.id FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, ?, 'payer@example.test', 300, ?))) incoming
+ JOIN payment_enrollments e ON e.id=incoming.enrollment_id JOIN subscriptions sub ON sub.id=e.subscription_id AND sub.user_id=incoming.user_id`
     )
     .bind(identity(3, index), identity(1, index), identity(2, index), index, method);
 const attempt = (
@@ -88,14 +90,18 @@ const attempt = (
     );
 const available = (db: D1Database, index: number): D1PreparedStatement =>
   db
-    .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")
+    .prepare("UPDATE payment_enrollments SET status = 'available' WHERE id = ?")
     .bind(identity(2, index));
-const user = (db: D1Database, index: number): D1PreparedStatement =>
+const user = (db: D1Database, index: number): ReadonlyArray<D1PreparedStatement> => [
   db
     .prepare(
       "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', 0)"
     )
-    .bind(identity(1, index));
+    .bind(identity(1, index)),
+  db
+    .prepare("INSERT INTO subscriptions(id,user_id) VALUES(?,?)")
+    .bind(identity(1, index), identity(1, index)),
+];
 
 const retainedState = Effect.fnUntraced(function* (db: D1Database) {
   const tables = yield* Effect.tryPromise(() =>
@@ -137,40 +143,55 @@ it("rejects invalid methods, unclaimed or mismatched sources and authorization r
       const db = yield* baseline();
       yield* Effect.tryPromise(() =>
         db.batch([
-          user(db, 1),
+          ...user(db, 1),
           enrollment(db, 1, enrollmentSeed(1, "card")),
           source(db, 1, "card"),
           available(db, 1),
-          user(db, 2),
+          ...user(db, 2),
           enrollment(db, 2, enrollmentSeed(2, "nequi")),
           source(db, 2, "nequi"),
           available(db, 2),
-          user(db, 3),
+          ...user(db, 3),
           enrollment(db, 3, enrollmentSeed(3, "daviplata")),
-          user(db, 4),
+          ...user(db, 4),
         ])
       );
+      for (const [method, environment] of [
+        ["nequi", "sandbox"],
+        ["card", "production"],
+      ]) {
+        yield* rejectsAtomically(
+          db,
+          [
+            db
+              .prepare(`INSERT INTO payment_enrollments(id,subscription_id,price_id,billing_email,status,payment_source_mode,contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,method,wompi_environment,payment_source_id)
+        SELECT ?,subscription_id,price_id,billing_email,'prepared','reuse',contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,?,?,payment_source_id FROM payment_enrollments WHERE id=?`)
+              .bind(identity(2, 99), method, environment, identity(2, 1)),
+          ],
+          "payment_enrollment_source_mismatch"
+        );
+      }
       yield* rejectsAtomically(
         db,
         [enrollment(db, 4, { ...enrollmentSeed(4, "daviplata"), userIndex: 9 })],
-        "FOREIGN KEY constraint failed"
+        "NOT NULL constraint failed"
       );
       yield* rejectsAtomically(
         db,
         [enrollment(db, 4, enrollmentSeed(4, "cash"))],
         "CHECK constraint failed"
       );
-      yield* rejectsAtomically(db, [source(db, 3, "cash")], "payment_source_method_mismatch");
-      yield* rejectsAtomically(db, [source(db, 3, "nequi")], "payment_source_method_mismatch");
+      yield* rejectsAtomically(db, [source(db, 3, "cash")], "payment_source_invalid_claim");
+      yield* rejectsAtomically(db, [source(db, 3, "nequi")], "payment_source_invalid_claim");
       yield* rejectsAtomically(
         db,
         [
           db
-            .prepare("UPDATE card_enrollments SET status = 'refused' WHERE id = ?")
+            .prepare("UPDATE payment_enrollments SET status = 'refused' WHERE id = ?")
             .bind(identity(2, 3)),
           source(db, 3, "daviplata"),
         ],
-        "card_source_invalid_claim"
+        "payment_source_invalid_claim"
       );
       yield* rejectsAtomically(
         db,
@@ -178,7 +199,7 @@ it("rejects invalid methods, unclaimed or mismatched sources and authorization r
           enrollment(db, 4, { ...enrollmentSeed(4, "daviplata"), historical: true }),
           source(db, 4, "daviplata"),
         ],
-        "payment_source_method_mismatch"
+        "payment_source_invalid_claim"
       );
       yield* rejectsAtomically(
         db,
@@ -188,7 +209,7 @@ it("rejects invalid methods, unclaimed or mismatched sources and authorization r
             digest: enrollmentSeed(2, "nequi").digest,
           }),
         ],
-        "UNIQUE constraint failed: card_enrollments.authorization_digest"
+        "UNIQUE constraint failed"
       );
       yield* Effect.tryPromise(() => db.batch([source(db, 3, "daviplata"), available(db, 3)]));
       yield* rejectsAtomically(
@@ -197,29 +218,33 @@ it("rejects invalid methods, unclaimed or mismatched sources and authorization r
           enrollment(db, 4, { ...enrollmentSeed(4, "daviplata"), userIndex: 3 }),
           db
             .prepare(
-              `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 4, 'payer@example.test', 300, 'daviplata'))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+              `INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_source_id,billing_email,verified_at_ms,method,wompi_environment,archive_row_ref)
+ SELECT incoming.id,e.subscription_id,incoming.enrollment_id,incoming.wompi_source_id,incoming.billing_email,incoming.created_at_ms,incoming.method,e.wompi_environment,'source:'||incoming.id FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 4, 'payer@example.test', 300, 'daviplata'))) incoming
+ JOIN payment_enrollments e ON e.id=incoming.enrollment_id JOIN subscriptions sub ON sub.id=e.subscription_id AND sub.user_id=incoming.user_id`
             )
             .bind(identity(3, 4), identity(1, 3), identity(2, 4)),
         ],
-        "UNIQUE constraint failed: card_enrollments.user_id"
+        "UNIQUE constraint failed"
       );
       yield* rejectsAtomically(
         db,
         [
           db
-            .prepare("UPDATE card_enrollments SET wompi_candidate_source_id = NULL WHERE id = ?")
+            .prepare("UPDATE payment_enrollments SET wompi_candidate_source_id = NULL WHERE id = ?")
             .bind(identity(2, 1)),
           enrollment(db, 4, enrollmentSeed(4, "daviplata")),
           db
-            .prepare("UPDATE card_enrollments SET wompi_candidate_source_id = 1 WHERE id = ?")
+            .prepare("UPDATE payment_enrollments SET wompi_candidate_source_id = 1 WHERE id = ?")
             .bind(identity(2, 4)),
           db
             .prepare(
-              `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 1, 'payer@example.test', 300, 'daviplata'))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+              `INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_source_id,billing_email,verified_at_ms,method,wompi_environment,archive_row_ref)
+ SELECT incoming.id,e.subscription_id,incoming.enrollment_id,incoming.wompi_source_id,incoming.billing_email,incoming.created_at_ms,incoming.method,e.wompi_environment,'source:'||incoming.id FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 1, 'payer@example.test', 300, 'daviplata'))) incoming
+ JOIN payment_enrollments e ON e.id=incoming.enrollment_id JOIN subscriptions sub ON sub.id=e.subscription_id AND sub.user_id=incoming.user_id`
             )
             .bind(identity(3, 4), identity(1, 4), identity(2, 4)),
         ],
-        "UNIQUE constraint failed: card_enrollments.source_wompi_id"
+        "UNIQUE constraint failed"
       );
       yield* rejectsAtomically(
         db,
@@ -227,11 +252,13 @@ it("rejects invalid methods, unclaimed or mismatched sources and authorization r
           enrollment(db, 4, enrollmentSeed(4, "daviplata")),
           db
             .prepare(
-              `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 4, 'payer@example.test', 300, 'daviplata'))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+              `INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_source_id,billing_email,verified_at_ms,method,wompi_environment,archive_row_ref)
+ SELECT incoming.id,e.subscription_id,incoming.enrollment_id,incoming.wompi_source_id,incoming.billing_email,incoming.created_at_ms,incoming.method,e.wompi_environment,'source:'||incoming.id FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 4, 'payer@example.test', 300, 'daviplata'))) incoming
+ JOIN payment_enrollments e ON e.id=incoming.enrollment_id JOIN subscriptions sub ON sub.id=e.subscription_id AND sub.user_id=incoming.user_id`
             )
             .bind(identity(3, 1), identity(1, 4), identity(2, 4)),
         ],
-        "UNIQUE constraint failed: card_enrollments.payment_source_id"
+        "UNIQUE constraint failed"
       );
       for (const field of [
         "method = 'card'",
@@ -240,7 +267,7 @@ it("rejects invalid methods, unclaimed or mismatched sources and authorization r
       ]) {
         yield* rejectsAtomically(
           db,
-          [db.prepare(`UPDATE card_enrollments SET ${field} WHERE id = ?`).bind(identity(2, 3))],
+          [db.prepare(`UPDATE payment_enrollments SET ${field} WHERE id = ?`).bind(identity(2, 3))],
           "payment_enrollment_method_immutable"
         );
       }
@@ -251,7 +278,7 @@ it("rejects invalid methods, unclaimed or mismatched sources and authorization r
       ]) {
         yield* rejectsAtomically(
           db,
-          [db.prepare(`UPDATE card_enrollments SET ${field} WHERE id = ?`).bind(identity(2, 3))],
+          [db.prepare(`UPDATE payment_enrollments SET ${field} WHERE id = ?`).bind(identity(2, 3))],
           "card_enrollment_evidence_immutable"
         );
       }
@@ -259,12 +286,10 @@ it("rejects invalid methods, unclaimed or mismatched sources and authorization r
         db,
         [
           db
-            .prepare(
-              "UPDATE card_enrollments SET source_method = 'card' WHERE payment_source_id = ?"
-            )
+            .prepare("UPDATE payment_sources SET method = 'card' WHERE id = ?")
             .bind(identity(3, 3)),
         ],
-        "card_source_immutable"
+        "payment_source_immutable"
       );
       expect(
         (yield* Effect.tryPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
@@ -278,11 +303,11 @@ it("keeps attempt method, environment, ownership, price and replay guards atomic
       const db = yield* baseline();
       yield* Effect.tryPromise(() =>
         db.batch([
-          user(db, 1),
+          ...user(db, 1),
           enrollment(db, 1, enrollmentSeed(1, "card")),
           source(db, 1, "card"),
           available(db, 1),
-          user(db, 3),
+          ...user(db, 3),
           enrollment(db, 3, enrollmentSeed(3, "daviplata")),
           source(db, 3, "daviplata"),
           available(db, 3),
@@ -311,7 +336,7 @@ it("keeps attempt method, environment, ownership, price and replay guards atomic
         db,
         [
           db
-            .prepare("UPDATE card_enrollments SET status = 'verifying' WHERE id = ?")
+            .prepare("UPDATE payment_enrollments SET status = 'verifying' WHERE id = ?")
             .bind(identity(2, 3)),
           attempt(db, 3),
         ],

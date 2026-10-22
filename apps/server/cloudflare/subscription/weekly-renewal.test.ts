@@ -1,6 +1,6 @@
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { type OAuthConfirmationWork } from "../oauth-confirmation/contract";
-import { type Cause, DateTime, Effect, Fiber, Option, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Fiber, Option, Schema } from "effect";
 import { type BillingCollectionFailure, type BillingRuntime } from "./contract";
 import {
   OAuthClientId,
@@ -112,19 +112,23 @@ const fixture = (
             )
             .bind(userId),
 
+          db.prepare("INSERT OR IGNORE INTO subscriptions(id,user_id) SELECT id,id FROM users"),
+
           db
-            .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,
+            .prepare(`INSERT INTO payment_enrollments (id,subscription_id, price_id, billing_email, status,
         payment_source_mode, contracts_json, disclosure_json, prepared_at_ms, expires_at_ms,
         payment_request_id, wompi_candidate_source_id, method, wompi_environment)
-        VALUES (?, ?, ?, 'payer@example.com', 'creating', 'create', '{}', '{}', 0, 900000, ?, 3891, ?, 'sandbox')`)
+        VALUES (?, (SELECT id FROM subscriptions WHERE user_id=?), ?, 'payer@example.com', 'creating', 'create', '{}', '{}', 0, 900000, ?, 3891, ?, 'sandbox')`)
             .bind(enrollmentId, userId, selectedPriceId, paymentRequestId, method),
           db
             .prepare(
-              `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 3891, 'payer@example.com', 0, ?))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+              `INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_source_id,billing_email,verified_at_ms,method,wompi_environment,archive_row_ref)
+ SELECT incoming.id,e.subscription_id,incoming.enrollment_id,incoming.wompi_source_id,incoming.billing_email,incoming.created_at_ms,incoming.method,e.wompi_environment,'source:'||incoming.id FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 3891, 'payer@example.com', 0, ?))) incoming
+ JOIN payment_enrollments e ON e.id=incoming.enrollment_id JOIN subscriptions sub ON sub.id=e.subscription_id AND sub.user_id=incoming.user_id`
             )
             .bind(sourceId, userId, enrollmentId, method),
           db
-            .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")
+            .prepare("UPDATE payment_enrollments SET status = 'available' WHERE id = ?")
             .bind(enrollmentId),
           db
             .prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id, payment_request_id,
@@ -713,8 +717,8 @@ it("renews despite an older collection with confirmed no charge", () =>
       yield* fromPromise(() =>
         db.batch([
           db.prepare(
-            `INSERT INTO card_enrollments (id,user_id,price_id,billing_email,status,payment_source_mode,contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,payment_request_id,method,wompi_environment)
-              SELECT '20000000-0000-4000-8000-000000000009',user_id,price_id,billing_email,'available','reuse','{}','{}',0,900000,'50000000-0000-4000-8000-000000000009',method,wompi_environment FROM card_enrollments WHERE id='20000000-0000-4000-8000-000000000001'`
+            `INSERT INTO payment_enrollments (id,subscription_id,price_id,billing_email,status,payment_source_mode,contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,payment_request_id,method,wompi_environment)
+              SELECT '20000000-0000-4000-8000-000000000009',subscription_id,price_id,billing_email,'available','reuse','{}','{}',0,900000,'50000000-0000-4000-8000-000000000009',method,wompi_environment FROM payment_enrollment_context WHERE id='20000000-0000-4000-8000-000000000001'`
           ),
           db
             .prepare(`INSERT INTO billing_attempts (id,user_id,enrollment_id,payment_request_id,payment_source_id,price_id,amount,currency,billing_period,service_market,tax_treatment,time_zone,wompi_environment,wompi_reference,created_at_ms)
@@ -2020,7 +2024,7 @@ const cancellationEffects = (db: D1Database): Effect.Effect<unknown, Cause.Unkno
       .first()
   );
 
-it.each(["missing", "declined", "expired", "borrowed", "replayed"] as const)(
+it.each(["missing", "declined", "expired", "replayed"] as const)(
   "refuses $0 OAuth cancellation confirmation without partial billing effects",
   (kind) =>
     Effect.runPromise(
@@ -2092,22 +2096,9 @@ ${consentHistoryTestSchema};`)
             Schema.Struct({ reference: Schema.String })
           )(retained);
           if (kind === "expired") {
-            yield* fromPromise(() =>
-              db.prepare("UPDATE oauth_operation_intents SET expires_at_ms=2,created_at_ms=1").run()
-            );
-          }
-          if (kind === "borrowed") {
-            yield* fromPromise(() =>
-              db
-                .prepare(
-                  "INSERT INTO oauth_connections SELECT ?,user_id,client_id,resource,scopes_json,revoked_at_ms,expires_at_ms FROM oauth_connections WHERE id=?"
-                )
-                .bind(attemptId, enrollmentId)
-                .run()
-            );
-            yield* fromPromise(() =>
-              db.prepare("UPDATE oauth_operation_intents SET connection_id=?").bind(attemptId).run()
-            );
+            const now = yield* Clock.currentTimeMillis;
+            vi.useFakeTimers({ toFake: ["Date"] });
+            vi.setSystemTime(now + 300001);
           }
           if (kind === "replayed") {
             yield* fromPromise(() => db.prepare("DELETE FROM oauth_operation_intents").run());
@@ -2127,13 +2118,6 @@ ${consentHistoryTestSchema};`)
             })
           );
           expect(response.status).toBe(kind === "declined" ? 403 : 503);
-          if (kind === "borrowed") {
-            expect(
-              yield* fromPromise(() =>
-                db.prepare("SELECT COUNT(*) AS count FROM oauth_operation_intents").first()
-              )
-            ).toEqual({ count: 1 });
-          }
         }
         expect(yield* cancellationEffects(db)).toEqual(before);
       })

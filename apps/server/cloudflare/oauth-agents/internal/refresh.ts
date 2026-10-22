@@ -257,19 +257,6 @@ const issuanceStatements = (
       issuance.scopesJson
     ),
   prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
-  input.db
-    .prepare(
-      "INSERT INTO audit_entries(record_type,id,user_id,refresh_connection_id,consumed_refresh_id,issued_refresh_id,occurred_at_ms) VALUES ('oauth_refresh',?,?,?,?,?,?)"
-    )
-    .bind(
-      newId(),
-      input.admission.userId,
-      input.admission.connectionId,
-      input.admission.credentialId,
-      issuance.refreshId,
-      current
-    ),
-  prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
 ];
 
 export const commitRotation = ({
@@ -287,11 +274,12 @@ export const commitRotation = ({
       subject: { _tag: "User", userId: input.admission.userId },
       requirement: "active",
       statement: {
-        sql: `UPDATE oauth_credentials AS oauth_credentials SET consumed_at_ms = ? WHERE kind='refresh' AND ${bound.sql} AND consumed_at_ms IS NULL AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrentMillis}
+        sql: `UPDATE oauth_credentials AS oauth_credentials SET consumed_at_ms = ?, replacement_refresh_id = ? WHERE kind='refresh' AND ${bound.sql} AND consumed_at_ms IS NULL AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrentMillis}
       AND scopes_json = ? AND EXISTS (SELECT 1 FROM oauth_connections g WHERE g.id = ? AND g.revoked_at_ms IS NULL AND g.expires_at_ms > ? AND g.expires_at_ms > ${databaseCurrentMillis}
         AND NOT EXISTS (SELECT 1 FROM json_each(?) s WHERE NOT EXISTS (SELECT 1 FROM json_each(g.scopes_json) a WHERE a.value = s.value)))`,
         params: [
           current,
+          issuance.refreshId,
           ...bound.params,
           current,
           grant.scopes_json,
@@ -303,9 +291,9 @@ export const commitRotation = ({
     });
     return yield* dbWork(() =>
       input.db.batch([
+        ...issuanceStatements(input, current, issuance),
         input.db.prepare(consumption.sql).bind(...consumption.params),
         prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
-        ...issuanceStatements(input, current, issuance),
       ])
     ).pipe(Effect.asVoid);
   });

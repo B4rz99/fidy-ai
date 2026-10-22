@@ -1287,7 +1287,8 @@ Execute one native D1 batch:
    Matching rejected decisions are preserved as rejected cases; exceptional history blocks conversion
    for investigation rather than being discarded or rewritten.
 2. Drop captured Audit triggers/views before rebuilding. Create `audit_entries_1442` using the final
-   baseline Audit declaration with only its table name changed. Run `recovery-evidence-copy`: preserve
+   pre-#1446 Audit declaration (retained in `oauth-agents/lineage-before-1446.fixture.sql`)
+   with only its table name changed. Apply #1446 after this extraction. Run `recovery-evidence-copy`: preserve
    all unrelated writable Audit fields and sequences, its AUTOINCREMENT high-water mark and every
    case field/rowid. Keep generated columns derived by the unchanged final expressions.
 3. Run `recovery-evidence-replace`, then reinstall mapped final baseline Audit dependencies and the
@@ -1555,3 +1556,407 @@ proof and concurrent completion. The populated native check installs the cutover
 public-journey proof, refuses missing decision evidence without rewriting it, and verifies complete
 rollback after guard installation fails. All original parent, handoff and attempt fields, rowids,
 User/Consent/recovery records and archive addresses remain untouched by installation.
+
+## OAuth refresh lineage (#1446)
+
+`oauth_credentials.replacement_refresh_id` owns the single successor of a consumed refresh proof.
+The composite foreign key binds a refresh-kind successor to the same User and OAuthConnection;
+unique successors, no self-link, exact issue/consumption time and nonwidening scopes are enforced.
+Rotation inserts both new credentials, then consumes the old proof and binds its successor in one
+D1 batch. A skipped insert or consumption rolls the whole batch back. Consumed proof stays consumed
+when lineage is erased, so erasure cannot revive it. Replay still revokes the connection and appends
+Consent evidence. General OAuth operation accountability remains Audit-owned; management reads only
+credential-call activity, so its public shape and filtering are unchanged.
+
+`refresh_event_id` and `refresh_event_row_ref` preserve only historical rotation IDs and original
+Audit sequence archive addresses. New rotations need neither; their lineage erasure address is
+`credential:<id>`. The existing `oauth_refresh_events` erasure purpose clears the link and optional
+historical metadata before credential deletion. Existing generation-qualified `{}` archives remain
+unchanged. These are credential-owned fields, not a new event table or a new Audit purpose.
+
+Public-client registration, pending reviews, approved connections and operation intents retain
+their existing tables, indexes and public contracts. Approval snapshots, exact redirect/resource/PKCE,
+fresh browser authority, absolute authorization expiry and narrowed credential scopes are unchanged.
+
+Back up D1 and fence OAuth exchange/refresh/management, Audit writers/retention and erasure before
+conversion. Editing an already-applied baseline does not update an existing database: this is an
+explicit synchronized code/schema cutover, never a baseline replay. Stop on unexplained source
+history or dependencies. In particular, consumed proof without retained rotation evidence requires
+investigation rather than a fabricated successor. No temporary destination may already exist.
+Capture all dependent schema objects; map each to the final baseline and reject unknown triggers,
+views or incoming foreign keys. Known incoming credential references are Audit's access-credential
+FK and its two historical refresh references, replaced by the new credential self-reference; Audit has no incoming FK. Run the reference block once
+for every existing table, substituting a validated schema identifier for `__TABLE_NAME__`.
+
+Execute one native D1 batch:
+
+1. Enable `PRAGMA defer_foreign_keys=ON`; run preflight and all reference checks.
+2. Create the final `oauth_credentials` and `audit_entries` definitions from `0001_schema.sql` as
+   `oauth_credentials_1446` and `audit_entries_1446`. Rewrite the credential self-FK to the temporary
+   credential name, and the temporary Audit access FK to that same temporary credential name.
+3. Run copy/verification below before dropping any original table. Preserve every credential rowid,
+   digest, exact instant and scope bytes; preserve remaining Audit sequences and its high watermark.
+4. Drop original Audit triggers (especially append-only delete protection), then run replacement.
+   Reinstall every final index/trigger owned by either replaced table from the baseline. External
+   references must still resolve to the final credential name. Run final verification and update the
+   existing baseline ledger hash in the same transaction only after all checks pass.
+5. Recheck foreign keys, public refresh/replay and browser management before removing the write fence.
+   A failed batch preserves the entire original schema, rows, archives and migration ledger. After
+   successful publication, rollback needs the preserved backup plus matching old code; code-only
+   rollback is unsafe. Never rerun the historical extraction on the converted schema.
+
+<!-- oauth-lineage-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'oauth_lineage_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_permits) AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM audit_retention_permits)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM oauth_credentials c LEFT JOIN oauth_connections g ON g.id=c.connection_id
+ WHERE c.user_id IS NULL OR c.user_id IS NOT g.user_id OR c.expires_at_ms>g.expires_at_ms
+ OR NOT json_valid(c.scopes_json) OR json_type(c.scopes_json)<>'array' OR json_array_length(c.scopes_json)=0
+ OR EXISTS(SELECT 1 FROM json_each(c.scopes_json) s WHERE s.type<>'text' OR s.value NOT IN('read','write','dashboard')
+ OR NOT EXISTS(SELECT 1 FROM json_each(g.scopes_json) a WHERE a.value=s.value)))
+ AND NOT EXISTS(SELECT 1 FROM audit_entries e
+ LEFT JOIN oauth_credentials c ON c.kind='refresh' AND c.id=e.consumed_refresh_id
+ LEFT JOIN oauth_credentials n ON n.kind='refresh' AND n.id=e.issued_refresh_id
+ WHERE e.record_type='oauth_refresh' AND (c.id IS NULL OR n.id IS NULL OR c.id=n.id
+ OR c.user_id IS NOT e.user_id OR n.user_id IS NOT e.user_id
+ OR c.connection_id IS NOT e.refresh_connection_id OR n.connection_id IS NOT e.refresh_connection_id
+ OR c.consumed_at_ms IS NOT e.occurred_at_ms OR n.issued_at_ms IS NOT e.occurred_at_ms
+ OR e.occurred_at_ms<c.issued_at_ms OR e.occurred_at_ms>=c.expires_at_ms
+ OR EXISTS(SELECT 1 FROM json_each(n.scopes_json) s WHERE NOT EXISTS(SELECT 1 FROM json_each(c.scopes_json) a WHERE a.value=s.value))))
+ AND NOT EXISTS(SELECT consumed_refresh_id FROM audit_entries WHERE record_type='oauth_refresh' GROUP BY consumed_refresh_id HAVING count(*)<>1)
+ AND NOT EXISTS(SELECT issued_refresh_id FROM audit_entries WHERE record_type='oauth_refresh' GROUP BY issued_refresh_id HAVING count(*)<>1)
+ AND NOT EXISTS(SELECT 1 FROM oauth_credentials c WHERE c.kind='refresh' AND c.consumed_at_ms IS NOT NULL
+ AND NOT EXISTS(SELECT 1 FROM audit_entries e WHERE e.record_type='oauth_refresh' AND e.consumed_refresh_id=c.id))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- oauth-lineage-preflight:end -->
+
+<!-- oauth-lineage-references:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'oauth_lineage_cutover',CASE WHEN NOT EXISTS(
+ SELECT 1 FROM pragma_foreign_key_list('__TABLE_NAME__')
+ WHERE "table"='audit_entries' OR ("table"='oauth_credentials' AND NOT (
+ '__TABLE_NAME__'='audit_entries' AND (("from"='oauth_credential_id' AND "to"='access_id')
+ OR ("from" IN('consumed_refresh_id','issued_refresh_id') AND "to"='refresh_id'))))
+) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- oauth-lineage-references:end -->
+
+<!-- oauth-lineage-copy:start -->
+
+```sql
+INSERT INTO oauth_credentials_1446(rowid,kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,consumed_at_ms,scopes_json,replacement_refresh_id,refresh_event_id,refresh_event_row_ref)
+SELECT c.rowid,c.kind,c.id,c.connection_id,c.user_id,c.digest,c.issued_at_ms,c.expires_at_ms,c.consumed_at_ms,c.scopes_json,e.issued_refresh_id,e.id,CAST(e.sequence AS TEXT)
+FROM oauth_credentials c LEFT JOIN audit_entries e ON e.record_type='oauth_refresh' AND c.kind='refresh' AND e.consumed_refresh_id=c.id;
+INSERT INTO audit_entries_1446(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries WHERE record_type<>'oauth_refresh';
+UPDATE sqlite_sequence SET seq=(SELECT seq FROM sqlite_sequence WHERE name='audit_entries') WHERE name='audit_entries_1446';
+INSERT INTO sqlite_sequence(name,seq) SELECT 'audit_entries_1446',seq FROM sqlite_sequence WHERE name='audit_entries'
+ AND NOT EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='audit_entries_1446');
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'oauth_lineage_cutover',CASE WHEN
+ (SELECT count(*) FROM oauth_credentials)=(SELECT count(*) FROM oauth_credentials_1446)
+ AND NOT EXISTS(SELECT rowid,kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,consumed_at_ms,scopes_json FROM oauth_credentials EXCEPT SELECT rowid,kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,consumed_at_ms,scopes_json FROM oauth_credentials_1446)
+ AND (SELECT count(*) FROM audit_entries WHERE record_type='oauth_refresh')=(SELECT count(*) FROM oauth_credentials_1446 WHERE replacement_refresh_id IS NOT NULL)
+ AND NOT EXISTS(SELECT sequence,id,user_id,refresh_connection_id,consumed_refresh_id,issued_refresh_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh'
+ EXCEPT SELECT CAST(refresh_event_row_ref AS INTEGER),refresh_event_id,user_id,connection_id,id,replacement_refresh_id,consumed_at_ms FROM oauth_credentials_1446 WHERE replacement_refresh_id IS NOT NULL)
+ AND (SELECT count(*) FROM audit_entries WHERE record_type<>'oauth_refresh')=(SELECT count(*) FROM audit_entries_1446)
+ AND NOT EXISTS(SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries WHERE record_type<>'oauth_refresh' EXCEPT SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries_1446)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- oauth-lineage-copy:end -->
+
+<!-- oauth-lineage-replace:start -->
+
+```sql
+DROP TABLE audit_entries;
+DROP TABLE oauth_credentials;
+ALTER TABLE oauth_credentials_1446 RENAME TO oauth_credentials;
+ALTER TABLE audit_entries_1446 RENAME TO audit_entries;
+```
+
+<!-- oauth-lineage-replace:end -->
+
+<!-- oauth-lineage-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'oauth_lineage_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='oauth_lineage_cutover';
+```
+
+<!-- oauth-lineage-verify:end -->
+
+## Exact OAuth operation approvals (#1447)
+
+`oauth_operation_intents` retains the agreed twelve fields and existing indexes, expiry cleanup,
+capacity, erasure address and deletion ordering. There is no table extraction or data copy. The new
+`oauth_intent_initial` guard requires the connection's same User and an initially absent browser
+proof. `oauth_intent_immutable` protects the exact review bytes, digest, revision bindings,
+disclosure and lifetime. Its only update is one same-User browser-session approval during that
+original lifetime. Approval does not consume the intent or execute the operation; its guarded DELETE,
+owner revision checks, live credential scope/Consent, mutation and Audit still commit together.
+
+Canonical policy continues to select browser-proof requirements for each operation and every batch
+child. A browser decision before review creation is refused without recording approval. Native
+continuation also rejects future review/approval timestamps relative to its current Clock. A browser
+session's later logout does not retroactively cancel its recorded decision; the current OAuth
+credential/grant, scope, Consent and owner revision must still hold when the operation commits.
+Existing work remains bounded by its original five-minute deadline.
+
+For an existing database, first apply the synchronized #1429, #1438 and #1446 changes. Back up D1
+and fence intent issuance, browser decisions, sensitive continuations, expiration cleanup and erasure.
+Inspect dependencies and stop on unexplained guards rather than replacing them. Execute the preflight,
+the two final guard definitions from `0001_schema.sql`, and final verification in one native D1 batch;
+align the existing baseline ledger only after verification. The preflight accepts expired or revoked
+pending work with coherent historical relationships; it does not invent approval or refresh authority.
+Foreign ownership, partial proof, or an approval outside its original lifetime stops installation.
+A failed batch preserves all original intent fields, rows, archives and schema. Validate a public
+review/approval/continuation against the matching new code before removing the write fence. Reverting
+the two guards and matching code is sufficient for this additive guard installation; never rewrite
+reviewed bytes or extend an existing approval to repair bad history.
+
+<!-- oauth-intent-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'oauth_intent_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_permits) AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM oauth_operation_intents i WHERE
+  NOT EXISTS(SELECT 1 FROM oauth_connections g WHERE g.id=i.connection_id AND g.user_id=i.user_id)
+  OR (i.browser_approved_at_ms IS NULL)<>(i.browser_session_id IS NULL)
+  OR (i.browser_approved_at_ms IS NOT NULL AND (
+   typeof(i.browser_approved_at_ms)<>'integer' OR i.browser_approved_at_ms<i.created_at_ms OR i.browser_approved_at_ms>=i.expires_at_ms
+   OR NOT EXISTS(SELECT 1 FROM web_sessions s WHERE s.id=i.browser_session_id AND s.user_id=i.user_id))))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- oauth-intent-preflight:end -->
+
+<!-- oauth-intent-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'oauth_intent_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='oauth_intent_cutover';
+```
+
+<!-- oauth-intent-verify:end -->
+
+## PAT grant integration (#1448)
+
+Tokens retains `pats` (fourteen fields) and `pat_pairings` (fifteen fields). Audit owns activity;
+Consent owns grant/revocation evidence; Resource Admission owns source counters and rolling browser
+review events. The #1433 and #1438 conversions must already be verified before this cutover.
+No additional issuance counter, consent flag or compatibility table is introduced. Existing active
+capacity (100) and issuance protection (20 per User per ten minutes), source admission, rolling
+review protection, private proof and polling slowdown retain their original semantics.
+
+A paired issuance now commits the exact recipient, scopes, selected lifetime, approval anchor and
+absolute expiry used to prepare its response. The final insert guard checks those facts against the
+same-User claimed pairing, with issuance inside both original deadlines and at or after approval.
+A changed grant aborts the complete claim/issuance/Audit batch, leaving its original proof retryable.
+Approval remains the lifetime anchor; `issued_at_ms` records the later claim for issuance-window
+accounting. Manual issuance still requires a fresh WebSession. Pairing approval still permits a live
+same-User WebSession; claim requires the original private proof. Revocation evidence, credential
+changes and Audit remain one unit. Neither a retry nor activity discloses a stored bearer or renews
+its expiry.
+
+For an existing D1 database, back up and fence PAT issuance, pairing creation/review/approval/claim,
+protected PAT operations, revocation, maintenance and erasure. Inspect the installed dependencies and
+confirm `paired_pat_requires_claim` is the original guard from the preceding schema; stop on
+unexplained differences. Execute the following preflight, `DROP TRIGGER paired_pat_requires_claim`,
+the replacement definition from `0001_schema.sql`, and final verification in **one native D1 batch**.
+There is no row copy or archive-address change. Historical shorter PAT expiries are retained exactly,
+including paired PATs shorter than their approved maximum; new claims must use the exact approved
+expiry. Foreign ownership, inconsistent Consent references, changed reviewed grants and claims
+outside their original deadlines stop the cutover. Do not repair them by rewriting approval,
+issuance, lifetime or expiry. A failed batch restores both records and the preceding guard.
+
+After verification, align the existing baseline ledger, deploy matching code and exercise manual and
+paired issuance, activity and revocation before removing the fence. Do not replay the baseline on an
+existing database. Revert the guard and matching code together if rollback is required; preserve all
+recorded identities, digests, origins, exact instants and Consent/Audit references.
+
+<!-- pat-grants-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'pat_grants_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_permits) AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM pat_pairings q WHERE
+  (q.approved_at_ms IS NOT NULL AND (q.approved_at_ms<q.created_at_ms OR q.approved_at_ms>=q.expires_at_ms
+   OR NOT EXISTS(SELECT 1 FROM consent_history g WHERE g.record_type='pat_grant'
+    AND g.pairing_id=q.id AND g.user_id=q.user_id AND g.occurred_at_ms=q.approved_at_ms))))
+ AND NOT EXISTS(SELECT 1 FROM pats p WHERE p.expires_at_ms<=p.issued_at_ms
+  OR (p.request_id IS NOT NULL AND (p.created_at_ms<>p.issued_at_ms
+   OR NOT EXISTS(SELECT 1 FROM consent_history g WHERE g.record_type='pat_grant'
+    AND g.request_id=p.request_id AND g.user_id=p.user_id AND g.occurred_at_ms=p.created_at_ms)))
+  OR (p.pairing_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pat_pairings q
+   WHERE q.id=p.pairing_id AND q.user_id=p.user_id AND q.state='claimed'
+    AND q.approved_at_ms=p.created_at_ms AND q.expires_at_ms>p.issued_at_ms
+    AND q.pat_expires_at_ms>=p.expires_at_ms AND p.issued_at_ms>=q.approved_at_ms
+    AND q.recipient_label=p.recipient_label AND q.scopes_json=p.scopes_json AND q.lifetime_days=p.lifetime_days)))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- pat-grants-preflight:end -->
+
+<!-- pat-grants-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'pat_grants_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='pat_grants_cutover';
+```
+
+<!-- pat-grants-verify:end -->
+
+## Subscription enrollment and reusable sources (#1449)
+
+`subscriptions` now owns the stable `(id,user_id)` identity formerly in `users.subscription_id`.
+An enrollment and its Subscription reservation commit together. Existing issued Subscription IDs
+are preserved; an owner with enrollment history but no issued Subscription receives one new stable
+identity during extraction. Free/trial Users without enrollment history need no row. The selected
+paid-attempt pointer and the remaining paid-standing copies are the separate #1450 slice; this
+branch is the integration branch for that dependent work, not a compatibility release.
+
+`payment_enrollments` has the accepted twenty fields. `payment_sources` has nine domain fields plus
+`archive_row_ref`, preserving the original source erasure address. Candidate IDs remain on enrollment;
+only authenticated verified observations establish a reusable source. Composite deferred foreign keys
+bind a source and its original enrollment to the same Subscription. An inserted verified source binds
+its origin in that same native statement; reuse resolves the existing active source, never a new
+source or origin. Method/environment and original source facts are immutable. Retirement retains the
+existing failed-card, cleared-attempt and no-paid-standing requirements. Provider candidate and source
+identities are unique within their recorded environment. Proof lifetime, browser freshness, acceptance
+binding, lookup cooldowns/eight-check budget and ambiguous-creation behavior are unchanged.
+
+The read-only `payment_enrollment_context` and `payment_source_context` projections resolve User
+ownership through Subscription for the owning adapter's reads and guards. They hold no state and
+have no write triggers. All mutations address the final tables. No old enrollment/source view remains.
+Erasure keeps the purpose identifiers `card_enrollments`, `card_payment_sources` and
+`subscription_identities`, original archive body keys and row addresses. Source erasure first clears
+resolved enrollment references, then deletes the selected sources; origin enrollments follow, then
+the Subscription identity. Billing/refund/cancellation history is disposed in its existing order.
+
+For existing D1, back up and fence enrollment, billing/renewal/settlement, refunds, cancellation,
+price publication, erasure and User creation. Complete the preceding identity/authentication cutovers.
+Inventory every table, view, trigger, index and incoming foreign key against the preceding baseline;
+stop on unknown dependencies or schema differences. This cutover also replaces the incoming source
+FKs in `billing_attempts` and `users`, and the Subscription FK in `refund_attempts`. Do not replay
+the baseline. The `source-cutover` native test executes the following plan against populated native D1.
+
+In **one native D1 batch**:
+
+1. Enable deferred foreign keys, run `subscription-source-preflight`, and require a clean FK check.
+2. Create the final `subscriptions`, `payment_enrollments` and `payment_sources` tables from the
+   baseline, without their indexes/triggers yet. Create final `users`, `billing_attempts` and
+   `refund_attempts` definitions under `_1449` shadow names, changing only each CREATE TABLE name.
+   Keep all incoming references addressed to their final table names.
+3. Run `subscription-source-copy`. Copy each shadow table using an explicit manifest of its final
+   non-generated columns from `PRAGMA table_xinfo`, preserving original rowid and every retained
+   column byte-for-byte. `users.subscription_id` is the sole removed User column; generated paid
+   identity helpers are recomputed from their unchanged inputs. No billing/refund fact is removed.
+4. Run `subscription-source-copy-check` before dropping originals. Preserve the original schema
+   inventory for rollback and verify each shadow table's rowid/common-column sets with bidirectional
+   EXCEPT. Preserve all unrelated tables, archives, migration-ledger rows and sequence watermarks.
+5. Drop inventoried views/triggers and explicit indexes (never SQLite autoindexes), then drop the
+   original `card_enrollments`, `users`, `billing_attempts`, `refund_attempts`. Rename shadows to their
+   final names. Reinstall all final views/triggers/indexes from the baseline, including erasure guards.
+6. Run `subscription-source-verify`, then align the existing baseline ledger in the same unit only
+   after verification. Any failure restores all original rows, schema and archives. After success,
+   rollback requires the backup and matching old code. Publish matching code and verify enrollment,
+   retry/reuse, retirement, billing and erasure before removing the fence.
+
+Missing source environments are resolved only from a single recorded billing environment for that
+exact source; never from current deployment configuration. A source with unknown/conflicting history,
+changed method/billing context, or a reuse enrollment with ambiguous source references stops the batch.
+The extraction performs no provider mutation and never invents acceptance or verification evidence.
+
+<!-- subscription-source-preflight:start -->
+
+```sql
+PRAGMA defer_foreign_keys=ON;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription_source_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_permits) AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM card_enrollments e WHERE e.payment_source_id IS NOT NULL AND (
+  e.source_method<>e.method OR e.source_billing_email<>e.billing_email
+  OR (e.wompi_environment IS NULL AND (SELECT count(DISTINCT a.wompi_environment) FROM billing_attempts a WHERE a.payment_source_id=e.payment_source_id)<>1)
+  OR EXISTS(SELECT 1 FROM billing_attempts a WHERE a.payment_source_id=e.payment_source_id
+   AND (a.user_id<>e.user_id OR (e.wompi_environment IS NOT NULL AND a.wompi_environment<>e.wompi_environment)))))
+ AND NOT EXISTS(SELECT 1 FROM billing_attempts a WHERE NOT EXISTS(SELECT 1 FROM card_enrollments e
+  JOIN card_enrollments origin ON origin.payment_source_id=a.payment_source_id
+  WHERE e.id=a.enrollment_id AND e.user_id=a.user_id AND origin.user_id=a.user_id
+   AND e.method=origin.source_method AND (e.wompi_environment IS NULL OR e.wompi_environment=a.wompi_environment)))
+ AND NOT EXISTS(SELECT 1 FROM card_enrollments e WHERE
+  (e.status='available' AND e.payment_source_id IS NULL AND (SELECT count(DISTINCT a.payment_source_id) FROM billing_attempts a WHERE a.enrollment_id=e.id)<>1)
+  OR (SELECT count(DISTINCT a.payment_source_id) FROM billing_attempts a WHERE a.enrollment_id=e.id)>1)
+ AND NOT EXISTS(SELECT 1 FROM refund_attempts r JOIN users u ON u.id=r.user_id WHERE u.subscription_id IS NOT r.subscription_id)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- subscription-source-preflight:end -->
+
+<!-- subscription-source-copy:start -->
+
+```sql
+INSERT INTO subscriptions(rowid,id,user_id)
+SELECT u.rowid,COALESCE(u.subscription_id,lower(hex(randomblob(4))||'-'||hex(randomblob(2))||'-4'||substr(hex(randomblob(2)),2)||'-a'||substr(hex(randomblob(2)),2)||'-'||hex(randomblob(6)))),u.id
+FROM users u WHERE u.subscription_id IS NOT NULL OR EXISTS(SELECT 1 FROM card_enrollments e WHERE e.user_id=u.id);
+INSERT INTO payment_enrollments(rowid,id,subscription_id,price_id,billing_email,status,payment_source_mode,contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,accepted_at_ms,payment_request_id,wompi_candidate_source_id,verification_attempts,last_verification_at_ms,refusal_reason,method,wompi_environment,authorization_digest,payment_source_id)
+SELECT e.rowid,e.id,s.id,e.price_id,e.billing_email,e.status,e.payment_source_mode,e.contracts_json,e.disclosure_json,e.prepared_at_ms,e.expires_at_ms,e.accepted_at_ms,e.payment_request_id,e.wompi_candidate_source_id,e.verification_attempts,e.last_verification_at_ms,e.refusal_reason,e.method,COALESCE(e.wompi_environment,(SELECT a.wompi_environment FROM billing_attempts a WHERE a.enrollment_id=e.id LIMIT 1)),e.authorization_digest,COALESCE(e.payment_source_id,(SELECT a.payment_source_id FROM billing_attempts a WHERE a.enrollment_id=e.id LIMIT 1))
+FROM card_enrollments e JOIN subscriptions s ON s.user_id=e.user_id;
+INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_environment,wompi_source_id,billing_email,method,verified_at_ms,retired_at_ms,archive_row_ref)
+SELECT e.payment_source_id,s.id,e.id,COALESCE(e.wompi_environment,(SELECT a.wompi_environment FROM billing_attempts a WHERE a.payment_source_id=e.payment_source_id LIMIT 1)),e.source_wompi_id,e.source_billing_email,e.source_method,e.source_created_at_ms,e.source_retired_at_ms,COALESCE(e.source_row_ref,'source:'||e.payment_source_id)
+FROM card_enrollments e JOIN subscriptions s ON s.user_id=e.user_id WHERE e.payment_source_id IS NOT NULL;
+```
+
+<!-- subscription-source-copy:end -->
+
+<!-- subscription-source-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription_source_cutover',CASE WHEN
+ (SELECT count(*) FROM card_enrollments)=(SELECT count(*) FROM payment_enrollments)
+ AND (SELECT count(*) FROM card_enrollments WHERE payment_source_id IS NOT NULL)=(SELECT count(*) FROM payment_sources)
+ AND NOT EXISTS(SELECT rowid,subscription_id,id FROM users WHERE subscription_id IS NOT NULL
+  EXCEPT SELECT rowid,id,user_id FROM subscriptions)
+ AND NOT EXISTS(SELECT e.rowid,e.id,e.user_id,e.price_id,e.billing_email,e.status,e.payment_source_mode,e.contracts_json,e.disclosure_json,e.prepared_at_ms,e.expires_at_ms,e.accepted_at_ms,e.payment_request_id,e.wompi_candidate_source_id,e.verification_attempts,e.last_verification_at_ms,e.refusal_reason,e.method,e.authorization_digest FROM card_enrollments e
+  EXCEPT SELECT e.rowid,e.id,s.user_id,e.price_id,e.billing_email,e.status,e.payment_source_mode,e.contracts_json,e.disclosure_json,e.prepared_at_ms,e.expires_at_ms,e.accepted_at_ms,e.payment_request_id,e.wompi_candidate_source_id,e.verification_attempts,e.last_verification_at_ms,e.refusal_reason,e.method,e.authorization_digest FROM payment_enrollments e JOIN subscriptions s ON s.id=e.subscription_id)
+ AND NOT EXISTS(SELECT e.payment_source_id,e.user_id,e.id,e.source_wompi_id,e.source_billing_email,e.source_method,e.source_created_at_ms,e.source_retired_at_ms,COALESCE(e.source_row_ref,'source:'||e.payment_source_id) FROM card_enrollments e WHERE e.payment_source_id IS NOT NULL
+  EXCEPT SELECT p.id,s.user_id,p.origin_enrollment_id,p.wompi_source_id,p.billing_email,p.method,p.verified_at_ms,p.retired_at_ms,p.archive_row_ref FROM payment_sources p JOIN subscriptions s ON s.id=p.subscription_id)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- subscription-source-copy-check:end -->
+
+<!-- subscription-source-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription_source_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM payment_enrollments e JOIN payment_sources p ON p.id=e.payment_source_id
+  WHERE e.subscription_id<>p.subscription_id OR e.method<>p.method OR e.wompi_environment IS NOT p.wompi_environment)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='subscription_source_cutover';
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- subscription-source-verify:end -->

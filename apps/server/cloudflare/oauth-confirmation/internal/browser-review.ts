@@ -61,7 +61,7 @@ const intentConditions = (input: BrowserReviewInput, reference: string): OwnedSt
     requirement: "active",
     statement: {
       sql: `reference = ? AND user_id = ? AND disclosure_revision = ?
-        AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrent} AND ${fresh.sql}
+        AND created_at_ms <= ? AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrent} AND ${fresh.sql}
         AND EXISTS (SELECT 1 FROM oauth_connections g WHERE g.id = oauth_operation_intents.connection_id
           AND g.user_id = oauth_operation_intents.user_id AND g.revoked_at_ms IS NULL
           AND g.expires_at_ms > ? AND g.expires_at_ms > ${databaseCurrent})`,
@@ -69,6 +69,7 @@ const intentConditions = (input: BrowserReviewInput, reference: string): OwnedSt
         reference,
         input.session.user_id,
         input.disclosureRevision,
+        input.current,
         input.current,
         ...fresh.params,
         input.current,

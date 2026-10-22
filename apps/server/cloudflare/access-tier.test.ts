@@ -42,7 +42,7 @@ it("derives each decision from one User's original trial and current settled pai
           db.prepare(
             "CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER)"
           ),
-          db.prepare("CREATE TABLE verified_payment_sources (id TEXT, user_id TEXT, method TEXT)"),
+          db.prepare("CREATE TABLE payment_source_context (id TEXT, user_id TEXT, method TEXT)"),
           db.prepare("CREATE TABLE subscription_renewal_stops (user_id TEXT)"),
           db.prepare(
             "CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops"
@@ -99,7 +99,7 @@ it("derives each decision from one User's original trial and current settled pai
             "UPDATE billing_attempts SET paid_starts_at_ms=incoming.starts_at_ms,paid_ends_at_ms=incoming.ends_at_ms FROM (SELECT 'attempt' AS attempt_id,400 AS starts_at_ms,500 AS ends_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.paid_starts_at_ms IS NULL"
           ),
           db
-            .prepare("INSERT INTO verified_payment_sources VALUES ('source', ?, 'nequi')")
+            .prepare("INSERT INTO payment_source_context VALUES ('source', ?, 'nequi')")
             .bind(userId),
         ])
       );

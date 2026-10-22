@@ -118,8 +118,8 @@ const consumeIntent = (
   const consumed = db
     .prepare(`DELETE FROM oauth_operation_intents WHERE reference = ? AND user_id = ? AND connection_id = ?
         AND operation = ? AND input_json = ? AND input_digest = ? AND binding_json = ? AND disclosure_revision = ?
-        AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrent} AND ${live}
-        AND (? = 0 OR (typeof(browser_approved_at_ms) = 'integer' AND browser_approved_at_ms >= created_at_ms AND browser_approved_at_ms < expires_at_ms
+        AND created_at_ms <= ? AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrent} AND ${live}
+        AND (? = 0 OR (typeof(browser_approved_at_ms) = 'integer' AND browser_approved_at_ms >= created_at_ms AND browser_approved_at_ms < expires_at_ms AND browser_approved_at_ms <= ?
           AND EXISTS (SELECT 1 FROM web_sessions s WHERE s.id = browser_session_id AND s.user_id = oauth_operation_intents.user_id)))`)
     .bind(
       attempt.reference,
@@ -131,8 +131,10 @@ const consumeIntent = (
       work.binding,
       disclosureRevision,
       work.current,
+      work.current,
       ...work.authority.bindings,
-      requiresBrowser ? 1 : 0
+      requiresBrowser ? 1 : 0,
+      work.current
     );
   return Effect.succeed({
     _tag: "Prepared",

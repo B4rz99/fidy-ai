@@ -100,25 +100,25 @@
   },
   "dnd-kit": {
     "repository": "https://github.com/clauderic/dnd-kit",
-    "verifiedOn": "2026-10-12",
+    "verifiedOn": "2026-10-22",
     "snapshot": {
       "manifest": ".repos/dnd-kit/packages/react/package.json",
       "version": "0.5.0",
       "revision": "0b8129b02fb44ab34cb7d3c35d379c03c403dc53",
       "revisionKind": "repository-tree",
       "provenance": "Exact vendored Git tree, restored in 6ebc6d61b639908ae68ace479a143b3d01ace922. Upstream commit was not retained in discoverable import metadata; matching package version is not proof of byte parity.",
-      "status": "matching-version"
+      "status": "historical"
     },
     "packages": [
       {
         "name": "@dnd-kit/react",
         "manifest": "apps/web/package.json",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       {
         "name": "@dnd-kit/dom",
         "manifest": "apps/web/package.json",
-        "version": "0.5.0"
+        "version": "0.5.1"
       }
     ],
     "sourcePaths": [

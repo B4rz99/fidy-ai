@@ -23,5 +23,5 @@ back to ready. A consumed pairing cannot reissue a bearer after a lost response;
 Provider, WhatsApp, email and recovery approvals do not themselves create browser authority.
 
 The accepted pairing/session fields and state-owned email dispatch facts remain intact. The only
-schema addition is the expiry index for the existing bounded cleanup, preserving references from
-sessions and recovery cases. See the [#1443 installation procedure](database-cutover-1428.md#browser-pairing-to-session-authority-1443).
+schema additions are the expiry index for the existing bounded cleanup and an owner index for
+User-scoped session erasure, preserving references from sessions and recovery cases. See the [#1443 installation procedure](database-cutover-1428.md#browser-pairing-to-session-authority-1443).

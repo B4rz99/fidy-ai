@@ -1397,11 +1397,12 @@ instants, proof generations, Queue dispatch state, archive addresses and indepen
 No table conversion or field rewriting is required. Existing unique pairing and bearer keys and
 the same-User consumed-pairing insertion guard remain authoritative.
 
-The only schema addition is an expiry index for Browser Login's existing 32-row cleanup. On an
+The schema additions are an expiry index for Browser Login's existing 32-row cleanup and a
+WebSession owner index for User-scoped erasure. On an
 existing populated database, fence authentication cleanup during installation, check foreign-key
-integrity and apply the exact statement below in one native D1 batch. Stop on an unexplained
+integrity and apply the exact statements below in one native D1 batch. Stop on an unexplained
 same-name schema object or invalid history; do not silently replace it. If the final baseline has
-already installed this index, no cutover is needed. A failed batch leaves the original records and
+already installed both indexes, no cutover is needed. A failed batch leaves the original records and
 schema intact. Publish matching code and align the one-baseline ledger after successful verification;
 keep `0001_schema.sql` as the sole migration file.
 
@@ -1409,6 +1410,7 @@ keep `0001_schema.sql` as the sole migration file.
 
 ```sql
 CREATE INDEX browser_login_pairings_retention ON browser_login_pairings(expires_at_ms,id);
+CREATE INDEX web_sessions_by_user ON web_sessions(user_id);
 ```
 
 <!-- browser-session-index:end -->
@@ -1418,7 +1420,8 @@ transient `sql_assertions` check in one batch. A zero-row insertion must roll ba
 like an SQL error. Replay cannot mint another token. A lost success response never permits
 reissuing the consumed credential; the browser starts another pairing.
 
-Native Browser Login tests execute the populated index installation, interrupted-batch rollback and
+Native Browser Login tests execute populated index installation, interrupted-batch rollback,
+the User-scoped session archive query and
 actual bounded cleanup. Session- and recovery-referenced pairings remain retained, including revoked
 sessions. Existing integrated provider, WhatsApp, email and recovery journeys exercise approval and
 redemption; session journeys cover freshness, sliding idle/hard expiry, revocation and logout.

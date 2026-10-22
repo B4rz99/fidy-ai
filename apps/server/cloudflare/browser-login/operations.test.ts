@@ -1,9 +1,10 @@
 import { HttpClient } from "effect/http";
-import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
+import { Clock, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { afterAll, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { retainedRecoveryPairingsQuery } from "../recovery/operations";
 import { documentedSqlBlock } from "../schema-cutover.test-fixture";
+import { makeWebSessionErasureStores } from "../web-session/runtime";
 import { startBrowserPairing } from "./operations";
 import { handleWebAuthentication } from "../web-authentication/operations";
 import {
@@ -179,7 +180,10 @@ it("prunes at most 32 expired pairings through the expiry index while retaining 
         ]);
       const before = yield* Effect.tryPromise(snapshot);
       yield* Effect.tryPromise(() =>
-        db.prepare("DROP INDEX browser_login_pairings_retention").run()
+        db.batch([
+          db.prepare("DROP INDEX browser_login_pairings_retention"),
+          db.prepare("DROP INDEX web_sessions_by_user"),
+        ])
       );
       const guide = yield* Effect.tryPromise(() =>
         Bun.file(
@@ -235,5 +239,42 @@ it("prunes at most 32 expired pairings through the expiry index while retaining 
           retained.results
         );
       }
+      const observedOwner = observeRetentionCost(db);
+      const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        dispositions: {
+          credentials: { action: "Retain", retention: { untilMs: current + 600000 } },
+        },
+      });
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES('session-archive',?,?,'AwaitingReview',?)"
+            )
+            .bind(userId, current, decision),
+          db.prepare(
+            "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES('session-archive','web_sessions','credentials')"
+          ),
+          db.prepare("UPDATE erasure_requests SET state='Archiving' WHERE id='session-archive'"),
+        ])
+      );
+      const store = Option.getOrThrow(
+        Option.fromUndefinedOr(makeWebSessionErasureStores(observedOwner.database)[0])
+      );
+      expect(yield* store.archive({ userId, reference: "session-archive" })).toBe(true);
+      expect(
+        (yield* Effect.tryPromise(observedOwner.plans)).some(
+          (plan) => plan.includes("web_sessions_by_user") && plan.includes("user_id=?")
+        )
+      ).toBe(true);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT store_id,row_ref,body FROM erasure_archives WHERE request_id='session-archive'"
+            )
+            .all()
+        )).results
+      ).toEqual([{ store_id: "web_sessions", row_ref: "initial:1", body: "{}" }]);
     })
   ));

@@ -127,6 +127,7 @@ it("orders digest items by Currency, Counterparty and identity while retaining t
     [second, first],
     [third, first],
     [fourth, first],
+    [first, { ...third, confirmationId: first.confirmationId }],
     [{ ...first, confirmedAt: "2026-10-06T04:59:59.999Z" }],
     [{ ...first, confirmedAt: confirmationDay.toExclusive }],
   ]) {

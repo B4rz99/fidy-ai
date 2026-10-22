@@ -1,8 +1,11 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import {
+  CaptureInterpretation,
   type CsvRowEvidence,
   EmailForwardingLocalPart,
+  EmailNeedsReviewItem,
+  MediaNeedsReviewItem,
   NeedsReviewItem,
   NeedsReviewReason,
   NeedsReviewStatus,
@@ -327,6 +330,92 @@ it("validates a bounded opaque forwarding local part without accepting surroundi
     "A".repeat(24),
   ]) {
     expect(Result.isFailure(decode(value))).toBe(true);
+  }
+});
+
+it("roundtrips captured facts with their explicit or default policy evidence", () => {
+  for (const currencyBasis of ["explicit", "default"] as const) {
+    for (const dateBasis of ["explicit", "submission-date-default"] as const) {
+      const value = {
+        _tag: "Extracted",
+        extraction: {
+          money: { amount: "100", currency: "COP" },
+          direction: "outflow",
+          occurredAt: "2026-08-01T12:00:00.000Z",
+        },
+        evidence: { currencyBasis, dateBasis, revision: "capture-v1" },
+      };
+      expect(
+        Schema.encodeSync(CaptureInterpretation)(
+          Schema.decodeUnknownSync(CaptureInterpretation)(value)
+        )
+      ).toEqual(value);
+    }
+  }
+  const review = { _tag: "NeedsReview", reason: "invalid-occurrence" };
+  expect(
+    Schema.encodeSync(CaptureInterpretation)(
+      Schema.decodeUnknownSync(CaptureInterpretation)(review)
+    )
+  ).toEqual(review);
+});
+
+it("roundtrips pending email review with or without retained raw evidence and after expiry", () => {
+  const base = {
+    id: reviewId,
+    receivedEmailId: submissionId,
+    serviceMarket: "CO",
+    locale: "es-CO",
+    timeZone: "America/Bogota",
+    sourceFormat: "notification-email",
+    sourceChannel: "forwarded-email",
+    sourceProvider: "cloudflare-email",
+    messageEvidence: {
+      channel: "email",
+      provider: "cloudflare-email",
+      providerMessageId: "message-1",
+    },
+    parserRevision: "parser-v1",
+    extractorRevision: "extractor-v1",
+    issues: [],
+    createdAt: "2026-08-01T12:00:00.000Z",
+  };
+  for (const state of [
+    { status: "pending", reason: "unknown-format", ingestSampleId: stagingId },
+    { status: "pending", reason: "provider-retrieval-failed" },
+    { status: "expired", reason: "consent-revoked" },
+  ]) {
+    const value = { ...base, ...state };
+    expect(
+      Schema.encodeSync(EmailNeedsReviewItem)(Schema.decodeUnknownSync(EmailNeedsReviewItem)(value))
+    ).toEqual(value);
+  }
+  expect(
+    Schema.decodeUnknownOption(EmailNeedsReviewItem)({
+      ...base,
+      status: "pending",
+      reason: "unknown-format",
+    })._tag
+  ).toBe("None");
+});
+
+it("roundtrips media review after acceptance and after raw material expiry", () => {
+  for (const status of ["pending", "expired"]) {
+    const value = {
+      id: reviewId,
+      mediaSubmissionId: submissionId,
+      reason: "extraction-unavailable",
+      serviceMarket: "CO",
+      locale: "es-CO",
+      timeZone: "America/Bogota",
+      sourceChannel: "whatsapp",
+      sourceFormat: "image",
+      status,
+      createdAt: "2026-08-01T12:00:00.000Z",
+    };
+    expect(
+      Schema.encodeSync(MediaNeedsReviewItem)(Schema.decodeUnknownSync(MediaNeedsReviewItem)(value))
+    ).toEqual(value);
   }
 });
 

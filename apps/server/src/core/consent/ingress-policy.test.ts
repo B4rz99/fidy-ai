@@ -52,7 +52,7 @@ it("accepts a decision only after proven delivery and the last disclosure bounda
           decisionNotBeforeMs: 200,
         },
       },
-      message: reply,
+      message: { ...reply, occurredAtMs: 400 },
     })
   ).toBe(false);
   expect(canRecordConsentIngressDecision({ exchange, message })).toBe(false);

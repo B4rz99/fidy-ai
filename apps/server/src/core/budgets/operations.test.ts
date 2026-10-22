@@ -96,6 +96,19 @@ it("does not compare a threshold with spending in another Currency", () => {
   expect(Result.isFailure(result) ? result.failure._tag : undefined).toBe("CurrencyMismatch");
 });
 
+it("latches exactly eighty percent before the full cap and never reopens it after a correction", () => {
+  const reached = Effect.runSync(
+    advanceBudgetLatch({ budget, spent: money("800"), latch: initialLatch() })
+  );
+  expect(reached).toEqual({
+    latch: { ...initialLatch(), reached80: true },
+    newlyReached: [80],
+  });
+  expect(
+    Effect.runSync(advanceBudgetLatch({ budget, spent: money("799.99"), latch: reached.latch }))
+  ).toEqual({ latch: reached.latch, newlyReached: [] });
+});
+
 it("refuses to calculate status from spending in another Currency", () => {
   const outcome = Effect.runSync(
     Effect.result(

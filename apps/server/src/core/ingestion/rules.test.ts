@@ -353,6 +353,93 @@ it.effect("accounts for every row through the canonical Transaction and Money ga
   })
 );
 
+it.effect("omits unsafe spreadsheet suggestions even when cached values look valid", () =>
+  Effect.gen(function* () {
+    const mapping = StatementColumnMapping.make({
+      ...copDebitMapping(),
+      currencyColumn: Option.some(2),
+      currencyLiteral: Option.none(),
+      counterpartyColumn: Option.some(3),
+      directionColumn: Option.none(),
+      inflowMarkers: [],
+      outflowMarkers: [],
+    });
+    const result = yield* interpretCanonicalRows({
+      rows: [
+        {
+          recordNumber: 1,
+          fields: ["2026-02-05", "100", "USD", "Cached merchant"],
+          evidence: {
+            sourceFormat: "xlsx",
+            sheetName: "Statement",
+            sheetIndex: 0,
+            rowNumber: 2,
+            hidden: false,
+            cells: [
+              xlsxCell("A2", "2026-02-05", Option.none()),
+              xlsxCell("B2", "100", Option.none()),
+              xlsxCell("C2", "USD", Option.some("CURRENCY()")),
+              xlsxCell("D2", "Cached merchant", Option.some("MERCHANT()")),
+            ],
+          },
+        },
+      ],
+      mapping: { ...mapping, dateFormat: "yyyy-MM-dd" },
+      timeZone: "America/Bogota",
+    });
+    const row = result.outcomes[0];
+    if (row?.outcome !== "needs-review") throw new Error("Expected review outcome");
+    expect(row.suggestions).toEqual(
+      Option.some({
+        amount: "100",
+        currency: Option.none(),
+        direction: Option.some("inflow"),
+        counterparty: "",
+        occurredAt: "2026-02-05T05:00:00.000Z",
+        categoryId: Option.none(),
+        userProvidedFields: [],
+      })
+    );
+  })
+);
+
+it.effect("bounds review text and keeps missing amounts and unknown Currency unresolved", () =>
+  Effect.gen(function* () {
+    const mapping = StatementColumnMapping.make({
+      ...copDebitMapping(),
+      currencyColumn: Option.some(2),
+      currencyLiteral: Option.none(),
+      counterpartyColumn: Option.some(3),
+      directionColumn: Option.none(),
+      inflowMarkers: [],
+      outflowMarkers: [],
+    });
+    const result = yield* interpretCanonicalRows({
+      rows: [
+        csvRow(1, ["invalid", "100", "???", "x".repeat(121)]),
+        csvRow(2, ["invalid", "1".repeat(121), "???"]),
+        csvRow(3, ["invalid"]),
+      ],
+      mapping,
+      timeZone: "America/Bogota",
+    });
+    for (const [index, row] of result.outcomes.entries()) {
+      if (row.outcome !== "needs-review") throw new Error("Expected review outcome");
+      expect(row.suggestions).toEqual(
+        Option.some({
+          amount: index === 0 ? "100" : "",
+          currency: Option.none(),
+          direction: index === 2 ? Option.none() : Option.some("inflow"),
+          counterparty: "",
+          occurredAt: "",
+          categoryId: Option.none(),
+          userProvidedFields: [],
+        })
+      );
+    }
+  })
+);
+
 it.effect(
   "handles signed amounts, literal-free currencies, date layouts, and unknown markers",
   () =>

@@ -62,11 +62,19 @@ it.each([
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* wait(() => databases.acquire());
-        const current = schemaStatements(
+        const latest = schemaStatements(
           yield* wait(() =>
             Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
           )
         );
+        const current = precedingSchema({
+          current: latest,
+          history: yield* Schema.decodeEffect(historySchema)(
+            yield* wait(() =>
+              Bun.file(new URL("./cancellation-cutover.test-fixture.json", import.meta.url)).text()
+            )
+          ),
+        });
         const previous = precedingSchema({
           current,
           history: yield* Schema.decodeEffect(historySchema)(
@@ -133,6 +141,11 @@ it.each([
             db
               .prepare("UPDATE billing_attempts SET followup_due_at_ms=? WHERE id=?")
               .bind(ends, id(4)),
+            db
+              .prepare(
+                "INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(?,'dashboard','{\"original\":true}',2)"
+              )
+              .bind(id(1)),
             db.prepare(
               "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES('past','removed',1,'Complete')"
             ),
@@ -164,6 +177,7 @@ it.each([
             ...targets.map((table) => db.prepare(`SELECT rowid,* FROM ${table} ORDER BY rowid`)),
             db.prepare("SELECT rowid,* FROM billing_provider_transactions ORDER BY rowid"),
             db.prepare("SELECT rowid,* FROM erasure_archives ORDER BY rowid"),
+            db.prepare("SELECT rowid,* FROM user_documents ORDER BY rowid"),
           ]);
         const before = (yield* wait(retained)).map((result) => result.results);
         const condition = activeProUserCondition({ userId: id(1), nowEpochMs: ends + 1 });
@@ -196,10 +210,7 @@ it.each([
           ...targets.map((target) =>
             schemaDefinition({ source: current, target })
               .replace(/^(CREATE TABLE "?\w+"?)/u, `CREATE TABLE ${target}_1450`)
-              .replace(
-                /REFERENCES "?(users|subscriptions|billing_attempts)"?\(/gu,
-                "REFERENCES $1_1450("
-              )
+              .replace(/REFERENCES "?(subscriptions|billing_attempts)"?\(/gu, "REFERENCES $1_1450(")
           ),
           ...documentedSqlBlock({ guide, marker: "subscription-standing-copy" }),
           ...documentedSqlBlock({ guide, marker: "subscription-standing-copy-check" }),
@@ -207,8 +218,11 @@ it.each([
             ? ["INSERT INTO sql_assertions(scope,accepted) VALUES('fault',0)"]
             : []),
           ...objects.results.map((object) => `DROP ${object.type.toUpperCase()} "${object.name}"`),
-          ...targets.map((target) => `DROP TABLE ${target}`),
-          ...targets.map((target) => `ALTER TABLE ${target}_1450 RENAME TO ${target}`),
+          ...targets.filter((target) => target !== "users").map((target) => `DROP TABLE ${target}`),
+          ...targets
+            .filter((target) => target !== "users")
+            .map((target) => `ALTER TABLE ${target}_1450 RENAME TO ${target}`),
+          ...documentedSqlBlock({ guide, marker: "subscription-standing-user-remove" }),
           ...current.filter((sql) => /^CREATE (?:UNIQUE )?(?:VIEW|TRIGGER|INDEX) /u.test(sql)),
           ...(history === "interrupted-swap"
             ? ["INSERT INTO sql_assertions(scope,accepted) VALUES('fault',0)"]
@@ -225,6 +239,10 @@ it.each([
           return;
         }
         yield* wait(apply);
+        expect(
+          (yield* wait(() => db.prepare("SELECT rowid,* FROM user_documents ORDER BY rowid").all()))
+            .results
+        ).toEqual(before[6]);
         yield* verifyWorkPlans(db, workBefore);
         expect(yield* wait(() => access(true))).toBe(1);
         const original = yield* Schema.decodeUnknownEffect(

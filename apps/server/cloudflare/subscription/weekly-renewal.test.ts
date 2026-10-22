@@ -17,8 +17,12 @@ import coreWorker, { UserTransactionCoordinator } from "../core-worker";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
 import { afterEach, expect, it, vi } from "vitest";
-import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import {
+  makePaymentEnrollmentD1,
+  queuedBillingExecution,
+} from "./payment-enrollment-d1.test-fixture";
+import {
+  dispatchSubscriptionCancellations,
   dispatchSubscriptionRenewals,
   publishWeeklyPriceAndNotify,
   receiveBillingCollection,
@@ -778,7 +782,7 @@ it("uses the current payer and retries a definitively rejected notice", () =>
                 workflowIds.push(id);
                 return Promise.resolve({});
               },
-              get: (): Promise<unknown> => Promise.resolve({}),
+              get: () => Promise.resolve(queuedBillingExecution()),
             },
           },
           batch: { messages: [{ body: noticeWork, ack: (): void => {} }] },
@@ -843,7 +847,10 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
       yield* receiveBillingCollection({
         environment: {
           DB: db,
-          BILLING_COLLECTION_WORKFLOW: { create, get: () => Promise.resolve({}) },
+          BILLING_COLLECTION_WORKFLOW: {
+            create,
+            get: () => Promise.resolve(queuedBillingExecution()),
+          },
         },
         batch: { messages: [{ body: foreignWork, ack: (): void => {} }] },
       });
@@ -860,7 +867,10 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
       yield* receiveBillingCollection({
         environment: {
           DB: db,
-          BILLING_COLLECTION_WORKFLOW: { create, get: () => Promise.resolve({}) },
+          BILLING_COLLECTION_WORKFLOW: {
+            create,
+            get: () => Promise.resolve(queuedBillingExecution()),
+          },
         },
         batch: { messages: [{ body: noticeWork, ack: (): void => {} }] },
       });
@@ -1350,6 +1360,20 @@ it("cancels a paid Subscription through a write-scoped PAT", () =>
         },
       });
       expect(response.status).toBe(200);
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT paid_attempt_id,payment_source_id,source_cancellation_state FROM subscription_cancellations WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?)"
+            )
+            .bind(userId)
+            .first()
+        )
+      ).toEqual({
+        paid_attempt_id: attemptId,
+        payment_source_id: sourceId,
+        source_cancellation_state: "detached",
+      });
       expect(yield* fromPromise(() => response.json())).toMatchObject({
         data: { sourceCancellation: "detached" },
       });
@@ -1509,7 +1533,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
               WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
               WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
             },
-            payload: { version: 1, kind: "source-cancellation", userId },
+            payload: { version: 2, kind: "source-cancellation", userId },
             sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, work) => work(),
           });
@@ -1523,6 +1547,123 @@ it.each(["card", "nequi", "daviplata"] as const)(
       })
     )
 );
+it("recovers one cancellation execution after an engine interruption and preserves the eight-check budget and ambiguous void claim", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      let now = yield* Clock.currentTimeMillis;
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(now);
+      const sent: unknown[] = [];
+      yield* dispatchSubscriptionCancellations({
+        DB: db,
+        BILLING_COLLECTION_QUEUE: {
+          send: (work) => {
+            sent.push(work);
+            return Promise.resolve();
+          },
+        },
+      });
+      yield* dispatchSubscriptionCancellations({
+        DB: db,
+        BILLING_COLLECTION_QUEUE: {
+          send: (work) => {
+            sent.push(work);
+            return Promise.resolve();
+          },
+        },
+      });
+      expect(sent).toHaveLength(1);
+      let execution = Option.none<unknown>();
+      let status: InstanceStatus["status"] = "queued";
+      let interrupted = true;
+      let puts = 0;
+      let gets = 0;
+      vi.stubGlobal("fetch", (url: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(url, init);
+        expect(new URL(request.url).pathname).toBe(
+          request.method === "PUT" ? "/v1/payment_sources/3891/void" : "/v1/payment_sources/3891"
+        );
+        if (request.method === "PUT") {
+          puts++;
+          return Promise.reject(new Error("lost void response"));
+        }
+        gets++;
+        return Promise.resolve(
+          Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "AVAILABLE" } })
+        );
+      });
+      const run = (): Promise<void> =>
+        runBillingCollectionWorkflow({
+          environment: {
+            DB: db,
+            WOMPI_ENVIRONMENT: "sandbox",
+            WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+          },
+          payload: Option.getOrThrow(execution),
+          activity: (_name, _options, work) => {
+            if (interrupted) {
+              status = "errored";
+              return Promise.reject(new Error("engine interrupted"));
+            }
+            status = "running";
+            return work();
+          },
+          sleep: (_name, duration) => {
+            now += duration;
+            vi.setSystemTime(now);
+            return Promise.resolve();
+          },
+        });
+      const restart = vi.fn(() => {
+        interrupted = false;
+        return run().then(() => {
+          status = "complete";
+        });
+      });
+      const workflow = {
+        create: vi.fn((options: { id: string; params: unknown }) => {
+          expect(options.id).toBe(`source-cancel-v2-${userId}`);
+          execution = Option.some(options.params);
+          return Promise.reject(new Error("lost launch response"));
+        }),
+        get: (_id: string): Promise<Pick<WorkflowInstance, "status" | "restart">> =>
+          Option.isSome(execution)
+            ? Promise.resolve({ status: () => Promise.resolve({ status }), restart })
+            : Promise.reject(new Error("missing execution")),
+      };
+      const ack = vi.fn();
+      const receive = (): Effect.Effect<void, BillingCollectionFailure> =>
+        receiveBillingCollection({
+          environment: { DB: db, BILLING_COLLECTION_WORKFLOW: workflow },
+          batch: { messages: [{ body: sent[0], ack }] },
+        });
+      yield* receive();
+      yield* receive();
+      expect(workflow.create).toHaveBeenCalledTimes(1);
+      expect((yield* Effect.exit(fromPromise(run)))._tag).toBe("Failure");
+      yield* receive();
+      yield* receive();
+      expect(restart).toHaveBeenCalledTimes(1);
+      expect(ack).toHaveBeenCalledTimes(4);
+      expect(puts).toBe(1);
+      expect(gets).toBe(8);
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT verification_count,source_cancellation_state FROM subscription_cancellations"
+            )
+            .first()
+        )
+      ).toEqual({ verification_count: 8, source_cancellation_state: "void-pending" });
+      expect((yield* cancel(db, dueAt)).status).toBe(200);
+    })
+  ));
+
 const runObservedRenewal = ({
   db,
   id,
@@ -1777,11 +1918,7 @@ it("refuses a borrowed or revoked browser credential before cancellation and rol
       expect((yield* cancel(db, dueAt - 1000)).status).toBe(503);
       expect(
         (yield* fromPromise(() =>
-          db
-            .prepare(
-              "SELECT user_id FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL)"
-            )
-            .all()
+          db.prepare("SELECT user_id FROM subscription_cancellation_context").all()
         )).results
       ).toHaveLength(0);
       yield* admission(db, dueAt);
@@ -2031,7 +2168,7 @@ const cancellationEffects = (db: D1Database): Effect.Effect<unknown, Cause.Unkno
   fromPromise(() =>
     db
       .prepare(`SELECT
-  (SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL)) AS cancellations,
+  (SELECT COUNT(*) FROM subscription_cancellation_context) AS cancellations,
   (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
   (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE state='armed') AS armed,
   (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work) AS offers,

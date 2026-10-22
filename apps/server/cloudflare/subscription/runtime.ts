@@ -50,7 +50,6 @@ import {
   type BillingObservationWorkflow,
   type BillingQueuePublisher,
   type BillingRuntime,
-  type BillingWorkflowStarter,
 } from "./contract";
 import {
   captureObservedProviderFetch,
@@ -182,7 +181,10 @@ export const dispatchBillingCollection = (
 /** Hand identity-only Queue work to its deterministic Workflow without repeating a charge. */
 export const receiveBillingCollection = (
   input: Readonly<{
-    environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: BillingWorkflowStarter }>;
+    environment: Readonly<{
+      DB: D1Database;
+      BILLING_COLLECTION_WORKFLOW: BillingObservationWorkflow;
+    }>;
     batch: Readonly<{ messages: ReadonlyArray<{ body: unknown; ack: () => void }> }>;
   }>
 ): Effect.Effect<void, BillingCollectionFailure> => receive(input);

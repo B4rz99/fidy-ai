@@ -1973,11 +1973,14 @@ For a populated database, fence all ordinary/background writers and provider pub
 restorable backup and inventory every dependent schema object. Stop on any unexplained divergence.
 Do not replay the fresh-install baseline or infer historical values from the current environment.
 Use one native D1 batch with deferred foreign keys. Create `users_1450`, `subscriptions_1450` and
-`billing_attempts_1450` from the corresponding final baseline definitions by changing only the
-CREATE TABLE name and redirect references among these three replaced tables to their shadow names.
-Renaming the shadows restores their final reference names. Execute preflight and copy below,
+`billing_attempts_1450` from the schema checkpoint at commit `8d5d210e7` (after #1450 and
+before #1452 removes cancellation fields), rather than the later final baseline, by changing only the
+CREATE TABLE name and redirect references to replaced Subscriptions and BillingAttempts to their
+shadow names. Keep all User references pointing to the original users table. Execute preflight and copy below,
 compare every copied row and exact rowid with its source, then remove dependent triggers/views/indexes,
-drop the three old tables, rename shadows to their final names and reinstall all final schema objects.
+drop only the old subscriptions and billing_attempts tables, rename those two shadows to their final
+names, execute the User column-removal block below and reinstall all final schema objects. Users
+remain in place so cascading child data cannot be deleted. users_1450 is a validated copy only.
 Preserve every other row and existing erasure archive verbatim. Any failure must roll back the entire
 batch. Test interruption after copying and after replacement; retain the backup until #1494's full
 release verification is complete. Subsequent deployment must use this matching schema and code.
@@ -2107,6 +2110,18 @@ INSERT INTO sql_assertions(scope,accepted) SELECT 'subscription-standing-copy-bi
 
 <!-- subscription-standing-copy-check:end -->
 
+<!-- subscription-standing-user-remove:start -->
+
+```sql
+DROP TABLE users_1450;
+ALTER TABLE users DROP COLUMN paid_renewal_anchor_ms;
+ALTER TABLE users DROP COLUMN paid_period_ends_at_ms;
+ALTER TABLE users DROP COLUMN paid_price_id;
+ALTER TABLE users DROP COLUMN paid_attempt_id;
+```
+
+<!-- subscription-standing-user-remove:end -->
+
 <!-- subscription-standing-verify:start -->
 
 ```sql
@@ -2150,3 +2165,105 @@ one-step meaning during their existing three-day retention; new offers use v2. D
 restart an existing execution with its old charged payload. Recovery reoffers the retained database
 identity through the dispatcher, preserving its cumulative charging and deadline guards. Final live
 verification remains part of #1494.
+
+## Retained Subscription cancellation (#1452)
+
+Cancellation moves nine nullable User fields into the ten-field `subscription_cancellations` table.
+Its Subscription key and composite paid-attempt/source references enforce one owner. The read-only
+context supplies User identity and preserves existing archive keys. New rows keep the original User
+rowid, so retained archive locators remain unchanged. A cancellation remains a renewal stop after
+source replacement; it never revokes the already awarded paid period.
+
+Fence ordinary writers and take the same verified backup required above. Create the final empty
+`subscription_cancellations` table from the baseline. Execute the following blocks, removal of
+schema objects that depend on the old cancellation columns, and reinstallation of final views,
+indexes and triggers in one native atomic batch. Copy and validate before dropping columns.
+Drop `cancellation_last_offered_at_ms` first because its inline CHECK owns the old grouped-absence
+constraint. Dropping columns in place preserves the User table, rowids and every cascading child;
+this cutover does not drop or rename Users. Never disable foreign keys. Retain archives unchanged.
+
+<!-- subscription-cancellation-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-cancellation-preflight',CASE WHEN NOT EXISTS (
+ SELECT 1 FROM users u LEFT JOIN subscriptions s ON s.user_id=u.id
+ LEFT JOIN billing_attempts a ON a.id=u.cancellation_paid_attempt_id
+ LEFT JOIN payment_sources p ON p.id=u.cancellation_payment_source_id
+ WHERE u.cancellation_cancelled_at_ms IS NOT NULL AND (
+  s.id IS NULL OR a.id IS NULL OR p.id IS NULL OR a.subscription_id IS NOT s.id
+  OR p.subscription_id IS NOT s.id OR a.payment_source_id IS NOT p.id
+  OR a.status<>'succeeded' OR a.paid_starts_at_ms IS NULL
+  OR u.cancellation_paid_through_ms>a.paid_ends_at_ms
+  OR u.cancellation_verification_count NOT BETWEEN 0 AND 8
+  OR u.cancellation_source_cancellation NOT IN ('detached','void-pending','voided')
+ )) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-cancellation-preflight:end -->
+
+<!-- subscription-cancellation-copy:start -->
+
+```sql
+INSERT INTO subscription_cancellations(rowid,subscription_id,paid_attempt_id,payment_source_id,cancelled_at_ms,paid_through_ms,source_cancellation_state,void_started_at_ms,void_verified_at_ms,verification_count,last_offered_at_ms)
+SELECT u.rowid,s.id,u.cancellation_paid_attempt_id,u.cancellation_payment_source_id,u.cancellation_cancelled_at_ms,u.cancellation_paid_through_ms,u.cancellation_source_cancellation,u.cancellation_void_started_at_ms,u.cancellation_void_verified_at_ms,u.cancellation_verification_count,u.cancellation_last_offered_at_ms FROM users u JOIN subscriptions s ON s.user_id=u.id WHERE u.cancellation_cancelled_at_ms IS NOT NULL;
+```
+
+<!-- subscription-cancellation-copy:end -->
+
+<!-- subscription-cancellation-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-cancellation-copy',CASE WHEN
+ (SELECT count(*) FROM subscription_cancellations)=(SELECT count(*) FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL)
+ AND NOT EXISTS(SELECT 1 FROM users u JOIN subscriptions s ON s.user_id=u.id
+ LEFT JOIN subscription_cancellations c ON c.subscription_id=s.id
+ WHERE u.cancellation_cancelled_at_ms IS NOT NULL AND (c.rowid IS NOT u.rowid
+  OR c.paid_attempt_id IS NOT u.cancellation_paid_attempt_id
+  OR c.payment_source_id IS NOT u.cancellation_payment_source_id
+  OR c.cancelled_at_ms IS NOT u.cancellation_cancelled_at_ms
+  OR c.paid_through_ms IS NOT u.cancellation_paid_through_ms
+  OR c.source_cancellation_state IS NOT u.cancellation_source_cancellation
+  OR c.void_started_at_ms IS NOT u.cancellation_void_started_at_ms
+  OR c.void_verified_at_ms IS NOT u.cancellation_void_verified_at_ms
+  OR c.verification_count IS NOT u.cancellation_verification_count
+  OR c.last_offered_at_ms IS NOT u.cancellation_last_offered_at_ms
+)) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-cancellation-copy-check:end -->
+
+<!-- subscription-cancellation-remove:start -->
+
+```sql
+ALTER TABLE users DROP COLUMN cancellation_last_offered_at_ms;
+ALTER TABLE users DROP COLUMN cancellation_verification_count;
+ALTER TABLE users DROP COLUMN cancellation_void_verified_at_ms;
+ALTER TABLE users DROP COLUMN cancellation_void_started_at_ms;
+ALTER TABLE users DROP COLUMN cancellation_source_cancellation;
+ALTER TABLE users DROP COLUMN cancellation_paid_through_ms;
+ALTER TABLE users DROP COLUMN cancellation_cancelled_at_ms;
+ALTER TABLE users DROP COLUMN cancellation_payment_source_id;
+ALTER TABLE users DROP COLUMN cancellation_paid_attempt_id;
+```
+
+<!-- subscription-cancellation-remove:end -->
+
+<!-- subscription-cancellation-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-cancellation-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-cancellation-verify:end -->
+
+Cleanup uses `source-cancel-v2-<UserId>` with eight bounded native lookup steps and durable waits.
+Queue publication retains its original offer clock. The void mutation still needs its one durable
+claim; an ambiguous void is never repeated. Each source GET reserves the existing cumulative
+verification counter. Active executions are deduplicated; terminal executions may restart only
+while pending work and remaining budget exist. Every step reloads the retained original source and
+same-environment binding, so a replacement source cannot redirect the cleanup. Existing v1
+executions retain their one-step meaning for the existing three-day retention. #1494 owns final
+live cutover verification.

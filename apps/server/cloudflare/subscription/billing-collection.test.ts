@@ -1,7 +1,10 @@
 import { type WorkflowStepConfig } from "cloudflare:workers";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
-import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
+import {
+  makePaymentEnrollmentD1,
+  queuedBillingExecution,
+} from "./payment-enrollment-d1.test-fixture";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import {
   dispatchBillingCollection,
@@ -1359,7 +1362,7 @@ it("publishes the armed intent once per cooldown and deduplicates Queue redelive
         created = true;
         return Promise.resolve({});
       });
-      const get = vi.fn((_id: string) => Promise.resolve({}));
+      const get = vi.fn((_id: string) => Promise.resolve(queuedBillingExecution()));
       const ack = vi.fn();
       const batch = { messages: [{ body: { version: 1, attemptId }, ack }] };
       const environment = { DB: db, BILLING_COLLECTION_WORKFLOW: { create, get } };
@@ -1381,7 +1384,7 @@ it("drops diagnostic garbage before durable Billing handoff without refusing val
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => fixture());
       const create = vi.fn((_options: { id: string; params: unknown }) => Promise.resolve({}));
-      const get = vi.fn((_id: string) => Promise.resolve({}));
+      const get = vi.fn((_id: string) => Promise.resolve(queuedBillingExecution()));
       const ack = vi.fn();
       const traceContext = {
         version: 1,
@@ -1522,7 +1525,9 @@ it.each(["price-notice", "source-cancellation"] as const)(
           ...(kind === "price-notice" ? { priceId } : {}),
         };
         const create = vi.fn((_options: { id: string; params: unknown }) => Promise.resolve({}));
-        const get = vi.fn((_id: string) => Promise.resolve({}));
+        const get = vi.fn((_id: string): Promise<never> =>
+          Promise.reject(new Error("missing workflow"))
+        );
         const ack = vi.fn();
         const traceContext = {
           version: 1,
@@ -1541,12 +1546,12 @@ it.each(["price-notice", "source-cancellation"] as const)(
           id:
             kind === "price-notice"
               ? `price-v1-${priceId}-${userId}-1`
-              : `source-cancel-v1-${userId}-1`,
-          params: domain,
+              : `source-cancel-v2-${userId}`,
+          params: kind === "source-cancellation" ? { ...domain, version: 2 } : domain,
           retention: { successRetention: "3 days", errorRetention: "3 days" },
         });
         expect(ack).toHaveBeenCalledOnce();
-        expect(get).not.toHaveBeenCalled();
+        expect(get).toHaveBeenCalledTimes(kind === "source-cancellation" ? 1 : 0);
       })
     )
 );

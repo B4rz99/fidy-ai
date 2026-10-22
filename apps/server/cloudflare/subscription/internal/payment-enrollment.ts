@@ -437,7 +437,7 @@ const prepare = ({
     if (Option.isNone(selected)) return invalid();
     const incompatibleSource = yield* waitFor(() =>
       environment.DB.prepare(
-        `SELECT s.id FROM payment_source_context AS s WHERE s.user_id = ? AND s.retired_at_ms IS NULL AND (EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) c WHERE c.payment_source_id=s.id) OR (s.method <> ? AND NOT (? AND s.method='card'))
+        `SELECT s.id FROM payment_source_context AS s WHERE s.user_id = ? AND s.retired_at_ms IS NULL AND (EXISTS (SELECT 1 FROM subscription_cancellation_context c WHERE c.payment_source_id=s.id) OR (s.method <> ? AND NOT (? AND s.method='card'))
             OR NOT EXISTS (SELECT 1 FROM payment_enrollment_context AS origin WHERE origin.id = s.enrollment_id
               AND (origin.wompi_environment = ? OR (origin.wompi_environment IS NULL AND EXISTS
                 (SELECT 1 FROM billing_attempt_context AS a WHERE a.payment_source_id = s.id AND a.wompi_environment = ?))))

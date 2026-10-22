@@ -6,6 +6,7 @@ import {
   workTraceParent,
   workerRelease,
 } from "../../runtime/telemetry/operations";
+import { offerBillingWorkflow } from "./workflow-execution";
 import { cancelSource, receiveCancellation } from "./source-cancellation";
 import { receivePriceNotice, sendPriceNotice } from "./price-notice";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
@@ -39,7 +40,6 @@ import {
   type BillingObservationWorkflow,
   BillingPriceNoticeWork,
   type BillingRuntime,
-  type BillingWorkflowStarter,
   SubscriptionCancellationWork,
 } from "../contract";
 
@@ -61,11 +61,15 @@ const LookupWork = Schema.Struct({
   signedAt: Schema.NullOr(Schema.Finite),
   signedStatus: Schema.NullOr(Schema.String),
 });
+const CancellationExecution = Schema.Struct({
+  ...SubscriptionCancellationWork.fields,
+  version: Schema.Literal(2),
+});
 const workflowRetention = { successRetention: "3 days", errorRetention: "3 days" } as const;
 type CollectionQueue = Readonly<{
   send: (work: typeof CollectionMessage.Type) => Promise<unknown>;
 }>;
-type CollectionWorkflow = BillingWorkflowStarter;
+type CollectionWorkflow = BillingObservationWorkflow;
 type LookupWorkflowBinding = BillingObservationWorkflow;
 /** Identify this Queue payload without interpreting any provider data as authority. */
 export const isBillingCollectionWork = (body: unknown): boolean =>
@@ -602,6 +606,7 @@ export const runBillingCollectionWorkflow = (input: BillingWorkflowExecution): P
       PreviousLookupWork,
       BillingPriceNoticeWork,
       SubscriptionCancellationWork,
+      CancellationExecution,
     ])
   )(input.payload);
   if (Option.isNone(work)) return Promise.resolve();
@@ -623,10 +628,7 @@ export const runBillingCollectionWorkflow = (input: BillingWorkflowExecution): P
     );
   }
   if ("kind" in work.value && work.value.kind === "source-cancellation") {
-    const cancellation = work.value;
-    return input.activity("cancel-wompi-source-v1", options, () =>
-      runActivity(cancelSource({ environment: input.environment, work: cancellation, wompiHttp }))
-    );
+    return runCancellationExecution({ input, work: work.value, runActivity });
   }
   if ("kind" in work.value) {
     if (work.value.version === 2) {
@@ -647,6 +649,62 @@ export const runBillingCollectionWorkflow = (input: BillingWorkflowExecution): P
     runActivity(collect(input.environment, attemptId, wompiHttp))
   );
 };
+
+const runCancellationExecution = ({
+  input,
+  work,
+  runActivity,
+}: Readonly<{
+  input: BillingWorkflowExecution;
+  work: typeof CancellationExecution.Type | typeof SubscriptionCancellationWork.Type;
+  runActivity: RunActivity;
+}>): Promise<void> =>
+  work.version === 2
+    ? runCancellationLoop({ input, work, runActivity })
+    : input.activity("cancel-wompi-source-v1", { retries: { limit: 0, delay: "1 second" } }, () =>
+        runActivity(
+          cancelSource({ environment: input.environment, work, wompiHttp: input.wompiHttp })
+        )
+      );
+
+const runCancellationLoop = ({
+  input,
+  work,
+  runActivity,
+}: Readonly<{
+  input: BillingWorkflowExecution;
+  work: typeof CancellationExecution.Type;
+  runActivity: RunActivity;
+}>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const options = { retries: { limit: 0, delay: "1 second" } } as const;
+      for (let index = 0; index < maximumCandidateLookupAttempts; index++) {
+        if (index > 0) {
+          yield* attempt(() =>
+            input.sleep(`source-cancellation-wait-v2-${index}`, candidateCooldownMs + 1)
+          );
+        }
+        yield* attempt(() =>
+          input.activity(`cancel-wompi-source-v2-${index}`, options, () =>
+            runCancellationCheck({ input, work, runActivity })
+          )
+        );
+      }
+    })
+  );
+const runCancellationCheck = ({
+  input,
+  work,
+  runActivity,
+}: Readonly<{
+  input: BillingWorkflowExecution;
+  work: typeof CancellationExecution.Type;
+  runActivity: RunActivity;
+}>): Promise<void> =>
+  runActivity(
+    cancelSource({ environment: input.environment, work, wompiHttp: input.wompiHttp })
+  ).catch(() => undefined);
 
 const observeLookup = (
   input: Readonly<{
@@ -783,11 +841,6 @@ const lookupExecutionId = ({
     );
     return `billing-lookup-v2-${fingerprint}`;
   });
-const terminalObservationStatuses: ReadonlySet<InstanceStatus["status"]> = new Set([
-  "errored",
-  "terminated",
-  "complete",
-]);
 const offerBillingLookup = (
   input: Readonly<{
     db: D1Database;
@@ -801,36 +854,17 @@ const offerBillingLookup = (
   Effect.gen(function* () {
     const { db, workflow, transactionId, signedAt, signedStatus, now } = input;
     const id = yield* lookupExecutionId({ transactionId, signedAt, signedStatus });
-    const existing = yield* Effect.exit(attempt(() => workflow.get(id)));
-    if (Exit.isSuccess(existing)) {
-      const current = yield* attempt(() => existing.value.status());
-      if (!terminalObservationStatuses.has(current.status)) return true;
-    }
     const generation = {
       transactionId,
       signedAt: Option.getOrNull(signedAt),
       signedStatus: Option.getOrNull(signedStatus),
     };
-    if (!(yield* reserveLookup(db, generation, now))) return true;
-    const started = yield* Effect.exit(
-      attempt(() =>
-        Exit.isSuccess(existing)
-          ? existing.value.restart()
-          : workflow.create({
-              id,
-              params: { version: 2, kind: "lookup", ...generation },
-              retention: workflowRetention,
-            })
-      )
-    );
-    if (Exit.isFailure(started)) {
-      const recovered = yield* attempt(() => workflow.get(id));
-      const status = yield* attempt(() => recovered.status());
-      return (
-        status.status === "queued" || status.status === "running" || status.status === "waiting"
-      );
-    }
-    return true;
+    return yield* offerBillingWorkflow({
+      workflow,
+      id,
+      params: { version: 2, kind: "lookup", ...generation },
+      reserve: reserveLookup(db, generation, now),
+    });
   });
 
 /** Recheck known candidates by starting a bounded, named Workflow Activity. Failed handoffs retain D1 intent. */

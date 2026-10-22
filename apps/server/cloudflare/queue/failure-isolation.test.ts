@@ -48,6 +48,7 @@ const seed = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
       retention_expires_at_ms INTEGER NOT NULL) STRICT`),
         db.prepare(`CREATE TABLE billing_attempts (
       id TEXT PRIMARY KEY, collection_state TEXT NOT NULL,collection_sent_at_ms INTEGER,collection_last_attempt_at_ms INTEGER) STRICT`),
+        db.prepare("CREATE VIEW billing_attempt_context AS SELECT rowid,* FROM billing_attempts"),
         db.prepare(`CREATE TABLE browser_login_pairings (
       email_work_id TEXT PRIMARY KEY, email_address TEXT NOT NULL,
       email_expires_at_ms INTEGER NOT NULL, email_state TEXT NOT NULL) STRICT`),

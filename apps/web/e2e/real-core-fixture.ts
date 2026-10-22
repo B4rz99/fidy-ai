@@ -42,7 +42,10 @@ const observeConsentRead = (page: Page): Promise<ConsentRead> =>
       (response) => response.url().endsWith("/web/consent") && response.request().method() === "GET"
     )
     .then((response) => ({ status: response.status() }));
-const confirmConsentRead = (page: Page, first: ConsentRead): Promise<void> =>
+export const confirmConsentRead = ({
+  page,
+  first,
+}: Readonly<{ page: Page; first: ConsentRead }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       let response = first;
@@ -66,7 +69,7 @@ const navigateThroughConsent = (page: Page, navigate: () => Promise<unknown>): P
   const consent = observeConsentRead(page);
   return navigate()
     .then(() => consent)
-    .then((response) => confirmConsentRead(page, response));
+    .then((response) => confirmConsentRead({ page, first: response }));
 };
 
 export const reloadTransactionsThroughCore = (page: Page): Promise<void> =>
@@ -149,7 +152,7 @@ const signInWithIdentity = ({
       expect(page)
         .toHaveURL(/\/app\/transactions$/u, { timeout: pairingTimeoutMilliseconds })
         .then(() => page.clock.setSystemTime(Effect.runSync(Clock.currentTimeMillis)))
-        .then(() => confirmConsentRead(page, consent))
+        .then(() => confirmConsentRead({ page, first: consent }))
     );
 
 /** Real public email pairing; the loopback fixture only delivers the synthetic proof. */

@@ -11,8 +11,13 @@ availability after this deployment. No further production financial or access mu
 Local OAuth operation audit, 22 October 2026: the accepted-connection journey now uses a dedicated
 synthetic User, separating its canonical admission from concurrent primary-User journeys. The
 production limiter and mutation retry policy are unchanged. Provider journeys also follow the
-selected token duration in the control’s accessible name. Broad browser verification remains
-in progress; see the linked incident evidence for the observed parallel-run failures.
+selected token duration in the control’s accessible name. The complete serial browser project passes 182 checks with three opt-in cost checks skipped.
+The linked incident evidence retains the observed parallel-run failures; this functional control
+does not establish concurrency or production availability.
+
+The three opt-in resource probes and the isolated native CLI/browser journey pass locally; the OS
+credential cross-process probe also passes and cleans up its synthetic entry. These are local
+metadata, session-lifetime and synthetic authority checks, not a new production access grant.
 
 A fresh post-incident Accesos navigation still returned MCP metadata with all eight audit grants
 marked Revocado (HTTP 200), while PAT metadata returned HTTP 503 and offered Reintentar carga.

@@ -5,6 +5,7 @@ import {
   InvalidWhatsAppPayload,
   InvalidWhatsAppSignature,
   WhatsAppBusinessPhoneNumberId,
+  type WhatsAppDeliveryLookup,
   type WhatsAppDisclosureLifecycleEvidence,
   WhatsAppDocumentFileName,
   type WhatsAppHostedLifecycleEvidence,
@@ -151,6 +152,17 @@ const RawStoredMessage = Schema.Struct({
     statuses: Schema.NonEmptyArray(RawReceiptStatus),
   }),
 });
+
+// Kapso publishes the sent message before Meta receipt history is available.
+const RawPendingSentMessage = Schema.Struct({
+  ...RawStoredMessage.fields,
+  kapso: Schema.Struct({
+    ...RawStoredMessage.fields.kapso.fields,
+    status: Schema.Literal("sent"),
+    statuses: Schema.optionalKey(Schema.Never),
+  }),
+});
+const RawStoredLifecycle = Schema.Union([RawStoredMessage, RawPendingSentMessage]);
 
 export const RawMetaEnvelope = Schema.Struct({
   object: Schema.Literal("whatsapp_business_account"),
@@ -452,6 +464,15 @@ const projectReceiptHistory = Effect.fn(function* (
   return { _tag: "Correlated" as const, value: latest.value };
 });
 
+const matchesStoredCoordinates = (
+  stored: typeof RawStoredLifecycle.Type,
+  expected: Pick<WhatsAppDeliveryLookup, "businessPhoneNumberId" | "messageId">
+): boolean =>
+  stored.id === expected.messageId &&
+  stored.kapso.phone_number_id === expected.businessPhoneNumberId &&
+  (stored.kapso.statuses === undefined ||
+    stored.kapso.statuses.every((status) => status.id === stored.id));
+
 export const lookupLifecycleStatus = Effect.fn(function* (
   input: Readonly<{
     outboundHttp: OutboundHttpService;
@@ -475,21 +496,18 @@ export const lookupLifecycleStatus = Effect.fn(function* (
       })
     );
   if (response.status !== okStatus) return yield* new WhatsAppStatusUnavailable();
-  const stored = yield* Schema.decodeEffect(Schema.fromJsonString(RawStoredMessage))(
+  const stored = yield* Schema.decodeEffect(Schema.fromJsonString(RawStoredLifecycle))(
     new TextDecoder().decode(response.body)
   ).pipe(Effect.mapError(invalidKapsoPayload));
-  if (
-    stored.id !== input.messageId ||
-    stored.kapso.phone_number_id !== input.businessPhoneNumberId ||
-    stored.kapso.statuses.some((status) => status.id !== stored.id)
-  ) {
+  const statuses = stored.kapso.statuses;
+  if (!matchesStoredCoordinates(stored, input)) {
     return yield* invalidKapsoInvariant("lookup coordinates disagreed");
   }
-  const projected = yield* projectReceiptHistory(
-    stored.kapso.statuses,
-    input.status,
-    input.receivedAt
-  );
+  if (statuses === undefined) {
+    if (input.status !== "sent") return yield* invalidKapsoInvariant("missing provider status");
+    return { _tag: "Uncorrelated" as const };
+  }
+  const projected = yield* projectReceiptHistory(statuses, input.status, input.receivedAt);
   return projected._tag === "Correlated"
     ? {
         ...projected,

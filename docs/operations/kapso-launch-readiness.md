@@ -24,12 +24,30 @@ what the first callback observed or establish a root cause. Existing native test
 rejected proof and bounded lookup replay; neither receipt timing nor D1 exhaustion is claimed
 as the cause. Keep signature, correlation, delivery-proof and resource-admission guards intact.
 
-On the same revision with Effect 4.0.5, the current local rerun passed:
+A single labeled technical send then captured three immediate genuine provider responses:
+HTTP 200, matching message/endpoint, `status: sent`, and no `statuses` field. The provider's
+pending-sent shape therefore does not yet supply a receipt history. A native public-Ingress/Core
+regression reproduced 401 for that shape. The local fix acknowledges only the authenticated
+sent hint plus that coordinate-matching provider response, returning no lifecycle evidence and
+making no domain change. Delivered/failed hints still require receipt history. Nine negative
+cases retain rejection for forged signatures, mismatched coordinates/direction, malformed
+history, and other lifecycle states. The positive case proves Consent remains blocked until a
+separate verified delivered receipt and its decision timing permit acceptance. The captured
+later history and this new send do not reconstruct the earlier callbacks' original responses.
+Production verification of the fix remains pending deployment. A concurrent audit subsequently
+reported renewed 503 responses on protected canonical reads; this audit paused live probes.
+Successful direct D1 reads do not classify that separate availability failure as quota exhaustion.
+
+On the baseline revision with Effect 4.0.5, the local rerun passed:
 
 - 31 WhatsApp adapter checks across five files.
 - 233 native checks across WhatsApp, provider association, onboarding Consent and Agent files.
 - 61 controlled hosted-inference checks across three files.
 - 38 Agent Core checks across five files.
+
+After the pending-sent fix, the same selected native run passed 243 checks across 21 files,
+including the ten new lifecycle cases. The adapter, inference and Core reruns remain separately
+reported above; this does not turn controlled tests into deployed-provider evidence.
 
 These commands use controlled external responses and isolated local persistence; they do not
 prove live inference, voice/media interpretation, proactive templates, or all new-number journeys.
@@ -41,7 +59,7 @@ returned the intended QA account review, and its association identifier matched 
 handoff. No account identifier or raw provider payload is retained here. The inbound callback
 returned 200; the sent callback again returned 401. Association confirmation is deferred for
 explicit approval when the User returns. Another audit retains the shared browser session;
-no sign-out or further provider selection was performed by this audit. No financial fixture,
+no sign-out or further provider selection was performed by this audit. The separately labeled technical message ran no Agent operation. No financial fixture,
 access grant, counter reset or history deletion was performed in this continuation.
 
 ## Dedicated-number cutover (2026-10-21)

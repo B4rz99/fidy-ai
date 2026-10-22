@@ -1,0 +1,35 @@
+apps/web/e2e/access-management.spec.ts
+  s_6d017cc65783af::t_8f508cefc51cff 274
+apps/web/e2e/needs-review.spec.ts
+  s_6d017cc65783af::t_8de7fd5439092c 607,804,806,1028,1058,1075
+apps/web/e2e/recurring-plans.spec.ts
+  s_241024bc81d268::t_5a9ed6a74f7433 319,331-333
+apps/web/src/ui/components/calendar-field.tsx
+  s_241024bc81d268::t_7a7a5e13106421 37,43,61
+apps/web/src/ui/components/choice-dropdown.tsx
+  s_241024bc81d268::t_0047d9e4b65ed3 37-56,58-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "469b4d00893f4fd9271c27e7afba7b116ae8e2b5",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

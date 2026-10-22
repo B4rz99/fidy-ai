@@ -71,3 +71,9 @@ run hit socket failures under competing runtimes; the controlled reviewed-runtim
 the completed evidence. Local Alchemy emulation failed first with stale-schema-style 503, then
 with a provider-sidecar connection failure and startup time bound in isolated stages. It remains
 inconclusive locally; do not report its failure as a production fix or suppress its CI gate.
+
+The fresh CI infrastructure job in run `39791951121` passed all 289 cases, including Alchemy local
+emulation. Its broad browser shard passed 97 cases and correctly refused the Recurring list's
+visible-name mismatch exposed by axe-core 4.14. The already reviewed shared control-name fix from
+PR1508 is incorporated without disabling accessibility checks. All 15 chat/Recurring checks pass
+on that corrected baseline. Full final-head CI must still complete before merge.

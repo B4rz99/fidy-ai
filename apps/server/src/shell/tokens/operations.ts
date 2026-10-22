@@ -124,8 +124,8 @@ export const claimPairingGrant = (
   const protectedClaim = protectConsentStatement({
     statement: {
       sql: `UPDATE pat_pairings SET state = 'claimed' WHERE id = ? AND state = 'approved_awaiting_claim'
-        AND user_id = ? AND expires_at_ms > ?`,
-      params: [input.pairingId, input.userId, input.current],
+        AND user_id = ? AND approved_at_ms <= ? AND expires_at_ms > ? AND pat_expires_at_ms > ?`,
+      params: [input.pairingId, input.userId, input.current, input.current, input.current],
     },
     subject: { _tag: "Owner", column: "pat_pairings.user_id" },
     requirement: "unrevoked",
@@ -336,6 +336,9 @@ export const insertClaimedPAT = (
     patId: string;
     shortId: string;
     bearerDigest: Uint8Array;
+    recipientLabel: string;
+    scopesJson: string;
+    lifetimeDays: number;
     approvedAt: number;
     current: number;
     expires: number;
@@ -345,12 +348,15 @@ export const insertClaimedPAT = (
 ): OwnedStatement => ({
   sql: `INSERT INTO pats (id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,
     created_at_ms,issued_at_ms,expires_at_ms,pairing_id)
-    SELECT ?,user_id,?,?,recipient_label,scopes_json,lifetime_days,?,?,?,id
+    SELECT ?,user_id,?,?,?,?,?,?,?,?,id
     FROM pat_pairings WHERE id = ? AND state = 'claimed' AND user_id = ? AND changes() = 1`,
   params: [
     input.patId,
     input.shortId,
     input.bearerDigest,
+    input.recipientLabel,
+    input.scopesJson,
+    input.lifetimeDays,
     input.approvedAt,
     input.current,
     input.expires,

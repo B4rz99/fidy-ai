@@ -1753,3 +1753,74 @@ DELETE FROM sql_assertions WHERE scope='oauth_intent_cutover';
 ```
 
 <!-- oauth-intent-verify:end -->
+
+## PAT grant integration (#1448)
+
+Tokens retains `pats` (fourteen fields) and `pat_pairings` (fifteen fields). Audit owns activity;
+Consent owns grant/revocation evidence; Resource Admission owns source counters and rolling browser
+review events. The #1433 and #1438 conversions must already be verified before this cutover.
+No additional issuance counter, consent flag or compatibility table is introduced. Existing active
+capacity (100) and issuance protection (20 per User per ten minutes), source admission, rolling
+review protection, private proof and polling slowdown retain their original semantics.
+
+A paired issuance now commits the exact recipient, scopes, selected lifetime, approval anchor and
+absolute expiry used to prepare its response. The final insert guard checks those facts against the
+same-User claimed pairing, with issuance inside both original deadlines and at or after approval.
+A changed grant aborts the complete claim/issuance/Audit batch, leaving its original proof retryable.
+Approval remains the lifetime anchor; `issued_at_ms` records the later claim for issuance-window
+accounting. Manual issuance still requires a fresh WebSession. Pairing approval still permits a live
+same-User WebSession; claim requires the original private proof. Revocation evidence, credential
+changes and Audit remain one unit. Neither a retry nor activity discloses a stored bearer or renews
+its expiry.
+
+For an existing D1 database, back up and fence PAT issuance, pairing creation/review/approval/claim,
+protected PAT operations, revocation, maintenance and erasure. Inspect the installed dependencies and
+confirm `paired_pat_requires_claim` is the original guard from the preceding schema; stop on
+unexplained differences. Execute the following preflight, `DROP TRIGGER paired_pat_requires_claim`,
+the replacement definition from `0001_schema.sql`, and final verification in **one native D1 batch**.
+There is no row copy or archive-address change. Historical shorter PAT expiries are retained exactly,
+including paired PATs shorter than their approved maximum; new claims must use the exact approved
+expiry. Foreign ownership, inconsistent Consent references, changed reviewed grants and claims
+outside their original deadlines stop the cutover. Do not repair them by rewriting approval,
+issuance, lifetime or expiry. A failed batch restores both records and the preceding guard.
+
+After verification, align the existing baseline ledger, deploy matching code and exercise manual and
+paired issuance, activity and revocation before removing the fence. Do not replay the baseline on an
+existing database. Revert the guard and matching code together if rollback is required; preserve all
+recorded identities, digests, origins, exact instants and Consent/Audit references.
+
+<!-- pat-grants-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'pat_grants_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_permits) AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM pat_pairings q WHERE
+  (q.approved_at_ms IS NOT NULL AND (q.approved_at_ms<q.created_at_ms OR q.approved_at_ms>=q.expires_at_ms
+   OR NOT EXISTS(SELECT 1 FROM consent_history g WHERE g.record_type='pat_grant'
+    AND g.pairing_id=q.id AND g.user_id=q.user_id AND g.occurred_at_ms=q.approved_at_ms))))
+ AND NOT EXISTS(SELECT 1 FROM pats p WHERE p.expires_at_ms<=p.issued_at_ms
+  OR (p.request_id IS NOT NULL AND (p.created_at_ms<>p.issued_at_ms
+   OR NOT EXISTS(SELECT 1 FROM consent_history g WHERE g.record_type='pat_grant'
+    AND g.request_id=p.request_id AND g.user_id=p.user_id AND g.occurred_at_ms=p.created_at_ms)))
+  OR (p.pairing_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pat_pairings q
+   WHERE q.id=p.pairing_id AND q.user_id=p.user_id AND q.state='claimed'
+    AND q.approved_at_ms=p.created_at_ms AND q.expires_at_ms>p.issued_at_ms
+    AND q.pat_expires_at_ms>=p.expires_at_ms AND p.issued_at_ms>=q.approved_at_ms
+    AND q.recipient_label=p.recipient_label AND q.scopes_json=p.scopes_json AND q.lifetime_days=p.lifetime_days)))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- pat-grants-preflight:end -->
+
+<!-- pat-grants-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'pat_grants_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='pat_grants_cutover';
+```
+
+<!-- pat-grants-verify:end -->

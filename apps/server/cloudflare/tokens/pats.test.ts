@@ -1,3 +1,8 @@
+import {
+  documentedSqlBlock,
+  schemaDefinition,
+  schemaStatements,
+} from "../schema-cutover.test-fixture";
 import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { Clock, Data, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { makeAudit } from "../../src/shell/audit/runtime";
@@ -576,6 +581,177 @@ it("authenticated scope and input refusals retain commercial allowance headers w
 
 afterEach(() => vi.useRealTimers());
 afterAll(() => databases.dispose());
+it("refuses a changed paired grant atomically and lets the original proof retry", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const started = yield* Schema.decodeUnknownEffect(Started)(
+        yield* awaitPromise(
+          (yield* awaitPromise(
+            send({
+              path: "/pat-pairings",
+              method: "POST",
+              payload: { recipientLabel: "Reviewed agent", scopes: ["read"], lifetimeDays: 7 },
+            })
+          )).json()
+        )
+      );
+      expect(
+        (yield* awaitPromise(
+          send({
+            path: "/pats/pairings/approve",
+            method: "POST",
+            session: sessions[0],
+            payload: { pairingId: started.pairingId },
+          })
+        )).status
+      ).toBe(200);
+      yield* awaitPromise(
+        db
+          .prepare(`CREATE TRIGGER change_reviewed_grant AFTER UPDATE OF state ON pat_pairings
+        WHEN NEW.state='claimed' BEGIN
+        UPDATE pat_pairings SET recipient_label='Different agent',scopes_json='["write"]' WHERE id=NEW.id;
+        END`)
+          .run()
+      );
+      const claim = (): Promise<Response> =>
+        send({
+          path: "/pat-pairings/claim",
+          method: "POST",
+          payload: { pairingId: started.pairingId, privateDeviceCode: started.privateDeviceCode },
+        });
+      expect((yield* awaitPromise(claim())).status).toBe(400);
+      yield* awaitPromise(db.prepare("DROP TRIGGER change_reviewed_grant").run());
+      const issued = yield* awaitPromise(claim());
+      expect(issued.status).toBe(200);
+      expect(yield* awaitPromise(issued.json())).toMatchObject({
+        pat: { recipientLabel: "Reviewed agent", scopes: ["read"] },
+      });
+      expect((yield* awaitPromise(claim())).status).toBe(400);
+    })
+  ));
+
+it.each(["valid", "foreign-owner", "changed-grant", "late-claim", "interrupted"] as const)(
+  "preserves PAT grants and evidence or rolls back %s cutover",
+  (history) =>
+    runTest(
+      Effect.gen(function* () {
+        const { db, send, sessions } = yield* awaitPromise(setup());
+        yield* issueManualPAT({
+          send,
+          session: sessions[0],
+          requestId: "14480000-0000-4000-8000-000000000001",
+          grant: manualGrant(),
+        });
+        const started = yield* Schema.decodeUnknownEffect(Started)(
+          yield* awaitPromise(
+            (yield* awaitPromise(
+              send({
+                path: "/pat-pairings",
+                method: "POST",
+                payload: { recipientLabel: "Agent", scopes: ["read"], lifetimeDays: 7 },
+              })
+            )).json()
+          )
+        );
+        expect(
+          (yield* awaitPromise(
+            send({
+              path: "/pats/pairings/approve",
+              method: "POST",
+              session: sessions[0],
+              payload: { pairingId: started.pairingId },
+            })
+          )).status
+        ).toBe(200);
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(clock() + 120_000);
+        expect(
+          (yield* awaitPromise(
+            send({
+              path: "/pat-pairings/claim",
+              method: "POST",
+              payload: {
+                pairingId: started.pairingId,
+                privateDeviceCode: started.privateDeviceCode,
+              },
+            })
+          )).status
+        ).toBe(200);
+        yield* awaitPromise(
+          db.batch([
+            db.prepare("DROP TRIGGER paired_pat_requires_claim"),
+            db.prepare(`CREATE TRIGGER paired_pat_requires_claim BEFORE INSERT ON pats
+        WHEN NEW.pairing_id IS NOT NULL AND NOT EXISTS (
+          SELECT 1 FROM pat_pairings WHERE id=NEW.pairing_id AND user_id=NEW.user_id
+          AND state='claimed' AND expires_at_ms>NEW.created_at_ms)
+        BEGIN SELECT RAISE(ABORT,'pat_pairing_not_claimable'); END`),
+            // Retained policy input is not permission to extend either historical absolute expiry.
+            db.prepare("UPDATE pats SET expires_at_ms=expires_at_ms-86400000"),
+          ])
+        );
+        const alterations = {
+          valid: "",
+          interrupted: "",
+          "foreign-owner": `UPDATE pats SET user_id='${userB}' WHERE pairing_id IS NOT NULL`,
+          "changed-grant": `UPDATE pats SET scopes_json='["write"]' WHERE pairing_id IS NOT NULL`,
+          "late-claim":
+            "UPDATE pats SET issued_at_ms=(SELECT expires_at_ms FROM pat_pairings WHERE id=pats.pairing_id) WHERE pairing_id IS NOT NULL",
+        };
+        if (alterations[history].length > 0) {
+          yield* awaitPromise(db.prepare(alterations[history]).run());
+        }
+        const snapshot = (): Promise<ReadonlyArray<D1Result>> =>
+          db.batch(
+            [
+              "SELECT rowid,* FROM pats ORDER BY id",
+              "SELECT rowid,* FROM pat_pairings ORDER BY id",
+              "SELECT * FROM consent_history ORDER BY record_type,id",
+              "SELECT * FROM audit_entries ORDER BY sequence",
+              "SELECT * FROM sqlite_schema ORDER BY name",
+            ].map((sql) => db.prepare(sql))
+          );
+        const before = (yield* awaitPromise(snapshot())).map((result) => result.results);
+        const source = schemaStatements(
+          yield* awaitPromise(
+            Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+          )
+        );
+        const guide = yield* awaitPromise(
+          Bun.file(
+            new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)
+          ).text()
+        );
+        const plan = [
+          ...documentedSqlBlock({ guide, marker: "pat-grants-preflight" }),
+          "DROP TRIGGER paired_pat_requires_claim",
+          schemaDefinition({ source, target: "paired_pat_requires_claim" }),
+          ...(history === "interrupted"
+            ? ["INSERT INTO sql_assertions(scope,accepted) VALUES('interrupted',0)"]
+            : []),
+          ...documentedSqlBlock({ guide, marker: "pat-grants-verify" }),
+        ];
+        const apply = (): Promise<ReadonlyArray<D1Result>> =>
+          db.batch(plan.map((sql) => db.prepare(sql)));
+        if (history !== "valid") {
+          yield* awaitPromise(expect(apply()).rejects.toThrow());
+          expect((yield* awaitPromise(snapshot())).map((result) => result.results)).toEqual(before);
+          return;
+        }
+        yield* awaitPromise(apply());
+        expect(
+          (yield* awaitPromise(snapshot())).slice(0, 4).map((result) => result.results)
+        ).toEqual(before.slice(0, 4));
+        expect((yield* awaitPromise(db.prepare("PRAGMA foreign_key_check").all())).results).toEqual(
+          []
+        );
+        expect(
+          (yield* awaitPromise(send({ path: "/pats", method: "GET", session: sessions[0] }))).status
+        ).toBe(200);
+      })
+    )
+);
+
 it.each(["fresh", "live"] as const)(
   "releases one scoped bearer after approval by a %s browser session, never on replay",
   (sessionAge) =>
@@ -680,6 +856,7 @@ it.each(["fresh", "live"] as const)(
           })
         );
         expect(approval.status).toBe(200);
+        vi.setSystemTime(clock() + 120_000);
         const proof = {
           pairingId: created.pairingId,
           privateDeviceCode: created.privateDeviceCode,
@@ -693,6 +870,14 @@ it.each(["fresh", "live"] as const)(
         );
         expect(claim.status).toBe(200);
         const issued = yield* Schema.decodeUnknownEffect(Issued)(yield* awaitPromise(claim.json()));
+        expect(
+          yield* awaitPromise(
+            db
+              .prepare("SELECT issued_at_ms-created_at_ms AS delay FROM pats WHERE pairing_id=?")
+              .bind(created.pairingId)
+              .first()
+          )
+        ).toEqual({ delay: 120_000 });
         expect(issued.bearer).toMatch(/^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{43}$/u);
         expect(Date.parse(issued.pat.expiresAt) - Date.parse(issued.pat.createdAt)).toBe(
           7 * 86_400_000

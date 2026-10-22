@@ -7034,7 +7034,11 @@ BEGIN SELECT RAISE(ABORT, 'oauth_capacity'); END;
 CREATE TRIGGER paired_pat_requires_claim BEFORE INSERT ON pats
 WHEN NEW.pairing_id IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM pat_pairings WHERE id = NEW.pairing_id AND user_id = NEW.user_id
-    AND state = 'claimed' AND expires_at_ms > NEW.created_at_ms
+    AND state = 'claimed' AND expires_at_ms > NEW.issued_at_ms
+    AND approved_at_ms = NEW.created_at_ms AND approved_at_ms <= NEW.issued_at_ms
+    AND pat_expires_at_ms = NEW.expires_at_ms AND pat_expires_at_ms > NEW.issued_at_ms
+    AND recipient_label = NEW.recipient_label AND scopes_json = NEW.scopes_json
+    AND lifetime_days = NEW.lifetime_days
 )
 BEGIN SELECT RAISE(ABORT,'pat_pairing_not_claimable'); END;
 --> statement-breakpoint

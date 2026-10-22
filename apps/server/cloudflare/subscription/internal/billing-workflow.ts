@@ -840,8 +840,8 @@ export const reconcileBillingCandidates = (
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* attempt(() =>
-      environment.DB.prepare(`SELECT transaction_id, MAX(signed_at) AS signed_at,
-      MAX(signed_status) AS signed_status FROM (
+      environment.DB.prepare(`WITH candidates AS (SELECT transaction_id, MAX(signed_at) AS signed_at,
+      MAX(signed_status) AS signed_status, MIN(priority) AS priority FROM (
       SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, a.created_at_ms) AS priority,
         c.event_signed_at AS signed_at, c.event_signed_status AS signed_status
         FROM billing_provider_transactions AS c
@@ -858,13 +858,18 @@ export const reconcileBillingCandidates = (
         AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
         AND (a.id IS NULL OR a.status = 'pending' OR (a.status = 'failed'
           AND c.received_at_ms >= a.finalized_at_ms))
-    ) GROUP BY transaction_id ORDER BY MIN(priority) LIMIT ?`)
+    ) GROUP BY transaction_id), ranked AS (
+      SELECT *,row_number() OVER (ORDER BY priority,transaction_id)-1 AS position,
+        count(*) OVER () AS candidate_count FROM candidates
+    ) SELECT transaction_id,signed_at,signed_status FROM ranked
+      ORDER BY (position+?)%candidate_count LIMIT ?`)
         .bind(
           maximumCandidateLookupAttempts,
           now - candidateCooldownMs,
           maximumCandidateLookupAttempts,
           now - eventCandidateLifetimeMs,
           now - candidateCooldownMs,
+          Math.floor(now / candidateCooldownMs) * pendingBatchSize,
           pendingBatchSize
         )
         .all()

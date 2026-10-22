@@ -930,6 +930,70 @@ it("keeps queued and waiting work uncharged and restarts a failed execution with
     })
   ));
 
+it("discovers another transaction even when a full earlier batch remains queued", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      let now = yield* Clock.currentTimeMillis;
+      vi.spyOn(Date, "now").mockImplementation(() => now);
+      const instances = new Set<string>();
+      const workflow = {
+        create: vi.fn((options: { id: string }) => {
+          instances.add(options.id);
+          return Promise.resolve({});
+        }),
+        get: (id: string): Promise<Pick<WorkflowInstance, "status" | "restart">> =>
+          instances.has(id)
+            ? Promise.resolve({
+                status: () => Promise.resolve({ status: "queued" }),
+                restart: () => Promise.reject(new Error("must not restart queued work")),
+              })
+            : Promise.reject(new Error("missing execution")),
+      };
+      try {
+        yield* Effect.tryPromise(() =>
+          db.batch(
+            Array.from({ length: 32 }, (_, index) =>
+              db
+                .prepare(
+                  "INSERT INTO billing_provider_transactions(transaction_id,event_received_at_ms,event_signed_at,event_signed_status,event_lookup_attempts) VALUES(?,?,0,'UNKNOWN',0)"
+                )
+                .bind(`queued-provider-${index}`, now)
+            )
+          )
+        );
+        yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+        expect(workflow.create).toHaveBeenCalledTimes(32);
+        now += 120001;
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO billing_provider_transactions(transaction_id,event_received_at_ms,event_signed_at,event_signed_status,event_lookup_attempts) VALUES('later-provider',?,0,'UNKNOWN',0)"
+            )
+            .bind(now)
+            .run()
+        );
+        for (let tick = 0; tick < 2; tick++) {
+          yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+          now += 60001;
+        }
+        expect(workflow.create).toHaveBeenCalledTimes(33);
+        expect(instances.size).toBe(33);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT sum(event_lookup_attempts) AS reservations FROM billing_provider_transactions"
+              )
+              .first()
+          )
+        ).toEqual({ reservations: 33 });
+      } finally {
+        vi.restoreAllMocks();
+      }
+    })
+  ));
+
 it("durably claims each lookup before Workflow handoff, even if the handoff is ambiguous", () =>
   Effect.runPromise(
     Effect.gen(function* () {

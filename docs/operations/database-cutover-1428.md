@@ -2135,7 +2135,9 @@ Provider observations now launch `billing-lookup-v2-<digest>` for the retained t
 hint generation. The digest includes the exact provider-native signed timestamp and status; it has
 no wall-clock bucket. The payload contains only these identities. A lost launch response is recovered with `get` and native status inspection of that same execution id. Queued, running, waiting and paused executions keep their existing reservation; scheduler reoffers do not charge them again. A terminal execution with remaining eligible budget is restarted only after a new atomic prelaunch reservation.
 
-Each execution has at most eight named lookup steps separated by native durable cooldown sleeps.
+Discovery rotates bounded batches independently of the provider lookup clocks so queued or paused
+executions cannot permanently occupy the oldest batch. Each execution has at most eight named
+lookup steps separated by native durable cooldown sleeps.
 The initial reservation remains charged before handoff, including failed handoffs. Later steps
 atomically reserve the applicable attempt and callback budgets before provider GET. Neither a new
 execution nor an engine replacement resets those counters. A newer signed hint resets only its

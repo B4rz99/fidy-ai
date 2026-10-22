@@ -8,6 +8,10 @@ The guarded rollback failed closed. [Incident evidence and deferred checks](../.
 record the recovery boundary. Earlier successes below remain dated evidence; they do not establish
 availability after this deployment. No further production financial or access mutation was attempted.
 
+A post-incident no-data greeting returned HTTP 503. Its exact editable draft and safe failure
+feedback survived Accesos-to-Dashboard navigation, with no automatic hosted resubmission or false
+assistant success. The reviewed-runtime hosted Turn/public recovery suite passed all 34 cases.
+
 Current audit status, 22 October 2026: rebased onto deployed trunk
 `20fd17a37458f54031c771d0b9e1de24a5e98933`. Fresh production metadata and Recurring
 reads work after the D1 reset. A minimal greeting returned processing, and an explicit progress

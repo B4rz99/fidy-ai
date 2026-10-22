@@ -25,6 +25,16 @@ Status: unresolved in production. Do not interpret the protected-read failures a
   also excludes schema-changing release pairs. No guard was
   weakened, and no direct production data or schema write was performed by this audit.
 
+A fresh Accesos navigation after the incident returned OAuth connection metadata with eight revoked
+audit grants (HTTP 200), while PAT metadata returned HTTP 503 with retry feedback. Viewing the page
+did not request a fresh sign-in. The outage is therefore not a universal browser-session failure.
+A no-data greeting returned one hosted proposal HTTP 503; the composer retained the exact editable
+draft and removed the temporary User entry, with no successful assistant reply. This proves safe
+proposal-failure feedback, not successful inference or absence of all possible server-side work.
+After closing chat, navigating from Accesos to Dashboard and reopening it, the exact greeting draft
+remained editable and no new hosted request appeared. Dashboard itself showed safe load-failure
+feedback. The same failure did not become a false successful assistant entry.
+
 ## Regression and limit
 
 `smoke-schema.test.ts` executes the real private smoke protocol against native D1 with the complete
@@ -55,7 +65,8 @@ With locked Effect 4.0.5 and the reviewed Bun `13a98b0db`, the selected native R
 Budget, OAuth-agent and PAT run passed 373 checks with one existing skip (19 files).
 The selected browser runs passed 31 and 54 checks respectively; shared admission/performance
 prerequisites overlap. Native smoke/Worker checks passed 40, and the infrastructure suite excluding
-local Alchemy emulation passed 288. The complete static gate passed. The broad initial local native
+local Alchemy emulation passed 288. The complete static gate passed. The reviewed-runtime hosted Turn and public recovery checks
+passed all 34 cases. The broad initial local native
 run hit socket failures under competing runtimes; the controlled reviewed-runtime rerun above is
 the completed evidence. Local Alchemy emulation failed first with stale-schema-style 503, then
 with a provider-sidecar connection failure and startup time bound in isolated stages. It remains

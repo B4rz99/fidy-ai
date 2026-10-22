@@ -8,6 +8,10 @@ The guarded rollback failed closed. [Incident evidence and deferred checks](../.
 record the recovery boundary. Earlier successes below remain dated evidence; they do not establish
 availability after this deployment. No further production financial or access mutation was attempted.
 
+A fresh post-incident Accesos navigation still returned MCP metadata with all eight audit grants
+marked Revocado (HTTP 200), while PAT metadata returned HTTP 503 and offered Reintentar carga.
+The browser retained the signed-in session and did not ask for fresh identity merely to view it.
+
 Current audit status, 22 October 2026, deployed release
 `20fd17a37458f54031c771d0b9e1de24a5e98933`: after an intentional reload, PAT metadata
 and MCP connections both returned HTTP 200 under the existing session without an identity prompt.

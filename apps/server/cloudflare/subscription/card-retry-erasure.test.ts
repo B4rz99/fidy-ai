@@ -251,6 +251,9 @@ it("erases paid standing and billing accountability with their own permits while
       yield* wait(() => seed(db, foreignUser, 2));
       yield* wait(() =>
         db.batch([
+          db.prepare(
+            "INSERT INTO billing_price_notices(subscription_id,price_id,created_at_ms) SELECT id,'22700000-0000-4000-8000-000000000001',1 FROM subscriptions"
+          ),
           db
             .prepare(`INSERT INTO subscription_cancellations(rowid,subscription_id,paid_attempt_id,payment_source_id,cancelled_at_ms,paid_through_ms,source_cancellation_state,verification_count)
             SELECT u.rowid,s.id,a.id,a.payment_source_id,a.finalized_at_ms+1,a.paid_ends_at_ms,'detached',0 FROM users u JOIN subscriptions s ON s.user_id=u.id JOIN billing_attempts a ON a.id=s.current_paid_attempt_id WHERE u.id=?`)
@@ -285,6 +288,7 @@ it("erases paid standing and billing accountability with their own permits while
       }
       for (const name of [
         "billing_audit",
+        "billing_price_notices",
         "subscription_cancellations",
         "subscriptions",
         "billing_checkout_responses",
@@ -329,6 +333,10 @@ it("erases paid standing and billing accountability with their own permits while
             .first("count(*)")
         )
       ).toBe(1);
+      expect(
+        (yield* wait(() => db.prepare("SELECT user_id FROM billing_price_notice_context").all()))
+          .results
+      ).toEqual([{ user_id: foreignUser }]);
       expect((yield* wait(() => db.prepare("PRAGMA foreign_key_check").all())).results).toEqual([]);
       expect(
         yield* wait(() => db.prepare("SELECT count(*) FROM erasure_permits").first("count(*)"))

@@ -32,20 +32,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'price_id',r.\"price_id\",'created_at_ms',r.\"created_at_ms\",'last_offered_at_ms',r.\"last_offered_at_ms\",'send_started_at_ms',r.\"send_started_at_ms\",'accepted_at_ms',r.\"accepted_at_ms\") AS body FROM billing_price_notices r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'price_id',r.\"price_id\",'created_at_ms',r.\"created_at_ms\",'last_offered_at_ms',r.\"last_offered_at_ms\",'send_started_at_ms',r.\"send_started_at_ms\",'provider_accepted_at_ms',r.\"provider_accepted_at_ms\") AS body FROM billing_price_notice_context r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM billing_price_notices r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM billing_price_notice_context r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM billing_price_notices r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM billing_price_notice_context r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM billing_price_notices AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM billing_price_notices AS r WHERE r.subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -223,6 +223,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [
       "billing_history",
       "refund_attempts",
+      "billing_price_notices",
       "card_enrollments",
       "card_payment_sources",
     ],

@@ -37,6 +37,7 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
         "billing_attempt_context",
         "billing_callback_hints",
         "billing_price_notices",
+        "billing_price_notice_context",
         "billing_provider_transactions",
         "billing_retry_clearances",
         "subscriptions",

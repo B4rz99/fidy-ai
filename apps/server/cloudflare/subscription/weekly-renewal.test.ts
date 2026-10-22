@@ -469,7 +469,7 @@ it("publishes a changed weekly Price with immediate durable notice and charges i
       yield* publishWeeklyPrice({ db, price: newPrice });
       expect(
         (yield* fromPromise(() =>
-          db.prepare("SELECT user_id, price_id FROM billing_price_notices").all()
+          db.prepare("SELECT user_id, price_id FROM billing_price_notice_context").all()
         )).results
       ).toEqual([{ user_id: userId, price_id: newPrice.id }]);
       yield* admission(db);
@@ -553,7 +553,9 @@ it("offers Price-change notices immediately and sends the retained billing email
       expect(
         yield* fromPromise(() =>
           db
-            .prepare("SELECT accepted_at_ms IS NOT NULL AS accepted FROM billing_price_notices")
+            .prepare(
+              "SELECT provider_accepted_at_ms IS NOT NULL AS accepted FROM billing_price_notices"
+            )
             .first()
         )
       ).toEqual({ accepted: 1 });
@@ -767,9 +769,9 @@ it("uses the current payer and retries a definitively rejected notice", () =>
         db.batch([
           db
             .prepare(
-              "INSERT INTO billing_price_notices (user_id,price_id,created_at_ms) VALUES (?, ?, 1)"
+              "INSERT INTO billing_price_notices (subscription_id,price_id,created_at_ms) SELECT id,?,1 FROM subscriptions WHERE user_id=?"
             )
-            .bind(userId, priceId),
+            .bind(priceId, userId),
         ])
       );
       const workflowIds: string[] = [];
@@ -835,9 +837,9 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
             .bind(foreignUserId),
           db
             .prepare(
-              "INSERT INTO billing_price_notices (user_id,price_id,created_at_ms) VALUES (?, ?, 1)"
+              "INSERT INTO billing_price_notices (subscription_id,price_id,created_at_ms) SELECT id,?,1 FROM subscriptions WHERE user_id=?"
             )
-            .bind(userId, priceId),
+            .bind(priceId, userId),
         ])
       );
       const fetch = vi.fn(() => Promise.reject(new Error("forbidden notice")));
@@ -878,9 +880,11 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
       expect(fetch).not.toHaveBeenCalled();
       expect(
         yield* fromPromise(() =>
-          db.prepare("SELECT send_started_at_ms,accepted_at_ms FROM billing_price_notices").first()
+          db
+            .prepare("SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices")
+            .first()
         )
-      ).toEqual({ send_started_at_ms: null, accepted_at_ms: null });
+      ).toEqual({ send_started_at_ms: null, provider_accepted_at_ms: null });
     })
   ));
 
@@ -2274,4 +2278,52 @@ ${consentHistoryTestSchema};`)
         expect(yield* cancellationEffects(db)).toEqual(before);
       })
     )
+);
+
+it(
+  "retains an ambiguous Price-notice send claim after timeout and never resends it",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture());
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO billing_price_notices(subscription_id,price_id,created_at_ms) SELECT id,?,1 FROM subscriptions WHERE user_id=?"
+            )
+            .bind(priceId, userId)
+            .run()
+        );
+        const services = yield* Effect.context<never>();
+        const fetch = vi.fn((_input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
+          Effect.runPromiseWith(services)(Effect.never, { signal: init?.signal ?? undefined })
+        );
+        vi.stubGlobal("fetch", fetch);
+        expect((yield* Effect.exit(fromPromise(() => runNotice(db))))._tag).toBe("Failure");
+        const before = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ send_started_at_ms: Schema.Int, provider_accepted_at_ms: Schema.Null })
+        )(
+          yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices"
+              )
+              .first<unknown>()
+          )
+        );
+        expect(before.provider_accepted_at_ms).toBeNull();
+        yield* fromPromise(() => runNotice(db));
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices"
+              )
+              .first()
+          )
+        ).toEqual(before);
+      })
+    ),
+  25_000
 );

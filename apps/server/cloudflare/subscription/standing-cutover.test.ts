@@ -62,11 +62,26 @@ it.each([
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* wait(() => databases.acquire());
-        const refundTarget = schemaStatements(
+        const noticeTarget = schemaStatements(
           yield* wait(() =>
             Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
           )
         );
+        const refundTarget = precedingSchema({
+          current: noticeTarget,
+          history: yield* Schema.decodeEffect(
+            Schema.fromJsonString(
+              Schema.Struct({
+                originalDefinitions: Schema.Array(Schema.String),
+                introducedNames: Schema.Array(Schema.String),
+              })
+            )
+          )(
+            yield* wait(() =>
+              Bun.file(new URL("./price-notice-cutover.test-fixture.json", import.meta.url)).text()
+            )
+          ),
+        });
         const latest = precedingSchema({
           current: refundTarget,
           history: yield* Schema.decodeEffect(historySchema)(

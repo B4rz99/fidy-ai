@@ -175,13 +175,13 @@ CHECK(late_approval_observed_at_ms IS NULL OR no_charge_confirmed_at_ms IS NOT N
 --> statement-breakpoint
 
 CREATE TABLE billing_price_notices (
-  user_id TEXT NOT NULL REFERENCES users(id),
+  subscription_id TEXT NOT NULL REFERENCES subscriptions(id),
   price_id TEXT NOT NULL REFERENCES subscription_prices(id),
   created_at_ms INTEGER NOT NULL,
   last_offered_at_ms INTEGER,
   send_started_at_ms INTEGER,
-  accepted_at_ms INTEGER,
-  PRIMARY KEY (user_id, price_id)
+  provider_accepted_at_ms INTEGER,
+  PRIMARY KEY (subscription_id, price_id)
 ) STRICT;
 --> statement-breakpoint
 
@@ -3709,17 +3709,17 @@ CREATE TRIGGER erasure_fence_billing_event_candidates_update BEFORE UPDATE ON bi
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_price_notices_delete BEFORE DELETE ON billing_price_notices
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_price_notices'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((SELECT user_id FROM subscriptions WHERE id=OLD.subscription_id)=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_price_notices'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_price_notices_insert BEFORE INSERT ON billing_price_notices
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_price_notices'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((SELECT user_id FROM subscriptions WHERE id=NEW.subscription_id)=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_price_notices'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_price_notices_update BEFORE UPDATE ON billing_price_notices
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_price_notices'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (((SELECT user_id FROM subscriptions WHERE id=NEW.subscription_id)=q.user_id) OR ((SELECT user_id FROM subscriptions WHERE id=OLD.subscription_id)=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_price_notices'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -5427,13 +5427,13 @@ END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_billing_price_notices_delete BEFORE DELETE ON billing_price_notices
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND ((SELECT user_id FROM subscriptions WHERE id=OLD.subscription_id)=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'billing_price_notices','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'price_id',OLD."price_id",'created_at_ms',OLD."created_at_ms",'last_offered_at_ms',OLD."last_offered_at_ms",'send_started_at_ms',OLD."send_started_at_ms",'accepted_at_ms',OLD."accepted_at_ms")
-  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+  SELECT q.id,'billing_price_notices','drain:'||lower(hex(randomblob(16))),json_object('user_id',(SELECT user_id FROM subscriptions WHERE id=OLD.subscription_id),'price_id',OLD."price_id",'created_at_ms',OLD."created_at_ms",'last_offered_at_ms',OLD."last_offered_at_ms",'send_started_at_ms',OLD."send_started_at_ms",'provider_accepted_at_ms',OLD."provider_accepted_at_ms")
+  FROM erasure_requests q WHERE q.state='Draining' AND ((SELECT user_id FROM subscriptions WHERE id=OLD.subscription_id)=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
@@ -8091,8 +8091,8 @@ CREATE TRIGGER weekly_governor_deliveries_marker_preserve_update BEFORE UPDATE O
 CREATE TRIGGER weekly_price_notice AFTER UPDATE OF published_order ON subscription_prices
 WHEN NEW.published_order = 1 AND OLD.published_order IS NULL
 BEGIN
- INSERT OR IGNORE INTO billing_price_notices (user_id, price_id, created_at_ms)
-    SELECT s.user_id, NEW.id, CAST(unixepoch('subsec') * 1000 AS INTEGER) FROM (SELECT * FROM subscription_standing) s
+ INSERT OR IGNORE INTO billing_price_notices (subscription_id, price_id, created_at_ms)
+    SELECT a.subscription_id, NEW.id, CAST(unixepoch('subsec') * 1000 AS INTEGER) FROM (SELECT * FROM subscription_standing) s
     JOIN billing_attempt_context a ON a.id=s.attempt_id AND a.user_id=s.user_id
     JOIN payment_source_context source ON source.id=a.payment_source_id AND source.user_id=s.user_id
     WHERE a.billing_period='weekly' AND source.method='card' AND a.price_id<>NEW.id
@@ -8410,4 +8410,16 @@ SELECT r.rowid,r.*,a.subscription_id,a.price_id,a.currency,a.original_cents,
  CASE WHEN r.access_ends_at_ms IS NOT NULL THEN r.billing_attempt_id END AS adjusted_attempt_id,
  CASE WHEN r.renewal_stopped_at_ms IS NOT NULL THEN r.user_id END AS renewal_stopped_user_id
 FROM refund_attempts r JOIN refund_charge_context a ON a.id=r.billing_attempt_id;
+--> statement-breakpoint
+
+CREATE VIEW billing_price_notice_context AS
+SELECT n.rowid,n.*,s.user_id FROM billing_price_notices n JOIN subscriptions s ON s.id=n.subscription_id;
+--> statement-breakpoint
+
+CREATE INDEX billing_price_notices_pending ON billing_price_notices(last_offered_at_ms,created_at_ms,subscription_id) WHERE send_started_at_ms IS NULL;
+--> statement-breakpoint
+
+CREATE TRIGGER billing_price_notice_identity BEFORE UPDATE OF subscription_id,price_id,created_at_ms ON billing_price_notices
+WHEN NEW.subscription_id IS NOT OLD.subscription_id OR NEW.price_id IS NOT OLD.price_id OR NEW.created_at_ms IS NOT OLD.created_at_ms
+BEGIN SELECT RAISE(ABORT,'billing_price_notice_identity'); END;
 --> statement-breakpoint

@@ -2377,3 +2377,72 @@ SELECT 'subscription-refund-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_for
 ```
 
 <!-- subscription-refund-verify:end -->
+
+## Subscription price notices (#1454)
+
+Apply after #1453 at verified checkpoint `9e4e7a965`. In one D1 batch run the preflight,
+create the target table as `billing_price_notices_1454`, copy and compare, drop explicit
+views/triggers/indexes, swap only the notice table, reinstall target views/triggers/indexes,
+and verify foreign keys. Preserve original rowids and archive bodies. Missing Subscription
+ownership blocks the conversion; never invent it or discard the notice. User and Subscription
+tables remain in place.
+
+The six-field store is keyed by Subscription/Price. `provider_accepted_at_ms` records email
+provider acknowledgment, not User approval of a Price. The queue still carries the resolved User
+and exact Price; reads derive User ownership through Subscription and every write scopes the
+same Subscription. Offer cooldown and durable send claims retain their meaning: definitive refusal
+can release a claim for retry, while timeout or an ambiguous provider response leaves it claimed.
+Renewal admission does not acquire a Price-approval requirement. Erasure removes notices before
+their Subscription identity. #1494 owns final live cutover verification.
+
+<!-- subscription-price-notice-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-price-notice-preflight',CASE WHEN NOT EXISTS(
+ SELECT 1 FROM billing_price_notices n LEFT JOIN subscriptions s ON s.user_id=n.user_id
+ WHERE s.id IS NULL OR (n.accepted_at_ms IS NOT NULL AND n.send_started_at_ms IS NULL)
+) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-price-notice-preflight:end -->
+
+<!-- subscription-price-notice-copy:start -->
+
+```sql
+INSERT INTO billing_price_notices_1454(rowid,subscription_id,price_id,created_at_ms,last_offered_at_ms,send_started_at_ms,provider_accepted_at_ms)
+SELECT n.rowid,s.id,n.price_id,n.created_at_ms,n.last_offered_at_ms,n.send_started_at_ms,n.accepted_at_ms
+FROM billing_price_notices n JOIN subscriptions s ON s.user_id=n.user_id;
+```
+
+<!-- subscription-price-notice-copy:end -->
+
+<!-- subscription-price-notice-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-price-notice-copy',CASE WHEN NOT EXISTS(
+ SELECT rowid,subscription_id,price_id,created_at_ms,last_offered_at_ms,send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices_1454
+ EXCEPT SELECT n.rowid,s.id,n.price_id,n.created_at_ms,n.last_offered_at_ms,n.send_started_at_ms,n.accepted_at_ms FROM billing_price_notices n JOIN subscriptions s ON s.user_id=n.user_id
+) AND (SELECT COUNT(*) FROM billing_price_notices_1454)=(SELECT COUNT(*) FROM billing_price_notices) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-price-notice-copy-check:end -->
+
+<!-- subscription-price-notice-swap:start -->
+
+```sql
+DROP TABLE billing_price_notices;
+ALTER TABLE billing_price_notices_1454 RENAME TO billing_price_notices;
+```
+
+<!-- subscription-price-notice-swap:end -->
+
+<!-- subscription-price-notice-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-price-notice-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-price-notice-verify:end -->

@@ -51,7 +51,7 @@ export const dispatchPriceNotices = (
       subject: { _tag: "Owner", column: "o.user_id" },
       requirement: "active",
       statement: {
-        sql: `SELECT o.user_id, o.price_id FROM billing_price_notices o WHERE o.send_started_at_ms IS NULL
+        sql: `SELECT o.user_id, o.price_id FROM billing_price_notice_context o WHERE o.send_started_at_ms IS NULL
       AND (o.last_offered_at_ms IS NULL OR o.last_offered_at_ms < ?)`,
         params: [now - noticeOfferCooldownMs],
       },
@@ -72,7 +72,7 @@ export const dispatchPriceNotices = (
     for (const entry of entries) {
       const claimed = yield* fromPromise(() =>
         input.DB.prepare(`UPDATE billing_price_notices SET last_offered_at_ms = ?
-      WHERE user_id = ? AND price_id = ? AND send_started_at_ms IS NULL
+      WHERE subscription_id = (SELECT id FROM subscriptions WHERE user_id=?) AND price_id = ? AND send_started_at_ms IS NULL
       AND (last_offered_at_ms IS NULL OR last_offered_at_ms < ?)`)
           .bind(now, entry.user_id, entry.price_id, now - noticeOfferCooldownMs)
           .run()
@@ -153,7 +153,7 @@ const recordNoticeDelivery = (
       yield* fromPromise(() =>
         db
           .prepare(
-            "UPDATE billing_price_notices SET send_started_at_ms=NULL WHERE user_id=? AND price_id=? AND send_started_at_ms=? AND accepted_at_ms IS NULL"
+            "UPDATE billing_price_notices SET send_started_at_ms=NULL WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND price_id=? AND send_started_at_ms=? AND provider_accepted_at_ms IS NULL"
           )
           .bind(work.userId, work.priceId, startedAt)
           .run()
@@ -164,7 +164,7 @@ const recordNoticeDelivery = (
     yield* fromPromise(() =>
       db
         .prepare(
-          "UPDATE billing_price_notices SET accepted_at_ms=? WHERE user_id=? AND price_id=? AND accepted_at_ms IS NULL"
+          "UPDATE billing_price_notices SET provider_accepted_at_ms=? WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND price_id=? AND provider_accepted_at_ms IS NULL"
         )
         .bind(acceptedAt, work.userId, work.priceId)
         .run()
@@ -182,7 +182,7 @@ export const sendPriceNotice = (
       }
       const row = yield* fromPromise(() =>
         environment.DB.prepare(`SELECT source.billing_email, price.amount, price.currency
-    FROM billing_price_notices notice JOIN subscription_prices price ON price.id=notice.price_id
+    FROM billing_price_notice_context notice JOIN subscription_prices price ON price.id=notice.price_id
     JOIN subscription_standing subscription ON subscription.user_id=notice.user_id
     JOIN billing_attempt_context attempt ON attempt.id=subscription.attempt_id AND attempt.user_id=notice.user_id
     JOIN payment_source_context source ON source.id=attempt.payment_source_id AND source.user_id=notice.user_id
@@ -199,7 +199,7 @@ export const sendPriceNotice = (
         subject: { _tag: "User", userId: work.userId },
         requirement: "active",
         statement: {
-          sql: `UPDATE billing_price_notices SET send_started_at_ms=? WHERE user_id=? AND price_id=? AND send_started_at_ms IS NULL`,
+          sql: `UPDATE billing_price_notices SET send_started_at_ms=? WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND price_id=? AND send_started_at_ms IS NULL`,
           params: [now, work.userId, work.priceId],
         },
       });
@@ -229,7 +229,7 @@ export const receivePriceNotice = (
     const { environment, work } = input;
     const pending = yield* fromPromise(() =>
       environment.DB.prepare(
-        "SELECT last_offered_at_ms FROM billing_price_notices WHERE user_id=? AND price_id=? AND send_started_at_ms IS NULL"
+        "SELECT last_offered_at_ms FROM billing_price_notice_context WHERE user_id=? AND price_id=? AND send_started_at_ms IS NULL"
       )
         .bind(work.userId, work.priceId)
         .first()

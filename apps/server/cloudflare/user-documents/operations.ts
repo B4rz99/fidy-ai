@@ -1,8 +1,39 @@
-import { type Cause, Effect, type Option, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 import { type TransactionCaller, callerAuthority } from "../canonical-work/operations";
 
 type Kind = "dashboard" | "recurring-plan";
 const Stored = Schema.Struct({ encoded: Schema.String, revision: Schema.Int });
+
+/** Read a document and its owner-prepared related reads in one native snapshot. */
+export const readUserDocumentSnapshot = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    kind: Kind;
+    related: ReadonlyArray<D1PreparedStatement>;
+  }>
+): Effect.Effect<
+  Readonly<{ document: Option.Option<typeof Stored.Type>; related: ReadonlyArray<D1Result> }>,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const results = yield* Effect.tryPromise(() =>
+      input.db.batch([
+        input.db
+          .prepare(
+            "SELECT document_json AS encoded,revision FROM user_documents WHERE user_id=? AND kind=?"
+          )
+          .bind(input.userId, input.kind),
+        ...input.related,
+      ])
+    );
+    const raw = results[0]?.results[0];
+    const document =
+      raw === undefined
+        ? Option.none()
+        : Option.some(yield* Schema.decodeUnknownEffect(Stored)(raw));
+    return { document, related: results.slice(1) };
+  });
 
 export const findUserDocument = (
   input: Readonly<{ db: D1Database; userId: string; kind: Kind }>
@@ -10,19 +41,8 @@ export const findUserDocument = (
   Option.Option<Readonly<{ encoded: string; revision: number }>>,
   Cause.UnknownError | Schema.SchemaError
 > =>
-  Effect.tryPromise(() =>
-    input.db
-      .prepare(
-        "SELECT document_json AS encoded,revision FROM user_documents WHERE user_id=? AND kind=?"
-      )
-      .bind(input.userId, input.kind)
-      .first()
-  ).pipe(
-    Effect.flatMap((raw) =>
-      raw === null
-        ? Effect.succeedNone
-        : Schema.decodeUnknownEffect(Stored)(raw).pipe(Effect.asSome)
-    )
+  readUserDocumentSnapshot({ ...input, related: [] }).pipe(
+    Effect.map((snapshot) => snapshot.document)
   );
 
 export const prepareUserDocumentWrite = (

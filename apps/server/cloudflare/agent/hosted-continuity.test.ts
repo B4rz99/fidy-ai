@@ -1,3 +1,6 @@
+import { executeCanonicalQuery } from "../canonical-operations/operations";
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
+import { RecurringWorkspace } from "../../src/shell/recurring-plans/contract";
 import { observeRetentionCost } from "../d1-test-fixture";
 import {
   HostedAgentSessionId,
@@ -2894,15 +2897,19 @@ it("a recurring lifecycle challenge exposes a readable browser review and confir
         )
       ).toBe("Operación confirmada.");
       expect(yield* readBrowserConfirmation(metadata)).toEqual(Option.none());
-      const stored = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT document_json FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='recurring-plan') AS recurring_plan_documents WHERE user_id=?"
-          )
-          .bind(users[0])
-          .first<string>("document_json")
+      const workspaceResponse = yield* executeCanonicalQuery({
+        db,
+        subject: credential,
+        operation: CanonicalOperationId.make("recurringPlans.getRecurringWorkspace"),
+        input: { query: { month: "2026-10" } },
+        bucket: Option.none(),
+      });
+      const workspace = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(RecurringWorkspace) })
+      )(yield* Effect.tryPromise(() => Option.getOrThrow(workspaceResponse).json()));
+      expect(workspace.data.document.plans.find((plan) => plan.id === planId)?.stoppedOn).toBe(
+        "2026-10-15"
       );
-      expect(stored).toContain('"stoppedOn":"2026-10-15"');
       const transcript = yield* Effect.tryPromise(() => retained({ db, user: users[0] }));
       expect(transcript.results).toEqual(
         expect.arrayContaining([

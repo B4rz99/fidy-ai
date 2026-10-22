@@ -319,8 +319,27 @@ const credentialRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement>
 
 const renewalAndPlanRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> => [
   input.db
+    .prepare("INSERT INTO recurring_plans(user_id,id,position,pauses_json) VALUES(?,?,0,'[]')")
+    .bind(input.userId, input.userId),
+  input.db
     .prepare(
-      "INSERT INTO user_documents (kind,user_id,document_json,revision) VALUES('recurring-plan',?, json_object('revision',1,'private','User expectation'), 1)"
+      "INSERT INTO recurring_plan_revisions(user_id,plan_id,position,from_date,plan_json) VALUES(?,?,0,'2026-10-01','{}')"
+    )
+    .bind(input.userId, input.userId),
+  input.db
+    .prepare(
+      "INSERT INTO recurring_plan_exceptions(user_id,plan_id,position,local_date,skipped) VALUES(?,?,0,'2026-10-01',1)"
+    )
+    .bind(input.userId, input.userId),
+  input.db
+    .prepare(
+      "INSERT INTO recurring_plan_fulfillments(user_id,id,plan_id,position,local_date,actual_date,amount,currency,settled) VALUES(?,?,?,0,'2026-10-01','2026-10-01','100','COP',1)"
+    )
+    .bind(input.userId, input.userId, input.userId),
+
+  input.db
+    .prepare(
+      "INSERT INTO user_documents (kind,user_id,document_json,revision) VALUES('recurring-plan',?, json_object('excludedTransactionIds',json('[]'),'suggestions',json('[]')), 1)"
     )
     .bind(input.userId),
   input.db

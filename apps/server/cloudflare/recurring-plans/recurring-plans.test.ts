@@ -3,6 +3,7 @@ import { type QueryCaller } from "../canonical-work/operations";
 import { Cause, Config, DateTime, Effect, Option, Schema } from "effect";
 import { RecurringDocument } from "../../src/core/recurring-plans/contract";
 import { withErasureRecovery } from "../erasure/runtime";
+import { documentedSqlBlock } from "../schema-cutover.test-fixture";
 import { RecurringWorkspace } from "../../src/shell/recurring-plans/contract";
 import {
   installTestSchema,
@@ -945,10 +946,193 @@ it(
   30000
 );
 
+it(
+  "keeps supported large Planning history readable and isolates concurrent edits",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, subjects } = yield* fixture();
+        const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
+        const root = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+          excludedTransactionIds: Array.from(
+            { length: 4096 },
+            (_, index) => `50000000-0000-4000-8000-${String(index).padStart(12, "0")}`
+          ),
+          suggestions: Array.from({ length: 4096 }, (_, index) => ({
+            seriesId: `60000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+            disposition: "linked",
+            planId: "40000000-0000-4000-8000-000000000000",
+          })),
+        });
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("INSERT INTO user_documents VALUES(?,'recurring-plan',?,10000)")
+            .bind(owner.userId, root)
+            .run()
+        );
+        for (let plan = 0; plan < 100; plan++) {
+          const id = `40000000-0000-4000-8000-${String(plan).padStart(12, "0")}`;
+          const revisions = Array.from({ length: 100 }, (_, index) => ({
+            from: DateTime.formatIsoDateUtc(
+              DateTime.add(DateTime.makeUnsafe("2026-01-01"), { months: index })
+            ),
+            plan: {
+              ...planInput,
+              firstDate: "2026-01-01",
+              name: `Plan ${plan}, revision ${index}`.padEnd(120, "x"),
+              counterparty: "x".repeat(120),
+            },
+          }));
+          const encodedRevisions = yield* Schema.encodeEffect(
+            Schema.fromJsonString(Schema.Unknown)
+          )(revisions);
+          yield* Effect.tryPromise(() =>
+            db.batch([
+              db
+                .prepare(
+                  "INSERT INTO recurring_plans(user_id,id,position,pauses_json) VALUES(?,?,?,'[]')"
+                )
+                .bind(owner.userId, id, plan),
+              db
+                .prepare(
+                  "INSERT INTO recurring_plan_revisions(user_id,plan_id,position,from_date,plan_json) SELECT ?,?,CAST(key AS INTEGER),json_extract(value,'$.from'),json_extract(value,'$.plan') FROM json_each(?)"
+                )
+                .bind(owner.userId, id, encodedRevisions),
+            ])
+          );
+        }
+        const exceptions = Array.from({ length: 4096 }, (_, index) => ({
+          planId: `40000000-0000-4000-8000-${String(index % 100).padStart(12, "0")}`,
+          date: DateTime.formatIsoDateUtc(
+            DateTime.add(DateTime.makeUnsafe("2040-01-01"), { months: Math.floor(index / 100) })
+          ),
+          skipped: true,
+        }));
+        const fulfillments = Array.from({ length: 4096 }, (_, index) => ({
+          id: `70000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+          planId: `40000000-0000-4000-8000-${String(index % 100).padStart(12, "0")}`,
+          date: DateTime.formatIsoDateUtc(
+            DateTime.add(DateTime.makeUnsafe("2050-01-01"), { months: Math.floor(index / 100) })
+          ),
+          money: { amount: "1000000", currency: "COP" },
+        }));
+        const pauses = Array.from({ length: 100 }, (_, index) => ({
+          from: DateTime.formatIsoDateUtc(
+            DateTime.add(DateTime.makeUnsafe("2090-01-01"), { days: index })
+          ),
+          through: DateTime.formatIsoDateUtc(
+            DateTime.add(DateTime.makeUnsafe("2090-01-01"), { days: index })
+          ),
+        }));
+        const encodedExceptions = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+          exceptions
+        );
+        const encodedFulfillments = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.Unknown)
+        )(fulfillments);
+        const encodedPauses = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+          pauses
+        );
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            db
+              .prepare(
+                "INSERT INTO recurring_plan_exceptions(user_id,plan_id,position,local_date,skipped) SELECT ?,json_extract(value,'$.planId'),CAST(key AS INTEGER),json_extract(value,'$.date'),1 FROM json_each(?)"
+              )
+              .bind(owner.userId, encodedExceptions),
+            db
+              .prepare(
+                "INSERT INTO recurring_plan_fulfillments(user_id,id,plan_id,position,local_date,actual_date,amount,currency,settled) SELECT ?,json_extract(value,'$.id'),json_extract(value,'$.planId'),CAST(key AS INTEGER),json_extract(value,'$.date'),json_extract(value,'$.date'),json_extract(value,'$.money.amount'),json_extract(value,'$.money.currency'),1 FROM json_each(?)"
+              )
+              .bind(owner.userId, encodedFulfillments),
+            db
+              .prepare("UPDATE recurring_plans SET pauses_json=? WHERE user_id=?")
+              .bind(encodedPauses, owner.userId),
+          ])
+        );
+        const workspace = yield* read(db, owner);
+        expect(workspace.document.excludedTransactionIds).toHaveLength(4096);
+        expect(workspace.document.suggestions).toHaveLength(4096);
+        expect(workspace.document.exceptions).toHaveLength(4096);
+        expect(workspace.document.fulfillments).toHaveLength(4096);
+        expect(workspace.document.plans[0]?.pauses).toHaveLength(100);
+        if (measureStorage) {
+          const payload = yield* Schema.encodeEffect(
+            Schema.fromJsonString(Schema.toCodecJson(RecurringDocument))
+          )(workspace.document);
+          const observation = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+            documentBytes: new TextEncoder().encode(payload).length,
+            rootBytes: new TextEncoder().encode(root).length,
+            plans: 100,
+            revisionsPerPlan: 100,
+            pausesPerPlan: 100,
+            exceptions: 4096,
+            fulfillments: 4096,
+            exclusions: 4096,
+            suggestions: 4096,
+          });
+          yield* Effect.sync(() => process.stdout.write(`PLANNING_CAPACITY ${observation}\n`));
+        }
+        expect(workspace.document.plans).toHaveLength(100);
+        expect(workspace.document.plans[99]?.revisions).toHaveLength(100);
+        expect(workspace.document.plans[99]?.revisions[99]?.plan.name).toBe(
+          "Plan 99, revision 99".padEnd(120, "x")
+        );
+        const foreign = Option.getOrThrow(Option.fromUndefinedOr(subjects[1]));
+        expect((yield* read(db, foreign)).document.revision).toBe(0);
+        const cost = yield* measurePlanningContention(db, owner, {
+          revision: 10000,
+          date: "2043-05-01",
+          planId: "40000000-0000-4000-8000-000000000095",
+        });
+        expect(cost.rowsWritten).toBeLessThan(100);
+        expect((yield* read(db, owner)).document.plans[99]?.revisions).toHaveLength(100);
+      })
+    ),
+  60000
+);
+
+const seedPlanningHistory = Effect.fn(function* (
+  db: D1Database,
+  userId: string,
+  document: typeof RecurringDocument.Encoded
+) {
+  const root = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+    excludedTransactionIds: document.excludedTransactionIds,
+    suggestions: document.suggestions,
+  });
+  yield* Effect.tryPromise(() =>
+    db
+      .prepare("INSERT INTO user_documents VALUES(?,'recurring-plan',?,?)")
+      .bind(userId, root, document.revision)
+      .run()
+  );
+  for (const [position, plan] of document.plans.entries()) {
+    const revisions = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+      plan.revisions
+    );
+    const pauses = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(plan.pauses);
+    yield* Effect.tryPromise(() =>
+      db.batch([
+        db
+          .prepare(
+            "INSERT INTO recurring_plans(user_id,id,position,pauses_json,stopped_on) VALUES(?,?,?,?,?)"
+          )
+          .bind(userId, plan.id, position, pauses, plan.stoppedOn ?? null),
+        db
+          .prepare(
+            "INSERT INTO recurring_plan_revisions(user_id,plan_id,position,from_date,plan_json) SELECT ?,?,CAST(key AS INTEGER),json_extract(value,'$.from'),json_extract(value,'$.plan') FROM json_each(?)"
+          )
+          .bind(userId, plan.id, revisions),
+      ])
+    );
+  }
+});
+
 const measurePlanningContention = Effect.fn(function* (
   db: D1Database,
   owner: QueryCaller,
-  revision: number
+  { revision, date, planId }: Readonly<{ revision: number; date: string; planId: string }>
 ) {
   const observed = observeRetentionCost(db);
   const started = performance.now();
@@ -960,9 +1144,9 @@ const measurePlanningContention = Effect.fn(function* (
         owner,
         edit(revision, {
           kind: "skip",
-          planId: "40000000-0000-4000-8000-000000000000",
-          date: "2026-01-01",
-          skipped: true,
+          planId,
+          date,
+          skipped: false,
         })
       ),
     { concurrency: "unbounded" }
@@ -979,7 +1163,7 @@ const nativeStorageFailure = (error: Cause.UnknownError): string =>
 const measureStorage =
   Effect.runSync(Config.String("INFRA_PERFORMANCE_MEASURE").pipe(Config.withDefault("0"))) === "1";
 it.skipIf(!measureStorage)(
-  "measures supported Planning document storage before revision de-duplication",
+  "compares document limits with relational Planning history and concurrent edits",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -1040,16 +1224,34 @@ it.skipIf(!measureStorage)(
           const failure = stored._tag === "Failure" ? nativeStorageFailure(stored.failure) : "";
           expect(failure).toBe(fits ? "" : "SQLITE_TOOBIG");
           if (stored._tag === "Success") {
-            const readStart = performance.now();
-            const workspace = yield* read(db, owner);
-            readMs = performance.now() - readStart;
-            expect(workspace.document.plans).toHaveLength(100);
-            const race = yield* measurePlanningContention(db, owner, document.revision);
-            raceMs = race.elapsedMs;
-            raceReads = race.rowsRead;
-            raceWrites = race.rowsWritten;
-            outcomes = race.outcomes;
+            yield* Effect.tryPromise(() =>
+              db
+                .prepare("DELETE FROM user_documents WHERE user_id=? AND kind='recurring-plan'")
+                .bind(owner.userId)
+                .run()
+            );
           }
+          const relationalStarted = performance.now();
+          yield* seedPlanningHistory(
+            db,
+            owner.userId,
+            yield* Schema.encodeEffect(RecurringDocument)(document)
+          );
+          const relationalWriteMs = performance.now() - relationalStarted;
+          const readStart = performance.now();
+          const workspace = yield* read(db, owner);
+          readMs = performance.now() - readStart;
+          expect(workspace.document.plans).toHaveLength(100);
+          expect(workspace.document.plans[99]?.revisions).toHaveLength(revisions);
+          const race = yield* measurePlanningContention(db, owner, {
+            revision: document.revision,
+            date: "2026-01-01",
+            planId: "40000000-0000-4000-8000-000000000000",
+          });
+          raceMs = race.elapsedMs;
+          raceReads = race.rowsRead;
+          raceWrites = race.rowsWritten;
+          outcomes = race.outcomes;
           const observation = yield* Schema.encodeEffect(
             Schema.fromJsonString(
               Schema.Struct({
@@ -1059,6 +1261,7 @@ it.skipIf(!measureStorage)(
                 bytesWithoutRevision: Schema.Int,
                 fitsD1ValueLimit: Schema.Boolean,
                 nativeStored: Schema.Boolean,
+                relationalWriteMs: Schema.Finite,
                 writeMs: Schema.Finite,
                 publicReadMs: Schema.Finite,
                 concurrentEditMs: Schema.Finite,
@@ -1075,6 +1278,7 @@ it.skipIf(!measureStorage)(
             bytesWithoutRevision: new TextEncoder().encode(withoutRevision).length,
             fitsD1ValueLimit: fits,
             nativeStored: stored._tag === "Success",
+            relationalWriteMs,
             writeMs: elapsed,
             publicReadMs: readMs,
             concurrentEditMs: raceMs,
@@ -1088,4 +1292,223 @@ it.skipIf(!measureStorage)(
       })
     ),
   60_000
+);
+
+it(
+  "converts populated Planning state atomically and reconstructs the original representation for rollback",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, subjects } = yield* fixture();
+        const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
+        const legacy = {
+          revision: 8,
+          plans: [
+            {
+              id: planId,
+              pauses: [{ from: "2026-10-05", through: "2026-10-08" }],
+              stoppedOn: "2027-01-01",
+              revisions: [
+                {
+                  from: "2026-10-01",
+                  plan: {
+                    ...planInput,
+                    firstDate: "2026-10-01",
+                    money: { amount: "1000000000000000000000000.01", currency: "COP" },
+                  },
+                },
+                { from: "2026-11-01", plan: planInput },
+              ],
+            },
+          ],
+          exceptions: [
+            { planId, date: "2026-10-01", skipped: false, replacement: planInput },
+            { planId, date: "2026-12-31", skipped: true },
+          ],
+          fulfillments: [
+            {
+              id: "40000000-0000-4000-8000-000000000141",
+              planId,
+              date: "2026-10-01",
+              actualDate: "2026-10-01",
+              money: { amount: "100.01", currency: "COP" },
+              settled: false,
+              automatic: false,
+            },
+            {
+              id: "40000000-0000-4000-8000-000000000142",
+              planId,
+              date: "2026-11-30",
+              actualDate: "2026-11-30",
+              money: { amount: "1000000", currency: "COP" },
+              settled: true,
+            },
+          ],
+          excludedTransactionIds: ["40000000-0000-4000-8000-000000000143"],
+          suggestions: [
+            { seriesId: "40000000-0000-4000-8000-000000000144", disposition: "dismissed" },
+          ],
+        };
+        const codec = Schema.fromJsonString(Schema.toCodecJson(RecurringDocument));
+        const original = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(RecurringDocument))(
+          legacy
+        );
+        const encoded = yield* Schema.encodeEffect(codec)(original);
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            db
+              .prepare(
+                "INSERT INTO user_documents(rowid,user_id,kind,document_json,revision) VALUES(17,?,'recurring-plan',?,8)"
+              )
+              .bind(owner.userId, encoded),
+            db
+              .prepare(
+                "INSERT INTO user_documents(rowid,user_id,kind,document_json,revision) VALUES(19,?,'dashboard','{}',3)"
+              )
+              .bind(owner.userId),
+          ])
+        );
+        const guide = yield* Effect.tryPromise(() =>
+          Bun.file(
+            new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)
+          ).text()
+        );
+        const block = (marker: string): ReadonlyArray<D1PreparedStatement> =>
+          documentedSqlBlock({ guide, marker: "recurring-planning-" + marker }).map((sql) =>
+            db.prepare(sql)
+          );
+        const pending = yield* executeCanonicalQuery({
+          db,
+          subject: owner,
+          operation: CanonicalOperationId.make("recurringPlans.getRecurringWorkspace"),
+          input: { query: { month: "2026-10" } },
+          bucket: Option.none(),
+        });
+        expect(Option.getOrThrow(pending).status).toBe(503);
+        const before = yield* Effect.tryPromise(() =>
+          db.prepare("SELECT rowid,* FROM user_documents ORDER BY rowid").all()
+        );
+        const failed = yield* Effect.result(
+          Effect.tryPromise(() =>
+            db.batch([
+              ...block("copy"),
+              db.prepare("INSERT INTO sql_assertions VALUES('intentional_failure',0)"),
+            ])
+          )
+        );
+        expect(failed._tag).toBe("Failure");
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.prepare("SELECT rowid,* FROM user_documents ORDER BY rowid").all()
+          )).results
+        ).toEqual(before.results);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS n FROM recurring_plans").first("n")
+          )
+        ).toBe(0);
+        yield* Effect.tryPromise(() => db.batch([...block("copy")]));
+        expect((yield* read(db, owner)).document).toEqual(original);
+        expect(
+          (yield* read(db, Option.getOrThrow(Option.fromUndefinedOr(subjects[1])))).document
+            .revision
+        ).toBe(0);
+        yield* Effect.tryPromise(() => db.batch([...block("rollback")]));
+        const restored = yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT document_json FROM user_documents WHERE rowid=17")
+            .first<string>("document_json")
+        );
+        expect(yield* Schema.decodeUnknownEffect(codec)(restored)).toEqual(original);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT rowid,revision,document_json FROM user_documents WHERE kind='dashboard'"
+              )
+              .first()
+          )
+        ).toEqual({ rowid: 19, revision: 3, document_json: "{}" });
+        yield* Effect.tryPromise(() => db.batch([...block("copy")]));
+        expect((yield* read(db, owner)).document).toEqual(original);
+      })
+    ),
+  30000
+);
+
+it.each(["revision", "duplicate", "foreign-parent", "archive"])(
+  "refuses inconsistent or retained Planning conversion without partial effects: %s",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, subjects } = yield* fixture();
+        const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
+        const plan = {
+          id: planId,
+          revisions: [{ from: "2026-10-31", plan: planInput }],
+          pauses: [],
+        };
+        const value = {
+          revision: failure === "revision" ? 2 : 1,
+          plans: failure === "duplicate" ? [plan, plan] : [plan],
+          exceptions:
+            failure === "foreign-parent"
+              ? [
+                  {
+                    planId: "40000000-0000-4000-8000-000000000999",
+                    date: "2026-10-31",
+                    skipped: true,
+                  },
+                ]
+              : [],
+          fulfillments: [],
+          excludedTransactionIds: [],
+          suggestions: [],
+        };
+        const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(value);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("INSERT INTO user_documents VALUES(?,'recurring-plan',?,1)")
+            .bind(owner.userId, encoded)
+            .run()
+        );
+        if (failure === "archive") {
+          yield* Effect.tryPromise(() =>
+            db.batch([
+              db.prepare(
+                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES('prior','deleted',1,'Complete')"
+              ),
+              db.prepare(
+                "INSERT INTO erasure_archives(request_id,store_id,row_ref,body) VALUES('prior','recurring_plan_documents','initial:17','{}')"
+              ),
+            ])
+          );
+        }
+        const guide = yield* Effect.tryPromise(() =>
+          Bun.file(
+            new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)
+          ).text()
+        );
+        const statements = documentedSqlBlock({ guide, marker: "recurring-planning-copy" }).map(
+          (sql) => db.prepare(sql)
+        );
+        expect((yield* Effect.result(Effect.tryPromise(() => db.batch(statements))))._tag).toBe(
+          "Failure"
+        );
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT document_json FROM user_documents WHERE user_id=?")
+              .bind(owner.userId)
+              .first("document_json")
+          )
+        ).toBe(encoded);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS n FROM recurring_plans").first("n")
+          )
+        ).toBe(0);
+      })
+    ),
+  30000
 );

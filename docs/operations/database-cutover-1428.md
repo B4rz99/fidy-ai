@@ -3390,11 +3390,95 @@ row and the other User's layout, while a foreign erasure scope is refused. These
 existing authorization, malformed-layout, missing-layout and atomic mutation coverage. There is no
 new settings table, codec, generic document endpoint or migration for this verification ticket.
 
-## Planning document gate blocked (#1467)
+## Planning document gate and accepted replacement (#1467)
 
 The [supported-size measurement](../research/recurring-planning-storage-gate.md) found a schema-valid
 100-plan/100-revision history that native D1 refuses with `SQLITE_TOOBIG`. Removing the JSON revision
-does not make it fit. The accepted #1413/#1467 gate therefore halts that conversion. Keep its current
-schema and codecs together until the proposed revised storage design is accepted and verified;
-this is a blocker, not a completed revision extraction. No supported limits or retained history
-were reduced. The sequential #1468–#1494 implementation batch has not started.
+does not make it fit. The original single-document conversion was halted as #1413/#1467 require.
+The User subsequently accepted the following relational replacement, with no reduced product limits
+or discarded history. It is implemented locally and all three review axes passed; it has not been deployed.
+
+## #1467 approved relational Planning cutover
+
+The User accepted the revised design from the [measured gate](../research/recurring-planning-storage-gate.md).
+The shared root stores only exclusions/suggestions; its SQL revision is authoritative. Four Planning-owned
+stores retain plans, effective-dated settings, exceptions and fulfillments. Each has a `position` integer
+to preserve original public array order, including edited exceptions and partial fulfillments.
+
+Pause periods stay bounded JSON; generated occurrences remain computed. Reads use one native snapshot.
+Writes compare-and-swap the root before applying only changed child rows; Audit shares that atomic unit.
+No unchanged historical revisions are rewritten. Static SQL batches normally use JSON arrays below 900,000 bytes; a larger individual record travels
+alone with 1024 bytes reserved below D1's 2,000,000-byte row limit. Atomic batch children have a
+4096-byte input bound and individual canonical admission has a 1 MiB body bound. Historical Money
+exceeding the platform limit must be reported, never rounded or truncated. Domain Money itself has
+no magnitude ceiling; these are platform/transport boundaries, not new financial limits.
+
+For an existing local/remote schema: stop writers, take and verify a restorable backup, decode every
+original full Planning document with `RecurringDocument` and require its JSON revision to match the row.
+Refuse unexplained duplicate plan/revision/exception/fulfillment identities and missing same-User parents.
+Install the four tables, ordered indexes and their triggers verbatim from `0001_schema.sql` before this batch. Never
+reapply the baseline over populated state. The following copy is one native atomic batch, including guards.
+It refuses active erasure or retained original Planning archives, whose old addressing must finish first.
+Keep the original root rowid and Dashboard rows. Resume only with synchronized new code after native
+foreign-key checks and decoded public workspace comparisons. Test interrupted/failing copies on the backup.
+
+<!-- recurring-planning-copy:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+VALUES('recurring_plan',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id='recurring_plan_documents')
+ AND NOT EXISTS(SELECT 1 FROM recurring_plans)
+ AND NOT EXISTS(SELECT 1 FROM recurring_plan_revisions)
+ AND NOT EXISTS(SELECT 1 FROM recurring_plan_exceptions)
+ AND NOT EXISTS(SELECT 1 FROM recurring_plan_fulfillments)
+ AND NOT EXISTS(SELECT 1 FROM user_documents WHERE kind='recurring-plan' AND
+ (json_type(document_json,'$.revision') IS NOT 'integer' OR json_extract(document_json,'$.revision')<>revision
+ OR json_type(document_json,'$.plans') IS NOT 'array' OR json_type(document_json,'$.exceptions') IS NOT 'array'
+ OR json_type(document_json,'$.fulfillments') IS NOT 'array'))
+ THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+INSERT INTO recurring_plans(user_id,id,position,pauses_json,stopped_on)
+SELECT r.user_id,json_extract(p.value,'$.id'),CAST(p.key AS INTEGER),json_extract(p.value,'$.pauses'),json_extract(p.value,'$.stoppedOn')
+FROM user_documents r,json_each(r.document_json,'$.plans') p WHERE r.kind='recurring-plan';
+INSERT INTO recurring_plan_revisions(user_id,plan_id,position,from_date,plan_json)
+SELECT r.user_id,json_extract(p.value,'$.id'),CAST(v.key AS INTEGER),json_extract(v.value,'$.from'),json_extract(v.value,'$.plan')
+FROM user_documents r,json_each(r.document_json,'$.plans') p,json_each(p.value,'$.revisions') v WHERE r.kind='recurring-plan';
+INSERT INTO recurring_plan_exceptions(user_id,plan_id,position,local_date,skipped,replacement_json)
+SELECT r.user_id,json_extract(e.value,'$.planId'),CAST(e.key AS INTEGER),json_extract(e.value,'$.date'),json_extract(e.value,'$.skipped'),json_extract(e.value,'$.replacement')
+FROM user_documents r,json_each(r.document_json,'$.exceptions') e WHERE r.kind='recurring-plan';
+INSERT INTO recurring_plan_fulfillments(user_id,id,plan_id,position,local_date,actual_date,amount,currency,settled,automatic,transaction_id)
+SELECT r.user_id,json_extract(f.value,'$.id'),json_extract(f.value,'$.planId'),CAST(f.key AS INTEGER),json_extract(f.value,'$.date'),json_extract(f.value,'$.actualDate'),json_extract(f.value,'$.money.amount'),json_extract(f.value,'$.money.currency'),json_extract(f.value,'$.settled'),json_extract(f.value,'$.automatic'),json_extract(f.value,'$.transactionId')
+FROM user_documents r,json_each(r.document_json,'$.fulfillments') f WHERE r.kind='recurring-plan';
+UPDATE user_documents SET document_json=json_object('excludedTransactionIds',json(json_extract(document_json,'$.excludedTransactionIds')),'suggestions',json(json_extract(document_json,'$.suggestions'))) WHERE kind='recurring-plan';
+```
+
+<!-- recurring-planning-copy:end -->
+
+Rollback keeps writers stopped and restores the original application only after the following one-batch
+reconstruction succeeds. It preserves root rowids, exact decimal text, array order and optional absence.
+If new history exceeds the former single-row limit, D1 refuses reconstruction and rolls the whole batch
+back, leaving new storage intact; use the verified pre-cutover backup or forward-fix instead. Never clear
+child tables after failed reconstruction. Existing erasure/retention work also blocks rollback. This is
+recovery evidence, not an alternate application read path.
+
+<!-- recurring-planning-rollback:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) VALUES('recurring_plan',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN('recurring_plan_documents','recurring_plans','recurring_plan_revisions','recurring_plan_exceptions','recurring_plan_fulfillments'))
+ AND NOT EXISTS(SELECT 1 FROM recurring_plans p WHERE NOT EXISTS(SELECT 1 FROM user_documents r WHERE r.user_id=p.user_id AND r.kind='recurring-plan'))
+ THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+UPDATE user_documents AS r SET document_json=json_set(document_json,'$.revision',revision,
+ '$.plans',json((SELECT json_group_array(json(body)) FROM (SELECT json_patch(json_object('id',p.id,'pauses',json(p.pauses_json),'revisions',json((SELECT json_group_array(json(body)) FROM (SELECT json_object('from',v.from_date,'plan',json(v.plan_json)) AS body FROM recurring_plan_revisions v WHERE v.user_id=p.user_id AND v.plan_id=p.id ORDER BY v.position)))),CASE WHEN p.stopped_on IS NULL THEN '{}' ELSE json_object('stoppedOn',p.stopped_on) END) AS body FROM recurring_plans p WHERE p.user_id=r.user_id ORDER BY p.position))),
+ '$.exceptions',json((SELECT json_group_array(json(body)) FROM (SELECT json_patch(json_object('planId',e.plan_id,'date',e.local_date,'skipped',json(CASE e.skipped WHEN 1 THEN 'true' ELSE 'false' END)),CASE WHEN e.replacement_json IS NULL THEN '{}' ELSE json_object('replacement',json(e.replacement_json)) END) AS body FROM recurring_plan_exceptions e WHERE e.user_id=r.user_id ORDER BY e.position))),
+ '$.fulfillments',json((SELECT json_group_array(json(body)) FROM (SELECT json_patch(json_patch(json_object('id',f.id,'planId',f.plan_id,'date',f.local_date,'actualDate',f.actual_date,'money',json_object('amount',f.amount,'currency',f.currency),'settled',json(CASE f.settled WHEN 1 THEN 'true' ELSE 'false' END)),CASE WHEN f.automatic IS NULL THEN '{}' ELSE json_object('automatic',json(CASE f.automatic WHEN 1 THEN 'true' ELSE 'false' END)) END),CASE WHEN f.transaction_id IS NULL THEN '{}' ELSE json_object('transactionId',f.transaction_id) END) AS body FROM recurring_plan_fulfillments f WHERE f.user_id=r.user_id ORDER BY f.position))))
+WHERE r.kind='recurring-plan';
+DELETE FROM recurring_plan_fulfillments;
+DELETE FROM recurring_plan_exceptions;
+DELETE FROM recurring_plan_revisions;
+DELETE FROM recurring_plans;
+```
+
+<!-- recurring-planning-rollback:end -->

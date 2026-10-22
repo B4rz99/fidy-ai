@@ -1,0 +1,63 @@
+{
+  "capacity": {
+    "documentBytes": 7042211,
+    "rootBytes": 663596,
+    "plans": 100,
+    "revisionsPerPlan": 100,
+    "pausesPerPlan": 100,
+    "exceptions": 4096,
+    "fulfillments": 4096,
+    "exclusions": 4096,
+    "suggestions": 4096
+  },
+  "histories": [
+    {
+      "plans": 100,
+      "revisions": 1,
+      "bytes": 54805,
+      "bytesWithoutRevision": 54790,
+      "fitsD1ValueLimit": true,
+      "nativeStored": true,
+      "relationalWriteMs": 68.3265420000007,
+      "writeMs": 1.8027920000004087,
+      "publicReadMs": 15.916290999999546,
+      "concurrentEditMs": 11.142750000000888,
+      "concurrentRowsRead": 652,
+      "concurrentRowsWritten": 17,
+      "nativeFailure": "",
+      "concurrentOutcomes": "200,503"
+    },
+    {
+      "plans": 100,
+      "revisions": 25,
+      "bytes": 1194806,
+      "bytesWithoutRevision": 1194790,
+      "fitsD1ValueLimit": true,
+      "nativeStored": true,
+      "relationalWriteMs": 143.76224999999977,
+      "writeMs": 20.939167000000452,
+      "publicReadMs": 83.06666699999914,
+      "concurrentEditMs": 124.43975000000137,
+      "concurrentRowsRead": 7852,
+      "concurrentRowsWritten": 17,
+      "nativeFailure": "",
+      "concurrentOutcomes": "200,503"
+    },
+    {
+      "plans": 100,
+      "revisions": 100,
+      "bytes": 4757307,
+      "bytesWithoutRevision": 4757290,
+      "fitsD1ValueLimit": false,
+      "nativeStored": false,
+      "relationalWriteMs": 337.3520839999983,
+      "writeMs": 31.380417000000307,
+      "publicReadMs": 237.10866699999679,
+      "concurrentEditMs": 425.020875000002,
+      "concurrentRowsRead": 30352,
+      "concurrentRowsWritten": 17,
+      "nativeFailure": "SQLITE_TOOBIG",
+      "concurrentOutcomes": "200,503"
+    }
+  ]
+}

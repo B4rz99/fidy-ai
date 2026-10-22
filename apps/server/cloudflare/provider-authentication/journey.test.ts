@@ -1,9 +1,11 @@
+import { verifyProviderOwnershipCutover } from "./ownership-cutover.test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { type Cause, Effect, Schema } from "effect";
 import {
   type Journey,
   delayedProviderTokenResponse,
   disposeJourneys,
+  onboardingRefusals,
   setup,
 } from "./journey.test-fixture";
 
@@ -257,6 +259,20 @@ it("preserves stable Google ownership across changed/missing emails and never me
           .prepare("SELECT user_id FROM provider_credentials WHERE subject='stable-google-user'")
           .first<string>("user_id")
       );
+      yield* Effect.tryPromise(() =>
+        expect(
+          journey.db
+            .prepare(
+              "UPDATE provider_authentication_attempts SET subject='rewritten-subject' WHERE pairing_id=?"
+            )
+            .bind(journey.pairing.pairingId)
+            .run()
+        ).rejects.toThrow("provider_completion_invalid")
+      );
+      const creationQuery = journey.db
+        .prepare("SELECT created_at_ms,trial_started_at_ms,trial_ends_at_ms FROM users WHERE id=?")
+        .bind(original);
+      const originalCreation = yield* Effect.tryPromise(() => creationQuery.first());
       for (const email of ["changed@example.test", undefined]) {
         const pairing = yield* nextPairing(journey);
         const response = yield* authenticate(
@@ -271,6 +287,7 @@ it("preserves stable Google ownership across changed/missing emails and never me
           (yield* Effect.tryPromise(() => journey.send("/web/pairings/redeem", pairing))).status
         ).toBe(200);
       }
+      expect(yield* Effect.tryPromise(() => creationQuery.first())).toEqual(originalCreation);
       const other = yield* nextPairing(journey);
       expect(
         (yield* authenticate(journey, other, {
@@ -279,6 +296,21 @@ it("preserves stable Google ownership across changed/missing emails and never me
         })).status
       ).toBe(200);
       expect(yield* countRows(journey.db, "users")).toBe(2);
+      yield* verifyProviderOwnershipCutover({
+        db: journey.db,
+        pairingId: journey.pairing.pairingId,
+        subject: "stable-google-user",
+      });
+      yield* Effect.tryPromise(() =>
+        expect(
+          journey.db
+            .prepare(
+              "UPDATE provider_credentials SET user_id=(SELECT user_id FROM provider_credentials WHERE subject='another-subject') WHERE subject='stable-google-user'"
+            )
+            .run()
+        ).rejects.toThrow("provider_credential_immutable")
+      );
+
       expect(
         yield* countRows(
           journey.db,
@@ -325,44 +357,43 @@ for (const fixture of [
     ));
 }
 
-it("rolls back every new owner record when the origin guard fails, and concurrent completion discloses recovery once", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(setup);
-      yield* Effect.tryPromise(() =>
-        journey.db
-          .prepare(
-            "CREATE TRIGGER refuse_provider BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts WHEN NEW.completed_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'fixture_rollback'); END"
-          )
-          .run()
-      );
-      expect((yield* authenticate(journey, journey.pairing)).status).toBe(400);
-      for (const table of [
-        "users",
-        "provider_credentials",
-        "backup_recovery_credentials",
-        "consent_history",
-      ]) {
-        expect(yield* countRows(journey.db, table)).toBe(0);
-      }
-      yield* Effect.tryPromise(() => journey.db.prepare("DROP TRIGGER refuse_provider").run());
-      const results = yield* Effect.tryPromise(() =>
-        Promise.all([
-          journey.send("/web/providers/google/complete", journey.pairing),
-          journey.send("/web/providers/google/complete", journey.pairing),
-        ])
-      );
-      expect(results.map((result) => result.status).sort((left, right) => left - right)).toEqual([
-        200, 400,
-      ]);
-      expect(yield* countRows(journey.db, "users")).toBe(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/google/complete", journey.pairing)
-        )).status
-      ).toBe(400);
-    })
-  ));
+it.each(onboardingRefusals)(
+  "rolls back every new owner record after $description, and concurrent completion discloses recovery once",
+  ({ clause }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const journey = yield* Effect.tryPromise(setup);
+        yield* Effect.tryPromise(() =>
+          journey.db.prepare(`CREATE TRIGGER refuse_provider ${clause}`).run()
+        );
+        expect((yield* authenticate(journey, journey.pairing)).status).toBe(400);
+        for (const table of [
+          "users",
+          "provider_credentials",
+          "backup_recovery_credentials",
+          "consent_history",
+        ]) {
+          expect(yield* countRows(journey.db, table)).toBe(0);
+        }
+        yield* Effect.tryPromise(() => journey.db.prepare("DROP TRIGGER refuse_provider").run());
+        const results = yield* Effect.tryPromise(() =>
+          Promise.all([
+            journey.send("/web/providers/google/complete", journey.pairing),
+            journey.send("/web/providers/google/complete", journey.pairing),
+          ])
+        );
+        expect(results.map((result) => result.status).sort((left, right) => left - right)).toEqual([
+          200, 400,
+        ]);
+        expect(yield* countRows(journey.db, "users")).toBe(1);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            journey.send("/web/providers/google/complete", journey.pairing)
+          )).status
+        ).toBe(400);
+      })
+    )
+);
 
 it("keeps configured Google credentials and protocol proofs out of exported diagnostics", () =>
   Effect.runPromise(

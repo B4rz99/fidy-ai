@@ -146,3 +146,29 @@ export const delayedProviderTokenResponse = ({
       return Response.json({ id_token: idToken });
     })
   );
+
+export const onboardingRefusals = [
+  {
+    description: "completion error",
+    clause:
+      "BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts WHEN NEW.completed_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'fixture_rollback'); END",
+  },
+  {
+    description: "zero-row completion",
+    clause:
+      "BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts WHEN NEW.completed_at_ms IS NOT NULL BEGIN SELECT RAISE(IGNORE); END",
+  },
+  {
+    description: "missing recovery credential",
+    clause: "BEFORE INSERT ON backup_recovery_credentials BEGIN SELECT RAISE(IGNORE); END",
+  },
+  {
+    description: "missing provider credential",
+    clause: "BEFORE INSERT ON provider_credentials BEGIN SELECT RAISE(IGNORE); END",
+  },
+  {
+    description: "missing Consent",
+    clause:
+      "BEFORE INSERT ON consent_history WHEN NEW.record_type='processing_grant' BEGIN SELECT RAISE(IGNORE); END",
+  },
+];

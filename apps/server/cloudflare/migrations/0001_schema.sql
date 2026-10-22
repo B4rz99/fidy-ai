@@ -7228,8 +7228,32 @@ BEGIN
 END;
 --> statement-breakpoint
 
+CREATE TRIGGER provider_credential_immutable BEFORE UPDATE ON provider_credentials
+WHEN NEW.issuer IS NOT OLD.issuer OR NEW.subject IS NOT OLD.subject OR NEW.user_id IS NOT OLD.user_id
+ OR NEW.contact_email IS NOT OLD.contact_email OR NEW.established_at_ms IS NOT OLD.established_at_ms
+BEGIN SELECT RAISE(ABORT,'provider_credential_immutable'); END;
+--> statement-breakpoint
+
 CREATE TRIGGER provider_completion_immutable BEFORE UPDATE ON provider_authentication_attempts
-WHEN (OLD.completed_at_ms IS NOT NULL AND (NEW.completed_at_ms IS NOT OLD.completed_at_ms OR NEW.created_user IS NOT OLD.created_user OR NEW.user_id IS NOT OLD.user_id OR NEW.state<>'completed'))
+WHEN (OLD.completed_at_ms IS NOT NULL AND (
+ NEW.id IS NOT OLD.id
+ OR NEW.pairing_id IS NOT OLD.pairing_id
+ OR NEW.cookie_digest IS NOT OLD.cookie_digest
+ OR NEW.nonce IS NOT OLD.nonce
+ OR NEW.intent IS NOT OLD.intent
+ OR NEW.disclosure_json IS NOT OLD.disclosure_json
+ OR NEW.consent_at_ms IS NOT OLD.consent_at_ms
+ OR NEW.created_at_ms IS NOT OLD.created_at_ms
+ OR NEW.expires_at_ms IS NOT OLD.expires_at_ms
+ OR NEW.state IS NOT OLD.state
+ OR NEW.issuer IS NOT OLD.issuer
+ OR NEW.subject IS NOT OLD.subject
+ OR NEW.contact_email IS NOT OLD.contact_email
+ OR NEW.user_id IS NOT OLD.user_id
+ OR NEW.provider IS NOT OLD.provider
+ OR NEW.handoff_id IS NOT OLD.handoff_id
+ OR NEW.completed_at_ms IS NOT OLD.completed_at_ms
+ OR NEW.created_user IS NOT OLD.created_user))
  OR (NEW.completed_at_ms IS NOT OLD.completed_at_ms AND NOT(OLD.completed_at_ms IS NULL AND OLD.state='verified' AND NEW.state='completed' AND NEW.user_id IS NOT NULL AND NEW.cookie_digest=zeroblob(32) AND NEW.nonce='' AND NEW.contact_email IS NULL))
 BEGIN SELECT RAISE(ABORT,'provider_completion_invalid'); END;
 --> statement-breakpoint

@@ -1426,3 +1426,58 @@ actual bounded cleanup. Session- and recovery-referenced pairings remain retaine
 sessions. Existing integrated provider, WhatsApp, email and recovery journeys exercise approval and
 redemption; session journeys cover freshness, sliding idle/hard expiry, revocation and logout.
 State-owned email dispatch claims and ambiguous outcomes remain unchanged.
+
+## Provider onboarding ownership (#1444)
+
+Provider credentials retain their five fields and attempts retain their eighteen fields from #1403.
+The existing onboarding composition already creates the User and original TrialPeriod, processing
+Consent and extracted backup recovery credential in one native D1 batch. Provider issuer/subject
+selects identity; contact email never establishes mailbox authority or merges Users. Browser Login
+still requires its independent private verifier before issuing a session.
+
+Install `provider_credential_immutable` and the expanded `provider_completion_immutable` from the
+final baseline together. The former protects the original issuer, subject, owner, contact evidence
+and establishment instant. The latter freezes completed attempt evidence, including its original
+pairing and provider identity; it still permits the one verified-to-completed transition that clears
+cookie/nonce/contact proof. Neither guard prevents purpose-authorized deletion or expired-attempt
+cleanup. No table rebuild, field conversion or additional migration file is needed.
+
+For a populated database, stop provider completion, expiry cleanup and erasure during installation,
+back up the database, capture its existing trigger definitions and check for unexpected dependencies.
+Run the preflight below in the same native D1 batch as dropping the old completion guard, creating
+both final guards and deleting the `provider_onboarding_cutover` assertion. An unexplained preexisting
+credential guard or inconsistent history requires investigation, not silent replacement or inferred
+identity repair. Preserve every original rowid, field, disclosure byte, exact instant and archive
+address. Retained historical attempts do not require an independently erased current credential,
+Consent record or recovery credential to be recreated. New onboarding still requires all of them at
+its atomic completion boundary. Publish matching code and align the one-baseline ledger only after
+successful verification. Failed preflight or installation rolls the whole batch back.
+
+<!-- provider-onboarding-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'provider_onboarding_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM provider_authentication_attempts a
+   LEFT JOIN browser_login_pairings p ON p.id=a.pairing_id
+   LEFT JOIN provider_credentials c ON c.issuer=a.issuer AND c.subject=a.subject
+   WHERE (a.state='completed')<>(a.completed_at_ms IS NOT NULL)
+   OR (a.completed_at_ms IS NOT NULL AND (
+     a.user_id IS NULL OR a.issuer IS NULL OR a.subject IS NULL
+     OR a.cookie_digest IS NOT zeroblob(32) OR a.nonce<>'' OR a.contact_email IS NOT NULL
+     OR a.created_user IS NULL OR p.user_id IS NOT a.user_id OR p.state NOT IN('ready','consumed')
+     OR a.expires_at_ms<=a.completed_at_ms OR p.expires_at_ms<=a.completed_at_ms
+     OR (c.user_id IS NOT NULL AND c.user_id IS NOT a.user_id))))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- provider-onboarding-preflight:end -->
+
+Existing Google and Microsoft journeys verify nonce/cookie/issuer/subject binding, non-authoritative
+contact email, duplicate completion, concurrent single-use recovery disclosure and rollback when
+Consent, recovery or provider credential insertion produces no row. The populated native cutover
+reuses those real journey records, refuses conflicting ownership, preserves all retained values and
+archives, proves guard-installation rollback and checks the actual indexed expiry query.

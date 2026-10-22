@@ -25,3 +25,15 @@ Provider, WhatsApp, email and recovery approvals do not themselves create browse
 The accepted pairing/session fields and state-owned email dispatch facts remain intact. The only
 schema additions are the expiry index for the existing bounded cleanup and an owner index for
 User-scoped session erasure, preserving references from sessions and recovery cases. See the [#1443 installation procedure](database-cutover-1428.md#browser-pairing-to-session-authority-1443).
+
+### Provider onboarding ownership (#1444)
+
+Google and Microsoft onboarding use the extracted recovery credential and normalized Consent
+history in the same batch as User, original trial, provider association and pairing approval.
+Completion checks require those records before disclosing recovery material. Returning login uses
+exact issuer/subject and preserves the User's creation and trial facts. Provider contact email
+never creates verified-mailbox authority or merges identities.
+
+Established provider credentials and completed attempt evidence are immutable while retained;
+purpose-specific erasure and bounded attempt expiry remain available. The five- and eighteen-field
+records remain intact. See the [populated guard installation](database-cutover-1428.md#provider-onboarding-ownership-1444).

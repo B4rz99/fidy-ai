@@ -152,7 +152,7 @@ class-wide hold. Stop review until the actual source and executable scope agree.
 | `insights`                | `weekly_question_intents`               | schedules    | `weekly_question_intents`                                                       |
 | `oauth-agents`            | `oauth_credentials`                     | credentials  | `oauth_credentials`                                                             |
 | `oauth-agents`            | `oauth_connections`                     | credentials  | `oauth_connections`                                                             |
-| `oauth-agents`            | `oauth_refresh_events`                  | credentials  | `audit_entries (oauth_refresh)`                                                 |
+| `oauth-agents`            | `oauth_refresh_events`                  | credentials  | `oauth_credentials` successor and historical rotation identity fields           |
 | `oauth-agents`            | `oauth_review_requests`                 | credentials  | `oauth_review_requests`                                                         |
 
 ## Other current stores and dispositions

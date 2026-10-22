@@ -148,7 +148,7 @@ it.each([
           yield* wait(
             fixture.db
               .prepare(
-                "SELECT count(*) FROM (SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh')"
+                "SELECT count(*) FROM (SELECT * FROM oauth_credentials WHERE replacement_refresh_id IS NOT NULL)"
               )
               .first<number>("count(*)")
           )

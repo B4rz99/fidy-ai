@@ -1287,7 +1287,8 @@ Execute one native D1 batch:
    Matching rejected decisions are preserved as rejected cases; exceptional history blocks conversion
    for investigation rather than being discarded or rewritten.
 2. Drop captured Audit triggers/views before rebuilding. Create `audit_entries_1442` using the final
-   baseline Audit declaration with only its table name changed. Run `recovery-evidence-copy`: preserve
+   pre-#1446 Audit declaration (retained in `oauth-agents/lineage-before-1446.fixture.sql`)
+   with only its table name changed. Apply #1446 after this extraction. Run `recovery-evidence-copy`: preserve
    all unrelated writable Audit fields and sequences, its AUTOINCREMENT high-water mark and every
    case field/rowid. Keep generated columns derived by the unchanged final expressions.
 3. Run `recovery-evidence-replace`, then reinstall mapped final baseline Audit dependencies and the
@@ -1555,3 +1556,142 @@ proof and concurrent completion. The populated native check installs the cutover
 public-journey proof, refuses missing decision evidence without rewriting it, and verifies complete
 rollback after guard installation fails. All original parent, handoff and attempt fields, rowids,
 User/Consent/recovery records and archive addresses remain untouched by installation.
+
+## OAuth refresh lineage (#1446)
+
+`oauth_credentials.replacement_refresh_id` owns the single successor of a consumed refresh proof.
+The composite foreign key binds a refresh-kind successor to the same User and OAuthConnection;
+unique successors, no self-link, exact issue/consumption time and nonwidening scopes are enforced.
+Rotation inserts both new credentials, then consumes the old proof and binds its successor in one
+D1 batch. A skipped insert or consumption rolls the whole batch back. Consumed proof stays consumed
+when lineage is erased, so erasure cannot revive it. Replay still revokes the connection and appends
+Consent evidence. General OAuth operation accountability remains Audit-owned; management reads only
+credential-call activity, so its public shape and filtering are unchanged.
+
+`refresh_event_id` and `refresh_event_row_ref` preserve only historical rotation IDs and original
+Audit sequence archive addresses. New rotations need neither; their lineage erasure address is
+`credential:<id>`. The existing `oauth_refresh_events` erasure purpose clears the link and optional
+historical metadata before credential deletion. Existing generation-qualified `{}` archives remain
+unchanged. These are credential-owned fields, not a new event table or a new Audit purpose.
+
+Public-client registration, pending reviews, approved connections and operation intents retain
+their existing tables, indexes and public contracts. Approval snapshots, exact redirect/resource/PKCE,
+fresh browser authority, absolute authorization expiry and narrowed credential scopes are unchanged.
+
+Back up D1 and fence OAuth exchange/refresh/management, Audit writers/retention and erasure before
+conversion. Editing an already-applied baseline does not update an existing database: this is an
+explicit synchronized code/schema cutover, never a baseline replay. Stop on unexplained source
+history or dependencies. In particular, consumed proof without retained rotation evidence requires
+investigation rather than a fabricated successor. No temporary destination may already exist.
+Capture all dependent schema objects; map each to the final baseline and reject unknown triggers,
+views or incoming foreign keys. Known incoming credential references are Audit's access-credential
+FK and its two historical refresh references, replaced by the new credential self-reference; Audit has no incoming FK. Run the reference block once
+for every existing table, substituting a validated schema identifier for `__TABLE_NAME__`.
+
+Execute one native D1 batch:
+
+1. Enable `PRAGMA defer_foreign_keys=ON`; run preflight and all reference checks.
+2. Create the final `oauth_credentials` and `audit_entries` definitions from `0001_schema.sql` as
+   `oauth_credentials_1446` and `audit_entries_1446`. Rewrite the credential self-FK to the temporary
+   credential name, and the temporary Audit access FK to that same temporary credential name.
+3. Run copy/verification below before dropping any original table. Preserve every credential rowid,
+   digest, exact instant and scope bytes; preserve remaining Audit sequences and its high watermark.
+4. Drop original Audit triggers (especially append-only delete protection), then run replacement.
+   Reinstall every final index/trigger owned by either replaced table from the baseline. External
+   references must still resolve to the final credential name. Run final verification and update the
+   existing baseline ledger hash in the same transaction only after all checks pass.
+5. Recheck foreign keys, public refresh/replay and browser management before removing the write fence.
+   A failed batch preserves the entire original schema, rows, archives and migration ledger. After
+   successful publication, rollback needs the preserved backup plus matching old code; code-only
+   rollback is unsafe. Never rerun the historical extraction on the converted schema.
+
+<!-- oauth-lineage-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'oauth_lineage_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_permits) AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM audit_retention_permits)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM oauth_credentials c LEFT JOIN oauth_connections g ON g.id=c.connection_id
+ WHERE c.user_id IS NULL OR c.user_id IS NOT g.user_id OR c.expires_at_ms>g.expires_at_ms
+ OR NOT json_valid(c.scopes_json) OR json_type(c.scopes_json)<>'array' OR json_array_length(c.scopes_json)=0
+ OR EXISTS(SELECT 1 FROM json_each(c.scopes_json) s WHERE s.type<>'text' OR s.value NOT IN('read','write','dashboard')
+ OR NOT EXISTS(SELECT 1 FROM json_each(g.scopes_json) a WHERE a.value=s.value)))
+ AND NOT EXISTS(SELECT 1 FROM audit_entries e
+ LEFT JOIN oauth_credentials c ON c.kind='refresh' AND c.id=e.consumed_refresh_id
+ LEFT JOIN oauth_credentials n ON n.kind='refresh' AND n.id=e.issued_refresh_id
+ WHERE e.record_type='oauth_refresh' AND (c.id IS NULL OR n.id IS NULL OR c.id=n.id
+ OR c.user_id IS NOT e.user_id OR n.user_id IS NOT e.user_id
+ OR c.connection_id IS NOT e.refresh_connection_id OR n.connection_id IS NOT e.refresh_connection_id
+ OR c.consumed_at_ms IS NOT e.occurred_at_ms OR n.issued_at_ms IS NOT e.occurred_at_ms
+ OR e.occurred_at_ms<c.issued_at_ms OR e.occurred_at_ms>=c.expires_at_ms
+ OR EXISTS(SELECT 1 FROM json_each(n.scopes_json) s WHERE NOT EXISTS(SELECT 1 FROM json_each(c.scopes_json) a WHERE a.value=s.value))))
+ AND NOT EXISTS(SELECT consumed_refresh_id FROM audit_entries WHERE record_type='oauth_refresh' GROUP BY consumed_refresh_id HAVING count(*)<>1)
+ AND NOT EXISTS(SELECT issued_refresh_id FROM audit_entries WHERE record_type='oauth_refresh' GROUP BY issued_refresh_id HAVING count(*)<>1)
+ AND NOT EXISTS(SELECT 1 FROM oauth_credentials c WHERE c.kind='refresh' AND c.consumed_at_ms IS NOT NULL
+ AND NOT EXISTS(SELECT 1 FROM audit_entries e WHERE e.record_type='oauth_refresh' AND e.consumed_refresh_id=c.id))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- oauth-lineage-preflight:end -->
+
+<!-- oauth-lineage-references:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'oauth_lineage_cutover',CASE WHEN NOT EXISTS(
+ SELECT 1 FROM pragma_foreign_key_list('__TABLE_NAME__')
+ WHERE "table"='audit_entries' OR ("table"='oauth_credentials' AND NOT (
+ '__TABLE_NAME__'='audit_entries' AND (("from"='oauth_credential_id' AND "to"='access_id')
+ OR ("from" IN('consumed_refresh_id','issued_refresh_id') AND "to"='refresh_id'))))
+) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- oauth-lineage-references:end -->
+
+<!-- oauth-lineage-copy:start -->
+
+```sql
+INSERT INTO oauth_credentials_1446(rowid,kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,consumed_at_ms,scopes_json,replacement_refresh_id,refresh_event_id,refresh_event_row_ref)
+SELECT c.rowid,c.kind,c.id,c.connection_id,c.user_id,c.digest,c.issued_at_ms,c.expires_at_ms,c.consumed_at_ms,c.scopes_json,e.issued_refresh_id,e.id,CAST(e.sequence AS TEXT)
+FROM oauth_credentials c LEFT JOIN audit_entries e ON e.record_type='oauth_refresh' AND c.kind='refresh' AND e.consumed_refresh_id=c.id;
+INSERT INTO audit_entries_1446(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries WHERE record_type<>'oauth_refresh';
+UPDATE sqlite_sequence SET seq=(SELECT seq FROM sqlite_sequence WHERE name='audit_entries') WHERE name='audit_entries_1446';
+INSERT INTO sqlite_sequence(name,seq) SELECT 'audit_entries_1446',seq FROM sqlite_sequence WHERE name='audit_entries'
+ AND NOT EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='audit_entries_1446');
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'oauth_lineage_cutover',CASE WHEN
+ (SELECT count(*) FROM oauth_credentials)=(SELECT count(*) FROM oauth_credentials_1446)
+ AND NOT EXISTS(SELECT rowid,kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,consumed_at_ms,scopes_json FROM oauth_credentials EXCEPT SELECT rowid,kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,consumed_at_ms,scopes_json FROM oauth_credentials_1446)
+ AND (SELECT count(*) FROM audit_entries WHERE record_type='oauth_refresh')=(SELECT count(*) FROM oauth_credentials_1446 WHERE replacement_refresh_id IS NOT NULL)
+ AND NOT EXISTS(SELECT sequence,id,user_id,refresh_connection_id,consumed_refresh_id,issued_refresh_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh'
+ EXCEPT SELECT CAST(refresh_event_row_ref AS INTEGER),refresh_event_id,user_id,connection_id,id,replacement_refresh_id,consumed_at_ms FROM oauth_credentials_1446 WHERE replacement_refresh_id IS NOT NULL)
+ AND (SELECT count(*) FROM audit_entries WHERE record_type<>'oauth_refresh')=(SELECT count(*) FROM audit_entries_1446)
+ AND NOT EXISTS(SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries WHERE record_type<>'oauth_refresh' EXCEPT SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries_1446)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- oauth-lineage-copy:end -->
+
+<!-- oauth-lineage-replace:start -->
+
+```sql
+DROP TABLE audit_entries;
+DROP TABLE oauth_credentials;
+ALTER TABLE oauth_credentials_1446 RENAME TO oauth_credentials;
+ALTER TABLE audit_entries_1446 RENAME TO audit_entries;
+```
+
+<!-- oauth-lineage-replace:end -->
+
+<!-- oauth-lineage-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'oauth_lineage_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='oauth_lineage_cutover';
+```
+
+<!-- oauth-lineage-verify:end -->

@@ -38,10 +38,6 @@ CREATE TABLE "audit_entries" (
  accepted_at_ms INTEGER,
  credential_session_id TEXT GENERATED ALWAYS AS (CASE WHEN record_type='session_call' AND operation GLOB 'dashboard.*' THEN NULL ELSE session_id END) VIRTUAL REFERENCES web_sessions(id),
  media_submission_id TEXT GENERATED ALWAYS AS (CASE WHEN record_type='media_admission' THEN id END) VIRTUAL REFERENCES media_submissions(id) ON DELETE CASCADE,
- refresh_connection_id TEXT REFERENCES oauth_connections(id),
- consumed_refresh_id TEXT UNIQUE REFERENCES oauth_credentials(refresh_id),
- issued_refresh_id TEXT UNIQUE REFERENCES oauth_credentials(refresh_id),
- CHECK((record_type='oauth_refresh' AND refresh_connection_id IS NOT NULL AND consumed_refresh_id IS NOT NULL AND issued_refresh_id IS NOT NULL) OR (record_type<>'oauth_refresh' AND refresh_connection_id IS NULL AND consumed_refresh_id IS NULL AND issued_refresh_id IS NULL)),
  UNIQUE(record_type,id), UNIQUE(attempt_id,transition),
  FOREIGN KEY(user_id) REFERENCES users(id),
  FOREIGN KEY(pat_id) REFERENCES pats(id),
@@ -51,7 +47,6 @@ CREATE TABLE "audit_entries" (
  FOREIGN KEY(attempt_id) REFERENCES billing_attempts(id),
  CHECK(
   (record_type='reminder_control' AND id IS NOT NULL AND json_valid(id) AND json_array_length(id)=2 AND json_extract(id,'$[0]')=user_id AND json_type(id,'$[1]')='text' AND user_id IS NOT NULL AND outcome IS NOT NULL AND session_id IS NULL AND operation IS NULL AND occurred_at_ms IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL AND oauth_credential_id IS NULL AND hosted_turn_id IS NULL AND attempt_id IS NULL AND transition IS NULL AND accepted_at_ms IS NULL) OR
-  (record_type='oauth_refresh' AND id IS NOT NULL AND user_id IS NOT NULL AND occurred_at_ms IS NOT NULL AND session_id IS NULL AND operation IS NULL AND outcome IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL AND oauth_credential_id IS NULL AND hosted_turn_id IS NULL AND attempt_id IS NULL AND transition IS NULL AND accepted_at_ms IS NULL) OR
   (record_type='session_call' AND id IS NOT NULL AND user_id IS NOT NULL AND session_id IS NOT NULL AND operation IS NOT NULL AND outcome IS NOT NULL AND occurred_at_ms IS NOT NULL AND ((operation IN ('transactions.createTransaction','transactions.listTransactions','transactions.getTransaction','transactions.updateTransaction','transactions.deleteTransaction','transactions.searchTransactions','transactions.linkTransactions','transactions.unlinkTransactions','operations.executeAtomicBatch') AND outcome IN ('success','not_found','validation_failed','resource_limit'))
  OR (operation IN ('categories.listCategories','categories.listKeywordRules','categories.createKeywordRule','categories.updateKeywordRule','categories.deleteKeywordRule') AND outcome IN ('success','validation_failed'))
  OR (operation IN ('memory.remember','memory.recall','memory.revise','memory.forget') AND outcome IN ('success','not_found','validation_failed','resource_limit'))
@@ -897,6 +892,13 @@ CREATE TABLE oauth_credentials (
  scopes_json TEXT NOT NULL DEFAULT '["read"]',
  access_id TEXT GENERATED ALWAYS AS(CASE WHEN kind='access' THEN id END) VIRTUAL UNIQUE,
  refresh_id TEXT GENERATED ALWAYS AS(CASE WHEN kind='refresh' THEN id END) VIRTUAL UNIQUE,
+ replacement_refresh_id TEXT UNIQUE,
+ refresh_event_id TEXT UNIQUE,
+ refresh_event_row_ref TEXT UNIQUE,
+ UNIQUE(user_id,connection_id,refresh_id),
+ FOREIGN KEY(user_id,connection_id,replacement_refresh_id) REFERENCES oauth_credentials(user_id,connection_id,refresh_id),
+ CHECK(replacement_refresh_id IS NULL OR (kind='refresh' AND user_id IS NOT NULL AND consumed_at_ms IS NOT NULL AND replacement_refresh_id<>id)),
+ CHECK((refresh_event_id IS NULL AND refresh_event_row_ref IS NULL) OR (refresh_event_id IS NOT NULL AND refresh_event_row_ref IS NOT NULL AND replacement_refresh_id IS NOT NULL)),
  PRIMARY KEY(kind,id),UNIQUE(kind,digest),CHECK(kind='refresh' OR(user_id IS NOT NULL AND consumed_at_ms IS NULL))
 ) STRICT;
 --> statement-breakpoint
@@ -1702,9 +1704,6 @@ CREATE INDEX audit_entries_oauth_activity ON audit_entries(user_id,oauth_connect
 CREATE INDEX audit_entries_pat_activity ON audit_entries(user_id,pat_id,occurred_at_ms DESC,id DESC) WHERE record_type='credential_call';
 --> statement-breakpoint
 
-
-CREATE INDEX audit_entries_refresh_connection ON audit_entries(refresh_connection_id) WHERE refresh_connection_id IS NOT NULL;
---> statement-breakpoint
 
 CREATE INDEX audit_entries_retention ON audit_entries(occurred_at_ms,id,user_id) WHERE record_type IN('session_call','credential_call','insight_call','publication');
 --> statement-breakpoint
@@ -2739,7 +2738,6 @@ WHEN OLD.record_type IN ('session_call','credential_call','insight_call','public
  WHEN 'request_admission' THEN 'canonical_request_acceptances'
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
- WHEN 'oauth_refresh' THEN 'oauth_refresh_events'
  WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
@@ -3603,7 +3601,6 @@ WHEN EXISTS (
  WHEN 'request_admission' THEN 'canonical_request_acceptances'
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
- WHEN 'oauth_refresh' THEN 'oauth_refresh_events'
  WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
@@ -3629,7 +3626,6 @@ WHEN EXISTS (
  WHEN 'request_admission' THEN 'canonical_request_acceptances'
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
- WHEN 'oauth_refresh' THEN 'oauth_refresh_events'
  WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
@@ -3655,7 +3651,6 @@ WHEN EXISTS (
  WHEN 'request_admission' THEN 'canonical_request_acceptances'
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
- WHEN 'oauth_refresh' THEN 'oauth_refresh_events'
  WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
@@ -4465,7 +4460,12 @@ WHEN NEW.kind='refresh' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.sta
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_refresh_credentials_update BEFORE UPDATE ON oauth_credentials
-WHEN NEW.kind='refresh' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_credentials'))
+WHEN NEW.kind='refresh' AND NOT (
+ NEW.replacement_refresh_id IS NULL AND NEW.refresh_event_id IS NULL AND NEW.refresh_event_row_ref IS NULL
+ AND NEW.consumed_at_ms IS OLD.consumed_at_ms
+ AND EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id AND q.user_id=p.user_id
+ WHERE p.store_id='oauth_refresh_events' AND p.user_id=OLD.user_id AND q.state='Erasing')
+) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_credentials'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -7008,11 +7008,6 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER oauth_refresh_events_no_delete BEFORE DELETE ON audit_entries
-WHEN OLD.record_type='oauth_refresh' AND (NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='oauth_refresh_events' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id)))
-BEGIN SELECT RAISE(ABORT,'oauth_append_only'); END;
---> statement-breakpoint
-
 CREATE TRIGGER oauth_refresh_policy_immutable BEFORE UPDATE OF refresh_allowed ON oauth_connections
 BEGIN
  SELECT RAISE(ABORT,'oauth_immutable');
@@ -8326,4 +8321,35 @@ WHEN (OLD.opened_event_id IS NOT NULL OR OLD.decision_event_id IS NOT NULL)
  AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=OLD.user_id AND q.state NOT IN('AwaitingReview','Draining','Complete')
  AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.request_id=q.id AND p.user_id=q.user_id AND p.store_id='support_recovery_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER oauth_lineage_initial BEFORE INSERT ON oauth_credentials
+WHEN NEW.consumed_at_ms IS NOT NULL OR NEW.replacement_refresh_id IS NOT NULL OR NEW.refresh_event_id IS NOT NULL OR NEW.refresh_event_row_ref IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'oauth_lineage_initial'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER oauth_lineage_immutable BEFORE UPDATE ON oauth_credentials
+WHEN NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.connection_id IS NOT OLD.connection_id
+ OR (OLD.consumed_at_ms IS NOT NULL AND NEW.consumed_at_ms IS NOT OLD.consumed_at_ms)
+ OR ((NEW.replacement_refresh_id IS NOT OLD.replacement_refresh_id OR NEW.refresh_event_id IS NOT OLD.refresh_event_id OR NEW.refresh_event_row_ref IS NOT OLD.refresh_event_row_ref)
+ AND NOT (
+  OLD.consumed_at_ms IS NULL AND NEW.consumed_at_ms IS NOT NULL AND OLD.replacement_refresh_id IS NULL
+  AND NEW.replacement_refresh_id IS NOT NULL AND NEW.refresh_event_id IS NULL AND NEW.refresh_event_row_ref IS NULL
+  AND EXISTS(SELECT 1 FROM oauth_credentials r WHERE r.kind='refresh' AND r.id=NEW.replacement_refresh_id
+    AND r.user_id=OLD.user_id AND r.connection_id=OLD.connection_id AND r.issued_at_ms=NEW.consumed_at_ms
+    AND r.consumed_at_ms IS NULL AND NEW.consumed_at_ms>=OLD.issued_at_ms AND NEW.consumed_at_ms<OLD.expires_at_ms
+    AND NOT EXISTS(SELECT 1 FROM json_each(r.scopes_json) n WHERE NOT EXISTS(SELECT 1 FROM json_each(OLD.scopes_json) o WHERE o.value=n.value)))
+ ) AND NOT (
+  NEW.replacement_refresh_id IS NULL AND NEW.refresh_event_id IS NULL AND NEW.refresh_event_row_ref IS NULL
+  AND NEW.consumed_at_ms IS OLD.consumed_at_ms
+  AND EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id AND q.user_id=p.user_id
+    WHERE p.store_id='oauth_refresh_events' AND p.user_id=OLD.user_id AND q.state='Erasing')
+ ))
+ OR (OLD.consumed_at_ms IS NULL AND NEW.consumed_at_ms IS NOT NULL AND NEW.replacement_refresh_id IS NULL)
+BEGIN SELECT RAISE(ABORT,'oauth_lineage_immutable'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER oauth_lineage_no_delete BEFORE DELETE ON oauth_credentials
+WHEN OLD.replacement_refresh_id IS NOT NULL OR OLD.refresh_event_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'oauth_lineage_retained'); END;
 --> statement-breakpoint

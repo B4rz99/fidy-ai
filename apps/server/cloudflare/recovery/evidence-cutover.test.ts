@@ -525,7 +525,14 @@ it.each(cases)("preserves recovery evidence or refuses $description atomically",
           Bun.file(new URL("./evidence-before-1442.fixture.sql", import.meta.url)).text()
         )
       );
-      const auditObjects = baseline.filter(onAudit);
+      const auditTarget = schemaStatements(
+        yield* native(() =>
+          Bun.file(
+            new URL("../oauth-agents/lineage-before-1446.fixture.sql", import.meta.url)
+          ).text()
+        )
+      );
+      const auditObjects = auditTarget.filter(onAudit);
       yield* native(() =>
         db.batch(
           [
@@ -578,7 +585,7 @@ it.each(cases)("preserves recovery evidence or refuses $description atomically",
               ...documentedSqlBlock({ guide, marker: "recovery-evidence-preflight" }),
               ...referenceChecks({ tables, guide }),
               ...sourceAuditTriggers.map((sql) => `DROP TRIGGER ${schemaObjectName(sql)}`),
-              schemaDefinition({ source: baseline, target: "audit_entries" }).replace(
+              schemaDefinition({ source: auditTarget, target: "audit_entries" }).replace(
                 '"audit_entries"',
                 '"audit_entries_1442"'
               ),

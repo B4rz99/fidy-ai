@@ -64,20 +64,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM (SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh') r WHERE r.user_id=?",
+      sql: "SELECT COALESCE(r.refresh_event_row_ref,'credential:'||r.id) AS rowRef,'{}' AS body FROM oauth_credentials r WHERE r.kind='refresh' AND r.replacement_refresh_id IS NOT NULL AND r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh') r WHERE r.user_id=?",
+      sql: "SELECT COALESCE(r.refresh_event_row_ref,'credential:'||r.id) AS rowRef FROM oauth_credentials r WHERE r.kind='refresh' AND r.replacement_refresh_id IS NOT NULL AND r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM (SELECT sequence AS rowid,id,user_id,refresh_connection_id AS connection_id,consumed_refresh_id AS consumed_credential_id,issued_refresh_id AS issued_credential_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh') r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM oauth_credentials r WHERE r.kind='refresh' AND r.replacement_refresh_id IS NOT NULL AND r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM audit_entries AS r WHERE record_type='oauth_refresh' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE oauth_credentials AS r SET replacement_refresh_id=NULL,refresh_event_id=NULL,refresh_event_row_ref=NULL WHERE r.kind='refresh' AND r.user_id=? AND COALESCE(r.refresh_event_row_ref,'credential:'||r.id) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

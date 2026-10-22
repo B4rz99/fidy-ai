@@ -1,5 +1,67 @@
 # Kapso production launch check
 
+## Post-reset verification (2026-10-22)
+
+Production health reported `available` at `20fd17a37458f54031c771d0b9e1de24a5e98933`.
+The dedicated-number webhook is active and the old sandbox webhook is inactive. The staged
+configuration described below was consumed by the successful `b525295dd9a07569a8cf3a01b8411cb638859c4e`
+release; the setup-time inactive/pending statements below describe that earlier checkpoint.
+
+A fresh authorized greeting reached Fidy at 08:07 Bogotá. Kapso recorded HTTP 200 for the
+inbound callback, HTTP 200 for the outbound send, and sent/delivered/read provider receipts.
+The delivered callback returned 200; WhatsApp Web visibly displayed the disclosure. After
+explicit approval, sending `Acepto` at 08:13 returned the Consent-recorded provider handoff;
+its inbound and delivered callbacks also returned 200. The browser handoff displayed Google
+and Microsoft choices. This establishes disclosure delivery and Consent-to-handoff, not a
+completed provider association or a hosted Agent conversation on the new number.
+
+The disclosure and handoff replies also exposed an unresolved status-callback observation: their initial
+`whatsapp.message.sent` callbacks returned 401, then the two retries returned 503. The first
+message's status lookup returned 200. A later read of its stored provider history contained
+correlated sent/delivered/read receipts and passed the installed lifecycle verifier locally.
+The original lookup response bytes were not retained, so that later response does not prove
+what the first callback observed or establish a root cause. Existing native tests exercise
+rejected proof and bounded lookup replay; neither receipt timing nor D1 exhaustion is claimed
+as the cause. Keep signature, correlation, delivery-proof and resource-admission guards intact.
+
+A single labeled technical send then captured three immediate genuine provider responses:
+HTTP 200, matching message/endpoint, `status: sent`, and no `statuses` field. The provider's
+pending-sent shape therefore does not yet supply a receipt history. A native public-Ingress/Core
+regression reproduced 401 for that shape. The local fix acknowledges only the authenticated
+sent hint plus that coordinate-matching provider response, returning no lifecycle evidence and
+making no domain change. Delivered/failed hints still require receipt history. Nine negative
+cases retain rejection for forged signatures, mismatched coordinates/direction, malformed
+history, and other lifecycle states. The positive case proves Consent remains blocked until a
+separate verified delivered receipt and its decision timing permit acceptance. The captured
+later history and this new send do not reconstruct the earlier callbacks' original responses.
+Production verification of the fix remains pending deployment. A concurrent audit subsequently
+reported renewed 503 responses on protected canonical reads; this audit paused live probes.
+Successful direct D1 reads do not classify that separate availability failure as quota exhaustion.
+
+On the baseline revision with Effect 4.0.5, the local rerun passed:
+
+- 31 WhatsApp adapter checks across five files.
+- 233 native checks across WhatsApp, provider association, onboarding Consent and Agent files.
+- 61 controlled hosted-inference checks across three files.
+- 38 Agent Core checks across five files.
+
+After the pending-sent fix, the same selected native run passed 243 checks across 21 files,
+including the ten new lifecycle cases. The adapter, inference and Core reruns remain separately
+reported above; this does not turn controlled tests into deployed-provider evidence.
+
+These commands use controlled external responses and isolated local persistence; they do not
+prove live inference, voice/media interpretation, proactive templates, or all new-number journeys.
+The existing [Agent feature map](../../apps/web/src/features/agent/FEATURE.md) retains earlier
+coverage and its separate live gaps.
+
+The User subsequently completed Google sign-in. An authorized `Estado` request at 08:23
+returned the intended QA account review, and its association identifier matched the browser
+handoff. No account identifier or raw provider payload is retained here. The inbound callback
+returned 200; the sent callback again returned 401. Association confirmation is deferred for
+explicit approval when the User returns. Another audit retains the shared browser session;
+no sign-out or further provider selection was performed by this audit. The separately labeled technical message ran no Agent operation. No financial fixture,
+access grant, counter reset or history deletion was performed in this continuation.
+
 ## Dedicated-number cutover (2026-10-21)
 
 Kapso CLI authenticated to project `e12c802f-113f-4a71-9516-d9c2191392e8` and verified the
@@ -17,13 +79,13 @@ connected production number **+1 205-687-1742**:
 Number health reported available messaging, verified webhook subscription, and passed number
 access. The registered Fidy webhook uses Kapso payload v2 without buffering and subscribes to
 `whatsapp.message.received`, `whatsapp.message.sent`, `whatsapp.message.delivered`, and
-`whatsapp.message.failed`. It is **inactive**, pending deployment and live verification.
+`whatsapp.message.failed`. It was **inactive** at this setup checkpoint, pending deployment and live verification.
 
 GitHub's **Production environment** holds the updated `KAPSO_API_KEY`, the new
 `KAPSO_WEBHOOK_SECRET`, and the verified `WHATSAPP_BUSINESS_PORTFOLIO_ID`. The environment's
 `WHATSAPP_SANDBOX_PHONE_NUMBER_ID` override was removed. Never place those credentials in Git,
 chat, command arguments, or this evidence file. The temporary webhook-secret capture was removed
-after storage in GitHub. The old sandbox webhook has not been disabled yet; it cannot be treated
+after storage in GitHub. The old sandbox webhook had not been disabled at this setup checkpoint; it could not be treated
 as verification of the new number.
 
 Fidy obtains its business phone endpoint from authenticated inbound evidence and retains it for

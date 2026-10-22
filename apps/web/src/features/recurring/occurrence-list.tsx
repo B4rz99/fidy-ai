@@ -132,7 +132,6 @@ const MobileList = ({ items, open, today }: ListProps): JSX.Element => (
         key={`${item.planId}:${item.date}`}
         onClick={() => open(item)}
         className="grid w-full min-w-0 gap-3 px-4 py-3 @min-2xl:grid-cols-[minmax(0,1fr)_auto] text-left hover:bg-muted focus-visible:bg-muted focus-visible:underline"
-        aria-label={`${item.plan.name} ${item.expectedDate} · ${statuses[item.status]} ${expectedAmount(item)}`}
       >
         <span className="min-w-0">
           <RecurringIdentity plan={item.plan} />

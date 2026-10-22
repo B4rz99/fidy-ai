@@ -604,7 +604,7 @@ test("keeps the desktop review controls in the viewport with bulk selection", ({
         )
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Categoría", exact: true })).toBeInViewport({
+        expect(page.getByRole("button", { name: /^Categoría:/u })).toBeInViewport({
           ratio: 1,
         })
       );
@@ -801,9 +801,9 @@ const chooseReviewTime = ({
   page
     .getByRole("button", { name: "Hora del movimiento", exact: true })
     .click()
-    .then(() => page.getByRole("button", { name: "Horas", exact: true }).click())
+    .then(() => page.getByRole("button", { name: /^Horas:/u }).click())
     .then(() => page.getByRole("menuitemradio", { name: hour, exact: true }).click())
-    .then(() => page.getByRole("button", { name: "Minutos", exact: true }).click())
+    .then(() => page.getByRole("button", { name: /^Minutos:/u }).click())
     .then(() => page.getByRole("menuitemradio", { name: minute, exact: true }).click())
     .then(() => page.getByRole("button", { name: "Listo", exact: true }).click());
 
@@ -1025,6 +1025,7 @@ const reviewPickers = [
   { label: "Tipo de transacción", trigger: "button", popup: "menu" },
 ] as const;
 for (const picker of reviewPickers) {
+  const pickerName = new RegExp(`^${RegExp.escape(picker.label)}(?:$|:)`, "u");
   test(`dismisses ${picker.label} when leaving the retained review`, ({ page, request }) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -1054,7 +1055,7 @@ for (const picker of reviewPickers) {
         yield* Effect.tryPromise(() => page.goto("/app/recurring"));
         yield* Effect.tryPromise(() => page.getByRole("link", { name: /^Por revisar/u }).click());
         yield* Effect.tryPromise(() =>
-          page.getByRole(picker.trigger, { name: picker.label, exact: true }).click()
+          page.getByRole(picker.trigger, { name: pickerName }).click()
         );
         yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toBeVisible());
         yield* Effect.tryPromise(() => page.goBack());
@@ -1071,7 +1072,7 @@ for (const picker of reviewPickers) {
         );
         yield* Effect.tryPromise(() => page.getByRole("button", { name: /^Pendientes/u }).click());
         yield* Effect.tryPromise(() =>
-          page.getByRole(picker.trigger, { name: picker.label, exact: true }).click()
+          page.getByRole(picker.trigger, { name: pickerName }).click()
         );
         yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toBeVisible());
         yield* Effect.tryPromise(() => page.goBack());

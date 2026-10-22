@@ -316,7 +316,7 @@ const recurringItem = (page: Page, name: RegExp): ReturnType<Page["getByRole"]> 
     .or(page.getByRole("button", { name: new RegExp(`^(?:${name.source})`, "u") }));
 const chooseOption = (page: Page, label: string, option: string): Promise<void> =>
   page
-    .getByRole("button", { name: label, exact: true })
+    .getByRole("button", { name: new RegExp(`^${RegExp.escape(label)}:`, "u") })
     .click()
     .then(() => page.getByRole("menuitemradio", { name: option, exact: true }).click());
 const chooseCurrency = (page: Page, currency: string): Promise<void> =>
@@ -328,7 +328,9 @@ const chooseCurrency = (page: Page, currency: string): Promise<void> =>
 const chooseDate = (page: Page, label: string, date: string): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const trigger = page.getByRole("button", { name: label, exact: true });
+      const trigger = page.getByRole("button", {
+        name: new RegExp(`^${RegExp.escape(label)}:`, "u"),
+      });
       const selected = yield* Effect.tryPromise(() => trigger.innerText());
       const [, month = 0, year = 0] = selected.split("-").map(Number);
       const [targetYear = 0, targetMonth = 0] = date.split("-").map(Number);

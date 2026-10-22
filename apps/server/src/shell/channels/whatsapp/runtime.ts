@@ -34,7 +34,8 @@ import {
 /** Authenticate lifecycle proof before exposing metadata. Signed v2 hints without history require
  * one fixed-origin, 64 KiB provider read within eight seconds; read/sent never prove delivery.
  * Invalid signature, malformed history or mismatching provider coordinates fail before state changes.
- * None acknowledges a valid uncorrelated receipt without delivery authority or domain effects.
+ * None acknowledges a valid uncorrelated receipt or pending sent hint without delivery authority
+ * or domain effects.
  */
 export const makeLifecycleVerifier = (
   input: Readonly<{

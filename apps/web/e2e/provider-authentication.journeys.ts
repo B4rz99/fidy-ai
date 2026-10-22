@@ -964,7 +964,7 @@ const reauthenticatePATJourney = Effect.fn(function* (
   yield* Effect.tryPromise(() => page.getByLabel("Nombre", { exact: true }).fill(tokenName));
   yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Lectura:/u }).check());
   yield* Effect.tryPromise(() =>
-    page.getByRole("button", { name: "Duración del token", exact: true }).click()
+    page.getByRole("button", { name: /^Duración del token:/u }).click()
   );
   yield* Effect.tryPromise(() =>
     page.getByRole("menuitemradio", { name: "7 días", exact: true }).click()

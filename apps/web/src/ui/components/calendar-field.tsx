@@ -34,12 +34,13 @@ const dateLabel = (value: string): string =>
 
 export const CalendarField = (props: DateFieldProps): JSX.Element => {
   const [open, setOpen] = useState(false);
+  const visibleLabel = props.appearance === "filter" ? "Fecha" : dateLabel(props.value);
   const selected = Option.getOrUndefined(localDate(props.value, props.timeZone));
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         id={props.id}
-        aria-label={props.label}
+        aria-label={props.appearance === "filter" ? props.label : `${props.label}: ${visibleLabel}`}
         render={
           <Button
             contentLayout="wrap"
@@ -57,7 +58,7 @@ export const CalendarField = (props: DateFieldProps): JSX.Element => {
           data-icon="inline-start"
           aria-hidden="true"
         />
-        {props.appearance === "filter" ? "Fecha" : dateLabel(props.value)}
+        {visibleLabel}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-auto max-w-[calc(100vw-8px)] p-0">
         <PopoverTitle className="sr-only">

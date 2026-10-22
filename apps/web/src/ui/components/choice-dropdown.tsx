@@ -34,44 +34,47 @@ export const ChoiceDropdown = ({
   leading,
   onChange,
   triggerLabel,
-}: DropdownProps): JSX.Element => (
-  <DropdownMenu>
-    <DropdownMenuTrigger
-      id={id}
-      aria-label={label}
-      render={
-        <Button
-          contentLayout="wrap"
-          type="button"
-          variant="outline"
-          focusAppearance="subtle"
-          disabled={disabled}
-          className={cn(width === "full" && "w-full")}
-        />
-      }
-    >
-      {leading}
-      <span
-        className={cn(
-          "min-w-0 whitespace-normal [overflow-wrap:anywhere]",
-          width === "full" && "flex-1 text-left"
-        )}
+}: DropdownProps): JSX.Element => {
+  const selectedLabel = Option.getOrElse(
+    triggerLabel,
+    () => options.find((option) => option.value === value)?.label ?? ""
+  );
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        id={id}
+        aria-label={`${label}: ${selectedLabel}`}
+        render={
+          <Button
+            contentLayout="wrap"
+            type="button"
+            variant="outline"
+            focusAppearance="subtle"
+            disabled={disabled}
+            className={cn(width === "full" && "w-full")}
+          />
+        }
       >
-        {Option.getOrElse(
-          triggerLabel,
-          () => options.find((option) => option.value === value)?.label ?? ""
-        )}
-      </span>
-      <HugeiconsIcon
-        icon={ArrowDown01Icon}
-        strokeWidth={1.5}
-        data-icon="inline-end"
-        aria-hidden="true"
-      />
-    </DropdownMenuTrigger>
-    <ChoiceMenuOptions value={value} options={options} onChange={onChange} />
-  </DropdownMenu>
-);
+        {leading}
+        <span
+          className={cn(
+            "min-w-0 whitespace-normal [overflow-wrap:anywhere]",
+            width === "full" && "flex-1 text-left"
+          )}
+        >
+          {selectedLabel}
+        </span>
+        <HugeiconsIcon
+          icon={ArrowDown01Icon}
+          strokeWidth={1.5}
+          data-icon="inline-end"
+          aria-hidden="true"
+        />
+      </DropdownMenuTrigger>
+      <ChoiceMenuOptions value={value} options={options} onChange={onChange} />
+    </DropdownMenu>
+  );
+};
 
 export const ChoiceMenuOptions = ({
   value,

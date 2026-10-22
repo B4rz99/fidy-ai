@@ -23,11 +23,20 @@ it.each(["valid", "changed-deadline", "interrupted-copy", "interrupted-swap"] as
       Effect.gen(function* () {
         const { db } = yield* io(() => storage.acquire());
         const current = precedingSchema({
-          current: schemaStatements(
-            yield* io(() =>
-              Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-            )
-          ),
+          current: precedingSchema({
+            current: schemaStatements(
+              yield* io(() =>
+                Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+              )
+            ),
+            history: yield* Schema.decodeEffect(CutoverHistory)(
+              yield* io(() =>
+                Bun.file(
+                  new URL("./backfill-progress-cutover.test-fixture.json", import.meta.url)
+                ).text()
+              )
+            ),
+          }),
           history: yield* Schema.decodeEffect(CutoverHistory)(
             yield* io(() =>
               Bun.file(

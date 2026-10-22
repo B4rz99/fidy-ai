@@ -1507,7 +1507,7 @@ CREATE TABLE statement_submissions (
   staging_id TEXT NOT NULL UNIQUE REFERENCES statement_staging_objects(id),
   submitted_at_ms INTEGER NOT NULL CHECK (submitted_at_ms >= 0), source_format TEXT
   CHECK (source_format IS NULL OR source_format IN ('csv', 'xlsx')), parser_revision TEXT, service_market TEXT, locale TEXT, time_zone TEXT, status TEXT NOT NULL DEFAULT 'queued'
-  CHECK (status IN ('queued', 'processing', 'completed', 'failed')), started_at_ms INTEGER, completed_at_ms INTEGER, input_rows INTEGER, accepted_rows INTEGER, needs_review_rows INTEGER, retention_expires_at_ms INTEGER, failure_reason TEXT
+  CHECK (status IN ('queued', 'processing', 'completed', 'failed')), started_at_ms INTEGER, completed_at_ms INTEGER, retention_expires_at_ms INTEGER, failure_reason TEXT
   CHECK (failure_reason IS NULL OR failure_reason IN ('unsupported-format', 'resource-limit',
     'malformed-file', 'mapping-unavailable', 'retention-expired')), source_parse_attempts INTEGER NOT NULL DEFAULT 0 CHECK(source_parse_attempts BETWEEN 0 AND 3), processed_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_rows>=0), processed_accepted_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_accepted_rows>=0), processed_review_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_review_rows>=0), hosted_session_id TEXT, hosted_turn_id TEXT, hosted_expires_at_ms INTEGER, hosted_abandoned_at_ms INTEGER, clarification_state TEXT, clarification_expires_at_ms INTEGER, clarification_ended_at_ms INTEGER, work_published_at_ms INTEGER, work_last_attempt_at_ms INTEGER, work_last_reconciled_at_ms INTEGER CHECK((work_published_at_ms IS NULL AND work_last_attempt_at_ms IS NULL AND work_last_reconciled_at_ms IS NULL) OR (work_published_at_ms IS NOT NULL AND (work_published_at_ms >= 0) AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms >= 0) AND (work_last_reconciled_at_ms IS NULL OR work_last_reconciled_at_ms >= 0))),
   UNIQUE (user_id, idempotency_key)
@@ -1645,7 +1645,7 @@ CREATE TABLE users (
   locale TEXT NOT NULL CHECK (locale = 'es-CO'),
   time_zone TEXT NOT NULL CHECK (length(time_zone) BETWEEN 1 AND 128),
   created_at_ms INTEGER NOT NULL
-, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER CHECK ((trial_started_at_ms IS NULL AND trial_ends_at_ms IS NULL) OR (trial_started_at_ms IS NOT NULL AND trial_ends_at_ms IS NOT NULL AND trial_ends_at_ms=trial_started_at_ms+604800000)), backfill_present INTEGER CHECK(backfill_present IS NULL OR backfill_present=1), backfill_submission_id TEXT REFERENCES statement_submissions(id), backfill_consumed_at_ms INTEGER CHECK(backfill_consumed_at_ms IS NULL OR backfill_consumed_at_ms>=0) CHECK(backfill_present IS NOT NULL OR (backfill_submission_id IS NULL AND backfill_consumed_at_ms IS NULL)), whatsapp_portfolio_id TEXT, whatsapp_bsuid TEXT, whatsapp_verified_at_ms INTEGER CHECK((whatsapp_portfolio_id IS NULL AND whatsapp_bsuid IS NULL AND whatsapp_verified_at_ms IS NULL) OR (whatsapp_portfolio_id IS NOT NULL AND whatsapp_bsuid IS NOT NULL AND whatsapp_verified_at_ms IS NOT NULL)), route_portfolio_id TEXT, route_bsuid TEXT, route_phone_number_id TEXT, route_verified_at_ms INTEGER CHECK((route_portfolio_id IS NULL AND route_bsuid IS NULL AND route_phone_number_id IS NULL AND route_verified_at_ms IS NULL) OR (route_portfolio_id IS NOT NULL AND route_bsuid IS NOT NULL AND route_phone_number_id IS NOT NULL AND route_verified_at_ms IS NOT NULL))) STRICT;
+, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER CHECK ((trial_started_at_ms IS NULL AND trial_ends_at_ms IS NULL) OR (trial_started_at_ms IS NOT NULL AND trial_ends_at_ms IS NOT NULL AND trial_ends_at_ms=trial_started_at_ms+604800000)), whatsapp_portfolio_id TEXT, whatsapp_bsuid TEXT, whatsapp_verified_at_ms INTEGER CHECK((whatsapp_portfolio_id IS NULL AND whatsapp_bsuid IS NULL AND whatsapp_verified_at_ms IS NULL) OR (whatsapp_portfolio_id IS NOT NULL AND whatsapp_bsuid IS NOT NULL AND whatsapp_verified_at_ms IS NOT NULL)), route_portfolio_id TEXT, route_bsuid TEXT, route_phone_number_id TEXT, route_verified_at_ms INTEGER CHECK((route_portfolio_id IS NULL AND route_bsuid IS NULL AND route_phone_number_id IS NULL AND route_verified_at_ms IS NULL) OR (route_portfolio_id IS NOT NULL AND route_bsuid IS NOT NULL AND route_phone_number_id IS NOT NULL AND route_verified_at_ms IS NOT NULL))) STRICT;
 --> statement-breakpoint
 
 CREATE TABLE subscription_cancellations (
@@ -2467,9 +2467,6 @@ CREATE UNIQUE INDEX transcript_tool_call ON transcript_entries(turn_id, tool_cal
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX transcript_tool_result ON transcript_entries(turn_id, tool_call_id) WHERE kind = 'tool_result';
---> statement-breakpoint
-
-CREATE INDEX users_backfill_submission ON users(backfill_submission_id) WHERE backfill_submission_id IS NOT NULL;
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX users_whatsapp_identity ON users(whatsapp_portfolio_id,whatsapp_bsuid) WHERE whatsapp_portfolio_id IS NOT NULL;
@@ -6296,7 +6293,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'statement_submissions','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'idempotency_key',OLD."idempotency_key",'staging_id',OLD."staging_id",'submitted_at_ms',OLD."submitted_at_ms",'source_format',OLD."source_format",'parser_revision',OLD."parser_revision",'service_market',OLD."service_market",'locale',OLD."locale",'time_zone',OLD."time_zone",'status',OLD."status",'started_at_ms',OLD."started_at_ms",'completed_at_ms',OLD."completed_at_ms",'input_rows',OLD."input_rows",'accepted_rows',OLD."accepted_rows",'needs_review_rows',OLD."needs_review_rows",'retention_expires_at_ms',OLD."retention_expires_at_ms",'failure_reason',OLD."failure_reason",'source_parse_attempts',OLD."source_parse_attempts",'processed_rows',OLD."processed_rows",'processed_accepted_rows',OLD."processed_accepted_rows",'processed_review_rows',OLD."processed_review_rows",'hosted_session_id',OLD.hosted_session_id,'hosted_turn_id',OLD.hosted_turn_id,'hosted_expires_at_ms',OLD.hosted_expires_at_ms,'hosted_abandoned_at_ms',OLD.hosted_abandoned_at_ms,'clarification_state',OLD.clarification_state,'clarification_expires_at_ms',OLD.clarification_expires_at_ms,'clarification_ended_at_ms',OLD.clarification_ended_at_ms,'work_user_id',CASE WHEN OLD.work_published_at_ms IS NOT NULL THEN OLD.user_id END,'work_revision',CASE WHEN OLD.work_published_at_ms IS NOT NULL THEN 1 END,'work_published_at_ms',OLD.work_published_at_ms,'work_last_attempt_at_ms',OLD.work_last_attempt_at_ms,'work_last_reconciled_at_ms',OLD.work_last_reconciled_at_ms)
+  SELECT q.id,'statement_submissions','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'idempotency_key',OLD."idempotency_key",'staging_id',OLD."staging_id",'submitted_at_ms',OLD."submitted_at_ms",'source_format',OLD."source_format",'parser_revision',OLD."parser_revision",'service_market',OLD."service_market",'locale',OLD."locale",'time_zone',OLD."time_zone",'status',OLD."status",'started_at_ms',OLD."started_at_ms",'completed_at_ms',OLD."completed_at_ms",'input_rows',CASE WHEN OLD.status='completed' OR (OLD.status='failed' AND OLD.processed_rows>0) THEN OLD.processed_rows END,'accepted_rows',CASE WHEN OLD.status='completed' OR (OLD.status='failed' AND OLD.processed_rows>0) THEN OLD.processed_accepted_rows END,'needs_review_rows',CASE WHEN OLD.status='completed' OR (OLD.status='failed' AND OLD.processed_rows>0) THEN OLD.processed_review_rows END,'retention_expires_at_ms',OLD."retention_expires_at_ms",'failure_reason',OLD."failure_reason",'source_parse_attempts',OLD."source_parse_attempts",'processed_rows',OLD."processed_rows",'processed_accepted_rows',OLD."processed_accepted_rows",'processed_review_rows',OLD."processed_review_rows",'hosted_session_id',OLD.hosted_session_id,'hosted_turn_id',OLD.hosted_turn_id,'hosted_expires_at_ms',OLD.hosted_expires_at_ms,'hosted_abandoned_at_ms',OLD.hosted_abandoned_at_ms,'clarification_state',OLD.clarification_state,'clarification_expires_at_ms',OLD.clarification_expires_at_ms,'clarification_ended_at_ms',OLD.clarification_ended_at_ms,'work_user_id',CASE WHEN OLD.work_published_at_ms IS NOT NULL THEN OLD.user_id END,'work_revision',CASE WHEN OLD.work_published_at_ms IS NOT NULL THEN 1 END,'work_published_at_ms',OLD.work_published_at_ms,'work_last_attempt_at_ms',OLD.work_last_attempt_at_ms,'work_last_reconciled_at_ms',OLD.work_last_reconciled_at_ms)
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
@@ -7360,8 +7357,8 @@ END;
 
 CREATE TRIGGER reviewed_statement_entitlement_update AFTER UPDATE OF workspace_state ON ingestion_review_items
 WHEN NEW.source_kind='statement' AND NEW.workspace_state='created' AND OLD.workspace_state IS NOT 'created' BEGIN
- UPDATE users SET backfill_consumed_at_ms=coalesce(backfill_consumed_at_ms,NEW.workspace_updated_at_ms)
- WHERE backfill_present IS NOT NULL AND id=NEW.user_id AND backfill_submission_id=NEW.statement_submission_id;
+ UPDATE statement_backfill_entitlements SET consumed_at_ms=coalesce(consumed_at_ms,NEW.workspace_updated_at_ms)
+ WHERE user_id=NEW.user_id AND submission_id=NEW.statement_submission_id;
 END;
 --> statement-breakpoint
 
@@ -7424,27 +7421,12 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_backfill_entitlements_field_fence_delete BEFORE DELETE ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.backfill_present IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_backfill_entitlements')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
---> statement-breakpoint
-
-CREATE TRIGGER statement_backfill_entitlements_field_fence_insert BEFORE INSERT ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.backfill_present IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_backfill_entitlements')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
---> statement-breakpoint
-
-CREATE TRIGGER statement_backfill_entitlements_field_fence_update BEFORE UPDATE ON users WHEN (NEW.backfill_present IS NOT OLD.backfill_present OR NEW.backfill_submission_id IS NOT OLD.backfill_submission_id OR NEW.backfill_consumed_at_ms IS NOT OLD.backfill_consumed_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.backfill_present IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_backfill_entitlements')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.backfill_present IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_backfill_entitlements'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
---> statement-breakpoint
-
-CREATE TRIGGER statement_backfill_entitlements_field_preserve_delete BEFORE DELETE ON users WHEN OLD.backfill_present IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.id=q.user_id AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'statement_backfill_entitlements','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.id,'submission_id',OLD.backfill_submission_id,'consumed_at_ms',OLD.backfill_consumed_at_ms) FROM erasure_requests q WHERE q.state='Draining' AND OLD.id=q.user_id AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000; END;
---> statement-breakpoint
-
-CREATE TRIGGER statement_backfill_entitlements_field_preserve_update BEFORE UPDATE ON users WHEN OLD.backfill_present IS NOT NULL AND NEW.backfill_present IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.id=q.user_id AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'statement_backfill_entitlements','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.id,'submission_id',OLD.backfill_submission_id,'consumed_at_ms',OLD.backfill_consumed_at_ms) FROM erasure_requests q WHERE q.state='Draining' AND OLD.id=q.user_id AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000; END;
---> statement-breakpoint
-
 CREATE TRIGGER statement_backfill_on_capture AFTER INSERT ON statement_record_outcomes
 WHEN NEW.outcome = 'accepted'
 BEGIN
-  UPDATE users
-    SET backfill_consumed_at_ms = coalesce(backfill_consumed_at_ms, unixepoch('now') * 1000)
-    WHERE backfill_present IS NOT NULL AND id = NEW.user_id AND backfill_submission_id = NEW.submission_id;
+  UPDATE statement_backfill_entitlements
+    SET consumed_at_ms = coalesce(consumed_at_ms, unixepoch('now') * 1000)
+    WHERE user_id = NEW.user_id AND submission_id = NEW.submission_id;
 END;
 --> statement-breakpoint
 
@@ -7454,15 +7436,15 @@ WHEN NEW.clarification_state='abandoned' BEGIN
  WHERE source_kind='statement' AND statement_submission_id=NEW.id AND coalesce(workspace_state,'pending')='pending';
  UPDATE ingestion_review_items SET evidence_state='expired',original_evidence=NULL,known_money_json=NULL,suggestions_json=NULL
  WHERE source_kind='statement' AND statement_submission_id=NEW.id AND evidence_state='retained' AND workspace_state='abandoned';
- UPDATE users SET backfill_submission_id=NULL WHERE backfill_present IS NOT NULL AND id=NEW.user_id AND backfill_submission_id=NEW.id AND backfill_consumed_at_ms IS NULL;
+ UPDATE statement_backfill_entitlements SET submission_id=NULL WHERE user_id=NEW.user_id AND submission_id=NEW.id AND consumed_at_ms IS NULL;
 END;
 --> statement-breakpoint
 
 CREATE TRIGGER statement_clarification_release AFTER UPDATE OF clarification_state ON statement_submissions
 WHEN NEW.clarification_state='completed'
 BEGIN
- UPDATE users SET backfill_submission_id=NULL
- WHERE backfill_present IS NOT NULL AND id=NEW.user_id AND backfill_submission_id=NEW.id AND backfill_consumed_at_ms IS NULL;
+ UPDATE statement_backfill_entitlements SET submission_id=NULL
+ WHERE user_id=NEW.user_id AND submission_id=NEW.id AND consumed_at_ms IS NULL;
 END;
 --> statement-breakpoint
 
@@ -7501,7 +7483,7 @@ CREATE TRIGGER statement_document_staging_deleted AFTER DELETE ON statement_stag
 --> statement-breakpoint
 
 CREATE TRIGGER statement_extraction_clarification AFTER UPDATE OF status ON statement_submissions
-WHEN NEW.status IN ('completed','failed') AND OLD.status IN ('queued','processing') AND NEW.needs_review_rows>0
+WHEN NEW.status IN ('completed','failed') AND OLD.status IN ('queued','processing') AND NEW.processed_review_rows>0
 BEGIN
  UPDATE statement_submissions SET clarification_state='awaiting',clarification_expires_at_ms=(SELECT min(evidence_expires_at_ms) FROM statement_review_context WHERE submission_id=NEW.id),clarification_ended_at_ms=NULL WHERE id=NEW.id;
  UPDATE statement_submissions SET clarification_state='abandoned',clarification_ended_at_ms=NEW.completed_at_ms WHERE id=NEW.id AND clarification_expires_at_ms<=NEW.completed_at_ms;
@@ -7551,22 +7533,12 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_partial_accounting_on_failure AFTER UPDATE OF status ON statement_submissions
-WHEN NEW.status='failed' AND OLD.status IN ('queued','processing')
-  AND NEW.input_rows IS NULL AND NEW.processed_rows>0
-BEGIN
- UPDATE statement_submissions SET input_rows=processed_rows,
-    accepted_rows=processed_accepted_rows, needs_review_rows=processed_review_rows
-    WHERE id=NEW.id AND user_id=NEW.user_id;
-END;
---> statement-breakpoint
-
 CREATE TRIGGER statement_partial_backfill_on_failure AFTER UPDATE OF status ON statement_submissions
 WHEN NEW.status = 'failed' AND OLD.status IN ('queued', 'processing')
 BEGIN
- UPDATE users
-    SET backfill_submission_id = CASE WHEN backfill_consumed_at_ms IS NULL THEN NULL ELSE backfill_submission_id END
-    WHERE backfill_present IS NOT NULL AND id = NEW.user_id AND backfill_submission_id = NEW.id;
+ UPDATE statement_backfill_entitlements
+    SET submission_id = CASE WHEN consumed_at_ms IS NULL THEN NULL ELSE submission_id END
+    WHERE user_id = NEW.user_id AND submission_id = NEW.id;
 END;
 --> statement-breakpoint
 
@@ -7617,21 +7589,10 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_progress_terminal BEFORE UPDATE OF status,processed_rows,processed_accepted_rows,processed_review_rows,input_rows,accepted_rows,needs_review_rows ON statement_submissions
-WHEN (OLD.status IN ('completed','failed') AND NEW.status<>OLD.status)
-  OR (NEW.status='completed' AND (NEW.processed_rows=0
-    OR NEW.input_rows IS NOT NEW.processed_rows
-    OR NEW.accepted_rows IS NOT NEW.processed_accepted_rows
-    OR NEW.needs_review_rows IS NOT NEW.processed_review_rows))
-  OR (NEW.status='failed' AND NEW.input_rows IS NOT NULL AND (
-    NEW.input_rows IS NOT NEW.processed_rows
-    OR NEW.accepted_rows IS NOT NEW.processed_accepted_rows
-    OR NEW.needs_review_rows IS NOT NEW.processed_review_rows))
-  OR (NEW.status='failed' AND OLD.status='failed' AND NEW.processed_rows>0
-    AND NEW.input_rows IS NULL)
-BEGIN
- SELECT RAISE(ABORT,'statement_progress_terminal');
-END;
+CREATE TRIGGER statement_progress_terminal BEFORE UPDATE OF status,processed_rows,processed_accepted_rows,processed_review_rows ON statement_submissions
+WHEN (OLD.status IN ('completed','failed') AND (NEW.status<>OLD.status OR NEW.processed_rows<>OLD.processed_rows OR NEW.processed_accepted_rows<>OLD.processed_accepted_rows OR NEW.processed_review_rows<>OLD.processed_review_rows))
+  OR (NEW.status='completed' AND NEW.processed_rows=0)
+BEGIN SELECT RAISE(ABORT,'statement_progress_terminal'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER statement_record_outcome_no_delete BEFORE DELETE ON statement_record_outcomes
@@ -7676,16 +7637,13 @@ WHEN coalesce((
   AND NEW.retention_expires_at_ms > NEW.submitted_at_ms
   AND (
     (NEW.status = 'queued' AND NEW.started_at_ms IS NULL AND NEW.completed_at_ms IS NULL
-      AND NEW.failure_reason IS NULL AND NEW.input_rows IS NULL)
+      AND NEW.failure_reason IS NULL)
     OR (NEW.status = 'processing' AND NEW.started_at_ms IS NOT NULL
-      AND NEW.completed_at_ms IS NULL AND NEW.failure_reason IS NULL AND NEW.input_rows IS NULL)
+      AND NEW.completed_at_ms IS NULL AND NEW.failure_reason IS NULL)
     OR (NEW.status = 'completed' AND NEW.started_at_ms IS NOT NULL
-      AND NEW.completed_at_ms IS NOT NULL AND NEW.failure_reason IS NULL
-      AND NEW.input_rows = NEW.accepted_rows + NEW.needs_review_rows)
+      AND NEW.completed_at_ms IS NOT NULL AND NEW.failure_reason IS NULL)
     OR (NEW.status = 'failed' AND NEW.started_at_ms IS NOT NULL
-      AND NEW.completed_at_ms IS NOT NULL AND NEW.failure_reason IS NOT NULL
-      AND ((NEW.input_rows IS NULL AND NEW.accepted_rows IS NULL AND NEW.needs_review_rows IS NULL)
-        OR (NEW.input_rows > 0 AND NEW.input_rows = NEW.accepted_rows + NEW.needs_review_rows)))
+      AND NEW.completed_at_ms IS NOT NULL AND NEW.failure_reason IS NOT NULL)
   )
 ), 0) = 0
 BEGIN
@@ -7700,16 +7658,13 @@ WHEN coalesce((
   AND NEW.retention_expires_at_ms > NEW.submitted_at_ms
   AND (
     (NEW.status = 'queued' AND NEW.started_at_ms IS NULL AND NEW.completed_at_ms IS NULL
-      AND NEW.failure_reason IS NULL AND NEW.input_rows IS NULL)
+      AND NEW.failure_reason IS NULL)
     OR (NEW.status = 'processing' AND NEW.started_at_ms IS NOT NULL
-      AND NEW.completed_at_ms IS NULL AND NEW.failure_reason IS NULL AND NEW.input_rows IS NULL)
+      AND NEW.completed_at_ms IS NULL AND NEW.failure_reason IS NULL)
     OR (NEW.status = 'completed' AND NEW.started_at_ms IS NOT NULL
-      AND NEW.completed_at_ms IS NOT NULL AND NEW.failure_reason IS NULL
-      AND NEW.input_rows = NEW.accepted_rows + NEW.needs_review_rows)
+      AND NEW.completed_at_ms IS NOT NULL AND NEW.failure_reason IS NULL)
     OR (NEW.status = 'failed' AND NEW.started_at_ms IS NOT NULL
-      AND NEW.completed_at_ms IS NOT NULL AND NEW.failure_reason IS NOT NULL
-      AND ((NEW.input_rows IS NULL AND NEW.accepted_rows IS NULL AND NEW.needs_review_rows IS NULL)
-        OR (NEW.input_rows > 0 AND NEW.input_rows = NEW.accepted_rows + NEW.needs_review_rows)))
+      AND NEW.completed_at_ms IS NOT NULL AND NEW.failure_reason IS NOT NULL)
   )
 ), 0) = 0
 BEGIN
@@ -8418,3 +8373,50 @@ AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND
 BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
 SELECT q.id,'ingestion_review_items','drain:'||lower(hex(randomblob(16))),json_object('id',OLD.id,'user_id',OLD.user_id,'source_kind',OLD.source_kind,'email_receipt_id',OLD.email_receipt_id,'media_submission_id',OLD.media_submission_id,'reason',OLD.reason,'created_at_ms',OLD.created_at_ms,'evidence_expires_at_ms',OLD.evidence_expires_at_ms,'service_market',OLD.service_market,'locale',OLD.locale,'time_zone',OLD.time_zone,'suggestions_json',OLD.suggestions_json) FROM erasure_requests q WHERE q.state='Draining' AND q.user_id=OLD.user_id
 AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000; END;
+
+--> statement-breakpoint
+CREATE TABLE statement_backfill_entitlements (
+ user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
+ submission_id TEXT,
+ consumed_at_ms INTEGER CHECK(consumed_at_ms IS NULL OR consumed_at_ms>=0),
+ FOREIGN KEY(user_id,submission_id) REFERENCES statement_submissions(user_id,id)
+) STRICT;
+--> statement-breakpoint
+CREATE INDEX statement_backfill_submission ON statement_backfill_entitlements(submission_id) WHERE submission_id IS NOT NULL;
+
+--> statement-breakpoint
+
+
+CREATE TRIGGER statement_backfill_entitlements_field_fence_delete BEFORE DELETE ON statement_backfill_entitlements WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_backfill_entitlements')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+
+--> statement-breakpoint
+
+
+CREATE TRIGGER statement_backfill_entitlements_field_fence_insert BEFORE INSERT ON statement_backfill_entitlements WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_backfill_entitlements')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+
+--> statement-breakpoint
+
+
+CREATE TRIGGER statement_backfill_entitlements_field_fence_update BEFORE UPDATE ON statement_backfill_entitlements WHEN (NEW.user_id IS NOT OLD.user_id OR NEW.submission_id IS NOT OLD.submission_id OR NEW.consumed_at_ms IS NOT OLD.consumed_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_backfill_entitlements')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_backfill_entitlements'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+
+--> statement-breakpoint
+
+
+CREATE TRIGGER statement_backfill_entitlements_field_preserve_delete BEFORE DELETE ON statement_backfill_entitlements
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+  AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
+  AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000)
+BEGIN
+  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
+  SELECT q.id,'statement_backfill_entitlements','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.user_id,'submission_id',OLD.submission_id,'consumed_at_ms',OLD.consumed_at_ms)
+  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+    AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
+    AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
+END;
+
+--> statement-breakpoint
+CREATE VIEW statement_submission_context AS SELECT s.rowid AS rowid,s.*,
+ CASE WHEN status='completed' OR (status='failed' AND processed_rows>0) THEN processed_rows END AS input_rows,
+ CASE WHEN status='completed' OR (status='failed' AND processed_rows>0) THEN processed_accepted_rows END AS accepted_rows,
+ CASE WHEN status='completed' OR (status='failed' AND processed_rows>0) THEN processed_review_rows END AS needs_review_rows
+ FROM statement_submissions s;

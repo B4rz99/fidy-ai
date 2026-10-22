@@ -268,11 +268,23 @@ it.each(cases)(
         const latest = precedingSchema({
           current: precedingSchema({
             current: precedingSchema({
-              current: objects(
-                yield* native(() =>
-                  Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-                )
-              ),
+              current: precedingSchema({
+                current: objects(
+                  yield* native(() =>
+                    Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+                  )
+                ),
+                history: yield* Schema.decodeEffect(CutoverHistory)(
+                  yield* native(() =>
+                    Bun.file(
+                      new URL(
+                        "../ingestion/backfill-progress-cutover.test-fixture.json",
+                        import.meta.url
+                      )
+                    ).text()
+                  )
+                ),
+              }),
               history: yield* Schema.decodeEffect(CutoverHistory)(
                 yield* native(() =>
                   Bun.file(

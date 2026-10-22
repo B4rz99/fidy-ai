@@ -2795,3 +2795,88 @@ THEN 1 ELSE 0 END;
 ```
 
 <!-- email-media-review-verify:end -->
+
+## Statement entitlement and authoritative totals (#1460)
+
+Checkpoint: `cca848e07`, after #1459. Quiesce statement publication, processing, review,
+retention and erasure for one atomic conversion. `statement_backfill_entitlements` owns the optional
+three-field record. User existence never grants a backfill: first accepted publication initializes
+it under the existing Free/Pro policy. Available, reserved, consumed and absent states retain their
+original meaning; useful partial capture consumes once, failure releases only unconsumed work.
+The composite submission reference enforces the same User. Consumed historical absence of a
+submission binding remains valid.
+
+`statement_submission_context` is a read-only projection: completed submissions, and failed
+submissions with positive progress, expose the three authoritative progress counters as final totals.
+Queued/processing and zero-progress failures expose absent totals. Preflight blocks every historical
+mismatch, including failed positive progress whose old final totals are absent. Investigate such
+history before proceeding; never invent totals or silently discard a historical exception.
+
+In one native D1 batch: defer foreign keys; run preflight; create the target entitlement table;
+copy and compare exact original User rowids (which are existing logical erasure addresses); drop
+explicit views, triggers and indexes; run the in-place column removals; recreate all target indexes,
+views and triggers; verify foreign keys. Neither User nor submission is dropped or rebuilt, so their
+children and source/review identities remain. Exact old archive JSON and chunk references remain
+untouched; new archives reconstruct the same final-total fields through the projection. A failed
+copy, swap or check rolls the whole batch back. Apply code and schema together. This baseline/runbook
+is not evidence that an already-applied live baseline has been upgraded; final integration #1494
+owns live cutover verification.
+
+<!-- backfill-progress-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'backfill-progress-preflight',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+AND NOT EXISTS(SELECT 1 FROM users u WHERE (u.backfill_present IS NULL AND (u.backfill_submission_id IS NOT NULL OR u.backfill_consumed_at_ms IS NOT NULL)) OR (u.backfill_present IS NOT NULL AND u.backfill_present IS NOT 1) OR (u.backfill_submission_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM statement_submissions s WHERE s.id=u.backfill_submission_id AND s.user_id=u.id)))
+AND NOT EXISTS(SELECT 1 FROM statement_submissions s WHERE processed_rows NOT BETWEEN 0 AND 20000 OR processed_rows<>processed_accepted_rows+processed_review_rows
+ OR input_rows IS NOT CASE WHEN status='completed' OR (status='failed' AND processed_rows>0) THEN processed_rows END
+ OR accepted_rows IS NOT CASE WHEN status='completed' OR (status='failed' AND processed_rows>0) THEN processed_accepted_rows END
+ OR needs_review_rows IS NOT CASE WHEN status='completed' OR (status='failed' AND processed_rows>0) THEN processed_review_rows END)
+THEN 1 ELSE 0 END;
+```
+
+<!-- backfill-progress-preflight:end -->
+
+<!-- backfill-progress-copy:start -->
+
+```sql
+INSERT INTO statement_backfill_entitlements(rowid,user_id,submission_id,consumed_at_ms)
+SELECT rowid,id,backfill_submission_id,backfill_consumed_at_ms FROM users WHERE backfill_present IS NOT NULL;
+```
+
+<!-- backfill-progress-copy:end -->
+
+<!-- backfill-progress-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'backfill-progress-copy',CASE WHEN (SELECT count(*) FROM statement_backfill_entitlements)=(SELECT count(*) FROM users WHERE backfill_present IS NOT NULL)
+AND NOT EXISTS(SELECT rowid,id,backfill_submission_id,backfill_consumed_at_ms FROM users WHERE backfill_present IS NOT NULL EXCEPT SELECT rowid,user_id,submission_id,consumed_at_ms FROM statement_backfill_entitlements)
+THEN 1 ELSE 0 END;
+```
+
+<!-- backfill-progress-copy-check:end -->
+
+<!-- backfill-progress-swap:start -->
+
+```sql
+ALTER TABLE users DROP COLUMN backfill_consumed_at_ms;
+ALTER TABLE users DROP COLUMN backfill_submission_id;
+ALTER TABLE users DROP COLUMN backfill_present;
+ALTER TABLE statement_submissions DROP COLUMN needs_review_rows;
+ALTER TABLE statement_submissions DROP COLUMN accepted_rows;
+ALTER TABLE statement_submissions DROP COLUMN input_rows;
+```
+
+<!-- backfill-progress-swap:end -->
+
+<!-- backfill-progress-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'backfill-progress-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+AND NOT EXISTS(SELECT 1 FROM statement_backfill_entitlements e WHERE e.submission_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM statement_submissions s WHERE s.user_id=e.user_id AND s.id=e.submission_id))
+THEN 1 ELSE 0 END;
+```
+
+<!-- backfill-progress-verify:end -->

@@ -51,11 +51,20 @@ it.each([
         const { db, bucket } = yield* io(() => storage.acquire());
         const current = precedingSchema({
           current: precedingSchema({
-            current: schemaStatements(
-              yield* io(() =>
-                Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-              )
-            ),
+            current: precedingSchema({
+              current: schemaStatements(
+                yield* io(() =>
+                  Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+                )
+              ),
+              history: yield* Schema.decodeEffect(CutoverHistory)(
+                yield* io(() =>
+                  Bun.file(
+                    new URL("./backfill-progress-cutover.test-fixture.json", import.meta.url)
+                  ).text()
+                )
+              ),
+            }),
             history: yield* Schema.decodeEffect(CutoverHistory)(
               yield* io(() =>
                 Bun.file(
@@ -263,6 +272,82 @@ it.each([
           }))
         );
         expect((yield* io(() => db.prepare("PRAGMA foreign_key_check").all())).results).toEqual([]);
+        const finalSchema = schemaStatements(
+          yield* io(() =>
+            Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+          )
+        );
+        const backfillHistory = yield* Schema.decodeEffect(CutoverHistory)(
+          yield* io(() =>
+            Bun.file(
+              new URL("./backfill-progress-cutover.test-fixture.json", import.meta.url)
+            ).text()
+          )
+        );
+        const emailHistory = yield* Schema.decodeEffect(CutoverHistory)(
+          yield* io(() =>
+            Bun.file(
+              new URL("./email-media-review-cutover.test-fixture.json", import.meta.url)
+            ).text()
+          )
+        );
+        const emailTarget = precedingSchema({ current: finalSchema, history: backfillHistory });
+        const reviewTarget = precedingSchema({ current: emailTarget, history: emailHistory });
+        // The installed runtime requires all subsequent synchronized schema/code cutovers.
+        for (const stage of [
+          { target: reviewTarget, marker: "statement-review", table: "ingestion_review_items" },
+          { target: emailTarget, marker: "email-media-review", table: "forwarded_email_receipts" },
+          {
+            target: finalSchema,
+            marker: "backfill-progress",
+            table: "statement_backfill_entitlements",
+          },
+        ]) {
+          const installed = yield* io(() =>
+            db
+              .prepare(
+                "SELECT type,name FROM sqlite_schema WHERE type IN('view','trigger','index') AND sql IS NOT NULL"
+              )
+              .all<{ type: string; name: string }>()
+          );
+          const definition = schemaDefinition({ source: stage.target, target: stage.table });
+          yield* io(() =>
+            db.batch(
+              [
+                "PRAGMA defer_foreign_keys=ON",
+                ...documentedSqlBlock({ guide, marker: stage.marker + "-preflight" }),
+                ...installed.results
+                  .filter(
+                    (object) => stage.marker === "statement-review" || object.type !== "index"
+                  )
+                  .map((object) => `DROP ${object.type.toUpperCase()} "${object.name}"`),
+                stage.marker === "email-media-review"
+                  ? definition.replace(
+                      "CREATE TABLE forwarded_email_receipts (",
+                      "CREATE TABLE forwarded_email_receipts_1459 ("
+                    )
+                  : definition,
+                ...(stage.marker === "statement-review"
+                  ? stage.target.filter((sql) => /^CREATE (?:UNIQUE )?INDEX /u.test(sql))
+                  : []),
+                ...documentedSqlBlock({ guide, marker: stage.marker + "-copy" }),
+                ...documentedSqlBlock({ guide, marker: stage.marker + "-copy-check" }),
+                ...installed.results
+                  .filter(
+                    (object) => stage.marker !== "statement-review" && object.type === "index"
+                  )
+                  .map((object) => `DROP INDEX "${object.name}"`),
+                ...documentedSqlBlock({ guide, marker: stage.marker + "-swap" }),
+                ...stage.target.filter((sql) =>
+                  stage.marker === "statement-review"
+                    ? /^CREATE (?:VIEW|TRIGGER) /u.test(sql)
+                    : /^CREATE (?:UNIQUE )?(?:INDEX|VIEW|TRIGGER) /u.test(sql)
+                ),
+                ...documentedSqlBlock({ guide, marker: stage.marker + "-verify" }),
+              ].map((sql) => db.prepare(sql))
+            )
+          );
+        }
         expect(
           yield* processStatementSubmission({
             DB: db,

@@ -69,8 +69,8 @@ const snapshotSql = `SELECT json_object(
     'parser_revision',s.parser_revision,'status',s.status,'accepted_rows',s.accepted_rows,'needs_review_rows',s.needs_review_rows),
   'clarification', json_object('state',s.clarification_state,'expires_at_ms',s.clarification_expires_at_ms,'ended_at_ms',s.clarification_ended_at_ms),
   'content', json_object('sha256',o.sha256,'status',o.status),
-  'entitlement', (SELECT json_object('submission_id',e.backfill_submission_id,'consumed_at_ms',e.backfill_consumed_at_ms)
-    FROM users e WHERE e.backfill_present IS NOT NULL AND e.id=s.user_id),
+  'entitlement', (SELECT json_object('submission_id',e.submission_id,'consumed_at_ms',e.consumed_at_ms)
+    FROM statement_backfill_entitlements e WHERE e.user_id=s.user_id),
   'reviews', (SELECT json_group_array(json_object('id',id,'record_number',record_number,'reason',reason,
     'original_evidence',original_evidence,'known_money',known_money,'issues',issues,'status',status,
     'evidence_expires_at_ms',evidence_expires_at_ms,'created_at_ms',created_at_ms,'service_market',service_market,
@@ -80,7 +80,7 @@ const snapshotSql = `SELECT json_object(
   'decisions', (SELECT json_group_array(json_object('review_id',review_id,'decision',decision,
     'transaction_id',transaction_id,'decided_at_ms',decided_at_ms)) FROM (SELECT * FROM ingestion_statement_review_decisions
       WHERE submission_id=s.id AND user_id=s.user_id ORDER BY review_id LIMIT 5001))
-  ) AS snapshot FROM statement_submissions s
+  ) AS snapshot FROM statement_submission_context s
 
   JOIN statement_staging_objects o ON o.id=s.staging_id AND o.user_id=s.user_id
   WHERE s.id=? AND s.user_id=?`;

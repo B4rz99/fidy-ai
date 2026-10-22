@@ -254,8 +254,8 @@ const completedSubmission = (
     yield* fromTestPromise(() =>
       runtime.database
         .prepare(`INSERT INTO statement_submissions
-    (id,user_id,idempotency_key,staging_id,source_format,parser_revision,service_market,locale,time_zone,status,submitted_at_ms,started_at_ms,completed_at_ms,retention_expires_at_ms,input_rows,accepted_rows,needs_review_rows)
-    VALUES (?, ?, ?, ?, 'csv', 'v1', 'CO', 'es-CO', 'America/Bogota', 'completed', ?, ?, ?, ?, 0, 0, 0)`)
+    (id,user_id,idempotency_key,staging_id,source_format,parser_revision,service_market,locale,time_zone,status,submitted_at_ms,started_at_ms,completed_at_ms,retention_expires_at_ms)
+    VALUES (?, ?, ?, ?, 'csv', 'v1', 'CO', 'es-CO', 'America/Bogota', 'completed', ?, ?, ?, ?)`)
         .bind(
           submissionId,
           userA,

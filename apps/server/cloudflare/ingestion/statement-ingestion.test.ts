@@ -897,9 +897,6 @@ const relationSql = (relation: string): string => {
   if (relation === "publication" || relation === "session_call") {
     return `(SELECT * FROM audit_entries WHERE record_type='${relation}')`;
   }
-  if (relation === "statement_backfill_entitlements") {
-    return "(SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL)";
-  }
   return relation;
 };
 
@@ -977,10 +974,9 @@ const seedSubmission = (
         .prepare(
           `INSERT INTO statement_submissions (id, user_id, idempotency_key, staging_id, submitted_at_ms,
              source_format, parser_revision, service_market, locale, time_zone, status,
-             retention_expires_at_ms, started_at_ms, completed_at_ms, input_rows, accepted_rows,
-             needs_review_rows)
+             retention_expires_at_ms, started_at_ms, completed_at_ms)
            VALUES (?, ?, ?, ?, ?, 'csv', 'statement-parser-v1', 'CO', 'es-CO', 'America/Bogota',
-             'completed', ?, ?, ?, 0, 0, 0)`
+             'completed', ?, ?, ?)`
         )
         .bind(
           submissionId,
@@ -2486,7 +2482,7 @@ it("all-skipped clarification completes without consuming the Free grant", () =>
       const grantBefore = yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "SELECT submission_id, consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
+            "SELECT submission_id, consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?"
           )
           .bind(userA)
           .first()
@@ -2502,7 +2498,7 @@ it("all-skipped clarification completes without consuming the Free grant", () =>
       const grantAfter = yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "SELECT submission_id, consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
+            "SELECT submission_id, consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?"
           )
           .bind(userA)
           .first()
@@ -3372,7 +3368,7 @@ it(
           firstRow(
             runtime.db,
             entitlementRow,
-            "SELECT consumed_at_ms, submission_id FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements"
+            "SELECT consumed_at_ms, submission_id FROM statement_backfill_entitlements"
           )
         );
         expect(Option.isNone(entitlement.consumed_at_ms)).toBe(true);

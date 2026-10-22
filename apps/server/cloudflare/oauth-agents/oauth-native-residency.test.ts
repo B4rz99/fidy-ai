@@ -1375,7 +1375,7 @@ describe("native2025 residency integration", () => {
               .bind(foreignUser, "a".repeat(64), harness.current, harness.current + 86400000),
             harness.db
               .prepare(
-                "INSERT INTO statement_submissions(id,user_id,idempotency_key,staging_id,submitted_at_ms,source_format,parser_revision,service_market,locale,time_zone,status,retention_expires_at_ms,started_at_ms,completed_at_ms,input_rows,accepted_rows,needs_review_rows) VALUES (?,?,'70000000-0000-4000-8000-000000000099','60000000-0000-4000-8000-000000000099',?,'csv','statement-parser-v1','CO','es-CO','America/Bogota','completed',?,?,?,0,0,0)"
+                "INSERT INTO statement_submissions(id,user_id,idempotency_key,staging_id,submitted_at_ms,source_format,parser_revision,service_market,locale,time_zone,status,retention_expires_at_ms,started_at_ms,completed_at_ms) VALUES (?,?,'70000000-0000-4000-8000-000000000099','60000000-0000-4000-8000-000000000099',?,'csv','statement-parser-v1','CO','es-CO','America/Bogota','completed',?,?,?)"
               )
               .bind(
                 foreignStatement,

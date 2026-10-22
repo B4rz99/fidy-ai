@@ -119,7 +119,7 @@ class-wide hold. Stop review until the actual source and executable scope agree.
 | `ingestion`               | `email_forwarding_addresses`            | ingestion    | `users` (forwarding address fields)                                             |
 | `ingestion`               | `forwarded_email_receipts`              | ingestion    | `forwarded_email_receipts`                                                      |
 | `ingestion`               | `media_submissions`                     | ingestion    | `media_submissions`                                                             |
-| `ingestion`               | `statement_backfill_entitlements`       | ingestion    | `users (backfill field group)`                                                  |
+| `ingestion`               | `statement_backfill_entitlements`       | ingestion    | `statement_backfill_entitlements`                                               |
 | `ingestion`               | `statement_materialization_parts`       | ingestion    | `statement_materialization_parts`, `statement_submissions`                      |
 | `ingestion`               | `statement_needs_review`                | ingestion    | `statement_needs_review`                                                        |
 | `ingestion`               | `statement_record_outcomes`             | ingestion    | `statement_record_outcomes`                                                     |
@@ -230,8 +230,8 @@ removal always constrain both kind and User. Hosted callback events retain a for
 a hosted delivery can satisfy; consolidation cannot make an ambiguous send eligible for retry.
 
 Migrations 0156–0158 reduce the physical schema to 139 tables while retaining 142 D1 logical
-purposes. Delivery receipts clear only their InsightEvent field group. Statement backfill clears
-only the User entitlement group before submission deletion. The two document purposes filter their
+purposes. Delivery receipts clear only their InsightEvent field group. Statement backfill deletes
+only the optional owned entitlement row before submission deletion, retaining its logical archive shape. The two document purposes filter their
 own `user_documents.kind`; their original data classes and archive shapes remain distinct. All three
 folds retain same-User, purpose-specific, chunk-bounded deletion authority.
 

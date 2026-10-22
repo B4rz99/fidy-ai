@@ -136,20 +136,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"id\",'submission_id',r.\"backfill_submission_id\",'consumed_at_ms',r.\"backfill_consumed_at_ms\") AS body FROM users r WHERE r.backfill_present IS NOT NULL AND r.id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'submission_id',r.\"submission_id\",'consumed_at_ms',r.\"consumed_at_ms\") AS body FROM statement_backfill_entitlements r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM users r WHERE r.backfill_present IS NOT NULL AND r.id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_backfill_entitlements r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM users r WHERE r.backfill_present IS NOT NULL AND r.id=?",
+      sql: "SELECT 1 FROM statement_backfill_entitlements r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE users AS r SET backfill_present=NULL,backfill_submission_id=NULL,backfill_consumed_at_ms=NULL WHERE r.backfill_present IS NOT NULL AND r.id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM statement_backfill_entitlements AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -295,7 +295,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       }),
     },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'idempotency_key',r.\"idempotency_key\",'staging_id',r.\"staging_id\",'submitted_at_ms',r.\"submitted_at_ms\",'source_format',r.\"source_format\",'parser_revision',r.\"parser_revision\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'status',r.\"status\",'started_at_ms',r.\"started_at_ms\",'completed_at_ms',r.\"completed_at_ms\",'input_rows',r.\"input_rows\",'accepted_rows',r.\"accepted_rows\",'needs_review_rows',r.\"needs_review_rows\",'retention_expires_at_ms',r.\"retention_expires_at_ms\",'failure_reason',r.\"failure_reason\",'source_parse_attempts',r.\"source_parse_attempts\",'processed_rows',r.\"processed_rows\",'processed_accepted_rows',r.\"processed_accepted_rows\",'processed_review_rows',r.\"processed_review_rows\",'hosted_session_id',r.hosted_session_id,'hosted_turn_id',r.hosted_turn_id,'hosted_expires_at_ms',r.hosted_expires_at_ms,'hosted_abandoned_at_ms',r.hosted_abandoned_at_ms,'clarification_state',r.clarification_state,'clarification_expires_at_ms',r.clarification_expires_at_ms,'clarification_ended_at_ms',r.clarification_ended_at_ms,'work_user_id',CASE WHEN r.work_published_at_ms IS NOT NULL THEN r.user_id END,'work_revision',CASE WHEN r.work_published_at_ms IS NOT NULL THEN 1 END,'work_published_at_ms',r.work_published_at_ms,'work_last_attempt_at_ms',r.work_last_attempt_at_ms,'work_last_reconciled_at_ms',r.work_last_reconciled_at_ms) AS body FROM statement_submissions r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'idempotency_key',r.\"idempotency_key\",'staging_id',r.\"staging_id\",'submitted_at_ms',r.\"submitted_at_ms\",'source_format',r.\"source_format\",'parser_revision',r.\"parser_revision\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'status',r.\"status\",'started_at_ms',r.\"started_at_ms\",'completed_at_ms',r.\"completed_at_ms\",'input_rows',r.\"input_rows\",'accepted_rows',r.\"accepted_rows\",'needs_review_rows',r.\"needs_review_rows\",'retention_expires_at_ms',r.\"retention_expires_at_ms\",'failure_reason',r.\"failure_reason\",'source_parse_attempts',r.\"source_parse_attempts\",'processed_rows',r.\"processed_rows\",'processed_accepted_rows',r.\"processed_accepted_rows\",'processed_review_rows',r.\"processed_review_rows\",'hosted_session_id',r.hosted_session_id,'hosted_turn_id',r.hosted_turn_id,'hosted_expires_at_ms',r.hosted_expires_at_ms,'hosted_abandoned_at_ms',r.hosted_abandoned_at_ms,'clarification_state',r.clarification_state,'clarification_expires_at_ms',r.clarification_expires_at_ms,'clarification_ended_at_ms',r.clarification_ended_at_ms,'work_user_id',CASE WHEN r.work_published_at_ms IS NOT NULL THEN r.user_id END,'work_revision',CASE WHEN r.work_published_at_ms IS NOT NULL THEN 1 END,'work_published_at_ms',r.work_published_at_ms,'work_last_attempt_at_ms',r.work_last_attempt_at_ms,'work_last_reconciled_at_ms',r.work_last_reconciled_at_ms) AS body FROM statement_submission_context r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({

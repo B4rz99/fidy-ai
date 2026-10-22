@@ -17,6 +17,7 @@ import {
   observeRetentionCost,
 } from "../d1-test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
+import { authenticateWebSession } from "../web-session/operations";
 import { approveBrowserPairing, startBrowserPairing } from "../browser-login/operations";
 import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
@@ -482,6 +483,7 @@ it("refuses recovery rotation after WebSession freshness expires without changin
 it("admits email approval only for a browser-held verifier and an existing verified mailbox", () =>
   Effect.runPromise(
     Effect.gen(function* () {
+      vi.useFakeTimers({ toFake: ["Date"] });
       const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
       expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const start = yield* Effect.tryPromise(() =>
@@ -578,6 +580,41 @@ it("admits email approval only for a browser-held verifier and an existing verif
       expect((yield* Effect.tryPromise(() => complete(receivedCode, "A".repeat(43)))).status).toBe(
         400
       );
+      const oldCode = receivedCode;
+      const oldWork = workId;
+      vi.setSystemTime((yield* Clock.currentTimeMillis) + 61_000);
+      expect(
+        (yield* Effect.tryPromise(() => begin(pairing.privateVerifier, "person@example.test")))
+          .status
+      ).toBe(202);
+      yield* dispatchBrowserPairingEmail({
+        identity: Option.none(),
+        DB: db,
+        BROWSER_PAIRING_EMAIL_QUEUE: {
+          send: (work) => {
+            workId = work.id;
+            return Promise.resolve();
+          },
+        },
+      });
+      const supersededSend = vi.fn(() => Promise.resolve("succeeded" as const));
+      yield* Effect.tryPromise(() =>
+        deliverBrowserPairingEmail({ db, send: supersededSend })(oldWork)
+      );
+      expect(supersededSend).not.toHaveBeenCalled();
+      yield* Effect.tryPromise(() =>
+        deliverBrowserPairingEmail({
+          db,
+          send: (_email, combinedCode) => {
+            receivedCode = combinedCode;
+            return Promise.resolve("succeeded");
+          },
+        })(workId)
+      );
+      expect(
+        (yield* Effect.tryPromise(() => complete(oldCode, pairing.privateVerifier))).status
+      ).toBe(400);
+
       yield* Effect.tryPromise(() =>
         db
           .prepare(`UPDATE verified_email_credentials
@@ -1859,88 +1896,110 @@ it("rejects a WebSession revoked during renewal without releasing the User or wr
     })
   ));
 
-it("redeems one approved pairing under concurrent replay without accepting a fixated browser bearer", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
-      const oldToken = "F".repeat(43);
-      yield* Effect.tryPromise(() => seedWebSession(db, oldToken));
-      const pairing = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
-      )(
-        yield* startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }).pipe(
-          Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
-        )
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "UPDATE browser_login_pairings SET state = 'ready', user_id = (SELECT id FROM users) WHERE id = ?"
+it.each(["RAISE(ABORT, 'session_test_refusal')", "RAISE(IGNORE)"])(
+  "redeems one approved pairing under concurrent replay without accepting a fixated browser bearer after %s",
+  (refusal) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+        expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
+        const oldToken = "F".repeat(43);
+        yield* Effect.tryPromise(() => seedWebSession(db, oldToken));
+        const pairing = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
+        )(
+          yield* startBrowserPairing({
+            db,
+            retainedPairings: retainedRecoveryPairingsQuery(),
+          }).pipe(Effect.flatMap((response) => Effect.tryPromise(() => response.json())))
+        );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "UPDATE browser_login_pairings SET state = 'ready', user_id = (SELECT id FROM users) WHERE id = ?"
+            )
+            .bind(pairing.pairingId)
+            .run()
+        );
+        const redeem = (): Promise<Response> =>
+          sendRequest(
+            new Request("https://api.fidyapp.com/web/pairings/redeem", {
+              method: "POST",
+              headers: {
+                origin: "https://app.fidyapp.com",
+                "content-type": "application/json",
+                cookie: `__Host-fidy_session=${oldToken}`,
+              },
+              body: encodeJson(pairing),
+            })
+          );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`CREATE TRIGGER refuse_session BEFORE INSERT ON web_sessions
+        BEGIN SELECT ${refusal}; END`)
+            .run()
+        );
+        const refused = yield* Effect.tryPromise(() => redeem());
+        expect(refused.status).toBe(400);
+        expect(refused.headers.get("set-cookie")).toBeNull();
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT state FROM browser_login_pairings WHERE id = ?")
+              .bind(pairing.pairingId)
+              .first()
           )
-          .bind(pairing.pairingId)
-          .run()
-      );
-      const redeem = (): Promise<Response> =>
-        sendRequest(
-          new Request("https://api.fidyapp.com/web/pairings/redeem", {
-            method: "POST",
-            headers: {
-              origin: "https://app.fidyapp.com",
-              "content-type": "application/json",
-              cookie: `__Host-fidy_session=${oldToken}`,
-            },
-            body: encodeJson(pairing),
+        ).toEqual({ state: "ready" });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT count(*) AS count FROM web_sessions WHERE pairing_id = ?")
+              .bind(pairing.pairingId)
+              .first()
+          )
+        ).toEqual({ count: 0 });
+        yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_session").run());
+        const responses = yield* Effect.tryPromise(() => Promise.all([redeem(), redeem()]));
+        expect(
+          responses.map((response) => response.status).sort((left, right) => left - right)
+        ).toEqual([200, 400]);
+        const issued =
+          responses.find((response) => response.status === 200)?.headers.get("set-cookie") ?? "";
+        expect(issued).toContain("__Host-fidy_session=");
+        expect(issued).not.toContain(oldToken);
+        expect(issued).toContain("Secure; HttpOnly; SameSite=Lax");
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT count(*) AS count FROM web_sessions WHERE pairing_id = ?")
+              .bind(pairing.pairingId)
+              .first()
+          )
+        ).toEqual({ count: 1 });
+        const replay = yield* Effect.tryPromise(() => redeem());
+        expect(replay.status).toBe(400);
+        expect(replay.headers.get("set-cookie")).toBeNull();
+        const observed = observeRetentionCost(db);
+        const observedAt = yield* Clock.currentTimeMillis;
+        const session = yield* Effect.tryPromise(() =>
+          authenticateWebSession({
+            db: observed.database,
+            request: new Request("https://api.fidyapp.com/user", {
+              headers: { cookie: issued.split(";")[0] ?? "" },
+            }),
+            current: observedAt,
+            freshness: "live",
           })
         );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`CREATE TRIGGER refuse_session BEFORE INSERT ON web_sessions
-        BEGIN SELECT RAISE(ABORT, 'session_test_refusal'); END`)
-          .run()
-      );
-      const refused = yield* Effect.tryPromise(() => redeem());
-      expect(refused.status).toBe(400);
-      expect(refused.headers.get("set-cookie")).toBeNull();
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT state FROM browser_login_pairings WHERE id = ?")
-            .bind(pairing.pairingId)
-            .first()
-        )
-      ).toEqual({ state: "ready" });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT count(*) AS count FROM web_sessions WHERE pairing_id = ?")
-            .bind(pairing.pairingId)
-            .first()
-        )
-      ).toEqual({ count: 0 });
-      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_session").run());
-      const responses = yield* Effect.tryPromise(() => Promise.all([redeem(), redeem()]));
-      expect(
-        responses.map((response) => response.status).sort((left, right) => left - right)
-      ).toEqual([200, 400]);
-      const issued =
-        responses.find((response) => response.status === 200)?.headers.get("set-cookie") ?? "";
-      expect(issued).toContain("__Host-fidy_session=");
-      expect(issued).not.toContain(oldToken);
-      expect(issued).toContain("Secure; HttpOnly; SameSite=Lax");
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT count(*) AS count FROM web_sessions WHERE pairing_id = ?")
-            .bind(pairing.pairingId)
-            .first()
-        )
-      ).toEqual({ count: 1 });
-      const replay = yield* Effect.tryPromise(() => redeem());
-      expect(replay.status).toBe(400);
-      expect(replay.headers.get("set-cookie")).toBeNull();
-    })
-  ));
+        expect(Option.isSome(session)).toBe(true);
+        expect(
+          (yield* Effect.tryPromise(observed.plans)).some(
+            (plan) => plan.includes("SEARCH web_sessions") && plan.includes("token_digest=?")
+          )
+        ).toBe(true);
+      })
+    )
+);
 
 const runProofDelivery =
   (

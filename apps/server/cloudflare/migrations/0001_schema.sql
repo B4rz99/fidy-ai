@@ -1737,6 +1737,9 @@ CREATE UNIQUE INDEX billing_renewal_identity ON billing_attempts(previous_paid_a
 WHERE previous_paid_attempt_id IS NOT NULL;
 --> statement-breakpoint
 
+CREATE INDEX browser_login_pairings_retention ON browser_login_pairings(expires_at_ms,id);
+--> statement-breakpoint
+
 CREATE UNIQUE INDEX browser_login_approvals_identity_0 ON browser_login_pairings(approval_portfolio_id,approval_message_id) WHERE approval_message_id IS NOT NULL;
 --> statement-breakpoint
 

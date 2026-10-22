@@ -243,6 +243,9 @@ it("refuses session establishment without the exact browser-private verifier and
           db
             .prepare("INSERT INTO browser_login_pairings VALUES (?, 'ready', ?, ?, 0, ?, NULL, 5)")
             .bind(pairingId, userA, current + 600_000, verifierDigest),
+          db.prepare(
+            "CREATE TABLE sql_assertions (scope TEXT PRIMARY KEY, accepted INTEGER CHECK(accepted=1))"
+          ),
           db.prepare(`CREATE TABLE web_sessions (id TEXT, pairing_id TEXT UNIQUE, user_id TEXT, token_digest BLOB,
           created_at_ms INTEGER, fresh_until_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER)`),
         ])

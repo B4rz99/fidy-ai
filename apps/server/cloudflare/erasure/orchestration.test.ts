@@ -317,10 +317,12 @@ const verifyNativeErasure = Effect.gen(function* () {
   yield* Effect.tryPromise(() =>
     expect(
       db
-        .prepare("UPDATE ingestion_review_items SET user_id=? WHERE user_id=?")
-        .bind(foreignUser, userId)
+        .prepare(
+          `UPDATE ingestion_review_items SET draft_json='{"counterparty":"Changed draft"}' WHERE user_id=?`
+        )
+        .bind(userId)
         .run()
-    ).rejects.toThrow()
+    ).rejects.toThrow("erasure_fenced")
   );
   expect(
     (yield* Effect.result(

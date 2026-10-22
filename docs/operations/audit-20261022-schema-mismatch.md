@@ -77,3 +77,16 @@ emulation. Its broad browser shard passed 97 cases and correctly refused the Rec
 visible-name mismatch exposed by axe-core 4.14. The already reviewed shared control-name fix from
 PR1508 is incorporated without disabling accessibility checks. All 15 chat/Recurring checks pass
 on that corrected baseline. Full final-head CI must still complete before merge.
+
+The read-only production inspection workflow `39792941855` passed and reported no Worker topology
+drift. Database verification was intentionally not requested in that topology inspection; its success
+does not contradict or resolve the independently reproduced missing-view failure.
+
+The broad local browser run initially passed 178 cases, failed three and skipped three. Two failures
+used obsolete token-duration accessible names; the shared provider selector correction is included.
+The accepted OAuth operation also received a genuine canonical `rate_limited` refusal while sharing
+the primary synthetic User. Its fixture now uses a dedicated synthetic User without changing the
+limiter or retrying the mutation. A subsequent broad run passed those three cases but failed seven
+Pairing/Recurring cases (174 passed, three skipped). All 12 cases in those two affected files pass
+when run together in isolation. Broader-run interference is still under investigation; neither
+focused success nor the fixture isolation establishes an entirely passing broad browser suite.

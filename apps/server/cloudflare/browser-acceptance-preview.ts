@@ -22,6 +22,7 @@ import {
   firstCardUserId,
   fixtureUserId,
   navigationIdentities,
+  oauthOperationUserId,
   paginationUserId,
   pairingUserId,
   privacyErasureUserId,
@@ -417,6 +418,7 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
   return Option.some(statement.run().then(() => new Response(null, { status: 204 })));
 };
 const fixtureIdentities = [
+  { key: "oauthOperation", userId: oauthOperationUserId },
   ...recurringIsolatedIdentities,
   ...navigationIdentities,
   { key: "recurring", userId: recurringUserId },

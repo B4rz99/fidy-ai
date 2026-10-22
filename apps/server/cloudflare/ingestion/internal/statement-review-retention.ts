@@ -26,10 +26,10 @@ export const expireStatementReviewEvidence = ({
             current,
             maximumRetainedReviewEvidence
           ),
-          DB.prepare(`UPDATE statement_needs_review
-    SET status = 'expired', original_evidence = NULL, known_money = NULL, review_suggestions_json = NULL
-    WHERE id IN (SELECT id FROM statement_needs_review
-      WHERE status = 'pending' AND evidence_expires_at_ms <= ?
+          DB.prepare(`UPDATE ingestion_review_items
+    SET evidence_state = 'expired', original_evidence = NULL, known_money_json = NULL, suggestions_json = NULL
+    WHERE id IN (SELECT id FROM ingestion_review_items
+      WHERE source_kind='statement' AND evidence_state = 'retained' AND evidence_expires_at_ms <= ?
       ORDER BY evidence_expires_at_ms, id LIMIT ?)`).bind(current, maximumRetainedReviewEvidence),
         ]),
       catch: () => new StatementProcessingUnavailable(),

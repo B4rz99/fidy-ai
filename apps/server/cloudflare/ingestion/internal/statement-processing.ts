@@ -221,16 +221,16 @@ const reviewStatement = (
   const evidence = Schema.encodeUnknownSync(evidenceCodec)(result.evidence);
   const suggestions = knownReviewSuggestions(result);
   return db
-    .prepare(`INSERT INTO statement_needs_review
-      (id, user_id, submission_id, record_number, reason, original_evidence, known_money, review_suggestions_json,
-       issues, status, evidence_expires_at_ms, created_at_ms, service_market, locale,
+    .prepare(`INSERT INTO ingestion_review_items
+      (source_kind, id, user_id, statement_submission_id, record_number, reason, original_evidence, known_money_json, suggestions_json,
+       issues_json, evidence_state, evidence_expires_at_ms, created_at_ms, service_market, locale,
        time_zone, source_format, parser_revision, extractor_revision)
-      SELECT ?, ?, ?, ?, ?,
+      SELECT 'statement', ?, ?, ?, ?, ?,
         CASE WHEN COALESCE((SELECT pending_count FROM statement_review_capacity WHERE id = 1), 5000) < ?
           AND ? > ? THEN ? ELSE NULL END,
         NULL, ?, ?,
         CASE WHEN COALESCE((SELECT pending_count FROM statement_review_capacity WHERE id = 1), 5000) < ?
-          AND ? > ? THEN 'pending' ELSE 'expired' END,
+          AND ? > ? THEN 'retained' ELSE 'expired' END,
         ?, ?, ?, ?, ?, ?, ?, ? WHERE ${active}`)
     .bind(
       id,

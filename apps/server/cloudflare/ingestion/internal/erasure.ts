@@ -9,18 +9,22 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'status',r.\"status\",'revision',r.\"revision\",'draft_json',r.\"draft_json\",'transaction_id',r.\"transaction_id\",'expires_at_ms',r.\"expires_at_ms\",'updated_at_ms',r.\"updated_at_ms\",'created_at_ms',r.\"created_at_ms\") AS body FROM ingestion_review_state r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'status',r.\"status\",'revision',r.\"revision\",'draft_json',r.\"draft_json\",'transaction_id',r.\"transaction_id\",'expires_at_ms',r.\"expires_at_ms\",'updated_at_ms',r.\"updated_at_ms\",'created_at_ms',r.\"created_at_ms\") AS body FROM ingestion_review_workspace_state r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM ingestion_review_state r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM ingestion_review_workspace_state r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM ingestion_review_state r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM ingestion_review_workspace_state r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
+      {
+        sql: "UPDATE ingestion_review_items AS r SET workspace_state=NULL,workspace_revision=NULL,draft_json=NULL,transaction_id=NULL,workspace_updated_at_ms=NULL,workspace_archive_row_ref=NULL WHERE r.user_id=? AND r.workspace_archive_row_ref IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        params: [scope.userId, scope.reference],
+      },
       {
         sql: "DELETE FROM ingestion_review_state AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
@@ -186,20 +190,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: ["ingestion_review_state"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'submission_id',r.\"submission_id\",'record_number',r.\"record_number\",'reason',r.\"reason\",'original_evidence',r.\"original_evidence\",'known_money',r.\"known_money\",'issues',r.\"issues\",'status',r.\"status\",'evidence_expires_at_ms',r.\"evidence_expires_at_ms\",'created_at_ms',r.\"created_at_ms\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'source_format',r.\"source_format\",'parser_revision',r.\"parser_revision\",'extractor_revision',r.\"extractor_revision\",'review_suggestions_json',r.\"review_suggestions_json\") AS body FROM statement_needs_review r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'submission_id',r.\"submission_id\",'record_number',r.\"record_number\",'reason',r.\"reason\",'original_evidence',r.\"original_evidence\",'known_money',r.\"known_money\",'issues',r.\"issues\",'status',r.\"status\",'evidence_expires_at_ms',r.\"evidence_expires_at_ms\",'created_at_ms',r.\"created_at_ms\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'source_format',r.\"source_format\",'parser_revision',r.\"parser_revision\",'extractor_revision',r.\"extractor_revision\",'review_suggestions_json',r.\"review_suggestions_json\") AS body FROM statement_review_context r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_needs_review r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_review_context r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM statement_needs_review r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM statement_review_context r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM statement_needs_review AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM ingestion_review_items AS r WHERE r.source_kind='statement' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

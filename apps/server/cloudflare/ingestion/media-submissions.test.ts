@@ -76,6 +76,8 @@ const setup = Effect.gen(function* () {
           "canonical_request_replays",
           "media_submissions",
           "ingestion_review_state",
+          "ingestion_review_workspace_state",
+          "statement_review_context",
           "ingestion_statement_review_decisions",
         ],
       })
@@ -124,7 +126,7 @@ const prepareVisibleReviewRead = Effect.fnUntraced(function* (db: D1Database) {
  CREATE TABLE statement_submissions(id TEXT,user_id TEXT,clarification_state TEXT,clarification_expires_at_ms INTEGER,clarification_ended_at_ms INTEGER);
 
  CREATE TABLE statement_review_decisions(review_id TEXT,submission_id TEXT,user_id TEXT,decision TEXT,transaction_id TEXT,decided_at_ms INTEGER);
- CREATE TABLE statement_needs_review(id TEXT,submission_id TEXT,record_number INTEGER,reason TEXT,original_evidence TEXT,issues TEXT,status TEXT,created_at_ms INTEGER,service_market TEXT,locale TEXT,time_zone TEXT,source_format TEXT,parser_revision TEXT,extractor_revision TEXT,evidence_expires_at_ms INTEGER,user_id TEXT);
+ CREATE TABLE ingestion_review_items(id TEXT, user_id TEXT, source_kind TEXT, email_receipt_id TEXT, media_submission_id TEXT, statement_submission_id TEXT,record_number INTEGER,reason TEXT,original_evidence TEXT,known_money_json TEXT,issues_json TEXT,evidence_state TEXT,created_at_ms INTEGER,service_market TEXT,locale TEXT,time_zone TEXT,source_format TEXT,parser_revision TEXT,extractor_revision TEXT,evidence_expires_at_ms INTEGER,suggestions_json TEXT,workspace_state TEXT,workspace_revision INTEGER,draft_json TEXT,transaction_id TEXT,workspace_updated_at_ms INTEGER,workspace_archive_row_ref TEXT);
 
  CREATE TABLE forwarded_email_receipts(id TEXT,time_zone TEXT,user_id TEXT,review_id TEXT,review_reason TEXT,review_created_at_ms INTEGER,review_evidence_expires_at_ms INTEGER);`)
   );
@@ -290,7 +292,7 @@ it("keeps canonical review reads independent of retained evidence size before D1
         yield* io(() =>
           db
             .prepare(
-              "INSERT INTO statement_needs_review VALUES (?,?,?,'mapping-unavailable',?,'[]','pending',?,'CO','es-CO','America/Bogota','csv','csv-v1','csv-v1',?,?)"
+              "INSERT INTO ingestion_review_items (source_kind,id,statement_submission_id,record_number,reason,original_evidence,issues_json,evidence_state,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,evidence_expires_at_ms,user_id) VALUES ('statement',?,?,?,'mapping-unavailable',?,'[]','retained',?,'CO','es-CO','America/Bogota','csv','csv-v1','csv-v1',?,?)"
             )
             .bind(
               `10000000-0000-4000-8000-00000000010${index}`,
@@ -356,7 +358,7 @@ it("keeps canonical review reads independent of retained evidence size before D1
       expect(
         yield* io(() =>
           db
-            .prepare("SELECT sum(length(original_evidence)) AS bytes FROM statement_needs_review")
+            .prepare("SELECT sum(length(original_evidence)) AS bytes FROM statement_review_context")
             .first()
         )
       ).toEqual({ bytes: evidence.length * 4 });
@@ -364,7 +366,7 @@ it("keeps canonical review reads independent of retained evidence size before D1
   ));
 
 it.each([
-  { table: "statement_needs_review", column: "created_at_ms" },
+  { table: "ingestion_review_items", column: "created_at_ms" },
   { table: "forwarded_email_receipts", column: "review_created_at_ms" },
   { table: "forwarded_email_receipts", column: "review_evidence_expires_at_ms" },
   { table: "media_submissions", column: "review_created_at_ms" },
@@ -381,7 +383,7 @@ it.each([
           db.batch([
             db
               .prepare(
-                "INSERT INTO statement_needs_review (id,submission_id,record_number,reason,issues,status,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,evidence_expires_at_ms,user_id) VALUES (?,?,1,'malformed-source-row','[]','expired',?,'CO','es-CO','America/Bogota','csv','csv-v1','csv-v1',0,?)"
+                "INSERT INTO ingestion_review_items (source_kind,id,statement_submission_id,record_number,reason,issues_json,evidence_state,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,evidence_expires_at_ms,user_id) VALUES ('statement',?,?,1,'malformed-source-row','[]','expired',?,'CO','es-CO','America/Bogota','csv','csv-v1','csv-v1',0,?)"
               )
               .bind(
                 "10000000-0000-4000-8000-000000000091",

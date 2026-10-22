@@ -286,7 +286,7 @@ it.each([
         const review = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))(
           yield* Effect.tryPromise(() =>
             db
-              .prepare("SELECT id FROM statement_needs_review WHERE user_id=?")
+              .prepare("SELECT id FROM statement_review_context WHERE user_id=?")
               .bind(users[0])
               .first()
           )

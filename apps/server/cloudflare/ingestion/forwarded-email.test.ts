@@ -198,7 +198,7 @@ const setup = Effect.fn(function* () {
     CREATE TABLE statement_review_decisions (review_id TEXT PRIMARY KEY, submission_id TEXT, user_id TEXT, decision TEXT, transaction_id TEXT, decided_at_ms INTEGER);
     ALTER TABLE transactions ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;
     CREATE TABLE statement_review_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE statement_needs_review (id TEXT PRIMARY KEY, user_id TEXT, submission_id TEXT, record_number INTEGER, reason TEXT, original_evidence TEXT, issues TEXT, status TEXT, evidence_expires_at_ms INTEGER, created_at_ms INTEGER, service_market TEXT, locale TEXT, time_zone TEXT, source_format TEXT, parser_revision TEXT, extractor_revision TEXT);`)
+    CREATE TABLE ingestion_review_items(id TEXT, user_id TEXT, source_kind TEXT, email_receipt_id TEXT, media_submission_id TEXT, statement_submission_id TEXT,record_number INTEGER,reason TEXT,original_evidence TEXT,known_money_json TEXT,issues_json TEXT,evidence_state TEXT,created_at_ms INTEGER,service_market TEXT,locale TEXT,time_zone TEXT,source_format TEXT,parser_revision TEXT,extractor_revision TEXT,evidence_expires_at_ms INTEGER,suggestions_json TEXT,workspace_state TEXT,workspace_revision INTEGER,draft_json TEXT,transaction_id TEXT,workspace_updated_at_ms INTEGER,workspace_archive_row_ref TEXT);`)
   );
   for (const action of ["UPDATE", "DELETE"]) {
     yield* wait(() =>
@@ -222,6 +222,8 @@ const setup = Effect.fn(function* () {
       tables: [
         "media_submissions",
         "ingestion_review_state",
+        "ingestion_review_workspace_state",
+        "statement_review_context",
         "ingestion_statement_review_decisions",
         "anonymized_email_samples",
       ],
@@ -800,7 +802,7 @@ it.effect(
         yield* wait(() =>
           db
             .prepare(
-              `INSERT INTO statement_needs_review (id, user_id, submission_id, record_number, reason, original_evidence, issues, status, evidence_expires_at_ms, created_at_ms, service_market, locale, time_zone, source_format, parser_revision, extractor_revision) VALUES (?, ?, ?, ?, 'mapping-unavailable', ?, '[]', 'pending', ?, ?, 'CO', 'es-CO', 'America/Bogota', ?, 'statement-parser-v1', 'test')`
+              `INSERT INTO ingestion_review_items (source_kind,id, user_id, statement_submission_id, record_number, reason, original_evidence, issues_json, evidence_state, evidence_expires_at_ms, created_at_ms, service_market, locale, time_zone, source_format, parser_revision, extractor_revision) VALUES ('statement',?, ?, ?, ?, 'mapping-unavailable', ?, '[]', 'retained', ?, ?, 'CO', 'es-CO', 'America/Bogota', ?, 'statement-parser-v1', 'test')`
             )
             .bind(
               `10000000-0000-4000-8000-00000000060${index}`,
@@ -830,7 +832,7 @@ it.effect(
         "originalEvidence"
       );
       yield* wait(() =>
-        db.prepare("UPDATE statement_needs_review SET original_evidence='malformed'").run()
+        db.prepare("UPDATE ingestion_review_items SET original_evidence='malformed'").run()
       );
       const corrupt = yield* listNeedsReviewItems({
         database: db,

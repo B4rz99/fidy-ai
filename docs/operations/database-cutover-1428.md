@@ -2622,3 +2622,87 @@ Native processing-cost examples after cache extraction read 2,258 rows for 96 pr
 and 4,460 for 192, versus 2,247 and 4,437 at the preceding checkpoint. The existing native linear
 cost and bounded-chunk checks remain green; cache reads add indexed parent joins without rescanning
 unrelated submissions or rereading source bytes on resume.
+
+## Statement review ownership (#1458)
+
+Checkpoint: `013bd1b24`. Pause ingestion, review mutations, retention and erasure workers for
+this atomic cutover. Email and media retain their existing stores until #1459. The statement
+variant moves into `ingestion_review_items`; `statement_review_context` and
+`ingestion_review_workspace_state` are read-only owner projections, not extra copies.
+
+Read the current definitions from the checked-out baseline. In one D1 batch: run preflight;
+drop explicit views/triggers/indexes; create the target table and all current explicit indexes
+(including same-User parent keys); copy and compare; remove migrated overlays and the old evidence table;
+recreate all current explicit views/triggers;
+verify foreign keys. Do not drop User, submission, Transaction or archive tables. Apply this
+stage after #1457 and before #1459. Any failed assertion rolls back the whole batch.
+
+Original evidence rowids become target rowids. Original workspace rowids are independently
+retained as `workspace_archive_row_ref`, so existing `ingestion_review_state` chunks/archives
+remain meaningful. Workspace edits cannot recreate deleted evidence or change its deadline.
+A skipped workspace still counts toward the 5,000 retained statement-evidence capacity;
+only evidence settlement, expiry or deletion releases that capacity. Workspace history expires
+independently. Existing archives remain byte-for-byte unchanged.
+
+<!-- statement-review-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'statement-review-preflight',CASE WHEN
+NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+AND (SELECT pending_count FROM statement_review_capacity WHERE id=1)=
+ (SELECT count(*) FROM statement_needs_review WHERE status='pending')
+AND NOT EXISTS(SELECT 1 FROM statement_needs_review r JOIN ingestion_review_state w ON w.user_id=r.user_id AND w.id=r.id
+ WHERE w.created_at_ms IS NOT r.created_at_ms OR w.expires_at_ms IS NOT r.evidence_expires_at_ms)
+AND NOT EXISTS(SELECT 1 FROM statement_needs_review r JOIN forwarded_email_receipts e ON e.user_id=r.user_id AND e.review_id=r.id)
+AND NOT EXISTS(SELECT 1 FROM statement_needs_review r JOIN media_submissions m ON m.user_id=r.user_id AND m.id=r.id AND m.review_reason IS NOT NULL)
+THEN 1 ELSE 0 END;
+```
+
+<!-- statement-review-preflight:end -->
+
+<!-- statement-review-copy:start -->
+
+```sql
+INSERT INTO ingestion_review_items(rowid,id,user_id,source_kind,statement_submission_id,record_number,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,original_evidence,known_money_json,issues_json,evidence_state,suggestions_json,workspace_state,workspace_revision,draft_json,transaction_id,workspace_updated_at_ms,workspace_archive_row_ref)
+SELECT r.rowid,r.id,r.user_id,'statement',r.submission_id,r.record_number,r.reason,r.created_at_ms,r.evidence_expires_at_ms,r.service_market,r.locale,r.time_zone,r.source_format,r.parser_revision,r.extractor_revision,r.original_evidence,r.known_money,r.issues,CASE r.status WHEN 'pending' THEN 'retained' ELSE r.status END,r.review_suggestions_json,w.status,w.revision,w.draft_json,w.transaction_id,w.updated_at_ms,CAST(w.rowid AS TEXT)
+FROM statement_needs_review r LEFT JOIN ingestion_review_state w ON w.user_id=r.user_id AND w.id=r.id;
+```
+
+<!-- statement-review-copy:end -->
+
+<!-- statement-review-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'statement-review-copy',CASE WHEN
+(SELECT count(*) FROM ingestion_review_items)=(SELECT count(*) FROM statement_needs_review)
+AND NOT EXISTS(SELECT rowid,id,user_id,submission_id,record_number,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,original_evidence,known_money,issues,status,review_suggestions_json FROM statement_needs_review
+EXCEPT SELECT rowid,id,user_id,statement_submission_id,record_number,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,original_evidence,known_money_json,issues_json,CASE evidence_state WHEN 'retained' THEN 'pending' ELSE evidence_state END,suggestions_json FROM ingestion_review_items)
+AND NOT EXISTS(SELECT CAST(w.rowid AS TEXT),w.id,w.user_id,w.status,w.revision,w.draft_json,w.transaction_id,w.updated_at_ms FROM ingestion_review_state w JOIN statement_needs_review r ON r.user_id=w.user_id AND r.id=w.id
+EXCEPT SELECT workspace_archive_row_ref,id,user_id,workspace_state,workspace_revision,draft_json,transaction_id,workspace_updated_at_ms FROM ingestion_review_items WHERE workspace_updated_at_ms IS NOT NULL)
+THEN 1 ELSE 0 END;
+```
+
+<!-- statement-review-copy-check:end -->
+
+<!-- statement-review-swap:start -->
+
+```sql
+DELETE FROM ingestion_review_state WHERE (user_id,id) IN(SELECT user_id,id FROM ingestion_review_items);
+DROP TABLE statement_needs_review;
+```
+
+<!-- statement-review-swap:end -->
+
+<!-- statement-review-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'statement-review-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+AND (SELECT pending_count FROM statement_review_capacity WHERE id=1)=(SELECT count(*) FROM ingestion_review_items WHERE source_kind='statement' AND evidence_state='retained')
+AND NOT EXISTS(SELECT 1 FROM ingestion_review_state w JOIN ingestion_review_items r ON r.user_id=w.user_id AND r.id=w.id)
+THEN 1 ELSE 0 END;
+```
+
+<!-- statement-review-verify:end -->

@@ -49,11 +49,20 @@ it.each([
     Effect.runPromise(
       Effect.gen(function* () {
         const { db, bucket } = yield* io(() => storage.acquire());
-        const current = schemaStatements(
-          yield* io(() =>
-            Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-          )
-        );
+        const current = precedingSchema({
+          current: schemaStatements(
+            yield* io(() =>
+              Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+            )
+          ),
+          history: yield* Schema.decodeEffect(CutoverHistory)(
+            yield* io(() =>
+              Bun.file(
+                new URL("./statement-review-cutover.test-fixture.json", import.meta.url)
+              ).text()
+            )
+          ),
+        });
         const previous = precedingSchema({
           current,
           history: yield* Schema.decodeEffect(CutoverHistory)(

@@ -7,6 +7,7 @@ import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import {
   ReviewCommand,
   ReviewEditResult,
+  ReviewMetadata,
   type ReviewReference,
 } from "../../../src/core/ingestion/contract";
 import type {
@@ -35,7 +36,7 @@ const selectionGuard = (
 ): OwnedStatement => {
   const authority = callerAuthority(work);
   return {
-    sql: `SELECT user_id FROM ingestion_review_sources WHERE user_id = ? AND id = ? AND revision = ? AND status = ? AND expires_at_ms > ? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
+    sql: `SELECT user_id,source FROM ingestion_review_sources WHERE user_id = ? AND id = ? AND revision = ? AND status = ? AND expires_at_ms > ? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
     params: [
       work.subject.userId,
       ref.id,
@@ -56,23 +57,28 @@ const writeReview = ({
   ref,
   draft,
   transactionId,
+  source,
 }: Readonly<{
   work: ReviewEditWork["work"];
   command: ReviewCommand;
   ref: ReviewReference;
   draft: Option.Option<string>;
   transactionId: Option.Option<string>;
-}>): D1PreparedStatement =>
+  source: typeof ReviewMetadata.fields.source.Type;
+}>): ReadonlyArray<D1PreparedStatement> => [
   writeReviewState({
     db: work.db,
     userId: work.subject.userId,
     id: ref.id,
+    source,
     status: decisionStatus(command),
     current: work.current,
     guard: selectionGuard(work, command, ref),
     draft,
     transactionId,
-  });
+  }),
+  prepareChangedRowAssertion({ db: work.db, scope: "ingestion_review" }),
+];
 const reviewOutcome = (refs: ReadonlyArray<ReviewReference>, current: number): OwnerOutcome => ({
   _tag: "Owner",
   operation,
@@ -137,8 +143,10 @@ export const prepareReviewEdit = ({
       return refusedPreparation(reviewRefusal(work));
     }
     const guards = refs.map((ref) => selectionGuard(work, command, ref));
-    const eligible = yield* Effect.forEach(guards, (guard) => eligibleReview(work.db, guard));
-    if (eligible.some((row) => row === null)) return refusedPreparation(reviewRefusal(work));
+    const selected = yield* selectReviewSources(work, command, refs);
+    if (selected.some(({ source }) => Option.isNone(source))) {
+      return refusedPreparation(reviewRefusal(work));
+    }
     const draft =
       command._tag === "SaveDraft"
         ? Option.some(yield* Schema.encodeEffect(reviewDraftJson)(command.draft))
@@ -165,16 +173,16 @@ export const prepareReviewEdit = ({
         guardRefusal: (current) => Effect.succeed(reviewRefusal(current)),
         statements: [
           ...Option.toArray(capture).flatMap(({ statements }) => statements),
-          ...refs.flatMap((ref) => [
+          ...selected.flatMap(({ ref, source }) =>
             writeReview({
+              source: Option.getOrThrow(source),
               work,
               command,
               ref,
               draft,
               transactionId: Option.map(capture, (value) => value.transactionId),
-            }),
-            prepareChangedRowAssertion({ db: work.db, scope: "ingestion_review" }),
-          ]),
+            })
+          ),
           ...reviewAudit({ work, operation, accepted: true }),
         ],
         outcome: reviewOutcome(refs, work.current),
@@ -185,10 +193,40 @@ export const prepareReviewEdit = ({
 const eligibleReview = (
   db: D1Database,
   guard: OwnedStatement
-): Effect.Effect<unknown, Cause.UnknownError> =>
+): Effect.Effect<
+  Option.Option<typeof ReviewMetadata.fields.source.Type>,
+  Cause.UnknownError | Schema.SchemaError
+> =>
   Effect.tryPromise(() =>
     db
       .prepare(guard.sql)
       .bind(...guard.params)
       .first()
+  ).pipe(
+    Effect.flatMap((raw) =>
+      raw === null
+        ? Effect.succeedNone
+        : Schema.decodeUnknownEffect(Schema.Struct({ source: ReviewMetadata.fields.source }))(
+            raw
+          ).pipe(Effect.map(({ source }) => Option.some(source)))
+    )
+  );
+
+const selectReviewSources = (
+  work: ReviewEditWork["work"],
+  command: ReviewCommand,
+  refs: ReadonlyArray<ReviewReference>
+): Effect.Effect<
+  ReadonlyArray<
+    Readonly<{
+      ref: ReviewReference;
+      source: Option.Option<typeof ReviewMetadata.fields.source.Type>;
+    }>
+  >,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.forEach(refs, (ref) =>
+    eligibleReview(work.db, selectionGuard(work, command, ref)).pipe(
+      Effect.map((source) => ({ ref, source }))
+    )
   );

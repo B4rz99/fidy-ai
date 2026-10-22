@@ -1425,29 +1425,51 @@ CREATE TABLE "statement_materialization_parts" (
 ) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE statement_needs_review (
-  id TEXT PRIMARY KEY NOT NULL,
-  user_id TEXT NOT NULL,
-  submission_id TEXT NOT NULL,
-  record_number INTEGER NOT NULL CHECK (record_number > 0),
-  reason TEXT NOT NULL CHECK (reason IN ('malformed-source-row', 'missing-required-fact',
-    'ambiguous-direction', 'ambiguous-currency', 'canonical-validation-failed',
-    'mapping-unavailable', 'model-unavailable')),
-  original_evidence TEXT,
-  known_money TEXT,
-  issues TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('pending', 'expired', 'resolved')),
-  evidence_expires_at_ms INTEGER NOT NULL,
-  created_at_ms INTEGER NOT NULL,
-  service_market TEXT NOT NULL,
-  locale TEXT NOT NULL,
-  time_zone TEXT NOT NULL,
-  source_format TEXT NOT NULL CHECK (source_format IN ('csv', 'xlsx')),
-  parser_revision TEXT NOT NULL,
-  extractor_revision TEXT NOT NULL, review_suggestions_json TEXT,
-  UNIQUE (submission_id, record_number),
-  FOREIGN KEY (user_id, submission_id) REFERENCES statement_submissions(user_id, id),
-  CHECK ((status = 'pending') = (original_evidence IS NOT NULL))
+CREATE TABLE ingestion_review_items (
+ id TEXT NOT NULL,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ source_kind TEXT NOT NULL CHECK(source_kind IN ('statement','email','media')),
+ email_receipt_id TEXT,
+ media_submission_id TEXT,
+ statement_submission_id TEXT,
+ record_number INTEGER,
+ reason TEXT NOT NULL,
+ created_at_ms INTEGER NOT NULL,
+ evidence_expires_at_ms INTEGER NOT NULL,
+ service_market TEXT NOT NULL,
+ locale TEXT NOT NULL,
+ time_zone TEXT NOT NULL,
+ source_format TEXT,
+ parser_revision TEXT,
+ extractor_revision TEXT,
+ original_evidence TEXT,
+ known_money_json TEXT,
+ issues_json TEXT,
+ evidence_state TEXT CHECK(evidence_state IN ('retained','resolved','expired')),
+ suggestions_json TEXT,
+ workspace_state TEXT CHECK(workspace_state IN ('pending','skipped','created','abandoned')),
+ workspace_revision INTEGER CHECK(workspace_revision>0),
+ draft_json TEXT CHECK(draft_json IS NULL OR length(draft_json)<=4096),
+ transaction_id TEXT,
+ workspace_updated_at_ms INTEGER,
+ workspace_archive_row_ref TEXT,
+ PRIMARY KEY(user_id,id),
+ UNIQUE(statement_submission_id,record_number),
+ UNIQUE(email_receipt_id),
+ UNIQUE(media_submission_id),
+ FOREIGN KEY(user_id,statement_submission_id) REFERENCES statement_submissions(user_id,id),
+ FOREIGN KEY(user_id,email_receipt_id) REFERENCES forwarded_email_receipts(user_id,id),
+ FOREIGN KEY(user_id,media_submission_id) REFERENCES media_submissions(user_id,id),
+ FOREIGN KEY(transaction_id,user_id) REFERENCES transactions(id,user_id),
+ CHECK((source_kind='statement' AND statement_submission_id IS NOT NULL AND record_number IS NOT NULL AND record_number>0 AND email_receipt_id IS NULL AND media_submission_id IS NULL)
+ OR (source_kind='email' AND email_receipt_id IS NOT NULL AND statement_submission_id IS NULL AND record_number IS NULL AND media_submission_id IS NULL)
+ OR (source_kind='media' AND media_submission_id IS NOT NULL AND statement_submission_id IS NULL AND record_number IS NULL AND email_receipt_id IS NULL)),
+ CHECK((source_kind='statement' AND source_format IS NOT NULL AND source_format IN ('csv','xlsx') AND parser_revision IS NOT NULL AND extractor_revision IS NOT NULL AND issues_json IS NOT NULL AND evidence_state IS NOT NULL AND ((evidence_state='retained')=(original_evidence IS NOT NULL))
+ AND reason IN ('malformed-source-row','missing-required-fact','ambiguous-direction','ambiguous-currency','canonical-validation-failed','mapping-unavailable','model-unavailable'))
+ OR (source_kind<>'statement' AND source_format IS NULL AND parser_revision IS NULL AND extractor_revision IS NULL AND issues_json IS NULL AND evidence_state IS NULL AND original_evidence IS NULL AND known_money_json IS NULL
+ AND ((source_kind='media' AND reason IN ('extraction-unavailable','unparseable-material')) OR (source_kind='email' AND reason IN ('canonical-validation-failed','unsupported-content','unknown-format','ambiguous-format','invalid-format','provider-retrieval-failed','processing-interrupted','consent-revoked'))))),
+ CHECK((workspace_state IS NULL AND workspace_revision IS NULL AND draft_json IS NULL AND transaction_id IS NULL AND workspace_updated_at_ms IS NULL AND workspace_archive_row_ref IS NULL)
+ OR (workspace_state IS NOT NULL AND workspace_revision IS NOT NULL AND workspace_updated_at_ms IS NOT NULL AND workspace_archive_row_ref IS NOT NULL AND ((workspace_state='created')=(transaction_id IS NOT NULL))))
 ) STRICT;
 --> statement-breakpoint
 
@@ -2406,8 +2428,8 @@ CREATE INDEX statement_pending_health ON statement_submissions(submitted_at_ms)
   WHERE status IN ('queued', 'processing');
 --> statement-breakpoint
 
-CREATE INDEX statement_review_expiry ON statement_needs_review(evidence_expires_at_ms)
-  WHERE status = 'pending';
+CREATE INDEX statement_review_expiry ON ingestion_review_items(evidence_expires_at_ms)
+  WHERE source_kind='statement' AND evidence_state = 'retained';
 --> statement-breakpoint
 
 CREATE INDEX statement_staging_delete_retention
@@ -2639,7 +2661,7 @@ CREATE VIEW ingestion_review_originals AS
 SELECT r.id, r.user_id, 'statement' AS source, r.reason, r.created_at_ms,
   r.evidence_expires_at_ms AS expires_at_ms, r.service_market, r.locale, r.time_zone, r.review_suggestions_json AS suggestions_json,
   'pending' AS status, NULL AS transaction_id
-FROM statement_needs_review r
+FROM statement_review_context r
 UNION ALL
 SELECT s.review_id,s.user_id,'email',s.review_reason,s.review_created_at_ms,s.review_evidence_expires_at_ms,'CO','es-CO',s.time_zone,NULL,'pending',NULL FROM forwarded_email_receipts s WHERE s.review_id IS NOT NULL
 UNION ALL
@@ -2652,15 +2674,10 @@ CREATE VIEW ingestion_review_sources AS
 SELECT s.id,s.user_id,s.source,s.reason,s.created_at_ms,s.expires_at_ms,s.service_market,s.locale,s.time_zone,
   CASE WHEN d.status='abandoned' THEN 'expired' ELSE coalesce(d.status,s.status) END AS status,coalesce(d.transaction_id,s.transaction_id) AS transaction_id,
   coalesce(d.revision,0) AS revision,d.draft_json,s.suggestions_json
-FROM ingestion_review_originals s LEFT JOIN ingestion_review_state d ON d.id=s.id AND d.user_id=s.user_id;
+FROM ingestion_review_originals s LEFT JOIN ingestion_review_workspace_state d ON d.id=s.id AND d.user_id=s.user_id;
 --> statement-breakpoint
 
-CREATE VIEW ingestion_statement_review_decisions AS
-SELECT r.id AS review_id,r.submission_id,r.user_id,
- CASE n.status WHEN 'created' THEN 'resolved' ELSE n.status END AS decision,
- n.transaction_id,n.updated_at_ms AS decided_at_ms
-FROM statement_needs_review r JOIN ingestion_review_state n ON n.id=r.id AND n.user_id=r.user_id
-WHERE n.status!='pending';
+CREATE VIEW ingestion_statement_review_decisions AS SELECT id AS review_id,statement_submission_id AS submission_id,user_id,CASE workspace_state WHEN 'created' THEN 'resolved' ELSE workspace_state END AS decision,transaction_id,workspace_updated_at_ms AS decided_at_ms FROM ingestion_review_items WHERE source_kind='statement' AND workspace_state!='pending';
 --> statement-breakpoint
 
 CREATE VIEW proactivity_delivery_metadata AS
@@ -4959,18 +4976,18 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_statement_needs_review_delete BEFORE DELETE ON statement_needs_review
+CREATE TRIGGER erasure_fence_statement_needs_review_delete BEFORE DELETE ON ingestion_review_items
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_needs_review'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_statement_needs_review_insert BEFORE INSERT ON statement_needs_review
+CREATE TRIGGER erasure_fence_statement_needs_review_insert BEFORE INSERT ON ingestion_review_items
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_needs_review'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_statement_needs_review_update BEFORE UPDATE ON statement_needs_review
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_needs_review'))
+CREATE TRIGGER erasure_fence_statement_needs_review_update BEFORE UPDATE ON ingestion_review_items
+WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.source_kind IS NOT OLD.source_kind OR NEW.email_receipt_id IS NOT OLD.email_receipt_id OR NEW.media_submission_id IS NOT OLD.media_submission_id OR NEW.statement_submission_id IS NOT OLD.statement_submission_id OR NEW.record_number IS NOT OLD.record_number OR NEW.reason IS NOT OLD.reason OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.evidence_expires_at_ms IS NOT OLD.evidence_expires_at_ms OR NEW.service_market IS NOT OLD.service_market OR NEW.locale IS NOT OLD.locale OR NEW.time_zone IS NOT OLD.time_zone OR NEW.source_format IS NOT OLD.source_format OR NEW.parser_revision IS NOT OLD.parser_revision OR NEW.extractor_revision IS NOT OLD.extractor_revision OR NEW.original_evidence IS NOT OLD.original_evidence OR NEW.known_money_json IS NOT OLD.known_money_json OR NEW.issues_json IS NOT OLD.issues_json OR NEW.evidence_state IS NOT OLD.evidence_state OR NEW.suggestions_json IS NOT OLD.suggestions_json) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_needs_review'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -6320,13 +6337,13 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_statement_needs_review_delete BEFORE DELETE ON statement_needs_review
+CREATE TRIGGER erasure_preserve_statement_needs_review_delete BEFORE DELETE ON ingestion_review_items
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'statement_needs_review','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'submission_id',OLD."submission_id",'record_number',OLD."record_number",'reason',OLD."reason",'original_evidence',OLD."original_evidence",'known_money',OLD."known_money",'issues',OLD."issues",'status',OLD."status",'evidence_expires_at_ms',OLD."evidence_expires_at_ms",'created_at_ms',OLD."created_at_ms",'service_market',OLD."service_market",'locale',OLD."locale",'time_zone',OLD."time_zone",'source_format',OLD."source_format",'parser_revision',OLD."parser_revision",'extractor_revision',OLD."extractor_revision",'review_suggestions_json',OLD."review_suggestions_json")
+  SELECT q.id,'statement_needs_review','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'submission_id',OLD."statement_submission_id",'record_number',OLD."record_number",'reason',OLD."reason",'original_evidence',OLD."original_evidence",'known_money',OLD."known_money_json",'issues',OLD."issues_json",'status',CASE OLD.evidence_state WHEN 'retained' THEN 'pending' ELSE OLD.evidence_state END,'evidence_expires_at_ms',OLD."evidence_expires_at_ms",'created_at_ms',OLD."created_at_ms",'service_market',OLD."service_market",'locale',OLD."locale",'time_zone',OLD."time_zone",'source_format',OLD."source_format",'parser_revision',OLD."parser_revision",'extractor_revision',OLD."extractor_revision",'review_suggestions_json',OLD."suggestions_json")
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
@@ -7436,19 +7453,10 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER reviewed_statement_entitlement_insert AFTER INSERT ON ingestion_review_state
-WHEN NEW.status='created'
-BEGIN
-  UPDATE users SET backfill_consumed_at_ms=coalesce(backfill_consumed_at_ms,NEW.updated_at_ms)
-  WHERE backfill_present IS NOT NULL AND id=NEW.user_id AND backfill_submission_id=(SELECT submission_id FROM statement_needs_review WHERE id=NEW.id AND user_id=NEW.user_id);
-END;
---> statement-breakpoint
-
-CREATE TRIGGER reviewed_statement_entitlement_update AFTER UPDATE OF status ON ingestion_review_state
-WHEN NEW.status='created' AND OLD.status!='created'
-BEGIN
-  UPDATE users SET backfill_consumed_at_ms=coalesce(backfill_consumed_at_ms,NEW.updated_at_ms)
-  WHERE backfill_present IS NOT NULL AND id=NEW.user_id AND backfill_submission_id=(SELECT submission_id FROM statement_needs_review WHERE id=NEW.id AND user_id=NEW.user_id);
+CREATE TRIGGER reviewed_statement_entitlement_update AFTER UPDATE OF workspace_state ON ingestion_review_items
+WHEN NEW.source_kind='statement' AND NEW.workspace_state='created' AND OLD.workspace_state IS NOT 'created' BEGIN
+ UPDATE users SET backfill_consumed_at_ms=coalesce(backfill_consumed_at_ms,NEW.workspace_updated_at_ms)
+ WHERE backfill_present IS NOT NULL AND id=NEW.user_id AND backfill_submission_id=NEW.statement_submission_id;
 END;
 --> statement-breakpoint
 
@@ -7536,18 +7544,12 @@ END;
 --> statement-breakpoint
 
 CREATE TRIGGER statement_clarification_abandon AFTER UPDATE OF clarification_state ON statement_submissions
-WHEN NEW.clarification_state='abandoned'
-BEGIN
- INSERT INTO ingestion_review_state(id,user_id,status,revision,expires_at_ms,updated_at_ms,created_at_ms)
- SELECT r.id,r.user_id,'abandoned',1,r.evidence_expires_at_ms,NEW.clarification_ended_at_ms,r.created_at_ms
- FROM statement_needs_review r WHERE r.submission_id=NEW.id
- AND NOT EXISTS(SELECT 1 FROM ingestion_review_state n WHERE n.id=r.id AND n.user_id=r.user_id AND n.status!='pending')
- ON CONFLICT(user_id,id) DO UPDATE SET status='abandoned',revision=revision+1,draft_json=NULL,updated_at_ms=excluded.updated_at_ms;
- UPDATE statement_needs_review SET status='expired',original_evidence=NULL,known_money=NULL,review_suggestions_json=NULL
- WHERE submission_id=NEW.id AND status='pending' AND EXISTS
- (SELECT 1 FROM ingestion_review_state n WHERE n.id=statement_needs_review.id AND n.user_id=NEW.user_id AND n.status='abandoned');
- UPDATE users SET backfill_submission_id=NULL
- WHERE backfill_present IS NOT NULL AND id=NEW.user_id AND backfill_submission_id=NEW.id AND backfill_consumed_at_ms IS NULL;
+WHEN NEW.clarification_state='abandoned' BEGIN
+ UPDATE ingestion_review_items SET workspace_state='abandoned',workspace_revision=coalesce(workspace_revision,0)+1,draft_json=NULL,workspace_updated_at_ms=NEW.clarification_ended_at_ms,workspace_archive_row_ref=coalesce(workspace_archive_row_ref,'review:'||id)
+ WHERE source_kind='statement' AND statement_submission_id=NEW.id AND coalesce(workspace_state,'pending')='pending';
+ UPDATE ingestion_review_items SET evidence_state='expired',original_evidence=NULL,known_money_json=NULL,suggestions_json=NULL
+ WHERE source_kind='statement' AND statement_submission_id=NEW.id AND evidence_state='retained' AND workspace_state='abandoned';
+ UPDATE users SET backfill_submission_id=NULL WHERE backfill_present IS NOT NULL AND id=NEW.user_id AND backfill_submission_id=NEW.id AND backfill_consumed_at_ms IS NULL;
 END;
 --> statement-breakpoint
 
@@ -7596,7 +7598,7 @@ CREATE TRIGGER statement_document_staging_deleted AFTER DELETE ON statement_stag
 CREATE TRIGGER statement_extraction_clarification AFTER UPDATE OF status ON statement_submissions
 WHEN NEW.status IN ('completed','failed') AND OLD.status IN ('queued','processing') AND NEW.needs_review_rows>0
 BEGIN
- UPDATE statement_submissions SET clarification_state='awaiting',clarification_expires_at_ms=(SELECT min(evidence_expires_at_ms) FROM statement_needs_review WHERE submission_id=NEW.id),clarification_ended_at_ms=NULL WHERE id=NEW.id;
+ UPDATE statement_submissions SET clarification_state='awaiting',clarification_expires_at_ms=(SELECT min(evidence_expires_at_ms) FROM statement_review_context WHERE submission_id=NEW.id),clarification_ended_at_ms=NULL WHERE id=NEW.id;
  UPDATE statement_submissions SET clarification_state='abandoned',clarification_ended_at_ms=NEW.completed_at_ms WHERE id=NEW.id AND clarification_expires_at_ms<=NEW.completed_at_ms;
 END;
 --> statement-breakpoint
@@ -7736,43 +7738,30 @@ CREATE TRIGGER statement_record_outcome_no_update BEFORE UPDATE ON statement_rec
 BEGIN SELECT RAISE(ABORT, 'statement_outcome_append_only'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_review_capacity_delete AFTER DELETE ON statement_needs_review
-WHEN OLD.status = 'pending'
+CREATE TRIGGER statement_review_capacity_delete AFTER DELETE ON ingestion_review_items
+WHEN OLD.source_kind='statement' AND OLD.evidence_state = 'retained'
 BEGIN UPDATE statement_review_capacity SET pending_count = pending_count - 1 WHERE id = 1; END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_review_capacity_insert AFTER INSERT ON statement_needs_review
-WHEN NEW.status = 'pending'
+CREATE TRIGGER statement_review_capacity_insert AFTER INSERT ON ingestion_review_items
+WHEN NEW.source_kind='statement' AND NEW.evidence_state = 'retained'
 BEGIN UPDATE statement_review_capacity SET pending_count = pending_count + 1 WHERE id = 1; END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_review_capacity_settlement AFTER UPDATE OF status ON statement_needs_review
-WHEN OLD.status = 'pending' AND NEW.status != 'pending'
+CREATE TRIGGER statement_review_capacity_settlement AFTER UPDATE OF evidence_state ON ingestion_review_items
+WHEN OLD.source_kind='statement' AND OLD.evidence_state = 'retained' AND NEW.evidence_state != 'retained'
 BEGIN UPDATE statement_review_capacity SET pending_count = pending_count - 1 WHERE id = 1; END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_review_pending_cap BEFORE INSERT ON statement_needs_review
-WHEN NEW.status = 'pending' AND
+CREATE TRIGGER statement_review_pending_cap BEFORE INSERT ON ingestion_review_items
+WHEN NEW.source_kind='statement' AND NEW.evidence_state = 'retained' AND
   COALESCE((SELECT pending_count FROM statement_review_capacity WHERE id = 1), 5000) >= 5000
 BEGIN SELECT RAISE(ABORT, 'statement_review_capacity'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_review_settlement_only BEFORE UPDATE ON statement_needs_review
-WHEN NOT (((OLD.status = 'pending' AND NEW.status IN ('expired', 'resolved')
-  AND NEW.original_evidence IS NULL AND NEW.known_money IS NULL) OR
-  (NEW.status=OLD.status AND NEW.original_evidence IS OLD.original_evidence AND NEW.known_money IS OLD.known_money
-    AND NEW.review_suggestions_json IS NULL))
-  AND NEW.id = OLD.id AND NEW.user_id = OLD.user_id
-  AND NEW.submission_id = OLD.submission_id AND NEW.record_number = OLD.record_number
-  AND NEW.reason = OLD.reason AND NEW.issues = OLD.issues
-  AND NEW.evidence_expires_at_ms = OLD.evidence_expires_at_ms
-  AND NEW.created_at_ms = OLD.created_at_ms AND NEW.service_market = OLD.service_market
-  AND NEW.locale = OLD.locale AND NEW.time_zone = OLD.time_zone
-  AND NEW.source_format = OLD.source_format AND NEW.parser_revision = OLD.parser_revision
-  AND NEW.extractor_revision = OLD.extractor_revision
-  AND (NEW.status = OLD.status OR NEW.status = 'expired' OR EXISTS (SELECT 1 FROM ingestion_review_state
-    WHERE id = OLD.id AND user_id = OLD.user_id AND status = 'created')))
-BEGIN SELECT RAISE(ABORT, 'review_immutable'); END;
+CREATE TRIGGER statement_review_settlement_only BEFORE UPDATE ON ingestion_review_items
+WHEN (OLD.source_kind='statement' OR NEW.source_kind='statement') AND NOT (NEW.id IS OLD.id AND NEW.user_id IS OLD.user_id AND NEW.source_kind IS OLD.source_kind AND NEW.email_receipt_id IS OLD.email_receipt_id AND NEW.media_submission_id IS OLD.media_submission_id AND NEW.statement_submission_id IS OLD.statement_submission_id AND NEW.record_number IS OLD.record_number AND NEW.reason IS OLD.reason AND NEW.created_at_ms IS OLD.created_at_ms AND NEW.evidence_expires_at_ms IS OLD.evidence_expires_at_ms AND NEW.service_market IS OLD.service_market AND NEW.locale IS OLD.locale AND NEW.time_zone IS OLD.time_zone AND NEW.source_format IS OLD.source_format AND NEW.parser_revision IS OLD.parser_revision AND NEW.extractor_revision IS OLD.extractor_revision AND NEW.issues_json IS OLD.issues_json AND ((OLD.evidence_state='retained' AND NEW.evidence_state IN ('resolved','expired') AND NEW.original_evidence IS NULL AND NEW.known_money_json IS NULL AND NEW.suggestions_json IS NULL AND (NEW.evidence_state='expired' OR NEW.workspace_state='created')) OR (NEW.evidence_state=OLD.evidence_state AND NEW.original_evidence IS OLD.original_evidence AND NEW.known_money_json IS OLD.known_money_json AND (NEW.suggestions_json IS OLD.suggestions_json OR NEW.suggestions_json IS NULL))))
+BEGIN SELECT RAISE(ABORT,'review_immutable'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER statement_submission_state_insert BEFORE INSERT ON statement_submissions
@@ -8439,3 +8428,79 @@ WHEN EXISTS(SELECT 1 FROM statement_submissions s WHERE s.id=OLD.submission_id A
  AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=s.user_id AND q.state NOT IN ('AwaitingReview','Draining'))
  AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=s.user_id AND p.store_id='statement_materializations'))
 BEGIN SELECT RAISE(ABORT,'statement_materialization_identity'); END;
+--> statement-breakpoint
+
+CREATE VIEW statement_review_context AS SELECT rowid,id,user_id,statement_submission_id AS submission_id,record_number,reason,original_evidence,known_money_json AS known_money,issues_json AS issues,CASE evidence_state WHEN 'retained' THEN 'pending' ELSE evidence_state END AS status,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,suggestions_json AS review_suggestions_json FROM ingestion_review_items WHERE source_kind='statement';
+--> statement-breakpoint
+
+CREATE VIEW ingestion_review_workspace_state AS SELECT CAST(rowid AS TEXT) AS rowid,id,user_id,status,revision,draft_json,transaction_id,expires_at_ms,updated_at_ms,created_at_ms FROM ingestion_review_state
+UNION ALL SELECT workspace_archive_row_ref,id,user_id,workspace_state,workspace_revision,draft_json,transaction_id,evidence_expires_at_ms,workspace_updated_at_ms,created_at_ms FROM ingestion_review_items WHERE workspace_updated_at_ms IS NOT NULL;
+--> statement-breakpoint
+
+CREATE UNIQUE INDEX media_submissions_owned ON media_submissions(user_id,id);
+--> statement-breakpoint
+
+CREATE UNIQUE INDEX ingestion_statement_review_identity ON ingestion_review_items(id) WHERE source_kind='statement';
+--> statement-breakpoint
+
+CREATE INDEX ingestion_review_item_expiry ON ingestion_review_items(evidence_expires_at_ms,id);
+--> statement-breakpoint
+
+CREATE INDEX ingestion_review_item_history ON ingestion_review_items(created_at_ms,id) WHERE workspace_updated_at_ms IS NOT NULL;
+--> statement-breakpoint
+
+CREATE TRIGGER erasure_fence_ingestion_review_item_workspace_insert BEFORE INSERT ON ingestion_review_items
+WHEN NEW.workspace_updated_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id)
+AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='ingestion_review_state'))
+BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER erasure_fence_ingestion_review_item_workspace_update BEFORE UPDATE ON ingestion_review_items
+WHEN (NEW.workspace_state IS NOT OLD.workspace_state OR NEW.workspace_revision IS NOT OLD.workspace_revision OR NEW.draft_json IS NOT OLD.draft_json OR NEW.transaction_id IS NOT OLD.transaction_id OR NEW.workspace_updated_at_ms IS NOT OLD.workspace_updated_at_ms OR NEW.workspace_archive_row_ref IS NOT OLD.workspace_archive_row_ref) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id OR OLD.user_id=q.user_id)
+AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='ingestion_review_state'))
+BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER erasure_fence_ingestion_review_item_workspace_delete BEFORE DELETE ON ingestion_review_items
+WHEN OLD.workspace_updated_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id)
+AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='ingestion_review_state'))
+BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER erasure_preserve_ingestion_review_item_workspace_update BEFORE UPDATE ON ingestion_review_items
+WHEN OLD.workspace_updated_at_ms IS NOT NULL AND (NEW.workspace_state IS NOT OLD.workspace_state OR NEW.workspace_revision IS NOT OLD.workspace_revision OR NEW.draft_json IS NOT OLD.draft_json OR NEW.transaction_id IS NOT OLD.transaction_id OR NEW.workspace_updated_at_ms IS NOT OLD.workspace_updated_at_ms OR NEW.workspace_archive_row_ref IS NOT OLD.workspace_archive_row_ref) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id
+AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
+AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000)
+BEGIN
+ INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
+ SELECT q.id,'ingestion_review_state','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'status',OLD."workspace_state",'revision',OLD."workspace_revision",'draft_json',OLD."draft_json",'transaction_id',OLD."transaction_id",'expires_at_ms',OLD."evidence_expires_at_ms",'updated_at_ms',OLD."workspace_updated_at_ms",'created_at_ms',OLD."created_at_ms")
+ FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id
+ AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
+ AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
+END;
+--> statement-breakpoint
+
+CREATE TRIGGER erasure_preserve_ingestion_review_item_workspace_delete BEFORE DELETE ON ingestion_review_items
+WHEN OLD.workspace_updated_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id
+AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
+AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000)
+BEGIN
+ INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
+ SELECT q.id,'ingestion_review_state','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'status',OLD."workspace_state",'revision',OLD."workspace_revision",'draft_json',OLD."draft_json",'transaction_id',OLD."transaction_id",'expires_at_ms',OLD."evidence_expires_at_ms",'updated_at_ms',OLD."workspace_updated_at_ms",'created_at_ms',OLD."created_at_ms")
+ FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id
+ AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
+ AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
+END;
+--> statement-breakpoint
+
+CREATE TRIGGER ingestion_review_item_initial BEFORE INSERT ON ingestion_review_items WHEN NEW.workspace_updated_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'review_workspace_initial'); END;
+
+--> statement-breakpoint
+
+CREATE TRIGGER ingestion_review_legacy_statement_insert BEFORE INSERT ON ingestion_review_state WHEN EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.user_id=NEW.user_id AND r.id=NEW.id) BEGIN SELECT RAISE(ABORT,'review_owner'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER ingestion_review_legacy_statement_update BEFORE UPDATE ON ingestion_review_state WHEN EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.user_id=NEW.user_id AND r.id=NEW.id) BEGIN SELECT RAISE(ABORT,'review_owner'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER ingestion_review_source_identity BEFORE INSERT ON ingestion_review_items WHEN EXISTS(SELECT 1 FROM ingestion_review_originals r WHERE r.user_id=NEW.user_id AND r.id=NEW.id) BEGIN SELECT RAISE(ABORT,'review_identity'); END;

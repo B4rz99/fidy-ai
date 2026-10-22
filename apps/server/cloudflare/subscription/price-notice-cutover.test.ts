@@ -24,11 +24,23 @@ it.each(["valid", "missing-owner", "interrupted-copy", "interrupted-swap"] as co
         const db = yield* wait(() => databases.acquire());
         const current = precedingSchema({
           current: precedingSchema({
-            current: schemaStatements(
-              yield* wait(() =>
-                Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-              )
-            ),
+            current: precedingSchema({
+              current: schemaStatements(
+                yield* wait(() =>
+                  Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+                )
+              ),
+              history: yield* Schema.decodeEffect(CutoverHistory)(
+                yield* wait(() =>
+                  Bun.file(
+                    new URL(
+                      "../ingestion/statement-review-cutover.test-fixture.json",
+                      import.meta.url
+                    )
+                  ).text()
+                )
+              ),
+            }),
             history: yield* Schema.decodeEffect(CutoverHistory)(
               yield* wait(() =>
                 Bun.file(

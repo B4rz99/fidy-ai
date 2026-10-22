@@ -32,7 +32,7 @@ const findMaterial = ({
 > =>
   Effect.tryPromise(() =>
     db
-      .prepare(`SELECT original_evidence AS text,NULL AS object_key FROM statement_needs_review WHERE user_id=? AND id=?
+      .prepare(`SELECT original_evidence AS text,NULL AS object_key FROM statement_review_context WHERE user_id=? AND id=?
     UNION ALL SELECT NULL,s.object_key FROM forwarded_email_receipts s WHERE s.user_id=? AND s.review_id=?
     UNION ALL SELECT s.caption,NULL FROM media_submissions s WHERE s.review_reason IS NOT NULL AND s.user_id=? AND s.id=?`)
       .bind(userId, id, userId, id, userId, id)

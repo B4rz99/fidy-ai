@@ -139,7 +139,7 @@ effectIt.effect(
       const reviews = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT original_evidence FROM statement_needs_review WHERE user_id = ? ORDER BY record_number"
+            "SELECT original_evidence FROM statement_review_context WHERE user_id = ? ORDER BY record_number"
           )
           .bind(userA)
           .all()
@@ -216,7 +216,7 @@ effectIt.effect(
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT original_evidence,known_money FROM statement_needs_review WHERE submission_id = ?"
+              "SELECT original_evidence,known_money FROM statement_review_context WHERE submission_id = ?"
             )
             .bind(submissionId)
             .first()
@@ -286,12 +286,11 @@ effectIt.effect(
         db
           .prepare(`WITH RECURSIVE numbered(n) AS (
     SELECT 1 UNION ALL SELECT n + 1 FROM numbered WHERE n < 101
-  ) INSERT INTO statement_needs_review
-    (id,user_id,submission_id,record_number,reason,original_evidence,known_money,
-      issues,status,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,
+  ) INSERT INTO ingestion_review_items (source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,known_money_json,
+      issues_json,evidence_state,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,
       source_format,parser_revision,extractor_revision)
-    SELECT printf('40000000-0000-4000-8000-%012d', n), ?, ?, n, 'mapping-unavailable',
-      '{"sourceFormat":"csv"}', NULL, '[]', 'pending', ?, ?, 'CO', 'es-CO',
+    SELECT 'statement',printf('40000000-0000-4000-8000-%012d', n), ?, ?, n, 'mapping-unavailable',
+      '{"sourceFormat":"csv"}', NULL, '[]', 'retained', ?, ?, 'CO', 'es-CO',
       'America/Bogota', 'csv', 'statement-parser-v1', 'statement-mechanical-v1'
     FROM numbered`)
           .bind(userA, submissionId, expiredAt, expiredAt)
@@ -300,13 +299,13 @@ effectIt.effect(
       yield* expireStatementReviewEvidence({ DB: db });
       const pending = yield* fromTestPromise(() =>
         db
-          .prepare(`SELECT count(*) AS count FROM statement_needs_review
+          .prepare(`SELECT count(*) AS count FROM statement_review_context
     WHERE status = 'pending' OR original_evidence IS NOT NULL`)
           .first<{ count: number }>()
       );
       const expired = yield* fromTestPromise(() =>
         db
-          .prepare(`SELECT count(*) AS count FROM statement_needs_review
+          .prepare(`SELECT count(*) AS count FROM statement_review_context
     WHERE status = 'expired'`)
           .first<{ count: number }>()
       );
@@ -696,7 +695,9 @@ effectIt.effect(
       });
       const item = yield* fromTestPromise(() =>
         db
-          .prepare("SELECT reason, original_evidence FROM statement_needs_review WHERE user_id = ?")
+          .prepare(
+            "SELECT reason, original_evidence FROM statement_review_context WHERE user_id = ?"
+          )
           .bind(userA)
           .first<{ reason: string; original_evidence: string }>()
       );
@@ -863,7 +864,7 @@ effectIt.effect(
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS count FROM statement_needs_review WHERE submission_id = ? AND (status='pending' OR original_evidence IS NOT NULL OR known_money IS NOT NULL)"
+              "SELECT count(*) AS count FROM statement_review_context WHERE submission_id = ? AND (status='pending' OR original_evidence IS NOT NULL OR known_money IS NOT NULL)"
             )
             .bind(submissionId)
             .first()
@@ -1625,7 +1626,7 @@ effectIt.effect(
       (SELECT count(*) FROM transactions) AS transactions,
       (SELECT count(*) FROM source_attestations) AS attestations,
       (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
-      (SELECT count(*) FROM statement_needs_review) AS reviews`)
+      (SELECT count(*) FROM statement_review_context) AS reviews`)
           .first()
       );
       expect(counts).toEqual({ transactions: 33, attestations: 33, outcomes: 33, reviews: 0 });
@@ -1701,7 +1702,7 @@ effectIt.effect(
       expect(attested).toEqual({ count: 34 });
       expect(
         yield* fromTestPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM statement_needs_review").first()
+          db.prepare("SELECT count(*) AS count FROM statement_review_context").first()
         )
       ).toEqual({ count: 0 });
     })
@@ -1759,10 +1760,9 @@ effectIt.effect(
         const inserted = yield* Effect.exit(
           Effect.tryPromise(() =>
             db
-              .prepare(`INSERT INTO statement_needs_review
-        (id,user_id,submission_id,record_number,reason,original_evidence,known_money,issues,status,
-        evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,review_suggestions_json)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`)
+              .prepare(`INSERT INTO ingestion_review_items (source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,known_money_json,issues_json,evidence_state,
+        evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,suggestions_json)
+        VALUES ('statement',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`)
               .bind(
                 "10000000-0000-4000-8000-000000000701",
                 userA,
@@ -1772,7 +1772,7 @@ effectIt.effect(
                 evidence,
                 null,
                 issues,
-                "pending",
+                "retained",
                 context.expiresAt,
                 context.createdAt,
                 context.serviceMarket,
@@ -1846,7 +1846,7 @@ effectIt.effect("fails an already-processing oversized review row without undoin
       (SELECT count(*) FROM transactions) AS transactions,
       (SELECT count(*) FROM source_attestations) AS attestations,
       (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
-      (SELECT count(*) FROM statement_needs_review) AS reviews`)
+      (SELECT count(*) FROM statement_review_context) AS reviews`)
           .first()
       )
     ).toEqual({ transactions: 33, attestations: 33, outcomes: 33, reviews: 0 });
@@ -1892,7 +1892,7 @@ effectIt.effect(
       (SELECT count(*) FROM transactions WHERE counterparty='Cafe') AS transactions,
       (SELECT count(*) FROM source_attestations) AS attestations,
       (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
-      (SELECT count(*) FROM statement_needs_review) AS reviews`)
+      (SELECT count(*) FROM statement_review_context) AS reviews`)
             .first()
         )
       ).toEqual({ transactions: 0, attestations: 0, outcomes: 0, reviews: 0 });
@@ -1948,7 +1948,7 @@ effectIt.effect("releases an unspent reservation when the first review row excee
       (SELECT count(*) FROM transactions) AS transactions,
       (SELECT count(*) FROM source_attestations) AS attestations,
       (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
-      (SELECT count(*) FROM statement_needs_review) AS reviews`)
+      (SELECT count(*) FROM statement_review_context) AS reviews`)
           .first()
       )
     ).toEqual({ transactions: 0, attestations: 0, outcomes: 0, reviews: 0 });
@@ -2687,7 +2687,7 @@ effectIt.effect(
       (SELECT count(*) FROM transactions) AS captures,
       (SELECT count(*) FROM source_attestations) AS attestations,
       (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
-      (SELECT count(*) FROM statement_needs_review) AS reviews,
+      (SELECT count(*) FROM statement_review_context) AS reviews,
       (SELECT count(*) FROM statement_materializations) AS manifests,
       (SELECT count(*) FROM statement_materialization_parts) AS parts,
       (SELECT count(*) FROM (SELECT rowid,id AS submission_id,user_id AS user_id,1 AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_published_at_ms IS NOT NULL) AS statement_ingestion_outbox) AS outbox,
@@ -2857,10 +2857,9 @@ it(
         const { db } = yield* fromTestPromise(() => setup("unmapped\nrow\n", "csv"));
         const insert = (reviewId: string, record: number): D1PreparedStatement =>
           db
-            .prepare(`INSERT INTO statement_needs_review
-      (id,user_id,submission_id,record_number,reason,original_evidence,known_money,issues,status,
+            .prepare(`INSERT INTO ingestion_review_items (source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,known_money_json,issues_json,evidence_state,
        evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision)
-      VALUES (?, ?, ?, ?, 'mapping-unavailable', '{}', NULL, '[]', 'pending', 9999999999999, 0,
+      VALUES ('statement',?, ?, ?, ?, 'mapping-unavailable', '{}', NULL, '[]', 'retained', 9999999999999, 0,
         'CO', 'es-CO', 'America/Bogota', 'csv', 'fixture', 'fixture')`)
             .bind(reviewId, userA, submissionId, record);
         yield* fromTestPromise(() => insert("template", 1).run());
@@ -2873,10 +2872,10 @@ it(
         yield* fromTestPromise(() =>
           db
             .prepare(`WITH RECURSIVE n(i) AS (SELECT 2 UNION ALL SELECT i + 1 FROM n WHERE i < 5000)
-      INSERT INTO statement_needs_review SELECT 'capacity-' || i, user_id, submission_id, i, reason,
-        original_evidence, known_money, issues, status, evidence_expires_at_ms, created_at_ms,
+      INSERT INTO ingestion_review_items (source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,known_money_json,issues_json,evidence_state,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,suggestions_json) SELECT 'statement','capacity-' || i, user_id, statement_submission_id, i, reason,
+        original_evidence, known_money_json, issues_json, evidence_state, evidence_expires_at_ms, created_at_ms,
         service_market, locale, time_zone, source_format, parser_revision, extractor_revision, NULL
-      FROM statement_needs_review, n WHERE id = 'template'`)
+      FROM ingestion_review_items, n WHERE id = 'template'`)
             .run()
         );
         expect(yield* fromTestPromise(count)).toBe(5000);
@@ -2885,12 +2884,12 @@ it(
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "UPDATE statement_needs_review SET status = 'expired', original_evidence = NULL, known_money = NULL WHERE id = 'template'"
+              "UPDATE ingestion_review_items SET evidence_state = 'expired', original_evidence = NULL, known_money_json = NULL WHERE id = 'template'"
             )
             .run()
         );
         expect(yield* fromTestPromise(count)).toBe(4999);
-        yield* fromTestPromise(() => db.prepare("DELETE FROM statement_needs_review").run());
+        yield* fromTestPromise(() => db.prepare("DELETE FROM ingestion_review_items").run());
         expect(yield* fromTestPromise(count)).toBe(0);
         yield* fromTestPromise(() =>
           expect(db.batch([insert("rollback", 5002), insert("rollback", 5003)])).rejects.toThrow()

@@ -75,7 +75,7 @@ const snapshotSql = `SELECT json_object(
     'original_evidence',original_evidence,'known_money',known_money,'issues',issues,'status',status,
     'evidence_expires_at_ms',evidence_expires_at_ms,'created_at_ms',created_at_ms,'service_market',service_market,
     'locale',locale,'time_zone',time_zone,'source_format',source_format,'parser_revision',parser_revision,
-    'extractor_revision',extractor_revision)) FROM (SELECT * FROM statement_needs_review
+    'extractor_revision',extractor_revision)) FROM (SELECT * FROM statement_review_context
       WHERE submission_id=s.id AND user_id=s.user_id ORDER BY id LIMIT 5001)),
   'decisions', (SELECT json_group_array(json_object('review_id',review_id,'decision',decision,
     'transaction_id',transaction_id,'decided_at_ms',decided_at_ms)) FROM (SELECT * FROM ingestion_statement_review_decisions

@@ -1412,7 +1412,7 @@ it.each([false, true])(
         const offered: Array<unknown> = [];
         const database: D1Database = {
           prepare: (query) => {
-            if (failReviewExpiry && query.includes("UPDATE statement_needs_review")) {
+            if (failReviewExpiry && query.includes("UPDATE ingestion_review_items")) {
               throw new Error("private sweep failure");
             }
             return runtime.db.prepare(query);
@@ -1684,7 +1684,7 @@ const clarifyStatement = (
       const rows = yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "SELECT id FROM statement_needs_review WHERE submission_id = ? ORDER BY record_number"
+            "SELECT id FROM statement_review_context WHERE submission_id = ? ORDER BY record_number"
           )
           .bind(submission.id)
           .all()
@@ -2445,7 +2445,7 @@ it("clarifies a mixed statement through canonical capture and erases evidence wi
       const retained = yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "SELECT status, original_evidence, known_money FROM statement_needs_review WHERE id = ?"
+            "SELECT status, original_evidence, known_money FROM statement_review_context WHERE id = ?"
           )
           .bind(id)
           .first()
@@ -2559,7 +2559,9 @@ it("explicit abandonment is permanent and retains captured Transactions", () =>
       expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
       const retained = yield* fromTestPromise(() =>
         runtime.db
-          .prepare("SELECT original_evidence, known_money FROM statement_needs_review WHERE id = ?")
+          .prepare(
+            "SELECT original_evidence, known_money FROM statement_review_context WHERE id = ?"
+          )
           .bind(id)
           .first()
       );
@@ -2637,7 +2639,7 @@ it("shows committed review rows only to their User through the canonical read", 
         yield* fromTestPromise(() =>
           runtime.db
             .prepare(
-              "SELECT count(*) AS count FROM statement_needs_review WHERE user_id=? AND status='pending' AND original_evidence IS NOT NULL"
+              "SELECT count(*) AS count FROM statement_review_context WHERE user_id=? AND status='pending' AND original_evidence IS NOT NULL"
             )
             .bind(userA)
             .first()
@@ -2646,14 +2648,13 @@ it("shows committed review rows only to their User through the canonical read", 
       const overdueDeadline = (yield* Clock.currentTimeMillis) - 1_000;
       yield* fromTestPromise(() =>
         runtime.db
-          .prepare(`INSERT INTO statement_needs_review
-          (id,user_id,submission_id,record_number,reason,original_evidence,known_money,issues,
-           status,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,
+          .prepare(`INSERT INTO ingestion_review_items (source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,known_money_json,issues_json,
+           evidence_state,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,
            source_format,parser_revision,extractor_revision)
-          SELECT ?,user_id,submission_id,999,reason,original_evidence,known_money,issues,
-           'pending',?,created_at_ms,service_market,locale,time_zone,
+          SELECT 'statement',?,user_id,statement_submission_id,999,reason,original_evidence,known_money_json,issues_json,
+           'retained',?,created_at_ms,service_market,locale,time_zone,
            source_format,parser_revision,extractor_revision
-          FROM statement_needs_review WHERE id = ?`)
+          FROM ingestion_review_items WHERE id = ?`)
           .bind("40000000-0000-4000-8000-000000000699", overdueDeadline, ownBody.data[0]?.id)
           .run()
       );
@@ -2668,7 +2669,9 @@ it("shows committed review rows only to their User through the canonical read", 
       expect(overdueItem?.originalEvidence).toBeUndefined();
       const stillRaw = yield* fromTestPromise(() =>
         runtime.db
-          .prepare("SELECT original_evidence FROM statement_needs_review WHERE record_number = 999")
+          .prepare(
+            "SELECT original_evidence FROM statement_review_context WHERE record_number = 999"
+          )
           .first<{ original_evidence: string }>()
       );
       expect(stillRaw?.original_evidence).not.toBeNull();
@@ -4822,7 +4825,7 @@ const reviewRetentionRows = (db: D1Database): Effect.Effect<ReadonlyArray<unknow
   fromTestPromise(() =>
     db
       .prepare(
-        "SELECT r.user_id,sum(n.draft_json IS NOT NULL) AS drafts,sum(r.review_suggestions_json IS NOT NULL) AS suggestions FROM statement_needs_review r JOIN ingestion_review_state n ON n.id=r.id AND n.user_id=r.user_id GROUP BY r.user_id ORDER BY r.user_id"
+        "SELECT r.user_id,sum(n.draft_json IS NOT NULL) AS drafts,sum(r.review_suggestions_json IS NOT NULL) AS suggestions FROM statement_review_context r JOIN ingestion_review_workspace_state n ON n.id=r.id AND n.user_id=r.user_id GROUP BY r.user_id ORDER BY r.user_id"
       )
       .all()
   ).pipe(Effect.map((result) => result.results));

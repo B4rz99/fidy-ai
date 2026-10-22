@@ -705,9 +705,8 @@ describe("Cloudflare statement byte staging", () => {
               )
               .bind(submissionId, userA, startedAtEpochMs + 600000),
             runtime.database
-              .prepare(`INSERT INTO statement_needs_review
-        (id,user_id,submission_id,record_number,reason,original_evidence,issues,status,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision)
-        VALUES (?, ?, ?, 1, 'missing-required-fact', 'private-evidence', '[]', 'pending', ?, ?, 'CO', 'es-CO', 'America/Bogota', 'csv', 'v1', 'v1')`)
+              .prepare(`INSERT INTO ingestion_review_items (source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,issues_json,evidence_state,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision)
+        VALUES ('statement',?, ?, ?, 1, 'missing-required-fact', 'private-evidence', '[]', 'retained', ?, ?, 'CO', 'es-CO', 'America/Bogota', 'csv', 'v1', 'v1')`)
               .bind(reviewId, userA, submissionId, startedAtEpochMs + 600000, startedAtEpochMs),
           ])
         );
@@ -767,7 +766,7 @@ describe("Cloudflare statement byte staging", () => {
         expect(
           yield* fromTestPromise(() =>
             runtime.database
-              .prepare("SELECT original_evidence FROM statement_needs_review WHERE id = ?")
+              .prepare("SELECT original_evidence FROM statement_review_context WHERE id = ?")
               .bind(reviewId)
               .first("original_evidence")
           )

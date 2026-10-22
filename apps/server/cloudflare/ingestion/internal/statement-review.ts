@@ -184,11 +184,11 @@ const loadEmailItems = (
     const rows = yield* Effect.tryPromise({
       try: () =>
         database
-          .prepare(`SELECT e.review_id AS id,e.id AS receipt_id,e.review_reason AS reason,
-    e.review_created_at_ms AS created_at_ms,e.review_evidence_expires_at_ms AS evidence_expires_at_ms,e.time_zone
-    FROM forwarded_email_receipts e WHERE e.user_id=? AND e.review_id IS NOT NULL
-    AND NOT EXISTS(SELECT 1 FROM ingestion_review_workspace_state n WHERE n.id=e.review_id AND n.user_id=e.user_id AND n.status!='pending')
-    ORDER BY e.review_created_at_ms DESC,e.review_id DESC LIMIT ?`)
+          .prepare(`SELECT e.id,e.email_receipt_id AS receipt_id,e.reason,
+    e.created_at_ms,e.evidence_expires_at_ms,e.time_zone
+    FROM ingestion_review_items e WHERE e.user_id=? AND e.source_kind='email'
+    AND NOT EXISTS(SELECT 1 FROM ingestion_review_workspace_state n WHERE n.id=e.id AND n.user_id=e.user_id AND n.status!='pending')
+    ORDER BY e.created_at_ms DESC,e.id DESC LIMIT ?`)
           .bind(userId, maximumOffset + pageSize)
           .all(),
       catch: () => new ReviewReadUnavailable(),

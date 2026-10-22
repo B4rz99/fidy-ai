@@ -260,7 +260,6 @@ const decisionStatements = ({
   const resolving = Option.isSome(decision.extraction);
   return [
     writeReviewState({
-      source: "statement",
       db: work.db,
       userId: work.userId,
       id: decision.id,

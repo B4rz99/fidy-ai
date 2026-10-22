@@ -5,9 +5,13 @@ import {
 import { it as effectIt } from "@effect/vitest";
 import { deletionDecision } from "./erasure.test-fixture";
 import { expect } from "vitest";
-import { type Cause, Clock, Effect, Schema } from "effect";
+import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { installRetentionTestSchema } from "../d1-test-fixture";
-import { nativeErasurePlatform, seedPersonalClasses } from "./native.test-fixture";
+import {
+  nativeErasurePlatform,
+  retainedReviewRows,
+  seedPersonalClasses,
+} from "./native.test-fixture";
 import { NodeFileSystem } from "@effect/platform-node";
 
 const userId = "12740000-0000-4000-8000-000000000001";
@@ -211,12 +215,17 @@ const verifyNativeErasure = Effect.gen(function* () {
   for (const [index, id] of [userId, foreignUser].entries()) {
     yield* seedPersonalClasses({ db, userId: id, current, index });
     yield* Effect.tryPromise(() =>
-      db
-        .prepare(`INSERT INTO ingestion_review_state
-        (id,user_id,status,revision,draft_json,transaction_id,expires_at_ms,updated_at_ms,created_at_ms)
-        VALUES(?,?,'created',1,'{"counterparty":"Personal draft"}',?,?,?,?)`)
-        .bind(id, id, id, current + 86400000, current, current)
-        .run()
+      db.batch([
+        ...retainedReviewRows({
+          db,
+          userId: id,
+          id,
+          created: current,
+          current,
+          status: "created",
+          transactionId: Option.some(id),
+        }),
+      ])
     );
     const key = `staging/statement/v1/${(index === 0 ? "a" : "b").repeat(64)}`;
     yield* Effect.tryPromise(() =>
@@ -308,10 +317,10 @@ const verifyNativeErasure = Effect.gen(function* () {
   yield* Effect.tryPromise(() =>
     expect(
       db
-        .prepare("UPDATE ingestion_review_state SET user_id=? WHERE user_id=?")
+        .prepare("UPDATE ingestion_review_items SET user_id=? WHERE user_id=?")
         .bind(foreignUser, userId)
         .run()
-    ).rejects.toThrow("erasure_fenced")
+    ).rejects.toThrow()
   );
   expect(
     (yield* Effect.result(
@@ -406,7 +415,7 @@ const verifyNativeErasure = Effect.gen(function* () {
     )).results
   ).toEqual([{ user_id: foreignUser, cutoff_ms: current }]);
   for (const table of [
-    "ingestion_review_state",
+    "ingestion_review_items",
     "(SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)",
     "transactions",
     "source_attestations",

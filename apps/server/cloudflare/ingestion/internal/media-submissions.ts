@@ -86,7 +86,7 @@ const snapshot = ({
     db,
     userId,
     statement: {
-      sql: `INSERT INTO media_submissions (id,user_id,portfolio_id,bsuid,message_id,input_digest,media_id,caption,accepted_at_ms,expires_at_ms,service_market,locale,time_zone,review_reason,review_created_at_ms) SELECT ?,userId,?,?,?,?,?,NULLIF(?,''),?,?,serviceMarket,locale,timeZone,'extraction-unavailable',? FROM identity_user_context WHERE userId = ? AND EXISTS (${authority.sql})`,
+      sql: `INSERT INTO media_submissions (id,user_id,portfolio_id,bsuid,message_id,input_digest,media_id,caption,accepted_at_ms,expires_at_ms,service_market,locale,time_zone) SELECT ?,userId,?,?,?,?,?,NULLIF(?,''),?,?,serviceMarket,locale,timeZone FROM identity_user_context WHERE userId = ? AND EXISTS (${authority.sql})`,
       params: [
         id,
         event.caller.businessPortfolioId,
@@ -97,7 +97,6 @@ const snapshot = ({
         caption,
         current,
         current + mediaEvidenceLifetimeMs,
-        current,
         userId,
         ...authority.params,
       ],
@@ -132,6 +131,10 @@ const publication = ({
       authority,
     }),
     snapshot({ input, id, current, mediaId, caption, inputDigest }),
+    db
+      .prepare(`INSERT INTO ingestion_review_items(id,user_id,source_kind,media_submission_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone)
+      SELECT id,user_id,'media',id,'extraction-unavailable',accepted_at_ms,expires_at_ms,service_market,locale,time_zone FROM media_submissions WHERE id=? AND user_id=?`)
+      .bind(id, userId),
     preparePredicateAssertion({
       db,
       scope: "media_publication",

@@ -1,5 +1,5 @@
 import { coordinatorTestDatabase } from "../d1-test-fixture";
-import { Effect, FileSystem, type Scope } from "effect";
+import { Effect, FileSystem, Option, type Scope } from "effect";
 import { Miniflare } from "miniflare";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 
@@ -333,4 +333,55 @@ const renewalAndPlanRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatem
       "INSERT INTO consent_history (record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,occurred_at_ms) VALUES ('processing_renewal',?,?,?,?,?,'{}',?)"
     )
     .bind(input.userId, input.userId, input.userId, input.userId, input.userId, input.current + 1),
+];
+
+const mediaRetentionMilliseconds = 2592000000;
+const hexadecimalDigestLength = 64;
+
+/** Seed an actual owned media source and its independently retained review workspace. */
+export const retainedReviewRows = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    id: string;
+    created: number;
+    current: number;
+    status: "pending" | "created";
+    transactionId: Option.Option<string>;
+  }>
+): ReadonlyArray<D1PreparedStatement> => [
+  input.db
+    .prepare(
+      `INSERT INTO media_submissions(id,user_id,portfolio_id,bsuid,message_id,input_digest,accepted_at_ms,expires_at_ms,service_market,locale,time_zone,capacity_held) VALUES(?,?,'fixture','CO.fixture',?,?,?,?,'CO','es-CO','America/Bogota',0)`
+    )
+    .bind(
+      input.id,
+      input.userId,
+      input.id,
+      "a".repeat(hexadecimalDigestLength),
+      input.created,
+      input.created + mediaRetentionMilliseconds
+    ),
+  input.db
+    .prepare(
+      `INSERT INTO ingestion_review_items(id,user_id,source_kind,media_submission_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone) VALUES(?,?,'media',?,'extraction-unavailable',?,?,'CO','es-CO','America/Bogota')`
+    )
+    .bind(
+      input.id,
+      input.userId,
+      input.id,
+      input.created,
+      input.created + mediaRetentionMilliseconds
+    ),
+  input.db
+    .prepare(
+      `UPDATE ingestion_review_items SET workspace_state=?,workspace_revision=1,draft_json='{"counterparty":"Personal draft"}',transaction_id=?,workspace_updated_at_ms=?,workspace_archive_row_ref='review:'||id WHERE id=? AND user_id=?`
+    )
+    .bind(
+      input.status,
+      Option.getOrNull(input.transactionId),
+      input.current,
+      input.id,
+      input.userId
+    ),
 ];

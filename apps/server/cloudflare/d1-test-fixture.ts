@@ -133,6 +133,7 @@ export const installForwardingTestSchema = ({
     tables: [
       "forwarding_addresses",
       "forwarded_email_receipts",
+      "ingestion_review_items",
       "canonical_child_guard",
       "commercial_allowance_consumptions",
       "canonical_request_replays",

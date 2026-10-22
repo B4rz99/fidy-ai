@@ -4,6 +4,31 @@ const storingInterruptionMs = 900000;
 
 export const projections: ReadonlyArray<ErasureProjection> = [
   {
+    id: "ingestion_review_items",
+    dataClass: "ingestion",
+    dependencies: ["ingestion_review_state"],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.id,'user_id',r.user_id,'source_kind',r.source_kind,'email_receipt_id',r.email_receipt_id,'media_submission_id',r.media_submission_id,'reason',r.reason,'created_at_ms',r.created_at_ms,'evidence_expires_at_ms',r.evidence_expires_at_ms,'service_market',r.service_market,'locale',r.locale,'time_zone',r.time_zone,'suggestions_json',r.suggestions_json) AS body FROM ingestion_review_items r WHERE r.source_kind<>'statement' AND r.user_id=?",
+      params: [userId],
+    }),
+    candidates: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM ingestion_review_items r WHERE r.source_kind<>'statement' AND r.user_id=?",
+      params: [userId],
+    }),
+    remaining: (userId) => ({
+      sql: "SELECT 1 FROM ingestion_review_items r WHERE r.source_kind<>'statement' AND r.user_id=?",
+      params: [userId],
+    }),
+    remove: (scope) => [
+      {
+        sql: "DELETE FROM ingestion_review_items AS r WHERE r.source_kind<>'statement' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        params: [scope.userId, scope.reference],
+      },
+    ],
+  },
+
+  {
     id: "ingestion_review_state",
     dataClass: "ingestion",
     dependencies: [],
@@ -23,10 +48,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     remove: (scope) => [
       {
         sql: "UPDATE ingestion_review_items AS r SET workspace_state=NULL,workspace_revision=NULL,draft_json=NULL,transaction_id=NULL,workspace_updated_at_ms=NULL,workspace_archive_row_ref=NULL WHERE r.user_id=? AND r.workspace_archive_row_ref IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-      {
-        sql: "DELETE FROM ingestion_review_state AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -58,7 +79,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
   {
     id: "forwarded_email_receipts",
     dataClass: "ingestion",
-    dependencies: ["source_attestations"],
+    dependencies: ["source_attestations", "ingestion_review_items"],
     quiescence: {
       _tag: "Durable",
       select: ({ current, userId }) => ({
@@ -67,7 +88,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       }),
     },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'object_key',r.\"object_key\",'byte_length',r.\"byte_length\",'state',r.\"state\",'received_at_ms',r.\"received_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'time_zone',r.\"time_zone\",'deferred_checked_at_ms',r.\"deferred_checked_at_ms\",'outcome',r.outcome,'outcome_transaction_id',r.outcome_transaction_id,'outcome_review_id',r.outcome_review_id,'outcome_completed_at_ms',r.outcome_completed_at_ms,'review_id',r.review_id,'review_reason',r.review_reason,'review_created_at_ms',r.review_created_at_ms,'review_evidence_expires_at_ms',r.review_evidence_expires_at_ms,'dispatch_user_id',r.dispatch_user_id,'dispatch_sent_at_ms',r.dispatch_sent_at_ms) AS body FROM forwarded_email_receipts r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'object_key',r.\"object_key\",'byte_length',r.\"byte_length\",'state',r.\"state\",'received_at_ms',r.\"received_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'time_zone',r.\"time_zone\",'deferred_checked_at_ms',r.\"deferred_checked_at_ms\",'outcome',r.outcome,'outcome_transaction_id',r.outcome_transaction_id,'outcome_review_id',r.outcome_review_id,'outcome_completed_at_ms',r.outcome_completed_at_ms,'review_id',(SELECT id FROM ingestion_review_items i WHERE i.source_kind='email' AND i.user_id=r.user_id AND i.email_receipt_id=r.id),'review_reason',(SELECT reason FROM ingestion_review_items i WHERE i.source_kind='email' AND i.user_id=r.user_id AND i.email_receipt_id=r.id),'review_created_at_ms',(SELECT created_at_ms FROM ingestion_review_items i WHERE i.source_kind='email' AND i.user_id=r.user_id AND i.email_receipt_id=r.id),'review_evidence_expires_at_ms',(SELECT evidence_expires_at_ms FROM ingestion_review_items i WHERE i.source_kind='email' AND i.user_id=r.user_id AND i.email_receipt_id=r.id),'dispatch_user_id',CASE WHEN r.dispatch_pending=1 THEN r.user_id END,'dispatch_sent_at_ms',r.dispatch_sent_at_ms) AS body FROM forwarded_email_receipts r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -88,10 +109,10 @@ export const projections: ReadonlyArray<ErasureProjection> = [
   {
     id: "media_submissions",
     dataClass: "ingestion",
-    dependencies: ["media_submission_audit"],
+    dependencies: ["media_submission_audit", "ingestion_review_items"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'message_id',r.\"message_id\",'media_id',r.\"media_id\",'caption',r.\"caption\",'accepted_at_ms',r.\"accepted_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'review_reason',r.\"review_reason\",'review_created_at_ms',r.\"review_created_at_ms\") AS body FROM media_submissions r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'message_id',r.\"message_id\",'media_id',r.\"media_id\",'caption',r.\"caption\",'accepted_at_ms',r.\"accepted_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'review_reason',(SELECT reason FROM ingestion_review_items i WHERE i.source_kind='media' AND i.user_id=r.user_id AND i.media_submission_id=r.id),'review_created_at_ms',(SELECT created_at_ms FROM ingestion_review_items i WHERE i.source_kind='media' AND i.user_id=r.user_id AND i.media_submission_id=r.id)) AS body FROM media_submissions r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({

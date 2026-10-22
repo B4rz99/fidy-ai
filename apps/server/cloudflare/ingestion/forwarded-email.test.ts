@@ -63,7 +63,7 @@ it.live("still offers another User's current email when expired-byte deletion fa
     yield* wait(() =>
       db
         .prepare(
-          "UPDATE forwarded_email_receipts AS forwarded_email_outbox SET dispatch_sent_at_ms = NULL WHERE dispatch_user_id IS NOT NULL "
+          "UPDATE forwarded_email_receipts AS forwarded_email_outbox SET dispatch_sent_at_ms = NULL WHERE dispatch_pending=1 "
         )
         .run()
     );
@@ -184,7 +184,7 @@ const setup = Effect.fn(function* () {
     INSERT INTO categories (id) VALUES ('10000000-0000-4000-8000-000000000016');
     CREATE TABLE transactions (id TEXT PRIMARY KEY, user_id TEXT, amount TEXT, currency TEXT, direction TEXT, counterparty TEXT, category_id TEXT, notes TEXT, occurred_at TEXT, created_at TEXT, UNIQUE(user_id, id));
     CREATE TABLE source_attestations (id TEXT PRIMARY KEY, user_id TEXT, transaction_id TEXT, kind TEXT, service_market TEXT, locale TEXT, time_zone TEXT, interpretation_revision TEXT, created_at TEXT, statement_submission_id TEXT, statement_record_number INTEGER, statement_content_hash TEXT, source_format TEXT,received_email_id TEXT,message_content_sha256 TEXT,message_evidence TEXT,deterministic_interpretation TEXT,extractor_revision TEXT);
-    CREATE TABLE statement_submissions (id TEXT PRIMARY KEY,user_id TEXT,clarification_state TEXT,clarification_expires_at_ms INTEGER,clarification_ended_at_ms INTEGER);
+    CREATE TABLE statement_submissions (id TEXT PRIMARY KEY,user_id TEXT,clarification_state TEXT,clarification_expires_at_ms INTEGER,clarification_ended_at_ms INTEGER,UNIQUE(user_id,id));
     CREATE TABLE consent_user_context (user_id TEXT PRIMARY KEY, time_zone TEXT);
     CREATE VIEW subscription_standing AS SELECT rowid,id AS user_id,paid_attempt_id AS attempt_id,paid_period_ends_at_ms FROM users WHERE paid_attempt_id IS NOT NULL;
     CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER);
@@ -194,11 +194,8 @@ const setup = Effect.fn(function* () {
 
  CREATE TABLE refund_attempts(id TEXT,billing_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT);
     CREATE TABLE statement_clarification_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
-
-    CREATE TABLE statement_review_decisions (review_id TEXT PRIMARY KEY, submission_id TEXT, user_id TEXT, decision TEXT, transaction_id TEXT, decided_at_ms INTEGER);
     ALTER TABLE transactions ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;
-    CREATE TABLE statement_review_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE ingestion_review_items(id TEXT, user_id TEXT, source_kind TEXT, email_receipt_id TEXT, media_submission_id TEXT, statement_submission_id TEXT,record_number INTEGER,reason TEXT,original_evidence TEXT,known_money_json TEXT,issues_json TEXT,evidence_state TEXT,created_at_ms INTEGER,service_market TEXT,locale TEXT,time_zone TEXT,source_format TEXT,parser_revision TEXT,extractor_revision TEXT,evidence_expires_at_ms INTEGER,suggestions_json TEXT,workspace_state TEXT,workspace_revision INTEGER,draft_json TEXT,transaction_id TEXT,workspace_updated_at_ms INTEGER,workspace_archive_row_ref TEXT);`)
+    CREATE TABLE statement_review_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);`)
   );
   for (const action of ["UPDATE", "DELETE"]) {
     yield* wait(() =>
@@ -221,7 +218,8 @@ const setup = Effect.fn(function* () {
       db,
       tables: [
         "media_submissions",
-        "ingestion_review_state",
+        "ingestion_review_items",
+        "statement_review_capacity",
         "ingestion_review_workspace_state",
         "statement_review_context",
         "ingestion_statement_review_decisions",
@@ -407,7 +405,7 @@ it.effect(
         yield* wait(() =>
           db
             .prepare(
-              "SELECT count(*) AS total FROM (SELECT rowid,id AS receipt_id,dispatch_user_id AS user_id,dispatch_sent_at_ms AS sent_at_ms FROM forwarded_email_receipts WHERE dispatch_user_id IS NOT NULL) AS forwarded_email_outbox"
+              "SELECT count(*) AS total FROM (SELECT rowid,id AS receipt_id,user_id,dispatch_sent_at_ms AS sent_at_ms FROM forwarded_email_receipts WHERE dispatch_pending=1) AS forwarded_email_outbox"
             )
             .first()
         )
@@ -696,7 +694,7 @@ it.each([
           (yield* wait(() =>
             db
               .prepare(
-                "SELECT user_id,review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL"
+                "SELECT user_id,reason AS reason FROM ingestion_review_items WHERE source_kind='email'"
               )
               .all()
           )).results
@@ -734,7 +732,7 @@ it("keeps uncertain mail in visible review rather than creating a Transaction", 
       const review = yield* wait(() =>
         db
           .prepare(
-            "SELECT review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND user_id = ?"
+            "SELECT reason AS reason FROM ingestion_review_items WHERE source_kind='email' AND user_id = ?"
           )
           .bind(userA)
           .all()
@@ -832,7 +830,11 @@ it.effect(
         "originalEvidence"
       );
       yield* wait(() =>
-        db.prepare("UPDATE ingestion_review_items SET original_evidence='malformed'").run()
+        db
+          .prepare(`INSERT INTO ingestion_review_items (id,user_id,source_kind,statement_submission_id,record_number,reason,original_evidence,issues_json,evidence_state,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision)
+          SELECT ?,user_id,'statement',statement_submission_id,99,reason,'malformed',issues_json,'retained',evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision FROM ingestion_review_items LIMIT 1`)
+          .bind("10000000-0000-4000-8000-000000000699")
+          .run()
       );
       const corrupt = yield* listNeedsReviewItems({
         database: db,
@@ -856,7 +858,11 @@ it.effect(
       });
       expect(metadata.status).toBe(200);
       const retained = yield* wait(() => metadata.json());
-      expect(retained).toMatchObject({ data: [{ sourceFormat: "xlsx" }, { sourceFormat: "csv" }] });
+      const formats = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.Array(Schema.Struct({ sourceFormat: Schema.String })) })
+      )(retained);
+      expect(formats.data.map((row) => row.sourceFormat)).toContain("xlsx");
+      expect(formats.data.map((row) => row.sourceFormat)).toContain("csv");
       expect(
         yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(retained)
       ).not.toContain("originalEvidence");
@@ -989,7 +995,7 @@ it.each(["before-processing", "during-processing"] as const)(
         (SELECT count(*) FROM transactions) AS transactions,
         (SELECT count(*) FROM source_attestations) AS attestations,
         (SELECT count(*) FROM anonymized_email_samples) AS samples,
-        (SELECT count(*) FROM forwarded_email_receipts WHERE review_id IS NOT NULL) AS reviews,
+        (SELECT count(*) FROM ingestion_review_items WHERE source_kind='email') AS reviews,
         (SELECT count(*) FROM forwarded_email_receipts WHERE outcome IS NOT NULL) AS outcomes`)
               .first()
           )
@@ -1037,11 +1043,7 @@ it("finishes previously queued email after withdrawal while ordinary access stay
       ).toHaveLength(1);
       expect(
         (yield* wait(() =>
-          db
-            .prepare(
-              "SELECT review_id AS id FROM forwarded_email_receipts WHERE review_id IS NOT NULL"
-            )
-            .all()
+          db.prepare("SELECT id AS id FROM ingestion_review_items WHERE source_kind='email'").all()
         )).results
       ).toHaveLength(1);
       yield* wait(() => emailWorker.scheduled(scheduledController, env));
@@ -1049,7 +1051,7 @@ it("finishes previously queued email after withdrawal while ordinary access stay
       const review = yield* wait(() =>
         db
           .prepare(
-            "SELECT review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND user_id = ?"
+            "SELECT reason AS reason FROM ingestion_review_items WHERE source_kind='email' AND user_id = ?"
           )
           .bind(userA)
           .first<{ reason: string }>()
@@ -1245,7 +1247,7 @@ it("refuses publication when Consent is revoked after reservation and cleans pri
         (yield* wait(() =>
           db
             .prepare(
-              "SELECT receipt_id FROM (SELECT rowid,id AS receipt_id,dispatch_user_id AS user_id,dispatch_sent_at_ms AS sent_at_ms FROM forwarded_email_receipts WHERE dispatch_user_id IS NOT NULL) AS forwarded_email_outbox"
+              "SELECT receipt_id FROM (SELECT rowid,id AS receipt_id,user_id,dispatch_sent_at_ms AS sent_at_ms FROM forwarded_email_receipts WHERE dispatch_pending=1) AS forwarded_email_outbox"
             )
             .all()
         )).results
@@ -1459,7 +1461,7 @@ it("deletes expired private email while keeping a replay tombstone", () =>
       const review = yield* wait(() =>
         db
           .prepare(
-            "SELECT review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND user_id = ?"
+            "SELECT reason AS reason FROM ingestion_review_items WHERE source_kind='email' AND user_id = ?"
           )
           .bind(userA)
           .first<{ reason: string }>()
@@ -1487,7 +1489,7 @@ it("clears near-expiry email before the bounded sweep can exceed its retention d
       const review = yield* wait(() =>
         db
           .prepare(
-            "SELECT review_reason AS reason,review_evidence_expires_at_ms AS evidence_expires_at_ms FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND user_id = ?"
+            "SELECT reason AS reason,evidence_expires_at_ms AS evidence_expires_at_ms FROM ingestion_review_items WHERE source_kind='email' AND user_id = ?"
           )
           .bind(userA)
           .first<{ reason: string; evidence_expires_at_ms: number }>()
@@ -1517,7 +1519,7 @@ it("records interrupted reservations visibly before expiring their private bytes
       const review = yield* wait(() =>
         db
           .prepare(
-            "SELECT review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND id = ?"
+            "SELECT reason AS reason FROM ingestion_review_items WHERE source_kind='email' AND email_receipt_id = ?"
           )
           .bind(id)
           .first<{ reason: string }>()
@@ -1554,7 +1556,7 @@ it("makes an interrupted reservation visible after its bounded write window", ()
       const review = yield* wait(() =>
         db
           .prepare(
-            "SELECT review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND id = ?"
+            "SELECT reason AS reason FROM ingestion_review_items WHERE source_kind='email' AND email_receipt_id = ?"
           )
           .bind(id)
           .first<{ reason: string }>()
@@ -1629,7 +1631,7 @@ it("keeps retention failure visible and retries private deletion without duplica
       const review = yield* wait(() =>
         db
           .prepare(
-            "SELECT review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND user_id = ?"
+            "SELECT reason AS reason FROM ingestion_review_items WHERE source_kind='email' AND user_id = ?"
           )
           .bind(userA)
           .first<{ reason: string }>()
@@ -1640,7 +1642,7 @@ it("keeps retention failure visible and retries private deletion without duplica
       const reviews = yield* wait(() =>
         db
           .prepare(
-            "SELECT review_id AS id FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND user_id = ?"
+            "SELECT id AS id FROM ingestion_review_items WHERE source_kind='email' AND user_id = ?"
           )
           .bind(userA)
           .all()

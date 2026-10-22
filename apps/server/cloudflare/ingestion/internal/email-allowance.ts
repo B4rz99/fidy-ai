@@ -49,8 +49,8 @@ export const prepareEmailProcessingAdmission = ({
       .bind(...accepted.params, current, receiptId, userId, state),
     db
       .prepare(
-        `UPDATE forwarded_email_receipts SET dispatch_user_id=user_id
-        WHERE id=? AND user_id=? AND state='queued' AND dispatch_user_id IS NULL AND EXISTS (${accepted.sql})`
+        `UPDATE forwarded_email_receipts SET dispatch_pending=1
+        WHERE id=? AND user_id=? AND state='queued' AND dispatch_pending=0 AND EXISTS (${accepted.sql})`
       )
       .bind(receiptId, userId, ...accepted.params),
   ];

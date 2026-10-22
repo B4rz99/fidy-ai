@@ -2706,3 +2706,92 @@ THEN 1 ELSE 0 END;
 ```
 
 <!-- statement-review-verify:end -->
+
+## Email and media review ownership (#1459)
+
+Checkpoint: `1bfb570bd`, after #1458. Quiesce all ingestion, review, retention and erasure
+execution during this atomic conversion. All sources use `ingestion_review_items`; the old
+workspace table and six source-only review fields are removed. Email dispatch keeps the same
+presence/sent distinction with `dispatch_pending`, removing its duplicated User key. The shared
+workspace owner now writes one table without source-specific branches.
+
+In one native D1 batch: enable deferred foreign keys; run preflight; drop explicit triggers and
+views, retaining existing indexes during copying; create a `forwarded_email_receipts_1459`
+shadow using the current receipt table definition with that table name; copy and compare;
+drop all old explicit indexes; run the swap; recreate all current explicit indexes, views and
+triggers; run final verification. Never disable foreign keys. Receipts have only NO ACTION
+incoming source references; retain their exact rowids and every source-attestation reference.
+Media stays in place because its admission Audit has a cascade relationship. Existing statement
+review rows and all archive bodies remain in place. Any error rolls the entire native batch back.
+
+Preflight rejects orphan or ambiguous historical overlays, altered original deadlines/creation
+instants and inconsistent outcome links. Do not invent missing source ownership. Original workspace
+archive references remain independent of newly allocated email/media source rowids. Metadata-only
+email replay tombstones keep their original deadlines; media still releases capacity once, clears
+private material at thirty days and removes accountability at one year. Workspace draft/history
+expiry remains independent of original evidence expiry. Anonymized samples retain their own owner.
+
+<!-- email-media-review-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email-media-review-preflight',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+AND NOT EXISTS(SELECT 1 FROM ingestion_review_state w WHERE
+ (SELECT count(*) FROM forwarded_email_receipts e WHERE e.user_id=w.user_id AND e.review_id=w.id AND e.review_created_at_ms=w.created_at_ms AND e.review_evidence_expires_at_ms=w.expires_at_ms)
+ +(SELECT count(*) FROM media_submissions m WHERE m.user_id=w.user_id AND m.id=w.id AND m.review_reason IS NOT NULL AND m.review_created_at_ms=w.created_at_ms AND m.expires_at_ms=w.expires_at_ms)<>1)
+AND NOT EXISTS(SELECT 1 FROM forwarded_email_receipts e JOIN media_submissions m ON m.user_id=e.user_id AND m.id=e.review_id WHERE m.review_reason IS NOT NULL)
+AND NOT EXISTS(SELECT 1 FROM forwarded_email_receipts e WHERE e.outcome='needs-review' AND e.outcome_review_id IS NOT e.review_id)
+THEN 1 ELSE 0 END;
+```
+
+<!-- email-media-review-preflight:end -->
+
+<!-- email-media-review-copy:start -->
+
+```sql
+INSERT INTO forwarded_email_receipts_1459(rowid,id,user_id,delivery_digest,object_key,byte_length,state,received_at_ms,expires_at_ms,time_zone,deferred_checked_at_ms,outcome,outcome_transaction_id,outcome_review_id,outcome_completed_at_ms,dispatch_pending,dispatch_sent_at_ms) SELECT rowid,id,user_id,delivery_digest,object_key,byte_length,state,received_at_ms,expires_at_ms,time_zone,deferred_checked_at_ms,outcome,outcome_transaction_id,outcome_review_id,outcome_completed_at_ms,(dispatch_user_id IS NOT NULL),dispatch_sent_at_ms FROM forwarded_email_receipts;
+INSERT INTO ingestion_review_items(id,user_id,source_kind,email_receipt_id,media_submission_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone,workspace_state,workspace_revision,draft_json,transaction_id,workspace_updated_at_ms,workspace_archive_row_ref)
+SELECT r.*,w.status,w.revision,w.draft_json,w.transaction_id,w.updated_at_ms,CAST(w.rowid AS TEXT)
+FROM (SELECT e.review_id AS id,e.user_id,'email' AS source_kind,e.id AS email_receipt_id,NULL AS media_submission_id,e.review_reason AS reason,e.review_created_at_ms AS created_at_ms,e.review_evidence_expires_at_ms AS evidence_expires_at_ms,'CO' AS service_market,'es-CO' AS locale,e.time_zone FROM forwarded_email_receipts e WHERE e.review_id IS NOT NULL UNION ALL SELECT m.id,m.user_id,'media',NULL,m.id,m.review_reason,m.review_created_at_ms,m.expires_at_ms,m.service_market,m.locale,m.time_zone FROM media_submissions m WHERE m.review_reason IS NOT NULL) r LEFT JOIN ingestion_review_state w ON w.user_id=r.user_id AND w.id=r.id;
+```
+
+<!-- email-media-review-copy:end -->
+
+<!-- email-media-review-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email-media-review-copy',CASE WHEN
+NOT EXISTS(SELECT rowid,id,user_id,delivery_digest,object_key,byte_length,state,received_at_ms,expires_at_ms,time_zone,deferred_checked_at_ms,outcome,outcome_transaction_id,outcome_review_id,outcome_completed_at_ms,(dispatch_user_id IS NOT NULL),dispatch_sent_at_ms FROM forwarded_email_receipts EXCEPT SELECT rowid,id,user_id,delivery_digest,object_key,byte_length,state,received_at_ms,expires_at_ms,time_zone,deferred_checked_at_ms,outcome,outcome_transaction_id,outcome_review_id,outcome_completed_at_ms,dispatch_pending,dispatch_sent_at_ms FROM forwarded_email_receipts_1459)
+AND (SELECT count(*) FROM forwarded_email_receipts)=(SELECT count(*) FROM forwarded_email_receipts_1459)
+AND NOT EXISTS(SELECT e.review_id,e.user_id,'email',e.id,NULL,e.review_reason,e.review_created_at_ms,e.review_evidence_expires_at_ms,'CO','es-CO',e.time_zone FROM forwarded_email_receipts e WHERE e.review_id IS NOT NULL UNION ALL SELECT m.id,m.user_id,'media',NULL,m.id,m.review_reason,m.review_created_at_ms,m.expires_at_ms,m.service_market,m.locale,m.time_zone FROM media_submissions m WHERE m.review_reason IS NOT NULL EXCEPT SELECT id,user_id,source_kind,email_receipt_id,media_submission_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone FROM ingestion_review_items WHERE source_kind<>'statement')
+AND (SELECT count(*) FROM ingestion_review_items WHERE source_kind<>'statement')=(SELECT count(*) FROM (SELECT e.review_id,e.user_id,'email',e.id,NULL,e.review_reason,e.review_created_at_ms,e.review_evidence_expires_at_ms,'CO','es-CO',e.time_zone FROM forwarded_email_receipts e WHERE e.review_id IS NOT NULL UNION ALL SELECT m.id,m.user_id,'media',NULL,m.id,m.review_reason,m.review_created_at_ms,m.expires_at_ms,m.service_market,m.locale,m.time_zone FROM media_submissions m WHERE m.review_reason IS NOT NULL))
+AND NOT EXISTS(SELECT CAST(rowid AS TEXT),id,user_id,status,revision,draft_json,transaction_id,updated_at_ms FROM ingestion_review_state EXCEPT SELECT workspace_archive_row_ref,id,user_id,workspace_state,workspace_revision,draft_json,transaction_id,workspace_updated_at_ms FROM ingestion_review_items WHERE source_kind<>'statement' AND workspace_updated_at_ms IS NOT NULL)
+THEN 1 ELSE 0 END;
+```
+
+<!-- email-media-review-copy-check:end -->
+
+<!-- email-media-review-swap:start -->
+
+```sql
+DROP TABLE forwarded_email_receipts;
+ALTER TABLE forwarded_email_receipts_1459 RENAME TO forwarded_email_receipts;
+DROP TABLE ingestion_review_state;
+ALTER TABLE media_submissions DROP COLUMN review_created_at_ms;
+ALTER TABLE media_submissions DROP COLUMN review_reason;
+```
+
+<!-- email-media-review-swap:end -->
+
+<!-- email-media-review-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email-media-review-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+AND NOT EXISTS(SELECT 1 FROM forwarded_email_receipts e WHERE e.outcome='needs-review' AND NOT EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.source_kind='email' AND r.user_id=e.user_id AND r.email_receipt_id=e.id AND r.id=e.outcome_review_id))
+AND (SELECT pending_count FROM statement_review_capacity WHERE id=1)=(SELECT count(*) FROM ingestion_review_items WHERE source_kind='statement' AND evidence_state='retained')
+THEN 1 ELSE 0 END;
+```
+
+<!-- email-media-review-verify:end -->

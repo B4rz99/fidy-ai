@@ -1,0 +1,41 @@
+apps/server/cloudflare/migrations/0001_schema.sql
+  s_6d017cc65783af::t_ea37d19d1ac549 2448,3275-3278
+apps/server/cloudflare/ingestion/statement-processing.test.ts
+  s_6d017cc65783af::t_ac204658cd5545 2683-2684
+  s_6d017cc65783af::t_018034e8d881b2 2844-2849
+  s_6d017cc65783af::t_3a513d4aabe7eb 2378-2382,2670,2681-2682,2685
+  s_6d017cc65783af::t_7c5d9cf415c8cb 33-35
+  s_6d017cc65783af::t_31986c406597fb 36-37,2354-2355,2358,2686-2689,2838-2839,2842-2843,2863-2864
+docs/operations/backend-local-audit-20261022.md
+  s_6d017cc65783af::t_9b8af594b63d9d 19,55-71
+  s_6d017cc65783af::t_e46599e4d44245 1-18,20-54
+  s_6d017cc65783af::t_d04011c3ecb51f 72-156
+apps/server/cloudflare/maintenance/performance.test.ts
+  s_6d017cc65783af::t_b89510469c0a24 121-127,172-181,184,187-193
+  s_6d017cc65783af::t_9af81d723ef307 159
+apps/server/cloudflare/d1-test-fixture.ts
+  s_6d017cc65783af::t_7c5d9cf415c8cb 146,163,310-312,323
+  s_6d017cc65783af::t_9e99a9c50f8131 506-513,521-524
+apps/server/cloudflare/d1-test-fixture.test.ts
+  s_6d017cc65783af::t_e6367018359b3a 14,16-23,341,417
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_6d017cc65783af::t_b9dcdd3a2a7bab 164-170,214,2361-2404,6801-6802
+apps/server/src/core/ingestion/FEATURE.md
+  s_6d017cc65783af::t_db718306a633a8 33-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b15de92a585bcab8ea06dedb04084253b54feea7",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

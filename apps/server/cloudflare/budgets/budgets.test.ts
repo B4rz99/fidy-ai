@@ -1236,7 +1236,7 @@ const seedCrossingConsent = (
         users.map((user) =>
           db
             .prepare(
-              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,?,'disclosed','accepted',0,0)"
+              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,?,'disclosed','accepted',0,0)"
             )
             .bind(user, user, disclosure)
         )

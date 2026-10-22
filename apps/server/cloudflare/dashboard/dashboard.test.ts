@@ -672,7 +672,7 @@ const queryFault = ({
   return db.batch([
     db
       .prepare(
-        `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+        `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
       )
       .bind(grant, users[0], current, current),
     db
@@ -1237,7 +1237,7 @@ it(
           db.batch([
             db
               .prepare(
-                `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+                `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
               )
               .bind(grant, users[0], current, current),
             db
@@ -2323,7 +2323,7 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(`INSERT INTO consent_history
-          (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
+          (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms)
           VALUES('processing_grant','repair-facts-grant',?,'{}','disclosure','decision',?,?)`)
             .bind(
               factQuery.userId,
@@ -2591,7 +2591,7 @@ const dashboardOAuthSubject = (db: D1Database): Effect.Effect<OAuthCaller, Cause
       db.batch([
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant','dashboard-onboarding', ?, '{}', 'fixture-disclosure', 'fixture-decision', ?, ?)`
+            `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, occurred_at_ms) VALUES ('processing_grant','dashboard-onboarding', ?, '{}', 'fixture-disclosure', 'fixture-decision', ?, ?)`
           )
           .bind(subject.userId, current, current),
         db
@@ -2609,7 +2609,7 @@ const dashboardOAuthSubject = (db: D1Database): Effect.Effect<OAuthCaller, Cause
           ),
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id, connection_id, user_id, session_id, disclosure_revision, disclosure_text, accepted_at_ms) VALUES ('oauth_grant','dashboard-consent', ?, ?, ?, 'fixture', 'fixture', ?)`
+            `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_json,occurred_at_ms) VALUES ('oauth_grant','dashboard-consent',?,?,?,json_object('revision','fixture','text','fixture'),?)`
           )
           .bind(subject.oauthConnectionId, subject.userId, sessions[0], current),
         db

@@ -217,7 +217,7 @@ const existingSourceOffer = (
         channelAction(
           input,
           {
-            sql: "SELECT id,disclosure_json FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') AS weekly_consent_offers WHERE user_id=? AND source_id=? AND portfolio_id=? AND bsuid=? AND expires_at_ms>?",
+            sql: "SELECT id,disclosure_json FROM consent_offers WHERE kind='weekly-summary' AND user_id=? AND source_id=? AND portfolio_id=? AND bsuid=? AND expires_at_ms>?",
             params: [
               input.userId,
               sourceId,
@@ -266,9 +266,9 @@ const createOfferWithAdmission = (
       channelAction(
         input,
         {
-          sql: `INSERT INTO consent_offers (id,user_id,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,source_id,rejection_id)
-      SELECT ?,?,?,?,?,?,?,NULLIF(?,''),(SELECT id FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id=? ORDER BY sequence DESC LIMIT 1) WHERE (SELECT COUNT(*) FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') AS weekly_consent_offers WHERE user_id = ? AND created_at_ms > ?) < 8
-      AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') AS weekly_consent_offers WHERE user_id = ? AND decision IS NULL AND expires_at_ms > ?)
+          sql: `INSERT INTO consent_offers (kind,id,user_id,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,source_id,rejection_id)
+      SELECT 'weekly-summary',?,?,?,?,?,?,?,NULLIF(?,''),(SELECT id FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id=? ORDER BY sequence DESC LIMIT 1) WHERE (SELECT COUNT(*) FROM consent_offers WHERE kind='weekly-summary' AND user_id = ? AND created_at_ms > ?) < 8
+      AND NOT EXISTS (SELECT 1 FROM consent_offers WHERE kind='weekly-summary' AND user_id = ? AND decision IS NULL AND expires_at_ms > ?)
       AND (? = 'requested' OR NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id = ?))`,
           params: [
             id,
@@ -345,7 +345,7 @@ export const hasChoiceReceipt = (
     if (Option.isNone(choice)) return false;
     const raw = yield* Effect.tryPromise(() =>
       privacyChannelAction(input, {
-        sql: `SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') AS o WHERE o.user_id=? AND o.id=? AND o.disclosure_message_id IS NOT NULL AND ((o.decision_message_id=? AND o.decision=?) OR EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_revocation') AS r WHERE r.user_id=o.user_id AND r.offer_id=o.id AND r.decision_message_id=? AND r.decision=?) OR (? <> 'accept' AND EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id=o.user_id) AND NOT EXISTS (${liveGrant})))`,
+        sql: `SELECT 1 FROM consent_offers AS o WHERE o.kind='weekly-summary' AND o.user_id=? AND o.id=? AND o.disclosure_message_id IS NOT NULL AND ((o.decision_message_id=? AND o.decision=?) OR EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_revocation') AS r WHERE r.user_id=o.user_id AND r.offer_id=o.id AND r.decision_message_id=? AND r.decision=?) OR (? <> 'accept' AND EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id=o.user_id) AND NOT EXISTS (${liveGrant})))`,
         params: [
           input.userId,
           choice.value[1],
@@ -370,7 +370,7 @@ const findDecisionOffer = (
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT id,disclosure_json,disclosure_message_id,decision_message_id,expires_at_ms FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') AS weekly_consent_offers WHERE id = ? AND user_id = ? AND (? <> 'accept' OR (portfolio_id = ? AND bsuid = ?))"
+          "SELECT id,disclosure_json,disclosure_message_id,decision_message_id,expires_at_ms FROM consent_offers WHERE kind='weekly-summary' AND id = ? AND user_id = ? AND (? <> 'accept' OR (portfolio_id = ? AND bsuid = ?))"
         )
         .bind(
           id,
@@ -423,7 +423,7 @@ const revocationAuthorization = (
   }: Readonly<{ offer: OfferRow; message: WhatsAppProviderMessageId; grantId: ConsentRecordId }>
 ): D1PreparedStatement =>
   privacyChannelAction(input, {
-    sql: `UPDATE consent_offers SET decision_message_id=decision_message_id WHERE kind='weekly-summary' AND id=? AND user_id=? AND disclosure_message_id IS NOT NULL AND EXISTS (${liveGrant} AND g.id=?) AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') AS weekly_consent_offers WHERE user_id=? AND decision_message_id=?)`,
+    sql: `UPDATE consent_offers SET decision_message_id=decision_message_id WHERE kind='weekly-summary' AND id=? AND user_id=? AND disclosure_message_id IS NOT NULL AND EXISTS (${liveGrant} AND g.id=?) AND NOT EXISTS (SELECT 1 FROM consent_offers WHERE kind='weekly-summary' AND user_id=? AND decision_message_id=?)`,
     params: [offer.id, input.userId, input.userId, grantId, input.userId, message],
   });
 const rejectionStatement = (

@@ -549,7 +549,7 @@ it.each(["session-revocation", "consent-withdrawal"] as const)(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','browser-grant', ?, '{}', 'disclosure', 'decision', 1, 1)"
+              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','browser-grant', ?, '{}', 'disclosure', 'decision', 1, 1)"
             )
             .bind(users[0])
             .run()
@@ -1158,7 +1158,7 @@ it("scheduled retention erases abandoned preparation after Consent withdrawal wi
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','retention-grant', ?, '{}', 'disclosure', 'decision', 1, 1)"
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','retention-grant', ?, '{}', 'disclosure', 'decision', 1, 1)"
           )
           .bind(users[0])
           .run()

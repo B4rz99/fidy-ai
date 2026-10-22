@@ -4,6 +4,7 @@ import { Miniflare } from "miniflare";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 
 const noContentStatus = 204;
+const recoveryDigestBytes = 32;
 const wait = <A>(run: () => Promise<A>): Effect.Effect<A> =>
   Effect.tryPromise(run).pipe(Effect.orDie);
 type NativeBindings = Readonly<{
@@ -216,7 +217,7 @@ const identityRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> =
 const conversationRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> => [
   input.db
     .prepare(
-      "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','test-disclosure','test-decision',?,?)"
+      "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','test-disclosure','test-decision',?,?)"
     )
     .bind(input.userId, input.userId, input.current, input.current),
 
@@ -290,6 +291,14 @@ const projectionRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement>
 const credentialRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> => [
   input.db
     .prepare(
+      "INSERT INTO backup_recovery_credentials(user_id,code_digest,created_at_ms,revision) VALUES(?,?,?,1)"
+    )
+    .bind(input.userId, new Uint8Array(recoveryDigestBytes).fill(input.index), input.current),
+  input.db
+    .prepare("INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) VALUES(?,?,?)")
+    .bind(input.userId, `person${input.index}@example.test`, input.current),
+  input.db
+    .prepare(
       "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES(?,?,?,?,?,?,?,?)"
     )
     .bind(
@@ -323,7 +332,7 @@ const renewalAndPlanRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatem
     .bind(input.userId, input.userId, input.userId, input.userId, input.current),
   input.db
     .prepare(
-      "INSERT INTO consent_history (record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,accepted_at_ms) VALUES ('processing_renewal',?,?,?,?,?,'{}',?)"
+      "INSERT INTO consent_history (record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,occurred_at_ms) VALUES ('processing_renewal',?,?,?,?,?,'{}',?)"
     )
     .bind(input.userId, input.userId, input.userId, input.userId, input.userId, input.current + 1),
 ];

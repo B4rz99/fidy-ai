@@ -63,7 +63,7 @@ it.skipIf(!enabled)(
                     db
                       .prepare(`WITH RECURSIVE n(i) AS (
           SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
-          INSERT INTO resource_admission_events SELECT 'retained-' || i, 'workers-ai', 'operation',
+          INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms) SELECT 'retained-' || i, 'workers-ai', 'operation',
             'test', 'rolling_window', 1, ?, ?, ?, NULL FROM n`)
                       .bind(retainedAdmissions, now, now, now + 3_600_000),
                     db
@@ -78,7 +78,7 @@ it.skipIf(!enabled)(
               db.batch([
                 db
                   .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?)
-                INSERT INTO resource_admission_events
+                INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms)
                 SELECT 'workers-ai-expired-' || i, 'workers-ai', 'operation', 'test', 'rolling_window',
                   1, ?, ?, ?, NULL FROM n`)
                   .bind(expiredAdmissions, now - 90_000_000, now - 90_000_000, now - 1),

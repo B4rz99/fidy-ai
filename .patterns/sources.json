@@ -1,7 +1,7 @@
 {
   "effect": {
     "repository": "https://github.com/Effect-TS/effect",
-    "verifiedOn": "2026-10-20",
+    "verifiedOn": "2026-10-22",
     "snapshot": {
       "manifest": ".repos/effect/packages/effect/package.json",
       "version": "4.0.4",
@@ -14,12 +14,12 @@
       {
         "name": "effect",
         "manifest": "package.json",
-        "version": "4.0.4"
+        "version": "4.0.5"
       },
       {
         "name": "@effect/atom-react",
         "manifest": "apps/web/package.json",
-        "version": "4.0.4"
+        "version": "4.0.5"
       }
     ],
     "sourcePaths": [

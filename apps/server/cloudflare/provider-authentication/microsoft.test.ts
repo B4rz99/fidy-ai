@@ -5,6 +5,7 @@ import {
   type Journey,
   delayedProviderTokenResponse,
   disposeJourneys,
+  onboardingRefusals,
   setup,
 } from "./journey.test-fixture";
 
@@ -333,6 +334,10 @@ it("preserves stable Microsoft ownership across changed/missing emails and never
           .prepare("SELECT user_id FROM provider_credentials WHERE subject='stable-microsoft-user'")
           .first<string>("user_id")
       );
+      const creationQuery = journey.db
+        .prepare("SELECT created_at_ms,trial_started_at_ms,trial_ends_at_ms FROM users WHERE id=?")
+        .bind(original);
+      const originalCreation = yield* Effect.tryPromise(() => creationQuery.first());
       for (const email of ["changed@example.test", undefined]) {
         const pairing = yield* nextPairing(journey);
         const response = yield* authenticate(
@@ -351,6 +356,7 @@ it("preserves stable Microsoft ownership across changed/missing emails and never
           (yield* Effect.tryPromise(() => journey.send("/web/pairings/redeem", pairing))).status
         ).toBe(200);
       }
+      expect(yield* Effect.tryPromise(() => creationQuery.first())).toEqual(originalCreation);
       const other = yield* nextPairing(journey);
       expect(
         (yield* authenticate(journey, other, {
@@ -368,7 +374,7 @@ it("preserves stable Microsoft ownership across changed/missing emails and never
       expect(
         yield* countRows(
           journey.db,
-          "(SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL)"
+          "(SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials)"
         )
       ).toBe(0);
       expect(
@@ -412,44 +418,43 @@ for (const fixture of [
     ));
 }
 
-it("rolls back every new owner record when the origin guard fails, and concurrent completion discloses recovery once", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(setup);
-      yield* Effect.tryPromise(() =>
-        journey.db
-          .prepare(
-            "CREATE TRIGGER refuse_provider BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts WHEN NEW.completed_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'fixture_rollback'); END"
-          )
-          .run()
-      );
-      expect((yield* authenticate(journey, journey.pairing)).status).toBe(400);
-      for (const table of [
-        "users",
-        "provider_credentials",
-        "(SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)",
-        "consent_history",
-      ]) {
-        expect(yield* countRows(journey.db, table)).toBe(0);
-      }
-      yield* Effect.tryPromise(() => journey.db.prepare("DROP TRIGGER refuse_provider").run());
-      const results = yield* Effect.tryPromise(() =>
-        Promise.all([
-          journey.send("/web/providers/microsoft/complete", journey.pairing),
-          journey.send("/web/providers/microsoft/complete", journey.pairing),
-        ])
-      );
-      expect(results.map((result) => result.status).sort((left, right) => left - right)).toEqual([
-        200, 400,
-      ]);
-      expect(yield* countRows(journey.db, "users")).toBe(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/microsoft/complete", journey.pairing)
-        )).status
-      ).toBe(400);
-    })
-  ));
+it.each(onboardingRefusals)(
+  "rolls back every new owner record after $description, and concurrent completion discloses recovery once",
+  ({ clause }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const journey = yield* Effect.tryPromise(setup);
+        yield* Effect.tryPromise(() =>
+          journey.db.prepare(`CREATE TRIGGER refuse_provider ${clause}`).run()
+        );
+        expect((yield* authenticate(journey, journey.pairing)).status).toBe(400);
+        for (const table of [
+          "users",
+          "provider_credentials",
+          "backup_recovery_credentials",
+          "consent_history",
+        ]) {
+          expect(yield* countRows(journey.db, table)).toBe(0);
+        }
+        yield* Effect.tryPromise(() => journey.db.prepare("DROP TRIGGER refuse_provider").run());
+        const results = yield* Effect.tryPromise(() =>
+          Promise.all([
+            journey.send("/web/providers/microsoft/complete", journey.pairing),
+            journey.send("/web/providers/microsoft/complete", journey.pairing),
+          ])
+        );
+        expect(results.map((result) => result.status).sort((left, right) => left - right)).toEqual([
+          200, 400,
+        ]);
+        expect(yield* countRows(journey.db, "users")).toBe(1);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            journey.send("/web/providers/microsoft/complete", journey.pairing)
+          )).status
+        ).toBe(400);
+      })
+    )
+);
 
 it("keeps configured Microsoft credentials and protocol proofs out of exported diagnostics", () =>
   Effect.runPromise(
@@ -634,7 +639,7 @@ it("accepts organizational tenants without merging the same subject or contact c
       expect(
         yield* countRows(
           journey.db,
-          "(SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL)"
+          "(SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials)"
         )
       ).toBe(0);
     })

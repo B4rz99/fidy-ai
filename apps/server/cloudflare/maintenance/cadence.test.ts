@@ -16,12 +16,12 @@ it("waits for hourly cleanup before removing expired grants and preserves curren
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
-            "INSERT INTO resource_admission_events VALUES ('workers-ai-expired','test','operation','test','rolling_window',1,1,1,2,NULL)"
+            "INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms) VALUES ('workers-ai-expired','test','operation','test','rolling_window',1,1,1,2,NULL)"
           ),
           db.prepare("INSERT INTO resource_admission_grants VALUES ('workers-ai-expired',1,1)"),
           db
             .prepare(
-              "INSERT INTO resource_admission_events VALUES ('workers-ai-current','test','operation','test','rolling_window',1,?,?,?,NULL)"
+              "INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms) VALUES ('workers-ai-current','test','operation','test','rolling_window',1,?,?,?,NULL)"
             )
             .bind(now, now, now + 86_400_000),
           db

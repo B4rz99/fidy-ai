@@ -36,8 +36,6 @@ import {
 
 export const pairingMilliseconds = 600_000;
 const maxPairingsPerWindow = 4000;
-const maxPairingsPerSource = 20;
-const maximumReviewAttempts = 10;
 export const maxActivePATs = 100;
 export const issuanceWindowMilliseconds = 600_000;
 export const maxIssuancesPerUserWindow = 20;
@@ -265,50 +263,10 @@ export const sweepUnapprovedPairings = ({
   params: [current - pairingMilliseconds, limit],
 });
 
-export const sweepPairingAdmission = ({
-  current,
-  limit,
-}: Readonly<{ current: number; limit: number }>): OwnedStatement => ({
-  sql: `DELETE FROM pat_pairing_admission WHERE source_digest IN (
-    SELECT source_digest FROM pat_pairing_admission WHERE window_start_ms <= ?
-    ORDER BY window_start_ms LIMIT ?)`,
-  params: [current - pairingMilliseconds * 2, limit],
-});
-
-export const sweepPairingReviews = ({
-  current,
-  limit,
-}: Readonly<{ current: number; limit: number }>): OwnedStatement => ({
-  sql: `DELETE FROM pat_review_attempts WHERE id IN (
-    SELECT id FROM pat_review_attempts WHERE occurred_at_ms <= ?
-    ORDER BY occurred_at_ms LIMIT ?)`,
-  params: [current - pairingMilliseconds * 2, limit],
-});
-
-/** Reserve bounded anonymous source capacity before persisting a PATPairing proof digest. */
-export const admitPairingSource = ({
-  sourceDigest,
-  current,
-}: Readonly<{ sourceDigest: Uint8Array; current: number }>): OwnedStatement => ({
-  sql: `INSERT INTO pat_pairing_admission (source_digest,window_start_ms,started_count)
-    SELECT ?,?,1 WHERE (SELECT count(*) FROM pat_pairings WHERE created_at_ms > ?) < ?
-    ON CONFLICT(source_digest) DO UPDATE SET
-      window_start_ms = CASE WHEN window_start_ms <= ? THEN excluded.window_start_ms ELSE window_start_ms END,
-      started_count = CASE WHEN window_start_ms <= ? THEN 1 ELSE started_count + 1 END
-    WHERE (window_start_ms <= ? OR started_count < ?)
-      AND (SELECT count(*) FROM pat_pairings WHERE created_at_ms > ?) < ?`,
-  params: [
-    sourceDigest,
-    current,
-    current - pairingMilliseconds,
-    maxPairingsPerWindow,
-    current - pairingMilliseconds,
-    current - pairingMilliseconds,
-    current - pairingMilliseconds,
-    maxPairingsPerSource,
-    current - pairingMilliseconds,
-    maxPairingsPerWindow,
-  ],
+/** Global recent-pairing capacity is rechecked inside source admission and actual creation. */
+export const pairingCapacityQuery = (current: number): OwnedStatement => ({
+  sql: "SELECT 1 WHERE (SELECT count(*) FROM pat_pairings WHERE created_at_ms>?)<?",
+  params: [current - pairingMilliseconds, maxPairingsPerWindow],
 });
 
 /** Persist only the private-device-code digest when anonymous source admission succeeded. */
@@ -339,26 +297,6 @@ export const startPairingGrant = (
     input.expires,
     input.current - pairingMilliseconds,
     maxPairingsPerWindow,
-  ],
-});
-
-/** Bound public-code review attempts per WebSession without granting pairing authority. */
-export const admitPairingReview = (
-  input: Readonly<{
-    id: string;
-    sessionId: string;
-    current: number;
-  }>
-): OwnedStatement => ({
-  sql: `INSERT INTO pat_review_attempts (id,session_id,occurred_at_ms)
-    SELECT ?,?,? WHERE (SELECT count(*) FROM pat_review_attempts WHERE session_id = ? AND occurred_at_ms > ?) < ?`,
-  params: [
-    input.id,
-    input.sessionId,
-    input.current,
-    input.sessionId,
-    input.current - pairingMilliseconds,
-    maximumReviewAttempts,
   ],
 });
 

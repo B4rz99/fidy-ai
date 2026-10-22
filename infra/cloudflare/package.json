@@ -14,12 +14,12 @@
   },
   "dependencies": {
     "@fidy/server": "workspace:0.0.0",
-    "effect": "4.0.4"
+    "effect": "4.0.5"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261014.1",
-    "@effect/platform-bun": "4.0.4",
-    "@effect/vitest": "4.0.4",
+    "@cloudflare/workers-types": "5.20261015.1",
+    "@effect/platform-bun": "4.0.5",
+    "@effect/vitest": "4.0.5",
     "alchemy": "2.0.0-beta.80",
     "typescript": "7.0.2",
     "vitest": "5.0.4",

@@ -45,7 +45,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
         [userId, otherUserId].map((subject) =>
           db
             .prepare(
-              `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', 0, 0)`
+              `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, occurred_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', 0, 0)`
             )
             .bind(subject, subject)
         )

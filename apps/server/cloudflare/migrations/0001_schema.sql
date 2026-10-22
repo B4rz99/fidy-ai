@@ -14,6 +14,12 @@ CREATE TABLE anonymized_email_samples (
 ) STRICT;
 --> statement-breakpoint
 
+CREATE TABLE audit_retention_permits (
+  user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
+  cutoff_ms INTEGER NOT NULL
+) STRICT;
+--> statement-breakpoint
+
 CREATE TABLE "audit_entries" (
  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
  record_type TEXT NOT NULL,
@@ -35,12 +41,7 @@ CREATE TABLE "audit_entries" (
  refresh_connection_id TEXT REFERENCES oauth_connections(id),
  consumed_refresh_id TEXT UNIQUE REFERENCES oauth_credentials(refresh_id),
  issued_refresh_id TEXT UNIQUE REFERENCES oauth_credentials(refresh_id),
- recovery_case_id TEXT REFERENCES support_recovery_cases(id),
- operator_issuer TEXT,
- operator_subject TEXT,
- recovery_action TEXT CHECK(recovery_action IS NULL OR recovery_action IN ('opened','approved','rejected')),
  CHECK((record_type='oauth_refresh' AND refresh_connection_id IS NOT NULL AND consumed_refresh_id IS NOT NULL AND issued_refresh_id IS NOT NULL) OR (record_type<>'oauth_refresh' AND refresh_connection_id IS NULL AND consumed_refresh_id IS NULL AND issued_refresh_id IS NULL)),
- CHECK((record_type='support_recovery' AND recovery_case_id IS NOT NULL AND operator_issuer IS NOT NULL AND operator_subject IS NOT NULL AND recovery_action IS NOT NULL) OR (record_type<>'support_recovery' AND recovery_case_id IS NULL AND operator_issuer IS NULL AND operator_subject IS NULL AND recovery_action IS NULL)),
  UNIQUE(record_type,id), UNIQUE(attempt_id,transition),
  FOREIGN KEY(user_id) REFERENCES users(id),
  FOREIGN KEY(pat_id) REFERENCES pats(id),
@@ -50,7 +51,7 @@ CREATE TABLE "audit_entries" (
  FOREIGN KEY(attempt_id) REFERENCES billing_attempts(id),
  CHECK(
   (record_type='reminder_control' AND id IS NOT NULL AND json_valid(id) AND json_array_length(id)=2 AND json_extract(id,'$[0]')=user_id AND json_type(id,'$[1]')='text' AND user_id IS NOT NULL AND outcome IS NOT NULL AND session_id IS NULL AND operation IS NULL AND occurred_at_ms IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL AND oauth_credential_id IS NULL AND hosted_turn_id IS NULL AND attempt_id IS NULL AND transition IS NULL AND accepted_at_ms IS NULL) OR
-  (record_type IN ('oauth_refresh','support_recovery') AND id IS NOT NULL AND user_id IS NOT NULL AND occurred_at_ms IS NOT NULL AND session_id IS NULL AND operation IS NULL AND outcome IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL AND oauth_credential_id IS NULL AND hosted_turn_id IS NULL AND attempt_id IS NULL AND transition IS NULL AND accepted_at_ms IS NULL) OR
+  (record_type='oauth_refresh' AND id IS NOT NULL AND user_id IS NOT NULL AND occurred_at_ms IS NOT NULL AND session_id IS NULL AND operation IS NULL AND outcome IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL AND oauth_credential_id IS NULL AND hosted_turn_id IS NULL AND attempt_id IS NULL AND transition IS NULL AND accepted_at_ms IS NULL) OR
   (record_type='session_call' AND id IS NOT NULL AND user_id IS NOT NULL AND session_id IS NOT NULL AND operation IS NOT NULL AND outcome IS NOT NULL AND occurred_at_ms IS NOT NULL AND ((operation IN ('transactions.createTransaction','transactions.listTransactions','transactions.getTransaction','transactions.updateTransaction','transactions.deleteTransaction','transactions.searchTransactions','transactions.linkTransactions','transactions.unlinkTransactions','operations.executeAtomicBatch') AND outcome IN ('success','not_found','validation_failed','resource_limit'))
  OR (operation IN ('categories.listCategories','categories.listKeywordRules','categories.createKeywordRule','categories.updateKeywordRule','categories.deleteKeywordRule') AND outcome IN ('success','validation_failed'))
  OR (operation IN ('memory.remember','memory.recall','memory.revise','memory.forget') AND outcome IN ('success','not_found','validation_failed','resource_limit'))
@@ -388,7 +389,6 @@ CREATE TABLE "consent_history" (
  disclosure_message_id TEXT,
  decision_message_id TEXT,
  decision_received_at_ms INTEGER,
- accepted_at_ms INTEGER,
  grant_record_id TEXT,
  session_id TEXT,
  occurred_at_ms INTEGER,
@@ -400,11 +400,8 @@ CREATE TABLE "consent_history" (
  kind TEXT,
  pairing_id TEXT,
  request_id TEXT,
- disclosure_revision TEXT,
- disclosure_text TEXT,
  grant_consent_id TEXT,
  pat_id TEXT,
- policy_reason TEXT,
  connection_id TEXT,
  reason TEXT,
  processing_parent_type TEXT GENERATED ALWAYS AS (CASE WHEN grant_record_id IS NOT NULL THEN 'processing_grant' END) VIRTUAL,
@@ -415,18 +412,21 @@ CREATE TABLE "consent_history" (
  proactivity_offer_reference TEXT GENERATED ALWAYS AS (CASE WHEN record_type='proactivity_grant' THEN offer_id END) VIRTUAL,
  UNIQUE(record_type,id),
  UNIQUE(user_id,record_type,id),
- CHECK(record_type<>'processing_grant' OR (id IS NOT NULL AND user_id IS NOT NULL AND disclosure_json IS NOT NULL AND disclosure_message_id IS NOT NULL AND decision_message_id IS NOT NULL AND decision_received_at_ms IS NOT NULL AND accepted_at_ms IS NOT NULL AND grant_record_id IS NULL AND session_id IS NULL AND occurred_at_ms IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND disclosure_revision IS NULL AND disclosure_text IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND policy_reason IS NULL AND connection_id IS NULL AND reason IS NULL)),
- CHECK(record_type<>'processing_withdrawal' OR (id IS NOT NULL AND user_id IS NOT NULL AND grant_record_id IS NOT NULL AND session_id IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND accepted_at_ms IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND disclosure_revision IS NULL AND disclosure_text IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND policy_reason IS NULL AND connection_id IS NULL AND reason IS NULL)),
- CHECK(record_type<>'processing_renewal' OR (id IS NOT NULL AND user_id IS NOT NULL AND withdrawal_id IS NOT NULL AND grant_record_id IS NOT NULL AND session_id IS NOT NULL AND disclosure_json IS NOT NULL AND accepted_at_ms IS NOT NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND occurred_at_ms IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND disclosure_revision IS NULL AND disclosure_text IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND policy_reason IS NULL AND connection_id IS NULL AND reason IS NULL AND (json_valid(disclosure_json)))),
- CHECK(record_type<>'weekly_grant' OR (id IS NOT NULL AND user_id IS NOT NULL AND offer_id IS NOT NULL AND record_json IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND accepted_at_ms IS NULL AND grant_record_id IS NULL AND session_id IS NULL AND withdrawal_id IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND disclosure_revision IS NULL AND disclosure_text IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND policy_reason IS NULL AND connection_id IS NULL AND reason IS NULL)),
- CHECK(record_type<>'weekly_rejection' OR (id IS NOT NULL AND user_id IS NOT NULL AND offer_id IS NOT NULL AND decision_message_id IS NOT NULL AND decision IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_received_at_ms IS NULL AND accepted_at_ms IS NULL AND grant_record_id IS NULL AND session_id IS NULL AND occurred_at_ms IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND record_json IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND disclosure_revision IS NULL AND disclosure_text IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND policy_reason IS NULL AND connection_id IS NULL AND reason IS NULL AND (decision IN ('decline','revoke')))),
- CHECK(record_type<>'weekly_revocation' OR (id IS NOT NULL AND user_id IS NOT NULL AND grant_id IS NOT NULL AND offer_id IS NOT NULL AND decision_message_id IS NOT NULL AND decision IS NOT NULL AND record_json IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_received_at_ms IS NULL AND accepted_at_ms IS NULL AND grant_record_id IS NULL AND session_id IS NULL AND withdrawal_id IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND disclosure_revision IS NULL AND disclosure_text IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND policy_reason IS NULL AND connection_id IS NULL AND reason IS NULL AND (decision IN ('decline','revoke')) AND (json_valid(record_json)))),
- CHECK(record_type<>'proactivity_grant' OR (id IS NOT NULL AND user_id IS NOT NULL AND kind IS NOT NULL AND offer_id IS NOT NULL AND decision_message_id IS NOT NULL AND record_json IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_received_at_ms IS NULL AND accepted_at_ms IS NULL AND grant_record_id IS NULL AND session_id IS NULL AND withdrawal_id IS NULL AND decision IS NULL AND pairing_id IS NULL AND request_id IS NULL AND disclosure_revision IS NULL AND disclosure_text IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND policy_reason IS NULL AND connection_id IS NULL AND reason IS NULL AND (kind IN ('budget-threshold','manual-entry-reminder','new-recurring-series')) AND (json_valid(record_json)))),
- CHECK(record_type<>'pat_grant' OR (id IS NOT NULL AND user_id IS NOT NULL AND session_id IS NOT NULL AND disclosure_revision IS NOT NULL AND disclosure_text IS NOT NULL AND accepted_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND grant_record_id IS NULL AND occurred_at_ms IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND policy_reason IS NULL AND connection_id IS NULL AND reason IS NULL AND ((pairing_id IS NULL) <> (request_id IS NULL)))),
- CHECK(record_type<>'pat_revocation' OR (id IS NOT NULL AND grant_consent_id IS NOT NULL AND user_id IS NOT NULL AND disclosure_revision IS NOT NULL AND disclosure_text IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND accepted_at_ms IS NULL AND grant_record_id IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND request_id IS NULL AND connection_id IS NULL AND reason IS NULL AND (policy_reason IN ('pat-approved-unclaimed-expiry','pat-fixed-lifetime-expiry')) AND ((pat_id IS NULL) <> (pairing_id IS NULL)) AND ((session_id IS NULL) <> (policy_reason IS NULL)))),
- CHECK(record_type<>'oauth_grant' OR (id IS NOT NULL AND connection_id IS NOT NULL AND user_id IS NOT NULL AND session_id IS NOT NULL AND disclosure_revision IS NOT NULL AND disclosure_text IS NOT NULL AND accepted_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND grant_record_id IS NULL AND occurred_at_ms IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND policy_reason IS NULL AND reason IS NULL)),
- CHECK(record_type<>'oauth_replay_revocation' OR (id IS NOT NULL AND user_id IS NOT NULL AND connection_id IS NOT NULL AND reason IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND accepted_at_ms IS NULL AND grant_record_id IS NULL AND session_id IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND disclosure_revision IS NULL AND disclosure_text IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND policy_reason IS NULL AND (reason = 'refresh_replay'))),
- CHECK(record_type<>'oauth_user_revocation' OR (connection_id IS NOT NULL AND user_id IS NOT NULL AND session_id IS NOT NULL AND reason IS NOT NULL AND disclosure_revision IS NOT NULL AND disclosure_text IS NOT NULL AND occurred_at_ms IS NOT NULL AND id IS NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND accepted_at_ms IS NULL AND grant_record_id IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND policy_reason IS NULL AND (reason IN ('user_one','user_all')))),
+ CHECK(record_type<>'processing_grant' OR (id IS NOT NULL AND user_id IS NOT NULL AND disclosure_json IS NOT NULL AND disclosure_message_id IS NOT NULL AND decision_message_id IS NOT NULL AND decision_received_at_ms IS NOT NULL AND occurred_at_ms IS NOT NULL AND grant_record_id IS NULL AND session_id IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND connection_id IS NULL AND reason IS NULL)),
+ CHECK(record_type<>'processing_withdrawal' OR (id IS NOT NULL AND user_id IS NOT NULL AND grant_record_id IS NOT NULL AND session_id IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND connection_id IS NULL AND reason IS NULL)),
+ CHECK(record_type<>'processing_renewal' OR (id IS NOT NULL AND user_id IS NOT NULL AND withdrawal_id IS NOT NULL AND grant_record_id IS NOT NULL AND session_id IS NOT NULL AND disclosure_json IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND connection_id IS NULL AND reason IS NULL AND (json_valid(disclosure_json)))),
+ CHECK(record_type<>'weekly_grant' OR (id IS NOT NULL AND user_id IS NOT NULL AND offer_id IS NOT NULL AND record_json IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND grant_record_id IS NULL AND session_id IS NULL AND withdrawal_id IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND connection_id IS NULL AND reason IS NULL)),
+ CHECK(record_type<>'weekly_rejection' OR (id IS NOT NULL AND user_id IS NOT NULL AND offer_id IS NOT NULL AND decision_message_id IS NOT NULL AND decision IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_received_at_ms IS NULL AND grant_record_id IS NULL AND session_id IS NULL AND occurred_at_ms IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND record_json IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND connection_id IS NULL AND reason IS NULL AND (decision IN ('decline','revoke')))),
+ CHECK(record_type<>'weekly_revocation' OR (id IS NOT NULL AND user_id IS NOT NULL AND grant_id IS NOT NULL AND offer_id IS NOT NULL AND decision_message_id IS NOT NULL AND decision IS NOT NULL AND record_json IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_received_at_ms IS NULL AND grant_record_id IS NULL AND session_id IS NULL AND withdrawal_id IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND connection_id IS NULL AND reason IS NULL AND (decision IN ('decline','revoke')) AND (json_valid(record_json)))),
+ CHECK(record_type<>'proactivity_grant' OR (id IS NOT NULL AND user_id IS NOT NULL AND kind IS NOT NULL AND offer_id IS NOT NULL AND decision_message_id IS NOT NULL AND record_json IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_received_at_ms IS NULL AND grant_record_id IS NULL AND session_id IS NULL AND withdrawal_id IS NULL AND decision IS NULL AND pairing_id IS NULL AND request_id IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND connection_id IS NULL AND reason IS NULL AND (kind IN ('budget-threshold','manual-entry-reminder','new-recurring-series')) AND (json_valid(record_json)))),
+ CHECK(record_type<>'pat_grant' OR (id IS NOT NULL AND user_id IS NOT NULL AND session_id IS NOT NULL AND disclosure_json IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND grant_record_id IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND connection_id IS NULL AND reason IS NULL AND ((pairing_id IS NULL) <> (request_id IS NULL)))),
+ CHECK(record_type<>'pat_revocation' OR (id IS NOT NULL AND grant_consent_id IS NOT NULL AND user_id IS NOT NULL AND disclosure_json IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND grant_record_id IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND request_id IS NULL AND connection_id IS NULL AND (reason IN ('pat-approved-unclaimed-expiry','pat-fixed-lifetime-expiry')) AND ((pat_id IS NULL) <> (pairing_id IS NULL)) AND ((session_id IS NULL) <> (reason IS NULL)))),
+ CHECK(record_type<>'oauth_grant' OR (id IS NOT NULL AND connection_id IS NOT NULL AND user_id IS NOT NULL AND session_id IS NOT NULL AND disclosure_json IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND grant_record_id IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND reason IS NULL)),
+ CHECK(record_type<>'oauth_replay_revocation' OR (id IS NOT NULL AND user_id IS NOT NULL AND connection_id IS NOT NULL AND reason IS NOT NULL AND occurred_at_ms IS NOT NULL AND disclosure_json IS NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND grant_record_id IS NULL AND session_id IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND (reason = 'refresh_replay'))),
+ CHECK(record_type<>'oauth_user_revocation' OR (connection_id IS NOT NULL AND user_id IS NOT NULL AND session_id IS NOT NULL AND reason IS NOT NULL AND disclosure_json IS NOT NULL AND occurred_at_ms IS NOT NULL AND id IS NULL AND disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_received_at_ms IS NULL AND grant_record_id IS NULL AND withdrawal_id IS NULL AND grant_id IS NULL AND offer_id IS NULL AND record_json IS NULL AND decision IS NULL AND kind IS NULL AND pairing_id IS NULL AND request_id IS NULL AND grant_consent_id IS NULL AND pat_id IS NULL AND (reason IN ('user_one','user_all')))),
+ CHECK(disclosure_json IS NULL OR json_valid(disclosure_json)),
+ CHECK(record_json IS NULL OR json_valid(record_json)),
+ CHECK(record_type NOT IN ('pat_grant','pat_revocation','oauth_grant','oauth_user_revocation') OR (json_type(disclosure_json) IS 'object' AND json_type(disclosure_json,'$.revision') IS 'text' AND json_type(disclosure_json,'$.text') IS 'text' AND json_remove(disclosure_json,'$.revision','$.text')='{}')),
  FOREIGN KEY(user_id) REFERENCES users(id),
  FOREIGN KEY(session_id) REFERENCES web_sessions(id),
  FOREIGN KEY(pairing_id) REFERENCES pat_pairings(id),
@@ -529,16 +529,29 @@ CREATE TABLE email_replacements (
 ) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE "email_security_limits" (
- kind TEXT NOT NULL CHECK(kind IN ('pairing','replacement','pairing-global')),
- user_id TEXT REFERENCES users(id),
- window_started_at_ms INTEGER NOT NULL,
- requests INTEGER NOT NULL CHECK(requests>=1 AND requests<=CASE WHEN kind='pairing-global' THEN 1000 ELSE 5 END),
- last_work_id TEXT CHECK(last_work_id IS NULL OR length(last_work_id)=36),
- CHECK((kind='pairing-global' AND user_id IS NULL AND last_work_id IS NULL)
- OR (kind='pairing' AND user_id IS NOT NULL AND last_work_id IS NULL)
- OR (kind='replacement' AND user_id IS NOT NULL AND last_work_id IS NOT NULL)),
- UNIQUE(kind,user_id)
+CREATE TABLE resource_admission_counters (
+  policy_key TEXT NOT NULL CHECK(policy_key IN (
+    'email.pairing.user.v1','email.pairing.global.v1','email.replacement.user.v1','pat.pairing.source.v1','hosted.compaction.user.v1'
+  )),
+  scope_key TEXT NOT NULL CHECK(length(scope_key) BETWEEN 1 AND 256),
+  window_kind TEXT NOT NULL CHECK((policy_key='hosted.compaction.user.v1' AND window_kind='calendar')
+    OR (policy_key<>'hosted.compaction.user.v1' AND window_kind='anchored')),
+  window_start_ms INTEGER NOT NULL,
+  window_ends_ms INTEGER NOT NULL,
+  used INTEGER NOT NULL CHECK(used BETWEEN 1 AND CASE policy_key
+    WHEN 'email.pairing.global.v1' THEN 1000 WHEN 'pat.pairing.source.v1' THEN 20 WHEN 'hosted.compaction.user.v1' THEN 3 ELSE 5 END),
+  last_work_id TEXT CHECK(last_work_id IS NULL OR length(last_work_id)=36),
+  owner_user_id TEXT REFERENCES users(id),
+  CHECK(window_ends_ms=window_start_ms+CASE policy_key
+    WHEN 'email.replacement.user.v1' THEN 86400000 WHEN 'pat.pairing.source.v1' THEN 600000 WHEN 'hosted.compaction.user.v1' THEN 86400000 ELSE 3600000 END),
+  CHECK((policy_key='email.pairing.global.v1' AND scope_key='global' AND owner_user_id IS NULL)
+    OR (policy_key IN ('email.pairing.user.v1','email.replacement.user.v1','hosted.compaction.user.v1')
+      AND owner_user_id IS NOT NULL AND scope_key=owner_user_id)
+    OR (policy_key='pat.pairing.source.v1' AND owner_user_id IS NULL
+      AND length(scope_key)=64 AND scope_key NOT GLOB '*[^0-9a-f]*')),
+  CHECK(policy_key<>'hosted.compaction.user.v1' OR window_start_ms%86400000=0),
+  CHECK((policy_key='email.replacement.user.v1' AND last_work_id IS NOT NULL)
+    OR (policy_key<>'email.replacement.user.v1' AND last_work_id IS NULL))
 ) STRICT;
 --> statement-breakpoint
 
@@ -687,14 +700,6 @@ CREATE TABLE hosted_agent_sessions (
   last_activity_at_ms INTEGER,
   status TEXT NOT NULL CHECK (status IN ('active','idle-ended','revoked')), compacted_text TEXT, compacted_through_sequence INTEGER, compacted_revision INTEGER, compacted_nonce TEXT, compacted_at_ms INTEGER CHECK((compacted_revision IS NULL AND compacted_text IS NULL AND compacted_through_sequence IS NULL AND compacted_revision IS NULL AND compacted_nonce IS NULL AND compacted_at_ms IS NULL) OR (compacted_revision IS NOT NULL AND compacted_text IS NOT NULL AND (length(compacted_text) > 0) AND compacted_through_sequence IS NOT NULL AND (compacted_through_sequence >= 0) AND compacted_revision IS NOT NULL AND (compacted_revision > 0) AND compacted_nonce IS NOT NULL AND compacted_at_ms IS NOT NULL)),
   UNIQUE (user_id, id)
-) STRICT;
---> statement-breakpoint
-
-CREATE TABLE hosted_compaction_attempts (
-  user_id TEXT NOT NULL REFERENCES users(id),
-  day_ms INTEGER NOT NULL,
-  used INTEGER NOT NULL CHECK (used BETWEEN 1 AND 3),
-  PRIMARY KEY (user_id, day_ms)
 ) STRICT;
 --> statement-breakpoint
 
@@ -963,13 +968,6 @@ CREATE TABLE operational_health_view (
 , last_succeeded_ms INTEGER CHECK(last_succeeded_ms IS NULL OR (last_succeeded_ms>=0 AND operation IN ('queueExecution','workflowExecution')))) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE pat_pairing_admission (
-  source_digest BLOB PRIMARY KEY NOT NULL CHECK (length(source_digest) = 32),
-  window_start_ms INTEGER NOT NULL,
-  started_count INTEGER NOT NULL CHECK (started_count BETWEEN 1 AND 20)
-) STRICT;
---> statement-breakpoint
-
 CREATE TABLE pat_pairings (
   id TEXT PRIMARY KEY NOT NULL,
   public_code TEXT NOT NULL UNIQUE,
@@ -988,13 +986,6 @@ CREATE TABLE pat_pairings (
   minimum_poll_seconds INTEGER NOT NULL DEFAULT 5 CHECK (minimum_poll_seconds BETWEEN 5 AND 60),
   CHECK ((state = 'pending_approval' AND user_id IS NULL AND approved_at_ms IS NULL AND pat_expires_at_ms IS NULL) OR state <> 'pending_approval'),
   CHECK ((state IN ('approved_awaiting_claim','claimed') AND user_id IS NOT NULL AND approved_at_ms IS NOT NULL AND pat_expires_at_ms IS NOT NULL AND pat_expires_at_ms = approved_at_ms + lifetime_days * 86400000) OR state NOT IN ('approved_awaiting_claim','claimed'))
-) STRICT;
---> statement-breakpoint
-
-CREATE TABLE pat_review_attempts (
-  id TEXT PRIMARY KEY NOT NULL,
-  session_id TEXT NOT NULL REFERENCES web_sessions(id),
-  occurred_at_ms INTEGER NOT NULL
 ) STRICT;
 --> statement-breakpoint
 
@@ -1034,7 +1025,31 @@ CREATE TABLE pending_consent_exchanges (
   expires_at_ms INTEGER NOT NULL,
   state TEXT NOT NULL CHECK (state IN ('awaiting_delivery', 'outbound_started', 'awaiting_decision', 'accepted', 'declined')), rejected_at_ms INTEGER
   CHECK (rejected_at_ms IS NULL OR rejected_at_ms BETWEEN created_at_ms AND expires_at_ms), sandbox_phone TEXT
-  CHECK (sandbox_phone IS NULL OR length(sandbox_phone) BETWEEN 8 AND 16), delivery_phone_number_id TEXT, delivery_message_id TEXT, delivery_occurred_at_ms INTEGER, delivery_received_at_ms INTEGER, delivery_not_before_ms INTEGER, decision_portfolio_id TEXT, decision_bsuid TEXT, decision_phone_number_id TEXT, decision_value TEXT, decision_disclosure_json TEXT, decision_disclosure_message_id TEXT, decision_message_id TEXT, decision_delivery_key TEXT, decision_body_sha256 TEXT, decision_occurred_at_ms INTEGER, decision_received_at_ms INTEGER CHECK((delivery_message_id IS NULL AND delivery_phone_number_id IS NULL AND delivery_message_id IS NULL AND delivery_occurred_at_ms IS NULL AND delivery_received_at_ms IS NULL AND delivery_not_before_ms IS NULL) OR (delivery_message_id IS NOT NULL AND delivery_phone_number_id IS NOT NULL AND (length(delivery_phone_number_id) BETWEEN 1 AND 32) AND delivery_message_id IS NOT NULL AND (length(delivery_message_id) BETWEEN 1 AND 256) AND delivery_occurred_at_ms IS NOT NULL AND delivery_received_at_ms IS NOT NULL AND delivery_not_before_ms IS NOT NULL AND (delivery_not_before_ms >= delivery_received_at_ms))) CHECK((decision_value IS NULL AND decision_portfolio_id IS NULL AND decision_bsuid IS NULL AND decision_phone_number_id IS NULL AND decision_value IS NULL AND decision_disclosure_json IS NULL AND decision_disclosure_message_id IS NULL AND decision_message_id IS NULL AND decision_delivery_key IS NULL AND decision_body_sha256 IS NULL AND decision_occurred_at_ms IS NULL AND decision_received_at_ms IS NULL) OR (decision_value IS NOT NULL AND decision_portfolio_id IS NOT NULL AND decision_bsuid IS NOT NULL AND decision_phone_number_id IS NOT NULL AND (length(decision_phone_number_id) BETWEEN 1 AND 32) AND decision_value IS NOT NULL AND (decision_value IN ('accepted', 'declined')) AND decision_disclosure_json IS NOT NULL AND decision_disclosure_message_id IS NOT NULL AND decision_message_id IS NOT NULL AND decision_delivery_key IS NOT NULL AND (length(decision_delivery_key) BETWEEN 1 AND 256) AND decision_body_sha256 IS NOT NULL AND (length(decision_body_sha256) = 64) AND decision_occurred_at_ms IS NOT NULL AND decision_received_at_ms IS NOT NULL)),
+  CHECK (sandbox_phone IS NULL OR length(sandbox_phone) BETWEEN 8 AND 16),
+  delivery_phone_number_id TEXT,
+  delivery_message_id TEXT,
+  delivery_occurred_at_ms INTEGER,
+  delivery_received_at_ms INTEGER,
+  delivery_not_before_ms INTEGER,
+  decision_value TEXT,
+  decision_message_id TEXT,
+  decision_delivery_key TEXT,
+  decision_body_sha256 TEXT,
+  decision_occurred_at_ms INTEGER,
+  decision_received_at_ms INTEGER,
+  CHECK ((delivery_message_id IS NULL AND delivery_phone_number_id IS NULL
+    AND delivery_occurred_at_ms IS NULL AND delivery_received_at_ms IS NULL AND delivery_not_before_ms IS NULL)
+    OR (delivery_message_id IS NOT NULL AND delivery_phone_number_id IS NOT NULL
+    AND length(delivery_phone_number_id) BETWEEN 1 AND 32 AND length(delivery_message_id) BETWEEN 1 AND 256
+    AND delivery_occurred_at_ms IS NOT NULL AND delivery_received_at_ms IS NOT NULL
+    AND delivery_not_before_ms IS NOT NULL AND delivery_not_before_ms >= delivery_received_at_ms)),
+  CHECK ((decision_value IS NULL AND decision_message_id IS NULL AND decision_delivery_key IS NULL
+    AND decision_body_sha256 IS NULL AND decision_occurred_at_ms IS NULL AND decision_received_at_ms IS NULL)
+    OR (decision_value IS NOT NULL AND decision_value IN ('accepted','declined')
+    AND disclosure_message_id IS NOT NULL AND decision_message_id IS NOT NULL
+    AND decision_delivery_key IS NOT NULL AND length(decision_delivery_key) BETWEEN 1 AND 256
+    AND decision_body_sha256 IS NOT NULL AND length(decision_body_sha256)=64
+    AND decision_occurred_at_ms IS NOT NULL AND decision_received_at_ms IS NOT NULL)),
   UNIQUE (portfolio_id, initiating_message_id),
   CHECK (expires_at_ms = created_at_ms + 86400000),
   CHECK (disclosed_at_ms IS NULL OR disclosed_at_ms BETWEEN (created_at_ms / 1000) * 1000 AND expires_at_ms)
@@ -1231,7 +1246,16 @@ CREATE TABLE resource_admission_events (
   window_start_epoch_ms INTEGER,
   expires_at_epoch_ms INTEGER NOT NULL,
   released_at_epoch_ms INTEGER,
+  owner_user_id TEXT REFERENCES users(id),
+  owner_session_id TEXT REFERENCES web_sessions(id),
   PRIMARY KEY (grant_id, policy_key),
+  CHECK ((policy_key='pat.review.session.v1' AND owner_user_id IS NOT NULL
+    AND owner_session_id IS NOT NULL AND scope_key=owner_session_id
+    AND dimension='source' AND policy_kind='rolling_window' AND units=1
+    AND expires_at_epoch_ms=admitted_at_epoch_ms+600000
+    AND window_start_epoch_ms=max(0,admitted_at_epoch_ms-600000)
+    AND released_at_epoch_ms IS NULL)
+    OR (policy_key<>'pat.review.session.v1' AND owner_user_id IS NULL AND owner_session_id IS NULL)),
   CHECK (expires_at_epoch_ms > admitted_at_epoch_ms),
   CHECK (
     (policy_kind = 'outstanding' AND window_start_epoch_ms IS NULL) OR
@@ -1462,7 +1486,13 @@ CREATE TABLE support_recovery_cases (
   expires_at_ms INTEGER NOT NULL,
   state TEXT NOT NULL CHECK (state IN ('approved', 'rejected')),
   closed_at_ms INTEGER NOT NULL,
-  CHECK (expires_at_ms > opened_at_ms)
+  opened_event_id TEXT,
+  opened_event_row_ref TEXT,
+  decision_event_id TEXT,
+  decision_event_row_ref TEXT,
+  CHECK (expires_at_ms > opened_at_ms),
+  CHECK((opened_event_id IS NULL)=(opened_event_row_ref IS NULL)),
+  CHECK((decision_event_id IS NULL)=(decision_event_row_ref IS NULL))
 );
 --> statement-breakpoint
 
@@ -1558,7 +1588,14 @@ CREATE TABLE users (
   created_at_ms INTEGER NOT NULL
 , trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER CHECK ((trial_started_at_ms IS NULL AND trial_ends_at_ms IS NULL) OR (trial_started_at_ms IS NOT NULL AND trial_ends_at_ms IS NOT NULL AND trial_ends_at_ms=trial_started_at_ms+604800000)), subscription_id TEXT CHECK(subscription_id IS NULL OR length(subscription_id)=36), forwarding_address_id TEXT CHECK(forwarding_address_id IS NULL OR length(forwarding_address_id)=36), forwarding_local_part TEXT CHECK(forwarding_local_part IS NULL OR length(forwarding_local_part) BETWEEN 24 AND 64), forwarding_issued_at_ms INTEGER
  CHECK((forwarding_address_id IS NULL AND forwarding_local_part IS NULL AND forwarding_issued_at_ms IS NULL)
- OR (forwarding_address_id IS NOT NULL AND forwarding_local_part IS NOT NULL AND forwarding_issued_at_ms IS NOT NULL)), backfill_present INTEGER CHECK(backfill_present IS NULL OR backfill_present=1), backfill_submission_id TEXT REFERENCES statement_submissions(id), backfill_consumed_at_ms INTEGER CHECK(backfill_consumed_at_ms IS NULL OR backfill_consumed_at_ms>=0) CHECK(backfill_present IS NOT NULL OR (backfill_submission_id IS NULL AND backfill_consumed_at_ms IS NULL)), verified_email_address TEXT COLLATE NOCASE CHECK(verified_email_address IS NULL OR verified_email_address=lower(trim(verified_email_address))), email_verified_at_ms INTEGER CHECK((verified_email_address IS NULL)=(email_verified_at_ms IS NULL)), recovery_code_digest BLOB CHECK(recovery_code_digest IS NULL OR length(recovery_code_digest)=32), recovery_created_at_ms INTEGER, recovery_consumed_at_ms INTEGER, recovery_revision INTEGER CHECK((recovery_code_digest IS NULL AND recovery_created_at_ms IS NULL AND recovery_consumed_at_ms IS NULL AND recovery_revision IS NULL) OR (recovery_code_digest IS NOT NULL AND recovery_created_at_ms IS NOT NULL AND recovery_revision IS NOT NULL)), whatsapp_portfolio_id TEXT, whatsapp_bsuid TEXT, whatsapp_verified_at_ms INTEGER CHECK((whatsapp_portfolio_id IS NULL AND whatsapp_bsuid IS NULL AND whatsapp_verified_at_ms IS NULL) OR (whatsapp_portfolio_id IS NOT NULL AND whatsapp_bsuid IS NOT NULL AND whatsapp_verified_at_ms IS NOT NULL)), route_portfolio_id TEXT, route_bsuid TEXT, route_phone_number_id TEXT, route_verified_at_ms INTEGER CHECK((route_portfolio_id IS NULL AND route_bsuid IS NULL AND route_phone_number_id IS NULL AND route_verified_at_ms IS NULL) OR (route_portfolio_id IS NOT NULL AND route_bsuid IS NOT NULL AND route_phone_number_id IS NOT NULL AND route_verified_at_ms IS NOT NULL)), audit_retention_cutoff_ms INTEGER, paid_attempt_id TEXT REFERENCES billing_attempts(id), paid_price_id TEXT REFERENCES subscription_prices(id), paid_period_ends_at_ms INTEGER, paid_renewal_anchor_ms INTEGER CHECK((paid_attempt_id IS NULL AND paid_price_id IS NULL AND paid_period_ends_at_ms IS NULL AND paid_renewal_anchor_ms IS NULL) OR (paid_attempt_id IS NOT NULL AND paid_price_id IS NOT NULL AND paid_period_ends_at_ms IS NOT NULL AND paid_renewal_anchor_ms IS NOT NULL)), cancellation_paid_attempt_id TEXT REFERENCES billing_attempts(paid_attempt_id), cancellation_payment_source_id TEXT REFERENCES "card_enrollments"(payment_source_id), cancellation_cancelled_at_ms INTEGER, cancellation_paid_through_ms INTEGER, cancellation_source_cancellation TEXT CHECK(cancellation_source_cancellation IS NULL OR cancellation_source_cancellation IN ('detached','void-pending','voided')), cancellation_void_started_at_ms INTEGER, cancellation_void_verified_at_ms INTEGER, cancellation_verification_count INTEGER CHECK(cancellation_verification_count IS NULL OR cancellation_verification_count BETWEEN 0 AND 8), cancellation_last_offered_at_ms INTEGER CHECK((cancellation_cancelled_at_ms IS NULL AND cancellation_paid_attempt_id IS NULL AND cancellation_payment_source_id IS NULL AND cancellation_paid_through_ms IS NULL AND cancellation_source_cancellation IS NULL AND cancellation_void_started_at_ms IS NULL AND cancellation_void_verified_at_ms IS NULL AND cancellation_verification_count IS NULL AND cancellation_last_offered_at_ms IS NULL) OR (cancellation_cancelled_at_ms IS NOT NULL AND cancellation_paid_attempt_id IS NOT NULL AND cancellation_payment_source_id IS NOT NULL AND cancellation_paid_through_ms IS NOT NULL AND cancellation_source_cancellation IS NOT NULL AND cancellation_verification_count IS NOT NULL))) STRICT;
+ OR (forwarding_address_id IS NOT NULL AND forwarding_local_part IS NOT NULL AND forwarding_issued_at_ms IS NOT NULL)), backfill_present INTEGER CHECK(backfill_present IS NULL OR backfill_present=1), backfill_submission_id TEXT REFERENCES statement_submissions(id), backfill_consumed_at_ms INTEGER CHECK(backfill_consumed_at_ms IS NULL OR backfill_consumed_at_ms>=0) CHECK(backfill_present IS NOT NULL OR (backfill_submission_id IS NULL AND backfill_consumed_at_ms IS NULL)), whatsapp_portfolio_id TEXT, whatsapp_bsuid TEXT, whatsapp_verified_at_ms INTEGER CHECK((whatsapp_portfolio_id IS NULL AND whatsapp_bsuid IS NULL AND whatsapp_verified_at_ms IS NULL) OR (whatsapp_portfolio_id IS NOT NULL AND whatsapp_bsuid IS NOT NULL AND whatsapp_verified_at_ms IS NOT NULL)), route_portfolio_id TEXT, route_bsuid TEXT, route_phone_number_id TEXT, route_verified_at_ms INTEGER CHECK((route_portfolio_id IS NULL AND route_bsuid IS NULL AND route_phone_number_id IS NULL AND route_verified_at_ms IS NULL) OR (route_portfolio_id IS NOT NULL AND route_bsuid IS NOT NULL AND route_phone_number_id IS NOT NULL AND route_verified_at_ms IS NOT NULL)), paid_attempt_id TEXT REFERENCES billing_attempts(id), paid_price_id TEXT REFERENCES subscription_prices(id), paid_period_ends_at_ms INTEGER, paid_renewal_anchor_ms INTEGER CHECK((paid_attempt_id IS NULL AND paid_price_id IS NULL AND paid_period_ends_at_ms IS NULL AND paid_renewal_anchor_ms IS NULL) OR (paid_attempt_id IS NOT NULL AND paid_price_id IS NOT NULL AND paid_period_ends_at_ms IS NOT NULL AND paid_renewal_anchor_ms IS NOT NULL)), cancellation_paid_attempt_id TEXT REFERENCES billing_attempts(paid_attempt_id), cancellation_payment_source_id TEXT REFERENCES "card_enrollments"(payment_source_id), cancellation_cancelled_at_ms INTEGER, cancellation_paid_through_ms INTEGER, cancellation_source_cancellation TEXT CHECK(cancellation_source_cancellation IS NULL OR cancellation_source_cancellation IN ('detached','void-pending','voided')), cancellation_void_started_at_ms INTEGER, cancellation_void_verified_at_ms INTEGER, cancellation_verification_count INTEGER CHECK(cancellation_verification_count IS NULL OR cancellation_verification_count BETWEEN 0 AND 8), cancellation_last_offered_at_ms INTEGER CHECK((cancellation_cancelled_at_ms IS NULL AND cancellation_paid_attempt_id IS NULL AND cancellation_payment_source_id IS NULL AND cancellation_paid_through_ms IS NULL AND cancellation_source_cancellation IS NULL AND cancellation_void_started_at_ms IS NULL AND cancellation_void_verified_at_ms IS NULL AND cancellation_verification_count IS NULL AND cancellation_last_offered_at_ms IS NULL) OR (cancellation_cancelled_at_ms IS NOT NULL AND cancellation_paid_attempt_id IS NOT NULL AND cancellation_payment_source_id IS NOT NULL AND cancellation_paid_through_ms IS NOT NULL AND cancellation_source_cancellation IS NOT NULL AND cancellation_verification_count IS NOT NULL))) STRICT;
+--> statement-breakpoint
+
+CREATE TABLE verified_email_credentials (
+  user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
+  address TEXT COLLATE NOCASE NOT NULL UNIQUE CHECK(address COLLATE BINARY=lower(trim(address))),
+  verified_at_ms INTEGER NOT NULL
+) STRICT;
 --> statement-breakpoint
 
 CREATE TABLE web_sessions (
@@ -1665,8 +1702,6 @@ CREATE INDEX audit_entries_oauth_activity ON audit_entries(user_id,oauth_connect
 CREATE INDEX audit_entries_pat_activity ON audit_entries(user_id,pat_id,occurred_at_ms DESC,id DESC) WHERE record_type='credential_call';
 --> statement-breakpoint
 
-CREATE INDEX audit_entries_recovery_case ON audit_entries(recovery_case_id,occurred_at_ms) WHERE record_type='support_recovery';
---> statement-breakpoint
 
 CREATE INDEX audit_entries_refresh_connection ON audit_entries(refresh_connection_id) WHERE refresh_connection_id IS NOT NULL;
 --> statement-breakpoint
@@ -1700,6 +1735,12 @@ CREATE INDEX billing_provider_transaction_attempt ON billing_provider_transactio
 
 CREATE UNIQUE INDEX billing_renewal_identity ON billing_attempts(previous_paid_attempt_id, renewal_attempt_number)
 WHERE previous_paid_attempt_id IS NOT NULL;
+--> statement-breakpoint
+
+CREATE INDEX web_sessions_by_user ON web_sessions(user_id);
+--> statement-breakpoint
+
+CREATE INDEX browser_login_pairings_retention ON browser_login_pairings(expires_at_ms,id);
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX browser_login_approvals_identity_0 ON browser_login_pairings(approval_portfolio_id,approval_message_id) WHERE approval_message_id IS NOT NULL;
@@ -1886,7 +1927,8 @@ CREATE UNIQUE INDEX delivery_status_identity ON whatsapp_event_records(correlati
 CREATE INDEX email_replacement_dispatch_due ON email_replacements(dispatch_attempted_at_ms,created_at_ms,work_id) WHERE state='awaiting_delivery';
 --> statement-breakpoint
 
-CREATE UNIQUE INDEX email_security_global_identity ON email_security_limits(kind) WHERE kind='pairing-global';
+CREATE UNIQUE INDEX resource_counter_anchored_identity
+  ON resource_admission_counters(policy_key,scope_key) WHERE window_kind='anchored';
 --> statement-breakpoint
 
 CREATE INDEX erasure_writers_by_user ON erasure_writers(user_id);
@@ -1920,9 +1962,6 @@ CREATE INDEX hosted_compacted_retention_due ON hosted_agent_sessions(compacted_a
 --> statement-breakpoint
 
 CREATE INDEX hosted_compacted_retention_user ON hosted_agent_sessions(user_id, compacted_at_ms) WHERE compacted_revision IS NOT NULL;
---> statement-breakpoint
-
-CREATE INDEX hosted_compaction_attempts_due ON hosted_compaction_attempts(day_ms, user_id);
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX hosted_confirmations_one_consumption ON hosted_confirmations(consumed_turn_id)
@@ -2116,16 +2155,7 @@ CREATE INDEX pairing_email_pending_health ON browser_login_pairings(email_last_r
 CREATE INDEX pairing_email_rejected_health ON browser_login_pairings(email_last_requested_at_ms) WHERE email_state = 'rejected' AND email_work_id IS NOT NULL;
 --> statement-breakpoint
 
-CREATE INDEX pat_pairing_admission_expiry ON pat_pairing_admission(window_start_ms);
---> statement-breakpoint
-
 CREATE INDEX pat_pairings_capacity ON pat_pairings(created_at_ms);
---> statement-breakpoint
-
-CREATE INDEX pat_review_expiry ON pat_review_attempts(occurred_at_ms);
---> statement-breakpoint
-
-CREATE INDEX pat_review_rate ON pat_review_attempts(session_id,occurred_at_ms);
 --> statement-breakpoint
 
 CREATE INDEX pats_user_active ON pats(user_id,revoked_at_ms,expires_at_ms);
@@ -2147,7 +2177,7 @@ CREATE UNIQUE INDEX payment_source_record_reference ON card_enrollments(source_r
 CREATE INDEX payment_sources_by_owner ON card_enrollments(user_id) WHERE payment_source_id IS NOT NULL;
 --> statement-breakpoint
 
-CREATE UNIQUE INDEX pending_consent_decisions_identity_0 ON pending_consent_exchanges(decision_portfolio_id,decision_message_id) WHERE decision_value IS NOT NULL;
+CREATE UNIQUE INDEX pending_consent_decisions_identity_0 ON pending_consent_exchanges(portfolio_id,decision_message_id) WHERE decision_value IS NOT NULL;
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX pending_consent_one_caller ON pending_consent_exchanges(portfolio_id, bsuid)
@@ -2399,13 +2429,8 @@ CREATE UNIQUE INDEX users_forwarding_local_part ON users(forwarding_local_part);
 CREATE UNIQUE INDEX users_paid_attempt ON users(paid_attempt_id) WHERE paid_attempt_id IS NOT NULL;
 --> statement-breakpoint
 
-CREATE INDEX users_recovery_digest ON users(recovery_code_digest) WHERE recovery_code_digest IS NOT NULL;
---> statement-breakpoint
 
 CREATE UNIQUE INDEX users_subscription_id ON users(subscription_id);
---> statement-breakpoint
-
-CREATE UNIQUE INDEX users_verified_email ON users(verified_email_address) WHERE verified_email_address IS NOT NULL;
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX users_whatsapp_identity ON users(whatsapp_portfolio_id,whatsapp_bsuid) WHERE whatsapp_portfolio_id IS NOT NULL;
@@ -2699,7 +2724,7 @@ BEGIN SELECT RAISE(ABORT, 'sample_append_only'); END;
 CREATE TRIGGER audit_entries_no_delete BEFORE DELETE ON audit_entries
 WHEN OLD.record_type IN ('session_call','credential_call','insight_call','publication')
  AND NOT EXISTS (
-  SELECT 1 FROM (SELECT rowid,id AS user_id,audit_retention_cutoff_ms AS cutoff_ms FROM users WHERE audit_retention_cutoff_ms IS NOT NULL) WHERE user_id=OLD.user_id AND OLD.occurred_at_ms<cutoff_ms
+  SELECT 1 FROM audit_retention_permits WHERE user_id=OLD.user_id AND OLD.occurred_at_ms<cutoff_ms
  )
  AND NOT EXISTS (
   SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id
@@ -2715,7 +2740,6 @@ WHEN OLD.record_type IN ('session_call','credential_call','insight_call','public
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
  WHEN 'oauth_refresh' THEN 'oauth_refresh_events'
- WHEN 'support_recovery' THEN 'support_recovery_events'
  WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
@@ -2725,13 +2749,22 @@ BEGIN SELECT RAISE(ABORT,'audit_append_only'); END;
 CREATE TRIGGER audit_entries_no_update BEFORE UPDATE ON audit_entries BEGIN SELECT RAISE(ABORT,'audit_append_only'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER backup_recovery_credentials_field_fence_delete BEFORE DELETE ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.recovery_code_digest IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TABLE backup_recovery_credentials (
+ user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
+ code_digest BLOB NOT NULL UNIQUE CHECK(length(code_digest)=32),
+ created_at_ms INTEGER NOT NULL,
+ consumed_at_ms INTEGER,
+ revision INTEGER NOT NULL
+) STRICT;
 --> statement-breakpoint
 
-CREATE TRIGGER backup_recovery_credentials_field_fence_insert BEFORE INSERT ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.recovery_code_digest IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER backup_recovery_credentials_field_fence_delete BEFORE DELETE ON backup_recovery_credentials WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER backup_recovery_credentials_field_fence_update BEFORE UPDATE ON users WHEN (NEW.id IS NOT OLD.id OR NEW.recovery_code_digest IS NOT OLD.recovery_code_digest OR NEW.recovery_created_at_ms IS NOT OLD.recovery_created_at_ms OR NEW.recovery_consumed_at_ms IS NOT OLD.recovery_consumed_at_ms OR NEW.recovery_revision IS NOT OLD.recovery_revision) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.recovery_code_digest IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.recovery_code_digest IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER backup_recovery_credentials_field_fence_insert BEFORE INSERT ON backup_recovery_credentials WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER backup_recovery_credentials_field_fence_update BEFORE UPDATE ON backup_recovery_credentials WHEN (NEW.user_id IS NOT OLD.user_id OR NEW.code_digest IS NOT OLD.code_digest OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.consumed_at_ms IS NOT OLD.consumed_at_ms OR NEW.revision IS NOT OLD.revision) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER billing_access_adjustment_immutable BEFORE UPDATE OF adjusted_attempt_id,access_ends_at_ms ON refund_attempts
@@ -3200,6 +3233,34 @@ CREATE TRIGGER consent_history_no_delete BEFORE DELETE ON consent_history WHEN N
 CREATE TRIGGER consent_history_no_update BEFORE UPDATE ON consent_history BEGIN SELECT RAISE(ABORT,'consent_history_immutable'); END;
 --> statement-breakpoint
 
+CREATE TRIGGER consent_offer_valid_insert BEFORE INSERT ON consent_offers
+WHEN NOT json_valid(NEW.disclosure_json) OR NEW.expires_at_ms<=NEW.created_at_ms
+ OR (NEW.decision IS NOT NULL AND NEW.disclosure_message_id IS NULL)
+ OR (NEW.rejection_id IS NOT NULL AND NOT EXISTS (
+   SELECT 1 FROM consent_history r WHERE r.user_id=NEW.user_id
+   AND r.record_type='weekly_rejection' AND r.id=NEW.rejection_id))
+ OR (NEW.replaces_offer_id IS NOT NULL AND NOT EXISTS (
+   SELECT 1 FROM consent_offers old WHERE old.user_id=NEW.user_id
+   AND old.kind=NEW.kind AND old.id=NEW.replaces_offer_id AND old.id<>NEW.id))
+BEGIN SELECT RAISE(ABORT,'consent_offer_invalid'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER consent_offer_valid_update BEFORE UPDATE ON consent_offers
+WHEN NOT json_valid(NEW.disclosure_json) OR NEW.expires_at_ms<=NEW.created_at_ms
+ OR (NEW.decision IS NOT NULL AND NEW.disclosure_message_id IS NULL)
+BEGIN SELECT RAISE(ABORT,'consent_offer_invalid'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER consent_history_offer_owner BEFORE INSERT ON consent_history
+WHEN (NEW.weekly_offer_reference IS NOT NULL AND NOT EXISTS (
+   SELECT 1 FROM consent_offers o WHERE o.user_id=NEW.user_id
+   AND o.kind='weekly-summary' AND o.id=NEW.weekly_offer_reference))
+ OR (NEW.proactivity_offer_reference IS NOT NULL AND NOT EXISTS (
+   SELECT 1 FROM consent_offers o WHERE o.user_id=NEW.user_id
+   AND o.kind=NEW.kind AND o.id=NEW.proactivity_offer_reference))
+BEGIN SELECT RAISE(ABORT,'consent_history_offer_owner'); END;
+--> statement-breakpoint
+
 CREATE TRIGGER consent_offer_kind_immutable BEFORE UPDATE OF kind ON consent_offers WHEN NEW.kind<>OLD.kind BEGIN SELECT RAISE(ABORT,'consent_offer_kind_immutable'); END;
 --> statement-breakpoint
 
@@ -3543,7 +3604,6 @@ WHEN EXISTS (
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
  WHEN 'oauth_refresh' THEN 'oauth_refresh_events'
- WHEN 'support_recovery' THEN 'support_recovery_events'
  WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
@@ -3570,7 +3630,6 @@ WHEN EXISTS (
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
  WHEN 'oauth_refresh' THEN 'oauth_refresh_events'
- WHEN 'support_recovery' THEN 'support_recovery_events'
  WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
@@ -3597,7 +3656,6 @@ WHEN EXISTS (
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
  WHEN 'oauth_refresh' THEN 'oauth_refresh_events'
- WHEN 'support_recovery' THEN 'support_recovery_events'
  WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
@@ -3607,13 +3665,13 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_audit_retention_permits_delete BEFORE DELETE ON users WHEN (OLD.audit_retention_cutoff_ms IS NOT NULL) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_audit_retention_permits_delete BEFORE DELETE ON audit_retention_permits WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_audit_retention_permits_insert BEFORE INSERT ON users WHEN (NEW.audit_retention_cutoff_ms IS NOT NULL) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_audit_retention_permits_insert BEFORE INSERT ON audit_retention_permits WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_audit_retention_permits_update BEFORE UPDATE ON users WHEN ((NEW.id IS NOT OLD.id OR NEW.audit_retention_cutoff_ms IS NOT OLD.audit_retention_cutoff_ms) AND (OLD.audit_retention_cutoff_ms IS NOT NULL OR NEW.audit_retention_cutoff_ms IS NOT NULL)) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.id=q.user_id) OR (OLD.id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_audit_retention_permits_update BEFORE UPDATE ON audit_retention_permits WHEN ((NEW.user_id IS NOT OLD.user_id OR NEW.cutoff_ms IS NOT OLD.cutoff_ms)) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_attempts_delete BEFORE DELETE ON billing_attempts
@@ -3697,13 +3755,13 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_delete BEFORE DELETE ON email_security_limits WHEN (OLD.kind='pairing') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_delete BEFORE DELETE ON resource_admission_counters WHEN (OLD.policy_key='email.pairing.user.v1') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_insert BEFORE INSERT ON email_security_limits WHEN (NEW.kind='pairing') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_insert BEFORE INSERT ON resource_admission_counters WHEN (NEW.policy_key='email.pairing.user.v1') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_update BEFORE UPDATE ON email_security_limits WHEN ((NEW.user_id IS NOT OLD.user_id OR NEW.requests IS NOT OLD.requests OR NEW.window_started_at_ms IS NOT OLD.window_started_at_ms OR NEW.kind IS NOT OLD.kind) AND (OLD.kind='pairing' OR NEW.kind='pairing')) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_update BEFORE UPDATE ON resource_admission_counters WHEN ((NEW.owner_user_id IS NOT OLD.owner_user_id OR NEW.used IS NOT OLD.used OR NEW.window_start_ms IS NOT OLD.window_start_ms OR NEW.window_ends_ms IS NOT OLD.window_ends_ms OR NEW.policy_key IS NOT OLD.policy_key) AND (OLD.policy_key='email.pairing.user.v1' OR NEW.policy_key='email.pairing.user.v1')) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.owner_user_id=q.user_id) OR (OLD.owner_user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_crossing_publications_delete BEFORE DELETE ON budget_state WHEN (OLD.kind='publication') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_crossing_publications'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
@@ -4033,13 +4091,13 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingRevie
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_email_replacement_limits_delete BEFORE DELETE ON email_security_limits WHEN (OLD.kind='replacement') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_email_replacement_limits_delete BEFORE DELETE ON resource_admission_counters WHEN (OLD.policy_key='email.replacement.user.v1') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_email_replacement_limits_insert BEFORE INSERT ON email_security_limits WHEN (NEW.kind='replacement') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_email_replacement_limits_insert BEFORE INSERT ON resource_admission_counters WHEN (NEW.policy_key='email.replacement.user.v1') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_email_replacement_limits_update BEFORE UPDATE ON email_security_limits WHEN ((NEW.user_id IS NOT OLD.user_id OR NEW.last_work_id IS NOT OLD.last_work_id OR NEW.requests IS NOT OLD.requests OR NEW.window_started_at_ms IS NOT OLD.window_started_at_ms OR NEW.kind IS NOT OLD.kind) AND (OLD.kind='replacement' OR NEW.kind='replacement')) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_email_replacement_limits_update BEFORE UPDATE ON resource_admission_counters WHEN ((NEW.owner_user_id IS NOT OLD.owner_user_id OR NEW.last_work_id IS NOT OLD.last_work_id OR NEW.used IS NOT OLD.used OR NEW.window_start_ms IS NOT OLD.window_start_ms OR NEW.window_ends_ms IS NOT OLD.window_ends_ms OR NEW.policy_key IS NOT OLD.policy_key) AND (OLD.policy_key='email.replacement.user.v1' OR NEW.policy_key='email.replacement.user.v1')) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.owner_user_id=q.user_id) OR (OLD.owner_user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_email_replacements_delete BEFORE DELETE ON email_replacements
@@ -4099,18 +4157,18 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_hosted_compaction_attempts_delete BEFORE DELETE ON hosted_compaction_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
+CREATE TRIGGER erasure_fence_hosted_compaction_attempts_delete BEFORE DELETE ON resource_admission_counters
+WHEN (OLD.policy_key='hosted.compaction.user.v1') AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_hosted_compaction_attempts_insert BEFORE INSERT ON hosted_compaction_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
+CREATE TRIGGER erasure_fence_hosted_compaction_attempts_insert BEFORE INSERT ON resource_admission_counters
+WHEN (NEW.policy_key='hosted.compaction.user.v1') AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_hosted_compaction_attempts_update BEFORE UPDATE ON hosted_compaction_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
+CREATE TRIGGER erasure_fence_hosted_compaction_attempts_update BEFORE UPDATE ON resource_admission_counters
+WHEN (OLD.policy_key='hosted.compaction.user.v1' OR NEW.policy_key='hosted.compaction.user.v1') AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.owner_user_id=q.user_id) OR (OLD.owner_user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -4441,18 +4499,18 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingRevie
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_pat_review_attempts_delete BEFORE DELETE ON pat_review_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=OLD.session_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
+CREATE TRIGGER erasure_fence_pat_review_attempts_delete BEFORE DELETE ON resource_admission_events
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.policy_key='pat.review.session.v1' AND OLD.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_pat_review_attempts_insert BEFORE INSERT ON pat_review_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=NEW.session_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
+CREATE TRIGGER erasure_fence_pat_review_attempts_insert BEFORE INSERT ON resource_admission_events
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.policy_key='pat.review.session.v1' AND NEW.owner_user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_pat_review_attempts_update BEFORE UPDATE ON pat_review_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=NEW.session_id AND p.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=OLD.session_id AND p.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
+CREATE TRIGGER erasure_fence_pat_review_attempts_update BEFORE UPDATE ON resource_admission_events
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.policy_key='pat.review.session.v1' AND NEW.owner_user_id=q.user_id) OR (OLD.policy_key='pat.review.session.v1' AND OLD.owner_user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -4805,17 +4863,17 @@ BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_resource_admission_events_delete BEFORE DELETE ON resource_admission_events
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.scope_key=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.policy_key<>'pat.review.session.v1' AND OLD.scope_key=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_resource_admission_events_insert BEFORE INSERT ON resource_admission_events
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.scope_key=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.policy_key<>'pat.review.session.v1' AND NEW.scope_key=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_resource_admission_events_update BEFORE UPDATE ON resource_admission_events
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.scope_key=q.user_id) OR (OLD.scope_key=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.policy_key<>'pat.review.session.v1' AND NEW.scope_key=q.user_id) OR (OLD.policy_key<>'pat.review.session.v1' AND OLD.scope_key=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -5006,7 +5064,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingRevie
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_support_recovery_cases_update BEFORE UPDATE ON support_recovery_cases
+CREATE TRIGGER erasure_fence_support_recovery_cases_update BEFORE UPDATE OF id,user_id,pairing_id,operator_issuer,operator_subject,credential_revision,opened_at_ms,expires_at_ms,state,closed_at_ms ON support_recovery_cases
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='support_recovery_cases'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
@@ -5317,25 +5375,13 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_audit_retention_permits_delete BEFORE DELETE ON users WHEN (OLD.audit_retention_cutoff_ms IS NOT NULL) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.id=q.user_id)
+CREATE TRIGGER erasure_preserve_audit_retention_permits_delete BEFORE DELETE ON audit_retention_permits WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'audit_retention_permits','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.id,'cutoff_ms',OLD.audit_retention_cutoff_ms)
-  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.id=q.user_id)
-    AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
-    AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000;
-END;
---> statement-breakpoint
-
-CREATE TRIGGER erasure_preserve_audit_retention_permits_delete_clear BEFORE UPDATE ON users WHEN (OLD.audit_retention_cutoff_ms IS NOT NULL) AND NEW.audit_retention_cutoff_ms IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.id=q.user_id)
-  AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
-  AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000)
-BEGIN
-  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'audit_retention_permits','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.id,'cutoff_ms',OLD.audit_retention_cutoff_ms)
-  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.id=q.user_id)
+  SELECT q.id,'audit_retention_permits','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.user_id,'cutoff_ms',OLD.cutoff_ms)
+  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000;
 END;
@@ -5639,7 +5685,7 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_consent_history_delete BEFORE DELETE ON consent_history WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND q.user_id=OLD.user_id AND json_extract(q.decision_json,'$.dispositions.consent.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,CASE OLD.record_type WHEN 'processing_grant' THEN 'onboarding_consent_records' WHEN 'processing_withdrawal' THEN 'processing_consent_withdrawal_records' WHEN 'processing_renewal' THEN 'processing_consent_renewals' WHEN 'weekly_grant' THEN 'weekly_consent_records' WHEN 'weekly_rejection' THEN 'weekly_consent_rejections' WHEN 'weekly_revocation' THEN 'weekly_consent_revocation_records' WHEN 'proactivity_grant' THEN 'proactivity_consent_records' WHEN 'pat_grant' THEN 'pat_grant_consents' WHEN 'pat_revocation' THEN 'pat_revocation_consents' WHEN 'oauth_grant' THEN 'oauth_grant_consents' WHEN 'oauth_replay_revocation' THEN 'oauth_revocation_consents' WHEN 'oauth_user_revocation' THEN 'oauth_user_revocation_consents' END,'drain:'||lower(hex(randomblob(16))),CASE OLD.record_type WHEN 'processing_grant' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'disclosure_json',OLD."disclosure_json",'disclosure_message_id',OLD."disclosure_message_id",'decision_message_id',OLD."decision_message_id",'decision_received_at_ms',OLD."decision_received_at_ms",'accepted_at_ms',OLD."accepted_at_ms") WHEN 'processing_withdrawal' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'grant_record_id',OLD."grant_record_id",'session_id',OLD."session_id",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'processing_renewal' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'withdrawal_id',OLD."withdrawal_id",'grant_record_id',OLD."grant_record_id",'session_id',OLD."session_id",'disclosure_json',OLD."disclosure_json",'accepted_at_ms',OLD."accepted_at_ms") WHEN 'weekly_grant' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'grant_id',OLD."grant_id",'offer_id',OLD."offer_id",'record_json',OLD."record_json",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'weekly_rejection' THEN json_object('sequence',OLD."sequence",'id',OLD."id",'user_id',OLD."user_id",'offer_id',OLD."offer_id",'decision_message_id',OLD."decision_message_id",'decision',OLD."decision") WHEN 'weekly_revocation' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'grant_id',OLD."grant_id",'offer_id',OLD."offer_id",'decision_message_id',OLD."decision_message_id",'decision',OLD."decision",'record_json',OLD."record_json",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'proactivity_grant' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'kind',OLD."kind",'grant_id',OLD."grant_id",'offer_id',OLD."offer_id",'decision_message_id',OLD."decision_message_id",'record_json',OLD."record_json",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'pat_grant' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'session_id',OLD."session_id",'pairing_id',OLD."pairing_id",'request_id',OLD."request_id",'disclosure_revision',OLD."disclosure_revision",'disclosure_text',OLD."disclosure_text",'accepted_at_ms',OLD."accepted_at_ms") WHEN 'pat_revocation' THEN json_object('id',OLD."id",'grant_consent_id',OLD."grant_consent_id",'user_id',OLD."user_id",'pat_id',OLD."pat_id",'pairing_id',OLD."pairing_id",'session_id',OLD."session_id",'policy_reason',OLD."policy_reason",'disclosure_revision',OLD."disclosure_revision",'disclosure_text',OLD."disclosure_text",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'oauth_grant' THEN json_object('id',OLD."id",'connection_id',OLD."connection_id",'user_id',OLD."user_id",'session_id',OLD."session_id",'disclosure_revision',OLD."disclosure_revision",'disclosure_text',OLD."disclosure_text",'accepted_at_ms',OLD."accepted_at_ms") WHEN 'oauth_replay_revocation' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'connection_id',OLD."connection_id",'reason',OLD."reason",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'oauth_user_revocation' THEN json_object('connection_id',OLD."connection_id",'user_id',OLD."user_id",'session_id',OLD."session_id",'reason',OLD."reason",'disclosure_revision',OLD."disclosure_revision",'disclosure_text',OLD."disclosure_text",'occurred_at_ms',OLD."occurred_at_ms") END FROM erasure_requests q WHERE q.state='Draining' AND q.user_id=OLD.user_id AND json_extract(q.decision_json,'$.dispositions.consent.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000; END;
+CREATE TRIGGER erasure_preserve_consent_history_delete BEFORE DELETE ON consent_history WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND q.user_id=OLD.user_id AND json_extract(q.decision_json,'$.dispositions.consent.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,CASE OLD.record_type WHEN 'processing_grant' THEN 'onboarding_consent_records' WHEN 'processing_withdrawal' THEN 'processing_consent_withdrawal_records' WHEN 'processing_renewal' THEN 'processing_consent_renewals' WHEN 'weekly_grant' THEN 'weekly_consent_records' WHEN 'weekly_rejection' THEN 'weekly_consent_rejections' WHEN 'weekly_revocation' THEN 'weekly_consent_revocation_records' WHEN 'proactivity_grant' THEN 'proactivity_consent_records' WHEN 'pat_grant' THEN 'pat_grant_consents' WHEN 'pat_revocation' THEN 'pat_revocation_consents' WHEN 'oauth_grant' THEN 'oauth_grant_consents' WHEN 'oauth_replay_revocation' THEN 'oauth_revocation_consents' WHEN 'oauth_user_revocation' THEN 'oauth_user_revocation_consents' END,'drain:'||lower(hex(randomblob(16))),CASE OLD.record_type WHEN 'processing_grant' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'disclosure_json',OLD."disclosure_json",'disclosure_message_id',OLD."disclosure_message_id",'decision_message_id',OLD."decision_message_id",'decision_received_at_ms',OLD."decision_received_at_ms",'accepted_at_ms',OLD.occurred_at_ms) WHEN 'processing_withdrawal' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'grant_record_id',OLD."grant_record_id",'session_id',OLD."session_id",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'processing_renewal' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'withdrawal_id',OLD."withdrawal_id",'grant_record_id',OLD."grant_record_id",'session_id',OLD."session_id",'disclosure_json',OLD."disclosure_json",'accepted_at_ms',OLD.occurred_at_ms) WHEN 'weekly_grant' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'grant_id',OLD."grant_id",'offer_id',OLD."offer_id",'record_json',OLD."record_json",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'weekly_rejection' THEN json_object('sequence',OLD."sequence",'id',OLD."id",'user_id',OLD."user_id",'offer_id',OLD."offer_id",'decision_message_id',OLD."decision_message_id",'decision',OLD."decision") WHEN 'weekly_revocation' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'grant_id',OLD."grant_id",'offer_id',OLD."offer_id",'decision_message_id',OLD."decision_message_id",'decision',OLD."decision",'record_json',OLD."record_json",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'proactivity_grant' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'kind',OLD."kind",'grant_id',OLD."grant_id",'offer_id',OLD."offer_id",'decision_message_id',OLD."decision_message_id",'record_json',OLD."record_json",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'pat_grant' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'session_id',OLD."session_id",'pairing_id',OLD."pairing_id",'request_id',OLD."request_id",'disclosure_revision',json_extract(OLD.disclosure_json,'$.revision'),'disclosure_text',json_extract(OLD.disclosure_json,'$.text'),'accepted_at_ms',OLD.occurred_at_ms) WHEN 'pat_revocation' THEN json_object('id',OLD."id",'grant_consent_id',OLD."grant_consent_id",'user_id',OLD."user_id",'pat_id',OLD."pat_id",'pairing_id',OLD."pairing_id",'session_id',OLD."session_id",'policy_reason',OLD.reason,'disclosure_revision',json_extract(OLD.disclosure_json,'$.revision'),'disclosure_text',json_extract(OLD.disclosure_json,'$.text'),'occurred_at_ms',OLD."occurred_at_ms") WHEN 'oauth_grant' THEN json_object('id',OLD."id",'connection_id',OLD."connection_id",'user_id',OLD."user_id",'session_id',OLD."session_id",'disclosure_revision',json_extract(OLD.disclosure_json,'$.revision'),'disclosure_text',json_extract(OLD.disclosure_json,'$.text'),'accepted_at_ms',OLD.occurred_at_ms) WHEN 'oauth_replay_revocation' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'connection_id',OLD."connection_id",'reason',OLD."reason",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'oauth_user_revocation' THEN json_object('connection_id',OLD."connection_id",'user_id',OLD."user_id",'session_id',OLD."session_id",'reason',OLD."reason",'disclosure_revision',json_extract(OLD.disclosure_json,'$.revision'),'disclosure_text',json_extract(OLD.disclosure_json,'$.text'),'occurred_at_ms',OLD."occurred_at_ms") END FROM erasure_requests q WHERE q.state='Draining' AND q.user_id=OLD.user_id AND json_extract(q.decision_json,'$.dispositions.consent.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000; END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_dashboard_documents_delete BEFORE DELETE ON user_documents
@@ -5733,14 +5779,14 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_hosted_compaction_attempts_delete BEFORE DELETE ON hosted_compaction_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+CREATE TRIGGER erasure_preserve_hosted_compaction_attempts_delete BEFORE DELETE ON resource_admission_counters
+WHEN (OLD.policy_key='hosted.compaction.user.v1') AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.owner_user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'hosted_compaction_attempts','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'day_ms',OLD."day_ms",'used',OLD."used")
-  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+  SELECT q.id,'hosted_compaction_attempts','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."owner_user_id",'day_ms',OLD."window_start_ms",'used',OLD."used")
+  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.owner_user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
@@ -5944,7 +5990,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (EXIST
   AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'pending_consent_exchanges','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'portfolio_id',OLD."portfolio_id",'bsuid',OLD."bsuid",'phone_number_id',OLD."phone_number_id",'initiating_message_id',OLD."initiating_message_id",'initiating_body_sha256',OLD."initiating_body_sha256",'disclosure_json',OLD."disclosure_json",'disclosure_message_id',OLD."disclosure_message_id",'created_at_ms',OLD."created_at_ms",'disclosed_at_ms',OLD."disclosed_at_ms",'decision_not_before_ms',OLD."decision_not_before_ms",'expires_at_ms',OLD."expires_at_ms",'state',OLD."state",'rejected_at_ms',OLD."rejected_at_ms",'sandbox_phone',OLD."sandbox_phone",'delivery_phone_number_id',OLD.delivery_phone_number_id,'delivery_message_id',OLD.delivery_message_id,'delivery_occurred_at_ms',OLD.delivery_occurred_at_ms,'delivery_received_at_ms',OLD.delivery_received_at_ms,'delivery_not_before_ms',OLD.delivery_not_before_ms,'decision_portfolio_id',OLD.decision_portfolio_id,'decision_bsuid',OLD.decision_bsuid,'decision_phone_number_id',OLD.decision_phone_number_id,'decision_value',OLD.decision_value,'decision_disclosure_json',OLD.decision_disclosure_json,'decision_disclosure_message_id',OLD.decision_disclosure_message_id,'decision_message_id',OLD.decision_message_id,'decision_delivery_key',OLD.decision_delivery_key,'decision_body_sha256',OLD.decision_body_sha256,'decision_occurred_at_ms',OLD.decision_occurred_at_ms,'decision_received_at_ms',OLD.decision_received_at_ms)
+  SELECT q.id,'pending_consent_exchanges','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'portfolio_id',OLD."portfolio_id",'bsuid',OLD."bsuid",'phone_number_id',OLD."phone_number_id",'initiating_message_id',OLD."initiating_message_id",'initiating_body_sha256',OLD."initiating_body_sha256",'disclosure_json',OLD."disclosure_json",'disclosure_message_id',OLD."disclosure_message_id",'created_at_ms',OLD."created_at_ms",'disclosed_at_ms',OLD."disclosed_at_ms",'decision_not_before_ms',OLD."decision_not_before_ms",'expires_at_ms',OLD."expires_at_ms",'state',OLD."state",'rejected_at_ms',OLD."rejected_at_ms",'sandbox_phone',OLD."sandbox_phone",'delivery_phone_number_id',OLD.delivery_phone_number_id,'delivery_message_id',OLD.delivery_message_id,'delivery_occurred_at_ms',OLD.delivery_occurred_at_ms,'delivery_received_at_ms',OLD.delivery_received_at_ms,'delivery_not_before_ms',OLD.delivery_not_before_ms,'decision_portfolio_id',CASE WHEN OLD.decision_value IS NOT NULL THEN OLD.portfolio_id END,'decision_bsuid',CASE WHEN OLD.decision_value IS NOT NULL THEN OLD.bsuid END,'decision_phone_number_id',CASE WHEN OLD.decision_value IS NOT NULL THEN OLD.phone_number_id END,'decision_value',OLD.decision_value,'decision_disclosure_json',CASE WHEN OLD.decision_value IS NOT NULL THEN OLD.disclosure_json END,'decision_disclosure_message_id',CASE WHEN OLD.decision_value IS NOT NULL THEN OLD.disclosure_message_id END,'decision_message_id',OLD.decision_message_id,'decision_delivery_key',OLD.decision_delivery_key,'decision_body_sha256',OLD.decision_body_sha256,'decision_occurred_at_ms',OLD.decision_occurred_at_ms,'decision_received_at_ms',OLD.decision_received_at_ms)
   FROM erasure_requests q WHERE q.state='Draining' AND (EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) w WHERE w.user_id=q.user_id AND w.portfolio_id=OLD.portfolio_id AND w.bsuid=OLD.bsuid))
     AND json_extract(q.decision_json,'$.dispositions.consent.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000;
@@ -6237,13 +6283,13 @@ END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_resource_admission_events_delete BEFORE DELETE ON resource_admission_events
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.scope_key=q.user_id)
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.policy_key<>'pat.review.session.v1' AND OLD.scope_key=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
   SELECT q.id,'resource_admission_events','drain:'||lower(hex(randomblob(16))),json_object('grant_id',OLD."grant_id",'policy_key',OLD."policy_key",'dimension',OLD."dimension",'scope_key',OLD."scope_key",'policy_kind',OLD."policy_kind",'units',OLD."units",'admitted_at_epoch_ms',OLD."admitted_at_epoch_ms",'window_start_epoch_ms',OLD."window_start_epoch_ms",'expires_at_epoch_ms',OLD."expires_at_epoch_ms",'released_at_epoch_ms',OLD."released_at_epoch_ms")
-  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.scope_key=q.user_id)
+  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.policy_key<>'pat.review.session.v1' AND OLD.scope_key=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
@@ -6914,7 +6960,7 @@ CREATE TRIGGER insight_work_identity_immutable BEFORE UPDATE ON insight_reports 
 
 CREATE TRIGGER issue_forwarding_address AFTER INSERT ON consent_history WHEN NEW.record_type='processing_grant' BEGIN UPDATE users SET forwarding_address_id=lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
     substr(lower(hex(randomblob(2))), 2, 3) || '-8' ||
-    substr(lower(hex(randomblob(2))), 2, 3) || '-' || lower(hex(randomblob(6))),forwarding_local_part=lower(hex(randomblob(24))),forwarding_issued_at_ms=NEW.accepted_at_ms WHERE id=NEW.user_id AND forwarding_address_id IS NULL; END;
+    substr(lower(hex(randomblob(2))), 2, 3) || '-' || lower(hex(randomblob(6))),forwarding_local_part=lower(hex(randomblob(24))),forwarding_issued_at_ms=NEW.occurred_at_ms WHERE id=NEW.user_id AND forwarding_address_id IS NULL; END;
 --> statement-breakpoint
 
 CREATE TRIGGER keyword_rule_capacity BEFORE INSERT ON keyword_rules
@@ -7027,12 +7073,18 @@ BEGIN SELECT RAISE(ABORT, 'payment_enrollment_method_immutable'); END;
 CREATE TRIGGER payment_source_method_guard BEFORE UPDATE ON card_enrollments WHEN OLD.payment_source_id IS NULL AND NEW.payment_source_id IS NOT NULL AND (NEW.source_method<>OLD.method OR (OLD.wompi_environment IS NULL AND OLD.method<>'card')) BEGIN SELECT RAISE(ABORT,'payment_source_method_mismatch'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER pending_consent_decision_requires_delivery BEFORE UPDATE OF decision_portfolio_id,decision_bsuid,decision_phone_number_id,decision_value,decision_disclosure_json,decision_disclosure_message_id,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
+CREATE TRIGGER pending_consent_exchange_basis_immutable BEFORE UPDATE ON pending_consent_exchanges
+WHEN NEW.id IS NOT OLD.id OR NEW.portfolio_id IS NOT OLD.portfolio_id OR NEW.bsuid IS NOT OLD.bsuid
+ OR NEW.phone_number_id IS NOT OLD.phone_number_id OR NEW.disclosure_json IS NOT OLD.disclosure_json
+ OR ((OLD.decision_value IS NOT NULL OR OLD.disclosure_message_id IS NOT NULL)
+   AND NEW.disclosure_message_id IS NOT OLD.disclosure_message_id)
+BEGIN SELECT RAISE(ABORT,'pending_consent_exchange_basis_immutable'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER pending_consent_decision_requires_delivery BEFORE UPDATE OF decision_value,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
 WHEN OLD.decision_value IS NULL AND NEW.decision_value IS NOT NULL AND (NOT EXISTS (
   SELECT 1 FROM pending_consent_exchanges AS e
-  WHERE e.id = NEW.id AND e.portfolio_id = NEW.decision_portfolio_id AND e.bsuid = NEW.decision_bsuid
-    AND e.phone_number_id = NEW.decision_phone_number_id AND e.state = 'awaiting_decision' AND e.disclosure_json = NEW.decision_disclosure_json
-    AND e.disclosure_message_id = NEW.decision_disclosure_message_id
+  WHERE e.id = NEW.id AND e.state = 'awaiting_decision' AND e.disclosure_message_id IS NOT NULL
     AND NEW.decision_message_id <> e.initiating_message_id
     -- Kapso timestamps have second precision: equal timestamps cannot prove reply order.
     AND NEW.decision_occurred_at_ms > e.disclosed_at_ms AND NEW.decision_occurred_at_ms > e.decision_not_before_ms
@@ -7044,15 +7096,15 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER pending_consent_decision_settles AFTER UPDATE OF decision_portfolio_id,decision_bsuid,decision_phone_number_id,decision_value,decision_disclosure_json,decision_disclosure_message_id,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
+CREATE TRIGGER pending_consent_decision_settles AFTER UPDATE OF decision_value,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
 WHEN OLD.decision_value IS NULL AND NEW.decision_value IS NOT NULL
 BEGIN
  UPDATE pending_consent_exchanges SET state = NEW.decision_value WHERE id = NEW.id;
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER pending_consent_decisions_no_update BEFORE UPDATE OF decision_portfolio_id,decision_bsuid,decision_phone_number_id,decision_value,decision_disclosure_json,decision_disclosure_message_id,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
-WHEN OLD.decision_value IS NOT NULL AND (NEW.decision_portfolio_id IS NOT OLD.decision_portfolio_id OR NEW.decision_bsuid IS NOT OLD.decision_bsuid OR NEW.decision_phone_number_id IS NOT OLD.decision_phone_number_id OR NEW.decision_value IS NOT OLD.decision_value OR NEW.decision_disclosure_json IS NOT OLD.decision_disclosure_json OR NEW.decision_disclosure_message_id IS NOT OLD.decision_disclosure_message_id OR NEW.decision_message_id IS NOT OLD.decision_message_id OR NEW.decision_delivery_key IS NOT OLD.decision_delivery_key OR NEW.decision_body_sha256 IS NOT OLD.decision_body_sha256 OR NEW.decision_occurred_at_ms IS NOT OLD.decision_occurred_at_ms OR NEW.decision_received_at_ms IS NOT OLD.decision_received_at_ms) AND NEW.decision_value IS NOT NULL
+CREATE TRIGGER pending_consent_decisions_no_update BEFORE UPDATE OF decision_value,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
+WHEN OLD.decision_value IS NOT NULL AND (NEW.decision_value IS NOT OLD.decision_value OR NEW.decision_message_id IS NOT OLD.decision_message_id OR NEW.decision_delivery_key IS NOT OLD.decision_delivery_key OR NEW.decision_body_sha256 IS NOT OLD.decision_body_sha256 OR NEW.decision_occurred_at_ms IS NOT OLD.decision_occurred_at_ms OR NEW.decision_received_at_ms IS NOT OLD.decision_received_at_ms)
 BEGIN
  SELECT RAISE(ABORT, 'pending_consent_append_only');
 END;
@@ -7087,7 +7139,7 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER pending_consent_exchanges_companions_initial BEFORE INSERT ON pending_consent_exchanges WHEN NEW.delivery_phone_number_id IS NOT NULL OR NEW.delivery_message_id IS NOT NULL OR NEW.delivery_occurred_at_ms IS NOT NULL OR NEW.delivery_received_at_ms IS NOT NULL OR NEW.delivery_not_before_ms IS NOT NULL OR NEW.decision_portfolio_id IS NOT NULL OR NEW.decision_bsuid IS NOT NULL OR NEW.decision_phone_number_id IS NOT NULL OR NEW.decision_value IS NOT NULL OR NEW.decision_disclosure_json IS NOT NULL OR NEW.decision_disclosure_message_id IS NOT NULL OR NEW.decision_message_id IS NOT NULL OR NEW.decision_delivery_key IS NOT NULL OR NEW.decision_body_sha256 IS NOT NULL OR NEW.decision_occurred_at_ms IS NOT NULL OR NEW.decision_received_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'pending_consent_exchanges_companions_initial'); END;
+CREATE TRIGGER pending_consent_exchanges_companions_initial BEFORE INSERT ON pending_consent_exchanges WHEN NEW.delivery_phone_number_id IS NOT NULL OR NEW.delivery_message_id IS NOT NULL OR NEW.delivery_occurred_at_ms IS NOT NULL OR NEW.delivery_received_at_ms IS NOT NULL OR NEW.delivery_not_before_ms IS NOT NULL OR NEW.decision_value IS NOT NULL OR NEW.decision_message_id IS NOT NULL OR NEW.decision_delivery_key IS NOT NULL OR NEW.decision_body_sha256 IS NOT NULL OR NEW.decision_occurred_at_ms IS NOT NULL OR NEW.decision_received_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'pending_consent_exchanges_companions_initial'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER pending_consent_rejected_delivery BEFORE UPDATE OF delivery_phone_number_id,delivery_message_id,delivery_occurred_at_ms,delivery_received_at_ms,delivery_not_before_ms ON pending_consent_exchanges
@@ -7155,9 +7207,9 @@ WHEN NEW.record_type='processing_renewal' AND ( NOT EXISTS (
   JOIN web_sessions w ON w.user_id=r.user_id
   WHERE r.id=NEW.withdrawal_id AND r.user_id=NEW.user_id AND g.user_id=NEW.user_id
     AND g.id=NEW.grant_record_id AND g.disclosure_json=NEW.disclosure_json
-    AND r.occurred_at_ms<=NEW.accepted_at_ms AND w.id=NEW.session_id AND w.revoked_at_ms IS NULL
-    AND w.fresh_until_ms>NEW.accepted_at_ms AND w.idle_expires_at_ms>NEW.accepted_at_ms
-    AND w.hard_expires_at_ms>NEW.accepted_at_ms
+    AND r.occurred_at_ms<=NEW.occurred_at_ms AND w.id=NEW.session_id AND w.revoked_at_ms IS NULL
+    AND w.fresh_until_ms>NEW.occurred_at_ms AND w.idle_expires_at_ms>NEW.occurred_at_ms
+    AND w.hard_expires_at_ms>NEW.occurred_at_ms
 )
 ) BEGIN SELECT RAISE(ABORT,'consent_renewal_requires_authority'); END;
 --> statement-breakpoint
@@ -7176,8 +7228,32 @@ BEGIN
 END;
 --> statement-breakpoint
 
+CREATE TRIGGER provider_credential_immutable BEFORE UPDATE ON provider_credentials
+WHEN NEW.issuer IS NOT OLD.issuer OR NEW.subject IS NOT OLD.subject OR NEW.user_id IS NOT OLD.user_id
+ OR NEW.contact_email IS NOT OLD.contact_email OR NEW.established_at_ms IS NOT OLD.established_at_ms
+BEGIN SELECT RAISE(ABORT,'provider_credential_immutable'); END;
+--> statement-breakpoint
+
 CREATE TRIGGER provider_completion_immutable BEFORE UPDATE ON provider_authentication_attempts
-WHEN (OLD.completed_at_ms IS NOT NULL AND (NEW.completed_at_ms IS NOT OLD.completed_at_ms OR NEW.created_user IS NOT OLD.created_user OR NEW.user_id IS NOT OLD.user_id OR NEW.state<>'completed'))
+WHEN (OLD.completed_at_ms IS NOT NULL AND (
+ NEW.id IS NOT OLD.id
+ OR NEW.pairing_id IS NOT OLD.pairing_id
+ OR NEW.cookie_digest IS NOT OLD.cookie_digest
+ OR NEW.nonce IS NOT OLD.nonce
+ OR NEW.intent IS NOT OLD.intent
+ OR NEW.disclosure_json IS NOT OLD.disclosure_json
+ OR NEW.consent_at_ms IS NOT OLD.consent_at_ms
+ OR NEW.created_at_ms IS NOT OLD.created_at_ms
+ OR NEW.expires_at_ms IS NOT OLD.expires_at_ms
+ OR NEW.state IS NOT OLD.state
+ OR NEW.issuer IS NOT OLD.issuer
+ OR NEW.subject IS NOT OLD.subject
+ OR NEW.contact_email IS NOT OLD.contact_email
+ OR NEW.user_id IS NOT OLD.user_id
+ OR NEW.provider IS NOT OLD.provider
+ OR NEW.handoff_id IS NOT OLD.handoff_id
+ OR NEW.completed_at_ms IS NOT OLD.completed_at_ms
+ OR NEW.created_user IS NOT OLD.created_user))
  OR (NEW.completed_at_ms IS NOT OLD.completed_at_ms AND NOT(OLD.completed_at_ms IS NULL AND OLD.state='verified' AND NEW.state='completed' AND NEW.user_id IS NOT NULL AND NEW.cookie_digest=zeroblob(32) AND NEW.nonce='' AND NEW.contact_email IS NULL))
 BEGIN SELECT RAISE(ABORT,'provider_completion_invalid'); END;
 --> statement-breakpoint
@@ -7199,7 +7275,7 @@ WHEN OLD.completed_at_ms IS NULL AND NEW.completed_at_ms IS NOT NULL AND NOT EXI
  AND ((a.handoff_id IS NULL AND g.id=a.id AND g.disclosure_json=a.disclosure_json)
  OR (a.handoff_id IS NOT NULL AND g.id=(SELECT exchange_id FROM whatsapp_provider_handoffs WHERE id=a.handoff_id))))
  AND EXISTS(SELECT 1 FROM users t WHERE t.id=NEW.user_id AND t.trial_started_at_ms=NEW.completed_at_ms)
- AND EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL) r WHERE r.user_id=NEW.user_id AND r.created_at_ms=NEW.completed_at_ms)
+ AND EXISTS(SELECT 1 FROM backup_recovery_credentials r WHERE r.user_id=NEW.user_id AND r.created_at_ms=NEW.completed_at_ms)
  ))
 )
 BEGIN
@@ -8064,13 +8140,13 @@ WHEN OLD.trial_started_at_ms IS NOT NULL AND (NEW.trial_started_at_ms IS NOT OLD
 BEGIN SELECT RAISE(ABORT,'trial_period_immutable'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER verified_email_credentials_field_fence_delete BEFORE DELETE ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.verified_email_address IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='verified_email_credentials')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER verified_email_credentials_field_fence_delete BEFORE DELETE ON verified_email_credentials WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='verified_email_credentials')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER verified_email_credentials_field_fence_insert BEFORE INSERT ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.verified_email_address IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='verified_email_credentials')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER verified_email_credentials_field_fence_insert BEFORE INSERT ON verified_email_credentials WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='verified_email_credentials')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER verified_email_credentials_field_fence_update BEFORE UPDATE ON users WHEN (NEW.id IS NOT OLD.id OR NEW.verified_email_address IS NOT OLD.verified_email_address OR NEW.email_verified_at_ms IS NOT OLD.email_verified_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.verified_email_address IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='verified_email_credentials')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.verified_email_address IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='verified_email_credentials'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER verified_email_credentials_field_fence_update BEFORE UPDATE ON verified_email_credentials WHEN (NEW.user_id IS NOT OLD.user_id OR NEW.address IS NOT OLD.address OR NEW.verified_at_ms IS NOT OLD.verified_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='verified_email_credentials')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='verified_email_credentials'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER web_session_requires_pairing BEFORE INSERT ON web_sessions
@@ -8140,11 +8216,19 @@ CREATE TRIGGER whatsapp_identities_field_fence_insert BEFORE INSERT ON users WHE
 CREATE TRIGGER whatsapp_identities_field_fence_update BEFORE UPDATE ON users WHEN (NEW.id IS NOT OLD.id OR NEW.whatsapp_portfolio_id IS NOT OLD.whatsapp_portfolio_id OR NEW.whatsapp_bsuid IS NOT OLD.whatsapp_bsuid OR NEW.whatsapp_verified_at_ms IS NOT OLD.whatsapp_verified_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.whatsapp_portfolio_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='whatsapp_identities')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.whatsapp_portfolio_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='whatsapp_identities'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER whatsapp_provider_completion_consumes_confirmation AFTER UPDATE OF completed_at_ms ON provider_authentication_attempts
-WHEN OLD.completed_at_ms IS NULL AND NEW.completed_at_ms IS NOT NULL
-BEGIN
- UPDATE whatsapp_provider_handoffs SET consumed_at_ms=NEW.completed_at_ms WHERE id=(SELECT handoff_id FROM provider_authentication_attempts WHERE id=NEW.id);
-END;
+
+CREATE TRIGGER whatsapp_provider_handoff_immutable BEFORE UPDATE ON whatsapp_provider_handoffs
+WHEN NEW.id IS NOT OLD.id OR NEW.exchange_id IS NOT OLD.exchange_id
+ OR (OLD.handoff_send_started_ms IS NOT NULL AND NEW.handoff_send_started_ms IS NOT OLD.handoff_send_started_ms)
+ OR (OLD.pairing_id IS NOT NULL AND NEW.pairing_id IS NOT OLD.pairing_id)
+ OR (OLD.review_code IS NOT NULL AND NEW.review_code IS NOT OLD.review_code)
+ OR (OLD.review_started_ms IS NOT NULL AND NEW.review_started_ms IS NOT OLD.review_started_ms)
+ OR (OLD.review_message_id IS NOT NULL AND NEW.review_message_id IS NOT OLD.review_message_id)
+ OR (OLD.decision IS NOT NULL AND (NEW.decision IS NOT OLD.decision
+   OR NEW.decision_message_id IS NOT OLD.decision_message_id OR NEW.confirmed_at_ms IS NOT OLD.confirmed_at_ms
+   OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.expires_at_ms IS NOT OLD.expires_at_ms))
+ OR (OLD.consumed_at_ms IS NOT NULL AND NEW.consumed_at_ms IS NOT OLD.consumed_at_ms)
+BEGIN SELECT RAISE(ABORT,'whatsapp_handoff_immutable'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER whatsapp_provider_completion_requires_confirmation BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts
@@ -8161,4 +8245,85 @@ AND NOT EXISTS(
 BEGIN
  SELECT RAISE(ABORT,'whatsapp_provider_confirmation_invalid');
 END;
+--> statement-breakpoint
+
+CREATE INDEX resource_counter_source_expiry ON resource_admission_counters(window_start_ms,scope_key)
+WHERE policy_key='pat.pairing.source.v1';
+--> statement-breakpoint
+
+CREATE INDEX resource_admission_review_retention ON resource_admission_events(admitted_at_epoch_ms,grant_id)
+WHERE policy_key='pat.review.session.v1';
+--> statement-breakpoint
+
+CREATE TRIGGER resource_admission_review_owner_insert BEFORE INSERT ON resource_admission_events
+WHEN NEW.policy_key='pat.review.session.v1' AND NOT EXISTS(
+ SELECT 1 FROM web_sessions WHERE id=NEW.owner_session_id AND user_id=NEW.owner_user_id)
+BEGIN SELECT RAISE(ABORT,'resource_admission_owner_mismatch'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER resource_admission_review_owner_update BEFORE UPDATE ON resource_admission_events
+WHEN NEW.policy_key='pat.review.session.v1' AND NOT EXISTS(
+ SELECT 1 FROM web_sessions WHERE id=NEW.owner_session_id AND user_id=NEW.owner_user_id)
+BEGIN SELECT RAISE(ABORT,'resource_admission_owner_mismatch'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER resource_admission_review_session_owner BEFORE UPDATE OF id,user_id ON web_sessions
+WHEN EXISTS(SELECT 1 FROM resource_admission_events WHERE policy_key='pat.review.session.v1'
+ AND owner_session_id=OLD.id AND (owner_session_id IS NOT NEW.id OR owner_user_id IS NOT NEW.user_id))
+BEGIN SELECT RAISE(ABORT,'resource_admission_owner_mismatch'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER resource_admission_review_grant_cleanup AFTER DELETE ON resource_admission_events
+WHEN OLD.policy_key='pat.review.session.v1'
+ AND NOT EXISTS(SELECT 1 FROM resource_admission_events WHERE grant_id=OLD.grant_id)
+BEGIN DELETE FROM resource_admission_grants WHERE id=OLD.grant_id; END;
+--> statement-breakpoint
+
+CREATE INDEX resource_counter_compaction_due ON resource_admission_counters(window_start_ms,scope_key)
+ WHERE policy_key='hosted.compaction.user.v1';
+--> statement-breakpoint
+
+CREATE UNIQUE INDEX resource_counter_calendar_identity
+ ON resource_admission_counters(policy_key,scope_key,window_start_ms) WHERE window_kind='calendar';
+--> statement-breakpoint
+
+CREATE TRIGGER support_recovery_case_immutable BEFORE UPDATE ON support_recovery_cases
+WHEN NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.pairing_id IS NOT OLD.pairing_id
+ OR NEW.operator_issuer IS NOT OLD.operator_issuer OR NEW.operator_subject IS NOT OLD.operator_subject
+ OR NEW.credential_revision IS NOT OLD.credential_revision OR NEW.opened_at_ms IS NOT OLD.opened_at_ms
+ OR NEW.expires_at_ms IS NOT OLD.expires_at_ms OR NEW.state IS NOT OLD.state OR NEW.closed_at_ms IS NOT OLD.closed_at_ms
+BEGIN SELECT RAISE(ABORT,'recovery_case_immutable'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER support_recovery_event_metadata_immutable BEFORE UPDATE OF opened_event_id,opened_event_row_ref,decision_event_id,decision_event_row_ref ON support_recovery_cases
+WHEN (NEW.opened_event_id IS NOT OLD.opened_event_id OR NEW.opened_event_row_ref IS NOT OLD.opened_event_row_ref
+ OR NEW.decision_event_id IS NOT OLD.decision_event_id OR NEW.decision_event_row_ref IS NOT OLD.decision_event_row_ref)
+ AND NOT (((NEW.opened_event_id IS OLD.opened_event_id AND NEW.opened_event_row_ref IS OLD.opened_event_row_ref)
+ OR (NEW.opened_event_id IS NULL AND NEW.opened_event_row_ref IS NULL))
+ AND ((NEW.decision_event_id IS OLD.decision_event_id AND NEW.decision_event_row_ref IS OLD.decision_event_row_ref)
+ OR (NEW.decision_event_id IS NULL AND NEW.decision_event_row_ref IS NULL))
+ AND EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id
+ WHERE p.user_id=OLD.user_id AND q.user_id=OLD.user_id AND q.state='Erasing' AND p.store_id='support_recovery_events'))
+BEGIN SELECT RAISE(ABORT,'recovery_case_immutable'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER support_recovery_case_owner BEFORE INSERT ON support_recovery_cases
+WHEN NOT EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=NEW.pairing_id AND p.user_id=NEW.user_id)
+BEGIN SELECT RAISE(ABORT,'recovery_case_owner'); END;
+--> statement-breakpoint
+
+CREATE UNIQUE INDEX support_recovery_opened_event_id ON support_recovery_cases(opened_event_id) WHERE opened_event_id IS NOT NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX support_recovery_opened_event_ref ON support_recovery_cases(opened_event_row_ref) WHERE opened_event_row_ref IS NOT NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX support_recovery_decision_event_id ON support_recovery_cases(decision_event_id) WHERE decision_event_id IS NOT NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX support_recovery_decision_event_ref ON support_recovery_cases(decision_event_row_ref) WHERE decision_event_row_ref IS NOT NULL;
+--> statement-breakpoint
+
+CREATE TRIGGER support_recovery_event_metadata_delete BEFORE DELETE ON support_recovery_cases
+WHEN (OLD.opened_event_id IS NOT NULL OR OLD.decision_event_id IS NOT NULL)
+ AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=OLD.user_id AND q.state NOT IN('AwaitingReview','Draining','Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.request_id=q.id AND p.user_id=q.user_id AND p.store_id='support_recovery_events'))
+BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint

@@ -63,7 +63,7 @@ const revocationDisclosure =
 
 /** Append the exact reviewed OAuth grant after its guarded connection insertion in the same unit. */
 export const grantOAuthConsent = (input: OAuthGrantConsentInput): OwnedStatement => ({
-  sql: `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) SELECT 'oauth_grant',?,?,?,?,?,?,? WHERE changes() = 1`,
+  sql: `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_json,occurred_at_ms) SELECT 'oauth_grant',?,?,?,?,json_object('revision',?,'text',?),? WHERE changes() = 1`,
   params: [
     input.id,
     input.connectionId,
@@ -89,7 +89,7 @@ export const grantOAuthConsent = (input: OAuthGrantConsentInput): OwnedStatement
 });
 /** Appends the exact first-party decision for each owner-selected same-User grant, in its revocation unit. Already terminal grants gain no duplicate evidence. */
 export const revokeOAuthUserConsent = (input: OAuthUserRevocationInput): OwnedStatement => ({
-  sql: `INSERT INTO consent_history (record_type,connection_id,user_id,session_id,reason,disclosure_revision,disclosure_text,occurred_at_ms) SELECT 'oauth_user_revocation',selected.connection_id,selected.user_id,?,?,?,?,? FROM (${input.selection.sql}) selected
+  sql: `INSERT INTO consent_history (record_type,connection_id,user_id,session_id,reason,disclosure_json,occurred_at_ms) SELECT 'oauth_user_revocation',selected.connection_id,selected.user_id,?,?,json_object('revision',?,'text',?),? FROM (${input.selection.sql}) selected
     WHERE selected.user_id = ? AND EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='oauth_grant') c WHERE c.connection_id = selected.connection_id AND c.user_id = selected.user_id)`,
   params: [
     input.session.id,

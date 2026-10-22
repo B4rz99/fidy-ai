@@ -25,9 +25,7 @@ export const retainEvidence = ({
     const result = yield* Effect.tryPromise(() =>
       database.batch([
         database
-          .prepare(
-            "UPDATE users SET audit_retention_cutoff_ms=?2 WHERE id=?1 AND audit_retention_cutoff_ms IS NULL"
-          )
+          .prepare("INSERT INTO audit_retention_permits(user_id,cutoff_ms) VALUES(?1,?2)")
           .bind(request.userId, request.now - retentionMilliseconds),
         prepareChangedRowAssertion({ db: database, scope: "audit_retention" }),
         database
@@ -36,7 +34,7 @@ export const retainEvidence = ({
           )
           .bind(request.userId, request.now - retentionMilliseconds, maximumRows),
         database
-          .prepare("UPDATE users SET audit_retention_cutoff_ms=NULL WHERE id=?")
+          .prepare("DELETE FROM audit_retention_permits WHERE user_id=?")
           .bind(request.userId),
       ])
     );
@@ -53,7 +51,7 @@ export const sweepEvidence = ({
     const rows = yield* Effect.tryPromise(() =>
       database
         .prepare(
-          `SELECT user_id FROM audit_entries WHERE ${retainedKinds} AND occurred_at_ms<? ORDER BY occurred_at_ms,id LIMIT ?`
+          `SELECT user_id FROM audit_entries INDEXED BY audit_entries_retention WHERE ${retainedKinds} AND occurred_at_ms<? ORDER BY occurred_at_ms,id LIMIT ?`
         )
         .bind(current - retentionMilliseconds, maximumSubjects)
         .all()

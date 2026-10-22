@@ -1,3 +1,4 @@
+import { verifyHandoffCutover } from "./handoff-cutover.test-fixture";
 import { whatsappMessages } from "./whatsapp-messages.test-fixture";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
@@ -39,7 +40,7 @@ const seedAcceptedChat = (
           ),
         db
           .prepare(
-            `UPDATE pending_consent_exchanges SET decision_portfolio_id=incoming.portfolio_id,decision_bsuid=incoming.bsuid,decision_phone_number_id=incoming.phone_number_id,decision_value=incoming.decision,decision_disclosure_json=incoming.disclosure_json,decision_disclosure_message_id=incoming.disclosure_message_id,decision_message_id=incoming.decision_message_id,decision_delivery_key=incoming.delivery_key,decision_body_sha256=incoming.body_sha256,decision_occurred_at_ms=incoming.occurred_at_ms,decision_received_at_ms=incoming.received_at_ms FROM (SELECT ? AS exchange_id,'portfolio' AS portfolio_id,'CO.Person1' AS bsuid,'123456789012345' AS phone_number_id,'accepted' AS decision,? AS disclosure_json,'disclosure' AS disclosure_message_id,'accept' AS decision_message_id,'accept' AS delivery_key,? AS body_sha256,? AS occurred_at_ms,? AS received_at_ms) AS incoming WHERE pending_consent_exchanges.id=incoming.exchange_id AND pending_consent_exchanges.decision_value IS NULL`
+            `UPDATE pending_consent_exchanges SET decision_value=incoming.decision,decision_message_id=incoming.decision_message_id,decision_delivery_key=incoming.delivery_key,decision_body_sha256=incoming.body_sha256,decision_occurred_at_ms=incoming.occurred_at_ms,decision_received_at_ms=incoming.received_at_ms FROM (SELECT ? AS exchange_id,'portfolio' AS portfolio_id,'CO.Person1' AS bsuid,'123456789012345' AS phone_number_id,'accepted' AS decision,? AS disclosure_json,'disclosure' AS disclosure_message_id,'accept' AS decision_message_id,'accept' AS delivery_key,? AS body_sha256,? AS occurred_at_ms,? AS received_at_ms) AS incoming WHERE pending_consent_exchanges.id=incoming.exchange_id AND pending_consent_exchanges.decision_value IS NULL AND pending_consent_exchanges.portfolio_id IS incoming.portfolio_id AND pending_consent_exchanges.bsuid IS incoming.bsuid AND pending_consent_exchanges.phone_number_id IS incoming.phone_number_id AND pending_consent_exchanges.disclosure_json IS incoming.disclosure_json AND pending_consent_exchanges.disclosure_message_id IS incoming.disclosure_message_id`
           )
           .bind(id, disclosure, "a".repeat(64), now - 7000, now - 7000),
         db
@@ -342,6 +343,22 @@ it("requires exact originating caller and reply confirmation, then atomically cr
       expect(
         (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
       ).toEqual([]);
+      const reviewStarted = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ review_started_ms: Schema.Int })
+      )(
+        yield* Effect.tryPromise(() =>
+          journey.db
+            .prepare("SELECT review_started_ms FROM whatsapp_provider_handoffs WHERE id=?")
+            .bind(reference)
+            .first()
+        )
+      );
+      expect(
+        (yield* whatsappMessages.sendChat(journey, command, {
+          reply: "wamid.association-review",
+          timestamp: Math.floor(reviewStarted.review_started_ms / 1000),
+        })).status
+      ).toBe(409);
       yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
       expect(
         (yield* whatsappMessages.sendChat(journey, command, { reply: "wamid.association-review" }))
@@ -351,11 +368,36 @@ it("requires exact originating caller and reply confirmation, then atomically cr
         (yield* whatsappMessages.sendChat(journey, command, { reply: "wamid.association-review" }))
           .status
       ).toBe(409);
+      yield* verifyHandoffCutover({ db: journey.db, reference });
+      yield* Effect.tryPromise(() =>
+        expect(
+          journey.db
+            .prepare(
+              "UPDATE whatsapp_provider_handoffs SET decision_message_id='rewritten-decision' WHERE id=?"
+            )
+            .bind(reference)
+            .run()
+        ).rejects.toThrow("whatsapp_handoff_immutable")
+      );
       const completed = yield* Effect.tryPromise(() =>
         journey.send("/web/providers/google/complete", journey.pairing)
       );
       expect(completed.status).toBe(200);
       expect(completed.headers.get("set-cookie")).toBeNull();
+      const receipt = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ consumed_at_ms: Schema.Int, completed_at_ms: Schema.Int })
+      )(
+        yield* Effect.tryPromise(() =>
+          journey.db
+            .prepare(
+              "SELECT h.consumed_at_ms,a.completed_at_ms FROM whatsapp_provider_handoffs h JOIN provider_authentication_attempts a ON a.handoff_id=h.id WHERE h.id=?"
+            )
+            .bind(reference)
+            .first()
+        )
+      );
+      expect(receipt.consumed_at_ms).toBe(receipt.completed_at_ms);
+
       const created = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ status: Schema.Literal("created"), backupRecoveryCode: Schema.String })
       )(yield* Effect.tryPromise(() => completed.json()));
@@ -466,7 +508,7 @@ it("starts in authenticated WhatsApp with provider instructions and creates no m
         (yield* Effect.tryPromise(() =>
           journey.db
             .prepare(
-              "SELECT user_id FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL)"
+              "SELECT user_id FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials)"
             )
             .all()
         )).results
@@ -474,7 +516,7 @@ it("starts in authenticated WhatsApp with provider instructions and creates no m
     })
   ));
 
-it.each(["denied", "expired", "uncertain_send"] as const)(
+it.each(["denied", "expired", "expired_browser", "uncertain_send"] as const)(
   "refuses %s association without stable effects or repeated delivery",
   (scenario) =>
     Effect.runPromise(
@@ -500,12 +542,27 @@ it.each(["denied", "expired", "uncertain_send"] as const)(
                 .run()
             );
           }
+          if (scenario === "expired_browser") {
+            const pairing = yield* Schema.decodeUnknownEffect(
+              Schema.Struct({ expires_at_ms: Schema.Int })
+            )(
+              yield* Effect.tryPromise(() =>
+                journey.db
+                  .prepare("SELECT expires_at_ms FROM browser_login_pairings WHERE id=?")
+                  .bind(journey.pairing.pairingId)
+                  .first()
+              )
+            );
+            yield* whatsappMessages.advanceClock(
+              pairing.expires_at_ms - (yield* Clock.currentTimeMillis)
+            );
+          }
           const command = `${scenario === "denied" ? "Rechazo" : "Confirmo"} asociación ${code}`;
           expect(
             (yield* whatsappMessages.sendChat(journey, command, {
               reply: "wamid.association-review",
             })).status
-          ).toBe(scenario === "denied" ? 200 : 409);
+          ).toBe(scenario === "expired" ? 409 : 200);
           expect(
             (yield* whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
               reply: "wamid.association-review",
@@ -524,66 +581,87 @@ it.each(["denied", "expired", "uncertain_send"] as const)(
     )
 );
 
-it("rolls back a failed association commit and permits exactly one concurrent successful completion", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
-      yield* authenticateChatProvider(journey, yield* seedAcceptedChat(journey.db));
-      const code = yield* requestReview(journey);
-      yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
-      const confirmations = yield* Effect.all(
-        [
-          whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
-            reply: "wamid.association-review",
-          }),
-          whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
-            reply: "wamid.association-review",
-          }),
-        ],
-        { concurrency: "unbounded" }
-      );
-      expect(
-        confirmations.map((response) => response.status).sort((left, right) => left - right)
-      ).toEqual([200, 409]);
-      yield* Effect.tryPromise(() =>
-        journey.db
-          .prepare(
-            "CREATE TRIGGER fixture_refuse BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts WHEN NEW.completed_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'fixture_failure'); END"
-          )
-          .run()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/google/complete", journey.pairing)
-        )).status
-      ).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
-      ).toEqual([]);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db
-            .prepare(
-              "SELECT user_id FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)"
-            )
-            .all()
-        )).results
-      ).toEqual([]);
-      yield* Effect.tryPromise(() => journey.db.prepare("DROP TRIGGER fixture_refuse").run());
-      const completed = yield* Effect.tryPromise(() =>
-        Promise.all([
-          journey.send("/web/providers/google/complete", journey.pairing),
-          journey.send("/web/providers/google/complete", journey.pairing),
-        ])
-      );
-      expect(
-        completed.map((response) => response.status).sort((left, right) => left - right)
-      ).toEqual([200, 400]);
-      expect(
-        (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
-      ).toHaveLength(1);
-    })
-  ));
+it.each([
+  {
+    target: "attempt",
+    clause:
+      "BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts WHEN NEW.completed_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'fixture_failure'); END",
+  },
+  {
+    target: "handoff consumption",
+    clause:
+      "BEFORE UPDATE OF consumed_at_ms ON whatsapp_provider_handoffs WHEN NEW.consumed_at_ms IS NOT NULL BEGIN SELECT RAISE(IGNORE); END",
+  },
+])(
+  "rolls back a failed association commit at $target and permits exactly one concurrent successful completion",
+  ({ clause }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const journey = yield* Effect.tryPromise(() => setupWhatsApp());
+        yield* authenticateChatProvider(journey, yield* seedAcceptedChat(journey.db));
+        const code = yield* requestReview(journey);
+        yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
+        const confirmations = yield* Effect.all(
+          [
+            whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
+              reply: "wamid.association-review",
+            }),
+            whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
+              reply: "wamid.association-review",
+            }),
+          ],
+          { concurrency: "unbounded" }
+        );
+        expect(
+          confirmations.map((response) => response.status).sort((left, right) => left - right)
+        ).toEqual([200, 409]);
+        const proofRows = (): Promise<ReadonlyArray<D1Result>> =>
+          journey.db.batch([
+            journey.db.prepare("SELECT rowid,* FROM whatsapp_provider_handoffs ORDER BY rowid"),
+            journey.db.prepare(
+              "SELECT rowid,* FROM provider_authentication_attempts ORDER BY rowid"
+            ),
+          ]);
+        const originalProof = yield* Effect.tryPromise(proofRows);
+        yield* Effect.tryPromise(() =>
+          journey.db.prepare(`CREATE TRIGGER fixture_refuse ${clause}`).run()
+        );
+        expect(
+          (yield* Effect.tryPromise(() =>
+            journey.send("/web/providers/google/complete", journey.pairing)
+          )).status
+        ).toBe(400);
+        expect(
+          (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
+        ).toEqual([]);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            journey.db
+              .prepare(
+                "SELECT user_id FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)"
+              )
+              .all()
+          )).results
+        ).toEqual([]);
+        expect((yield* Effect.tryPromise(proofRows)).map((table) => table.results)).toEqual(
+          originalProof.map((table) => table.results)
+        );
+        yield* Effect.tryPromise(() => journey.db.prepare("DROP TRIGGER fixture_refuse").run());
+        const completed = yield* Effect.tryPromise(() =>
+          Promise.all([
+            journey.send("/web/providers/google/complete", journey.pairing),
+            journey.send("/web/providers/google/complete", journey.pairing),
+          ])
+        );
+        expect(
+          completed.map((response) => response.status).sort((left, right) => left - right)
+        ).toEqual([200, 400]);
+        expect(
+          (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
+        ).toHaveLength(1);
+      })
+    )
+);
 
 it.each([false, true])(
   "initially links a web-created User while refusing existing association conflicts: %s",
@@ -603,7 +681,7 @@ it.each([false, true])(
         const records = yield* Effect.tryPromise(() =>
           journey.db
             .prepare(
-              "SELECT (SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trial,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)) recovery,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent"
+              "SELECT (SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trial,(SELECT COUNT(*) FROM backup_recovery_credentials) recovery,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent"
             )
             .first()
         );
@@ -645,7 +723,7 @@ it.each([false, true])(
           yield* Effect.tryPromise(() =>
             journey.db
               .prepare(
-                "SELECT (SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trial,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)) recovery,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent"
+                "SELECT (SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trial,(SELECT COUNT(*) FROM backup_recovery_credentials) recovery,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent"
               )
               .first()
           )
@@ -786,7 +864,7 @@ it("sweeps expired handoff correlation while preserving committed User and legal
         )).status
       ).toBe(200);
       const durable =
-        "SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM provider_credentials) credentials,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent,(SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trials,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)) recovery,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)) associations";
+        "SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM provider_credentials) credentials,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent,(SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trials,(SELECT COUNT(*) FROM backup_recovery_credentials) recovery,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)) associations";
       const before = yield* Effect.tryPromise(() => journey.db.prepare(durable).first());
       expect(before).toEqual({
         users: 1,

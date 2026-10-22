@@ -15,10 +15,12 @@ import {
   ResourceAdmissionUnavailable,
   ResourceAdmissionUnits,
 } from "./contract";
-import { installCurrentTestObjects } from "../d1-test-fixture";
+import { installCurrentTestObjects, observeRetentionCost } from "../d1-test-fixture";
 import {
   admitResource,
   admitResourceWithAttemptPressure,
+  classifyResourceAdmissionFailure,
+  prepareResourceAdmission,
   releaseOutstandingResource,
 } from "./operations";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -72,7 +74,7 @@ const makeMiniflare = (resourcePersistencePath?: string): Promise<Miniflare> =>
 const migrateDatabase = (database: D1Database): Promise<void> =>
   installCurrentTestObjects({
     db: database,
-    tables: ["resource_admission_events", "resource_admission_grants"],
+    tables: ["resource_admission_events", "users", "web_sessions", "resource_admission_grants"],
   });
 
 const prepareDatabase = (miniflare: Miniflare): Promise<D1Database> =>
@@ -400,7 +402,7 @@ describe("Cloudflare resource admission", () => {
             .prepare(
               `CREATE TABLE test_outbox (
           id TEXT PRIMARY KEY NOT NULL,
-          admission_grant_id TEXT NOT NULL REFERENCES resource_admission_grants(id)
+          admission_grant_id TEXT NOT NULL REFERENCES resource_admission_grants(id) DEFERRABLE INITIALLY DEFERRED
         ) STRICT`
             )
             .run()
@@ -413,28 +415,59 @@ describe("Cloudflare resource admission", () => {
           }
         );
 
+        const baseline = observeRetentionCost(database);
         yield* admit(
-          authority,
-          "atomic-admitted",
-          [charge("source:atomic:v1", "source:atomic")],
+          { ...authority, database: baseline.database },
+          "atomic-baseline",
+          [charge("source:atomic:v1", "source:baseline")],
           [
+            baseline.database
+              .prepare("INSERT INTO test_outbox (id, admission_grant_id) VALUES (?, ?)")
+              .bind("work-baseline", "atomic-baseline"),
+          ]
+        );
+        yield* fromTestPromise(() =>
+          database.batch([
+            database.prepare("DELETE FROM test_outbox"),
+            database.prepare("DELETE FROM resource_admission_events"),
+            database.prepare("DELETE FROM resource_admission_grants"),
+          ])
+        );
+        const prepared = prepareResourceAdmission(authority, {
+          grantId: grantId("atomic-admitted"),
+          charges: ResourceAdmissionCharges.make([charge("source:atomic:v1", "source:atomic")]),
+        });
+        const committed = yield* fromTestPromise(() =>
+          database.batch([
+            ...prepared.statements,
             database
               .prepare("INSERT INTO test_outbox (id, admission_grant_id) VALUES (?, ?)")
               .bind("work-admitted", "atomic-admitted"),
-          ]
+          ])
         );
+        const composedCost = {
+          rowsRead: committed.reduce((sum, result) => sum + result.meta.rows_read, 0),
+          rowsWritten: committed.reduce((sum, result) => sum + result.meta.rows_written, 0),
+        };
+        expect(composedCost).toEqual(baseline.cost());
+        expect(composedCost.rowsWritten).toBeLessThanOrEqual(8);
+        expect(composedCost.rowsRead).toBeLessThanOrEqual(7);
 
+        const refusedAdmission = prepareResourceAdmission(authority, {
+          grantId: grantId("atomic-refused"),
+          charges: ResourceAdmissionCharges.make([charge("source:atomic:v1", "source:atomic")]),
+        });
         const refused = yield* Effect.result(
-          admit(
-            authority,
-            "atomic-refused",
-            [charge("source:atomic:v1", "source:atomic")],
-            [
-              database
-                .prepare("INSERT INTO test_outbox (id, admission_grant_id) VALUES (?, ?)")
-                .bind("work-refused", "atomic-refused"),
-            ]
-          )
+          Effect.tryPromise({
+            try: () =>
+              database.batch([
+                database
+                  .prepare("INSERT INTO test_outbox (id, admission_grant_id) VALUES (?, ?)")
+                  .bind("work-refused", "atomic-refused"),
+                ...refusedAdmission.statements,
+              ]),
+            catch: classifyResourceAdmissionFailure,
+          })
         );
 
         const rows = yield* fromTestPromise(() =>
@@ -444,6 +477,9 @@ describe("Cloudflare resource admission", () => {
         );
 
         expect(Result.isFailure(refused)).toBe(true);
+        if (Result.isFailure(refused)) {
+          expect(refused.failure).toBeInstanceOf(ResourceAdmissionRefused);
+        }
         expect(rows.results).toEqual([
           { admission_grant_id: "atomic-admitted", id: "work-admitted" },
         ]);
@@ -467,13 +503,21 @@ describe("Cloudflare resource admission", () => {
           { read: () => epochMs(10_000) }
         );
 
+        const prepared = prepareResourceAdmission(authority, {
+          grantId: grantId("rolled-back-grant"),
+          charges: ResourceAdmissionCharges.make([
+            charge("operation:rollback:v1", "operation:rollback"),
+          ]),
+        });
         const failed = yield* Effect.result(
-          admit(
-            authority,
-            "rolled-back-grant",
-            [charge("operation:rollback:v1", "operation:rollback")],
-            [database.prepare("INSERT INTO unique_proof (id) VALUES (?)").bind("duplicate")]
-          )
+          Effect.tryPromise({
+            try: () =>
+              database.batch([
+                ...prepared.statements,
+                database.prepare("INSERT INTO unique_proof (id) VALUES (?)").bind("duplicate"),
+              ]),
+            catch: classifyResourceAdmissionFailure,
+          })
         );
 
         const retry = yield* admit(authority, "successful-after-rollback", [

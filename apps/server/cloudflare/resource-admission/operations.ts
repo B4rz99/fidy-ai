@@ -1,6 +1,9 @@
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { dual } from "effect/Function";
-import { Data, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 import {
+  type EmailCounterKind,
+  type PreparedResourceAdmission,
   type ReleaseOutstandingWorkRequest,
   type ResourceAdmissionAttempt,
   type ResourceAdmissionAuthorityConfig,
@@ -15,8 +18,11 @@ import {
   ResourceAdmissionRefused,
   type ResourceAdmissionRequest,
   type ResourceAdmissionScopeKey,
+  type ResourceAdmissionTransition,
   ResourceAdmissionUnavailable,
   type ResourceAdmissionUnits,
+  type ResourceCounterQuery,
+  type ResourceCounterRequest,
 } from "./contract";
 
 const refusalMarker = "resource_admission_refused";
@@ -95,7 +101,7 @@ const resolveCharge = (
 
 const resolveCharges = (
   policies: ReadonlyArray<ResourceAdmissionPolicy>,
-  request: ResourceAdmissionRequest,
+  request: ResourceAdmissionTransition,
   nowEpochMs: ResourceAdmissionEpochMs
 ): Option.Option<ReadonlyArray<ResolvedCharge>> => {
   if (!isSafeEpoch(nowEpochMs)) return Option.none();
@@ -174,36 +180,67 @@ const grantStatement = (
     )
     .bind(input.grantId, input.nowEpochMs, input.chargeCount);
 
-class D1BatchFailure extends Data.TaggedError("D1BatchFailure")<{
-  readonly cause: unknown;
-}> {}
-
 const executeBatch = (
   database: D1Database,
   statements: ReadonlyArray<D1PreparedStatement>
-): Effect.Effect<ReadonlyArray<D1Result<unknown>>, D1BatchFailure> =>
+): Effect.Effect<
+  ReadonlyArray<D1Result<unknown>>,
+  ResourceAdmissionRefused | ResourceAdmissionUnavailable
+> =>
   // D1 batch has no cancellation API. Shield it through settlement so interruption cannot detach a
   // still-running authority transaction from its caller and leave the durable outcome ambiguous.
   Effect.uninterruptible(
     Effect.tryPromise({
       try: () => database.batch([...statements]),
-      catch: (cause) => new D1BatchFailure({ cause }),
+      catch: classifyResourceAdmissionFailure,
     })
   );
 
 /** D1 exposes trigger provenance through this canonical SQLite extended-code error shape. */
-const classifyAdmissionFailure = (
-  failure: D1BatchFailure
+export const classifyResourceAdmissionFailure = (
+  cause: unknown
 ): ResourceAdmissionRefused | ResourceAdmissionUnavailable =>
-  refusalFailurePattern.test(String(failure.cause))
+  refusalFailurePattern.test(String(cause))
     ? new ResourceAdmissionRefused({ reason: "resource_limit" })
     : new ResourceAdmissionUnavailable({ reason: "authority_unavailable" });
 
-/**
- * Atomically claims installed resource policy and caller-owned statements against the same D1
- * binding. Unknown policy, excess charges, or unsafe derived timestamps die before SQL begins.
- * Batches settle before interruption completes; no process-local usage state grants admission.
+/** Prepare complete admission for an owner-controlled atomic D1 commit; performs no I/O.
+ * Unknown policies and unsafe timestamps are defects before any statements execute.
  */
+export const prepareResourceAdmission = dual<
+  (
+    request: ResourceAdmissionTransition
+  ) => (config: ResourceAdmissionAuthorityConfig) => PreparedResourceAdmission,
+  (
+    config: ResourceAdmissionAuthorityConfig,
+    request: ResourceAdmissionTransition
+  ) => PreparedResourceAdmission
+>(2, (config, request) => {
+  const nowEpochMs = config.nowEpochMs();
+  const charges = resolveCharges(config.policies, request, nowEpochMs);
+  if (Option.isNone(charges)) throw new TypeError("Invalid resource admission request");
+  return {
+    grantId: request.grantId,
+    statements: [
+      ...charges.value.map((charge) =>
+        claimStatement({
+          charge,
+          database: config.database,
+          grantId: request.grantId,
+          nowEpochMs,
+        })
+      ),
+      grantStatement({
+        chargeCount: charges.value.length,
+        database: config.database,
+        grantId: request.grantId,
+        nowEpochMs,
+      }),
+    ],
+  };
+});
+
+/** Commit admission and caller statements together, waiting for D1 settlement on interruption. */
 export const admitResource = dual<
   (
     request: ResourceAdmissionRequest
@@ -220,30 +257,14 @@ export const admitResource = dual<
     ResourceAdmissionGrant,
     ResourceAdmissionRefused | ResourceAdmissionUnavailable
   >
->(2, (config, request) => {
-  const nowEpochMs = config.nowEpochMs();
-  return Option.match(resolveCharges(config.policies, request, nowEpochMs), {
-    onNone: invalidRequestDefect,
-    onSome: (charges) =>
-      executeBatch(config.database, [
-        ...charges.map((charge) =>
-          claimStatement({
-            charge,
-            database: config.database,
-            grantId: request.grantId,
-            nowEpochMs,
-          })
-        ),
-        grantStatement({
-          chargeCount: charges.length,
-          database: config.database,
-          grantId: request.grantId,
-          nowEpochMs,
-        }),
-        ...request.statements,
-      ]).pipe(Effect.mapError(classifyAdmissionFailure), Effect.as({ grantId: request.grantId })),
-  });
-});
+>(2, (config, request) =>
+  Effect.suspend(() => {
+    const prepared = prepareResourceAdmission(config, request);
+    return executeBatch(config.database, [...prepared.statements, ...request.statements]).pipe(
+      Effect.as({ grantId: prepared.grantId })
+    );
+  })
+);
 
 /** Release outstanding occupancy with the caller's completion statements in the same D1 batch. */
 export const releaseOutstandingResource = dual<
@@ -296,3 +317,169 @@ export const admitResourceWithAttemptPressure = dual<
 >(2, (config, { attempt, work }) =>
   admitResource(config, attempt).pipe(Effect.flatMap(() => admitResource(config, work)))
 );
+
+const calendarDayMs = 86_400_000;
+const patWindowMs = 600_000;
+const patRetentionMs = patWindowMs * 2;
+const anchoredCounters = {
+  email_pairing_user: { key: "email.pairing.user.v1", duration: 3_600_000 },
+  email_pairing_global: { key: "email.pairing.global.v1", duration: 3_600_000 },
+  email_replacement: { key: "email.replacement.user.v1", duration: 86_400_000 },
+  pat_pairing_source: { key: "pat.pairing.source.v1", duration: patWindowMs },
+} as const satisfies Record<
+  EmailCounterKind | "pat_pairing_source",
+  { key: string; duration: number }
+>;
+
+/** Observe a closed counter inside an owner's query; absence means no accepted window yet. */
+export const resourceCounterQuery = (input: ResourceCounterQuery): OwnedStatement => ({
+  sql: `SELECT used,window_start_ms,window_ends_ms,last_work_id FROM resource_admission_counters
+    WHERE policy_key=? AND window_kind='anchored' AND scope_key=${
+      input.kind === "email_pairing_global"
+        ? "'global'"
+        : `(SELECT user_id FROM (${input.subject.sql}))`
+    }`,
+  params: [
+    anchoredCounters[input.kind].key,
+    ...(input.kind === "email_pairing_global" ? [] : input.subject.params),
+  ],
+});
+
+/** Advance a closed counter with its owner proof. Calendar compaction retains every UTC day;
+ * anchored policies keep their original reset and refusal rules. Zero changes spend no capacity.
+ */
+export const prepareResourceCounter = (input: ResourceCounterRequest): D1PreparedStatement => {
+  if (input.kind === "hosted_compaction") {
+    const day = Math.floor(input.current / calendarDayMs) * calendarDayMs;
+    return input.db
+      .prepare(`INSERT INTO resource_admission_counters
+      (policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,owner_user_id)
+      SELECT 'hosted.compaction.user.v1',user_id,'calendar',?,?,1,user_id
+      FROM (${input.subject.sql}) WHERE true
+      ON CONFLICT(policy_key,scope_key,window_start_ms) WHERE window_kind='calendar'
+      DO UPDATE SET used=used+1 WHERE used<3`)
+      .bind(day, day + calendarDayMs, ...input.subject.params);
+  }
+  const policy = anchoredCounters[input.kind];
+  const global = input.kind === "email_pairing_global";
+  const source = input.kind === "pat_pairing_source";
+  const scope = source ? "lower(hex(?))" : "user_id";
+  return input.db
+    .prepare(`INSERT INTO resource_admission_counters
+    (policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id)
+    SELECT ?,${global ? "'global'" : scope},'anchored',?,?,1,?,${global || source ? "NULL" : "user_id"}
+    FROM (${input.subject.sql}) WHERE true
+    ON CONFLICT(policy_key,scope_key) WHERE window_kind='anchored' DO UPDATE SET
+      window_start_ms=CASE WHEN window_ends_ms<=? THEN excluded.window_start_ms ELSE window_start_ms END,
+      window_ends_ms=CASE WHEN window_ends_ms<=? THEN excluded.window_ends_ms ELSE window_ends_ms END,
+      used=CASE WHEN window_ends_ms<=? THEN 1 ELSE used+1 END,
+      last_work_id=excluded.last_work_id
+    WHERE window_ends_ms<=? OR excluded.policy_key NOT IN('email.replacement.user.v1','pat.pairing.source.v1')
+      OR used<CASE excluded.policy_key WHEN 'pat.pairing.source.v1' THEN 20 ELSE 5 END`)
+    .bind(
+      policy.key,
+      ...(source ? [input.sourceDigest] : []),
+      input.current,
+      input.current + policy.duration,
+      input.kind === "email_replacement" ? input.workId : null,
+      ...input.subject.params,
+      input.current,
+      input.current,
+      input.current,
+      input.current
+    );
+};
+
+/** Charge a PAT public-code review before decoding its body, under exact live-session ownership.
+ * A full rolling window spends nothing. Keep event and one-claim grant together in one batch.
+ */
+export const preparePATReviewAdmission = (
+  input: Readonly<{
+    db: D1Database;
+    id: string;
+    sessionId: string;
+    userId: string;
+    current: number;
+    eligible: OwnedStatement;
+  }>
+): readonly [D1PreparedStatement, D1PreparedStatement] => [
+  input.db
+    .prepare(`INSERT INTO resource_admission_events
+    (grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,
+     window_start_epoch_ms,expires_at_epoch_ms,owner_user_id,owner_session_id)
+    SELECT ?,'pat.review.session.v1','source',?,'rolling_window',1,?,?,?, ?,?
+    WHERE (${input.eligible.sql}) AND
+      (SELECT coalesce(sum(units),0) FROM resource_admission_events
+       WHERE policy_key='pat.review.session.v1' AND dimension='source' AND scope_key=?
+       AND released_at_epoch_ms IS NULL AND expires_at_epoch_ms>? AND admitted_at_epoch_ms>?)<10`)
+    .bind(
+      input.id,
+      input.sessionId,
+      input.current,
+      Math.max(0, input.current - patWindowMs),
+      input.current + patWindowMs,
+      input.userId,
+      input.sessionId,
+      ...input.eligible.params,
+      input.sessionId,
+      input.current,
+      input.current - patWindowMs
+    ),
+  input.db
+    .prepare(`INSERT INTO resource_admission_grants(id,admitted_at_epoch_ms,claim_count)
+    SELECT ?,?,1 WHERE changes()=1`)
+    .bind(input.id, input.current),
+];
+
+/** Original bounded retention for anonymous anchored sources, with no fabricated User owner. */
+export const sweepPATSourceCounters = (
+  input: Readonly<{ current: number; limit: number }>
+): OwnedStatement => ({
+  sql: `DELETE FROM resource_admission_counters WHERE policy_key='pat.pairing.source.v1'
+    AND window_kind='anchored' AND scope_key IN(SELECT scope_key FROM resource_admission_counters
+      WHERE policy_key='pat.pairing.source.v1' AND window_start_ms<=?
+      ORDER BY window_start_ms LIMIT ?)`,
+  params: [input.current - patRetentionMs, input.limit],
+});
+
+/** Remove a bounded expired review batch; orphan grant cleanup is atomic with each event deletion. */
+export const sweepPATReviewEvents = (
+  input: Readonly<{ current: number; limit: number }>
+): OwnedStatement => ({
+  sql: `DELETE FROM resource_admission_events WHERE rowid IN(
+    SELECT rowid FROM resource_admission_events INDEXED BY resource_admission_review_retention
+    WHERE policy_key='pat.review.session.v1' AND admitted_at_epoch_ms<=?
+    ORDER BY admitted_at_epoch_ms LIMIT ?)`,
+  params: [input.current - patRetentionMs, input.limit],
+});
+
+/** Bounded compaction retention discovery, ordered by each original UTC accounting day. */
+export const expiredCompactionCounterUsers = (
+  input: Readonly<{ cutoff: number; limit: number }>
+): OwnedStatement => ({
+  sql: `SELECT owner_user_id AS user_id,window_start_ms AS due_ms FROM resource_admission_counters
+    WHERE policy_key='hosted.compaction.user.v1' AND window_start_ms<?
+    ORDER BY window_start_ms,scope_key LIMIT ?`,
+  params: [input.cutoff, input.limit],
+});
+
+/** Retention is owned by Hosted execution, not by the calendar window's admission expiry. */
+export const sweepCompactionCounters = (
+  input: Readonly<{ userId: string; cutoff: number; limit: number }>
+): OwnedStatement => ({
+  sql: `DELETE FROM resource_admission_counters WHERE rowid IN (
+    SELECT rowid FROM resource_admission_counters
+    WHERE policy_key='hosted.compaction.user.v1' AND window_kind='calendar'
+      AND scope_key=? AND window_start_ms<? ORDER BY window_start_ms LIMIT ?)`,
+  params: [input.userId, input.cutoff, input.limit],
+});
+
+/** Earliest retained day keeps hosted retention discoverable after Turns have been removed. */
+export const compactionCounterDeadline = (
+  input: Readonly<{ userId: string; retentionMs: number }>
+): OwnedStatement => ({
+  sql: `SELECT window_start_ms+? AS due_ms FROM resource_admission_counters
+    WHERE policy_key='hosted.compaction.user.v1' AND window_kind='calendar' AND scope_key=?
+    ORDER BY window_start_ms LIMIT 1`,
+  params: [input.retentionMs + 1, input.userId],
+});

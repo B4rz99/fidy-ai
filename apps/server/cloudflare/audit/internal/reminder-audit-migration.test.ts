@@ -1,6 +1,6 @@
 import { afterAll, expect, it } from "vitest";
 import { Effect, Option } from "effect";
-import { recordAuthorizedCall } from "../../../src/shell/audit/operations";
+import { recordAuthorizedCall, recordOwnerCall } from "../../../src/shell/audit/operations";
 import { makeAudit, makeAuditRetention } from "../../../src/shell/audit/runtime";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { executeHostedStatementQuery } from "../../canonical-operations/operations";
@@ -57,7 +57,7 @@ it("reads mixed browser/PAT/hosted attribution and enforces append-only and same
       }
       yield* Effect.tryPromise(() =>
         db
-          .prepare("UPDATE users SET audit_retention_cutoff_ms=?2 WHERE id=?1")
+          .prepare("INSERT INTO audit_retention_permits(user_id,cutoff_ms) VALUES(?1,?2)")
           .bind(proactivityTestUsers[1], current + 1)
           .run()
       );
@@ -80,9 +80,7 @@ it("reads mixed browser/PAT/hosted attribution and enforces append-only and same
             .all()
         )).results
       ).toEqual(before.results);
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE users SET audit_retention_cutoff_ms=NULL").run()
-      );
+      yield* Effect.tryPromise(() => db.prepare("DELETE FROM audit_retention_permits").run());
       const caller = yield* proactivityHostedCaller({ db, userIndex: 0 });
       expect(
         (yield* executeHostedStatementQuery({
@@ -98,6 +96,22 @@ it("reads mixed browser/PAT/hosted attribution and enforces append-only and same
       expect((yield* readCanonicalReminderSchedule({ db, subject: pat, current })).status).toBe(
         200
       );
+      const publication = recordOwnerCall({
+        id: newId(),
+        userId: browser.userId,
+        caller: { _tag: "WebSession", id: browser.id },
+        operation: "ingestion.listNeedsReviewItems",
+        outcome: "success",
+        current,
+        when: { sql: "SELECT 1", params: [] },
+        afterOwnerWrite: false,
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(publication.sql)
+          .bind(...publication.params)
+          .run()
+      );
       const audit = makeAudit({ database: db });
       expect(
         (yield* audit.query({ userId: browser.userId, limit: 10 }))
@@ -111,16 +125,12 @@ it("reads mixed browser/PAT/hosted attribution and enforces append-only and same
       ).toBe(0);
       expect(
         yield* retention.retain({ userId: browser.userId, now: current + retentionLifetimeMs + 1 })
-      ).toBe(3);
+      ).toBe(4);
+      expect(yield* audit.publications({ userId: browser.userId, limit: 10 })).toEqual([]);
       expect(yield* audit.query({ userId: browser.userId, limit: 10 })).toEqual([]);
       expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT * FROM (SELECT rowid,id AS user_id,audit_retention_cutoff_ms AS cutoff_ms FROM users WHERE audit_retention_cutoff_ms IS NOT NULL)"
-            )
-            .all()
-        )).results
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM audit_retention_permits").all()))
+          .results
       ).toEqual([]);
     })
   ));

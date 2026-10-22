@@ -786,7 +786,7 @@ effectIt.effect(
       yield* fromTestPromise(() =>
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
+            `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, occurred_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
           )
           .bind("10000000-0000-4000-8000-000000000091", users[0], disclosure, now, now)
           .run()
@@ -915,7 +915,7 @@ const grantHostedConsent = ({
   )(currentDisclosureFor());
   return db
     .prepare(
-      `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
+      `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, occurred_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
     )
     .bind(grant, user, disclosure, time, time)
     .run();
@@ -2511,7 +2511,7 @@ it("links and unlinks under the caller's live credential scope and records only 
       yield* fromTestPromise(() =>
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(withdrawnGrant, owner, current, current)
           .run()
@@ -5892,7 +5892,7 @@ it("refuses a batch under a revoked session, revoked PAT, or withdrawn Consent w
       yield* fromTestPromise(() =>
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(grantId, users[1], current, current)
           .run()

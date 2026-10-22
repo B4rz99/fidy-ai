@@ -59,7 +59,7 @@ const setup = (): Effect.Effect<D1Database> =>
       yield* testPromise(() =>
         db
           .prepare(
-            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,?,'disclosed','accepted',?,?)"
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,?,'disclosed','accepted',?,?)"
           )
           .bind(id, id, json, 0, 0)
           .run()
@@ -196,19 +196,41 @@ it.live("never proactively re-asks after a recorded no but permits a User-reques
       yield* decide({ ...context, choice: offer.declineChoice, decisionMessageId: "no-decision" })
     ).toBe(true);
     expect(Option.isNone(yield* createWeeklyConsentOffer(context))).toBe(true);
+    const request = {
+      _tag: "GovernorQuestion" as const,
+      origin: "requested" as const,
+      sourceId: "49000000-0000-4000-8000-000000000001",
+      requestedAt: now,
+      rejectionOfferId: Option.some(offer.id),
+    };
+    const requested = Option.getOrThrow(
+      yield* createWeeklyGovernorConsentOffer({ ...context, request })
+    );
+    const expiresAt = DateTime.makeUnsafe("2026-08-10T12:00:00Z");
+    const later = { ...context, now: DateTime.add(now, { minutes: 11 }) };
     expect(
-      Option.isSome(
-        yield* createWeeklyGovernorConsentOffer({
-          ...context,
-          request: {
-            _tag: "GovernorQuestion",
-            origin: "requested",
-            sourceId: "49000000-0000-4000-8000-000000000001",
-            requestedAt: now,
-            rejectionOfferId: Option.some(offer.id),
-          },
-        })
-      )
+      Option.getOrThrow(yield* createWeeklyGovernorConsentOffer({ ...later, request }))
+    ).toEqual(requested);
+    yield* recordWeeklyConsentDisclosure({
+      ...later,
+      offerId: requested.id,
+      disclosureMessageId: "requested-disclosure",
+    });
+    expect(
+      yield* decide({
+        ...context,
+        now: expiresAt,
+        choice: requested.acceptChoice,
+        decisionMessageId: "expired-request",
+      })
+    ).toBe(false);
+    expect(
+      yield* decide({
+        ...later,
+        now: DateTime.makeUnsafe("2026-08-10T11:59:59.999Z"),
+        choice: requested.acceptChoice,
+        decisionMessageId: "requested-accept",
+      })
     ).toBe(true);
   })
 );

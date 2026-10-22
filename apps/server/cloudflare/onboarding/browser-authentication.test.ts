@@ -14,8 +14,10 @@ import {
   installAuditTestSchema,
   installTestSchema,
   isolatedTestDatabases,
+  observeRetentionCost,
 } from "../d1-test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
+import { authenticateWebSession } from "../web-session/operations";
 import { approveBrowserPairing, startBrowserPairing } from "../browser-login/operations";
 import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
@@ -108,7 +110,7 @@ const setup = (
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            `UPDATE pending_consent_exchanges SET decision_portfolio_id=incoming.portfolio_id,decision_bsuid=incoming.bsuid,decision_phone_number_id=incoming.phone_number_id,decision_value=incoming.decision,decision_disclosure_json=incoming.disclosure_json,decision_disclosure_message_id=incoming.disclosure_message_id,decision_message_id=incoming.decision_message_id,decision_delivery_key=incoming.delivery_key,decision_body_sha256=incoming.body_sha256,decision_occurred_at_ms=incoming.occurred_at_ms,decision_received_at_ms=incoming.received_at_ms FROM (SELECT ? AS exchange_id,? AS portfolio_id,? AS bsuid,? AS phone_number_id,? AS decision,? AS disclosure_json,? AS disclosure_message_id,? AS decision_message_id,? AS delivery_key,? AS body_sha256,? AS occurred_at_ms,? AS received_at_ms) AS incoming WHERE pending_consent_exchanges.id=incoming.exchange_id AND pending_consent_exchanges.decision_value IS NULL`
+            `UPDATE pending_consent_exchanges SET decision_value=incoming.decision,decision_message_id=incoming.decision_message_id,decision_delivery_key=incoming.delivery_key,decision_body_sha256=incoming.body_sha256,decision_occurred_at_ms=incoming.occurred_at_ms,decision_received_at_ms=incoming.received_at_ms FROM (SELECT ? AS exchange_id,? AS portfolio_id,? AS bsuid,? AS phone_number_id,? AS decision,? AS disclosure_json,? AS disclosure_message_id,? AS decision_message_id,? AS delivery_key,? AS body_sha256,? AS occurred_at_ms,? AS received_at_ms) AS incoming WHERE pending_consent_exchanges.id=incoming.exchange_id AND pending_consent_exchanges.decision_value IS NULL AND pending_consent_exchanges.portfolio_id IS incoming.portfolio_id AND pending_consent_exchanges.bsuid IS incoming.bsuid AND pending_consent_exchanges.phone_number_id IS incoming.phone_number_id AND pending_consent_exchanges.disclosure_json IS incoming.disclosure_json AND pending_consent_exchanges.disclosure_message_id IS incoming.disclosure_message_id`
           )
           .bind(
             exchange,
@@ -185,12 +187,12 @@ const setup = (
                   .bind(userId, bsuid, now),
                 db
                   .prepare(
-                    "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+                    "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
                   )
                   .bind(userId, email, now),
                 db
                   .prepare(
-                    "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', ?, ?)"
+                    "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', ?, ?)"
                   )
                   .bind(exchange, userId, now, now),
                 db
@@ -396,11 +398,7 @@ it("rotates the backup recovery proof under a fresh WebSession", () =>
       const token = "R".repeat(43);
       yield* Effect.tryPromise(() => seedWebSession(db, token));
       const before = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT code_digest FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)"
-          )
-          .first()
+        db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()
       );
       const response = yield* Effect.tryPromise(() =>
         sendRequest(
@@ -418,11 +416,7 @@ it("rotates the backup recovery proof under a fresh WebSession", () =>
       yield* Effect.tryPromise(() => response.arrayBuffer());
       expect(
         yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT code_digest FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)"
-            )
-            .first()
+          db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()
         )
       ).not.toEqual(before);
     })
@@ -436,11 +430,7 @@ it("refuses recovery rotation after WebSession freshness expires without changin
       const token = "D".repeat(43);
       const started = yield* Effect.tryPromise(() => seedWebSession(db, token));
       const before = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT code_digest FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)"
-          )
-          .first()
+        db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()
       );
       const rotate = (origin: string): Promise<Response> =>
         sendRequest(
@@ -475,11 +465,7 @@ it("refuses recovery rotation after WebSession freshness expires without changin
       expect(currentUser.status).toBe(200);
       expect(
         yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT code_digest FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)"
-            )
-            .first()
+          db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()
         )
       ).toEqual(before);
       expect(
@@ -497,6 +483,7 @@ it("refuses recovery rotation after WebSession freshness expires without changin
 it("admits email approval only for a browser-held verifier and an existing verified mailbox", () =>
   Effect.runPromise(
     Effect.gen(function* () {
+      vi.useFakeTimers({ toFake: ["Date"] });
       const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
       expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const start = yield* Effect.tryPromise(() =>
@@ -593,10 +580,45 @@ it("admits email approval only for a browser-held verifier and an existing verif
       expect((yield* Effect.tryPromise(() => complete(receivedCode, "A".repeat(43)))).status).toBe(
         400
       );
+      const oldCode = receivedCode;
+      const oldWork = workId;
+      vi.setSystemTime((yield* Clock.currentTimeMillis) + 61_000);
+      expect(
+        (yield* Effect.tryPromise(() => begin(pairing.privateVerifier, "person@example.test")))
+          .status
+      ).toBe(202);
+      yield* dispatchBrowserPairingEmail({
+        identity: Option.none(),
+        DB: db,
+        BROWSER_PAIRING_EMAIL_QUEUE: {
+          send: (work) => {
+            workId = work.id;
+            return Promise.resolve();
+          },
+        },
+      });
+      const supersededSend = vi.fn(() => Promise.resolve("succeeded" as const));
+      yield* Effect.tryPromise(() =>
+        deliverBrowserPairingEmail({ db, send: supersededSend })(oldWork)
+      );
+      expect(supersededSend).not.toHaveBeenCalled();
+      yield* Effect.tryPromise(() =>
+        deliverBrowserPairingEmail({
+          db,
+          send: (_email, combinedCode) => {
+            receivedCode = combinedCode;
+            return Promise.resolve("succeeded");
+          },
+        })(workId)
+      );
+      expect(
+        (yield* Effect.tryPromise(() => complete(oldCode, pairing.privateVerifier))).status
+      ).toBe(400);
+
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`UPDATE users
-    SET email_verified_at_ms = email_verified_at_ms + 1`)
+          .prepare(`UPDATE verified_email_credentials
+    SET verified_at_ms = verified_at_ms + 1`)
           .run()
       );
       expect(
@@ -604,8 +626,8 @@ it("admits email approval only for a browser-held verifier and an existing verif
       ).toBe(400);
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`UPDATE users
-    SET email_verified_at_ms = email_verified_at_ms - 1`)
+          .prepare(`UPDATE verified_email_credentials
+    SET verified_at_ms = verified_at_ms - 1`)
           .run()
       );
       expect(
@@ -647,7 +669,7 @@ it("rejects each User's email proof at the other browser pairing without consumi
             .bind(otherUser, now),
           db
             .prepare(
-              "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+              "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
             )
             .bind(otherUser, "other@example.test", now),
         ])
@@ -821,7 +843,7 @@ it("replaces one credential only after fresh-session candidate proof and rejects
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT email_address FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL)"
+              "SELECT email_address FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials)"
             )
             .first()
         )
@@ -881,7 +903,7 @@ it("refuses malformed replacement work and revoked or foreign sessions before de
             db.batch([
               db.prepare("SELECT * FROM email_replacements"),
               db.prepare(
-                "SELECT * FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) ORDER BY user_id"
+                "SELECT * FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials) ORDER BY user_id"
               ),
               db.prepare(
                 "SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'emailAuthentication.*'"
@@ -936,7 +958,7 @@ it("refuses malformed replacement work and revoked or foreign sessions before de
             .bind(otherUser, started),
           db
             .prepare(
-              "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+              "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
             )
             .bind(otherUser, "foreign@example.test", started),
           db
@@ -976,7 +998,7 @@ it("keeps the old credential when freshness expires or a candidate is already ow
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+            "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
           )
           .bind("10000000-0000-4000-8000-000000000004", "owned@example.test", started)
           .run()
@@ -1008,7 +1030,7 @@ it("keeps the old credential when freshness expires or a candidate is already ow
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT email_address FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) WHERE email_address = 'person@example.test'"
+              "SELECT email_address FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials) WHERE email_address = 'person@example.test'"
             )
             .first()
         )
@@ -1050,7 +1072,7 @@ it("preserves global mailbox ownership when another User claims the candidate af
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+            "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) SELECT incoming.user_id,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at_ms=excluded.verified_at_ms"
           )
           .bind("10000000-0000-4000-8000-000000000004", "claimed@example.test", started)
           .run()
@@ -1064,7 +1086,7 @@ it("preserves global mailbox ownership when another User claims the candidate af
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT email_address FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) WHERE user_id = (SELECT id FROM users WHERE id <> ?)"
+              "SELECT email_address FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials) WHERE user_id = (SELECT id FROM users WHERE id <> ?)"
             )
             .bind("10000000-0000-4000-8000-000000000004")
             .first()
@@ -1085,7 +1107,19 @@ it("preserves global mailbox ownership when another User claims the candidate af
 it("bounds replacement delivery across rejected proofs for the same User", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      const measures: Array<ReturnType<typeof observeRetentionCost>> = [];
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() =>
+        setup(undefined, undefined, {
+          worker: coreWorker,
+          accessIssuer: "https://example.cloudflareaccess.com",
+          publication: Option.none(),
+          database: (db) => {
+            const observed = observeRetentionCost(db);
+            measures.push(observed);
+            return observed.database;
+          },
+        })
+      );
       expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const token = "J".repeat(43);
       yield* Effect.tryPromise(() => seedWebSession(db, token));
@@ -1129,7 +1163,7 @@ it("bounds replacement delivery across rejected proofs for the same User", () =>
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests,last_work_id AS last_work_id FROM email_security_limits WHERE kind='replacement')"
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.replacement.user.v1'"
             )
             .first<{ requests: number }>()
         ))?.requests
@@ -1152,11 +1186,17 @@ it("bounds replacement delivery across rejected proofs for the same User", () =>
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT email_address FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL)"
+              "SELECT email_address FROM (SELECT rowid,user_id,address AS email_address,verified_at_ms FROM verified_email_credentials)"
             )
             .first()
         ))?.email_address
       ).toBe("person@example.test");
+      const admissionCosts = measures
+        .flatMap((observed) => observed.statements())
+        .filter(({ sql }) => sql.includes("INSERT INTO resource_admission_counters"))
+        .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(31);
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(6);
     })
   ));
 
@@ -1375,11 +1415,7 @@ it("rejects the old recovery code after rotation and redeems its single-use repl
       ).toMatchObject({ state: "pending_approval", user_id: null });
       expect(
         yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT consumed_at_ms FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)"
-            )
-            .first()
+          db.prepare("SELECT consumed_at_ms FROM backup_recovery_credentials").first()
         )
       ).toMatchObject({ consumed_at_ms: null });
       expect(
@@ -1411,8 +1447,8 @@ it("rejects the old recovery code after rotation and redeems its single-use repl
       ).toBe(400);
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`CREATE TRIGGER reject_recovery_evidence BEFORE INSERT ON audit_entries
-          WHEN NEW.record_type='support_recovery' AND NEW.recovery_action = 'approved' BEGIN SELECT RAISE(ABORT, 'recovery evidence unavailable'); END`)
+          .prepare(`CREATE TRIGGER reject_recovery_evidence BEFORE INSERT ON support_recovery_cases
+          WHEN NEW.state='approved' BEGIN SELECT RAISE(IGNORE); END`)
           .run()
       );
       expect((yield* Effect.tryPromise(() => approve(created.backupRecoveryCode))).status).toBe(
@@ -1428,25 +1464,12 @@ it("rejects the old recovery code after rotation and redeems its single-use repl
       ).toEqual({ state: "pending_approval", user_id: null });
       expect(
         yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT consumed_at_ms FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)"
-            )
-            .first()
+          db.prepare("SELECT consumed_at_ms FROM backup_recovery_credentials").first()
         )
       ).toEqual({ consumed_at_ms: null });
       expect(
         yield* Effect.tryPromise(() =>
           db.prepare("SELECT count(*) AS count FROM support_recovery_cases").first()
-        )
-      ).toEqual({ count: 0 });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM (SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')"
-            )
-            .first()
         )
       ).toEqual({ count: 0 });
       yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER reject_recovery_evidence").run());
@@ -1496,20 +1519,11 @@ it("rejects the old recovery code after rotation and redeems its single-use repl
             .first<{ count: number }>()
         ))?.count
       ).toBe(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM (SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')"
-            )
-            .first<{ count: number }>()
-        ))?.count
-      ).toBe(2);
       const subject = yield* Effect.tryPromise(() =>
         db
           .prepare(`SELECT p.user_id AS paired_user, b.user_id AS proof_user,
     b.consumed_at_ms AS consumed FROM browser_login_pairings AS p
-    JOIN (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL) AS b ON b.user_id = p.user_id WHERE p.id = ?`)
+    JOIN backup_recovery_credentials AS b ON b.user_id = p.user_id WHERE p.id = ?`)
           .bind(pairing.pairingId)
           .first()
       );
@@ -1548,11 +1562,7 @@ it("rejects the old recovery code after rotation and redeems its single-use repl
         yield* Effect.tryPromise(() => db.prepare("SELECT count(*) AS count FROM users").first())
       ).toEqual({ count: 2 });
       const caseEvidence = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT * FROM (SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')"
-          )
-          .all()
+        db.prepare("SELECT * FROM support_recovery_cases").all()
       );
       expect(encodeJson(caseEvidence.results)).not.toContain(created.backupRecoveryCode);
       expect(encodeJson(caseEvidence.results)).not.toContain(pairing.privateVerifier);
@@ -1886,88 +1896,110 @@ it("rejects a WebSession revoked during renewal without releasing the User or wr
     })
   ));
 
-it("redeems one approved pairing under concurrent replay without accepting a fixated browser bearer", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
-      const oldToken = "F".repeat(43);
-      yield* Effect.tryPromise(() => seedWebSession(db, oldToken));
-      const pairing = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
-      )(
-        yield* startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }).pipe(
-          Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
-        )
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "UPDATE browser_login_pairings SET state = 'ready', user_id = (SELECT id FROM users) WHERE id = ?"
+it.each(["RAISE(ABORT, 'session_test_refusal')", "RAISE(IGNORE)"])(
+  "redeems one approved pairing under concurrent replay without accepting a fixated browser bearer after %s",
+  (refusal) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+        expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
+        const oldToken = "F".repeat(43);
+        yield* Effect.tryPromise(() => seedWebSession(db, oldToken));
+        const pairing = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
+        )(
+          yield* startBrowserPairing({
+            db,
+            retainedPairings: retainedRecoveryPairingsQuery(),
+          }).pipe(Effect.flatMap((response) => Effect.tryPromise(() => response.json())))
+        );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "UPDATE browser_login_pairings SET state = 'ready', user_id = (SELECT id FROM users) WHERE id = ?"
+            )
+            .bind(pairing.pairingId)
+            .run()
+        );
+        const redeem = (): Promise<Response> =>
+          sendRequest(
+            new Request("https://api.fidyapp.com/web/pairings/redeem", {
+              method: "POST",
+              headers: {
+                origin: "https://app.fidyapp.com",
+                "content-type": "application/json",
+                cookie: `__Host-fidy_session=${oldToken}`,
+              },
+              body: encodeJson(pairing),
+            })
+          );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`CREATE TRIGGER refuse_session BEFORE INSERT ON web_sessions
+        BEGIN SELECT ${refusal}; END`)
+            .run()
+        );
+        const refused = yield* Effect.tryPromise(() => redeem());
+        expect(refused.status).toBe(400);
+        expect(refused.headers.get("set-cookie")).toBeNull();
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT state FROM browser_login_pairings WHERE id = ?")
+              .bind(pairing.pairingId)
+              .first()
           )
-          .bind(pairing.pairingId)
-          .run()
-      );
-      const redeem = (): Promise<Response> =>
-        sendRequest(
-          new Request("https://api.fidyapp.com/web/pairings/redeem", {
-            method: "POST",
-            headers: {
-              origin: "https://app.fidyapp.com",
-              "content-type": "application/json",
-              cookie: `__Host-fidy_session=${oldToken}`,
-            },
-            body: encodeJson(pairing),
+        ).toEqual({ state: "ready" });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT count(*) AS count FROM web_sessions WHERE pairing_id = ?")
+              .bind(pairing.pairingId)
+              .first()
+          )
+        ).toEqual({ count: 0 });
+        yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_session").run());
+        const responses = yield* Effect.tryPromise(() => Promise.all([redeem(), redeem()]));
+        expect(
+          responses.map((response) => response.status).sort((left, right) => left - right)
+        ).toEqual([200, 400]);
+        const issued =
+          responses.find((response) => response.status === 200)?.headers.get("set-cookie") ?? "";
+        expect(issued).toContain("__Host-fidy_session=");
+        expect(issued).not.toContain(oldToken);
+        expect(issued).toContain("Secure; HttpOnly; SameSite=Lax");
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT count(*) AS count FROM web_sessions WHERE pairing_id = ?")
+              .bind(pairing.pairingId)
+              .first()
+          )
+        ).toEqual({ count: 1 });
+        const replay = yield* Effect.tryPromise(() => redeem());
+        expect(replay.status).toBe(400);
+        expect(replay.headers.get("set-cookie")).toBeNull();
+        const observed = observeRetentionCost(db);
+        const observedAt = yield* Clock.currentTimeMillis;
+        const session = yield* Effect.tryPromise(() =>
+          authenticateWebSession({
+            db: observed.database,
+            request: new Request("https://api.fidyapp.com/user", {
+              headers: { cookie: issued.split(";")[0] ?? "" },
+            }),
+            current: observedAt,
+            freshness: "live",
           })
         );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`CREATE TRIGGER refuse_session BEFORE INSERT ON web_sessions
-        BEGIN SELECT RAISE(ABORT, 'session_test_refusal'); END`)
-          .run()
-      );
-      const refused = yield* Effect.tryPromise(() => redeem());
-      expect(refused.status).toBe(400);
-      expect(refused.headers.get("set-cookie")).toBeNull();
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT state FROM browser_login_pairings WHERE id = ?")
-            .bind(pairing.pairingId)
-            .first()
-        )
-      ).toEqual({ state: "ready" });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT count(*) AS count FROM web_sessions WHERE pairing_id = ?")
-            .bind(pairing.pairingId)
-            .first()
-        )
-      ).toEqual({ count: 0 });
-      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_session").run());
-      const responses = yield* Effect.tryPromise(() => Promise.all([redeem(), redeem()]));
-      expect(
-        responses.map((response) => response.status).sort((left, right) => left - right)
-      ).toEqual([200, 400]);
-      const issued =
-        responses.find((response) => response.status === 200)?.headers.get("set-cookie") ?? "";
-      expect(issued).toContain("__Host-fidy_session=");
-      expect(issued).not.toContain(oldToken);
-      expect(issued).toContain("Secure; HttpOnly; SameSite=Lax");
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT count(*) AS count FROM web_sessions WHERE pairing_id = ?")
-            .bind(pairing.pairingId)
-            .first()
-        )
-      ).toEqual({ count: 1 });
-      const replay = yield* Effect.tryPromise(() => redeem());
-      expect(replay.status).toBe(400);
-      expect(replay.headers.get("set-cookie")).toBeNull();
-    })
-  ));
+        expect(Option.isSome(session)).toBe(true);
+        expect(
+          (yield* Effect.tryPromise(observed.plans)).some(
+            (plan) => plan.includes("SEARCH web_sessions") && plan.includes("token_digest=?")
+          )
+        ).toBe(true);
+      })
+    )
+);
 
 const runProofDelivery =
   (
@@ -2087,7 +2119,19 @@ const emailAdmissionRequest = (
 it("bounds concurrent email sends across pairings and preserves admission after pairing deletion", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      const measures: Array<ReturnType<typeof observeRetentionCost>> = [];
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() =>
+        setup(undefined, undefined, {
+          worker: coreWorker,
+          accessIssuer: "https://example.cloudflareaccess.com",
+          publication: Option.none(),
+          database: (db) => {
+            const observed = observeRetentionCost(db);
+            measures.push(observed);
+            return observed.database;
+          },
+        })
+      );
       yield* Effect.tryPromise(seedUser);
       const pairings = yield* Effect.all(
         Array.from({ length: 8 }, () => emailAdmissionPairing(sendRequest))
@@ -2117,7 +2161,7 @@ it("bounds concurrent email sends across pairings and preserves admission after 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests FROM email_security_limits WHERE kind='pairing')"
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.user.v1'"
             )
             .first()
         )
@@ -2142,17 +2186,19 @@ it("bounds concurrent email sends across pairings and preserves admission after 
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT requests FROM email_security_limits WHERE kind='pairing-global'")
+            .prepare(
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.global.v1'"
+            )
             .first()
         )
       ).toEqual({ requests: 5 });
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
-            "UPDATE email_security_limits SET window_started_at_ms=window_started_at_ms-3600000 WHERE kind='pairing'"
+            "UPDATE resource_admission_counters SET window_start_ms=window_start_ms-3600000,window_ends_ms=window_ends_ms-3600000 WHERE policy_key='email.pairing.user.v1'"
           ),
           db.prepare(
-            "UPDATE email_security_limits SET window_started_at_ms = window_started_at_ms - 3600000 WHERE kind='pairing-global'"
+            "UPDATE resource_admission_counters SET window_start_ms=window_start_ms-3600000,window_ends_ms=window_ends_ms-3600000 WHERE policy_key='email.pairing.global.v1'"
           ),
         ])
       );
@@ -2161,7 +2207,7 @@ it("bounds concurrent email sends across pairings and preserves admission after 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests FROM email_security_limits WHERE kind='pairing')"
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.user.v1'"
             )
             .first()
         )
@@ -2169,10 +2215,18 @@ it("bounds concurrent email sends across pairings and preserves admission after 
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT requests FROM email_security_limits WHERE kind='pairing-global'")
+            .prepare(
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.global.v1'"
+            )
             .first()
         )
       ).toEqual({ requests: 1 });
+      const admissionCosts = measures
+        .flatMap((observed) => observed.statements())
+        .filter(({ sql }) => sql.includes("INSERT INTO resource_admission_counters"))
+        .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(77);
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(14);
     })
   ));
 
@@ -2188,7 +2242,7 @@ it("does not spend email capacity for same-pairing cooldown or exhausted aggrega
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests FROM email_security_limits WHERE kind='pairing')"
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.user.v1'"
             )
             .first()
         )
@@ -2196,13 +2250,17 @@ it("does not spend email capacity for same-pairing cooldown or exhausted aggrega
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT requests FROM email_security_limits WHERE kind='pairing-global'")
+            .prepare(
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.global.v1'"
+            )
             .first()
         )
       ).toEqual({ requests: 1 });
       yield* Effect.tryPromise(() =>
         db
-          .prepare("UPDATE email_security_limits SET requests = 999 WHERE kind='pairing-global'")
+          .prepare(
+            "UPDATE resource_admission_counters SET used = 999 WHERE policy_key='email.pairing.global.v1'"
+          )
           .run()
       );
       const competing = yield* Effect.all([
@@ -2217,7 +2275,9 @@ it("does not spend email capacity for same-pairing cooldown or exhausted aggrega
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT requests FROM email_security_limits WHERE kind='pairing-global'")
+            .prepare(
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.global.v1'"
+            )
             .first()
         )
       ).toEqual({ requests: 1000 });
@@ -2227,7 +2287,7 @@ it("does not spend email capacity for same-pairing cooldown or exhausted aggrega
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests FROM email_security_limits WHERE kind='pairing')"
+              "SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.user.v1'"
             )
             .first()
         )
@@ -2259,8 +2319,8 @@ it("rolls email admission back when recording its proof fails", () =>
       const pairing = yield* emailAdmissionPairing(sendRequest);
       expect((yield* emailAdmissionRequest(sendRequest, pairing)).status).toBe(503);
       for (const table of [
-        "(SELECT user_id FROM email_security_limits WHERE kind='pairing')",
-        "(SELECT requests FROM email_security_limits WHERE kind='pairing-global')",
+        "(SELECT owner_user_id FROM resource_admission_counters WHERE policy_key='email.pairing.user.v1')",
+        "(SELECT used AS requests FROM resource_admission_counters WHERE policy_key='email.pairing.global.v1')",
         "(SELECT id FROM browser_login_pairings WHERE email_work_id IS NOT NULL)",
       ]) {
         expect(

@@ -1,3 +1,4 @@
+import { observeRetentionCost } from "../d1-test-fixture";
 import {
   HostedAgentSessionId,
   TranscriptText,
@@ -72,6 +73,7 @@ import {
   readHostedContinuity,
   readHostedSnapshot,
   recoverHostedTurn,
+  reserveHostedCompaction,
   selectHostedSession,
 } from "./internal/turn-store";
 
@@ -435,7 +437,8 @@ it("does not replace continuity when Consent is revoked during Compaction genera
 it("charges aborted pre-admission Compaction attempts against one User's daily capacity", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => setup());
+      const observed = observeRetentionCost(yield* Effect.tryPromise(() => setup()));
+      const db = observed.database;
       const awaited24 = yield* Effect.tryPromise(() => subject(0));
       const awaited25 = yield* Effect.tryPromise(() => inference(() => Promise.resolve(reply())));
       const first = yield* Effect.tryPromise(() =>
@@ -498,12 +501,84 @@ it("charges aborted pre-admission Compaction attempts against one User's daily c
       ]);
       const attempts = yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT used FROM hosted_compaction_attempts WHERE user_id = ?")
+          .prepare(
+            "SELECT used FROM resource_admission_counters WHERE policy_key='hosted.compaction.user.v1' AND scope_key=?"
+          )
           .bind(users[0])
           .first<{ used: number }>()
       );
       expect(attempts?.used).toBe(3);
+      const admissionCosts = observed
+        .statements()
+        .filter(({ sql }) => sql.includes("INSERT INTO resource_admission_counters"))
+        .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(27);
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(5);
     })
+  ));
+
+it("shares three atomic Compaction attempts across sessions and resets only at UTC midnight", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const midnight = Math.floor(now() / 86_400_000) * 86_400_000 + 86_400_000;
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(midnight - 1_000);
+      const db = yield* Effect.tryPromise(() => setup());
+      const credential = yield* Effect.tryPromise(() => subject(0));
+      const foreign = yield* Effect.tryPromise(() => subject(1));
+      const sessionIds: readonly [HostedAgentSessionId, HostedAgentSessionId] = [
+        HostedAgentSessionId.make("14350000-0000-4000-8000-000000000001"),
+        HostedAgentSessionId.make("14350000-0000-4000-8000-000000000002"),
+      ];
+      yield* Effect.tryPromise(() =>
+        db.batch(
+          sessionIds.map((id) =>
+            db
+              .prepare(
+                "INSERT INTO hosted_agent_sessions(id,user_id,consent_basis_json,started_at_ms,status) VALUES(?,?,'{}',?,'active')"
+              )
+              .bind(id, credential.userId, midnight - 1_000)
+          )
+        )
+      );
+      const sessionId = sessionIds[0];
+      expect(yield* reserveHostedCompaction({ db, subject: foreign, sessionId })).toBe(false);
+      const contenders = yield* Effect.all(
+        Array.from({ length: 8 }, (_, index) =>
+          reserveHostedCompaction({
+            db,
+            subject: credential,
+            sessionId: index % 2 === 0 ? sessionIds[0] : sessionIds[1],
+          })
+        ),
+        { concurrency: "unbounded" }
+      );
+      expect(contenders.filter(Boolean)).toHaveLength(3);
+      vi.setSystemTime(midnight - 1);
+      expect(yield* reserveHostedCompaction({ db, subject: credential, sessionId })).toBe(false);
+      vi.setSystemTime(midnight);
+      expect(yield* reserveHostedCompaction({ db, subject: credential, sessionId })).toBe(true);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT window_start_ms,window_ends_ms,used FROM resource_admission_counters WHERE policy_key='hosted.compaction.user.v1' AND scope_key=? ORDER BY window_start_ms"
+            )
+            .bind(credential.userId)
+            .all()
+        )).results
+      ).toEqual([
+        { window_start_ms: midnight - 86_400_000, window_ends_ms: midnight, used: 3 },
+        { window_start_ms: midnight, window_ends_ms: midnight + 86_400_000, used: 1 },
+      ]);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE web_sessions SET revoked_at_ms=? WHERE id=?")
+          .bind(midnight, credential.id)
+          .run()
+      );
+      expect(yield* reserveHostedCompaction({ db, subject: credential, sessionId })).toBe(false);
+    }).pipe(Effect.ensuring(Effect.sync(() => vi.useRealTimers())))
   ));
 
 it("compacts a long session of short Turns before its exact-entry capacity is reached", () =>
@@ -2118,9 +2193,9 @@ it("bounds independent User retention at four and expires every selected User", 
               .bind(userId, current),
             db
               .prepare(
-                "INSERT INTO hosted_compaction_attempts (user_id,day_ms,used) VALUES (?,0,1)"
+                "INSERT INTO resource_admission_counters(policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,owner_user_id) VALUES ('hosted.compaction.user.v1',?,'calendar',0,86400000,1,?)"
               )
-              .bind(userId),
+              .bind(userId, userId),
           ])
         )
       );
@@ -2186,7 +2261,11 @@ it("bounds independent User retention at four and expires every selected User", 
       expect({ active, started, maximum }).toEqual({ active: 0, started: 9, maximum: 4 });
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS retained FROM hosted_compaction_attempts").first()
+          db
+            .prepare(
+              "SELECT count(*) AS retained FROM resource_admission_counters WHERE policy_key='hosted.compaction.user.v1'"
+            )
+            .first()
         )
       ).toEqual({ retained: 0 });
     })

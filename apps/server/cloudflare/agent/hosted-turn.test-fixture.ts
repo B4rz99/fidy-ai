@@ -206,7 +206,7 @@ export const setup = (firstGrant: string = grants[0]): Promise<D1Database> =>
         statements.push(
           db
             .prepare(
-              "INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)"
+              "INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, occurred_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)"
             )
             .bind(grant, user, snapshot, timestamp, timestamp)
         );

@@ -702,7 +702,7 @@ it("requires the declared PAT scope, lifetime, revocation standing, and Consent 
       yield* fromTestPromise(() =>
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(grantId, users[0], clock(), clock())
           .run()
@@ -765,7 +765,7 @@ it("stops a revoked WebSession and a withdrawn Consent from reading or writing M
       yield* fromTestPromise(() =>
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(grantId, users[1], clock(), clock())
           .run()

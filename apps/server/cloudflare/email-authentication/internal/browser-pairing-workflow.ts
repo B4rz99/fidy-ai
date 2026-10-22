@@ -186,8 +186,8 @@ const findPendingProof = (
       db
         .prepare(`SELECT e.email_address, e.expires_at_ms, e.state
       FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) AS e
-      JOIN (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v ON v.user_id = e.user_id
-        AND v.email_address = e.email_address AND v.verified_at_ms = e.credential_verified_at_ms
+      JOIN verified_email_credentials AS v ON v.user_id = e.user_id
+        AND v.address = e.email_address AND v.verified_at_ms = e.credential_verified_at_ms
       WHERE e.work_id = ? AND EXISTS (${pairing.sql})`)
         .bind(id, ...pairing.params)
         .first()

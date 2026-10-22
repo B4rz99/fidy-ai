@@ -1,4 +1,4 @@
-import { prepareEmailSecurityLimit } from "./email-security-limit";
+import { prepareResourceCounter, resourceCounterQuery } from "../../resource-admission/operations";
 import { freshSessionQuery } from "../../../src/shell/web-session/operations";
 import { prepareEmailReplacementEvidence } from "../../../src/shell/audit/operations";
 import {
@@ -137,12 +137,60 @@ type ReplacementRequest = Readonly<{
   current: number;
 }>;
 
-const startProof = (db: D1Database, input: ReplacementRequest): Promise<void> => {
+const prepareReplacementProof = (
+  db: D1Database,
+  input: ReplacementRequest
+): D1PreparedStatement => {
   const { session, candidateEmail, workId, current } = input;
+  const counter = resourceCounterQuery({
+    kind: "email_replacement",
+    subject: { sql: "SELECT v.user_id AS user_id", params: [] },
+  });
+  return db
+    .prepare(`INSERT INTO email_replacements
+      (user_id, work_id, session_id, candidate_email, prior_email, prior_verified_at_ms,
+       state, created_at_ms, expires_at_ms)
+      SELECT v.user_id, ?, ?, ?, v.address, v.verified_at_ms, 'awaiting_delivery', ?, ?
+      FROM verified_email_credentials AS v WHERE v.user_id = ? AND v.address <> ?
+        AND EXISTS (SELECT 1 FROM (${counter.sql}) AS l WHERE l.last_work_id = ?)
+        AND NOT EXISTS (SELECT 1 FROM verified_email_credentials WHERE address = ?)
+        AND NOT EXISTS (SELECT 1 FROM email_replacements AS r WHERE r.user_id = v.user_id
+          AND r.expires_at_ms > ? AND r.state IN ('awaiting_delivery', 'sending', 'awaiting_proof'))
+      ON CONFLICT(user_id) DO UPDATE SET work_id = excluded.work_id,
+        session_id = excluded.session_id, candidate_email = excluded.candidate_email,
+        prior_email = excluded.prior_email, prior_verified_at_ms = excluded.prior_verified_at_ms,
+        state = 'awaiting_delivery', created_at_ms = excluded.created_at_ms,
+        expires_at_ms = excluded.expires_at_ms, wrong_attempts = 0, dispatch_attempted_at_ms = NULL,
+        public_code = NULL, proof_digest = NULL, proof_expires_at_ms = NULL
+      WHERE email_replacements.expires_at_ms <= ? OR email_replacements.state IN ('rejected', 'ambiguous')`)
+    .bind(
+      workId,
+      session.id,
+      candidateEmail,
+      current,
+      current + proofLifetimeMilliseconds,
+      session.user_id,
+      candidateEmail,
+      ...counter.params,
+      workId,
+      candidateEmail,
+      current,
+      current
+    );
+};
+
+const startProof = (db: D1Database, input: ReplacementRequest): Promise<void> => {
+  const { session, workId, current } = input;
   return Effect.runPromise(
     attempt(() =>
       db.batch([
-        admissionStatement(db, { userId: session.user_id, workId, current }),
+        prepareResourceCounter({
+          db,
+          kind: "email_replacement",
+          current,
+          workId,
+          subject: { sql: "SELECT ? AS user_id", params: [session.user_id] },
+        }),
         prepareEmailReplacementEvidence({
           db,
           id: newId(),
@@ -153,53 +201,11 @@ const startProof = (db: D1Database, input: ReplacementRequest): Promise<void> =>
           current,
           afterOwnerWrite: false,
         }),
-        db
-          .prepare(`INSERT INTO email_replacements
-      (user_id, work_id, session_id, candidate_email, prior_email, prior_verified_at_ms,
-       state, created_at_ms, expires_at_ms)
-      SELECT v.user_id, ?, ?, ?, v.email_address, v.verified_at_ms, 'awaiting_delivery', ?, ?
-      FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v WHERE v.user_id = ? AND v.email_address <> ?
-        AND EXISTS (SELECT 1 FROM email_security_limits AS l
-          WHERE l.kind='replacement' AND l.user_id = v.user_id AND l.last_work_id = ?)
-        AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) WHERE email_address = ?)
-        AND NOT EXISTS (SELECT 1 FROM email_replacements AS r WHERE r.user_id = v.user_id
-          AND r.expires_at_ms > ? AND r.state IN ('awaiting_delivery', 'sending', 'awaiting_proof'))
-      ON CONFLICT(user_id) DO UPDATE SET work_id = excluded.work_id,
-        session_id = excluded.session_id, candidate_email = excluded.candidate_email,
-        prior_email = excluded.prior_email, prior_verified_at_ms = excluded.prior_verified_at_ms,
-        state = 'awaiting_delivery', created_at_ms = excluded.created_at_ms,
-        expires_at_ms = excluded.expires_at_ms, wrong_attempts = 0, dispatch_attempted_at_ms = NULL,
-        public_code = NULL, proof_digest = NULL, proof_expires_at_ms = NULL
-      WHERE email_replacements.expires_at_ms <= ? OR email_replacements.state IN ('rejected', 'ambiguous')`)
-          .bind(
-            workId,
-            session.id,
-            candidateEmail,
-            current,
-            current + proofLifetimeMilliseconds,
-            session.user_id,
-            candidateEmail,
-            workId,
-            candidateEmail,
-            current,
-            current
-          ),
+        prepareReplacementProof(db, input),
       ])
     ).pipe(Effect.asVoid)
   );
 };
-
-const admissionStatement = (
-  db: D1Database,
-  input: { userId: string; workId: string; current: number }
-): D1PreparedStatement =>
-  prepareEmailSecurityLimit({
-    db,
-    kind: "replacement",
-    current: input.current,
-    workId: input.workId,
-    subject: { sql: "SELECT ? AS user_id", params: [input.userId] },
-  });
 
 const recordMalformedInput = (
   request: globalThis.Request,
@@ -422,15 +428,15 @@ const commitReplacement = (
     attempt(() =>
       db.batch([
         db
-          .prepare(`UPDATE users SET verified_email_address = (
-          SELECT candidate_email FROM email_replacements WHERE work_id = ?), email_verified_at_ms = ?
-        WHERE id = ? AND EXISTS (SELECT 1 FROM email_replacements AS r
+          .prepare(`UPDATE verified_email_credentials SET address = (
+          SELECT candidate_email FROM email_replacements WHERE work_id = ?), verified_at_ms = ?
+        WHERE user_id = ? AND EXISTS (SELECT 1 FROM email_replacements AS r
           WHERE r.work_id = ? AND r.user_id = ? AND r.session_id = ?
             AND r.state = 'awaiting_proof' AND r.public_code = ?
             AND r.proof_expires_at_ms > ? AND r.expires_at_ms > ?
             AND EXISTS (${session.sql})
-            AND users.verified_email_address = r.prior_email
-            AND users.email_verified_at_ms = r.prior_verified_at_ms)`)
+            AND verified_email_credentials.address = r.prior_email
+            AND verified_email_credentials.verified_at_ms = r.prior_verified_at_ms)`)
           .bind(
             workId,
             current,

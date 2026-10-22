@@ -1,3 +1,4 @@
+import { expiredCompactionCounterUsers } from "../../resource-admission/operations";
 import { pendingExecutionRecoveryMs } from "../contract";
 import { UserId } from "../../../src/core/identity/contract";
 import { type Cause, Effect, Schema } from "effect";
@@ -20,6 +21,10 @@ export const sweepHostedTurns = ({
   Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
 > =>
   Effect.gen(function* () {
+    const attempts = expiredCompactionCounterUsers({
+      cutoff: now - hostedTranscriptRetentionMs,
+      limit: maximumUsersPerSweep,
+    });
     const due = yield* Effect.tryPromise(() =>
       db
         .prepare(`WITH
@@ -36,10 +41,7 @@ export const sweepHostedTurns = ({
       SELECT user_id, updated_at_ms AS due_ms FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations
       WHERE updated_at_ms < ? ORDER BY updated_at_ms, user_id LIMIT ?
     ),
-    attempts AS (
-      SELECT user_id, day_ms AS due_ms FROM hosted_compaction_attempts
-      WHERE day_ms < ? ORDER BY day_ms, user_id LIMIT ?
-    ),
+    attempts AS (${attempts.sql}),
     confirmations AS (
       SELECT user_id, expires_at_ms AS due_ms FROM hosted_confirmations
       WHERE expires_at_ms < ? ORDER BY expires_at_ms, user_id LIMIT ?
@@ -55,8 +57,7 @@ export const sweepHostedTurns = ({
           maximumUsersPerSweep,
           now - hostedTranscriptRetentionMs,
           maximumUsersPerSweep,
-          now - hostedTranscriptRetentionMs,
-          maximumUsersPerSweep,
+          ...attempts.params,
           now,
           maximumUsersPerSweep,
           maximumUsersPerSweep

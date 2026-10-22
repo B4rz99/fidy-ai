@@ -1,4 +1,4 @@
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { Clock, Data, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { makeAudit } from "../../src/shell/audit/runtime";
 import { PATActivity } from "../../src/shell/tokens/contract";
@@ -204,7 +204,8 @@ type Send = Readonly<{
     }>
   >;
 const setup = (
-  beforeCoordinate?: (db: D1Database) => Promise<void>
+  beforeCoordinate?: (db: D1Database) => Promise<void>,
+  database: (db: D1Database) => D1Database = (db) => db
 ): Promise<{
   db: D1Database;
   send: (input: Send) => Promise<Response>;
@@ -213,9 +214,9 @@ const setup = (
 }> =>
   runTest(
     Effect.gen(function* () {
-      const db = yield* awaitPromise(databases.acquire());
-
-      yield* awaitPromise(installTestSchema({ db }));
+      const native = yield* awaitPromise(databases.acquire());
+      yield* awaitPromise(installTestSchema({ db: native }));
+      const db = database(native);
       const createSession = (user: string, index: number): Promise<string> =>
         runTest(
           Effect.gen(function* () {
@@ -580,7 +581,15 @@ it.each(["fresh", "live"] as const)(
   (sessionAge) =>
     runTest(
       Effect.gen(function* () {
-        const { db, send, sessions } = yield* awaitPromise(setup());
+        const measures: Array<ReturnType<typeof observeRetentionCost>> = [];
+        const { db, send, sessions } = yield* awaitPromise(
+          setup(undefined, (db) => {
+            const observed = observeRetentionCost(db);
+            measures.push(observed);
+            return observed.database;
+          })
+        );
+        const observed = Option.getOrThrow(Option.fromUndefinedOr(measures[0]));
         if (sessionAge === "live") {
           vi.useFakeTimers({ toFake: ["Date"] });
           vi.setSystemTime(clock() + 600_001);
@@ -713,6 +722,16 @@ it.each(["fresh", "live"] as const)(
               .first()
           ))?.bearer_digest
         ).not.toBe(issued.bearer);
+        const admissionCosts = observed
+          .statements()
+          .filter(
+            ({ sql }) =>
+              sql.includes("INSERT INTO resource_admission_events") ||
+              sql.includes("INSERT INTO resource_admission_grants")
+          )
+          .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
+        expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(9);
+        expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(7);
       })
     )
 );
@@ -785,7 +804,18 @@ it.each(["revoked", "idle-expired"] as const)(
 it("refuses a source's PAT pairing burst without denying an unrelated client", () =>
   runTest(
     Effect.gen(function* () {
-      const { send } = yield* awaitPromise(setup());
+      const measures: Array<ReturnType<typeof observeRetentionCost>> = [];
+      const { send } = yield* awaitPromise(
+        setup(undefined, (db) => {
+          const observed = observeRetentionCost(db);
+          measures.push(observed);
+          return observed.database;
+        })
+      );
+      const observed = Option.getOrThrow(Option.fromUndefinedOr(measures[0]));
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const started = clock();
+      vi.setSystemTime(started);
       const attempt = (source: string): Promise<Response> =>
         send({
           path: "/pat-pairings",
@@ -816,8 +846,137 @@ it("refuses a source's PAT pairing burst without denying an unrelated client", (
       );
       expect((yield* awaitPromise(attempt("198.51.100.10"))).status).toBe(429);
       expect((yield* awaitPromise(attempt("203.0.113.20"))).status).toBe(200);
+      const admissionCosts = observed
+        .statements()
+        .filter(({ sql }) => sql.includes("INSERT INTO resource_admission_counters"))
+        .map(({ rowsRead, rowsWritten }) => ({ rowsRead, rowsWritten }));
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(441);
+      expect(admissionCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(44);
+      vi.setSystemTime(started + 599_999);
+      expect((yield* awaitPromise(attempt("198.51.100.10"))).status).toBe(429);
+      vi.setSystemTime(started + 600_000);
+      expect((yield* awaitPromise(attempt("198.51.100.10"))).status).toBe(200);
+      const boundaryCosts = observed
+        .statements()
+        .filter(({ sql }) => sql.includes("INSERT INTO resource_admission_counters"))
+        .slice(admissionCosts.length);
+      expect(boundaryCosts.reduce((sum, cost) => sum + cost.rowsRead, 0)).toBeLessThanOrEqual(31);
+      expect(boundaryCosts.reduce((sum, cost) => sum + cost.rowsWritten, 0)).toBe(2);
     })
   ));
+it("commits global pairing capacity with source admission and rolls both back on failed creation", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send } = yield* awaitPromise(setup());
+      const attempt = (source: string): Promise<Response> =>
+        send({
+          path: "/pat-pairings",
+          method: "POST",
+          source,
+          payload: { recipientLabel: "Desktop agent", scopes: ["read"] },
+        });
+      yield* awaitPromise(
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_pairing BEFORE INSERT ON pat_pairings BEGIN SELECT RAISE(ABORT,'fixture_refusal'); END"
+          )
+          .run()
+      );
+      expect((yield* awaitPromise(attempt("198.51.100.10"))).status).toBe(503);
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM resource_admission_counters WHERE policy_key='pat.pairing.source.v1'"
+            )
+            .first()
+        ))?.total
+      ).toBe(0);
+      yield* awaitPromise(db.prepare("DROP TRIGGER refuse_pairing").run());
+      const current = clock();
+      yield* awaitPromise(
+        db
+          .prepare(`WITH RECURSIVE n(i) AS(SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<3999)
+    INSERT INTO pat_pairings(id,public_code,proof_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,expires_at_ms)
+    SELECT 'capacity-'||i,'capacity-'||i,zeroblob(32),'Fixture','["read"]',7,?,? FROM n`)
+          .bind(current, current + 600_000)
+          .run()
+      );
+      const results = yield* awaitPromise(
+        Promise.all([attempt("198.51.100.10"), attempt("203.0.113.20")])
+      );
+      expect(
+        results.map((response) => response.status).toSorted((left, right) => left - right)
+      ).toEqual([200, 429]);
+      expect(
+        (yield* awaitPromise(db.prepare("SELECT count(*) AS total FROM pat_pairings").first()))
+          ?.total
+      ).toBe(4000);
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT sum(used) AS total FROM resource_admission_counters WHERE policy_key='pat.pairing.source.v1'"
+            )
+            .first()
+        ))?.total
+      ).toBe(1);
+    })
+  ));
+
+it("charges malformed reviews per live WebSession and refills only each expired rolling attempt", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions, scheduled } = yield* awaitPromise(setup());
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const start = clock();
+      const inspect = (session: string): Promise<Response> =>
+        send({
+          path: "/pats/pairings/inspect",
+          method: "POST",
+          session,
+          payload: { publicCode: "invalid" },
+        });
+      for (const offset of [0, 100_000]) {
+        vi.setSystemTime(start + offset);
+        const burst = yield* awaitPromise(
+          Promise.all(Array.from({ length: 5 }, () => inspect(sessions[0])))
+        );
+        expect(burst.map((response) => response.status)).toEqual([400, 400, 400, 400, 400]);
+      }
+      expect((yield* awaitPromise(inspect(sessions[0]))).status).toBe(429);
+      expect((yield* awaitPromise(inspect(sessions[1]))).status).toBe(400);
+      vi.setSystemTime(start + 599_999);
+      expect((yield* awaitPromise(inspect(sessions[0]))).status).toBe(429);
+      vi.setSystemTime(start + 600_000);
+      const refill = yield* awaitPromise(
+        Promise.all(Array.from({ length: 6 }, () => inspect(sessions[0])))
+      );
+      expect(refill.filter((response) => response.status === 400)).toHaveLength(5);
+      expect(refill.filter((response) => response.status === 429)).toHaveLength(1);
+      vi.setSystemTime(start + 1_200_000);
+      yield* awaitPromise(scheduled());
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM resource_admission_events WHERE policy_key='pat.review.session.v1'"
+            )
+            .first()
+        ))?.total
+      ).toBe(11);
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM resource_admission_grants WHERE id NOT IN(SELECT grant_id FROM resource_admission_events)"
+            )
+            .first()
+        ))?.total
+      ).toBe(0);
+    })
+  ));
+
 it("sweeps expired anonymous pairing metadata but preserves approved grant evidence", () =>
   runTest(
     Effect.gen(function* () {
@@ -957,13 +1116,13 @@ it("sweeps expired anonymous pairing metadata but preserves approved grant evide
         yield* awaitPromise(
           db
             .prepare(
-              "SELECT policy_reason,session_id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
+              "SELECT reason,session_id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
             )
             .bind(approved.pairingId)
             .first()
         )
       ).toMatchObject({
-        policy_reason: "pat-approved-unclaimed-expiry",
+        reason: "pat-approved-unclaimed-expiry",
         session_id: null,
       });
       yield* awaitPromise(scheduled());
@@ -1080,14 +1239,14 @@ it("atomically revokes claimable approvals with User-origin Consent evidence and
         yield* awaitPromise(
           db
             .prepare(
-              "SELECT session_id,policy_reason FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
+              "SELECT session_id,reason FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
             )
             .bind(started.pairingId)
             .first()
         )
       ).toMatchObject({
         session_id: "40000000-0000-4000-8000-000000000001",
-        policy_reason: null,
+        reason: null,
       });
       expect(
         (yield* awaitPromise(
@@ -1445,13 +1604,13 @@ it("atomically expires a fixed-lifetime PAT with policy-origin Consent evidence"
       expect(
         yield* awaitPromise(
           db
-            .prepare(`SELECT r.policy_reason,r.session_id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r
+            .prepare(`SELECT r.reason,r.session_id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r
     JOIN pats p ON p.id = r.pat_id WHERE p.short_id = ?`)
             .bind(issued.pat.shortId)
             .first()
         )
       ).toMatchObject({
-        policy_reason: "pat-fixed-lifetime-expiry",
+        reason: "pat-fixed-lifetime-expiry",
         session_id: null,
       });
       expect(
@@ -1679,14 +1838,14 @@ it("isolates management by User and immediately refuses revoked and under-scoped
       expect(
         yield* awaitPromise(
           db
-            .prepare(`SELECT r.session_id,r.policy_reason FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r
+            .prepare(`SELECT r.session_id,r.reason FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r
     JOIN pats p ON p.id = r.pat_id WHERE p.short_id = ?`)
             .bind(issued.pat.shortId)
             .first()
         )
       ).toMatchObject({
         session_id: "40000000-0000-4000-8000-000000000001",
-        policy_reason: null,
+        reason: null,
       });
       expect(
         (yield* awaitPromise(
@@ -2280,7 +2439,7 @@ for (const refusal of ["revoked", "withdrawn", "suppressed-audit"] as const) {
             db.batch([
               db
                 .prepare(
-                  "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)"
+                  "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)"
                 )
                 .bind(grantId, userA, current, current),
               db
@@ -2415,7 +2574,7 @@ it("denies PAT metadata reads after explicit Consent withdrawal at protected wor
       yield* awaitPromise(
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(grantId, userA, clock(), clock())
           .run()
@@ -2535,7 +2694,7 @@ it("returns user_action_required when Consent is withdrawn between PAT admission
       yield* awaitPromise(
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(grantId, userA, clock(), clock())
           .run()
@@ -2543,7 +2702,7 @@ it("returns user_action_required when Consent is withdrawn between PAT admission
       yield* awaitPromise(
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(writerGrantId, userB, clock(), clock())
           .run()
@@ -3152,7 +3311,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
       yield* awaitPromise(
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(grantId, userA, clock(), clock())
           .run()
@@ -3855,7 +4014,7 @@ for (const refusal of [
           yield* awaitPromise(
             db
               .prepare(
-                `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','e0000000-0000-4000-8000-000000000001',?,'{}','disclosure','decision',?,?)`
+                `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','e0000000-0000-4000-8000-000000000001',?,'{}','disclosure','decision',?,?)`
               )
               .bind(userA, current, current)
               .run()
@@ -3961,7 +4120,7 @@ it("offers PAT activity to admitted hosted Turns and refuses substituted Users o
       yield* awaitPromise(
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','e0000000-0000-4000-8000-000000000257',?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','e0000000-0000-4000-8000-000000000257',?,'{}','disclosure','decision',?,?)`
           )
           .bind(userA, current, current)
           .run()

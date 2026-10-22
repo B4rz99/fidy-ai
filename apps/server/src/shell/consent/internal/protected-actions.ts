@@ -57,13 +57,13 @@ export const revocationEvidence = (evidence: PATRevocationProtection): OwnedStat
     case "ExpiredPAT":
       return {
         sql: `EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.pat_id = pats.id
-          AND r.policy_reason = 'pat-fixed-lifetime-expiry')`,
+          AND r.reason = 'pat-fixed-lifetime-expiry')`,
         params: [],
       };
     case "ExpiredPairing":
       return {
         sql: `EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.pairing_id = pat_pairings.id
-          AND r.policy_reason = 'pat-approved-unclaimed-expiry')`,
+          AND r.reason = 'pat-approved-unclaimed-expiry')`,
         params: [],
       };
   }
@@ -71,12 +71,12 @@ export const revocationEvidence = (evidence: PATRevocationProtection): OwnedStat
 
 export const fixedExpiryEvidenceStatement = (current: number): OwnedStatement => ({
   sql: `SELECT pat_id AS id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents
-  WHERE policy_reason = 'pat-fixed-lifetime-expiry' AND occurred_at_ms = ?`,
+  WHERE reason = 'pat-fixed-lifetime-expiry' AND occurred_at_ms = ?`,
   params: [current],
 });
 
 export const pairingExpiryEvidenceStatement = (current: number): OwnedStatement => ({
   sql: `SELECT pairing_id AS id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents
-  WHERE policy_reason = 'pat-approved-unclaimed-expiry' AND occurred_at_ms = ?`,
+  WHERE reason = 'pat-approved-unclaimed-expiry' AND occurred_at_ms = ?`,
   params: [current],
 });

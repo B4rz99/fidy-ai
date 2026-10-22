@@ -15,6 +15,8 @@ export const completePairing = ({
 }: WebSessionEstablishment): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
     const current = claim.current;
+    const sessionId = uuid();
+    const assertionScope = `web-session:${sessionId}`;
     const token = Base64Url.encode(crypto.getRandomValues(new Uint8Array(digestBytes)));
     const deadlines = calculateWebSessionDeadlines(DateTime.makeUnsafe(current));
     const tokenDigest = yield* attempt(() =>
@@ -31,7 +33,7 @@ export const completePairing = ({
       WHERE changes() = 1`
           )
           .bind(
-            uuid(),
+            sessionId,
             tokenDigest,
             current,
             DateTime.toEpochMillis(deadlines.freshUntil),
@@ -39,6 +41,10 @@ export const completePairing = ({
             DateTime.toEpochMillis(deadlines.hardExpiresAt),
             ...claim.subject.params
           ),
+        db
+          .prepare("INSERT INTO sql_assertions(scope,accepted) VALUES(?,changes()=1)")
+          .bind(assertionScope),
+        db.prepare("DELETE FROM sql_assertions WHERE scope=?").bind(assertionScope),
       ])
     );
     if (committed[1]?.meta.changes !== 1) return invalid();

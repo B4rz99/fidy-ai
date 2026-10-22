@@ -76,9 +76,9 @@ const rotateFreshSessionProof = (
       db.batch([
         db
           .prepare(
-            `UPDATE users SET recovery_code_digest = ?, recovery_created_at_ms = ?,
-        recovery_consumed_at_ms = NULL, recovery_revision = recovery_revision + 1
-        WHERE id = ? AND ${freshSessionExists}`
+            `UPDATE backup_recovery_credentials SET code_digest = ?, created_at_ms = ?,
+        consumed_at_ms = NULL, revision = revision + 1
+        WHERE user_id = ? AND ${freshSessionExists}`
           )
           .bind(
             codeDigest,

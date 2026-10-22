@@ -1,9 +1,15 @@
+import assert from "node:assert/strict";
+import { AuditUnavailable } from "../../../src/shell/audit/contract";
 import { afterAll, expect, it } from "vitest";
-import { Data, DateTime, Effect } from "effect";
+import { Data, DateTime, Effect, Exit } from "effect";
 import { recordAuthorizedCall, recordOwnerCall } from "../../../src/shell/audit/operations";
 import { makeAudit, makeAuditRetention } from "../../../src/shell/audit/runtime";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
-import { installTestSchema, isolatedTestDatabases } from "../../d1-test-fixture";
+import {
+  installTestSchema,
+  isolatedTestDatabases,
+  observeRetentionCost,
+} from "../../d1-test-fixture";
 import { fixtureWorker as coreWorker } from "../../core-worker.test-fixture";
 import { approvedWorkersAiModel } from "../../../src/shell/hosted-inference/contract";
 
@@ -244,6 +250,9 @@ it("retains evidence for 365 days, removes only the selected User's older eviden
         )
       );
       expect(afterRetention._tag).toBe("Failure");
+      expect(
+        yield* attempt(() => db.prepare("SELECT user_id FROM audit_retention_permits").all())
+      ).toMatchObject({ results: [] });
     })
   ));
 
@@ -270,7 +279,7 @@ it("rolls retention back and leaves ordinary deletion forbidden when a later pro
       yield* attempt(() =>
         db
           .prepare(
-            "CREATE TRIGGER audit_retention_failure BEFORE UPDATE OF audit_retention_cutoff_ms ON users WHEN OLD.audit_retention_cutoff_ms IS NOT NULL AND NEW.audit_retention_cutoff_ms IS NULL BEGIN SELECT RAISE(ABORT, 'private database detail'); END"
+            "CREATE TRIGGER audit_retention_failure BEFORE DELETE ON audit_retention_permits BEGIN SELECT RAISE(ABORT, 'private database detail'); END"
           )
           .run()
       );
@@ -282,6 +291,9 @@ it("rolls retention back and leaves ordinary deletion forbidden when a later pro
         expect(result.failure).toEqual(expect.objectContaining({ _tag: "AuditUnavailable" }));
       }
       expect(yield* makeAudit({ database: db }).query({ userId, limit: 10 })).toHaveLength(1);
+      expect(
+        yield* attempt(() => db.prepare("SELECT user_id FROM audit_retention_permits").all())
+      ).toMatchObject({ results: [] });
       const deletion = yield* Effect.result(
         attempt(() =>
           db
@@ -295,6 +307,60 @@ it("rolls retention back and leaves ordinary deletion forbidden when a later pro
       expect(deletion._tag).toBe("Failure");
     })
   ));
+
+it.each(["retained_permit", "erasure_fence"] as const)(
+  "refuses ordinary retention without partial deletion under %s",
+  (state) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const statement = recordOwnerCall({
+          id: "30000000-0000-4000-8000-000000000017",
+          userId,
+          caller: { _tag: "WebSession", id: sessionId },
+          operation: "transactions.listTransactions",
+          outcome: "success",
+          current: current - 1,
+          when: { sql: "SELECT 1", params: [] },
+          afterOwnerWrite: false,
+        });
+        yield* attempt(() =>
+          db
+            .prepare(statement.sql)
+            .bind(...statement.params)
+            .run()
+        );
+        if (state === "retained_permit") {
+          yield* attempt(() =>
+            db
+              .prepare("INSERT INTO audit_retention_permits VALUES(?,?)")
+              .bind(userId, current - 2)
+              .run()
+          );
+        } else {
+          yield* attempt(() =>
+            db
+              .prepare(
+                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,? ,?,'Sealing')"
+              )
+              .bind(userId, userId, current)
+              .run()
+          );
+        }
+        const before = yield* makeAudit({ database: db }).query({ userId, limit: 10 });
+        const retained = yield* Effect.exit(
+          makeAuditRetention({ database: db }).retain({ userId, now: current + 365 * 86400000 })
+        );
+        assert.deepStrictEqual(retained, Exit.fail(new AuditUnavailable()));
+        expect(yield* makeAudit({ database: db }).query({ userId, limit: 10 })).toEqual(before);
+        expect(
+          (yield* attempt(() =>
+            db.prepare("SELECT user_id,cutoff_ms FROM audit_retention_permits").all()
+          )).results
+        ).toEqual(state === "retained_permit" ? [{ user_id: userId, cutoff_ms: current - 2 }] : []);
+      })
+    )
+);
 
 it("returns a safe failure instead of exposing malformed stored evidence or database details", () =>
   Effect.runPromise(
@@ -425,10 +491,38 @@ it("bounds retention work and resumes the remaining expired evidence on the next
       yield* attempt(() =>
         db.batch(statements.map((statement) => db.prepare(statement.sql).bind(...statement.params)))
       );
-      const retention = makeAuditRetention({ database: db });
+      yield* attempt(() =>
+        db
+          .prepare(`WITH RECURSIVE n(i) AS (
+        SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<4000)
+        INSERT INTO audit_entries(record_type,id,user_id,session_id,operation,outcome,occurred_at_ms)
+        SELECT 'session_call',printf('30000000-0000-4000-8000-%012d',i+100),?,?,'transactions.listTransactions','success',? FROM n`)
+          .bind(otherUserId, otherSessionId, current)
+          .run()
+      );
+      const observed = observeRetentionCost(db);
+      const retention = makeAuditRetention({ database: observed.database });
       expect(yield* retention.retain({ userId, now: current + 365 * 86400000 })).toBe(64);
       expect(yield* makeAudit({ database: db }).query({ userId, limit: 256 })).toHaveLength(1);
       expect(yield* retention.retain({ userId, now: current + 365 * 86400000 })).toBe(1);
       expect(yield* makeAudit({ database: db }).query({ userId, limit: 256 })).toEqual([]);
+      expect(observed.cost().rowsRead).toBeLessThanOrEqual(397);
+      expect(observed.cost().rowsWritten).toBe(74);
+      expect(
+        (yield* attempt(() => observed.plans())).some((plan) =>
+          plan.includes("audit_entries_user_retention")
+        )
+      ).toBe(true);
+      const idle = observeRetentionCost(db);
+      expect(
+        yield* makeAuditRetention({ database: idle.database }).sweep(current + 365 * 86400000)
+      ).toBe(0);
+      expect(idle.cost().rowsRead).toBeLessThanOrEqual(2);
+      expect(idle.cost().rowsWritten).toBe(0);
+      expect(
+        (yield* attempt(() => idle.plans())).some((plan) =>
+          plan.includes("audit_entries_retention")
+        )
+      ).toBe(true);
     })
   ));

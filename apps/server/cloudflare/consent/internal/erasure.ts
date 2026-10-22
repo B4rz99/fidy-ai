@@ -1,5 +1,21 @@
 import type { ErasureProjection } from "../../erasure-store/contract";
 
+/** Preserve original archive keys and exact evidence while live history uses its normalized envelope. */
+const archiveValue = (field: string): string => {
+  switch (field) {
+    case "accepted_at_ms":
+      return "r.occurred_at_ms";
+    case "disclosure_revision":
+      return "json_extract(r.disclosure_json,'$.revision')";
+    case "disclosure_text":
+      return "json_extract(r.disclosure_json,'$.text')";
+    case "policy_reason":
+      return "r.reason";
+    default:
+      return `r."${field}"`;
+  }
+};
+
 /** A logical Consent purpose keeps its dependency order and exact erasure permit in the shared store. */
 const historyProjection = ({
   id,
@@ -18,7 +34,9 @@ const historyProjection = ({
   const body =
     archiveFields.length === 0
       ? "'{}'"
-      : "json_object(" + archiveFields.map((field) => `'${field}',r."${field}"`).join(",") + ")";
+      : "json_object(" +
+        archiveFields.map((field) => `'${field}',${archiveValue(field)}`).join(",") +
+        ")";
   return {
     id,
     dataClass: "consent",
@@ -207,7 +225,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: ["whatsapp_provider_handoffs"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'phone_number_id',r.\"phone_number_id\",'initiating_message_id',r.\"initiating_message_id\",'initiating_body_sha256',r.\"initiating_body_sha256\",'disclosure_json',r.\"disclosure_json\",'disclosure_message_id',r.\"disclosure_message_id\",'created_at_ms',r.\"created_at_ms\",'disclosed_at_ms',r.\"disclosed_at_ms\",'decision_not_before_ms',r.\"decision_not_before_ms\",'expires_at_ms',r.\"expires_at_ms\",'state',r.\"state\",'rejected_at_ms',r.\"rejected_at_ms\",'sandbox_phone',r.\"sandbox_phone\",'delivery_phone_number_id',r.delivery_phone_number_id,'delivery_message_id',r.delivery_message_id,'delivery_occurred_at_ms',r.delivery_occurred_at_ms,'delivery_received_at_ms',r.delivery_received_at_ms,'delivery_not_before_ms',r.delivery_not_before_ms,'decision_portfolio_id',r.decision_portfolio_id,'decision_bsuid',r.decision_bsuid,'decision_phone_number_id',r.decision_phone_number_id,'decision_value',r.decision_value,'decision_disclosure_json',r.decision_disclosure_json,'decision_disclosure_message_id',r.decision_disclosure_message_id,'decision_message_id',r.decision_message_id,'decision_delivery_key',r.decision_delivery_key,'decision_body_sha256',r.decision_body_sha256,'decision_occurred_at_ms',r.decision_occurred_at_ms,'decision_received_at_ms',r.decision_received_at_ms) AS body FROM pending_consent_exchanges r WHERE EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) w WHERE w.user_id=? AND w.portfolio_id=r.portfolio_id AND w.bsuid=r.bsuid)",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'phone_number_id',r.\"phone_number_id\",'initiating_message_id',r.\"initiating_message_id\",'initiating_body_sha256',r.\"initiating_body_sha256\",'disclosure_json',r.\"disclosure_json\",'disclosure_message_id',r.\"disclosure_message_id\",'created_at_ms',r.\"created_at_ms\",'disclosed_at_ms',r.\"disclosed_at_ms\",'decision_not_before_ms',r.\"decision_not_before_ms\",'expires_at_ms',r.\"expires_at_ms\",'state',r.\"state\",'rejected_at_ms',r.\"rejected_at_ms\",'sandbox_phone',r.\"sandbox_phone\",'delivery_phone_number_id',r.delivery_phone_number_id,'delivery_message_id',r.delivery_message_id,'delivery_occurred_at_ms',r.delivery_occurred_at_ms,'delivery_received_at_ms',r.delivery_received_at_ms,'delivery_not_before_ms',r.delivery_not_before_ms,'decision_portfolio_id',CASE WHEN r.decision_value IS NOT NULL THEN r.portfolio_id END,'decision_bsuid',CASE WHEN r.decision_value IS NOT NULL THEN r.bsuid END,'decision_phone_number_id',CASE WHEN r.decision_value IS NOT NULL THEN r.phone_number_id END,'decision_value',r.decision_value,'decision_disclosure_json',CASE WHEN r.decision_value IS NOT NULL THEN r.disclosure_json END,'decision_disclosure_message_id',CASE WHEN r.decision_value IS NOT NULL THEN r.disclosure_message_id END,'decision_message_id',r.decision_message_id,'decision_delivery_key',r.decision_delivery_key,'decision_body_sha256',r.decision_body_sha256,'decision_occurred_at_ms',r.decision_occurred_at_ms,'decision_received_at_ms',r.decision_received_at_ms) AS body FROM pending_consent_exchanges r WHERE EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) w WHERE w.user_id=? AND w.portfolio_id=r.portfolio_id AND w.bsuid=r.bsuid)",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -231,15 +249,15 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: ["proactivity_consent_records"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'kind',r.\"kind\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'disclosure_json',r.\"disclosure_json\",'created_at_ms',r.\"created_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'disclosure_message_id',r.\"disclosure_message_id\",'decision_message_id',r.\"decision_message_id\",'decision',r.\"decision\",'replaces_offer_id',r.\"replaces_offer_id\") AS body FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'kind',r.\"kind\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'disclosure_json',r.\"disclosure_json\",'created_at_ms',r.\"created_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'disclosure_message_id',r.\"disclosure_message_id\",'decision_message_id',r.\"decision_message_id\",'decision',r.\"decision\",'replaces_offer_id',r.\"replaces_offer_id\") AS body FROM consent_offers AS r WHERE r.kind<>'weekly-summary' AND r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM consent_offers AS r WHERE r.kind<>'weekly-summary' AND r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM consent_offers AS r WHERE r.kind<>'weekly-summary' AND r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
@@ -260,15 +278,15 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'disclosure_json',r.\"disclosure_json\",'created_at_ms',r.\"created_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'disclosure_message_id',r.\"disclosure_message_id\",'disclosed_at_ms',r.\"disclosed_at_ms\",'decision_message_id',r.\"decision_message_id\",'decision',r.\"decision\",'source_id',r.\"source_id\",'rejection_id',r.\"rejection_id\") AS body FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'disclosure_json',r.\"disclosure_json\",'created_at_ms',r.\"created_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'disclosure_message_id',r.\"disclosure_message_id\",'disclosed_at_ms',r.\"disclosed_at_ms\",'decision_message_id',r.\"decision_message_id\",'decision',r.\"decision\",'source_id',r.\"source_id\",'rejection_id',r.\"rejection_id\") AS body FROM consent_offers AS r WHERE r.kind='weekly-summary' AND r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM consent_offers AS r WHERE r.kind='weekly-summary' AND r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM consent_offers AS r WHERE r.kind='weekly-summary' AND r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [

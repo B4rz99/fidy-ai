@@ -464,7 +464,7 @@ it(
             runtime.db
               .prepare(
                 `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
-            decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'fixture', 'fixture', 1, 1)`
+            decision_received_at_ms, occurred_at_ms) VALUES ('processing_grant',?, ?, '{}', 'fixture', 'fixture', 1, 1)`
               )
               .bind(`30000000-0000-4000-8000-00000000010${index}`, userId)
               .run()
@@ -514,7 +514,7 @@ it(
         yield* fromTestPromise(() =>
           runtime.db
             .prepare(`INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
-           decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant','30000000-0000-4000-8000-000000000111', ?, '{}', 'fixture', 'fixture', 1, 1)`)
+           decision_received_at_ms, occurred_at_ms) VALUES ('processing_grant','30000000-0000-4000-8000-000000000111', ?, '{}', 'fixture', 'fixture', 1, 1)`)
             .bind(userA)
             .run()
         );
@@ -1250,7 +1250,7 @@ it("finishes a durably queued statement after withdrawal without reopening ordin
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','fixture','fixture',1,1)"
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','fixture','fixture',1,1)"
           )
           .bind(userA, userA)
           .run()
@@ -1636,7 +1636,7 @@ const clarifyStatement = (
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'fixture', 'fixture', 1, 1)`
+            `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, occurred_at_ms) VALUES ('processing_grant',?, ?, '{}', 'fixture', 'fixture', 1, 1)`
           )
           .bind(owner.grantId, owner.userId)
           .run()
@@ -1719,7 +1719,7 @@ const oauthClarificationSubject = (db: D1Database, current: number): Effect.Effe
           ),
         db
           .prepare(
-            `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) VALUES ('oauth_grant',?,?,?,?,'fixture','fixture',?)`
+            `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_json,occurred_at_ms) VALUES ('oauth_grant',?,?,?,?,json_object('revision','fixture','text','fixture'),?)`
           )
           .bind(
             "80000000-0000-4000-8000-000000000105",
@@ -2025,7 +2025,7 @@ it("publishes a staged statement under held WhatsApp authority and atomically bi
         runtime.db.batch([
           runtime.db
             .prepare(
-              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','30000000-0000-4000-8000-000000000199',?,'{}','fixture','fixture',1,1)"
+              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','30000000-0000-4000-8000-000000000199',?,'{}','fixture','fixture',1,1)"
             )
             .bind(userA),
           runtime.db
@@ -3979,7 +3979,7 @@ it("Core scheduling expires only old terminal Agent content and preserves curren
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) SELECT 'processing_grant',id, id, '{}', 'fixture', 'fixture', 1, 1 FROM users WHERE id IN (?, ?)"
+            "INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, occurred_at_ms) SELECT 'processing_grant',id, id, '{}', 'fixture', 'fixture', 1, 1 FROM users WHERE id IN (?, ?)"
           )
           .bind(userA, userB)
           .run()

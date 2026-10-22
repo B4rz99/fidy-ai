@@ -151,7 +151,7 @@ const recoveryCandidateQuery = ({
   return emailPairingAllowsUser({
     subject: {
       sql: `SELECT p.pairingId, b.user_id AS userId FROM (${pending.sql}) AS p
-        JOIN (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL) AS b ON b.code_digest = ? AND b.consumed_at_ms IS NULL
+        JOIN backup_recovery_credentials AS b ON b.code_digest = ? AND b.consumed_at_ms IS NULL
         WHERE NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = p.pairingId)`,
       params: [...pending.params, codeDigest],
     },
@@ -175,10 +175,10 @@ const recoveryCredentialConsume = ({
   codeDigest,
   now,
 }: Readonly<{ ready: OwnedStatement; codeDigest: Uint8Array; now: number }>): OwnedStatement => ({
-  sql: `UPDATE users SET recovery_code_digest = ?, recovery_consumed_at_ms = ?
-    WHERE recovery_code_digest = ? AND recovery_consumed_at_ms IS NULL
+  sql: `UPDATE backup_recovery_credentials SET code_digest = ?, consumed_at_ms = ?
+    WHERE code_digest = ? AND consumed_at_ms IS NULL
       AND EXISTS (SELECT 1 FROM (${ready.sql}) AS p
-        WHERE p.userId = users.id) AND changes() = 1`,
+        WHERE p.userId = backup_recovery_credentials.user_id) AND changes() = 1`,
   params: [crypto.getRandomValues(new Uint8Array(digestBytes)), now, codeDigest, ...ready.params],
 });
 
@@ -197,15 +197,10 @@ const supportCaseInsert = ({
     operator_issuer, operator_subject, credential_revision, opened_at_ms, expires_at_ms,
     state, closed_at_ms) SELECT ?, p.userId, p.pairingId, ?, ?, b.revision, ?, p.expiresAt,
     'approved', ? FROM (${ready.sql}) AS p
-    JOIN (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL) AS b ON b.user_id = p.userId
+    JOIN backup_recovery_credentials AS b ON b.user_id = p.userId
     WHERE b.consumed_at_ms = ? AND changes() = 1`,
   params: [caseId, operator.issuer, operator.subject, now, now, ...ready.params, now],
 });
-const supportCaseOpened = `INSERT INTO audit_entries(record_type,id,recovery_case_id,user_id,operator_issuer,operator_subject,recovery_action,occurred_at_ms) SELECT 'support_recovery',?, id, user_id, operator_issuer, operator_subject, 'opened', ?
-  FROM support_recovery_cases WHERE id = ? AND changes() = 1`;
-const supportCaseApproved = `INSERT INTO audit_entries(record_type,id,recovery_case_id,user_id,operator_issuer,operator_subject,recovery_action,occurred_at_ms) VALUES ('support_recovery',?, ?, (SELECT user_id FROM support_recovery_cases WHERE id = ?),
-    ?, ?, 'approved', ?)`;
-
 type CaseDecision = Readonly<{
   operator: { issuer: string; subject: string };
   codeDigest: Uint8Array;
@@ -215,8 +210,7 @@ type CaseDecision = Readonly<{
 
 const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
   const caseId = newId();
-  const openedId = newId();
-  const approvedId = newId();
+  const assertionScope = `support-recovery:${caseId}`;
   const { operator, codeDigest, publicCode, now } = input;
   const ready = approvedRecoveryBrowserPairingQuery({ publicCode, current: now });
   const credentialStatement = recoveryCredentialConsume({ ready, codeDigest, now });
@@ -230,10 +224,10 @@ const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
       }),
       db.prepare(credentialStatement.sql).bind(...credentialStatement.params),
       db.prepare(caseStatement.sql).bind(...caseStatement.params),
-      db.prepare(supportCaseOpened).bind(openedId, now, caseId),
       db
-        .prepare(supportCaseApproved)
-        .bind(approvedId, caseId, caseId, operator.issuer, operator.subject, now),
+        .prepare("INSERT INTO sql_assertions(scope,accepted) VALUES(?,changes()=1)")
+        .bind(assertionScope),
+      db.prepare("DELETE FROM sql_assertions WHERE scope=?").bind(assertionScope),
     ])
     .then((pairing) => pairing.every((entry) => entry.meta.changes === 1));
 };

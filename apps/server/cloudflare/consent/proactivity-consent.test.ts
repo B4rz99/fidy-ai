@@ -192,6 +192,19 @@ it("keeps Budget and reminder grants independent and refuses undisclosed, foreig
       expect(
         Option.isNone(yield* findProactivityConsentGrant({ ...input, userId: users[1] }))
       ).toBe(true);
+      expect(offer.value.expiresAt.epochMilliseconds).toBe(
+        DateTime.add(now, { minutes: 10 }).epochMilliseconds
+      );
+      expect(
+        Option.isNone(
+          yield* prepareProactivityConsentDecision({
+            ...input,
+            now: offer.value.expiresAt,
+            choice: offer.value.acceptChoice,
+            decisionMessageId: "expired",
+          })
+        )
+      ).toBe(true);
       const decision = yield* prepareProactivityConsentDecision({
         ...input,
         choice: offer.value.acceptChoice,

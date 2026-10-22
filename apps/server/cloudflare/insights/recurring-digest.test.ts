@@ -781,6 +781,21 @@ it("offers once on foreground discovery, replaces a definitively rejected disclo
       expect((yield* Effect.tryPromise(generate)).status).toBe(200);
       const second = Option.getOrThrow(yield* findCurrentProactivityOffer(context));
       expect(second.id).not.toBe(first.id);
+      expect(
+        yield* recordProactivityConsentDisclosure({
+          ...context,
+          offerId: first.id,
+          disclosureMessageId: "late-superseded-disclosure",
+        })
+      ).toBe(false);
+      expect(
+        yield* recordRecurringDigestDecision({
+          ...context,
+          choice: first.acceptChoice,
+          decisionMessageId: "stale-accept",
+        })
+      ).toBe(false);
+      expect(Option.isNone(yield* findProactivityConsentGrant(context))).toBe(true);
       provider.mockImplementation(() => Promise.reject(new Error("unknown transport outcome")));
       expect((yield* Effect.tryPromise(() => send(second.id))).status).toBe(200);
       yield* requestRecurringDigestOffer({ ...context, messageId: "foreground-ambiguous" });

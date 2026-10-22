@@ -30,6 +30,9 @@ const offerLifetimeMs = 600_000;
 const elapsedDayMs = 86_400_000;
 const maximumDailyOffers = 8;
 const maximumExpiredOffers = 64;
+const notReplaced = `NOT EXISTS (SELECT 1 FROM consent_offers AS replacement
+ WHERE replacement.kind<>'weekly-summary' AND replacement.user_id=consent_offers.user_id AND replacement.kind=consent_offers.kind
+ AND replacement.replaces_offer_id=consent_offers.id)`;
 
 export const sweepOffers = (
   input: Readonly<{ db: D1Database; nowEpochMs: number }>
@@ -39,7 +42,7 @@ export const sweepOffers = (
       input.db
         .prepare(
           `DELETE FROM consent_offers WHERE kind<>'weekly-summary' AND id IN (
- SELECT o.id FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS o WHERE o.decision IS NULL AND o.expires_at_ms<=?
+ SELECT o.id FROM consent_offers AS o WHERE o.kind<>'weekly-summary' AND o.decision IS NULL AND o.expires_at_ms<=?
  AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS r WHERE r.offer_id=o.id)
  ORDER BY o.expires_at_ms,o.id LIMIT ?)`
         )
@@ -71,7 +74,7 @@ export const hasChoiceReceipt = (
       channelAction(
         input,
         {
-          sql: `SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS o WHERE o.user_id=? AND o.kind=? AND o.id=? AND o.disclosure_message_id IS NOT NULL AND ((o.decision_message_id=? AND o.decision=?) OR (?='revoke' AND EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS r WHERE r.user_id=o.user_id AND r.kind=o.kind AND r.offer_id=o.id AND r.decision_message_id=? AND r.grant_id IS NOT NULL)))`,
+          sql: `SELECT 1 FROM consent_offers AS o WHERE o.kind<>'weekly-summary' AND o.user_id=? AND o.kind=? AND o.id=? AND o.disclosure_message_id IS NOT NULL AND ((o.decision_message_id=? AND o.decision=?) OR (?='revoke' AND EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS r WHERE r.user_id=o.user_id AND r.kind=o.kind AND r.offer_id=o.id AND r.decision_message_id=? AND r.grant_id IS NOT NULL)))`,
           params: [
             input.userId,
             input.kind,
@@ -166,7 +169,7 @@ const replacementProof = (
   const replacementGuard = Option.match(replacement, {
     onNone: () => ({ sql: "1=1", params: [] }),
     onSome: (value) => ({
-      sql: `EXISTS (SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS old WHERE old.user_id=? AND old.kind=? AND old.id=? AND old.disclosure_message_id IS NULL AND old.decision IS NULL AND EXISTS (SELECT 1 FROM (${value.proof.sql}) AS rejected WHERE rejected.user_id=old.user_id AND rejected.delivery_id=old.id))`,
+      sql: `EXISTS (SELECT 1 FROM consent_offers AS old WHERE old.kind<>'weekly-summary' AND old.user_id=? AND old.kind=? AND old.id=? AND old.disclosure_message_id IS NULL AND old.decision IS NULL AND EXISTS (SELECT 1 FROM (${value.proof.sql}) AS rejected WHERE rejected.user_id=old.user_id AND rejected.delivery_id=old.id))`,
       params: [input.userId, input.kind, value.offerId, ...value.proof.params],
     }),
   });
@@ -191,8 +194,8 @@ export const createOffer = (
         input,
         {
           sql: `INSERT INTO consent_offers(id,user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,replaces_offer_id)
- SELECT ?,?,?,?,?,?,?,?,nullif(?,'') WHERE (SELECT count(*) FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS proactivity_consent_offers WHERE user_id=? AND created_at_ms>?) < ?
- AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS o WHERE user_id=? AND kind=? AND decision IS NULL AND expires_at_ms>? AND ( ?='' OR id<>?) AND NOT EXISTS(SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS n WHERE n.replaces_offer_id=o.id)) AND ${replacementGuard.sql}`,
+ SELECT ?,?,?,?,?,?,?,?,nullif(?,'') WHERE (SELECT count(*) FROM consent_offers WHERE kind<>'weekly-summary' AND user_id=? AND created_at_ms>?) < ?
+ AND NOT EXISTS (SELECT 1 FROM consent_offers AS o WHERE o.kind<>'weekly-summary' AND user_id=? AND kind=? AND decision IS NULL AND expires_at_ms>? AND ( ?='' OR id<>?) AND NOT EXISTS(SELECT 1 FROM consent_offers AS n WHERE n.kind<>'weekly-summary' AND n.replaces_offer_id=o.id)) AND ${replacementGuard.sql}`,
           params: [
             id,
             input.userId,
@@ -238,7 +241,7 @@ export const findCurrentOffer = (
       channelAction(
         input,
         {
-          sql: "SELECT id,disclosure_json,expires_at_ms FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS o WHERE user_id=? AND kind=? AND portfolio_id=? AND bsuid=? AND decision IS NULL AND expires_at_ms>? AND NOT EXISTS(SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS n WHERE n.replaces_offer_id=o.id)",
+          sql: "SELECT id,disclosure_json,expires_at_ms FROM consent_offers AS o WHERE o.kind<>'weekly-summary' AND user_id=? AND kind=? AND portfolio_id=? AND bsuid=? AND decision IS NULL AND expires_at_ms>? AND NOT EXISTS(SELECT 1 FROM consent_offers AS n WHERE n.kind<>'weekly-summary' AND n.replaces_offer_id=o.id)",
           params: [
             input.userId,
             input.kind,
@@ -274,7 +277,7 @@ export const prepareVerifiedDisclosure = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      `UPDATE consent_offers SET disclosure_message_id=(SELECT v.provider_message_id FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?) WHERE kind<>'weekly-summary' AND user_id=? AND id=? AND disclosure_message_id IS NULL AND decision IS NULL AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND ((kind='budget-threshold' AND v.role='budget-offer') OR (kind='manual-entry-reminder' AND v.role='reminder-offer') OR (kind='new-recurring-series' AND v.role='recurring-offer')))`
+      `UPDATE consent_offers SET disclosure_message_id=(SELECT v.provider_message_id FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?) WHERE kind<>'weekly-summary' AND user_id=? AND id=? AND disclosure_message_id IS NULL AND decision IS NULL AND ${notReplaced} AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND ((kind='budget-threshold' AND v.role='budget-offer') OR (kind='manual-entry-reminder' AND v.role='reminder-offer') OR (kind='new-recurring-series' AND v.role='recurring-offer')))`
     )
     .bind(
       ...input.proof.params,
@@ -299,7 +302,7 @@ export const discloseOffer = (
       channelAction(
         input,
         {
-          sql: "UPDATE consent_offers SET disclosure_message_id=? WHERE kind<>'weekly-summary' AND user_id=? AND kind=? AND id=? AND portfolio_id=? AND bsuid=? AND disclosure_message_id IS NULL AND decision IS NULL",
+          sql: `UPDATE consent_offers SET disclosure_message_id=? WHERE kind<>'weekly-summary' AND user_id=? AND kind=? AND id=? AND portfolio_id=? AND bsuid=? AND disclosure_message_id IS NULL AND decision IS NULL AND ${notReplaced}`,
           params: [
             message,
             input.userId,
@@ -377,7 +380,7 @@ const readChoice = (
       channelAction(
         input,
         {
-          sql: "SELECT id,disclosure_json,disclosure_message_id,decision_message_id,expires_at_ms FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS proactivity_consent_offers WHERE user_id=? AND kind=? AND id=?",
+          sql: "SELECT id,disclosure_json,disclosure_message_id,decision_message_id,expires_at_ms FROM consent_offers WHERE kind<>'weekly-summary' AND user_id=? AND kind=? AND id=?",
           params: [input.userId, input.kind, choice.value[2]],
         },
         true
@@ -405,7 +408,7 @@ const acceptChoiceAction = (
   return channelAction(
     input,
     {
-      sql: `UPDATE consent_offers SET decision='accept',decision_message_id=? WHERE kind<>'weekly-summary' AND user_id=? AND kind=? AND id=? AND decision IS NULL AND disclosure_message_id IS NOT NULL AND portfolio_id=? AND bsuid=? AND expires_at_ms>? AND ${grantGuard.sql}`,
+      sql: `UPDATE consent_offers SET decision='accept',decision_message_id=? WHERE kind<>'weekly-summary' AND user_id=? AND kind=? AND id=? AND decision IS NULL AND disclosure_message_id IS NOT NULL AND portfolio_id=? AND bsuid=? AND expires_at_ms>? AND ${notReplaced} AND ${grantGuard.sql}`,
       params: [
         evidence.message,
         input.userId,

@@ -91,7 +91,7 @@ export const readProcessingAuthorization = (
     const result = yield* Effect.tryPromise(() =>
       input.db
         .prepare(`SELECT g.id AS reference,
-    g.accepted_at_ms AS acceptedAtMs,CASE WHEN length(g.disclosure_json)<=? THEN g.disclosure_json ELSE NULL END AS disclosure
+    g.occurred_at_ms AS acceptedAtMs,CASE WHEN length(g.disclosure_json)<=? THEN g.disclosure_json ELSE NULL END AS disclosure
     FROM web_sessions w LEFT JOIN (SELECT * FROM consent_history WHERE record_type='processing_grant') g ON g.user_id=w.user_id
     WHERE w.id=? AND w.user_id=? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
         .bind(

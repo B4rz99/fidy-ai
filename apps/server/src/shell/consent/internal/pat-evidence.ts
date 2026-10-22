@@ -22,7 +22,7 @@ export const revokeOnePATConsentStatement = ({
   session: FreshSessionSubject;
   input: RevokeOneInput;
 }>): OwnedStatement => ({
-  sql: `INSERT INTO consent_history (record_type,id,grant_consent_id,user_id,pat_id,session_id,disclosure_revision,disclosure_text,occurred_at_ms) SELECT 'pat_revocation',?,g.id,p.user_id,p.id,?,?,?,?
+  sql: `INSERT INTO consent_history (record_type,id,grant_consent_id,user_id,pat_id,session_id,disclosure_json,occurred_at_ms) SELECT 'pat_revocation',?,g.id,p.user_id,p.id,?,json_object('revision',?,'text',?),?
     FROM (${candidates.statement.sql}) p JOIN (SELECT * FROM consent_history WHERE record_type='pat_grant') g ON g.user_id = p.user_id
       AND (g.request_id = p.request_id OR g.pairing_id = p.pairing_id)
     WHERE p.user_id = ? AND ${freshSessionExists}
@@ -51,7 +51,7 @@ export const revokeAllPATConsentsStatement = ({
   session: FreshSessionSubject;
   current: number;
 }>): OwnedStatement => ({
-  sql: `INSERT INTO consent_history (record_type,id,grant_consent_id,user_id,pat_id,session_id,disclosure_revision,disclosure_text,occurred_at_ms) SELECT 'pat_revocation',${randomConsentId},g.id,p.user_id,p.id,?,?,?,?
+  sql: `INSERT INTO consent_history (record_type,id,grant_consent_id,user_id,pat_id,session_id,disclosure_json,occurred_at_ms) SELECT 'pat_revocation',${randomConsentId},g.id,p.user_id,p.id,?,json_object('revision',?,'text',?),?
     FROM (${candidates.statement.sql}) p JOIN (SELECT * FROM consent_history WHERE record_type='pat_grant') g ON g.user_id = p.user_id
       AND (g.request_id = p.request_id OR g.pairing_id = p.pairing_id)
     WHERE p.user_id = ? AND ${freshSessionExists}
@@ -79,7 +79,7 @@ export const revokeAllPairingConsentsStatement = ({
   session: FreshSessionSubject;
   current: number;
 }>): OwnedStatement => ({
-  sql: `INSERT INTO consent_history (record_type,id,grant_consent_id,user_id,pairing_id,session_id,disclosure_revision,disclosure_text,occurred_at_ms) SELECT 'pat_revocation',${randomConsentId},g.id,q.user_id,q.id,?,?,?,?
+  sql: `INSERT INTO consent_history (record_type,id,grant_consent_id,user_id,pairing_id,session_id,disclosure_json,occurred_at_ms) SELECT 'pat_revocation',${randomConsentId},g.id,q.user_id,q.id,?,json_object('revision',?,'text',?),?
     FROM (${candidates.statement.sql}) q JOIN (SELECT * FROM consent_history WHERE record_type='pat_grant') g ON g.pairing_id = q.id AND g.user_id = q.user_id
     WHERE q.user_id = ? AND ${freshSessionExists}
       AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.grant_consent_id = g.id)`,
@@ -104,7 +104,7 @@ export const expirePairingConsentsStatement = ({
   disclosure: PATRevocationDisclosure<"approved-unclaimed-expiry">;
   current: number;
 }>): OwnedStatement => ({
-  sql: `INSERT INTO consent_history (record_type,id,grant_consent_id,user_id,pairing_id,policy_reason,disclosure_revision,disclosure_text,occurred_at_ms) SELECT 'pat_revocation',${randomConsentId},g.id,q.user_id,q.id,?,?,?,?
+  sql: `INSERT INTO consent_history (record_type,id,grant_consent_id,user_id,pairing_id,reason,disclosure_json,occurred_at_ms) SELECT 'pat_revocation',${randomConsentId},g.id,q.user_id,q.id,?,json_object('revision',?,'text',?),?
     FROM (${candidates.statement.sql}) q JOIN (SELECT * FROM consent_history WHERE record_type='pat_grant') g ON g.pairing_id = q.id AND g.user_id = q.user_id
     WHERE NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.grant_consent_id = g.id)`,
   params: [
@@ -126,7 +126,7 @@ export const expirePATConsentsStatement = ({
   disclosure: PATRevocationDisclosure<"fixed-lifetime-expiry">;
   current: number;
 }>): OwnedStatement => ({
-  sql: `INSERT INTO consent_history (record_type,id,grant_consent_id,user_id,pat_id,policy_reason,disclosure_revision,disclosure_text,occurred_at_ms) SELECT 'pat_revocation',${randomConsentId},g.id,p.user_id,p.id,?,?,?,?
+  sql: `INSERT INTO consent_history (record_type,id,grant_consent_id,user_id,pat_id,reason,disclosure_json,occurred_at_ms) SELECT 'pat_revocation',${randomConsentId},g.id,p.user_id,p.id,?,json_object('revision',?,'text',?),?
     FROM (${candidates.statement.sql}) p JOIN (SELECT * FROM consent_history WHERE record_type='pat_grant') g ON g.user_id = p.user_id
       AND (g.request_id = p.request_id OR g.pairing_id = p.pairing_id)
     WHERE NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.grant_consent_id = g.id)`,
@@ -155,7 +155,7 @@ export const grantManualPATConsentStatement = ({
   session: FreshSessionSubject;
   input: ManualGrantInput;
 }>): OwnedStatement => ({
-  sql: `INSERT INTO consent_history (record_type,id,user_id,session_id,request_id,disclosure_revision,disclosure_text,accepted_at_ms) SELECT 'pat_grant',?,?,?,?,?,?,? WHERE changes() = 1`,
+  sql: `INSERT INTO consent_history (record_type,id,user_id,session_id,request_id,disclosure_json,occurred_at_ms) SELECT 'pat_grant',?,?,?,?,json_object('revision',?,'text',?),? WHERE changes() = 1`,
   params: [
     input.id,
     session.user_id,
@@ -183,7 +183,7 @@ export const grantPairedPATConsentStatement = ({
   session: FreshSessionSubject;
   input: PairedGrantInput;
 }>): OwnedStatement => ({
-  sql: `INSERT INTO consent_history (record_type,id,user_id,session_id,pairing_id,disclosure_revision,disclosure_text,accepted_at_ms) SELECT 'pat_grant',?,?,?,?,?,?,? WHERE changes() = 1`,
+  sql: `INSERT INTO consent_history (record_type,id,user_id,session_id,pairing_id,disclosure_json,occurred_at_ms) SELECT 'pat_grant',?,?,?,?,json_object('revision',?,'text',?),? WHERE changes() = 1`,
   params: [
     input.id,
     session.user_id,

@@ -379,3 +379,1179 @@ use acceptance time without the redundant expiry. Verify foreign keys and retain
 aligning the applied ledger. Roll back the whole conversion on any discrepancy, and keep ordinary
 admissions fenced through the code/schema cutover rather than serving old replay SQL against the
 new table.
+
+## Email admission counters (#1432)
+
+The single baseline now installs `resource_admission_counters` instead of `email_security_limits`.
+Resource Admission owns the shared counter statements, projections and erasure adapters. Email owns
+eligibility, proof creation, non-enumerating refusal and delivery. Existing logical erasure store IDs
+`browser_pairing_email_user_limits` and `email_replacement_limits` remain unchanged, including their
+credential disposition and row references. Global capacity has no fabricated User and is not erased
+with an individual User.
+
+For an existing database, fence email login/replacement and erasure first and back up the database.
+Refuse a pre-existing target table or any unexplained foreign-key inconsistency. Assemble **one native
+transactional batch**: create the target table from the current baseline; execute the copy/verification
+below; drop the old table; then install the target index and its six erasure triggers from that same
+baseline. Dropping the source removes its original index and same-named triggers. Do not install new
+triggers over those names before dropping the source. Do not publish matching Workers until the whole
+batch succeeds. Ordinary database migration deployment does not rewrite an already applied baseline.
+
+Copy original `rowid`, User, count, anchor and replacement work binding exactly. Compute the original
+one-hour or 24-hour deadline from that original anchor, never from cutover time. The target constraints
+reject unsupported policies, counts, scope/owner mismatches, lost work bindings, orphan Users and
+unrepresentable deadlines. The following block is exercised against populated native D1 by the
+Resource Admission conversion tests.
+
+<!-- email-counter-copy:start -->
+
+```sql
+INSERT INTO resource_admission_counters
+  (rowid,policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id)
+SELECT rowid,
+  CASE kind WHEN 'pairing' THEN 'email.pairing.user.v1'
+    WHEN 'pairing-global' THEN 'email.pairing.global.v1'
+    WHEN 'replacement' THEN 'email.replacement.user.v1' END,
+  CASE WHEN kind='pairing-global' THEN 'global' ELSE user_id END,
+  'anchored',window_started_at_ms,
+  window_started_at_ms+CASE WHEN kind='replacement' THEN 86400000 ELSE 3600000 END,
+  requests,last_work_id,user_id
+FROM email_security_limits;
+
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email_counter_cutover',CASE WHEN
+  (SELECT count(*) FROM email_security_limits)=(SELECT count(*) FROM resource_admission_counters)
+  AND NOT EXISTS (
+    SELECT 1 FROM email_security_limits old
+    LEFT JOIN resource_admission_counters next ON next.rowid=old.rowid
+    WHERE next.rowid IS NULL OR next.owner_user_id IS NOT old.user_id
+      OR next.used IS NOT old.requests OR next.last_work_id IS NOT old.last_work_id
+      OR next.window_start_ms IS NOT old.window_started_at_ms
+      OR next.window_ends_ms IS NOT (old.window_started_at_ms+
+        CASE WHEN old.kind='replacement' THEN 86400000 ELSE 3600000 END)
+  ) AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+  THEN 1 ELSE 0 END
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='email_counter_cutover';
+DROP TABLE email_security_limits;
+```
+
+<!-- email-counter-copy:end -->
+
+If copying, verification, dropping the old table or installing any target object fails, roll back the
+whole batch. Verify foreign keys, both original logical erasure permissions and stored anchors/counts
+before aligning the sole-baseline ledger. A quota refusal leaves this cutover pending; it is not a
+reason to deploy new SQL against the old schema. #1433 and #1435 extend the same target store only when
+their PAT/calendar consumers and populated conversions land; their unused indexes are not installed
+in advance.
+
+## PAT admission (#1433)
+
+PAT pairing sources now use `pat.pairing.source.v1` anchored counters. The scope is the lowercase
+hex encoding of the original 32-byte keyed digest, never an address or a fabricated User. Reviews
+use `pat.review.session.v1` rolling events with the original review identity as the one-claim grant
+identity, original millisecond instant, and exact WebSession and User. Resource Admission owns
+retention and the credential erasure projection under the unchanged `pat_review_attempts` logical
+store ID. Ordinary shared schedule erasure excludes this credential policy. Erasing one review
+never deletes another policy's charge or its still-shared grant.
+
+For a populated database, fence PAT creation/review, admission writers, retention and erasure and
+back up D1. Complete #1432 first. Refuse unexplained foreign keys, target policy collisions,
+missing/foreign sessions, unrepresentable deadlines or an unfinished erasure chunk. Drain that
+recoverable chunk with the old code before retrying; never reuse its old row selections against the
+new physical store. Historical credential archives retain their original request/store/reference
+and `{}` payload; credentials have no archived-content restoration. Shared existing event and email
+counter rowids remain exact. PAT review IDs remain exact; their new physical rowids are not grant
+identities or references to previously archived content.
+
+Assemble **one native D1 batch**, with no intermediate commits:
+
+1. Create `resource_admission_counters_next` and `resource_admission_events_next` using the current
+   baseline's two table declarations with only their declared table names changed. Keep the events'
+   deferred grant reference pointing to the real `resource_admission_grants`.
+2. Execute the following copy and guarded swap block. Existing grants stay in place; the grant
+   cardinality trigger is removed only inside this fenced atomic conversion.
+3. Install all current baseline indexes/triggers owned by the two final tables, plus
+   `resource_admission_require_every_claim` and `resource_admission_review_session_owner`.
+4. Execute the final grant/verification block. Publish matching code and align the single-baseline
+   ledger only after the entire batch succeeds. Any failure, including one after source drops,
+   rolls back DDL and data together. Baseline replay alone cannot upgrade an already applied schema.
+
+<!-- pat-admission-copy:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'pat_admission_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM resource_admission_events WHERE policy_key='pat.review.session.v1')
+ AND NOT EXISTS(SELECT 1 FROM resource_admission_counters WHERE policy_key='pat.pairing.source.v1')
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+
+INSERT INTO resource_admission_counters_next
+ (rowid,policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id)
+SELECT rowid,policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id
+FROM resource_admission_counters;
+INSERT INTO resource_admission_counters_next
+ (policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used)
+SELECT 'pat.pairing.source.v1',lower(hex(source_digest)),'anchored',window_start_ms,
+ window_start_ms+600000,started_count FROM pat_pairing_admission;
+
+INSERT INTO resource_admission_events_next
+ (rowid,grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,
+ window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms)
+SELECT rowid,grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,
+ window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms FROM resource_admission_events;
+INSERT INTO resource_admission_events_next
+ (grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,
+ window_start_epoch_ms,expires_at_epoch_ms,owner_user_id,owner_session_id)
+SELECT r.id,'pat.review.session.v1','source',r.session_id,'rolling_window',1,r.occurred_at_ms,
+ max(0,r.occurred_at_ms-600000),r.occurred_at_ms+600000,s.user_id,r.session_id
+FROM pat_review_attempts r JOIN web_sessions s ON s.id=r.session_id;
+
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'pat_admission_cutover',CASE WHEN
+ (SELECT count(*) FROM resource_admission_events_next)=
+ (SELECT count(*) FROM resource_admission_events)+(SELECT count(*) FROM pat_review_attempts)
+ AND (SELECT count(*) FROM resource_admission_counters_next)=
+ (SELECT count(*) FROM resource_admission_counters)+(SELECT count(*) FROM pat_pairing_admission)
+ AND NOT EXISTS(SELECT 1 FROM pat_review_attempts r
+  LEFT JOIN resource_admission_events_next n ON n.grant_id=r.id AND n.policy_key='pat.review.session.v1'
+  LEFT JOIN web_sessions s ON s.id=r.session_id
+  WHERE n.grant_id IS NULL OR n.owner_session_id IS NOT r.session_id OR n.owner_user_id IS NOT s.user_id
+   OR n.admitted_at_epoch_ms IS NOT r.occurred_at_ms OR n.expires_at_epoch_ms IS NOT r.occurred_at_ms+600000)
+ AND NOT EXISTS(SELECT 1 FROM pat_pairing_admission r
+  LEFT JOIN resource_admission_counters_next n ON n.policy_key='pat.pairing.source.v1' AND n.scope_key=lower(hex(r.source_digest))
+  WHERE n.scope_key IS NULL OR n.used IS NOT r.started_count OR n.window_start_ms IS NOT r.window_start_ms
+   OR n.window_ends_ms IS NOT r.window_start_ms+600000)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+
+DROP TRIGGER resource_admission_require_every_claim;
+DROP TABLE pat_review_attempts;
+DROP TABLE pat_pairing_admission;
+DROP TABLE resource_admission_events;
+DROP TABLE resource_admission_counters;
+ALTER TABLE resource_admission_events_next RENAME TO resource_admission_events;
+ALTER TABLE resource_admission_counters_next RENAME TO resource_admission_counters;
+```
+
+<!-- pat-admission-copy:end -->
+
+<!-- pat-admission-grants:start -->
+
+```sql
+INSERT INTO resource_admission_grants(id,admitted_at_epoch_ms,claim_count)
+SELECT grant_id,admitted_at_epoch_ms,1 FROM resource_admission_events WHERE policy_key='pat.review.session.v1';
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'pat_admission_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM resource_admission_events e
+  WHERE e.policy_key='pat.review.session.v1' AND NOT EXISTS(
+   SELECT 1 FROM web_sessions s WHERE s.id=e.owner_session_id AND s.user_id=e.owner_user_id))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='pat_admission_cutover';
+```
+
+<!-- pat-admission-grants:end -->
+
+## Recovery admission gate (#1434)
+
+**Do not drop or backfill `support_recovery_admissions`.** The shared one-event/one-grant candidate
+failed #1434/#1405's native cost gate without simplifying the four rolling admission predicates.
+Recovery retains its compact four-column store under the accepted design's explicit exception.
+The conditional target mapping remains blocked; it is not a completed consolidation or a pending
+quota-only deployment. No schema or migration ledger adjustment belongs to this slice.
+
+[Native comparison evidence](recovery-admission-1434.md) includes admission, refusal, cleanup, exact
+hour cutoffs and a fresh foreign operator. A future target revision must demonstrate equivalence
+and a concrete cost/code benefit before any conversion or source-table removal. The current one-hour
+accounting and original admission identities remain authoritative.
+
+## Compaction admission (#1435)
+
+Hosted execution supplies its same-User active session and live authority predicate to Resource
+Admission's `hosted.compaction.user.v1` calendar transition. Three attempts per User per UTC day
+remain charged even if subsequent model work fails or is abandoned. Different sessions share the
+same day; midnight starts another retained window without resetting or removing older windows.
+Resource Admission owns persistence and the `hosted_compaction_attempts` logical conversation-erasure
+projection. Hosted execution still owns retention cadence and duration, via published discovery,
+cleanup and deadline statements. Archives retain the original `{user_id,day_ms,used}` body.
+
+For a populated database, complete #1433 first, back up D1 and fence all admission writers, Hosted
+execution, retention and erasure. Assemble **one native D1 batch**:
+
+1. Create `resource_admission_counters_next` from the final baseline table declaration, changing only
+   its declared name. Do not install indexes/triggers before the copy and guarded swap below.
+2. Execute `compaction-counter-copy`. Existing shared rowids remain exact. New compaction rowids use
+   the original source rowid plus the maximum existing counter rowid (or zero); identity remains
+   the original User and day. An overflow, policy collision, invalid count/day, orphan User or
+   unrepresentable deadline aborts the whole batch. Never round inconsistent historical days.
+3. Install every final baseline index/trigger owned by `resource_admission_counters`.
+4. Execute `compaction-counter-verify`. Publish matching code and align the sole-baseline ledger
+   only after success. Any failure after either source drop rolls back schema and data together.
+
+Do not convert an unfinished erasure chunk, a restoring request, or live source rows belonging to an
+unfinished erasure request. Finish that work under the old representation first. Historical archives
+keep their exact request/store/reference/body and recovery-written marker; their opaque references
+address archived snapshots, not new physical rowids. No archived-content restoration is introduced.
+This prevents an in-progress archive generation from reselecting its original live rows under new
+physical references. Existing source erasure triggers disappear with the source table; their logical
+IDs and conversation safeguards are installed on the shared destination in the same batch.
+
+<!-- compaction-counter-copy:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'compaction_counter_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM resource_admission_counters WHERE policy_key='hosted.compaction.user.v1')
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.restoring=1 OR
+   (q.state<>'Complete' AND EXISTS(SELECT 1 FROM hosted_compaction_attempts r WHERE r.user_id=q.user_id)))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+
+INSERT INTO resource_admission_counters_next
+ (rowid,policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id)
+SELECT rowid,policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,last_work_id,owner_user_id
+FROM resource_admission_counters;
+INSERT INTO resource_admission_counters_next
+ (rowid,policy_key,scope_key,window_kind,window_start_ms,window_ends_ms,used,owner_user_id)
+SELECT r.rowid+(SELECT coalesce(max(rowid),0) FROM resource_admission_counters),
+ 'hosted.compaction.user.v1',r.user_id,'calendar',r.day_ms,r.day_ms+86400000,r.used,r.user_id
+FROM hosted_compaction_attempts r;
+
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'compaction_counter_cutover',CASE WHEN
+ (SELECT count(*) FROM resource_admission_counters_next)=
+ (SELECT count(*) FROM resource_admission_counters)+(SELECT count(*) FROM hosted_compaction_attempts)
+ AND NOT EXISTS(SELECT 1 FROM hosted_compaction_attempts r
+  LEFT JOIN resource_admission_counters_next n ON n.policy_key='hosted.compaction.user.v1'
+   AND n.scope_key=r.user_id AND n.window_start_ms=r.day_ms
+  WHERE n.scope_key IS NULL OR n.owner_user_id IS NOT r.user_id OR n.used IS NOT r.used
+   OR n.window_ends_ms IS NOT r.day_ms+86400000)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+
+DROP TABLE hosted_compaction_attempts;
+DROP TABLE resource_admission_counters;
+ALTER TABLE resource_admission_counters_next RENAME TO resource_admission_counters;
+```
+
+<!-- compaction-counter-copy:end -->
+
+<!-- compaction-counter-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'compaction_counter_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='compaction_counter_cutover';
+```
+
+<!-- compaction-counter-verify:end -->
+
+The sole baseline is the fresh-database shape, not an upgrade script for an already-applied schema.
+This conversion and its matching Worker publication remain local and undeployed until remote quota
+permits the fenced cutover. Recovery #1434's failed conversion remains excluded.
+
+## Audit retention permits (#1436)
+
+Ordinary Audit retention now installs a two-field `audit_retention_permits` row instead of mutating
+User. Its exact User and cutoff authorize only `session_call`, `credential_call`, `insight_call` and
+`publication` records strictly older than the existing 365-day boundary. Each bounded unit inserts
+one permit, asserts successful acquisition, deletes up to 64 eligible records, and deletes the permit
+in the same native D1 batch. Any failure rolls back both permission and deletions. An unexpected
+retained permit causes acquisition to fail; ordinary retention never overwrites or adopts its cutoff.
+Investigate that anomaly under fenced maintenance rather than treating it as standing permission.
+
+Independent request-admission cleanup remains 93 days and Recovery remains 24 calendar months after
+terminal closure. This slice moves no other Audit variants or owner evidence. Ordinary permission
+cannot bypass an erasure fence; exact purpose-specific erasure permissions and the logical
+`audit_retention_permits` projection remain independently enforced. Archived permit snapshots retain
+their original request/store/reference/body; snapshots are historical evidence, never live authority.
+
+For an existing development database, back up D1 and fence Audit retention and erasure through the
+code/schema cutover. **Refuse any non-null old cutoff**, including zero: a completed old transaction
+must already have cleared it. Investigate the original anomaly rather than copying it into a live
+permit or silently clearing it. Drain any unfinished erasure chunk with the old code first.
+
+Assemble one native D1 batch with no intermediate commits:
+
+1. Create `audit_retention_permits` using the final baseline declaration. A pre-existing destination
+   is an unexplained collision and must fail, not be reused.
+2. Execute `audit-retention-permit-cutover` below. Only the obsolete User column is dropped; User
+   rowids, every retained User field, Audit sequences/identities/timestamps and related records remain
+   unchanged. No Audit history or archive is copied, relabeled or reconstructed.
+3. Install the final baseline `audit_entries_no_delete` trigger and all indexes/triggers owned by
+   `audit_retention_permits`. The old field-clear preservation trigger has no role on the new table;
+   its delete preservation trigger handles removal directly.
+4. Execute `audit-retention-permit-verify`. Publish matching code and align the single-baseline ledger
+   only after success. A failure after column removal rolls back DDL and data together. The edited
+   baseline alone does not convert an already applied database.
+
+<!-- audit-retention-permit-cutover:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'audit_retention_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM users WHERE audit_retention_cutoff_ms IS NOT NULL)
+ AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DROP TRIGGER audit_entries_no_delete;
+DROP TRIGGER erasure_fence_audit_retention_permits_insert;
+DROP TRIGGER erasure_fence_audit_retention_permits_update;
+DROP TRIGGER erasure_fence_audit_retention_permits_delete;
+DROP TRIGGER erasure_preserve_audit_retention_permits_delete;
+DROP TRIGGER erasure_preserve_audit_retention_permits_delete_clear;
+ALTER TABLE users DROP COLUMN audit_retention_cutoff_ms;
+```
+
+<!-- audit-retention-permit-cutover:end -->
+
+<!-- audit-retention-permit-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'audit_retention_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM audit_retention_permits)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='audit_retention_cutover';
+```
+
+<!-- audit-retention-permit-verify:end -->
+
+The global and User-specific partial ordinary-retention indexes remain in place. Audit owns this
+permission table and its existing erasure dependency; no User-profile write is needed for routine
+cleanup. Changes remain local and undeployed until quota allows the fenced cutover.
+
+## Existing-User Consent offers (#1437)
+
+Weekly and proactive Consent share `consent_offers`: the accepted 15 stored fields and the two
+existing generated typed offer identifiers. Generation, delivery, decisions and erasure query that
+store directly. The two logical erasure projections keep their original field sets and archive
+identities; proactive disclosures still have no recorded disclosure timestamp. No table, column,
+recipient, disclosure, source identity or instant is copied or reconstructed in this slice.
+
+Weekly short offers and proactive offers retain their ten-minute lifetime; weekly Governor-question
+offers retain their 24-hour lifetime. Existing daily admission rules remain unchanged. Weekly source
+replay returns the same still-live source offer and acceptance compares the captured rejection with
+the latest rejection in its authoritative write. A replaced proactive offer cannot acquire delivery
+evidence or be accepted after replacement, including a disclosure prepared before replacement.
+
+New insertion guards require replacement references to identify the same User and category, rejection
+references to identify that User's `weekly_rejection`, and Consent history to reference that User's
+matching offer category. These capture guards deliberately do not create a permanent self-FK: ordinary
+bounded cleanup may delete an expired, undecided replacement ancestor while its newer child remains.
+Existing offer identity/reference immutability prevents subsequent relinking. The extra validation
+also refuses invalid disclosure JSON, nonpositive offer lifetimes and decisions without disclosure.
+
+For an existing development database, back up D1, fence Consent/Insights writers and erasure, and drain
+in-flight work with the old code. Submit this sequence as **one native D1 batch**, without intermediate
+commits:
+
+1. Execute `consent-offers-preflight` below. Any mismatch blocks the cutover. A missing replacement
+   ancestor might be explained by prior expiry cleanup, but its original ownership/category cannot
+   be inferred from absence. Investigate from retained evidence before proceeding; never manufacture
+   a parent, clear a reference or rewrite accepted history to pass the check.
+2. Install the exact final-baseline declarations of `consent_offer_valid_insert`,
+   `consent_offer_valid_update` and `consent_history_offer_owner`. Do not use `IF NOT EXISTS` to adopt
+   unexpected destination objects. Keep all existing typed identifiers, keys, indexes, immutable
+   evidence and erasure guards in place.
+3. Execute `consent-offers-verify`. Only after success publish matching code and align the
+   single-baseline ledger. A failure after any trigger creation rolls back the complete batch.
+
+<!-- consent-offers-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_offers_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM consent_offers o WHERE
+   NOT json_valid(o.disclosure_json) OR o.expires_at_ms<=o.created_at_ms
+   OR (o.decision IS NOT NULL AND o.disclosure_message_id IS NULL)
+   OR (o.rejection_id IS NOT NULL AND NOT EXISTS (
+     SELECT 1 FROM consent_history r WHERE r.user_id=o.user_id
+     AND r.record_type='weekly_rejection' AND r.id=o.rejection_id))
+   OR (o.replaces_offer_id IS NOT NULL AND NOT EXISTS (
+     SELECT 1 FROM consent_offers old WHERE old.user_id=o.user_id AND old.kind=o.kind
+     AND old.id=o.replaces_offer_id AND old.id<>o.id)))
+ AND NOT EXISTS(SELECT 1 FROM consent_history h WHERE
+   (h.weekly_offer_reference IS NOT NULL AND NOT EXISTS (
+     SELECT 1 FROM consent_offers o WHERE o.user_id=h.user_id
+     AND o.kind='weekly-summary' AND o.id=h.weekly_offer_reference))
+   OR (h.proactivity_offer_reference IS NOT NULL AND NOT EXISTS (
+     SELECT 1 FROM consent_offers o WHERE o.user_id=h.user_id
+     AND o.kind=h.kind AND o.id=h.proactivity_offer_reference)))
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- consent-offers-preflight:end -->
+
+<!-- consent-offers-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_offers_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='consent_offers_cutover';
+```
+
+<!-- consent-offers-verify:end -->
+
+The populated native cutover test executes these blocks and the baseline trigger definitions,
+compares exact rows (including rowids, missing timestamps, source/rejection/replacement identities
+and archives), and exercises rollback after trigger installation and refusal of inconsistent history.
+These changes are local and undeployed while D1 quota is exhausted. Editing the applied baseline alone
+does not install the new guards on an existing database. Consent history extraction and pre-User
+exchanges remain separate tickets.
+
+## Durable Consent history (#1438)
+
+`consent_history` retains 23 stored fields plus its existing generated typed-reference helpers.
+Grant/renewal event times use `occurred_at_ms`; `decision_received_at_ms` remains independent.
+PAT/OAuth disclosure JSON is exactly `{"revision": original revision, "text": original text}`.
+The text stays a string even when it contains JSON: parsing and reserializing it would alter original
+bytes. Full processing disclosure snapshots and serialized notification ConsentRecords remain exact.
+The latter retain independently meaningful disclosure and provider-qualified evidence; this slice
+does not remove their embedded envelope fields without historical equivalence proof.
+
+Automatic PAT expiry uses `reason`; browser-origin revocations retain their session and no automatic
+reason. Existing record-kind constraints, append-only rules, same-User links, offer category checks,
+scoped uniqueness, null IDs, erasure dependencies and policy remain in force. Erasure projections and
+drain triggers keep the original archive field names and values. Already written archives are never
+rewritten or reinterpreted as live Consent.
+
+### Fenced populated cutover
+
+Back up D1 and fence **all** application writers, including onboarding, PAT/OAuth decisions, Insights,
+forwarded mail and erasure. The edited single baseline is for fresh installation; it does not update
+an existing database. This is one coordinated code/schema cutover, with no mixed-client release.
+
+Capture the current trigger/view definitions that directly reference `consent_history` from
+`sqlite_schema` (`sql IS NOT NULL`, word-qualified table reference), including triggers owned by other
+tables. Record their exact names/types and map each to its final baseline definition. Stop if any
+source object has no explained destination or a destination is already present unexpectedly. Also
+capture every explicit index owned by Consent history. The baseline still owns the same helpers and
+incoming references. Do not turn foreign keys off or use `legacy_alter_table` to hide stale objects.
+
+Assemble **one native D1 batch** in this order; no intermediate commits:
+
+1. `PRAGMA defer_foreign_keys=ON`, then `consent-history-preflight` below. Refuse conflicting or
+   unmappable timestamp, disclosure and reason variants; inspect original evidence instead of
+   selecting one value or fabricating missing facts. Drain any active erasure chunk first.
+2. Drop the captured dependent triggers/views by exact validated identifiers. Create
+   `consent_history_next` from the final baseline `consent_history` declaration, changing only the
+   CREATE table name. Its self-references continue to name `consent_history`.
+3. Execute `consent-history-copy`. Original sequences and the AUTOINCREMENT high-water mark survive,
+   including a removed highest row. No forwarding address, credential or other domain side effect
+   runs while copying; owner triggers are installed after copying.
+4. Execute `consent-history-swap`, then install the final baseline indexes and the captured dependent
+   triggers/views at their final destinations. Ordinary permissions cannot authorize this operation.
+5. Execute `consent-history-verify`. Only after success publish matching code and align the one-file
+   baseline ledger. Any failure, including one after DROP/rename, rolls back data and DDL together.
+
+<!-- consent-history-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_history_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM consent_history WHERE
+   (record_type IN ('processing_grant','processing_renewal','pat_grant','oauth_grant') AND (accepted_at_ms IS NULL OR occurred_at_ms IS NOT NULL))
+   OR (record_type NOT IN ('processing_grant','processing_renewal','pat_grant','oauth_grant') AND accepted_at_ms IS NOT NULL)
+   OR (record_type IN ('pat_grant','pat_revocation','oauth_grant','oauth_user_revocation') AND (disclosure_revision IS NULL OR disclosure_text IS NULL OR disclosure_json IS NOT NULL))
+   OR (record_type NOT IN ('pat_grant','pat_revocation','oauth_grant','oauth_user_revocation') AND (disclosure_revision IS NOT NULL OR disclosure_text IS NOT NULL))
+   OR (record_type='pat_revocation' AND reason IS NOT NULL)
+   OR (record_type<>'pat_revocation' AND policy_reason IS NOT NULL))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- consent-history-preflight:end -->
+
+<!-- consent-history-copy:start -->
+
+```sql
+INSERT INTO consent_history_next (sequence, record_type, id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, grant_record_id, session_id, occurred_at_ms, withdrawal_id, grant_id, offer_id, record_json, decision, kind, pairing_id, request_id, grant_consent_id, pat_id, connection_id, reason)
+SELECT sequence,
+ record_type,
+ id,
+ user_id,
+ CASE WHEN record_type IN ('pat_grant','pat_revocation','oauth_grant','oauth_user_revocation') THEN json_object('revision',disclosure_revision,'text',disclosure_text) ELSE disclosure_json END,
+ disclosure_message_id,
+ decision_message_id,
+ decision_received_at_ms,
+ grant_record_id,
+ session_id,
+ CASE WHEN record_type IN ('processing_grant','processing_renewal','pat_grant','oauth_grant') THEN accepted_at_ms ELSE occurred_at_ms END,
+ withdrawal_id,
+ grant_id,
+ offer_id,
+ record_json,
+ decision,
+ kind,
+ pairing_id,
+ request_id,
+ grant_consent_id,
+ pat_id,
+ connection_id,
+ CASE WHEN record_type='pat_revocation' THEN policy_reason ELSE reason END
+FROM consent_history ORDER BY sequence;
+UPDATE sqlite_sequence SET seq=(SELECT seq FROM sqlite_sequence WHERE name='consent_history')
+WHERE name='consent_history_next' AND EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='consent_history');
+INSERT INTO sqlite_sequence(name,seq)
+SELECT 'consent_history_next',seq FROM sqlite_sequence WHERE name='consent_history'
+ AND NOT EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='consent_history_next');
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_history_cutover',CASE WHEN
+ (SELECT count(*) FROM consent_history)=(SELECT count(*) FROM consent_history_next)
+ AND NOT EXISTS(SELECT * FROM (
+ SELECT sequence,
+ record_type,
+ id,
+ user_id,
+ CASE WHEN record_type IN ('pat_grant','pat_revocation','oauth_grant','oauth_user_revocation') THEN json_object('revision',disclosure_revision,'text',disclosure_text) ELSE disclosure_json END,
+ disclosure_message_id,
+ decision_message_id,
+ decision_received_at_ms,
+ grant_record_id,
+ session_id,
+ CASE WHEN record_type IN ('processing_grant','processing_renewal','pat_grant','oauth_grant') THEN accepted_at_ms ELSE occurred_at_ms END,
+ withdrawal_id,
+ grant_id,
+ offer_id,
+ record_json,
+ decision,
+ kind,
+ pairing_id,
+ request_id,
+ grant_consent_id,
+ pat_id,
+ connection_id,
+ CASE WHEN record_type='pat_revocation' THEN policy_reason ELSE reason END
+ FROM consent_history EXCEPT SELECT sequence, record_type, id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, grant_record_id, session_id, occurred_at_ms, withdrawal_id, grant_id, offer_id, record_json, decision, kind, pairing_id, request_id, grant_consent_id, pat_id, connection_id, reason FROM consent_history_next))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- consent-history-copy:end -->
+
+<!-- consent-history-swap:start -->
+
+```sql
+DROP TABLE consent_history;
+ALTER TABLE consent_history_next RENAME TO consent_history;
+```
+
+<!-- consent-history-swap:end -->
+
+<!-- consent-history-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_history_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+PRAGMA defer_foreign_keys=OFF;
+DELETE FROM sql_assertions WHERE scope='consent_history_cutover';
+```
+
+<!-- consent-history-verify:end -->
+
+After the explicit whole-database foreign-key assertion succeeds, the batch resumes immediate
+checking with `PRAGMA defer_foreign_keys=OFF`, as supported by
+[Cloudflare's foreign-key guidance](https://developers.cloudflare.com/d1/sql-api/foreign-keys/).
+The explicit check is required: in native D1 a populated drop/rename can leave deferred bookkeeping
+that still rejects commit despite valid final references. Do not omit the assertion, leave real
+violations unresolved, or append unguarded mutations after verification. The native test also proves
+that an injected orphan before verification blocks commit and that immediate checking resumes afterward.
+
+The populated native test runs these exact blocks with baseline DDL. It verifies original disclosures,
+missing timestamps, parent links, anonymous-ID OAuth revocations, sequence high-water, unrelated User
+and offer rows, archives, constraint rejection, and interruption after the destructive swap. Historical
+source DDL lives only in a test fixture; it is not another migration or a runtime compatibility path.
+Changes stay local until quota permits a separately authorized deployment.
+
+## Pre-User Consent exchanges (#1439)
+
+`pending_consent_exchanges` keeps 27 stored fields. The five decision recipient/disclosure snapshots
+are represented by the exchange's immutable portfolio, recipient, business number, exact disclosure
+and established disclosure-message identity. An absent decision still has absent decision evidence;
+erasure projections and drain archives reconstruct the original five keys as NULL in that case.
+Already written archives keep their exact original representation.
+
+The atomic decision write compares authenticated inbound recipient/business-number evidence and the
+read disclosure against that immutable basis. A zero-row write aborts the same batch as the admission
+release. Replay identities, exact occurrence/receipt times, 24-hour expiry, callback-versus-applied
+state, sandbox handling, and atomic provider-verified signup remain unchanged. No workflow per
+exchange or initial financial-message content is introduced.
+
+### Fenced populated cutover
+
+Back up D1 and fence WhatsApp callbacks, disclosure send/recovery, provider onboarding, maintenance
+and erasure writers. The single edited baseline installs fresh databases; an existing database needs
+this coordinated schema/code cutover. Drain active erasure chunks. Capture every trigger/view that
+directly references `pending_consent_exchanges`, including objects owned by other tables, plus every trigger/view referencing the two cascading
+children `whatsapp_provider_handoffs` and `provider_authentication_attempts`, and all explicit indexes
+on the exchange table. Inspect the live FK graph: these must be the only cascading descendants; stop
+on an unexplained additional descendant. Match each source object to its final baseline destination; stop on unknown
+objects or an unexpected pre-existing destination. Keep handoff rows and their incoming references.
+
+Submit one native D1 batch, without intermediate commits:
+
+1. `PRAGMA defer_foreign_keys=ON`, then `consent-exchanges-preflight`. Exact binary text equality
+   and original NULL missingness must hold for all five snapshots. A mismatch blocks conversion;
+   inspect the evidence and review its representation before proceeding, never overwrite it.
+2. Drop the captured dependent triggers/views. Create `pending_consent_exchanges_next` using the
+   final baseline declaration with only the CREATE name changed. Copy with `consent-exchanges-copy`.
+   Preserve rowids as well as explicit exchange/replay identities and exact original bytes/instants.
+   Stage both cascading child sets in the same batch before DROP. FK deferral does not suppress
+   ON DELETE CASCADE; all dependent guards and side-effect triggers must be absent during the swap.
+3. Run `consent-exchanges-swap`, restoring the original child rowids/columns in parent-first order
+   and checking their exact values before removing staging. Then reinstall final baseline indexes
+   and mapped triggers/views. Unrelated provider attempts with no handoff remain untouched.
+4. Run `consent-exchanges-verify`: whole-database FK verification precedes resuming immediate
+   checking. Only then publish matching code and align the one-file baseline ledger.
+
+Failure at any stage rolls back the whole native batch, including the destructive swap. Retained
+archives, User/Consent history, provider handoffs and other owner records are not rewritten.
+
+<!-- consent-exchanges-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_exchanges_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM pending_consent_exchanges WHERE
+   (decision_value IS NULL AND (decision_portfolio_id IS NOT NULL OR decision_bsuid IS NOT NULL OR decision_phone_number_id IS NOT NULL OR decision_disclosure_json IS NOT NULL OR decision_disclosure_message_id IS NOT NULL))
+   OR (decision_value IS NOT NULL AND (decision_portfolio_id IS NOT portfolio_id OR decision_bsuid IS NOT bsuid OR decision_phone_number_id IS NOT phone_number_id OR decision_disclosure_json IS NOT disclosure_json OR decision_disclosure_message_id IS NOT disclosure_message_id)))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- consent-exchanges-preflight:end -->
+
+<!-- consent-exchanges-copy:start -->
+
+```sql
+CREATE TABLE whatsapp_provider_handoffs_consent_cutover AS SELECT rowid AS source_rowid, * FROM whatsapp_provider_handoffs WHERE 1;
+CREATE TABLE provider_authentication_attempts_consent_cutover AS SELECT rowid AS source_rowid, * FROM provider_authentication_attempts WHERE handoff_id IS NOT NULL;
+INSERT INTO pending_consent_exchanges_next (rowid, id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256, correlation_token, disclosure_json, disclosure_message_id, created_at_ms, disclosed_at_ms, decision_not_before_ms, expires_at_ms, state, rejected_at_ms, sandbox_phone, delivery_phone_number_id, delivery_message_id, delivery_occurred_at_ms, delivery_received_at_ms, delivery_not_before_ms, decision_value, decision_message_id, decision_delivery_key, decision_body_sha256, decision_occurred_at_ms, decision_received_at_ms)
+SELECT rowid, id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256, correlation_token, disclosure_json, disclosure_message_id, created_at_ms, disclosed_at_ms, decision_not_before_ms, expires_at_ms, state, rejected_at_ms, sandbox_phone, delivery_phone_number_id, delivery_message_id, delivery_occurred_at_ms, delivery_received_at_ms, delivery_not_before_ms, decision_value, decision_message_id, decision_delivery_key, decision_body_sha256, decision_occurred_at_ms, decision_received_at_ms FROM pending_consent_exchanges ORDER BY rowid;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_exchanges_cutover',CASE WHEN
+ (SELECT count(*) FROM pending_consent_exchanges)=(SELECT count(*) FROM pending_consent_exchanges_next)
+ AND NOT EXISTS(SELECT rowid, id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256, correlation_token, disclosure_json, disclosure_message_id, created_at_ms, disclosed_at_ms, decision_not_before_ms, expires_at_ms, state, rejected_at_ms, sandbox_phone, delivery_phone_number_id, delivery_message_id, delivery_occurred_at_ms, delivery_received_at_ms, delivery_not_before_ms, decision_value, decision_message_id, decision_delivery_key, decision_body_sha256, decision_occurred_at_ms, decision_received_at_ms FROM pending_consent_exchanges
+   EXCEPT SELECT rowid, id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256, correlation_token, disclosure_json, disclosure_message_id, created_at_ms, disclosed_at_ms, decision_not_before_ms, expires_at_ms, state, rejected_at_ms, sandbox_phone, delivery_phone_number_id, delivery_message_id, delivery_occurred_at_ms, delivery_received_at_ms, delivery_not_before_ms, decision_value, decision_message_id, decision_delivery_key, decision_body_sha256, decision_occurred_at_ms, decision_received_at_ms FROM pending_consent_exchanges_next)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- consent-exchanges-copy:end -->
+
+<!-- consent-exchanges-swap:start -->
+
+```sql
+DROP TABLE pending_consent_exchanges;
+ALTER TABLE pending_consent_exchanges_next RENAME TO pending_consent_exchanges;
+INSERT INTO whatsapp_provider_handoffs (rowid, id, exchange_id, created_at_ms, expires_at_ms, handoff_send_started_ms, pairing_id, review_code, review_started_ms, review_message_id, decision, decision_message_id, confirmed_at_ms, consumed_at_ms) SELECT source_rowid, id, exchange_id, created_at_ms, expires_at_ms, handoff_send_started_ms, pairing_id, review_code, review_started_ms, review_message_id, decision, decision_message_id, confirmed_at_ms, consumed_at_ms FROM whatsapp_provider_handoffs_consent_cutover;
+INSERT INTO sql_assertions(scope,accepted) SELECT 'consent_exchanges_cutover',CASE WHEN
+ NOT EXISTS(SELECT source_rowid, id, exchange_id, created_at_ms, expires_at_ms, handoff_send_started_ms, pairing_id, review_code, review_started_ms, review_message_id, decision, decision_message_id, confirmed_at_ms, consumed_at_ms FROM whatsapp_provider_handoffs_consent_cutover
+ EXCEPT SELECT rowid, id, exchange_id, created_at_ms, expires_at_ms, handoff_send_started_ms, pairing_id, review_code, review_started_ms, review_message_id, decision, decision_message_id, confirmed_at_ms, consumed_at_ms FROM whatsapp_provider_handoffs) THEN 1 ELSE 0 END
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DROP TABLE whatsapp_provider_handoffs_consent_cutover;
+INSERT INTO provider_authentication_attempts (rowid, id, pairing_id, cookie_digest, nonce, intent, disclosure_json, consent_at_ms, created_at_ms, expires_at_ms, state, issuer, subject, contact_email, user_id, provider, handoff_id, completed_at_ms, created_user) SELECT source_rowid, id, pairing_id, cookie_digest, nonce, intent, disclosure_json, consent_at_ms, created_at_ms, expires_at_ms, state, issuer, subject, contact_email, user_id, provider, handoff_id, completed_at_ms, created_user FROM provider_authentication_attempts_consent_cutover;
+INSERT INTO sql_assertions(scope,accepted) SELECT 'consent_exchanges_cutover',CASE WHEN
+ NOT EXISTS(SELECT source_rowid, id, pairing_id, cookie_digest, nonce, intent, disclosure_json, consent_at_ms, created_at_ms, expires_at_ms, state, issuer, subject, contact_email, user_id, provider, handoff_id, completed_at_ms, created_user FROM provider_authentication_attempts_consent_cutover
+ EXCEPT SELECT rowid, id, pairing_id, cookie_digest, nonce, intent, disclosure_json, consent_at_ms, created_at_ms, expires_at_ms, state, issuer, subject, contact_email, user_id, provider, handoff_id, completed_at_ms, created_user FROM provider_authentication_attempts) THEN 1 ELSE 0 END
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DROP TABLE provider_authentication_attempts_consent_cutover;
+```
+
+<!-- consent-exchanges-swap:end -->
+
+<!-- consent-exchanges-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'consent_exchanges_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+PRAGMA defer_foreign_keys=OFF;
+DELETE FROM sql_assertions WHERE scope='consent_exchanges_cutover';
+```
+
+<!-- consent-exchanges-verify:end -->
+
+## Verified email credential (#1440)
+
+Email Authentication owns `verified_email_credentials(user_id,address,verified_at_ms)`. One User
+has at most one normalized, case-insensitively unique login email; provider/billing contact email
+is not that credential. Original address bytes and verification milliseconds are preserved. A pending
+replacement retains its fourteen fields, the original credential stays valid until successful proof,
+and both sending and completion recheck the exact prior address/time and fresh session. Pairing's
+credential snapshot, proof generations, ambiguous-send behavior and admission windows are unchanged.
+No raw proof or new wait-for-user Workflow is introduced.
+
+Credential erasure deletes this row independently of the User. Preserve original credential rowrefs
+by copying each source User rowid. Existing credential archives contain only `{}` and keep their
+original identity; they do not restore a usable credential. Other User archives remain untouched.
+An in-progress `erasure_chunk` blocks cutover rather than reinterpreting its active selection.
+
+### Fenced populated cutover
+
+Back up D1 and fence all email pairing/replacement request, dispatch, Workflow and verification
+writers, onboarding and erasure. Capture all triggers/views referring to `verified_email_address` or
+`email_verified_at_ms` from `sqlite_schema`, plus the `users_verified_email` index. The expected three
+field-fence triggers move to the credential table; map every captured object to its final baseline
+destination and stop on unknown objects or a pre-existing target table. No mixed-code/schema release.
+
+Execute one native D1 batch:
+
+1. `email-credential-preflight` rejects partial credentials, non-normalized addresses, duplicate
+   case-insensitive addresses, active erasure chunks and foreign-key violations. Investigate original
+   evidence instead of changing an address or manufacturing a verification time.
+2. Create `verified_email_credentials` from the final baseline declaration, without its triggers.
+   Run `email-credential-copy`, preserving source rowids and comparing all original credential values.
+3. Drop the captured source triggers/views, then run `email-credential-remove-source`. Drop the
+   timestamp column before the address column because its source CHECK refers to the address.
+   This uses ALTER TABLE DROP COLUMN: User rows, rowids, indexes and incoming references stay in place,
+   without DROP/rename or cascading deletion. Do not disable foreign keys.
+4. Install the mapped final baseline triggers/views, then run `email-credential-verify`. Publish the
+   matching code and align the single baseline ledger only after successful verification.
+
+Any failure rolls back the copy and both column removals atomically. The changed baseline alone does
+not migrate an existing database. No runtime fallback reads the old User fields.
+
+<!-- email-credential-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email_credential_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM users WHERE
+   (verified_email_address IS NULL)<>(email_verified_at_ms IS NULL)
+   OR (verified_email_address IS NOT NULL AND verified_email_address COLLATE BINARY<>lower(trim(verified_email_address))))
+ AND (SELECT count(verified_email_address) FROM users)=
+     (SELECT count(DISTINCT verified_email_address COLLATE NOCASE) FROM users)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- email-credential-preflight:end -->
+
+<!-- email-credential-copy:start -->
+
+```sql
+INSERT INTO verified_email_credentials(rowid,user_id,address,verified_at_ms)
+SELECT rowid,id,verified_email_address,email_verified_at_ms FROM users WHERE verified_email_address IS NOT NULL;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email_credential_cutover',CASE WHEN
+ (SELECT count(*) FROM verified_email_credentials)=(SELECT count(*) FROM users WHERE verified_email_address IS NOT NULL)
+ AND NOT EXISTS(SELECT rowid,id,verified_email_address,email_verified_at_ms FROM users WHERE verified_email_address IS NOT NULL
+ EXCEPT SELECT rowid,user_id,address,verified_at_ms FROM verified_email_credentials)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- email-credential-copy:end -->
+
+<!-- email-credential-remove-source:start -->
+
+```sql
+DROP INDEX users_verified_email;
+ALTER TABLE users DROP COLUMN email_verified_at_ms;
+ALTER TABLE users DROP COLUMN verified_email_address;
+```
+
+<!-- email-credential-remove-source:end -->
+
+<!-- email-credential-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email_credential_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='email_credential_cutover';
+```
+
+<!-- email-credential-verify:end -->
+
+## One-use recovery credential (#1441)
+
+This synchronized cutover replaces the four embedded User recovery fields with the five-field
+`backup_recovery_credentials` record. It preserves the current digest bytes, original creation and
+consumption instants, revision, User identity and source rowid. The rowid remains the credential's
+existing erasure archive address; existing `{}` archives remain unchanged and contain no code or digest.
+No raw code can be recovered or disclosed by this conversion. Support-case history and the existing
+rolling operator admission policy are unchanged.
+
+Back up D1 and fence provider/onboarding completion, credential issuance/rotation, support recovery
+and erasure. Capture every trigger/view referring to `recovery_code_digest`, `recovery_created_at_ms`,
+`recovery_consumed_at_ms` or `recovery_revision`, and the `users_recovery_digest` index. Expected
+objects are the three credential fences and `provider_completion_requires_proof`; map them to the
+final baseline and stop on unknown dependencies or a pre-existing destination. Apply #1440 first
+where both cutovers are pending. Do not publish mixed schema/code.
+
+Execute one native D1 batch:
+
+1. Run `recovery-credential-preflight`. Reject partial groups, invalid digest bytes, duplicate
+   digests, active erasure chunks and foreign-key violations. Investigate inconsistent evidence;
+   never invent issuance instants or revisions, discard credentials or change original digests.
+2. Create the credential table from the final baseline, without its fences. Run
+   `recovery-credential-copy` and compare every original credential value and rowid.
+3. Drop captured dependent triggers/views. Run `recovery-credential-remove-source`: remove the
+   revision column first because its source CHECK references the other credential fields. User
+   rows, rowids, other indexes and incoming references stay intact; do not drop/rename User or disable
+   foreign keys.
+4. Install mapped final baseline dependencies, then run `recovery-credential-verify`. Only after
+   success publish matching code and align the single baseline ledger.
+
+Any failure rolls back both the credential copy and source removal. The editable clean-install
+baseline alone does not convert an existing database. There is no runtime fallback to embedded fields.
+
+<!-- recovery-credential-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_credential_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM users WHERE
+   (recovery_code_digest IS NULL AND (recovery_created_at_ms IS NOT NULL OR recovery_consumed_at_ms IS NOT NULL OR recovery_revision IS NOT NULL))
+   OR (recovery_code_digest IS NOT NULL AND (typeof(recovery_code_digest)<>'blob' OR length(recovery_code_digest)<>32 OR recovery_created_at_ms IS NULL OR recovery_revision IS NULL)))
+ AND (SELECT count(recovery_code_digest) FROM users)=(SELECT count(DISTINCT recovery_code_digest) FROM users)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recovery-credential-preflight:end -->
+
+<!-- recovery-credential-copy:start -->
+
+```sql
+INSERT INTO backup_recovery_credentials(rowid,user_id,code_digest,created_at_ms,consumed_at_ms,revision)
+SELECT rowid,id,recovery_code_digest,recovery_created_at_ms,recovery_consumed_at_ms,recovery_revision
+FROM users WHERE recovery_code_digest IS NOT NULL;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_credential_cutover',CASE WHEN
+ (SELECT count(*) FROM backup_recovery_credentials)=(SELECT count(*) FROM users WHERE recovery_code_digest IS NOT NULL)
+ AND NOT EXISTS(SELECT rowid,id,recovery_code_digest,recovery_created_at_ms,recovery_consumed_at_ms,recovery_revision FROM users WHERE recovery_code_digest IS NOT NULL
+ EXCEPT SELECT rowid,user_id,code_digest,created_at_ms,consumed_at_ms,revision FROM backup_recovery_credentials)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recovery-credential-copy:end -->
+
+<!-- recovery-credential-remove-source:start -->
+
+```sql
+DROP INDEX users_recovery_digest;
+ALTER TABLE users DROP COLUMN recovery_revision;
+ALTER TABLE users DROP COLUMN recovery_consumed_at_ms;
+ALTER TABLE users DROP COLUMN recovery_created_at_ms;
+ALTER TABLE users DROP COLUMN recovery_code_digest;
+```
+
+<!-- recovery-credential-remove-source:end -->
+
+<!-- recovery-credential-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_credential_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='recovery_credential_cutover';
+```
+
+<!-- recovery-credential-verify:end -->
+
+## Recovery case evidence (#1442)
+
+The ten logical fields of `support_recovery_cases` own the immutable operator and terminal decision.
+New approvals no longer create duplicate `support_recovery` Audit rows. Four nullable metadata fields
+retain migrated opening/decision event IDs and their original Audit sequence-based archive addresses;
+they do not repeat actor, action or time. New cases leave this historical metadata absent. The original
+`support_recovery_events` erasure purpose clears only this migrated identity metadata before case deletion.
+Existing `{}` archives retain their exact store IDs, generation-qualified row references and bodies.
+Ordinary retention remains 24 calendar months after closure, including the referenced browser pairing.
+Recovery never supplies the independent browser-private verifier.
+
+Apply #1441 first. Back up and fence all recovery approval/rotation, Audit writers/retention, browser
+pairing cleanup and erasure. Capture the original Audit table, its sequence watermark, every dependent
+index/trigger/view and all Case dependencies. Map each to the final baseline; stop on unknown objects
+or incoming Audit foreign keys. No temporary table may already exist. The batch below rebuilds only
+Audit, which currently has no incoming foreign keys; it never rebuilds User, Case or Pairing.
+
+Execute one native D1 batch:
+
+1. Run `recovery-evidence-preflight`. Require exactly one opening and one matching terminal event
+   per case. Reject orphan, missing, repeated, differently attributed or timed events, a decision
+   inconsistent with case state, foreign ownership, foreign-key violations or active erasure.
+   Matching rejected decisions are preserved as rejected cases; exceptional history blocks conversion
+   for investigation rather than being discarded or rewritten.
+2. Drop captured Audit triggers/views before rebuilding. Create `audit_entries_1442` using the final
+   baseline Audit declaration with only its table name changed. Run `recovery-evidence-copy`: preserve
+   all unrelated writable Audit fields and sequences, its AUTOINCREMENT high-water mark and every
+   case field/rowid. Keep generated columns derived by the unchanged final expressions.
+3. Run `recovery-evidence-replace`, then reinstall mapped final baseline Audit dependencies and the
+   final Case indexes/guards. The existing Case indexes and erasure insert/delete fences stay;
+   replace its update fence with the final field-specific one. Metadata may only be cleared under
+   its original same-User erasure permit; ordinary updates cannot change case evidence.
+4. Run `recovery-evidence-verify`. Publish matching code and align the one-baseline ledger only after
+   the batch succeeds. The baseline alone does not convert an existing database.
+
+Every failure rolls back both event extraction and Audit replacement. Do not disable foreign keys,
+reassign IDs, reset sequence ordering, infer an operator from current data or invent absent events.
+The native cutover fixture executes these exact blocks and final baseline definitions.
+
+For every captured application table, render `__TABLE_NAME__` below as its exact trusted schema
+name (including application tables outside the baseline, excluding SQLite internals and Cloudflare's
+platform-owned `_cf_METADATA`) and append the assertion to the same preflight batch.
+D1 requires a literal table name for this pragma; a dynamic pragma join is refused by its authorizer.
+Any incoming Audit foreign key must stop the rebuild and be designed explicitly.
+
+<!-- recovery-evidence-references:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_evidence_cutover',CASE WHEN NOT EXISTS(
+ SELECT 1 FROM pragma_foreign_key_list('__TABLE_NAME__') WHERE "table"='audit_entries')
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recovery-evidence-references:end -->
+
+<!-- recovery-evidence-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_evidence_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM support_recovery_cases c WHERE
+   NOT EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=c.pairing_id AND p.user_id=c.user_id)
+   OR (SELECT count(*) FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id)<>2
+   OR (SELECT count(*) FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id AND e.recovery_action='opened')<>1
+   OR (SELECT count(*) FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id AND e.recovery_action=c.state)<>1)
+ AND NOT EXISTS(SELECT 1 FROM audit_entries e LEFT JOIN support_recovery_cases c ON c.id=e.recovery_case_id
+   WHERE e.record_type='support_recovery' AND (c.id IS NULL OR e.user_id IS NOT c.user_id
+   OR e.operator_issuer IS NOT c.operator_issuer OR e.operator_subject IS NOT c.operator_subject
+   OR (e.recovery_action='opened' AND e.occurred_at_ms IS NOT c.opened_at_ms)
+   OR (e.recovery_action<>'opened' AND (e.recovery_action IS NOT c.state OR e.occurred_at_ms IS NOT c.closed_at_ms))))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recovery-evidence-preflight:end -->
+
+<!-- recovery-evidence-copy:start -->
+
+```sql
+ALTER TABLE support_recovery_cases ADD COLUMN opened_event_id TEXT;
+ALTER TABLE support_recovery_cases ADD COLUMN opened_event_row_ref TEXT CHECK((opened_event_id IS NULL)=(opened_event_row_ref IS NULL));
+ALTER TABLE support_recovery_cases ADD COLUMN decision_event_id TEXT;
+ALTER TABLE support_recovery_cases ADD COLUMN decision_event_row_ref TEXT CHECK((decision_event_id IS NULL)=(decision_event_row_ref IS NULL));
+UPDATE support_recovery_cases AS c SET
+ opened_event_id=(SELECT id FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id AND e.recovery_action='opened'),
+ opened_event_row_ref=(SELECT CAST(sequence AS TEXT) FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id AND e.recovery_action='opened'),
+ decision_event_id=(SELECT id FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id AND e.recovery_action=c.state),
+ decision_event_row_ref=(SELECT CAST(sequence AS TEXT) FROM audit_entries e WHERE e.record_type='support_recovery' AND e.recovery_case_id=c.id AND e.recovery_action=c.state);
+INSERT INTO audit_entries_1442(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms,refresh_connection_id,consumed_refresh_id,issued_refresh_id)
+SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms,refresh_connection_id,consumed_refresh_id,issued_refresh_id FROM audit_entries WHERE record_type<>'support_recovery';
+UPDATE sqlite_sequence SET seq=max(seq,COALESCE((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)) WHERE name='audit_entries_1442';
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_evidence_cutover',CASE WHEN
+ (SELECT count(*) FROM audit_entries_1442)=(SELECT count(*) FROM audit_entries WHERE record_type<>'support_recovery')
+ AND NOT EXISTS(SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms,refresh_connection_id,consumed_refresh_id,issued_refresh_id FROM audit_entries WHERE record_type<>'support_recovery'
+ EXCEPT SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms,refresh_connection_id,consumed_refresh_id,issued_refresh_id FROM audit_entries_1442)
+ AND NOT EXISTS(SELECT 1 FROM audit_entries e JOIN support_recovery_cases c ON c.id=e.recovery_case_id WHERE e.record_type='support_recovery'
+   AND ((e.recovery_action='opened' AND (c.opened_event_id IS NOT e.id OR c.opened_event_row_ref IS NOT CAST(e.sequence AS TEXT)))
+   OR (e.recovery_action=c.state AND (c.decision_event_id IS NOT e.id OR c.decision_event_row_ref IS NOT CAST(e.sequence AS TEXT)))))
+ AND COALESCE((SELECT seq FROM sqlite_sequence WHERE name='audit_entries_1442'),0)=COALESCE((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recovery-evidence-copy:end -->
+
+<!-- recovery-evidence-replace:start -->
+
+```sql
+DROP TABLE audit_entries;
+ALTER TABLE audit_entries_1442 RENAME TO audit_entries;
+```
+
+<!-- recovery-evidence-replace:end -->
+
+<!-- recovery-evidence-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recovery_evidence_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='recovery_evidence_cutover';
+```
+
+<!-- recovery-evidence-verify:end -->
+
+## Browser pairing-to-session authority (#1443)
+
+The target pairing and session field groups already match #1401. Retain their identities, original
+instants, proof generations, Queue dispatch state, archive addresses and independent deadlines.
+No table conversion or field rewriting is required. Existing unique pairing and bearer keys and
+the same-User consumed-pairing insertion guard remain authoritative.
+
+The schema additions are an expiry index for Browser Login's existing 32-row cleanup and a
+WebSession owner index for User-scoped erasure. On an
+existing populated database, fence authentication cleanup during installation, check foreign-key
+integrity and apply the exact statements below in one native D1 batch. Stop on an unexplained
+same-name schema object or invalid history; do not silently replace it. If the final baseline has
+already installed both indexes, no cutover is needed. A failed batch leaves the original records and
+schema intact. Publish matching code and align the one-baseline ledger after successful verification;
+keep `0001_schema.sql` as the sole migration file.
+
+<!-- browser-session-index:start -->
+
+```sql
+CREATE INDEX browser_login_pairings_retention ON browser_login_pairings(expires_at_ms,id);
+CREATE INDEX web_sessions_by_user ON web_sessions(user_id);
+```
+
+<!-- browser-session-index:end -->
+
+Session creation composes exact private-verifier consumption, same-User session insertion and a
+transient `sql_assertions` check in one batch. A zero-row insertion must roll back consumption just
+like an SQL error. Replay cannot mint another token. A lost success response never permits
+reissuing the consumed credential; the browser starts another pairing.
+
+Native Browser Login tests execute populated index installation, interrupted-batch rollback,
+the User-scoped session archive query and
+actual bounded cleanup. Session- and recovery-referenced pairings remain retained, including revoked
+sessions. Existing integrated provider, WhatsApp, email and recovery journeys exercise approval and
+redemption; session journeys cover freshness, sliding idle/hard expiry, revocation and logout.
+State-owned email dispatch claims and ambiguous outcomes remain unchanged.
+
+## Provider onboarding ownership (#1444)
+
+Provider credentials retain their five fields and attempts retain their eighteen fields from #1403.
+The existing onboarding composition already creates the User and original TrialPeriod, processing
+Consent and extracted backup recovery credential in one native D1 batch. Provider issuer/subject
+selects identity; contact email never establishes mailbox authority or merges Users. Browser Login
+still requires its independent private verifier before issuing a session.
+
+Install `provider_credential_immutable` and the expanded `provider_completion_immutable` from the
+final baseline together. The former protects the original issuer, subject, owner, contact evidence
+and establishment instant. The latter freezes completed attempt evidence, including its original
+pairing and provider identity; it still permits the one verified-to-completed transition that clears
+cookie/nonce/contact proof. Neither guard prevents purpose-authorized deletion or expired-attempt
+cleanup. No table rebuild, field conversion or additional migration file is needed.
+
+For a populated database, stop provider completion, expiry cleanup and erasure during installation,
+back up the database, capture its existing trigger definitions and check for unexpected dependencies.
+Run the preflight below in the same native D1 batch as dropping the old completion guard, creating
+both final guards and deleting the `provider_onboarding_cutover` assertion. An unexplained preexisting
+credential guard or inconsistent history requires investigation, not silent replacement or inferred
+identity repair. Preserve every original rowid, field, disclosure byte, exact instant and archive
+address. Retained historical attempts do not require an independently erased current credential,
+Consent record or recovery credential to be recreated. New onboarding still requires all of them at
+its atomic completion boundary. A pairing invalidated by five wrong private verifiers may have
+cleared its current User; retain the completed attempt's historical owner without restoring pairing
+authority. Publish matching code and align the one-baseline ledger only after
+successful verification. Failed preflight or installation rolls the whole batch back.
+
+<!-- provider-onboarding-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'provider_onboarding_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM provider_authentication_attempts a
+   LEFT JOIN browser_login_pairings p ON p.id=a.pairing_id
+   LEFT JOIN provider_credentials c ON c.issuer=a.issuer AND c.subject=a.subject
+   WHERE (a.state='completed')<>(a.completed_at_ms IS NOT NULL)
+   OR (a.completed_at_ms IS NOT NULL AND (
+     a.user_id IS NULL OR a.issuer IS NULL OR a.subject IS NULL
+     OR a.cookie_digest IS NOT zeroblob(32) OR a.nonce<>'' OR a.contact_email IS NOT NULL
+     OR a.created_user IS NULL
+     OR (p.state IN('ready','consumed') AND p.user_id IS NOT a.user_id)
+     OR p.state NOT IN('ready','consumed','invalidated')
+     OR (p.state='invalidated' AND (p.user_id IS NOT NULL OR p.wrong_attempts<>5))
+     OR a.expires_at_ms<=a.completed_at_ms OR p.expires_at_ms<=a.completed_at_ms
+     OR (c.user_id IS NOT NULL AND c.user_id IS NOT a.user_id))))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- provider-onboarding-preflight:end -->
+
+Existing Google and Microsoft journeys verify nonce/cookie/issuer/subject binding, non-authoritative
+contact email, duplicate completion, concurrent single-use recovery disclosure and rollback when
+Consent, recovery or provider credential insertion produces no row. The populated native cutover
+reuses those real journey records, refuses conflicting ownership, preserves all retained values and
+archives, proves guard-installation rollback and checks the actual indexed expiry query.
+
+## WhatsApp-to-browser handoff (#1445)
+
+Keep the thirteen handoff fields and the separate send claim, review send, confirmation and
+consumption facts from #1403. Consent owns the immutable 27-field pre-User exchange and its original
+recipient/disclosure/decision proof. Provider Authentication owns the browser handoff; the public
+reference is neither a decision nor a browser credential. Existing-User initial association and
+conflict refusal remain unchanged. Do not add a workflow or copy the removed recipient snapshots.
+
+Handoff consumption is now an explicit, guarded statement after provider completion in the same D1
+batch. It addresses the exact completed attempt, same User, pairing and confirmed handoff, and must
+change one row. Its shared changed-row assertion rolls back User, trial, Consent, recovery,
+association, pairing and attempt changes if consumption fails or silently writes no row. The old
+`whatsapp_provider_completion_consumes_confirmation` AFTER trigger must be removed in this same
+cutover. `whatsapp_provider_completion_requires_confirmation` remains the commit-time proof guard.
+The new `whatsapp_provider_handoff_immutable` guard prevents replacing the parent exchange, an
+established browser binding, claimed sends, a sent review, a recorded decision or consumption.
+Decision evidence retains its original message and receipt instant, including denied decisions.
+
+For a populated database, fence handoff ingress, provider completion, expiry cleanup and erasure;
+back up the database and capture existing trigger definitions. In one native D1 batch, run the
+preflight below, drop the exact old consumption trigger, install the final baseline handoff
+immutability guard and delete the `provider_handoff_cutover` assertion. Stop on unexplained objects
+or historical inconsistency; never fabricate missing proof or infer a consumption instant. There is
+no table rebuild or field rewrite, and `0001_schema.sql` remains the only migration file. Publish
+matching callers and align the baseline ledger while the fence remains in place; do not run new
+callers with the old trigger or old callers without it. Failed preflight or guard installation
+rolls back the whole database batch.
+
+A completed attempt's pairing can legitimately have been invalidated later, clearing its current
+User. Do not use that current pairing authority to reinterpret original decision ownership.
+A consumed handoff can outlive independently expired attempt correlation; absence of an already
+purged attempt does not recreate a missing record. Retained linked attempts must agree with the
+handoff's original pairing and exact consumption/completion instant.
+
+<!-- provider-handoff-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'provider_handoff_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM whatsapp_provider_handoffs h
+   JOIN pending_consent_exchanges e ON e.id=h.exchange_id
+   WHERE e.state<>'accepted' OR e.decision_value IS NOT 'accepted' OR h.expires_at_ms>e.expires_at_ms
+   OR (h.pairing_id IS NULL)<>(h.review_code IS NULL)
+   OR (h.review_started_ms IS NOT NULL AND h.pairing_id IS NULL)
+   OR (h.review_message_id IS NOT NULL AND h.review_started_ms IS NULL)
+   OR (h.decision IS NULL AND (h.decision_message_id IS NOT NULL OR h.confirmed_at_ms IS NOT NULL))
+   OR (h.decision IS NOT NULL AND (h.decision_message_id IS NULL OR h.confirmed_at_ms IS NULL
+     OR h.review_message_id IS NULL OR h.review_started_ms IS NULL OR h.pairing_id IS NULL))
+   OR (h.consumed_at_ms IS NOT NULL AND h.decision IS NOT 'confirmed'))
+ AND NOT EXISTS(SELECT 1 FROM provider_authentication_attempts a
+   JOIN whatsapp_provider_handoffs h ON h.id=a.handoff_id
+   WHERE a.pairing_id IS NOT h.pairing_id
+   OR (a.completed_at_ms IS NOT NULL AND (h.decision IS NOT 'confirmed' OR h.consumed_at_ms IS NOT a.completed_at_ms))
+   OR (a.completed_at_ms IS NULL AND h.consumed_at_ms IS NOT NULL))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- provider-handoff-preflight:end -->
+
+Existing public handoff journeys exercise wrong recipient/reply, premature and repeated decisions,
+uncertain review sends, handoff/browser expiry, existing association refusal, single-use browser
+proof and concurrent completion. The populated native check installs the cutover on confirmed
+public-journey proof, refuses missing decision evidence without rewriting it, and verifies complete
+rollback after guard installation fails. All original parent, handoff and attempt fields, rowids,
+User/Consent/recovery records and archive addresses remain untouched by installation.

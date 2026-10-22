@@ -399,7 +399,7 @@ const createBrowserSession = (
           onSome: (id) => [
             input.db
               .prepare(
-                "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', 1, 1)"
+                "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', 1, 1)"
               )
               .bind(id, user),
           ],
@@ -894,7 +894,7 @@ export const nativePeer = ({
     yield* wait(
       fixture.db
         .prepare(
-          "INSERT OR IGNORE INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', 1, 1)"
+          "INSERT OR IGNORE INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', 1, 1)"
         )
         .bind(`native-peer-${userIndex}`, `${userIndex}0000000-0000-4000-8000-000000000001`)
         .run()

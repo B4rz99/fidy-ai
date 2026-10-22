@@ -3028,6 +3028,12 @@ User. A still-retained review must agree on owner and any resolved Transaction; 
 remains historical evidence and does not acquire a destructive foreign key. New review-bound captures
 must still name an existing same-User review when written.
 
+Every linked decision must have exactly its two live members attached to that same ordered pair;
+keep-separate decisions must have no attached members. Refuse inconsistent historical membership
+instead of silently hiding or duplicating movements during conversion. Current linked amounts may
+differ after an accepted Correction: exact Money/Currency/direction equality is a link-admission rule,
+not a reason to reject later corrected facts.
+
 Run preflight and all bound row checks first. Then temporarily drop inventoried triggers and views
 inside the batch so parent replacement cannot run business effects or leave invalid view references.
 Create each baseline target table as `<name>_1462`, copy and compare the complete rows below, drop ONLY
@@ -3049,7 +3055,10 @@ SELECT 'transaction-history-preflight',NOT EXISTS(SELECT 1 FROM pragma_foreign_k
  AND NOT EXISTS(SELECT 1 FROM erasure_permits) AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
  AND NOT EXISTS(SELECT 1 FROM source_attestations a JOIN statement_submissions s ON s.id=a.statement_submission_id WHERE s.user_id<>a.user_id)
  AND NOT EXISTS(SELECT 1 FROM source_attestations a WHERE a.review_item_id IS NOT NULL AND ((NOT EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.id=a.review_item_id AND r.user_id=a.user_id) AND EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.id=a.review_item_id)) OR EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.id=a.review_item_id AND r.user_id=a.user_id AND r.transaction_id IS NOT NULL AND r.transaction_id<>a.transaction_id)))
- AND NOT EXISTS(SELECT user_id,review_item_id FROM source_attestations WHERE review_item_id IS NOT NULL GROUP BY user_id,review_item_id HAVING count(*)>1);
+ AND NOT EXISTS(SELECT user_id,review_item_id FROM source_attestations WHERE review_item_id IS NOT NULL GROUP BY user_id,review_item_id HAVING count(*)>1)
+ AND NOT EXISTS(SELECT 1 FROM transaction_reconciliation_decisions d WHERE
+   (d.state='linked' AND (SELECT count(*) FROM transactions t WHERE t.user_id=d.user_id AND t.reconciliation_first_id=d.first_transaction_id AND t.reconciliation_second_id=d.second_transaction_id AND t.deleted_at_ms IS NULL)<>2)
+   OR (d.state='keep-separate' AND EXISTS(SELECT 1 FROM transactions t WHERE t.user_id=d.user_id AND t.reconciliation_first_id=d.first_transaction_id AND t.reconciliation_second_id=d.second_transaction_id)));
 ```
 
 <!-- transaction-history-preflight:end -->

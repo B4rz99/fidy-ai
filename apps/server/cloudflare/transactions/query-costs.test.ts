@@ -253,6 +253,16 @@ it(
           linked: true,
           linkedFraction: 1,
         });
+        yield* fromTestPromise(() =>
+          db.batch([
+            db
+              .prepare(
+                "UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?"
+              )
+              .bind(userId),
+            db.prepare("DELETE FROM dashboard_projection_leaf WHERE user_id = ?").bind(userId),
+          ])
+        );
         const before = yield* fromTestPromise(() => historyPage(db, userId));
         expect(before.results).toHaveLength(101);
         expect(before.results[0]).toMatchObject({

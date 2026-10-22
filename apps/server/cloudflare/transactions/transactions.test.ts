@@ -1614,8 +1614,8 @@ it("links one exact pair into one effective Transaction while retaining both ori
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
       const owner = users[0] ?? "";
-      const visible = "30000000-0000-4000-8000-000000000101";
-      const suppressed = "30000000-0000-4000-8000-000000000102";
+      const visible = "30000000-0000-4000-8000-000000000102";
+      const suppressed = "30000000-0000-4000-8000-000000000101";
       yield* fromTestPromise(() =>
         Promise.all([
           seedRetainedTransaction({
@@ -1625,6 +1625,9 @@ it("links one exact pair into one effective Transaction while retaining both ori
             categoryId: category,
             counterparty: "Cafe Uno",
             notes: "notificacion",
+            amount: "9007199254740993.01",
+            occurredAt: "2025-01-05T12:00:00.003Z",
+            createdAt: "2025-01-05T12:00:00.001Z",
           }),
           seedRetainedTransaction({
             db,
@@ -1633,8 +1636,9 @@ it("links one exact pair into one effective Transaction while retaining both ori
             categoryId: category,
             counterparty: "Cafe Dos",
             notes: "extracto",
-            occurredAt: "2025-01-06T12:00:00.000Z",
-            createdAt: "2025-01-06T12:00:00.000Z",
+            amount: "9007199254740993.01",
+            occurredAt: "2025-01-05T12:00:00.004Z",
+            createdAt: "2025-01-05T12:00:00.002Z",
           }),
         ]).then(() =>
           Promise.all([
@@ -1678,6 +1682,10 @@ it("links one exact pair into one effective Transaction while retaining both ori
         yield* fromTestPromise(() => linked.json())
       ).pipe(Effect.orDie)).data;
       expect(effectiveTransaction.id).toBe(visible);
+      expect(encodeMoneyAmount(effectiveTransaction.money.amount)).toBe("9007199254740993.01");
+      expect(DateTime.formatIso(effectiveTransaction.createdAt)).toBe("2025-01-05T12:00:00.001Z");
+      expect(DateTime.formatIso(effectiveTransaction.occurredAt)).toBe("2025-01-05T12:00:00.003Z");
+      expect(effectiveTransaction.revision).toBe(0);
       expect(effectiveTransaction.presentation).toEqual({ kind: "visible-member" });
       expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([
         { operation: "transactions.linkTransactions", outcome: "success" },
@@ -1719,8 +1727,8 @@ it("links one exact pair into one effective Transaction while retaining both ori
           .all<{ id: string; counterparty: string; notes: string }>()
       );
       expect(retained.results).toEqual([
-        { id: visible, counterparty: "Cafe Uno", notes: "notificacion" },
         { id: suppressed, counterparty: "Cafe Dos", notes: "extracto" },
+        { id: visible, counterparty: "Cafe Uno", notes: "notificacion" },
       ]);
       expect(
         yield* fromTestPromise(() =>
@@ -1733,9 +1741,9 @@ it("links one exact pair into one effective Transaction while retaining both ori
       ).toBe(2);
       expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
         decisions: [
-          { first: visible, second: suppressed, state: "linked", visible: Option.some(visible) },
+          { first: suppressed, second: visible, state: "linked", visible: Option.some(visible) },
         ],
-        members: [{ transaction: visible }, { transaction: suppressed }],
+        members: [{ transaction: suppressed }, { transaction: visible }],
       });
     })
   ));
@@ -1747,14 +1755,28 @@ it("refuses ineligible pairs without writing any relation", () =>
       const owner = users[0] ?? "";
       const base = "30000000-0000-4000-8000-00000000015";
       const pairs = [
-        { first: `${base}1`, second: `${base}2`, secondFacts: { currency: "USD" } },
-        { first: `${base}3`, second: `${base}4`, secondFacts: { amount: "45000.01" } },
-        { first: `${base}5`, second: `${base}6`, secondFacts: { direction: "inflow" as const } },
+        {
+          first: `${base}1`,
+          second: `${base}2`,
+          secondFacts: { currency: "USD", amount: "9007199254740993.01" },
+        },
+        { first: `${base}3`, second: `${base}4`, secondFacts: { amount: "9007199254740993.02" } },
+        {
+          first: `${base}5`,
+          second: `${base}6`,
+          secondFacts: { direction: "inflow" as const, amount: "9007199254740993.01" },
+        },
       ];
       yield* fromTestPromise(() =>
         Promise.all(
           pairs.flatMap((pair) => [
-            seedRetainedTransaction({ db, userId: owner, id: pair.first, categoryId: category }),
+            seedRetainedTransaction({
+              db,
+              userId: owner,
+              id: pair.first,
+              categoryId: category,
+              amount: "9007199254740993.01",
+            }),
             seedRetainedTransaction({
               db,
               userId: owner,
@@ -1832,14 +1854,21 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
       const suppressed = "30000000-0000-4000-8000-000000000302";
       yield* fromTestPromise(() =>
         Promise.all([
-          seedRetainedTransaction({ db, userId: owner, id: visible, categoryId: category }),
+          seedRetainedTransaction({
+            db,
+            userId: owner,
+            id: visible,
+            categoryId: category,
+            occurredAt: "2025-01-05T12:00:00.001Z",
+            createdAt: "2025-01-05T12:00:00.002Z",
+          }),
           seedRetainedTransaction({
             db,
             userId: owner,
             id: suppressed,
             categoryId: category,
-            occurredAt: "2025-01-06T12:00:00.000Z",
-            createdAt: "2025-01-06T12:00:00.000Z",
+            occurredAt: "2025-01-06T12:00:00.003Z",
+            createdAt: "2025-01-06T12:00:00.004Z",
           }),
         ]).then(() =>
           seedManualAttestation({
@@ -1882,6 +1911,20 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
       ).pipe(Effect.orDie)).data;
       expect(restored.firstTransaction.id).toBe(visible);
       expect(restored.secondTransaction.id).toBe(suppressed);
+      expect(restored.firstTransaction.revision).toBe(0);
+      expect(restored.secondTransaction.revision).toBe(0);
+      expect(DateTime.formatIso(restored.firstTransaction.occurredAt)).toBe(
+        "2025-01-05T12:00:00.001Z"
+      );
+      expect(DateTime.formatIso(restored.firstTransaction.createdAt)).toBe(
+        "2025-01-05T12:00:00.002Z"
+      );
+      expect(DateTime.formatIso(restored.secondTransaction.occurredAt)).toBe(
+        "2025-01-06T12:00:00.003Z"
+      );
+      expect(DateTime.formatIso(restored.secondTransaction.createdAt)).toBe(
+        "2025-01-06T12:00:00.004Z"
+      );
       expect(restored.firstTransaction.presentation).toEqual({ kind: "independent" });
       expect(restored.secondTransaction.presentation).toEqual({ kind: "independent" });
       expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
@@ -2281,109 +2324,124 @@ it("keeps the effective Transaction consistent after corrections to either membe
     })
   ));
 
-it("derives each effective fact group from the member the Transaction policy selects", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const owner = users[0] ?? "";
-      const visible = "30000000-0000-4000-8000-000000000a01";
-      const suppressed = "30000000-0000-4000-8000-000000000a02";
-      const suppressedCategory = "10000000-0000-4000-8000-000000000012";
-      yield* fromTestPromise(() =>
-        Promise.all([
-          seedRetainedTransaction({
-            db,
-            userId: owner,
-            id: visible,
-            categoryId: category,
-            counterparty: "Uno",
-            notes: "visible",
-          }),
-          seedRetainedTransaction({
-            db,
-            userId: owner,
-            id: suppressed,
-            categoryId: suppressedCategory,
-            counterparty: "Dos",
-            notes: "suppressed",
-            occurredAt: "2025-01-06T12:00:00.000Z",
-            createdAt: "2025-01-06T12:00:00.000Z",
-            userDecisions: JSON.stringify({ categoryId: true, counterparty: true }),
-          }),
-        ])
-      );
-      expect(
-        (yield* fromTestPromise(() =>
-          sendPublicRequest(
-            db,
-            new Request("https://api.fidyapp.com/transactions/link", {
-              method: "POST",
-              headers: {
-                origin: "https://app.fidyapp.com",
-                "Fidy-Session-Binding": sessions[0] ?? "invalid",
-                cookie: `__Host-fidy_session=${bearer(0)}`,
-                "content-type": "application/json",
-              },
-              body: JSON.stringify({
-                firstTransactionId: visible,
-                secondTransactionId: suppressed,
-              }),
-            })
-          )
-        )).status
-      ).toBe(200);
-      const listed = (yield* Schema.decodeUnknownEffect(Listed)(
+it.each(["same-instant", "one-millisecond-newer"] as const)(
+  "derives each effective fact group with %s correction ordering",
+  (ordering) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromTestPromise(() => setup());
+        const owner = users[0] ?? "";
+        const visible = "30000000-0000-4000-8000-000000000a01";
+        const suppressed = "30000000-0000-4000-8000-000000000a02";
+        const suppressedCategory = "10000000-0000-4000-8000-000000000012";
         yield* fromTestPromise(() =>
-          sendPublicRequest(
-            db,
-            new Request("https://api.fidyapp.com/transactions", {
-              headers: {
-                origin: "https://app.fidyapp.com",
-                "Fidy-Session-Binding": sessions[0] ?? "invalid",
-                cookie: `__Host-fidy_session=${bearer(0)}`,
-              },
-            })
-          ).then((response) => response.json())
-        )
-      ).pipe(Effect.orDie)).data;
-      const effective = listed[0];
-      if (effective === undefined) throw new Error("Missing effective Transaction");
-      expect(listed).toHaveLength(1);
-      expect(effective.categoryId).toBe(suppressedCategory);
-      expect(Option.getOrNull(effective.counterparty)).toBe("Dos");
-      expect(Option.getOrNull(effective.notes)).toBe("visible");
-      expect(DateTime.formatIso(effective.occurredAt)).toBe("2025-01-05T12:00:00.000Z");
-      yield* fromTestPromise(() =>
-        Promise.all(
-          [visible, suppressed].map((transactionId, index) =>
-            db
-              .prepare(`INSERT INTO transaction_corrections
+          Promise.all([
+            seedRetainedTransaction({
+              db,
+              userId: owner,
+              id: visible,
+              categoryId: category,
+              counterparty: "Uno",
+              notes: "visible",
+            }),
+            seedRetainedTransaction({
+              db,
+              userId: owner,
+              id: suppressed,
+              categoryId: suppressedCategory,
+              counterparty: "Dos",
+              notes: "suppressed",
+              occurredAt: "2025-01-06T12:00:00.000Z",
+              createdAt: "2025-01-06T12:00:00.000Z",
+              userDecisions: JSON.stringify({ categoryId: true, counterparty: true }),
+            }),
+          ])
+        );
+        expect(
+          (yield* fromTestPromise(() =>
+            sendPublicRequest(
+              db,
+              new Request("https://api.fidyapp.com/transactions/link", {
+                method: "POST",
+                headers: {
+                  origin: "https://app.fidyapp.com",
+                  "Fidy-Session-Binding": sessions[0] ?? "invalid",
+                  cookie: `__Host-fidy_session=${bearer(0)}`,
+                  "content-type": "application/json",
+                },
+                body: JSON.stringify({
+                  firstTransactionId: visible,
+                  secondTransactionId: suppressed,
+                }),
+              })
+            )
+          )).status
+        ).toBe(200);
+        const listed = (yield* Schema.decodeUnknownEffect(Listed)(
+          yield* fromTestPromise(() =>
+            sendPublicRequest(
+              db,
+              new Request("https://api.fidyapp.com/transactions", {
+                headers: {
+                  origin: "https://app.fidyapp.com",
+                  "Fidy-Session-Binding": sessions[0] ?? "invalid",
+                  cookie: `__Host-fidy_session=${bearer(0)}`,
+                },
+              })
+            ).then((response) => response.json())
+          )
+        ).pipe(Effect.orDie)).data;
+        const effective = listed[0];
+        if (effective === undefined) throw new Error("Missing effective Transaction");
+        expect(listed).toHaveLength(1);
+        expect(effective.categoryId).toBe(suppressedCategory);
+        expect(Option.getOrNull(effective.counterparty)).toBe("Dos");
+        expect(Option.getOrNull(effective.notes)).toBe("visible");
+        expect(DateTime.formatIso(effective.occurredAt)).toBe("2025-01-05T12:00:00.000Z");
+        yield* fromTestPromise(() =>
+          Promise.all(
+            [visible, suppressed].map((transactionId, index) =>
+              db
+                .prepare(`INSERT INTO transaction_corrections
                 (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at_ms)
-                VALUES (?, ?, ?, 0, '[]', '{}', '{}', 1738368000000)`)
-              .bind(`40000000-0000-4000-8000-00000000010${index}`, owner, transactionId)
-              .run()
+                VALUES (?, ?, ?, 0, '[]', '{}', '{}', ?)`)
+                .bind(
+                  `40000000-0000-4000-8000-00000000010${index}`,
+                  owner,
+                  transactionId,
+                  ordering === "one-millisecond-newer" && index === 0
+                    ? 1738368000001
+                    : 1738368000000
+                )
+                .run()
+            )
           )
-        )
-      );
-      const corrected = (yield* Schema.decodeUnknownEffect(Listed)(
-        yield* fromTestPromise(() =>
-          sendPublicRequest(
-            db,
-            new Request("https://api.fidyapp.com/transactions", {
-              headers: {
-                origin: "https://app.fidyapp.com",
-                "Fidy-Session-Binding": sessions[0] ?? "invalid",
-                cookie: `__Host-fidy_session=${bearer(0)}`,
-              },
-            })
-          ).then((response) => response.json())
-        )
-      ).pipe(Effect.orDie)).data;
-      const afterTie = corrected[0];
-      if (afterTie === undefined) throw new Error("Missing effective Transaction");
-      expect(DateTime.formatIso(afterTie.occurredAt)).toBe("2025-01-06T12:00:00.000Z");
-    })
-  ));
+        );
+        const corrected = (yield* Schema.decodeUnknownEffect(Listed)(
+          yield* fromTestPromise(() =>
+            sendPublicRequest(
+              db,
+              new Request("https://api.fidyapp.com/transactions", {
+                headers: {
+                  origin: "https://app.fidyapp.com",
+                  "Fidy-Session-Binding": sessions[0] ?? "invalid",
+                  cookie: `__Host-fidy_session=${bearer(0)}`,
+                },
+              })
+            ).then((response) => response.json())
+          )
+        ).pipe(Effect.orDie)).data;
+        const correctedTransaction = corrected[0];
+        if (correctedTransaction === undefined) throw new Error("Missing effective Transaction");
+        expect(DateTime.formatIso(correctedTransaction.occurredAt)).toBe(
+          ordering === "same-instant" ? "2025-01-06T12:00:00.000Z" : "2025-01-05T12:00:00.000Z"
+        );
+        expect(correctedTransaction.categoryId).toBe(suppressedCategory);
+        expect(Option.getOrNull(correctedTransaction.counterparty)).toBe("Dos");
+        expect(Option.getOrNull(correctedTransaction.notes)).toBe("visible");
+      })
+    )
+);
 
 it("links and unlinks under the caller's live credential scope and records only metadata for an agent", () =>
   Effect.runPromise(

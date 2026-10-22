@@ -2103,7 +2103,7 @@ it(
                 path: "/transactions",
                 method: "POST",
                 body: {
-                  money: { amount: "7", currency: "COP" },
+                  money: { amount: "9007199254740993.01", currency: "COP" },
                   categoryId: "10000000-0000-4000-8000-000000000001",
                   direction: "outflow",
                   occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
@@ -2134,30 +2134,33 @@ it(
               yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))
             )).join(",");
           });
-        expect(yield* total()).toBe("14");
+        expect(yield* total()).toBe("18014398509481986.02");
         const pair = { firstTransactionId: first, secondTransactionId: second };
         expect(
           (yield* Effect.tryPromise(() =>
             send(db, 0, { path: "/transactions/link", method: "POST", body: pair })
           )).status
         ).toBe(200);
-        expect(yield* total()).toBe("7");
+        expect(yield* total()).toBe("9007199254740993.01");
         expect(
           (yield* Effect.tryPromise(() =>
             send(db, 0, {
               path: `/transactions/${first}`,
               method: "PUT",
-              body: { expectedRevision: 0, changes: { money: { amount: "9", currency: "COP" } } },
+              body: {
+                expectedRevision: 0,
+                changes: { money: { amount: "9007199254740993.02", currency: "COP" } },
+              },
             })
           )).status
         ).toBe(200);
-        expect(yield* total()).toBe("9");
+        expect(yield* total()).toBe("9007199254740993.02");
         expect(
           (yield* Effect.tryPromise(() =>
             send(db, 0, { path: "/transactions/unlink", method: "POST", body: pair })
           )).status
         ).toBe(200);
-        expect(yield* total()).toBe("16");
+        expect(yield* total()).toBe("18014398509481986.03");
       })
     ),
   30_000

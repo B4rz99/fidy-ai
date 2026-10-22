@@ -96,6 +96,8 @@ it.each([
   "lossy-instant",
   "foreign-statement",
   "foreign-review",
+  "missing-linked-member",
+  "keep-separate-members",
   "interrupted-copy",
   "interrupted-swap",
 ] as const)(
@@ -210,7 +212,12 @@ it.each([
           originalFacts
         );
         const correctedSnapshot = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-          { ...originalFacts, notes: "Chosen note", revision: 1 }
+          {
+            ...originalFacts,
+            money: { amount: "9007199254740993.16", currency: "COP" },
+            notes: "Chosen note",
+            revision: 1,
+          }
         );
         yield* Schema.decodeUnknownEffect(Schema.toCodecJson(Transaction))(
           yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(snapshot)
@@ -219,17 +226,17 @@ it.each([
           db.batch([
             db
               .prepare(
-                "INSERT INTO transaction_corrections(id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts,corrected_at) VALUES('50000000-0000-4000-8000-000000000001',?,?,0,'[\"notes\"]',?,?,'2026-09-01T21:00:02.013+15:59')"
+                "INSERT INTO transaction_corrections(id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts,corrected_at) VALUES('50000000-0000-4000-8000-000000000001',?,?,0,'[\"money\",\"notes\"]',?,?,'2026-09-01T21:00:02.013+15:59')"
               )
               .bind(owner, first, snapshot, correctedSnapshot),
             db
               .prepare(
-                "UPDATE transactions SET notes='Chosen note',revision=1,user_decisions='{\"notes\":true}' WHERE id=?"
+                "UPDATE transactions SET amount='9007199254740993.16',notes='Chosen note',revision=1,user_decisions='{\"money\":true,\"notes\":true}' WHERE id=?"
               )
               .bind(first),
             db
               .prepare(
-                "INSERT INTO transaction_reconciliation_decisions(user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id,decided_at) VALUES(?,?,?,'linked',?,'2026-08-31T13:02:02.017-15:59')"
+                "INSERT INTO transaction_reconciliation_decisions(user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id,decided_at) VALUES(?,?,?,'linked',?,'2026-08-31T13:02:02.012-15:59')"
               )
               .bind(owner, first, second, second),
             ...[first, second].map((id) =>
@@ -239,6 +246,24 @@ it.each([
                 )
                 .bind("original:" + id, first, second, id)
             ),
+            ...(history === "missing-linked-member"
+              ? [
+                  db
+                    .prepare(
+                      "UPDATE transactions SET reconciliation_row_ref=NULL,reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE id=?"
+                    )
+                    .bind(second),
+                ]
+              : []),
+            ...(history === "keep-separate-members"
+              ? [
+                  db
+                    .prepare(
+                      "UPDATE transaction_reconciliation_decisions SET state='keep-separate',visible_transaction_id=NULL WHERE user_id=?"
+                    )
+                    .bind(owner),
+                ]
+              : []),
           ])
         );
         // Restore historical facts without replaying capture/projection side effects, then enforce the checkpoint's guards.
@@ -363,7 +388,7 @@ it.each([
               .prepare("SELECT decided_at_ms FROM transaction_reconciliation_decisions")
               .first<number>("decided_at_ms")
           )
-        ).toBe(1788238862017);
+        ).toBe(1788238862012);
         expect(
           (yield* wait(() =>
             db.prepare("SELECT created_at_ms FROM source_attestations ORDER BY id").all()
@@ -379,7 +404,7 @@ it.each([
           )
         ).toMatchObject({
           id: second,
-          money: { amount: "9007199254740993.15", currency: "COP" },
+          money: { amount: "9007199254740993.16", currency: "COP" },
           categoryId: explicitCategory,
           notes: "Chosen note",
           occurredAt: "2026-09-01T05:01:02.003Z",

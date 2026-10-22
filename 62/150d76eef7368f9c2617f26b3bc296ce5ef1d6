@@ -1,0 +1,33 @@
+apps/server/cloudflare/provider-authentication/whatsapp-sent-history.test.ts
+  s_241024bc81d268::t_c69f644406834d 1-108
+apps/server/src/shell/channels/whatsapp/internal/kapso-webhook.ts
+  s_6d017cc65783af::t_f630337ecf33f1 8,156-166,467-475,499,502-503,506-510
+apps/server/src/shell/channels/whatsapp/runtime.ts
+  s_6d017cc65783af::t_d5f54c3506f208 37-38
+docs/operations/kapso-launch-readiness.md
+  s_6d017cc65783af::t_521a164b9ec03e 27-41,48-51,62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "62150d76eef7368f9c2617f26b3bc296ce5ef1d6",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

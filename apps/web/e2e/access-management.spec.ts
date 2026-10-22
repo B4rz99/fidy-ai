@@ -271,7 +271,7 @@ test("narrow Accesos permits keyboard grant review and restores the draft for ed
       yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
       yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
       yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
-      const duration = page.getByRole("button", { name: "Duración del token", exact: true });
+      const duration = page.getByRole("button", { name: /^Duración del token:/u });
       yield* Effect.tryPromise(() => expect(duration).toBeFocused());
       yield* Effect.tryPromise(() => duration.press("Enter"));
       const sevenDays = page.getByRole("menuitemradio", { name: "7 días", exact: true });

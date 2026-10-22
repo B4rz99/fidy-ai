@@ -1,9 +1,15 @@
 import { type CanonicalWork } from "../canonical-operations/contract";
 import { type QueryCaller } from "../canonical-work/operations";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { Cause, Config, DateTime, Effect, Option, Schema } from "effect";
+import { RecurringDocument } from "../../src/core/recurring-plans/contract";
 import { withErasureRecovery } from "../erasure/runtime";
 import { RecurringWorkspace } from "../../src/shell/recurring-plans/contract";
-import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
+import {
+  installTestSchema,
+  isolatedTestDatabases,
+  isolatedTestStorage,
+  observeRetentionCost,
+} from "../d1-test-fixture";
 import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { UserId } from "../../src/core/identity/contract";
@@ -937,4 +943,149 @@ it(
       })
     ),
   30000
+);
+
+const measurePlanningContention = Effect.fn(function* (
+  db: D1Database,
+  owner: QueryCaller,
+  revision: number
+) {
+  const observed = observeRetentionCost(db);
+  const started = performance.now();
+  const replies = yield* Effect.forEach(
+    [1, 2],
+    () =>
+      call(
+        observed.database,
+        owner,
+        edit(revision, {
+          kind: "skip",
+          planId: "40000000-0000-4000-8000-000000000000",
+          date: "2026-01-01",
+          skipped: true,
+        })
+      ),
+    { concurrency: "unbounded" }
+  );
+  const elapsedMs = performance.now() - started;
+  const statuses = replies.map((reply) => reply.status).sort((left, right) => left - right);
+  expect(statuses[0]).toBe(200);
+  expect([400, 503]).toContain(statuses[1]);
+  expect((yield* read(db, owner)).document.revision).toBe(revision + 1);
+  return { ...observed.cost(), elapsedMs, outcomes: statuses.join(",") };
+});
+const nativeStorageFailure = (error: Cause.UnknownError): string =>
+  /SQLITE_TOOBIG/u.test(Cause.pretty(Cause.fail(error))) ? "SQLITE_TOOBIG" : "OTHER_NATIVE_FAILURE";
+const measureStorage =
+  Effect.runSync(Config.String("INFRA_PERFORMANCE_MEASURE").pipe(Config.withDefault("0"))) === "1";
+it.skipIf(!measureStorage)(
+  "measures supported Planning document storage before revision de-duplication",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        for (const revisions of [1, 25, 100]) {
+          const { db, subjects } = yield* fixture();
+          const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
+          const input = {
+            revision: 100 * revisions,
+            plans: Array.from({ length: 100 }, (_, plan) => ({
+              id: `40000000-0000-4000-8000-${String(plan).padStart(12, "0")}`,
+              revisions: Array.from({ length: revisions }, (_, revision) => {
+                const date = DateTime.formatIsoDateUtc(
+                  DateTime.add(DateTime.makeUnsafe("2026-01-01"), { months: revision })
+                );
+                return {
+                  from: date,
+                  plan: {
+                    ...planInput,
+                    name: `Plan ${plan}, revision ${revision}`.padEnd(120, "x"),
+                    counterparty: `Counterparty ${plan}`.padEnd(120, "x"),
+                    firstDate: date,
+                  },
+                };
+              }),
+              pauses: [],
+            })),
+            exceptions: [],
+            fulfillments: [],
+            excludedTransactionIds: [],
+            suggestions: [],
+          };
+          const document = yield* Schema.decodeEffect(Schema.toCodecJson(RecurringDocument))(input);
+          const encoded = yield* Schema.encodeEffect(
+            Schema.fromJsonString(Schema.toCodecJson(RecurringDocument))
+          )(document);
+          const { revision: _revision, ...payload } = input;
+          const withoutRevision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+            payload
+          );
+          const started = performance.now();
+          const stored = yield* Effect.result(
+            Effect.tryPromise(() =>
+              db
+                .prepare(
+                  "INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(?,'recurring-plan',?,?)"
+                )
+                .bind(owner.userId, encoded, document.revision)
+                .run()
+            )
+          );
+          const elapsed = performance.now() - started;
+          const fits = new TextEncoder().encode(withoutRevision).length < 2_000_000;
+          let readMs = -1;
+          let raceMs = -1;
+          let raceReads = 0;
+          let raceWrites = 0;
+          let outcomes = "not-run";
+          const failure = stored._tag === "Failure" ? nativeStorageFailure(stored.failure) : "";
+          expect(failure).toBe(fits ? "" : "SQLITE_TOOBIG");
+          if (stored._tag === "Success") {
+            const readStart = performance.now();
+            const workspace = yield* read(db, owner);
+            readMs = performance.now() - readStart;
+            expect(workspace.document.plans).toHaveLength(100);
+            const race = yield* measurePlanningContention(db, owner, document.revision);
+            raceMs = race.elapsedMs;
+            raceReads = race.rowsRead;
+            raceWrites = race.rowsWritten;
+            outcomes = race.outcomes;
+          }
+          const observation = yield* Schema.encodeEffect(
+            Schema.fromJsonString(
+              Schema.Struct({
+                plans: Schema.Int,
+                revisions: Schema.Int,
+                bytes: Schema.Int,
+                bytesWithoutRevision: Schema.Int,
+                fitsD1ValueLimit: Schema.Boolean,
+                nativeStored: Schema.Boolean,
+                writeMs: Schema.Finite,
+                publicReadMs: Schema.Finite,
+                concurrentEditMs: Schema.Finite,
+                concurrentRowsRead: Schema.Int,
+                concurrentRowsWritten: Schema.Int,
+                nativeFailure: Schema.String,
+                concurrentOutcomes: Schema.String,
+              })
+            )
+          )({
+            plans: 100,
+            revisions,
+            bytes: new TextEncoder().encode(encoded).length,
+            bytesWithoutRevision: new TextEncoder().encode(withoutRevision).length,
+            fitsD1ValueLimit: fits,
+            nativeStored: stored._tag === "Success",
+            writeMs: elapsed,
+            publicReadMs: readMs,
+            concurrentEditMs: raceMs,
+            concurrentRowsRead: raceReads,
+            concurrentRowsWritten: raceWrites,
+            nativeFailure: failure,
+            concurrentOutcomes: outcomes,
+          });
+          yield* Effect.sync(() => process.stdout.write(`PLANNING_STORAGE ${observation}\n`));
+        }
+      })
+    ),
+  60_000
 );

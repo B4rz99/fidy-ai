@@ -3389,3 +3389,12 @@ purpose-specific erasure verifies repeated Dashboard removal preserves the same 
 row and the other User's layout, while a foreign erasure scope is refused. These checks extend the
 existing authorization, malformed-layout, missing-layout and atomic mutation coverage. There is no
 new settings table, codec, generic document endpoint or migration for this verification ticket.
+
+## Planning document gate blocked (#1467)
+
+The [supported-size measurement](../research/recurring-planning-storage-gate.md) found a schema-valid
+100-plan/100-revision history that native D1 refuses with `SQLITE_TOOBIG`. Removing the JSON revision
+does not make it fit. The accepted #1413/#1467 gate therefore halts that conversion. Keep its current
+schema and codecs together until the proposed revised storage design is accepted and verified;
+this is a blocker, not a completed revision extraction. No supported limits or retained history
+were reduced. The sequential #1468–#1494 implementation batch has not started.

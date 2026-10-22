@@ -1,0 +1,47 @@
+[
+  {
+    "plans": 100,
+    "revisions": 1,
+    "bytes": 54805,
+    "bytesWithoutRevision": 54790,
+    "fitsD1ValueLimit": true,
+    "nativeStored": true,
+    "writeMs": 1.34699999999998,
+    "publicReadMs": 15.850582999999915,
+    "concurrentEditMs": 9.959292000000005,
+    "concurrentRowsRead": 49,
+    "concurrentRowsWritten": 14,
+    "nativeFailure": "",
+    "concurrentOutcomes": "200,503"
+  },
+  {
+    "plans": 100,
+    "revisions": 25,
+    "bytes": 1194806,
+    "bytesWithoutRevision": 1194790,
+    "fitsD1ValueLimit": true,
+    "nativeStored": true,
+    "writeMs": 12.818667000000005,
+    "publicReadMs": 67.85649999999987,
+    "concurrentEditMs": 73.60512499999982,
+    "concurrentRowsRead": 49,
+    "concurrentRowsWritten": 14,
+    "nativeFailure": "",
+    "concurrentOutcomes": "200,503"
+  },
+  {
+    "plans": 100,
+    "revisions": 100,
+    "bytes": 4757307,
+    "bytesWithoutRevision": 4757290,
+    "fitsD1ValueLimit": false,
+    "nativeStored": false,
+    "writeMs": 30.035957999999937,
+    "publicReadMs": -1,
+    "concurrentEditMs": -1,
+    "concurrentRowsRead": 0,
+    "concurrentRowsWritten": 0,
+    "nativeFailure": "SQLITE_TOOBIG",
+    "concurrentOutcomes": "not-run"
+  }
+]

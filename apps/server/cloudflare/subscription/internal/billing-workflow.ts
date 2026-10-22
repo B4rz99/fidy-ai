@@ -47,11 +47,24 @@ const CollectionMessage = Schema.Struct({
   version: Schema.Literal(1),
   attemptId: BillingAttemptId,
 });
-const LookupWork = Schema.Struct({
+const PreviousLookupWork = Schema.Struct({
   traceContext: Schema.optionalKey(Schema.Unknown),
   version: Schema.Literal(1),
   kind: Schema.Literal("lookup"),
   transactionId: WompiTransactionId,
+});
+const LookupWork = Schema.Struct({
+  version: Schema.Literal(2),
+  kind: Schema.Literal("lookup"),
+  transactionId: WompiTransactionId,
+  signedAt: Schema.NullOr(Schema.Finite),
+  signedStatus: Schema.NullOr(Schema.String),
+  attemptReservation: Schema.NullOr(Schema.Int),
+  eventReservation: Schema.NullOr(Schema.Int),
+});
+const LookupReservation = Schema.Struct({
+  lookup_attempts: Schema.Int,
+  event_lookup_attempts: Schema.NullOr(Schema.Int),
 });
 const workflowRetention = { successRetention: "3 days", errorRetention: "3 days" } as const;
 type CollectionQueue = Readonly<{
@@ -402,19 +415,29 @@ export const reconcileBillingTransaction = (
 const reconcileEventCandidate = (
   environment: BillingRuntime,
   transactionId: WompiTransactionId,
-  wompiHttp: WompiTransportFactory
+  input: Readonly<{
+    wompiHttp: WompiTransportFactory;
+    generation: Pick<typeof LookupWork.Type, "signedAt" | "signedStatus">;
+  }>
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
-    const client = yield* billingClient(environment, wompiHttp);
+    const client = yield* billingClient(environment, input.wompiHttp);
     yield* reconcileBillingTransaction({ db: environment.DB, client, transactionId });
     const now = yield* Clock.currentTimeMillis;
     yield* attempt(() =>
       environment.DB.prepare(`UPDATE billing_provider_transactions
       SET event_resolved_at_ms = ? WHERE transaction_id = ? AND event_received_at_ms IS NOT NULL AND event_resolved_at_ms IS NULL
+      AND event_signed_at IS ? AND event_signed_status IS ?
       AND EXISTS (SELECT 1 FROM billing_provider_transactions AS e
         JOIN billing_attempt_context AS a ON a.id = e.attempt_id
         WHERE e.transaction_id = ? AND a.status IN ('succeeded', 'failed'))`)
-        .bind(now, transactionId, transactionId)
+        .bind(
+          now,
+          transactionId,
+          input.generation.signedAt,
+          input.generation.signedStatus,
+          transactionId
+        )
         .run()
     );
   }).pipe(Effect.withSpan("billing.collection.lookup"));
@@ -573,20 +596,22 @@ type CollectionActivity = (
   run: () => Promise<void>
 ) => Promise<void>;
 
+type BillingWorkflowExecution = Readonly<{
+  environment: BillingRuntime;
+  payload: unknown;
+  activity: CollectionActivity;
+  sleep: (name: string, duration: number) => Promise<void>;
+  wompiHttp: WompiTransportFactory;
+}>;
+type RunActivity = <E>(activity: Effect.Effect<void, E>) => Promise<void>;
 /** Only a versioned identity enters Workflow state. The named Activity owns the one armed POST. */
-export const runBillingCollectionWorkflow = (
-  input: Readonly<{
-    environment: BillingRuntime;
-    payload: unknown;
-    activity: CollectionActivity;
-    wompiHttp: WompiTransportFactory;
-  }>
-): Promise<void> => {
+export const runBillingCollectionWorkflow = (input: BillingWorkflowExecution): Promise<void> => {
   const { wompiHttp } = input;
   const work = Schema.decodeUnknownOption(
     Schema.Union([
       CollectionMessage,
       LookupWork,
+      PreviousLookupWork,
       BillingPriceNoticeWork,
       SubscriptionCancellationWork,
     ])
@@ -616,9 +641,17 @@ export const runBillingCollectionWorkflow = (
     );
   }
   if ("kind" in work.value) {
+    if (work.value.version === 2) {
+      return runLookupLoop({ input, work: work.value, runActivity });
+    }
     const transactionId = work.value.transactionId;
     return input.activity("lookup-wompi-billing-v1", options, () =>
-      runActivity(reconcileEventCandidate(input.environment, transactionId, wompiHttp))
+      runActivity(
+        reconcileEventCandidate(input.environment, transactionId, {
+          wompiHttp,
+          generation: { signedAt: null, signedStatus: null },
+        })
+      )
     );
   }
   const attemptId = work.value.attemptId;
@@ -626,6 +659,122 @@ export const runBillingCollectionWorkflow = (
     runActivity(collect(input.environment, attemptId, wompiHttp))
   );
 };
+
+const observeLookup = (
+  input: Readonly<{
+    execution: BillingWorkflowExecution;
+    work: typeof LookupWork.Type;
+    index: number;
+  }>
+): Effect.Effect<void, BillingCollectionFailure> =>
+  Effect.gen(function* () {
+    const { execution, work, index } = input;
+    const now = yield* Clock.currentTimeMillis;
+    const reserved =
+      index === 0
+        ? yield* initialLookupReservation(execution.environment.DB, work, now)
+        : yield* reserveLookup(execution.environment.DB, work, now).pipe(Effect.map(Option.isSome));
+    if (!reserved) return;
+    yield* reconcileEventCandidate(execution.environment, work.transactionId, {
+      wompiHttp: execution.wompiHttp,
+      generation: work,
+    }).pipe(Effect.exit);
+  });
+const runLookupLoop = ({
+  input,
+  work,
+  runActivity,
+}: Readonly<{
+  input: BillingWorkflowExecution;
+  work: typeof LookupWork.Type;
+  runActivity: RunActivity;
+}>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const options = { retries: { limit: 0, delay: "1 second" } } as const;
+      for (let index = 0; index < maximumCandidateLookupAttempts; index++) {
+        if (index > 0) {
+          yield* attempt(() =>
+            input.sleep(`billing-observation-wait-v2-${index}`, candidateCooldownMs + 1)
+          );
+        }
+        yield* attempt(() =>
+          input.activity(`lookup-wompi-billing-v2-${index}`, options, () =>
+            runActivity(observeLookup({ execution: input, work, index }))
+          )
+        );
+      }
+    })
+  );
+
+type LookupGeneration = Pick<typeof LookupWork.Type, "transactionId" | "signedAt" | "signedStatus">;
+const lookupEligibility = `FROM billing_provider_transactions c
+  LEFT JOIN billing_attempt_context a ON a.id=c.attempt_id
+  WHERE c.transaction_id=? AND c.event_signed_at IS ? AND c.event_signed_status IS ?`;
+const attemptEligible = `a.status='pending' AND c.lookup_attempts<8`;
+const eventEligible = `c.event_received_at_ms>=? AND c.event_resolved_at_ms IS NULL
+  AND c.event_lookup_attempts<8 AND (a.id IS NULL OR a.status='pending'
+  OR (a.status='failed' AND c.event_received_at_ms>=a.finalized_at_ms))`;
+const reserveLookup = (
+  db: D1Database,
+  generation: LookupGeneration,
+  now: number
+): Effect.Effect<
+  Option.Option<Pick<typeof LookupWork.Type, "attemptReservation" | "eventReservation">>,
+  BillingCollectionFailure
+> =>
+  Effect.gen(function* () {
+    const key = [generation.transactionId, generation.signedAt, generation.signedStatus];
+    const results = yield* attempt(() =>
+      db.batch([
+        db
+          .prepare(`UPDATE billing_provider_transactions SET last_checked_at_ms=?,lookup_attempts=lookup_attempts+1
+        WHERE transaction_id IN (SELECT c.transaction_id ${lookupEligibility}
+          AND ${attemptEligible} AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms<?))
+        RETURNING lookup_attempts,event_lookup_attempts`)
+          .bind(now, ...key, now - candidateCooldownMs),
+        db
+          .prepare(`UPDATE billing_provider_transactions SET event_last_checked_at_ms=?,event_lookup_attempts=event_lookup_attempts+1
+        WHERE transaction_id IN (SELECT c.transaction_id ${lookupEligibility}
+          AND ${eventEligible} AND (c.event_last_checked_at_ms IS NULL OR c.event_last_checked_at_ms<?))
+        RETURNING lookup_attempts,event_lookup_attempts`)
+          .bind(now, ...key, now - eventCandidateLifetimeMs, now - candidateCooldownMs),
+      ])
+    );
+    const first = results[0];
+    const second = results[1];
+    if (first === undefined || second === undefined) return yield* failure();
+    if (first.meta.changes === 0 && second.meta.changes === 0) return Option.none();
+    const row = yield* decode(LookupReservation, second.results[0] ?? first.results[0]);
+    return Option.some({
+      attemptReservation: first.meta.changes > 0 ? row.lookup_attempts : null,
+      eventReservation: second.meta.changes > 0 ? row.event_lookup_attempts : null,
+    });
+  });
+const initialLookupReservation = (
+  db: D1Database,
+  work: typeof LookupWork.Type,
+  now: number
+): Effect.Effect<boolean, BillingCollectionFailure> =>
+  Effect.gen(function* () {
+    const row = yield* attempt(() =>
+      db
+        .prepare(`SELECT c.transaction_id ${lookupEligibility}
+      AND ((a.status='pending' AND c.lookup_attempts=?) OR
+        (c.event_received_at_ms>=? AND c.event_resolved_at_ms IS NULL AND c.event_lookup_attempts=?
+        AND (a.id IS NULL OR a.status='pending' OR (a.status='failed' AND c.event_received_at_ms>=a.finalized_at_ms))))`)
+        .bind(
+          work.transactionId,
+          work.signedAt,
+          work.signedStatus,
+          work.attemptReservation,
+          now - eventCandidateLifetimeMs,
+          work.eventReservation
+        )
+        .first()
+    );
+    return row !== null;
+  });
 
 const offerBillingLookup = (
   input: Readonly<{
@@ -651,27 +800,19 @@ const offerBillingLookup = (
         )
       )
     );
-    const id = `billing-lookup-v1-${fingerprint}-${Math.floor(now / candidateCooldownMs)}`;
-    const recorded = yield* attempt(() =>
-      db.batch([
-        db
-          .prepare(
-            "UPDATE billing_provider_transactions SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND attempt_id IS NOT NULL AND lookup_attempts < ? AND (last_checked_at_ms IS NULL OR last_checked_at_ms < ?)"
-          )
-          .bind(now, transactionId, maximumCandidateLookupAttempts, now - candidateCooldownMs),
-        db
-          .prepare(
-            "UPDATE billing_provider_transactions SET event_last_checked_at_ms = ?, event_lookup_attempts = event_lookup_attempts + 1 WHERE transaction_id = ? AND event_lookup_attempts < ? AND event_resolved_at_ms IS NULL AND (event_last_checked_at_ms IS NULL OR event_last_checked_at_ms < ?)"
-          )
-          .bind(now, transactionId, maximumCandidateLookupAttempts, now - candidateCooldownMs),
-      ])
-    );
-    if (recorded.every((result) => result.meta.changes === 0)) return true;
+    const id = `billing-lookup-v2-${fingerprint}`;
+    const generation = {
+      transactionId,
+      signedAt: Option.getOrNull(signedAt),
+      signedStatus: Option.getOrNull(signedStatus),
+    };
+    const recorded = yield* reserveLookup(db, generation, now);
+    if (Option.isNone(recorded)) return true;
     const created = yield* Effect.exit(
       attempt(() =>
         workflow.create({
           id,
-          params: { version: 1, kind: "lookup", transactionId },
+          params: { version: 2, kind: "lookup", ...generation, ...recorded.value },
           retention: workflowRetention,
         })
       )
@@ -693,7 +834,7 @@ export const reconcileBillingCandidates = (
       environment.DB.prepare(`SELECT transaction_id, MAX(signed_at) AS signed_at,
       MAX(signed_status) AS signed_status FROM (
       SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, a.created_at_ms) AS priority,
-        NULL AS signed_at, NULL AS signed_status
+        c.event_signed_at AS signed_at, c.event_signed_status AS signed_status
         FROM billing_provider_transactions AS c
         JOIN billing_attempt_context AS a ON a.id = c.attempt_id WHERE a.status = 'pending'
           AND c.lookup_attempts < ?

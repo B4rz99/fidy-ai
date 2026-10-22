@@ -212,6 +212,7 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRunti
             environment: withErasureRecovery(this.env),
             payload: event.payload,
             activity: (name, options, activity) => step.do(name, options, activity),
+            sleep: (name, duration) => step.sleep(name, duration),
           }),
         {
           environment: workerRelease(this.env),
@@ -230,6 +231,7 @@ export const runBillingCollectionWorkflow = (
   input: Readonly<{
     environment: BillingRuntime;
     payload: unknown;
+    sleep: (name: string, duration: number) => Promise<void>;
     activity: (
       name: string,
       options: WorkflowStepConfig,

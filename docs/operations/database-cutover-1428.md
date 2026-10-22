@@ -2128,3 +2128,24 @@ a due-work index rather than scanning historical attempts. Compare EXPLAIN QUERY
 History lookup has `(subscription_id,created_at_ms DESC,id DESC)` support. Renewal/grace, sibling
 races and late approval continue through the existing public workflows; commercial quotas remain
 unchanged. The existing provider workflow telemetry remains at the same orchestration boundary.
+
+## Billing observation executions (#1451)
+
+Provider observations now launch `billing-lookup-v2-<digest>` for the retained transaction and signed
+hint generation. The digest includes the exact provider-native signed timestamp and status; it has
+no wall-clock bucket. The payload contains only these identities and the already charged budget
+ordinals. A lost launch response is recovered with `get` of that same execution id.
+
+Each execution has at most eight named lookup steps separated by native durable cooldown sleeps.
+The initial reservation remains charged before handoff, including failed handoffs. Later steps
+atomically reserve the applicable attempt and callback budgets before provider GET. Neither a new
+execution nor an engine replacement resets those counters. A newer signed hint resets only its
+callback budget and changes the execution identity; an older generation cannot charge that budget
+or mark the replacement hint resolved. Verified provider evidence, with the original environment,
+reference, source, amount and finalization checks, remains the only settlement authority.
+
+No schema or historical-row rewrite is needed. Existing v1 lookup executions retain their original
+one-step meaning during their existing three-day retention; new offers use v2. Do not manually
+restart an existing execution with its old charged payload. Recovery reoffers the retained database
+identity through the dispatcher, preserving its cumulative charging and deadline guards. Final live
+verification remains part of #1494.

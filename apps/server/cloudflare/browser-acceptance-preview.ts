@@ -265,6 +265,7 @@ const collectBilling = (): Promise<Response> =>
               ...syntheticDaviplataBindings,
             },
             payload: { version: 1, attemptId: attempt.id },
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, run) => run(),
           })
             .then(() =>

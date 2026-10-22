@@ -132,6 +132,7 @@ const verifyProviderTransaction = (
     return runBillingCollectionWorkflow({
       environment: billingRuntime(db),
       payload: { version: 1, kind: "lookup", transactionId: lookupId },
+      sleep: (_name, _duration) => Promise.resolve(),
       activity: (_name, _options, run) => run(),
     });
   });
@@ -174,6 +175,7 @@ it("collects a Nequi source without card installment fields and settles the comm
         runBillingCollectionWorkflow({
           environment: billingRuntime(db),
           payload: { version: 1, attemptId },
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (_name, _options, activity) => activity(),
         });
       yield* Effect.tryPromise(run);
@@ -201,7 +203,11 @@ it("collects a Nequi source without card installment fields and settles the comm
 
 const sendSignedEvent = (
   db: D1Database,
-  input: Readonly<{ transactionId: string; status: "APPROVED" | "DECLINED"; timestamp: number }>
+  input: Readonly<{
+    transactionId: string;
+    status: "APPROVED" | "DECLINED" | "PENDING";
+    timestamp: number;
+  }>
 ): Promise<Response> => {
   const amount = 990000;
   const secret = "test_events_payment_test_secret";
@@ -484,6 +490,7 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
         runBillingCollectionWorkflow({
           environment,
           payload: { version: 1, attemptId },
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (name, options, activity): Promise<void> => {
             expect(name).toBe("collect-wompi-billing-v1");
             expect(options.retries?.limit).toBe(0);
@@ -546,8 +553,9 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
           runBillingCollectionWorkflow({
             environment,
             payload: options.params,
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (name, stepOptions, activity): Promise<void> => {
-              expect(name).toBe("lookup-wompi-billing-v1");
+              expect(name).toMatch(/^lookup-wompi-billing-v2-/u);
               expect(stepOptions.retries?.limit).toBe(0);
               return activity();
             },
@@ -606,14 +614,18 @@ it("retains ambiguity without a callback and settles a privileged provider-ID re
         runBillingCollectionWorkflow({
           environment,
           payload: { version: 1, attemptId },
+          sleep: (_name, _duration) => Promise.resolve(),
           activity,
         })
       );
       const workflow = {
         create: vi.fn((options: { id: string; params: unknown }) =>
-          runBillingCollectionWorkflow({ environment, payload: options.params, activity }).then(
-            () => ({})
-          )
+          runBillingCollectionWorkflow({
+            environment,
+            payload: options.params,
+            activity,
+            sleep: (_name, _duration) => Promise.resolve(),
+          }).then(() => ({}))
         ),
         get: (_id: string): Promise<unknown> => Promise.resolve({}),
       };
@@ -666,6 +678,154 @@ it("rejects forged callback evidence across Public and Core ingress without writ
         )).results
       ).toHaveLength(0);
       expect(provider).not.toHaveBeenCalled();
+    })
+  ));
+
+it("keeps the same observation execution identity when a launch response is lost across cooldowns", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      yield* verifyProviderTransaction(db, () => transaction("PENDING"));
+      const ids: string[] = [];
+      const workflow = {
+        create: (options: { id: string }): Promise<unknown> => {
+          ids.push(options.id);
+          return Promise.reject(new Error("response lost"));
+        },
+        get: (_id: string): Promise<unknown> => Promise.resolve({}),
+      };
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "UPDATE billing_provider_transactions SET last_checked_at_ms=last_checked_at_ms-60001"
+          )
+          .run()
+      );
+      const originalNow = yield* Clock.currentTimeMillis;
+      vi.spyOn(Date, "now").mockReturnValue(originalNow + 120000);
+      try {
+        yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      } finally {
+        vi.restoreAllMocks();
+      }
+      expect(ids).toHaveLength(2);
+      expect(ids[1]).toBe(ids[0]);
+    })
+  ));
+
+it("runs the bounded provider checks in one execution with durable cooldowns", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      yield* verifyProviderTransaction(db, () => transaction("PENDING"));
+      let now = yield* Clock.currentTimeMillis;
+      vi.spyOn(Date, "now").mockImplementation(() => now);
+      const provider = vi.fn(() =>
+        Promise.resolve(Response.json({ data: transaction("PENDING") }))
+      );
+      vi.stubGlobal("fetch", provider);
+      const waits: number[] = [];
+      const workflow = {
+        create: vi.fn((options: { id: string; params: unknown }) =>
+          runBillingCollectionWorkflow({
+            environment: billingRuntime(db),
+            payload: options.params,
+            activity: (_name, _options, run) => run(),
+            sleep: (_name, duration) => {
+              waits.push(duration);
+              now += duration;
+              return Promise.resolve();
+            },
+          }).then(() => ({}))
+        ),
+        get: (_id: string): Promise<unknown> => Promise.reject(new Error("unexpected duplicate")),
+      };
+      try {
+        yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+        yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+        expect(workflow.create).toHaveBeenCalledTimes(1);
+        expect(provider).toHaveBeenCalledTimes(8);
+        expect(waits).toEqual(Array.from({ length: 7 }, () => 60001));
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT lookup_attempts FROM billing_provider_transactions WHERE transaction_id=?"
+              )
+              .bind(transactionId)
+              .first()
+          )
+        ).toEqual({ lookup_attempts: 8 });
+      } finally {
+        vi.restoreAllMocks();
+      }
+    })
+  ));
+
+it("stops an old signed generation from spending a newer hint's budget and settles its late approval", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      const timestamp = 1530291411;
+      yield* Effect.tryPromise(() =>
+        sendSignedEvent(db, { transactionId, status: "PENDING", timestamp })
+      );
+      let now = yield* Clock.currentTimeMillis;
+      vi.spyOn(Date, "now").mockImplementation(() => now);
+      let approved = false;
+      const provider = vi.fn(() =>
+        Promise.resolve(Response.json({ data: transaction(approved ? "APPROVED" : "PENDING") }))
+      );
+      vi.stubGlobal("fetch", provider);
+      let newerHint = Option.none<Promise<Response>>();
+      const ids: string[] = [];
+      const workflow = {
+        create: (options: { id: string; params: unknown }): Promise<unknown> => {
+          ids.push(options.id);
+          return runBillingCollectionWorkflow({
+            environment: billingRuntime(db),
+            payload: options.params,
+            activity: (_name, _options, run) => run(),
+            sleep: (_name, duration) => {
+              now += duration;
+              if (Option.isNone(newerHint)) {
+                newerHint = Option.some(
+                  sendSignedEvent(db, {
+                    transactionId,
+                    status: "APPROVED",
+                    timestamp: timestamp + 1,
+                  })
+                );
+              }
+              return Option.getOrThrow(newerHint).then(() => undefined);
+            },
+          }).then(() => ({}));
+        },
+        get: (_id: string): Promise<unknown> => Promise.reject(new Error("unexpected duplicate")),
+      };
+      try {
+        yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+        expect(provider).toHaveBeenCalledTimes(1);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT event_lookup_attempts,event_resolved_at_ms FROM billing_provider_transactions WHERE transaction_id=?"
+              )
+              .bind(transactionId)
+              .first()
+          )
+        ).toEqual({ event_lookup_attempts: 0, event_resolved_at_ms: null });
+        approved = true;
+        yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+        expect(provider).toHaveBeenCalledTimes(2);
+        expect(ids).toHaveLength(2);
+        expect(ids[0]).not.toBe(ids[1]);
+        expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
+      } finally {
+        vi.restoreAllMocks();
+      }
     })
   ));
 
@@ -797,6 +957,7 @@ it("bounds unrelated signed callback lookups and ignores identical event replay"
         runBillingCollectionWorkflow({
           environment,
           payload: options.params,
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (_name, _options, run) => run(),
         }).then(
           () => ({}),
@@ -853,6 +1014,7 @@ it("accepts same-second signed approval after a verified negative without replay
           return runBillingCollectionWorkflow({
             environment,
             payload: options.params,
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, run) => run(),
           }).then(() => ({}));
         }),
@@ -873,7 +1035,7 @@ it("accepts same-second signed approval after a verified negative without replay
       ).toBe(200);
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
-      expect(provider).toHaveBeenCalledTimes(2);
+      expect(provider).toHaveBeenCalledTimes(3);
       expect(started.size).toBe(2);
       expect(
         (yield* Effect.tryPromise(() =>
@@ -881,7 +1043,7 @@ it("accepts same-second signed approval after a verified negative without replay
         )).status
       ).toBe(200);
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
-      expect(provider).toHaveBeenCalledTimes(2);
+      expect(provider).toHaveBeenCalledTimes(3);
     })
   ));
 
@@ -959,6 +1121,7 @@ it("rejects a signed callback with another User's source even when its reference
           runBillingCollectionWorkflow({
             environment,
             payload: options.params,
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, run) => run(),
           }).then(
             () => ({}),

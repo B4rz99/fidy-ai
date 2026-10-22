@@ -335,6 +335,7 @@ const retainUnclearedRetry = Effect.fn(function* (fixture: Awaited<ReturnType<ty
   yield* fromTestPromise(() =>
     runBillingCollectionWorkflow({
       environment: fixture.environment,
+      sleep: (_name, _duration) => Promise.resolve(),
       activity,
       payload: { version: 1, attemptId: payment.billingAttempt.id },
     })
@@ -653,6 +654,7 @@ it.each(
         yield* fromTestPromise(() =>
           runBillingCollectionWorkflow({
             environment,
+            sleep: (_name, _duration) => Promise.resolve(),
             activity,
             payload: { version: 1, attemptId: payment.billingAttempt.id },
           })
@@ -662,6 +664,7 @@ it.each(
         yield* fromTestPromise(() =>
           runBillingCollectionWorkflow({
             environment,
+            sleep: (_name, _duration) => Promise.resolve(),
             activity,
             payload: { version: 1, kind: "lookup", transactionId: "checkout-declined-1" },
           })
@@ -671,6 +674,7 @@ it.each(
         yield* fromTestPromise(() =>
           runBillingCollectionWorkflow({
             environment,
+            sleep: (_name, _duration) => Promise.resolve(),
             activity,
             payload: { version: 1, kind: "lookup", transactionId: "checkout-declined-1" },
           })
@@ -795,6 +799,7 @@ it.each(
         yield* fromTestPromise(() =>
           runBillingCollectionWorkflow({
             environment,
+            sleep: (_name, _duration) => Promise.resolve(),
             activity,
             payload: { version: 1, attemptId: retried.billingAttempt.id },
           })
@@ -1894,6 +1899,7 @@ it.each([
           runBillingCollectionWorkflow({
             environment,
             payload: { version: 1, attemptId: submission.billingAttempt.id },
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, run) => run(),
           })
         );
@@ -2330,6 +2336,7 @@ const proveSandboxSettlement = (
       runBillingCollectionWorkflow({
         environment,
         payload: work,
+        sleep: (_name, _duration) => Promise.resolve(),
         activity: (_name, _options, activity) => activity(),
       });
     yield* fromTestPromise(() => run({ version: 1, attemptId }));

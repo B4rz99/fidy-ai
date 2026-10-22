@@ -293,6 +293,7 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
             WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
           },
           payload: { version: 1, attemptId: row.id },
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (_name, _options, work) => work(),
         });
       yield* fromPromise(run);
@@ -539,6 +540,7 @@ it("offers Price-change notices immediately and sends the retained billing email
             RESEND_API_KEY: "re_test",
           },
           payload: work,
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (_name, _options, activity) => activity(),
         });
       yield* fromPromise(run);
@@ -590,6 +592,7 @@ it.each(renewalCalendars)(
               WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
             },
             payload: { version: 1, attemptId: row.id },
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, activity) => activity(),
           })
         );
@@ -669,6 +672,7 @@ const runNotice = (db: D1Database, payload: unknown = noticeWork): Promise<void>
   runBillingCollectionWorkflow({
     environment: noticeEnvironment(db),
     payload,
+    sleep: (_name, _duration) => Promise.resolve(),
     activity: (_name, _options, activity) => activity(),
   });
 
@@ -1045,6 +1049,7 @@ it.each(
               payload: lookup
                 ? { version: 1, kind: "lookup", transactionId: `calendar-${row.id}` }
                 : { version: 1, attemptId: row.id },
+              sleep: (_name, _duration) => Promise.resolve(),
               activity: (_name, _options, work) => work(),
             });
           yield* fromPromise(() => run());
@@ -1194,6 +1199,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           runBillingCollectionWorkflow({
             environment,
             payload: { version: 1, attemptId: row.id },
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, work) => work(),
           })
         );
@@ -1202,6 +1208,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           runBillingCollectionWorkflow({
             environment,
             payload: { version: 1, kind: "lookup", transactionId: `declined-${row.id}` },
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, work) => work(),
           })
         );
@@ -1503,6 +1510,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
               WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
             },
             payload: { version: 1, kind: "source-cancellation", userId },
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, work) => work(),
           });
         yield* fromPromise(run);
@@ -1559,6 +1567,7 @@ const runObservedRenewal = ({
         payload: lookup
           ? { version: 1, kind: "lookup", transactionId: `dunning-${id}` }
           : { version: 1, attemptId: id },
+        sleep: (_name, _duration) => Promise.resolve(),
         activity: (_name, _options, work) => work(),
       });
     yield* fromPromise(() => run(false));
@@ -1808,6 +1817,7 @@ it("fences an already queued renewal at cancellation without submitting its char
             WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
           },
           payload: { version: 1, attemptId: queued },
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (_name, _options, work) => work(),
         })
       );
@@ -1842,6 +1852,7 @@ it("reconciles an ambiguous DaviPlata void without repeating PUT or trusting for
             WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
           },
           payload: { version: 1, kind: "source-cancellation", userId: subject },
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (_name, _options, work) => work(),
         });
       yield* fromPromise(() => run("10000000-0000-4000-8000-000000000009"));
@@ -1890,6 +1901,7 @@ it("does not submit a queued retry after its grace boundary", () =>
             WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
           },
           payload: { version: 1, attemptId: queued },
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (_name, _options, work) => work(),
         })
       );

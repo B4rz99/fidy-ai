@@ -952,6 +952,57 @@ describe("intermediate production smoke", () => {
 afterAll(() => vi.restoreAllMocks());
 
 describe("post-promotion production smoke", () => {
+  effectIt.effect.each([44, undefined])(
+    "waits for delayed synthetic completion but bounds an unfinished probe (%s)",
+    (completeOnPoll) =>
+      Effect.gen(function* () {
+        let polls = 0;
+        let starts = 0;
+        const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+          const request = new Request(input, init);
+          if (new URL(request.url).pathname !== "/internal/release-smoke") {
+            return Promise.resolve(edgeResponse(request));
+          }
+          if (request.method === "POST") starts++;
+          else polls++;
+          return Promise.resolve(
+            Response.json(
+              {
+                status:
+                  completeOnPoll !== undefined && polls >= completeOnPoll ? "passed" : "pending",
+                public: {
+                  gitRevision: revision,
+                  contractDigest: digest,
+                  workerVersionId: publicCandidate,
+                },
+                core: {
+                  gitRevision: revision,
+                  contractDigest: digest,
+                  workerVersionId: coreCandidate,
+                },
+                manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+              },
+              { headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate } }
+            )
+          );
+        });
+        const services = yield* Layer.build(FetchHttpClient.layer);
+        const pending = yield* verifyPromotedSmoke(config).pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            Context.get(services, HttpClient.HttpClient)
+          ),
+          Effect.provideService(FetchHttpClient.Fetch, mockedFetch),
+          Effect.exit,
+          Effect.forkScoped
+        );
+        yield* TestClock.adjust("150 seconds");
+        const exit = yield* Fiber.join(pending);
+        expect(Exit.isSuccess(exit)).toBe(completeOnPoll !== undefined);
+        expect(starts).toBe(1);
+        expect(polls).toBe(completeOnPoll ?? 80);
+      }).pipe(Effect.scoped)
+  );
   it("does not retry a Core identity rejection on normal traffic", () =>
     Effect.runPromise(
       Effect.scoped(

@@ -32,6 +32,7 @@ const RunnerConfig = Schema.Struct({
 type RunnerConfig = typeof RunnerConfig.Type;
 const apiOrigin = "https://api.fidyapp.com";
 const maxAttempts = 20;
+const maxSyntheticPolls = 80;
 const pollDelayMs = 1500;
 const authorityRefusedStatus = 403;
 const probeEntropyBytes = 16;
@@ -105,7 +106,7 @@ const awaitSyntheticWork = Effect.fn(function* (
           error instanceof CandidateRoutingPending,
       })
     );
-    for (let attempt = 0; attempt < maxAttempts && status !== "passed"; attempt++) {
+    for (let attempt = 0; attempt < maxSyntheticPolls && status !== "passed"; attempt++) {
       yield* Effect.sleep(`${pollDelayMs} millis`);
       status = yield* checkSmokeExchange(
         yield* exchangeSmoke({ query: `?probeId=${probeId}`, headers, body: Option.none() }),

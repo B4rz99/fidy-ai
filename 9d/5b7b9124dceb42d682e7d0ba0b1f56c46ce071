@@ -1,0 +1,25 @@
+apps/web/src/features/agent/FEATURE.md
+  s_241024bc81d268::t_4d9753e0c8d39d 11-14
+docs/operations/audit-20261022-schema-mismatch.md
+  s_241024bc81d268::t_cbd8dfe12fbeab 28-30,37
+  s_241024bc81d268::t_4d9753e0c8d39d 34-36,68-69
+  s_241024bc81d268::t_2945c15f44cea3 31-33
+apps/web/src/features/pats/FEATURE.md
+  s_241024bc81d268::t_cbd8dfe12fbeab 11-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9d5b7b9124dceb42d682e7d0ba0b1f56c46ce071",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

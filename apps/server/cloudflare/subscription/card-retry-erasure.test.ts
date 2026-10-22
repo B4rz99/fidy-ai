@@ -2,6 +2,8 @@ import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Schema } from "effect";
 import { makeSubscriptionErasureStores } from "./runtime";
+import { makeAuditErasureStores } from "../audit/runtime";
+import { seedRefundCharge } from "./refund-charge.test-fixture";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
@@ -237,5 +239,94 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
         yield* wait(() => db.prepare("SELECT count(*) FROM erasure_permits").first("count(*)"))
       ).toBe(0);
       expect((yield* wait(() => db.prepare("PRAGMA foreign_key_check").all())).results).toEqual([]);
+    })
+  ));
+
+it("erases paid standing and billing accountability with their own permits while preserving another User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* wait(() => databases.acquire());
+      yield* wait(() => installTestSchema({ db }));
+      yield* seedRefundCharge(db);
+      yield* wait(() => seed(db, foreignUser, 2));
+      yield* wait(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO audit_entries(record_type,attempt_id,transition,occurred_at_ms) VALUES('billing_transition',?,'succeeded',1)"
+            )
+            .bind(id(4, 1)),
+          db
+            .prepare(
+              "INSERT INTO audit_entries(record_type,attempt_id,transition,occurred_at_ms) VALUES('billing_transition',?,'failed',2)"
+            )
+            .bind(id(4, 2)),
+          db
+            .prepare(
+              'INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,\'Erasing\',\'{"dispositions":{"billing":{"action":"Delete"},"audit":{"action":"Delete"}}}\')'
+            )
+            .bind(reference, userId),
+        ])
+      );
+      const stores = [...makeAuditErasureStores(db), ...makeSubscriptionErasureStores(db)];
+      for (const store of stores) {
+        yield* wait(() =>
+          db
+            .prepare(
+              "INSERT INTO erasure_steps(request_id,store_id,data_class,archive_done) VALUES(?,?,?,1)"
+            )
+            .bind(reference, store.id, store.dataClass)
+            .run()
+        );
+      }
+      for (const name of [
+        "billing_audit",
+        "subscriptions",
+        "billing_checkout_responses",
+        "billing_provider_transactions",
+        "billing_history",
+        "card_payment_sources",
+        "card_enrollments",
+        "subscription_identities",
+      ]) {
+        const store = stores.find((candidate) => candidate.id === name);
+        if (store === undefined) throw new Error(`Missing ${name}`);
+        expect(yield* store.remove({ userId, reference })).toBe(true);
+      }
+      expect(
+        yield* wait(() =>
+          db
+            .prepare("SELECT count(*) FROM subscriptions WHERE user_id=?")
+            .bind(userId)
+            .first("count(*)")
+        )
+      ).toBe(0);
+      expect(
+        yield* wait(() =>
+          db
+            .prepare("SELECT count(*) FROM billing_attempt_context WHERE user_id=?")
+            .bind(userId)
+            .first("count(*)")
+        )
+      ).toBe(0);
+      expect(
+        (yield* wait(() =>
+          db
+            .prepare("SELECT attempt_id FROM audit_entries WHERE record_type='billing_transition'")
+            .all()
+        )).results
+      ).toEqual([{ attempt_id: id(4, 2) }]);
+      expect(
+        yield* wait(() =>
+          db
+            .prepare("SELECT count(*) FROM billing_attempt_context WHERE user_id=?")
+            .bind(foreignUser)
+            .first("count(*)")
+        )
+      ).toBe(1);
+      expect((yield* wait(() => db.prepare("PRAGMA foreign_key_check").all())).results).toEqual([]);
+      expect(
+        yield* wait(() => db.prepare("SELECT count(*) FROM erasure_permits").first("count(*)"))
+      ).toBe(0);
     })
   ));

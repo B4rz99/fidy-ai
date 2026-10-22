@@ -524,7 +524,7 @@ it.each(cases)("preserves recovery evidence or refuses $description atomically",
         yield* native(() =>
           Bun.file(new URL("./evidence-before-1442.fixture.sql", import.meta.url)).text()
         )
-      );
+      ).map((sql) => sql.replaceAll("FROM billing_attempts", "FROM billing_attempt_context"));
       const auditTarget = schemaStatements(
         yield* native(() =>
           Bun.file(

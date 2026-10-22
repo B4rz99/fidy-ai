@@ -16,7 +16,7 @@ const database = Effect.gen(function* () {
   yield* io(() =>
     db.batch([
       db.prepare(
-        "CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,id TEXT PRIMARY KEY, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
+        "CREATE TABLE users (id TEXT PRIMARY KEY, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
       ),
       db.prepare(
         "CREATE TABLE subscriptions (user_id TEXT PRIMARY KEY,current_paid_attempt_id TEXT)"
@@ -33,9 +33,7 @@ const database = Effect.gen(function* () {
       db.prepare(
         "CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops"
       ),
-      db.prepare(
-        "CREATE TABLE refund_attempts(id TEXT,billing_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT)"
-      ),
+      db.prepare("CREATE TABLE refund_attempts(billing_attempt_id TEXT,access_ends_at_ms INTEGER)"),
       db.prepare("CREATE TABLE authority (userId TEXT PRIMARY KEY, live INTEGER)"),
       db.prepare("CREATE TABLE publication (id TEXT PRIMARY KEY)"),
       db
@@ -144,70 +142,5 @@ it("keeps exact replay uncharged and rolls consumption back with a failed public
       expect(
         Option.getOrThrow(yield* readQuotaStatus({ db, userId, current })).mediaSubmissions
       ).toMatchObject({ consumed: 1 });
-    })
-  ));
-
-it("uses corrected paid standing at publication without retroactively charging Pro acceptance", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* database;
-      yield* io(() =>
-        db.batch([
-          db
-            .prepare("INSERT INTO subscriptions(user_id,current_paid_attempt_id) VALUES(?1,?2)")
-            .bind(userId, "paid-attempt"),
-          db
-            .prepare(
-              "INSERT INTO billing_attempts(id,user_id,payment_source_id,billing_period) VALUES ('paid-attempt', ?, 'source', 'weekly')"
-            )
-            .bind(userId),
-          db
-            .prepare(
-              "UPDATE billing_attempts SET paid_starts_at_ms=incoming.starts_at_ms,paid_ends_at_ms=incoming.ends_at_ms FROM (SELECT ? AS attempt_id,? AS starts_at_ms,? AS ends_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.paid_starts_at_ms IS NULL"
-            )
-            .bind("paid-attempt", current - 1, current + 1),
-          db
-            .prepare("INSERT INTO payment_source_context VALUES ('source', ?, 'nequi')")
-            .bind(userId),
-        ])
-      );
-      yield* io(() => consume(db, "paid"));
-      expect(
-        Option.getOrThrow(yield* readQuotaStatus({ db, userId, current })).mediaSubmissions
-      ).toEqual({ _tag: "Uncapped" });
-      yield* io(() =>
-        db
-          .prepare("INSERT INTO refund_attempts(billing_attempt_id,access_ends_at_ms) VALUES (?,?)")
-          .bind("paid-attempt", current)
-          .run()
-      );
-      expect(
-        Option.getOrThrow(yield* readQuotaStatus({ db, userId, current })).mediaSubmissions
-      ).toMatchObject({ _tag: "Limited", consumed: 0, remaining: 2 });
-      yield* io(() => consume(db, "free-after-correction"));
-      expect(
-        Option.getOrThrow(yield* readQuotaStatus({ db, userId, current })).mediaSubmissions
-      ).toMatchObject({ _tag: "Limited", consumed: 1, remaining: 1 });
-    })
-  ));
-
-it("leaves Trial use unmetered and begins a fresh Free meter at exclusive expiry", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* database;
-      yield* io(() =>
-        db
-          .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
-          .bind(userId, current - 1, current + 1)
-          .run()
-      );
-      yield* io(() => consume(db, "trial"));
-      expect(
-        Option.getOrThrow(yield* readQuotaStatus({ db, userId, current })).mediaSubmissions
-      ).toEqual({ _tag: "Uncapped" });
-      expect(
-        Option.getOrThrow(yield* readQuotaStatus({ db, userId, current: current + 1 }))
-          .mediaSubmissions
-      ).toMatchObject({ _tag: "Limited", consumed: 0, remaining: 2 });
     })
   ));

@@ -1,6 +1,6 @@
 import { BunServices } from "@effect/platform-bun";
 import { layer } from "@effect/vitest";
-import { Data, Effect, Layer, Schedule } from "effect";
+import { Crypto, Data, Effect, Layer, Schedule } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
@@ -44,10 +44,14 @@ layer(LocalEmulationServices, {
     "serves the browser through the real ingress-to-Core service binding",
     () =>
       Effect.gen(function* () {
+        const crypto = yield* Crypto.Crypto;
+        const stageId = yield* crypto.randomUUIDv4();
         const developmentProcess = yield* ChildProcess.make("bun", ["run", "dev"], {
           cwd: infrastructureRoot,
           env: {
             ...Bun.env,
+            // A clean-install check must not reuse the developer's persisted schema.
+            ALCHEMY_STAGE: `test-${stageId}`,
             CLOUDFLARE_ACCOUNT_ID: "00000000000000000000000000000000",
             CLOUDFLARE_API_TOKEN: "local-development-placeholder",
           },

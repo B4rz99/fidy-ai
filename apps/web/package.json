@@ -44,7 +44,7 @@
     "use-stick-to-bottom": "1.1.6"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.13.0",
+    "@axe-core/playwright": "4.14.0",
     "@effect/platform-bun": "4.0.5",
     "@playwright/test": "1.64.1",
     "@tailwindcss/vite": "4.3.3",

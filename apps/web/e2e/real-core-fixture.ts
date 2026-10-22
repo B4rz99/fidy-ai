@@ -62,22 +62,23 @@ const confirmConsentRead = (page: Page, first: ConsentRead): Promise<void> =>
       expect(response.status).toBe(successStatus);
     }).pipe(Effect.timeout("15 seconds"))
   );
-export const reloadTransactionsThroughCore = (page: Page): Promise<void> => {
+const navigateThroughConsent = (page: Page, navigate: () => Promise<unknown>): Promise<void> => {
   const consent = observeConsentRead(page);
-  return page
-    .reload()
+  return navigate()
     .then(() => consent)
     .then((response) => confirmConsentRead(page, response));
 };
 
+export const reloadTransactionsThroughCore = (page: Page): Promise<void> =>
+  navigateThroughConsent(page, () => page.reload());
+
+/** A declared temporary refusal requires the visible retry path, not another sign-in. */
+export const openTransactionsThroughCore = (page: Page): Promise<void> =>
+  navigateThroughConsent(page, () => page.goto("/app/transactions"));
+
 /** Upgrade checks Consent before requesting payment data; honor only explicit pressure refusals. */
-export const openUpgradeThroughCore = (page: Page): Promise<void> => {
-  const consent = observeConsentRead(page);
-  return page
-    .goto("/upgrade")
-    .then(() => consent)
-    .then((response) => confirmConsentRead(page, response));
-};
+export const openUpgradeThroughCore = (page: Page): Promise<void> =>
+  navigateThroughConsent(page, () => page.goto("/upgrade"));
 type RecurringIdentity =
   | "recurringStableReads"
   | "recurring"

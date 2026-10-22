@@ -8,6 +8,7 @@ import {
   boundSessionRequests,
   openBrowserLogin,
   openUpgradeThroughCore,
+  reloadTransactionsThroughCore,
   visiblePairingCode,
 } from "./real-core-fixture";
 
@@ -569,7 +570,7 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
       yield* wait(page.getByLabel("Contraparte (opcional)").fill("Recuperación Fidy"));
       yield* wait(page.getByRole("button", { name: "Registrar transacción" }).click());
       yield* wait(expect(page.locator("[data-sonner-toast]")).toContainText("Recuperación Fidy"));
-      yield* wait(page.reload());
+      yield* wait(reloadTransactionsThroughCore(page));
       yield* wait(expect(page.getByText("Recuperación Fidy").first()).toBeVisible());
       expect(page.url()).not.toContain("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
       expect(yield* wait(page.evaluate(() => localStorage.length + sessionStorage.length))).toBe(0);
@@ -670,7 +671,7 @@ const installExpiringPairingRoutes = (
     .route("**/web/pairings", (route: Route) => {
       counts.start += 1;
       return page
-        .evaluate(() => performance.timeOrigin + performance.now())
+        .evaluate(() => Date.now())
         .then((now) => DateTime.formatIso(DateTime.add(DateTime.makeUnsafe(now), { seconds: 6 })))
         .then((shortExpiry) =>
           route.fulfill({
@@ -697,8 +698,8 @@ test("stops at pairing expiry after a timed-out poll without creating a replacem
   Effect.runPromise(
     Effect.gen(function* () {
       const counts = { start: 0, redeem: 0 };
-      yield* wait(page.clock.install());
-      yield* wait(page.clock.pauseAt(yield* Clock.currentTimeMillis));
+      yield* wait(page.clock.install({ time: "2026-10-01T00:00:00Z" }));
+      yield* wait(page.clock.pauseAt("2026-10-02T00:00:00Z"));
       yield* wait(installExpiringPairingRoutes(page, counts));
       yield* wait(openBrowserLogin(page));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());

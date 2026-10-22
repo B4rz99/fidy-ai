@@ -90,3 +90,14 @@ limiter or retrying the mutation. A subsequent broad run passed those three case
 Pairing/Recurring cases (174 passed, three skipped). All 12 cases in those two affected files pass
 when run together in isolation. Broader-run interference is still under investigation; neither
 focused success nor the fixture isolation establishes an entirely passing broad browser suite.
+
+The serial browser diagnostic passed 180 cases, failed the Microsoft Consent-read journey and
+skipped three. A traced parallel diagnostic passed 162, failed 19 and skipped three; tracing
+changed workstation load, so those failures are not all attributed to one cause. The traces
+establish a real 429 Consent refusal during the SupportRecoveryCase's direct reload and a separate
+mock-clock `Cannot fast-forward to the past` race. The recovery journey now uses the existing
+bounded visible Consent retry helper. Provider history navigations use the same read helper, and
+the isolated expiry mock starts from explicit clock anchors with expiry derived from that clock.
+All 26 focused provider, Pairing and Consent checks pass, including a new controlled 429 read
+recovery with no replacement pairing. No production limiter, app deadline or mutation retry policy
+was changed; the complete final browser run remains required.

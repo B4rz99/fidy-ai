@@ -12,6 +12,7 @@ export const seedHistory = ({
   count,
   linked,
   linkedFraction,
+  spacingMinutes,
 }: Readonly<{
   db: D1Database;
   subject: string;
@@ -19,6 +20,7 @@ export const seedHistory = ({
   count: number;
   linked: boolean;
   linkedFraction: number;
+  spacingMinutes: number;
 }>): Effect.Effect<void> =>
   Effect.gen(function* () {
     const triggers = yield* Schema.decodeUnknownEffect(
@@ -44,8 +46,8 @@ export const seedHistory = ({
         .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
     INSERT INTO transactions(id, user_id, amount, currency, direction, counterparty,
       category_id, occurred_at_ms, created_at_ms)
-    SELECT ? || printf('%012d', i), ?, '100', 'COP', 'outflow', 'shop', ?,CAST(round(unixepoch(strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || (i * 20) || ' minutes'),'subsec')*1000) AS INTEGER),CAST(round(unixepoch(strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || i || ' days'),'subsec')*1000) AS INTEGER) FROM n`)
-        .bind(count, transactionPrefix, subject, categoryId)
+    SELECT ? || printf('%012d', i), ?, '100', 'COP', 'outflow', 'shop', ?,CAST(round(unixepoch(strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || (i * ?) || ' minutes'),'subsec')*1000) AS INTEGER),CAST(round(unixepoch(strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || (i * ?) || ' minutes', '+1 second'),'subsec')*1000) AS INTEGER) FROM n`)
+        .bind(count, transactionPrefix, subject, categoryId, spacingMinutes, spacingMinutes)
         .run()
     );
     yield* seedReconciliation({ db, subject, transactionPrefix, count, linked, linkedFraction });

@@ -339,6 +339,12 @@ These rows group work for navigation; the published tickets' native blocking edg
 not a blanket requirement to run each numeric range sequentially. In particular, coupled schema and
 caller work can assemble on the integration branch but must pass its final green gate together.
 
+The [#1464 financial-read comparison](../research/financial-projection-comparison.md) selects the four
+Transactions-owned projection tables for #1465. Preserve authoritative fact revision, original first
+capture and timezone on their state row. Rename the stores, convert true instants and validate exact
+maximum reconstruction; the measured write amplification and repair cost remain explicit tradeoffs.
+Historical maximum/digit coordinates use a fixed four-decimal scale, not Currency-specific minor units.
+
 Accepted workflow reductions retain their proof gates: Insights uses a generation-fenced native
 digest scan; Recurring uses bounded native cursor checkpoints; Budgets uses one fair User discovery
 clock. Do not remove fairness, prelaunch cooldown or cumulative provider/restart budgets based only

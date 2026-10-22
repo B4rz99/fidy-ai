@@ -57,6 +57,7 @@ it("bounds ready effective History pages while preserving authoritative rows", (
     Effect.gen(function* () {
       const db = yield* setup();
       yield* seedHistory({
+        spacingMinutes: 20,
         db,
         subject: userId,
         transactionPrefix: prefix,
@@ -76,6 +77,7 @@ it(
       Effect.gen(function* () {
         const db = yield* setup();
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: userId,
           transactionPrefix: prefix,
@@ -84,6 +86,7 @@ it(
           linkedFraction: 1,
         });
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: otherUserId,
           transactionPrefix: otherPrefix,
@@ -197,6 +200,7 @@ it.skipIf(!measuringCapacity)(
           for (const count of [200, 2_000, 20_000]) {
             const db = yield* setup();
             yield* seedHistory({
+              spacingMinutes: 20,
               db,
               subject: userId,
               transactionPrefix: prefix,
@@ -205,6 +209,7 @@ it.skipIf(!measuringCapacity)(
               linkedFraction,
             });
             yield* seedHistory({
+              spacingMinutes: 20,
               db,
               subject: otherUserId,
               transactionPrefix: otherPrefix,
@@ -246,6 +251,7 @@ it(
       Effect.gen(function* () {
         const db = yield* setup();
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: userId,
           transactionPrefix: prefix,
@@ -271,6 +277,7 @@ it(
         });
         expect(before.meta.rows_read).toBeLessThan(60_000);
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: otherUserId,
           transactionPrefix: otherPrefix,
@@ -347,6 +354,7 @@ it(
       Effect.gen(function* () {
         const db = yield* setup();
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: userId,
           transactionPrefix: prefix,
@@ -355,6 +363,7 @@ it(
           linkedFraction: 1,
         });
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: otherUserId,
           transactionPrefix: otherPrefix,
@@ -556,6 +565,7 @@ it.skipIf(!measuringCapacity)(
       Effect.gen(function* () {
         const db = yield* setup();
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: userId,
           transactionPrefix: prefix,
@@ -612,6 +622,7 @@ it.skipIf(!measuringCapacity)(
           for (const linked of [false, true]) {
             const db = yield* setup();
             yield* seedHistory({
+              spacingMinutes: 20,
               db,
               subject: userId,
               transactionPrefix: prefix,
@@ -620,6 +631,7 @@ it.skipIf(!measuringCapacity)(
               linkedFraction: 1,
             });
             yield* seedHistory({
+              spacingMinutes: 20,
               db,
               subject: otherUserId,
               transactionPrefix: otherPrefix,

@@ -476,6 +476,7 @@ it.each([
           )).status
         ).toBe(200);
         const matched = yield* read(db, owner);
+        expect(matched.matchesComplete).toBe(true);
         expect(matched.occurrences[0]?.status).toBe("completed");
         expect(matched.document.fulfillments).toEqual([]);
         expect((yield* read(db, owner)).document.revision).toBe(1);

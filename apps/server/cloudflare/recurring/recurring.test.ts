@@ -927,7 +927,7 @@ const seedRetainedPatternLimit = (db: D1Database): Effect.Effect<void> =>
       db.batch([
         db
           .prepare(`UPDATE recurring_series SET evidence_json = json_set(evidence_json,
-        '$.evaluatedFactRevision', (SELECT fact_revision FROM dashboard_projection_state WHERE user_id = ?))
+        '$.evaluatedFactRevision', (SELECT fact_revision FROM transaction_projection_state WHERE user_id = ?))
         WHERE user_id = ?`)
           .bind(userId, userId),
         db
@@ -950,8 +950,8 @@ const seedRetainedPatternLimit = (db: D1Database): Effect.Effect<void> =>
           .bind(count - 1, userId, original),
         db
           .prepare(`UPDATE recurring_evaluation_records SET revision =
-        (SELECT fact_revision FROM dashboard_projection_state WHERE user_id = ?), evaluated_revision =
-        (SELECT fact_revision FROM dashboard_projection_state WHERE user_id = ?) WHERE user_id = ?`)
+        (SELECT fact_revision FROM transaction_projection_state WHERE user_id = ?), evaluated_revision =
+        (SELECT fact_revision FROM transaction_projection_state WHERE user_id = ?) WHERE user_id = ?`)
           .bind(userId, userId, userId),
       ])
     );
@@ -1089,7 +1089,7 @@ it.effect("restores fair discovery after erasure removes the dispatch cursor", (
             .bind(id),
           db
             .prepare(
-              "UPDATE dashboard_projection_state SET fact_revision=1,first_captured_at='2026-01-01T00:00:00Z',time_zone='America/Bogota' WHERE user_id=?"
+              "UPDATE transaction_projection_state SET fact_revision=1,first_captured_at_ms=1767225600000,time_zone='America/Bogota' WHERE user_id=?"
             )
             .bind(id),
         ])
@@ -1174,7 +1174,7 @@ it.effect("discovers new Users hourly while resuming interrupted evaluation on t
     expect(observed.cost().rowsRead).toBeLessThanOrEqual(3);
     const plans = yield* fromPromise(() => observed.plans());
     expect(plans.some((plan) => plan.includes("recurring_unfinished_users"))).toBe(true);
-    expect(plans.some((plan) => plan.includes("dashboard_projection_state"))).toBe(false);
+    expect(plans.some((plan) => plan.includes("transaction_projection_state"))).toBe(false);
     yield* TestClock.setTime(start + 3600000);
     expect(yield* discoverRecurringWork(db)).toEqual([userId]);
     yield* evaluateRecurringSeries({ db, userId });

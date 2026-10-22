@@ -15,20 +15,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'size_seconds',r.\"size_seconds\",'bucket',r.\"bucket\",'currency',r.\"currency\",'direction',r.\"direction\",'category_id',r.\"category_id\",'count',r.\"count\",'maximum',r.\"maximum\",'max_minor',r.\"max_minor\") AS body FROM dashboard_projection_bucket r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'size_seconds',r.\"size_seconds\",'bucket',r.\"bucket\",'currency',r.\"currency\",'direction',r.\"direction\",'category_id',r.\"category_id\",'count',r.\"count\",'max_minor',r.\"max_minor\") AS body FROM transaction_projection_bucket r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM dashboard_projection_bucket r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM transaction_projection_bucket r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM dashboard_projection_bucket r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM transaction_projection_bucket r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM dashboard_projection_bucket AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM transaction_projection_bucket AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -47,20 +47,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'size_seconds',r.\"size_seconds\",'bucket',r.\"bucket\",'currency',r.\"currency\",'direction',r.\"direction\",'category_id',r.\"category_id\",'position',r.\"position\",'digit_sum',r.\"digit_sum\") AS body FROM dashboard_projection_digit r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'size_seconds',r.\"size_seconds\",'bucket',r.\"bucket\",'currency',r.\"currency\",'direction',r.\"direction\",'category_id',r.\"category_id\",'position',r.\"position\",'digit_sum',r.\"digit_sum\") AS body FROM transaction_projection_digit r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM dashboard_projection_digit r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM transaction_projection_digit r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM dashboard_projection_digit r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM transaction_projection_digit r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM dashboard_projection_digit AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM transaction_projection_digit AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -71,20 +71,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'id',r.\"id\",'amount',r.\"amount\",'currency',r.\"currency\",'direction',r.\"direction\",'category_id',r.\"category_id\",'counterparty',r.\"counterparty\",'notes',r.\"notes\",'occurred_at',r.\"occurred_at\",'created_at',r.\"created_at\",'revision',r.\"revision\") AS body FROM dashboard_projection_leaf r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'id',r.\"id\",'amount',r.\"amount\",'currency',r.\"currency\",'direction',r.\"direction\",'category_id',r.\"category_id\",'counterparty',r.\"counterparty\",'notes',r.\"notes\",'occurred_at_ms',r.\"occurred_at_ms\",'created_at_ms',r.\"created_at_ms\",'revision',r.\"revision\") AS body FROM transaction_projection_leaf r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM dashboard_projection_leaf r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM transaction_projection_leaf r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM dashboard_projection_leaf r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM transaction_projection_leaf r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM dashboard_projection_leaf AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM transaction_projection_leaf AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -103,20 +103,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'version',r.\"version\",'readiness',r.\"readiness\",'cursor_id',r.\"cursor_id\",'attempted_at_ms',r.\"attempted_at_ms\",'fact_revision',r.fact_revision,'first_captured_at',r.first_captured_at,'time_zone',r.time_zone) AS body FROM dashboard_projection_state r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'version',r.\"version\",'readiness',r.\"readiness\",'cursor_id',r.\"cursor_id\",'attempted_at_ms',r.\"attempted_at_ms\",'fact_revision',r.fact_revision,'first_captured_at_ms',r.first_captured_at_ms,'time_zone',r.time_zone) AS body FROM transaction_projection_state r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM dashboard_projection_state r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM transaction_projection_state r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM dashboard_projection_state r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM transaction_projection_state r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM dashboard_projection_state AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM transaction_projection_state AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

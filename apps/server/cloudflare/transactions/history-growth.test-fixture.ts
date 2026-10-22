@@ -34,7 +34,7 @@ export const seedHistory = ({
       (yield* fromTestPromise(() =>
         db
           .prepare(`SELECT name, sql FROM sqlite_master WHERE name IN
-    ('dashboard_projection_capture', 'dashboard_projection_link_member')`)
+    ('transaction_projection_capture', 'transaction_projection_link_member')`)
           .all()
       )).results
     ).pipe(Effect.orDie);
@@ -59,17 +59,19 @@ const prepareProjection = (db: D1Database, subject: string): Effect.Effect<unkno
   fromTestPromise(() =>
     db.batch([
       db
-        .prepare("UPDATE dashboard_projection_state SET readiness = 'rebuilding' WHERE user_id = ?")
+        .prepare(
+          "UPDATE transaction_projection_state SET readiness = 'rebuilding' WHERE user_id = ?"
+        )
         .bind(subject),
       db
-        .prepare(`INSERT INTO dashboard_projection_leaf
+        .prepare(`INSERT INTO transaction_projection_leaf
       (user_id, id, amount, currency, direction, counterparty, category_id, notes,
-        occurred_at, created_at, revision)
+        occurred_at_ms, created_at_ms, revision)
       SELECT user_id, id, amount, currency, direction, counterparty, category_id, notes,
-        occurred_at, created_at, revision FROM dashboard_effective_source WHERE user_id = ?`)
+        occurred_at_ms, created_at_ms, revision FROM transaction_effective_source WHERE user_id = ?`)
         .bind(subject),
       db
-        .prepare("UPDATE dashboard_projection_state SET readiness = 'ready' WHERE user_id = ?")
+        .prepare("UPDATE transaction_projection_state SET readiness = 'ready' WHERE user_id = ?")
         .bind(subject),
     ])
   );

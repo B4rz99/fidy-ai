@@ -3225,3 +3225,152 @@ PRAGMA defer_foreign_keys=OFF;
 ```
 
 <!-- transaction-history-verify:end -->
+
+## Transactions-owned financial projections (#1465)
+
+The measured target retains the four financial read stores. Physical tables, indexes, triggers and
+source view now use `transaction_projection_*` / `transaction_effective_source`. Logical erasure
+store IDs remain `dashboard_projection_*`: these identify an existing purpose and archive address,
+not a physical table. Owner selectors and preservation triggers emit the final numeric timestamp
+fields and omit the redundant decimal maximum.
+
+Fence financial captures/corrections/linking/deletion, repair, all projection readers and erasure.
+Back up the database and capture every schema dependency. Apply #1462 first. Stop on unknown
+incoming foreign keys or schema objects; compare every captured object with the checkpoint and final
+baseline before generating the batch. There are no incoming foreign keys to the four projection
+stores at this checkpoint. Never switch off foreign keys. The native populated conversion executes
+these blocks with the final baseline declarations in one D1 batch:
+
+1. Execute `financial-projection-preflight`. Outstanding projection archives must finish their
+   existing restore/deletion lifecycle first; do not discard or reinterpret archived bodies. Active
+   erasure or a selected erasure chunk also blocks conversion. Preserve unrelated completed archives.
+2. For each original leaf row, decode both timestamp strings with `UtcTimestamp`, reject nonzero
+   sub-millisecond precision, and bind the original rowid/strings and exact integer milliseconds to
+   `financial-projection-leaf-guard`. Do the same for the nullable first-capture instant on every
+   state row using `financial-projection-state-guard`; absence stays NULL. Require the original
+   independently present fact-revision/first-capture/timezone group. Decode each bucket's decimal
+   maximum with `Money` under its Currency and bind success to `financial-projection-money-guard`.
+   Run every guard before removing any dependency. A discrepancy requires investigation.
+3. Drop captured views and triggers, create the four final tables using unchanged baseline
+   declarations, and copy using `financial-projection-leaf-copy`, `financial-projection-state-copy`
+   (one row per guarded original), and `financial-projection-aggregate-copy`. Keep rowids and all
+   independent facts, including dirty phases/cursors, versions, attempts and absent User context.
+   `max_minor` keeps its historical fixed four-decimal scale; normalize the historical empty string
+   for zero to canonical `0`. No Currency-specific rescaling or floating-point Money conversion.
+4. Execute `financial-projection-copy-check` and `financial-projection-swap`. Reinstall the captured
+   final views/triggers and replacement indexes. Unaffected indexes remain installed. Execute
+   `financial-projection-verify`, then publish matching code and align the baseline ledger.
+
+Copy/swap/interruption failures roll back the entire batch. Runtime readiness, snapshot and revision
+fences remain unchanged; conversion does not repair a dirty projection or fabricate a financial
+mutation. True instants become milliseconds. Bucket widths and coordinates retain the original
+floor-to-seconds then truncate-by-width convention, including pre-epoch instants. Existing behavioral
+coverage compares incremental deletion against rebuild across those boundaries.
+
+<!-- financial-projection-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'financial-projection-cutover',
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN('dashboard_projection_state','dashboard_projection_leaf','dashboard_projection_bucket','dashboard_projection_digit'))
+ AND NOT EXISTS(SELECT 1 FROM dashboard_projection_bucket WHERE
+  coalesce(nullif(max_minor,''),'0')<>coalesce(nullif(ltrim(CASE WHEN instr(maximum,'.')=0 THEN maximum||'0000' ELSE replace(maximum,'.','')||substr('0000',1,4-(length(maximum)-instr(maximum,'.'))) END,'0'),''),'0'))
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-preflight:end -->
+
+<!-- financial-projection-leaf-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'financial-projection-cutover',?=1 AND EXISTS(
+ SELECT 1 FROM dashboard_projection_leaf WHERE rowid=? AND occurred_at IS ? AND created_at IS ? AND ? BETWEEN -62135596800000 AND 253402300799999 AND ? BETWEEN -62135596800000 AND 253402300799999)
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-leaf-guard:end -->
+
+<!-- financial-projection-state-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'financial-projection-cutover',?=1 AND EXISTS(
+ SELECT 1 FROM dashboard_projection_state WHERE rowid=? AND first_captured_at IS ? AND
+ ((first_captured_at IS NULL AND ? IS NULL) OR (? BETWEEN -62135596800000 AND 253402300799999)))
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-state-guard:end -->
+
+<!-- financial-projection-money-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) VALUES('financial-projection-cutover',?) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-money-guard:end -->
+
+<!-- financial-projection-leaf-copy:start -->
+
+```sql
+INSERT INTO transaction_projection_leaf(rowid,user_id,id,amount,currency,direction,category_id,counterparty,notes,occurred_at_ms,created_at_ms,revision)
+ SELECT rowid,user_id,id,amount,currency,direction,category_id,counterparty,notes,?,?,revision FROM dashboard_projection_leaf WHERE rowid=?;
+INSERT INTO sql_assertions(scope,accepted) VALUES('financial-projection-cutover',changes()=1) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-leaf-copy:end -->
+
+<!-- financial-projection-state-copy:start -->
+
+```sql
+INSERT INTO transaction_projection_state(rowid,user_id,version,readiness,cursor_id,attempted_at_ms,fact_revision,first_captured_at_ms,time_zone)
+ SELECT rowid,user_id,version,readiness,cursor_id,attempted_at_ms,fact_revision,?,time_zone FROM dashboard_projection_state WHERE rowid=?;
+INSERT INTO sql_assertions(scope,accepted) VALUES('financial-projection-cutover',changes()=1) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-state-copy:end -->
+
+<!-- financial-projection-aggregate-copy:start -->
+
+```sql
+INSERT INTO transaction_projection_bucket(rowid,user_id,size_seconds,bucket,currency,direction,category_id,count,max_minor)
+ SELECT rowid,user_id,size_seconds,bucket,currency,direction,category_id,count,coalesce(nullif(max_minor,''),'0') FROM dashboard_projection_bucket;
+INSERT INTO transaction_projection_digit(rowid,user_id,size_seconds,bucket,currency,direction,category_id,position,digit_sum) SELECT rowid,user_id,size_seconds,bucket,currency,direction,category_id,position,digit_sum FROM dashboard_projection_digit;
+```
+
+<!-- financial-projection-aggregate-copy:end -->
+
+<!-- financial-projection-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'financial-projection-cutover',
+ (SELECT count(*) FROM dashboard_projection_leaf)=(SELECT count(*) FROM transaction_projection_leaf)
+ AND (SELECT count(*) FROM dashboard_projection_state)=(SELECT count(*) FROM transaction_projection_state)
+ AND (SELECT count(*) FROM dashboard_projection_bucket)=(SELECT count(*) FROM transaction_projection_bucket)
+ AND (SELECT count(*) FROM dashboard_projection_digit)=(SELECT count(*) FROM transaction_projection_digit)
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-copy-check:end -->
+
+<!-- financial-projection-swap:start -->
+
+```sql
+DROP TABLE dashboard_projection_digit;
+DROP TABLE dashboard_projection_bucket;
+DROP TABLE dashboard_projection_leaf;
+DROP TABLE dashboard_projection_state;
+```
+
+<!-- financial-projection-swap:end -->
+
+<!-- financial-projection-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'financial-projection-cutover',NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='financial-projection-cutover';
+```
+
+<!-- financial-projection-verify:end -->

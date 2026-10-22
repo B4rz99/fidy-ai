@@ -176,3 +176,25 @@ logical erasure purposes and archive addresses belong to #1465. Historical `max_
 positions currently use a fixed four-decimal scale, even for COP/JPY; never reinterpret those
 coordinates using Currency precision when removing `maximum`. Reconstruct the original exact
 Money with that stored scale and validate the resulting Currency precision.
+
+## Target-schema validation — #1465
+
+The same eight-scenario executable comparison passes on the renamed stores with numeric leaf/state
+instants and exact maximum reconstruction. [Target-schema observations](financial-projection-cutover-measurements.csv)
+retain all 420 observations separately from the original decision evidence. Wire-equivalent History
+and Recurring-shaped pages, exact aggregate groups, and unchanged authoritative fact context are
+asserted before/after real bounded repair. The final source view exposes numeric instants alongside
+its public-format aliases; native projection predicates/order use the indexed numeric fields.
+
+At 20,000 retained base movements, ready History still reads 101 rows; the ordinary-density
+Recurring-shaped page reads 257. Dense-history aggregate reads remain 170,525 rows unpaired /
+85,466 paired, including the known minute/day-selection overhead. These are preservation checks,
+not a claim that the existing aggregate plan is optimal. Removing the duplicate maximum also removes
+one repeated bucket update on deletion: in the ordinary-density paired scenario, capture writes
+167 rows (previously 171), correction 99 (103), link 121 (127) and unlink 131 (135). Full repairs
+remain expensive and their maintenance protocol is preserved.
+
+One run concurrent with other native suites returned `ProjectionRepairFailed`; the isolated
+20,000-row linked scenario and subsequent complete serial run both passed. Its cause was not
+established. The reported measurements are from the complete serial run and provide no evidence
+about concurrent worker capacity or production latency. No speculative runtime workaround was added.

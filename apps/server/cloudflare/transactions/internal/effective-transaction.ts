@@ -14,7 +14,7 @@ export const effectiveTransactionRelation = (userId: string): EffectiveTransacti
         INDEXED BY sqlite_autoindex_transactions_2
         ON retained.user_id = decision.user_id
         AND retained.id IN (decision.first_transaction_id, decision.second_transaction_id)),
-    effective_transaction AS (SELECT * FROM dashboard_effective_source WHERE user_id = ?)`,
+    effective_transaction AS (SELECT * FROM transaction_effective_source WHERE user_id = ?)`,
   bindings: [userId, userId],
 });
 
@@ -50,20 +50,22 @@ export const effectiveHistoryPage = ({
     "created_at",
     "revision",
   ];
-  const columns = fields.join(", ");
-  const encoded = `json_object(${fields.flatMap((field) => [`'${field}'`, field]).join(", ")})`;
+  const columns = fields
+    .map((field) => (field === "occurred_at" || field === "created_at" ? `${field}_ms` : field))
+    .join(", ");
+  const encoded = `json_object(${fields.flatMap((field) => ["'" + field + "'", field === "occurred_at" || field === "created_at" ? `strftime('%Y-%m-%dT%H:%M:%fZ',${field}_ms/1000.0,'unixepoch')` : field]).join(", ")})`;
   const decoded = fields.map((field) => `json_extract(value, '$.${field}') AS ${field}`).join(", ");
-  const ordered = `ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT ${limit}`;
+  const ordered = `ORDER BY occurred_at_ms DESC, created_at_ms DESC, id DESC LIMIT ${limit}`;
   return {
     sql: `WITH selected AS (SELECT CASE WHEN EXISTS (
-        SELECT 1 FROM dashboard_projection_state
+        SELECT 1 FROM transaction_projection_state
         WHERE user_id = ? AND version = 1 AND readiness = 'ready')
       THEN (SELECT json_group_array(${encoded}) FROM (
-        SELECT ${columns} FROM dashboard_projection_leaf WHERE (${where}) ${ordered}))
+        SELECT ${columns} FROM transaction_projection_leaf WHERE (${where}) ${ordered}))
       ELSE (WITH ${relation.sql} SELECT json_group_array(${encoded}) FROM (
         SELECT ${columns} FROM effective_transaction WHERE (${where}) ${ordered}))
       END AS records)
-      SELECT ${decoded} FROM selected, json_each(selected.records) ${ordered}`,
+      SELECT ${decoded} FROM selected, json_each(selected.records) ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT ${limit}`,
     bindings: [userId, ...bindings, ...relation.bindings, ...bindings],
   };
 };

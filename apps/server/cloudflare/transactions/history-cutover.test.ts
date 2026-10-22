@@ -274,8 +274,8 @@ it.each([
         );
         const affected = [
           ...tables,
-          "dashboard_projection_leaf",
-          "dashboard_projection_state",
+          "transaction_projection_leaf",
+          "transaction_projection_state",
           "statement_submissions",
           "statement_staging_objects",
           "ingestion_review_items",

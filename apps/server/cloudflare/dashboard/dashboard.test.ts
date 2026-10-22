@@ -2317,7 +2317,7 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "UPDATE dashboard_projection_digit SET digit_sum = digit_sum + 5 WHERE user_id = ? AND position = 0"
+              "UPDATE transaction_projection_digit SET digit_sum = digit_sum + 5 WHERE user_id = ? AND position = 0"
             )
             .bind(users[0])
             .run()
@@ -2338,7 +2338,9 @@ it(
         const beforeRepair = Option.getOrThrow(yield* findRecurringSnapshot(factQuery));
         yield* Effect.tryPromise(() =>
           db
-            .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
+            .prepare(
+              "UPDATE transaction_projection_state SET readiness = 'dirty' WHERE user_id = ?"
+            )
             .bind(users[0])
             .run()
         );
@@ -2504,7 +2506,7 @@ it.each(["/dashboard/view", "/dashboard/view?"])(
           });
         const delayed: D1Database = {
           prepare: (sql) =>
-            sql.includes("FROM dashboard_projection_bucket")
+            sql.includes("FROM transaction_projection_bucket")
               ? markAggregate(db.prepare(sql))
               : db.prepare(sql),
           batch: <Row = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>

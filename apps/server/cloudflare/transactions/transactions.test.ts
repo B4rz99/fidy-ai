@@ -6595,12 +6595,12 @@ it("permanently deletes visible history with provenance retained and rejects ano
       ).toBe(1);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_effective_source")
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_effective_source")
         )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_projection_leaf")
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_projection_leaf")
         )
       ).toBe(0);
       expect(
@@ -6735,7 +6735,7 @@ it("rolls back deletion and dashboard removal when a later batch child fails at 
       ).toMatchObject({ deleted_at_ms: null });
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_projection_leaf")
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_projection_leaf")
         )
       ).toBe(1);
       expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([]);
@@ -6793,7 +6793,7 @@ it("cannot link a hidden Transaction or restore its visibility", () =>
       });
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_effective_source")
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_effective_source")
         )
       ).toBe(1);
     })

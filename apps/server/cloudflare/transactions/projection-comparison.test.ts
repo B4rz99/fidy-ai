@@ -175,13 +175,15 @@ const aggregateRows = (rows: ReadonlyArray<unknown>): ReadonlyArray<Summary> => 
 };
 const directAggregate = (
   db: D1Database,
-  table: "dashboard_effective_source" | "dashboard_projection_leaf" = "dashboard_effective_source"
+  table:
+    | "transaction_effective_source"
+    | "transaction_projection_leaf" = "transaction_effective_source"
 ): Effect.Effect<ReadonlyArray<Summary>, Cause.UnknownError> =>
   Effect.gen(function* () {
     const rows = yield* Effect.tryPromise(() =>
       db
         .prepare(
-          `SELECT ${aggregateColumns} FROM ${table} WHERE user_id=? AND occurred_at >= '2020-01-01T05:00:00.000Z' AND occurred_at < '2020-01-29T05:00:00.000Z'`
+          `SELECT ${aggregateColumns} FROM ${table} WHERE user_id=? AND occurred_at_ms >= 1577854800000 AND occurred_at_ms < 1580274000000`
         )
         .bind(userId)
         .all()
@@ -232,7 +234,7 @@ const compareReader = (
           ...input,
           mode: "leaf",
           sample,
-          run: (db) => directAggregate(db, "dashboard_projection_leaf"),
+          run: (db) => directAggregate(db, "transaction_projection_leaf"),
         });
         expect(leaf).toEqual(direct);
         expect(direct).toContainEqual(
@@ -261,11 +263,19 @@ const readCandidate = ({
   if (reader === "aggregate") {
     return mode === "direct" ? directAggregate(db) : projectedAggregate(db);
   }
-  const table = mode === "direct" ? "dashboard_effective_source" : "dashboard_projection_leaf";
+  const table = mode === "direct" ? "transaction_effective_source" : "transaction_projection_leaf";
+  const selectedFields =
+    mode === "direct"
+      ? fields
+      : "user_id,id,amount,currency,direction,counterparty,category_id,notes,strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') AS occurred_at,strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch') AS created_at,revision";
+  const instants =
+    mode === "direct"
+      ? "occurred_at,created_at"
+      : "strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') AS occurred_at,strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch') AS created_at";
   const query =
     reader === "history"
-      ? `SELECT ${fields} FROM ${table} WHERE user_id=? ORDER BY occurred_at DESC,created_at DESC,id DESC LIMIT 101`
-      : `SELECT id,amount,currency,counterparty,occurred_at,created_at FROM ${table} WHERE user_id=? AND direction='outflow' AND (occurred_at,id) > ('2020-01-15T00:00:00.000Z','') ORDER BY occurred_at,id LIMIT 128`;
+      ? `SELECT ${selectedFields} FROM ${table} WHERE user_id=? ORDER BY occurred_at_ms DESC,created_at_ms DESC,id DESC LIMIT 101`
+      : `SELECT id,amount,currency,counterparty,${instants} FROM ${table} WHERE user_id=? AND direction='outflow' AND (occurred_at_ms,id) > (1579046400000,'') ORDER BY occurred_at_ms,id LIMIT 128`;
   return Effect.tryPromise(() => db.prepare(query).bind(userId).all()).pipe(
     Effect.map((result) => result.results)
   );
@@ -454,14 +464,14 @@ const measureRepair = (
     const before = yield* Effect.tryPromise(() =>
       scenario.db
         .prepare(
-          "SELECT fact_revision,first_captured_at,time_zone FROM dashboard_projection_state WHERE user_id=?"
+          "SELECT fact_revision,first_captured_at_ms,time_zone FROM transaction_projection_state WHERE user_id=?"
         )
         .bind(userId)
         .first()
     );
     yield* Effect.tryPromise(() =>
       scenario.db
-        .prepare("UPDATE dashboard_projection_state SET readiness='dirty' WHERE user_id=?")
+        .prepare("UPDATE transaction_projection_state SET readiness='dirty' WHERE user_id=?")
         .bind(userId)
         .run()
     );
@@ -484,7 +494,7 @@ const measureRepair = (
       yield* Effect.tryPromise(() =>
         scenario.db
           .prepare(
-            "SELECT fact_revision,first_captured_at,time_zone FROM dashboard_projection_state WHERE user_id=?"
+            "SELECT fact_revision,first_captured_at_ms,time_zone FROM transaction_projection_state WHERE user_id=?"
           )
           .bind(userId)
           .first()
@@ -505,14 +515,14 @@ const withoutProjections = (
     const rows = yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "SELECT name FROM sqlite_schema WHERE type='trigger' AND name GLOB 'dashboard_projection_*'"
+          "SELECT name FROM sqlite_schema WHERE type='trigger' AND name GLOB 'transaction_projection_*'"
         )
         .all()
     );
     const triggers = yield* Schema.decodeUnknownEffect(
       Schema.Array(
         Schema.Struct({
-          name: Schema.String.check(Schema.isPattern(/^dashboard_projection_[a-z_]+$/u)),
+          name: Schema.String.check(Schema.isPattern(/^transaction_projection_[a-z_]+$/u)),
         })
       )
     )(rows.results);

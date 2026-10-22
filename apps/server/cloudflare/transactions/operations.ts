@@ -11,7 +11,8 @@ import {
 } from "./internal/recurring-query";
 import type { UserId } from "../../src/core/identity/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
-import { Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
+import { UtcTimestamp } from "../../src/core/_shared/time";
 import type {
   BudgetContributionCursor,
   PrivacyTransactionsRead,
@@ -230,8 +231,12 @@ export const readPlanningTransactions = ({
             bindings: [userId, ...selection.ids],
           }
         : {
-            where: "user_id = ? AND occurred_at >= ? AND occurred_at < ?",
-            bindings: [userId, selection.from, selection.through],
+            where: "user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?",
+            bindings: [
+              userId,
+              DateTime.toEpochMillis(yield* Schema.decodeEffect(UtcTimestamp)(selection.from)),
+              DateTime.toEpochMillis(yield* Schema.decodeEffect(UtcTimestamp)(selection.through)),
+            ],
           };
     const query = effectiveHistoryPage({ userId, ...selected, limit: maximumSelection + 1 });
     const rows = yield* Effect.tryPromise(() =>

@@ -45,14 +45,14 @@ const seedLeaves = (
       .prepare(`WITH RECURSIVE sequence(number) AS (
         SELECT 1 UNION ALL SELECT number + 1 FROM sequence WHERE number < 2000
       )
-      INSERT INTO dashboard_projection_leaf
+      INSERT INTO transaction_projection_leaf
         (user_id, id, amount, currency, direction, category_id, counterparty, notes,
-          occurred_at, created_at, revision)
+          occurred_at_ms, created_at_ms, revision)
       SELECT ?, ? || printf('%012d', number), '1', 'COP', 'outflow', ?, NULL,
         CASE WHEN ? = 1 THEN 'Café common unique foreignonly note'
           WHEN number = 1 THEN 'Café unique oldest note' ELSE 'Café common note' END,
-        strftime('%Y-%m-%dT%H:%M:%fZ', '2026-01-01', '+' || number || ' minutes'),
-        strftime('%Y-%m-%dT%H:%M:%fZ', '2026-01-01', '+' || number || ' minutes'), 0
+        1767225600000 + number * 60000,
+        1767225600000 + number * 60000, 0
       FROM sequence`)
       .bind(subject, transactionPrefix, categoryId, subject === foreignUserId ? 1 : 0)
       .run()

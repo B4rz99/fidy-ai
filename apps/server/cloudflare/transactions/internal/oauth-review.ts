@@ -76,7 +76,7 @@ const snapshotSql = `WITH roots(id) AS (SELECT ? UNION SELECT ?),
       'id', id, 'amount', amount, 'currency', currency, 'direction', direction,
       'counterparty', counterparty, 'category_id', category_id, 'notes', notes,
       'occurred_at', occurred_at, 'created_at', created_at, 'revision', revision))
-      FROM (SELECT * FROM dashboard_effective_source
+      FROM (SELECT * FROM transaction_effective_source
         WHERE user_id = ? AND id IN selected ORDER BY id))),
     'decisions', json((SELECT json_group_array(json_object(
       'first_transaction_id', first_transaction_id, 'second_transaction_id', second_transaction_id,

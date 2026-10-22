@@ -151,7 +151,7 @@ it.live("does not convert unavailable aggregates into an empty-week advancement"
     const snapshot = yield* enable(db);
     yield* Effect.tryPromise(() =>
       db
-        .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
+        .prepare("UPDATE transaction_projection_state SET readiness = 'dirty' WHERE user_id = ?")
         .bind(weeklySummaryTestUser)
         .run()
     );

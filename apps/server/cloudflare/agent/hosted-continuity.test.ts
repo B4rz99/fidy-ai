@@ -2750,7 +2750,7 @@ it("confirms a hosted Transaction deletion exactly once and retains the hidden o
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT COUNT(*) AS total FROM dashboard_effective_source WHERE user_id = ?")
+            .prepare("SELECT COUNT(*) AS total FROM transaction_effective_source WHERE user_id = ?")
             .bind(users[0])
             .first<number>("total")
         )
@@ -2765,7 +2765,7 @@ it("confirms a hosted Transaction deletion exactly once and retains the hidden o
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT COUNT(*) AS total FROM dashboard_effective_source WHERE user_id = ?")
+            .prepare("SELECT COUNT(*) AS total FROM transaction_effective_source WHERE user_id = ?")
             .bind(users[0])
             .first<number>("total")
         )

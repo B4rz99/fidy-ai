@@ -485,7 +485,7 @@ CREATE TABLE consent_offers (
 ) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE dashboard_projection_bucket (
+CREATE TABLE transaction_projection_bucket (
   user_id TEXT NOT NULL REFERENCES users(id),
   size_seconds INTEGER NOT NULL CHECK(size_seconds IN (60, 86400)),
   bucket INTEGER NOT NULL,
@@ -493,13 +493,12 @@ CREATE TABLE dashboard_projection_bucket (
   direction TEXT NOT NULL CHECK(direction IN ('inflow', 'outflow')),
   category_id TEXT NOT NULL REFERENCES categories(id),
   count INTEGER NOT NULL CHECK(count >= 0),
-  maximum TEXT NOT NULL,
-  max_minor TEXT NOT NULL,
+  max_minor TEXT NOT NULL CHECK(max_minor='0' OR (max_minor GLOB '[1-9]*' AND max_minor NOT GLOB '*[^0-9]*')),
   PRIMARY KEY (user_id, size_seconds, bucket, currency, direction, category_id)
 ) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE dashboard_projection_digit (
+CREATE TABLE transaction_projection_digit (
   user_id TEXT NOT NULL REFERENCES users(id),
   size_seconds INTEGER NOT NULL CHECK(size_seconds IN (60, 86400)),
   bucket INTEGER NOT NULL,
@@ -512,7 +511,7 @@ CREATE TABLE dashboard_projection_digit (
 ) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE dashboard_projection_leaf (
+CREATE TABLE transaction_projection_leaf (
   user_id TEXT NOT NULL REFERENCES users(id),
   id TEXT NOT NULL,
   amount TEXT NOT NULL,
@@ -521,22 +520,22 @@ CREATE TABLE dashboard_projection_leaf (
   category_id TEXT NOT NULL REFERENCES categories(id),
   counterparty TEXT,
   notes TEXT,
-  occurred_at TEXT NOT NULL,
-  created_at TEXT NOT NULL,
+  occurred_at_ms INTEGER NOT NULL CHECK(occurred_at_ms BETWEEN -62135596800000 AND 253402300799999),
+  created_at_ms INTEGER NOT NULL CHECK(created_at_ms BETWEEN -62135596800000 AND 253402300799999),
   revision INTEGER NOT NULL,
   PRIMARY KEY (user_id, id)
 ) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE dashboard_projection_state (
+CREATE TABLE transaction_projection_state (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
   version INTEGER NOT NULL CHECK(version >= 0),
   readiness TEXT NOT NULL CHECK(readiness IN ('ready', 'linking', 'dirty', 'clearing-buckets', 'clearing-digits', 'clearing', 'rebuilding')),
   cursor_id TEXT NOT NULL DEFAULT '',
   attempted_at_ms INTEGER NOT NULL DEFAULT 0
-, fact_revision INTEGER CHECK(fact_revision>0), first_captured_at TEXT, time_zone TEXT CHECK(
- (fact_revision IS NULL AND first_captured_at IS NULL AND time_zone IS NULL)
- OR(fact_revision IS NOT NULL AND first_captured_at IS NOT NULL AND time_zone IS NOT NULL))) STRICT;
+, fact_revision INTEGER CHECK(fact_revision>0), first_captured_at_ms INTEGER CHECK(first_captured_at_ms BETWEEN -62135596800000 AND 253402300799999), time_zone TEXT CHECK(
+ (fact_revision IS NULL AND first_captured_at_ms IS NULL AND time_zone IS NULL)
+ OR(fact_revision IS NOT NULL AND first_captured_at_ms IS NOT NULL AND time_zone IS NOT NULL))) STRICT;
 --> statement-breakpoint
 
 CREATE TABLE email_replacements (
@@ -1976,24 +1975,24 @@ CREATE INDEX consent_offers_user ON consent_offers(user_id,kind,created_at_ms);
 CREATE UNIQUE INDEX custody_current_identity ON erasure_custody_records(request_id,custodian) WHERE record_type='current';
 --> statement-breakpoint
 
-CREATE INDEX dashboard_projection_due ON dashboard_projection_state(attempted_at_ms, user_id)
+CREATE INDEX transaction_projection_due ON transaction_projection_state(attempted_at_ms, user_id)
   WHERE readiness != 'ready' OR version != 1;
 --> statement-breakpoint
 
-CREATE INDEX dashboard_projection_leaf_budget_page ON dashboard_projection_leaf
-  (user_id, category_id, currency, direction, occurred_at, id);
+CREATE INDEX transaction_projection_leaf_budget_page ON transaction_projection_leaf
+  (user_id, category_id, currency, direction, occurred_at_ms, id);
 --> statement-breakpoint
 
-CREATE INDEX dashboard_projection_leaf_category_recent ON dashboard_projection_leaf
-  (user_id, category_id, occurred_at DESC, created_at DESC, id DESC);
+CREATE INDEX transaction_projection_leaf_category_recent ON transaction_projection_leaf
+  (user_id, category_id, occurred_at_ms DESC, created_at_ms DESC, id DESC);
 --> statement-breakpoint
 
-CREATE INDEX dashboard_projection_leaf_max ON dashboard_projection_leaf
-  (user_id, currency, direction, category_id, length(amount) DESC, amount DESC, occurred_at);
+CREATE INDEX transaction_projection_leaf_max ON transaction_projection_leaf
+  (user_id, currency, direction, category_id, length(amount) DESC, amount DESC, occurred_at_ms);
 --> statement-breakpoint
 
-CREATE INDEX dashboard_projection_leaf_recent ON dashboard_projection_leaf
-  (user_id, occurred_at DESC, created_at DESC, id DESC);
+CREATE INDEX transaction_projection_leaf_recent ON transaction_projection_leaf
+  (user_id, occurred_at_ms DESC, created_at_ms DESC, id DESC);
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX delivery_status_identity ON whatsapp_event_records(correlation_token,provider_message_id,status,occurred_at_ms) WHERE kind='delivery-status';
@@ -2540,7 +2539,7 @@ WHERE a.status='failed' AND a.collection_state='sent'
   AND a.paid_starts_at_ms IS NULL;
 --> statement-breakpoint
 
-CREATE VIEW dashboard_effective_source AS
+CREATE VIEW transaction_effective_source AS
 WITH linked_decision AS (
   SELECT user_id, first_transaction_id, second_transaction_id, visible_transaction_id
   FROM transaction_reconciliation_decisions WHERE state = 'linked'
@@ -2624,7 +2623,7 @@ WITH linked_decision AS (
       WHERE second_member.user_id = decision.user_id
         AND second_member.transaction_id = decision.second_transaction_id)
 )
-SELECT user_id,id,amount,currency,direction,counterparty,category_id,notes,strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') AS occurred_at,strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch') AS created_at,revision FROM effective_transaction;
+SELECT user_id,id,amount,currency,direction,counterparty,category_id,notes,occurred_at_ms,created_at_ms,strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') AS occurred_at,strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch') AS created_at,revision FROM effective_transaction;
 --> statement-breakpoint
 
 CREATE VIEW ingestion_review_sources AS SELECT id,user_id,source_kind AS source,reason,created_at_ms,evidence_expires_at_ms AS expires_at_ms,service_market,locale,time_zone,
@@ -3270,9 +3269,9 @@ BEGIN SELECT RAISE(ABORT, 'consent_revocation_requires_user_session'); END;
 CREATE TRIGGER custody_record_identity_immutable BEFORE UPDATE ON erasure_custody_records WHEN NEW.record_type IS NOT OLD.record_type OR NEW.request_id IS NOT OLD.request_id OR NEW.custodian IS NOT OLD.custodian OR NEW.id IS NOT OLD.id BEGIN SELECT RAISE(ABORT,'custody_record_identity_immutable'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER dashboard_projection_attested_source AFTER INSERT ON source_attestations
+CREATE TRIGGER transaction_projection_attested_source AFTER INSERT ON source_attestations
 BEGIN
-  DELETE FROM dashboard_projection_leaf WHERE user_id = NEW.user_id
+  DELETE FROM transaction_projection_leaf WHERE user_id = NEW.user_id
     AND id IN (NEW.transaction_id, (SELECT decision.visible_transaction_id
       FROM reconciled_transactions member
       JOIN transaction_reconciliation_decisions decision
@@ -3280,12 +3279,12 @@ BEGIN
         AND decision.first_transaction_id = member.first_transaction_id
         AND decision.second_transaction_id = member.second_transaction_id
       WHERE member.user_id = NEW.user_id AND member.transaction_id = NEW.transaction_id));
-  INSERT INTO dashboard_projection_leaf
+  INSERT INTO transaction_projection_leaf
     (user_id, id, amount, currency, direction, category_id, counterparty, notes,
-      occurred_at, created_at, revision)
+      occurred_at_ms, created_at_ms, revision)
   SELECT user_id, id, amount, currency, direction, category_id, counterparty, notes,
-    occurred_at, created_at, revision
-    FROM dashboard_effective_source WHERE user_id = NEW.user_id
+    occurred_at_ms, created_at_ms, revision
+    FROM transaction_effective_source WHERE user_id = NEW.user_id
       AND id IN (NEW.transaction_id, (SELECT decision.visible_transaction_id
         FROM reconciled_transactions member
         JOIN transaction_reconciliation_decisions decision
@@ -3296,20 +3295,20 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER dashboard_projection_capture AFTER INSERT ON transactions
+CREATE TRIGGER transaction_projection_capture AFTER INSERT ON transactions
 BEGIN
-  INSERT INTO dashboard_projection_leaf
+  INSERT INTO transaction_projection_leaf
     (user_id, id, amount, currency, direction, category_id, counterparty, notes,
-      occurred_at, created_at, revision)
+      occurred_at_ms, created_at_ms, revision)
   SELECT user_id, id, amount, currency, direction, category_id, counterparty, notes,
-    occurred_at, created_at, revision
-    FROM dashboard_effective_source WHERE user_id = NEW.user_id AND id = NEW.id;
+    occurred_at_ms, created_at_ms, revision
+    FROM transaction_effective_source WHERE user_id = NEW.user_id AND id = NEW.id;
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER dashboard_projection_corrected_source AFTER INSERT ON transaction_corrections
+CREATE TRIGGER transaction_projection_corrected_source AFTER INSERT ON transaction_corrections
 BEGIN
-  DELETE FROM dashboard_projection_leaf WHERE user_id = NEW.user_id
+  DELETE FROM transaction_projection_leaf WHERE user_id = NEW.user_id
     AND id IN (NEW.transaction_id, (SELECT decision.visible_transaction_id
       FROM reconciled_transactions member
       JOIN transaction_reconciliation_decisions decision
@@ -3317,12 +3316,12 @@ BEGIN
         AND decision.first_transaction_id = member.first_transaction_id
         AND decision.second_transaction_id = member.second_transaction_id
       WHERE member.user_id = NEW.user_id AND member.transaction_id = NEW.transaction_id));
-  INSERT INTO dashboard_projection_leaf
+  INSERT INTO transaction_projection_leaf
     (user_id, id, amount, currency, direction, category_id, counterparty, notes,
-      occurred_at, created_at, revision)
+      occurred_at_ms, created_at_ms, revision)
   SELECT user_id, id, amount, currency, direction, category_id, counterparty, notes,
-    occurred_at, created_at, revision
-    FROM dashboard_effective_source WHERE user_id = NEW.user_id
+    occurred_at_ms, created_at_ms, revision
+    FROM transaction_effective_source WHERE user_id = NEW.user_id
       AND id IN (NEW.transaction_id, (SELECT decision.visible_transaction_id
         FROM reconciled_transactions member
         JOIN transaction_reconciliation_decisions decision
@@ -3333,10 +3332,10 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER dashboard_projection_corrected_transaction AFTER UPDATE ON transactions
+CREATE TRIGGER transaction_projection_corrected_transaction AFTER UPDATE ON transactions
 WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms)
 BEGIN
-  DELETE FROM dashboard_projection_leaf WHERE user_id = NEW.user_id
+  DELETE FROM transaction_projection_leaf WHERE user_id = NEW.user_id
     AND id IN (NEW.id, (SELECT decision.visible_transaction_id
       FROM reconciled_transactions member
       JOIN transaction_reconciliation_decisions decision
@@ -3344,12 +3343,12 @@ BEGIN
         AND decision.first_transaction_id = member.first_transaction_id
         AND decision.second_transaction_id = member.second_transaction_id
       WHERE member.user_id = NEW.user_id AND member.transaction_id = NEW.id));
-  INSERT INTO dashboard_projection_leaf
+  INSERT INTO transaction_projection_leaf
     (user_id, id, amount, currency, direction, category_id, counterparty, notes,
-      occurred_at, created_at, revision)
+      occurred_at_ms, created_at_ms, revision)
   SELECT user_id, id, amount, currency, direction, category_id, counterparty, notes,
-    occurred_at, created_at, revision
-    FROM dashboard_effective_source WHERE user_id = NEW.user_id
+    occurred_at_ms, created_at_ms, revision
+    FROM transaction_effective_source WHERE user_id = NEW.user_id
       AND id IN (NEW.id, (SELECT decision.visible_transaction_id
         FROM reconciled_transactions member
         JOIN transaction_reconciliation_decisions decision
@@ -3360,119 +3359,98 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER dashboard_projection_decision_insert AFTER INSERT ON transaction_reconciliation_decisions
-BEGIN UPDATE dashboard_projection_state SET readiness = 'linking'
+CREATE TRIGGER transaction_projection_decision_insert AFTER INSERT ON transaction_reconciliation_decisions
+BEGIN UPDATE transaction_projection_state SET readiness = 'linking'
   WHERE user_id = NEW.user_id AND readiness = 'ready'; END;
 --> statement-breakpoint
 
-CREATE TRIGGER dashboard_projection_decision_update AFTER UPDATE ON transaction_reconciliation_decisions
-BEGIN UPDATE dashboard_projection_state SET readiness = 'linking'
+CREATE TRIGGER transaction_projection_decision_update AFTER UPDATE ON transaction_reconciliation_decisions
+BEGIN UPDATE transaction_projection_state SET readiness = 'linking'
   WHERE user_id = NEW.user_id AND readiness = 'ready'; END;
 --> statement-breakpoint
 
-CREATE TRIGGER dashboard_projection_deleted_transaction AFTER DELETE ON transactions
+CREATE TRIGGER transaction_projection_deleted_transaction AFTER DELETE ON transactions
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE q.state='Erasing' AND p.user_id=q.user_id AND p.store_id='transactions' AND (OLD.user_id=q.user_id))
 BEGIN
-  DELETE FROM dashboard_projection_leaf WHERE user_id = OLD.user_id AND id = OLD.id;
+  DELETE FROM transaction_projection_leaf WHERE user_id = OLD.user_id AND id = OLD.id;
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER dashboard_projection_leaf_delete AFTER DELETE ON dashboard_projection_leaf
-WHEN ((SELECT readiness FROM dashboard_projection_state WHERE user_id = OLD.user_id)
+CREATE TRIGGER transaction_projection_leaf_delete AFTER DELETE ON transaction_projection_leaf
+WHEN ((SELECT readiness FROM transaction_projection_state WHERE user_id = OLD.user_id)
   IN ('ready', 'linking', 'rebuilding'))
 AND NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE q.state='Erasing' AND p.user_id=q.user_id AND p.store_id='dashboard_projection_leaf' AND (OLD.user_id=q.user_id))
 BEGIN
-  UPDATE dashboard_projection_bucket SET count = count - 1,
-    maximum = CASE WHEN maximum != OLD.amount THEN maximum ELSE
-      COALESCE((SELECT candidate.amount FROM dashboard_projection_leaf candidate
-        INDEXED BY dashboard_projection_leaf_category_recent
+  UPDATE transaction_projection_bucket SET count = count - 1,
+    max_minor = CASE WHEN max_minor != ltrim(CASE WHEN instr(OLD.amount, '.') = 0 THEN OLD.amount || '0000' ELSE replace(OLD.amount, '.', '') || substr('0000', 1, 4 - (length(OLD.amount) - instr(OLD.amount, '.'))) END, '0') THEN max_minor ELSE
+      COALESCE((SELECT coalesce(nullif(ltrim(CASE WHEN instr(candidate.amount, '.') = 0 THEN candidate.amount || '0000' ELSE replace(candidate.amount, '.', '') || substr('0000', 1, 4 - (length(candidate.amount) - instr(candidate.amount, '.'))) END, '0'),''),'0') FROM transaction_projection_leaf candidate
+        INDEXED BY transaction_projection_leaf_category_recent
         WHERE candidate.user_id = OLD.user_id AND candidate.currency = OLD.currency
           AND candidate.direction = OLD.direction AND candidate.category_id = OLD.category_id
-          AND candidate.occurred_at >= strftime('%Y-%m-%dT%H:%M:%fZ',
+          AND candidate.occurred_at_ms >= 1000 * (
             CASE WHEN bucket > 0 THEN bucket * size_seconds
-              ELSE (bucket - 1) * size_seconds + 1 END, 'unixepoch')
-          AND candidate.occurred_at < strftime('%Y-%m-%dT%H:%M:%fZ',
+              ELSE (bucket - 1) * size_seconds + 1 END)
+          AND candidate.occurred_at_ms < 1000 * (
             CASE WHEN bucket < 0 THEN bucket * size_seconds + 1
-              ELSE (bucket + 1) * size_seconds END, 'unixepoch')
-        ORDER BY length(ltrim(CASE WHEN instr(candidate.amount, '.') = 0
-          THEN candidate.amount || '0000' ELSE replace(candidate.amount, '.', '') ||
-          substr('0000', 1, 4 - (length(candidate.amount) - instr(candidate.amount, '.')))
-          END, '0')) DESC,
-          ltrim(CASE WHEN instr(candidate.amount, '.') = 0
-          THEN candidate.amount || '0000' ELSE replace(candidate.amount, '.', '') ||
-          substr('0000', 1, 4 - (length(candidate.amount) - instr(candidate.amount, '.')))
-          END, '0') DESC LIMIT 1), '0') END
+              ELSE (bucket + 1) * size_seconds END)
+        ORDER BY length(ltrim(CASE WHEN instr(candidate.amount, '.') = 0 THEN candidate.amount || '0000' ELSE replace(candidate.amount, '.', '') || substr('0000', 1, 4 - (length(candidate.amount) - instr(candidate.amount, '.'))) END, '0')) DESC, ltrim(CASE WHEN instr(candidate.amount, '.') = 0 THEN candidate.amount || '0000' ELSE replace(candidate.amount, '.', '') || substr('0000', 1, 4 - (length(candidate.amount) - instr(candidate.amount, '.'))) END, '0') DESC LIMIT 1), '0') END
   WHERE user_id = OLD.user_id
     AND (size_seconds, bucket) IN (
-      (60, CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / 60),
-      (86400, CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / 86400))
+      (60, (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / 60),
+      (86400, (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / 86400))
     AND currency = OLD.currency
     AND direction = OLD.direction AND category_id = OLD.category_id
-    AND bucket = CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / size_seconds;
-  UPDATE dashboard_projection_bucket SET max_minor = ltrim(
-    CASE WHEN instr(maximum, '.') = 0 THEN maximum || '0000'
-      ELSE replace(maximum, '.', '') || substr('0000', 1,
-        4 - (length(maximum) - instr(maximum, '.'))) END, '0')
-  WHERE user_id = OLD.user_id
+    AND bucket = (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / size_seconds;
+  DELETE FROM transaction_projection_bucket WHERE user_id = OLD.user_id
     AND (size_seconds, bucket) IN (
-      (60, CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / 60),
-      (86400, CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / 86400))
-    AND currency = OLD.currency
-    AND direction = OLD.direction AND category_id = OLD.category_id
-    AND bucket = CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / size_seconds;
-  DELETE FROM dashboard_projection_bucket WHERE user_id = OLD.user_id
-    AND (size_seconds, bucket) IN (
-      (60, CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / 60),
-      (86400, CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / 86400))
+      (60, (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / 60),
+      (86400, (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / 86400))
     AND currency = OLD.currency AND direction = OLD.direction AND category_id = OLD.category_id
-    AND bucket = CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / size_seconds AND count = 0;
-  UPDATE dashboard_projection_digit SET digit_sum = digit_sum - CAST(substr(
+    AND bucket = (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / size_seconds AND count = 0;
+  UPDATE transaction_projection_digit SET digit_sum = digit_sum - CAST(substr(
     CASE WHEN instr(OLD.amount, '.') = 0 THEN OLD.amount || '0000'
       ELSE replace(OLD.amount, '.', '') || substr('0000', 1,
         4 - (length(OLD.amount) - instr(OLD.amount, '.'))) END,
     -position - 1, 1) AS INTEGER)
   WHERE user_id = OLD.user_id
     AND (size_seconds, bucket) IN (
-      (60, CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / 60),
-      (86400, CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / 86400))
+      (60, (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / 60),
+      (86400, (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / 86400))
     AND currency = OLD.currency
     AND direction = OLD.direction AND category_id = OLD.category_id
-    AND bucket = CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / size_seconds
+    AND bucket = (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / size_seconds
     AND position < length(CASE WHEN instr(OLD.amount, '.') = 0 THEN OLD.amount || '0000'
       ELSE replace(OLD.amount, '.', '') || substr('0000', 1,
         4 - (length(OLD.amount) - instr(OLD.amount, '.'))) END);
-  DELETE FROM dashboard_projection_digit WHERE user_id = OLD.user_id
+  DELETE FROM transaction_projection_digit WHERE user_id = OLD.user_id
     AND (size_seconds, bucket) IN (
-      (60, CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / 60),
-      (86400, CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / 86400))
+      (60, (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / 60),
+      (86400, (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / 86400))
     AND currency = OLD.currency AND direction = OLD.direction AND category_id = OLD.category_id
-    AND bucket = CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / size_seconds
+    AND bucket = (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / size_seconds
     AND digit_sum = 0;
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER dashboard_projection_leaf_insert AFTER INSERT ON dashboard_projection_leaf
-WHEN (SELECT readiness FROM dashboard_projection_state WHERE user_id = NEW.user_id)
+CREATE TRIGGER transaction_projection_leaf_insert AFTER INSERT ON transaction_projection_leaf
+WHEN (SELECT readiness FROM transaction_projection_state WHERE user_id = NEW.user_id)
   IN ('ready', 'linking', 'rebuilding')
 BEGIN
-  INSERT INTO dashboard_projection_bucket
-    (user_id, size_seconds, bucket, currency, direction, category_id, count, maximum, max_minor)
+  INSERT INTO transaction_projection_bucket
+    (user_id, size_seconds, bucket, currency, direction, category_id, count, max_minor)
   SELECT NEW.user_id, segment.size_seconds,
-    CAST(strftime('%s', NEW.occurred_at) AS INTEGER) / segment.size_seconds,
-    NEW.currency, NEW.direction, NEW.category_id, 1, NEW.amount,
-    ltrim(CASE WHEN instr(NEW.amount, '.') = 0 THEN NEW.amount || '0000'
+    (NEW.occurred_at_ms / 1000 - (NEW.occurred_at_ms < 0 AND NEW.occurred_at_ms % 1000 != 0)) / segment.size_seconds,
+    NEW.currency, NEW.direction, NEW.category_id, 1,
+    coalesce(nullif(ltrim(CASE WHEN instr(NEW.amount, '.') = 0 THEN NEW.amount || '0000'
       ELSE replace(NEW.amount, '.', '') || substr('0000', 1,
-        4 - (length(NEW.amount) - instr(NEW.amount, '.'))) END, '0')
+        4 - (length(NEW.amount) - instr(NEW.amount, '.'))) END, '0'),''),'0')
   FROM (SELECT 60 AS size_seconds UNION ALL SELECT 86400) segment WHERE true
   ON CONFLICT (user_id, size_seconds, bucket, currency, direction, category_id)
   DO UPDATE SET count = count + 1,
-    maximum = CASE WHEN length(excluded.max_minor) > length(max_minor)
-      OR (length(excluded.max_minor) = length(max_minor) AND excluded.max_minor > max_minor)
-      THEN excluded.maximum ELSE maximum END,
     max_minor = (CASE WHEN length(excluded.max_minor) > length(max_minor)
       OR (length(excluded.max_minor) = length(max_minor) AND excluded.max_minor > max_minor)
       THEN excluded.max_minor ELSE max_minor END);
-  INSERT INTO dashboard_projection_digit
+  INSERT INTO transaction_projection_digit
     (user_id, size_seconds, bucket, currency, direction, category_id, position, digit_sum)
   WITH RECURSIVE
     minor(text) AS (SELECT CASE WHEN instr(NEW.amount, '.') = 0 THEN NEW.amount || '0000'
@@ -3481,7 +3459,7 @@ BEGIN
     digit(position) AS (SELECT 0 UNION ALL SELECT position + 1 FROM digit, minor
       WHERE position + 1 < length(minor.text))
   SELECT NEW.user_id, segment.size_seconds,
-    CAST(strftime('%s', NEW.occurred_at) AS INTEGER) / segment.size_seconds,
+    (NEW.occurred_at_ms / 1000 - (NEW.occurred_at_ms < 0 AND NEW.occurred_at_ms % 1000 != 0)) / segment.size_seconds,
     NEW.currency, NEW.direction, NEW.category_id, digit.position,
     CAST(substr(minor.text, -digit.position - 1, 1) AS INTEGER)
   FROM digit CROSS JOIN minor CROSS JOIN
@@ -3491,19 +3469,19 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER dashboard_projection_link_member AFTER UPDATE OF reconciliation_first_id,reconciliation_second_id ON transactions
+CREATE TRIGGER transaction_projection_link_member AFTER UPDATE OF reconciliation_first_id,reconciliation_second_id ON transactions
 WHEN OLD.reconciliation_first_id IS NULL AND NEW.reconciliation_first_id IS NOT NULL
 BEGIN
-  DELETE FROM dashboard_projection_leaf WHERE user_id = NEW.user_id
+  DELETE FROM transaction_projection_leaf WHERE user_id = NEW.user_id
     AND id IN (NEW.reconciliation_first_id, NEW.reconciliation_second_id);
-  INSERT INTO dashboard_projection_leaf
+  INSERT INTO transaction_projection_leaf
     (user_id, id, amount, currency, direction, category_id, counterparty, notes,
-      occurred_at, created_at, revision)
+      occurred_at_ms, created_at_ms, revision)
   SELECT user_id, id, amount, currency, direction, category_id, counterparty, notes,
-    occurred_at, created_at, revision
-    FROM dashboard_effective_source WHERE user_id = NEW.user_id
+    occurred_at_ms, created_at_ms, revision
+    FROM transaction_effective_source WHERE user_id = NEW.user_id
       AND id IN (NEW.reconciliation_first_id, NEW.reconciliation_second_id);
-  UPDATE dashboard_projection_state SET readiness = 'ready'
+  UPDATE transaction_projection_state SET readiness = 'ready'
     WHERE user_id = NEW.user_id AND readiness = 'linking'
     AND (SELECT COUNT(*) FROM reconciled_transactions
       WHERE user_id = NEW.user_id AND first_transaction_id = NEW.reconciliation_first_id
@@ -3511,24 +3489,24 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER dashboard_projection_new_user AFTER INSERT ON users
-BEGIN INSERT INTO dashboard_projection_state (user_id, version, readiness)
+CREATE TRIGGER transaction_projection_new_user AFTER INSERT ON users
+BEGIN INSERT INTO transaction_projection_state (user_id, version, readiness)
   VALUES (NEW.id, 1, 'ready'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER dashboard_projection_unlink_member AFTER UPDATE OF reconciliation_first_id,reconciliation_second_id ON transactions
+CREATE TRIGGER transaction_projection_unlink_member AFTER UPDATE OF reconciliation_first_id,reconciliation_second_id ON transactions
 WHEN OLD.reconciliation_first_id IS NOT NULL AND NEW.reconciliation_first_id IS NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE q.state='Erasing' AND p.user_id=q.user_id AND p.store_id='transaction_reconciliation_members' AND (OLD.user_id=q.user_id))
 BEGIN
-  DELETE FROM dashboard_projection_leaf WHERE user_id = OLD.user_id
+  DELETE FROM transaction_projection_leaf WHERE user_id = OLD.user_id
     AND id IN (OLD.reconciliation_first_id, OLD.reconciliation_second_id);
-  INSERT INTO dashboard_projection_leaf
+  INSERT INTO transaction_projection_leaf
     (user_id, id, amount, currency, direction, category_id, counterparty, notes,
-      occurred_at, created_at, revision)
+      occurred_at_ms, created_at_ms, revision)
   SELECT user_id, id, amount, currency, direction, category_id, counterparty, notes,
-    occurred_at, created_at, revision
-    FROM dashboard_effective_source WHERE user_id = OLD.user_id
+    occurred_at_ms, created_at_ms, revision
+    FROM transaction_effective_source WHERE user_id = OLD.user_id
       AND id IN (OLD.reconciliation_first_id, OLD.reconciliation_second_id);
-  UPDATE dashboard_projection_state SET readiness = 'ready'
+  UPDATE transaction_projection_state SET readiness = 'ready'
     WHERE user_id = OLD.user_id AND readiness = 'linking'
     AND NOT EXISTS (SELECT 1 FROM reconciled_transactions
       WHERE user_id = OLD.user_id AND first_transaction_id = OLD.reconciliation_first_id
@@ -3998,62 +3976,62 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingRevie
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_dashboard_projection_bucket_delete BEFORE DELETE ON dashboard_projection_bucket
+CREATE TRIGGER erasure_fence_transaction_projection_bucket_delete BEFORE DELETE ON transaction_projection_bucket
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_bucket'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_dashboard_projection_bucket_insert BEFORE INSERT ON dashboard_projection_bucket
+CREATE TRIGGER erasure_fence_transaction_projection_bucket_insert BEFORE INSERT ON transaction_projection_bucket
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_bucket'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_dashboard_projection_bucket_update BEFORE UPDATE ON dashboard_projection_bucket
+CREATE TRIGGER erasure_fence_transaction_projection_bucket_update BEFORE UPDATE ON transaction_projection_bucket
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_bucket'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_dashboard_projection_digit_delete BEFORE DELETE ON dashboard_projection_digit
+CREATE TRIGGER erasure_fence_transaction_projection_digit_delete BEFORE DELETE ON transaction_projection_digit
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_digit'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_dashboard_projection_digit_insert BEFORE INSERT ON dashboard_projection_digit
+CREATE TRIGGER erasure_fence_transaction_projection_digit_insert BEFORE INSERT ON transaction_projection_digit
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_digit'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_dashboard_projection_digit_update BEFORE UPDATE ON dashboard_projection_digit
+CREATE TRIGGER erasure_fence_transaction_projection_digit_update BEFORE UPDATE ON transaction_projection_digit
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_digit'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_dashboard_projection_leaf_delete BEFORE DELETE ON dashboard_projection_leaf
+CREATE TRIGGER erasure_fence_transaction_projection_leaf_delete BEFORE DELETE ON transaction_projection_leaf
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_leaf'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_dashboard_projection_leaf_insert BEFORE INSERT ON dashboard_projection_leaf
+CREATE TRIGGER erasure_fence_transaction_projection_leaf_insert BEFORE INSERT ON transaction_projection_leaf
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_leaf'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_dashboard_projection_leaf_update BEFORE UPDATE ON dashboard_projection_leaf
+CREATE TRIGGER erasure_fence_transaction_projection_leaf_update BEFORE UPDATE ON transaction_projection_leaf
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_leaf'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_dashboard_projection_state_delete BEFORE DELETE ON dashboard_projection_state
+CREATE TRIGGER erasure_fence_transaction_projection_state_delete BEFORE DELETE ON transaction_projection_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_state'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_dashboard_projection_state_insert BEFORE INSERT ON dashboard_projection_state
+CREATE TRIGGER erasure_fence_transaction_projection_state_insert BEFORE INSERT ON transaction_projection_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_state'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_dashboard_projection_state_update BEFORE UPDATE ON dashboard_projection_state
+CREATE TRIGGER erasure_fence_transaction_projection_state_update BEFORE UPDATE ON transaction_projection_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_state'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
@@ -5629,20 +5607,20 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_dashboard_projection_bucket_delete BEFORE DELETE ON dashboard_projection_bucket
+CREATE TRIGGER erasure_preserve_transaction_projection_bucket_delete BEFORE DELETE ON transaction_projection_bucket
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'dashboard_projection_bucket','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'size_seconds',OLD."size_seconds",'bucket',OLD."bucket",'currency',OLD."currency",'direction',OLD."direction",'category_id',OLD."category_id",'count',OLD."count",'maximum',OLD."maximum",'max_minor',OLD."max_minor")
+  SELECT q.id,'dashboard_projection_bucket','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'size_seconds',OLD."size_seconds",'bucket',OLD."bucket",'currency',OLD."currency",'direction',OLD."direction",'category_id',OLD."category_id",'count',OLD."count",'max_minor',OLD."max_minor")
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_dashboard_projection_digit_delete BEFORE DELETE ON dashboard_projection_digit
+CREATE TRIGGER erasure_preserve_transaction_projection_digit_delete BEFORE DELETE ON transaction_projection_digit
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
@@ -5655,26 +5633,26 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_dashboard_projection_leaf_delete BEFORE DELETE ON dashboard_projection_leaf
+CREATE TRIGGER erasure_preserve_transaction_projection_leaf_delete BEFORE DELETE ON transaction_projection_leaf
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'dashboard_projection_leaf','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'id',OLD."id",'amount',OLD."amount",'currency',OLD."currency",'direction',OLD."direction",'category_id',OLD."category_id",'counterparty',OLD."counterparty",'notes',OLD."notes",'occurred_at',OLD."occurred_at",'created_at',OLD."created_at",'revision',OLD."revision")
+  SELECT q.id,'dashboard_projection_leaf','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'id',OLD."id",'amount',OLD."amount",'currency',OLD."currency",'direction',OLD."direction",'category_id',OLD."category_id",'counterparty',OLD."counterparty",'notes',OLD."notes",'occurred_at_ms',OLD."occurred_at_ms",'created_at_ms',OLD."created_at_ms",'revision',OLD."revision")
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_dashboard_projection_state_delete BEFORE DELETE ON dashboard_projection_state
+CREATE TRIGGER erasure_preserve_transaction_projection_state_delete BEFORE DELETE ON transaction_projection_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'dashboard_projection_state','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'version',OLD."version",'readiness',OLD."readiness",'cursor_id',OLD."cursor_id",'attempted_at_ms',OLD."attempted_at_ms",'fact_revision',OLD.fact_revision,'first_captured_at',OLD.first_captured_at,'time_zone',OLD.time_zone)
+  SELECT q.id,'dashboard_projection_state','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'version',OLD."version",'readiness',OLD."readiness",'cursor_id',OLD."cursor_id",'attempted_at_ms',OLD."attempted_at_ms",'fact_revision',OLD.fact_revision,'first_captured_at_ms',OLD.first_captured_at_ms,'time_zone',OLD.time_zone)
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
@@ -7763,7 +7741,7 @@ BEGIN SELECT RAISE(ABORT, 'correction_append_only'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_attestation AFTER INSERT ON source_attestations BEGIN
-  UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1,
+  UPDATE transaction_projection_state SET fact_revision = fact_revision + 1,
     time_zone = CASE WHEN NEW.transaction_id = (SELECT id FROM transactions WHERE user_id = NEW.user_id ORDER BY created_at_ms, id LIMIT 1)
       AND (SELECT count(*) FROM source_attestations WHERE user_id = NEW.user_id AND transaction_id = NEW.transaction_id) = 1
       THEN NEW.time_zone ELSE time_zone END
@@ -7774,39 +7752,39 @@ END;
 CREATE TRIGGER transaction_fact_delete AFTER DELETE ON transactions
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE q.state='Erasing' AND p.user_id=q.user_id AND p.store_id='transactions' AND (OLD.user_id=q.user_id))
 BEGIN
-  UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = OLD.user_id AND fact_revision IS NOT NULL;
+  UPDATE transaction_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = OLD.user_id AND fact_revision IS NOT NULL;
 END;
 --> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_insert AFTER INSERT ON transactions BEGIN
-  INSERT INTO dashboard_projection_state(user_id,version,readiness,fact_revision,first_captured_at,time_zone)
-  SELECT NEW.user_id,0,'dirty',1,strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at_ms/1000.0,'unixepoch'),time_zone FROM users WHERE id=NEW.user_id
+  INSERT INTO transaction_projection_state(user_id,version,readiness,fact_revision,first_captured_at_ms,time_zone)
+  SELECT NEW.user_id,0,'dirty',1,NEW.created_at_ms,time_zone FROM users WHERE id=NEW.user_id
   ON CONFLICT(user_id) DO UPDATE SET fact_revision=coalesce(fact_revision,0)+1,
-    first_captured_at=coalesce(first_captured_at,excluded.first_captured_at),
-    time_zone=coalesce(dashboard_projection_state.time_zone,excluded.time_zone);
+    first_captured_at_ms=coalesce(first_captured_at_ms,excluded.first_captured_at_ms),
+    time_zone=coalesce(transaction_projection_state.time_zone,excluded.time_zone);
 END;
 --> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_link_delete AFTER DELETE ON transaction_reconciliation_decisions
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE q.state='Erasing' AND p.user_id=q.user_id AND p.store_id='transaction_reconciliation_decisions' AND (OLD.user_id=q.user_id))
 BEGIN
-  UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = OLD.user_id AND fact_revision IS NOT NULL;
+  UPDATE transaction_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = OLD.user_id AND fact_revision IS NOT NULL;
 END;
 --> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_link_insert AFTER INSERT ON transaction_reconciliation_decisions BEGIN
-  UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
+  UPDATE transaction_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
 END;
 --> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_link_update AFTER UPDATE ON transaction_reconciliation_decisions BEGIN
-  UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
+  UPDATE transaction_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
 END;
 --> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_update AFTER UPDATE ON transactions
 WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) BEGIN
-  UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
+  UPDATE transaction_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
 END;
 --> statement-breakpoint
 

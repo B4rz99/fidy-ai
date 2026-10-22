@@ -1,5 +1,13 @@
 # Hosted Agent chat
 
+Latest production audit, 22 October 2026: protected reads became unavailable after release
+`ff37f818fbf86bc766e090dc5cba8ee746cdd80a`. The deployed standing query requires
+`payment_source_context`, which is absent from production D1; read-only preparation reproduces the
+missing-view error. This is confirmed code/schema mismatch evidence, not a renewed quota diagnosis.
+The guarded rollback failed closed. [Incident evidence and deferred checks](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+record the recovery boundary. Earlier successes below remain dated evidence; they do not establish
+availability after this deployment. No further production financial or access mutation was attempted.
+
 Current audit status, 22 October 2026: rebased onto deployed trunk
 `20fd17a37458f54031c771d0b9e1de24a5e98933`. Fresh production metadata and Recurring
 reads work after the D1 reset. A minimal greeting returned processing, and an explicit progress

@@ -285,6 +285,7 @@ describe("private release smoke", () => {
             bind: (...values: ReadonlyArray<unknown>) => {
               run: () => Promise<unknown>;
               first: () => Promise<unknown>;
+              all: () => Promise<unknown>;
             };
           } => ({
             all: (): Promise<unknown> => {
@@ -293,7 +294,15 @@ describe("private release smoke", () => {
             },
             bind: (
               ...values: ReadonlyArray<unknown>
-            ): { run: () => Promise<unknown>; first: () => Promise<unknown> } => ({
+            ): {
+              run: () => Promise<unknown>;
+              first: () => Promise<unknown>;
+              all: () => Promise<unknown>;
+            } => ({
+              all: (): Promise<unknown> => {
+                actions.push("schema");
+                return Promise.resolve({});
+              },
               run: (): Promise<unknown> => {
                 actions.push(sql.startsWith("UPDATE") ? "synthetic-claim" : "synthetic-insert");
                 if (sql.startsWith("UPDATE")) claimed = true;
@@ -365,6 +374,7 @@ describe("private release smoke", () => {
           "synthetic-insert",
           "synthetic-read",
           "synthetic-claim",
+          "schema",
           "schema",
           "schema",
           "marker-write",

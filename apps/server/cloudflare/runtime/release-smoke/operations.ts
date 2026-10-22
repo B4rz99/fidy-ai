@@ -15,6 +15,7 @@ import {
   smokeProofHeader,
 } from "./contract";
 import { verifyCategoryStorage } from "../../categories/operations";
+import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 
 import { RequestBodyPolicy } from "../../http/contract";
@@ -136,6 +137,19 @@ const checkBindings = Effect.fn(function* (environment: SmokeEnvironment) {
   yield* platform({
     tryWork: () =>
       environment.DB.prepare("SELECT probe_id FROM release_smoke_probes LIMIT 0").all(),
+    stage: "schema",
+  });
+  // Prepare the same standing dependency every protected canonical read uses. No User is
+  // looked up or created: LIMIT 0 validates the deployed schema without producing a row.
+  const standing = activeProUserCondition({
+    userId: "00000000-0000-4000-8000-000000000000",
+    nowEpochMs: 0,
+  });
+  yield* platform({
+    tryWork: () =>
+      environment.DB.prepare(`SELECT ${standing.sql} AS active LIMIT 0`)
+        .bind(...standing.params)
+        .all(),
     stage: "schema",
   });
   yield* platform({

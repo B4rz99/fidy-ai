@@ -241,6 +241,7 @@ describe("Core smoke adapter", () => {
           prepare: (sql: string): object => ({
             all: (): Promise<object> => Promise.resolve({}),
             bind: (): object => ({
+              all: (): Promise<object> => Promise.resolve({}),
               run: (): Promise<object> => {
                 if (sql.startsWith("UPDATE")) claimed = true;
                 return Promise.resolve({ meta: { changes: 1 } });

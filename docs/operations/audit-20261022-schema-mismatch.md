@@ -114,6 +114,16 @@ Vite's filesystem deny rules; Astro's [7.4 notes](https://astro.build/blog/astro
 release and supported Node baseline. Dependency policy reports zero failing pins and nine retained
 review records. Final-head CI remains a merge requirement.
 
+The `89a484b714` CI run passed the workspace, native adapters, infrastructure, unit, build,
+packaging and security checks, and the second browser partition. The first partition failed one
+pairing journey at the post-logout Google-button assertion. The unchanged journey then passed
+three isolated repetitions. Its logout boundary now explicitly requires HTTP 204, cookie removal
+and `/login` before checking the provider button; no logout mutation is retried. The first local
+browser partition passed all 91 cases with three opt-in skips after that assertion change.
+Repeating the normal partition with its admission and performance prerequisites passed all 98
+cases with the same three opt-in skips.
+This does not establish a cause for the original CI-only failure.
+
 ## Recovery and deferred live checks
 
 The [D1 migration-history runbook](production-releases.md#d1-migration-history) explains that editing

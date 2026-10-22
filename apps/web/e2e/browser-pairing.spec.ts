@@ -464,9 +464,12 @@ const finishRealPairing = ({
       yield* wait(openUpgradeThroughCore(page));
       yield* wait(expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible());
       yield* wait(page.goto("/app/transactions"));
+      const loggedOut = page.waitForResponse("**/web/session/logout");
       yield* wait(page.getByRole("button", { name: "Cerrar sesión" }).click());
-      yield* wait(expect(page.getByRole("button", { name: "Continuar con Google" })).toBeVisible());
+      expect((yield* wait(loggedOut)).status()).toBe(noContentStatus);
       yield* wait(expect.poll(() => hasSessionCookie(context)).toBe(false));
+      yield* wait(expect(page).toHaveURL(/\/login$/u));
+      yield* wait(expect(page.getByRole("button", { name: "Continuar con Google" })).toBeVisible());
       const revoked = yield* wait(
         request.get(`${apiOrigin}/user`, {
           headers: {

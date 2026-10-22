@@ -39,9 +39,12 @@ const setup = (): Effect.Effect<D1Database> =>
         .run()
     );
     yield* fromPromise(() =>
+      db.prepare("INSERT INTO subscriptions(id,user_id) VALUES(?,?)").bind(userA, userA).run()
+    );
+    yield* fromPromise(() =>
       db
-        .prepare(`INSERT INTO card_enrollments
-    (id, user_id, price_id, billing_email, status, payment_source_mode,
+        .prepare(`INSERT INTO payment_enrollments
+    (id, subscription_id, price_id, billing_email, status, payment_source_mode,
      contracts_json, disclosure_json, prepared_at_ms, expires_at_ms, wompi_environment)
     VALUES (?, ?, ?, 'a@example.test', 'prepared', 'create', '{}', '{}', ?, ?, 'sandbox')`)
         .bind(enrollmentId, userA, priceId, nowMs, nowMs + 900_000)
@@ -71,7 +74,7 @@ it.effect("only the owning User can claim a prepared PaymentEnrollment, once", (
     ).toBe(false);
     const unclaimed = yield* fromPromise(() =>
       db
-        .prepare("SELECT status, payment_request_id FROM card_enrollments WHERE id = ?")
+        .prepare("SELECT status, payment_request_id FROM payment_enrollments WHERE id = ?")
         .bind(enrollmentId)
         .first()
     );
@@ -106,7 +109,7 @@ it.effect("only the owning User can claim a prepared PaymentEnrollment, once", (
     expect(
       yield* fromPromise(() =>
         db
-          .prepare("SELECT status, payment_request_id FROM card_enrollments WHERE id = ?")
+          .prepare("SELECT status, payment_request_id FROM payment_enrollments WHERE id = ?")
           .bind(enrollmentId)
           .first()
       )
@@ -137,15 +140,16 @@ it.effect("an expired preparation cannot authorize a provider source", () =>
       expect(
         db
           .prepare(
-            `UPDATE card_enrollments SET source_method='card',payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms FROM (VALUES (?, ?, ?, 42, 'a@example.test', ?))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+            `INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_source_id,billing_email,verified_at_ms,method,wompi_environment,archive_row_ref)
+ SELECT incoming.id,e.subscription_id,incoming.enrollment_id,incoming.wompi_source_id,incoming.billing_email,incoming.created_at_ms,'card',e.wompi_environment,'source:'||incoming.id FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms FROM (VALUES (?, ?, ?, 42, 'a@example.test', ?))) incoming
+ JOIN payment_enrollments e ON e.id=incoming.enrollment_id JOIN subscriptions sub ON sub.id=e.subscription_id AND sub.user_id=incoming.user_id`
           )
           .bind("50000000-0000-4000-8000-000000000001", userA, enrollmentId, nowMs)
           .run()
       ).rejects.toThrow()
     );
     expect(
-      (yield* fromPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
-        .results
+      (yield* fromPromise(() => db.prepare("SELECT id FROM payment_source_context").all())).results
     ).toEqual([]);
   })
 );
@@ -169,7 +173,7 @@ it.effect("rejects a source with another authorization method or provider enviro
     );
     yield* fromPromise(() =>
       db
-        .prepare("UPDATE card_enrollments SET wompi_candidate_source_id = 42 WHERE id = ?")
+        .prepare("UPDATE payment_enrollments SET wompi_candidate_source_id = 42 WHERE id = ?")
         .bind(enrollmentId)
         .run()
     );
@@ -177,7 +181,9 @@ it.effect("rejects a source with another authorization method or provider enviro
       expect(
         db
           .prepare(
-            `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 42, ?, ?, 'nequi'))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+            `INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_source_id,billing_email,verified_at_ms,method,wompi_environment,archive_row_ref)
+ SELECT incoming.id,e.subscription_id,incoming.enrollment_id,incoming.wompi_source_id,incoming.billing_email,incoming.created_at_ms,incoming.method,e.wompi_environment,'source:'||incoming.id FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 42, ?, ?, 'nequi'))) incoming
+ JOIN payment_enrollments e ON e.id=incoming.enrollment_id JOIN subscriptions sub ON sub.id=e.subscription_id AND sub.user_id=incoming.user_id`
           )
           .bind("50000000-0000-4000-8000-000000000001", userA, enrollmentId, billingEmail, nowMs)
           .run()
@@ -186,14 +192,13 @@ it.effect("rejects a source with another authorization method or provider enviro
     yield* fromPromise(() =>
       expect(
         db
-          .prepare("UPDATE card_enrollments SET wompi_environment = 'production' WHERE id = ?")
+          .prepare("UPDATE payment_enrollments SET wompi_environment = 'production' WHERE id = ?")
           .bind(enrollmentId)
           .run()
       ).rejects.toThrow()
     );
     expect(
-      (yield* fromPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
-        .results
+      (yield* fromPromise(() => db.prepare("SELECT id FROM payment_source_context").all())).results
     ).toEqual([]);
   })
 );
@@ -220,21 +225,23 @@ it.effect("rejects a pending BillingAttempt whose snapshot differs from the sele
     const sourceId = "50000000-0000-4000-8000-000000000001";
     yield* fromPromise(() =>
       db
-        .prepare("UPDATE card_enrollments SET wompi_candidate_source_id = 42 WHERE id = ?")
+        .prepare("UPDATE payment_enrollments SET wompi_candidate_source_id = 42 WHERE id = ?")
         .bind(enrollmentId)
         .run()
     );
     yield* fromPromise(() =>
       db
         .prepare(
-          `UPDATE card_enrollments SET source_method='card',payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms FROM (VALUES (?, ?, ?, 42, ?, ?))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+          `INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_source_id,billing_email,verified_at_ms,method,wompi_environment,archive_row_ref)
+ SELECT incoming.id,e.subscription_id,incoming.enrollment_id,incoming.wompi_source_id,incoming.billing_email,incoming.created_at_ms,'card',e.wompi_environment,'source:'||incoming.id FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms FROM (VALUES (?, ?, ?, 42, ?, ?))) incoming
+ JOIN payment_enrollments e ON e.id=incoming.enrollment_id JOIN subscriptions sub ON sub.id=e.subscription_id AND sub.user_id=incoming.user_id`
         )
         .bind(sourceId, userA, enrollmentId, billingEmail, nowMs)
         .run()
     );
     yield* fromPromise(() =>
       db
-        .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")
+        .prepare("UPDATE payment_enrollments SET status = 'available' WHERE id = ?")
         .bind(enrollmentId)
         .run()
     );

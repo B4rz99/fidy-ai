@@ -26,7 +26,6 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
         .map((sql) => db.prepare(sql))
     )
   );
-  yield* fromPromise(() => db.prepare("ALTER TABLE users ADD COLUMN subscription_id TEXT").run());
   yield* fromPromise(() =>
     db.batch(
       [
@@ -55,14 +54,16 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
         "billing_price_notices",
         "billing_provider_transactions",
         "billing_retry_clearances",
-        "card_enrollments",
-        "verified_payment_sources",
+        "subscriptions",
+        "payment_enrollments",
+        "payment_sources",
+        "payment_enrollment_context",
+        "payment_source_context",
         "refund_attempts",
         "subscription_prices",
         "subscription_renewal_fences",
         "subscription_standing",
       ],
-      objects: ["users_subscription_id", "subscription_identities_field_"],
     })
   );
   return { db };

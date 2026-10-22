@@ -331,7 +331,7 @@ const enrollment = (
   enrollmentId: string
 ): Promise<Option.Option<typeof EnrollmentRow.Type>> =>
   db
-    .prepare("SELECT * FROM card_enrollments WHERE id = ? AND user_id = ?")
+    .prepare("SELECT * FROM payment_enrollment_context WHERE id = ? AND user_id = ?")
     .bind(enrollmentId, userId)
     .first()
     .then((row) => decodeRow(EnrollmentRow, row));
@@ -424,7 +424,7 @@ const prepare = ({
     if (Option.isNone(body)) return invalid();
     const currentSource = yield* waitFor(() =>
       environment.DB.prepare(
-        "SELECT id FROM verified_payment_sources WHERE user_id=? AND retired_at_ms IS NULL"
+        "SELECT id FROM payment_source_context WHERE user_id=? AND retired_at_ms IS NULL"
       )
         .bind(session.user_id)
         .first()
@@ -437,8 +437,8 @@ const prepare = ({
     if (Option.isNone(selected)) return invalid();
     const incompatibleSource = yield* waitFor(() =>
       environment.DB.prepare(
-        `SELECT s.id FROM verified_payment_sources AS s WHERE s.user_id = ? AND s.retired_at_ms IS NULL AND (EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) c WHERE c.payment_source_id=s.id) OR (s.method <> ? AND NOT (? AND s.method='card'))
-            OR NOT EXISTS (SELECT 1 FROM card_enrollments AS origin WHERE origin.id = s.enrollment_id
+        `SELECT s.id FROM payment_source_context AS s WHERE s.user_id = ? AND s.retired_at_ms IS NULL AND (EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) c WHERE c.payment_source_id=s.id) OR (s.method <> ? AND NOT (? AND s.method='card'))
+            OR NOT EXISTS (SELECT 1 FROM payment_enrollment_context AS origin WHERE origin.id = s.enrollment_id
               AND (origin.wompi_environment = ? OR (origin.wompi_environment IS NULL AND EXISTS
                 (SELECT 1 FROM billing_attempts AS a WHERE a.payment_source_id = s.id AND a.wompi_environment = ?))))
             OR EXISTS (SELECT 1 FROM billing_attempts AS a WHERE a.payment_source_id = s.id AND a.wompi_environment <> ?))`
@@ -455,7 +455,7 @@ const prepare = ({
     );
     if (incompatibleSource !== null) return invalid();
     const active = yield* waitFor(() =>
-      environment.DB.prepare(`SELECT id FROM card_enrollments WHERE user_id = ?
+      environment.DB.prepare(`SELECT id FROM payment_enrollment_context WHERE user_id = ?
     AND status IN ('preparing', 'prepared', 'creating', 'verifying') ORDER BY prepared_at_ms DESC LIMIT 1`)
         .bind(session.user_id)
         .first()
@@ -513,7 +513,7 @@ const prepare = ({
     }
     const capacity = yield* waitFor(() =>
       environment.DB.prepare(
-        "SELECT count(*) AS count FROM card_enrollments WHERE user_id = ? AND prepared_at_ms > ?"
+        "SELECT count(*) AS count FROM payment_enrollment_context WHERE user_id = ? AND prepared_at_ms > ?"
       )
         .bind(session.user_id, now - preparationWindowMs)
         .first()
@@ -525,6 +525,7 @@ const prepare = ({
       return unavailable();
     }
     const enrollmentId = PaymentEnrollmentId.make(yield* id);
+    const subscriptionId = yield* id;
     const guard = enrollmentAuthority(session, now);
     yield* waitFor(() =>
       environment.DB.batch([
@@ -537,14 +538,14 @@ const prepare = ({
           onNone: () => [],
           onSome: (active) => [
             environment.DB.prepare(
-              "UPDATE card_enrollments SET status='expired' WHERE id=? AND user_id=? AND status IN ('prepared','preparing')"
+              "UPDATE payment_enrollments SET status='expired' WHERE id=? AND subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND status IN ('prepared','preparing')"
             ).bind(active.id, session.user_id),
           ],
         }),
         ...(replacing
           ? [
-              environment.DB.prepare(`UPDATE card_enrollments SET source_retired_at_ms=?
-          WHERE user_id=? AND source_method='card' AND source_retired_at_ms IS NULL`).bind(
+              environment.DB.prepare(`UPDATE payment_sources SET retired_at_ms=?
+          WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND method='card' AND retired_at_ms IS NULL`).bind(
                 now,
                 session.user_id
               ),
@@ -552,15 +553,19 @@ const prepare = ({
                 db: environment.DB,
                 scope: "payment_replacement",
                 predicate: {
-                  sql: "SELECT 1 WHERE EXISTS (SELECT 1 FROM verified_payment_sources WHERE user_id=? AND method='card' AND retired_at_ms IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM verified_payment_sources WHERE user_id=? AND retired_at_ms IS NULL)",
+                  sql: "SELECT 1 WHERE EXISTS (SELECT 1 FROM payment_source_context WHERE user_id=? AND method='card' AND retired_at_ms IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM payment_source_context WHERE user_id=? AND retired_at_ms IS NULL)",
                   params: [session.user_id, session.user_id],
                 },
               }),
             ]
           : []),
-        environment.DB.prepare(`INSERT OR IGNORE INTO card_enrollments
-        (id,user_id,price_id,billing_email,method,wompi_environment,status,payment_source_mode,contracts_json,
-        disclosure_json,prepared_at_ms,expires_at_ms) VALUES (?,?,?,?,?,?,'preparing','create','{}','{}',?,?)`).bind(
+        environment.DB.prepare("INSERT OR IGNORE INTO subscriptions(id,user_id) VALUES(?,?)").bind(
+          subscriptionId,
+          session.user_id
+        ),
+        environment.DB.prepare(`INSERT OR IGNORE INTO payment_enrollments
+        (id,subscription_id,price_id,billing_email,method,wompi_environment,status,payment_source_mode,contracts_json,
+        disclosure_json,prepared_at_ms,expires_at_ms) VALUES (?,(SELECT id FROM subscriptions WHERE user_id=?),?,?,?,?,'preparing','create','{}','{}',?,?)`).bind(
           enrollmentId,
           session.user_id,
           selected.value.id,
@@ -574,7 +579,7 @@ const prepare = ({
           db: environment.DB,
           scope: "payment_reservation",
           predicate: {
-            sql: "SELECT 1 FROM card_enrollments WHERE id=? AND user_id=? AND status='preparing'",
+            sql: "SELECT 1 FROM payment_enrollment_context WHERE id=? AND user_id=? AND status='preparing'",
             params: [enrollmentId, session.user_id],
           },
         }),
@@ -585,7 +590,7 @@ const prepare = ({
     if (Exit.isFailure(contracts)) {
       yield* waitFor(() =>
         environment.DB.prepare(
-          "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND status = 'preparing'"
+          "UPDATE payment_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND status = 'preparing'"
         )
           .bind(enrollmentId)
           .run()
@@ -605,17 +610,17 @@ const prepare = ({
     });
     const source = yield* waitFor(() =>
       environment.DB.prepare(
-        "SELECT id FROM verified_payment_sources WHERE user_id = ? AND method = ? AND retired_at_ms IS NULL"
+        "SELECT id FROM payment_source_context WHERE user_id = ? AND method = ? AND retired_at_ms IS NULL"
       )
         .bind(session.user_id, body.value.method)
         .first()
     );
     const inserted = yield* waitFor(() =>
-      environment.DB.prepare(`UPDATE card_enrollments
+      environment.DB.prepare(`UPDATE payment_enrollments
     SET status = 'prepared', payment_source_mode = ?,
-      billing_email = COALESCE((SELECT billing_email FROM verified_payment_sources WHERE user_id = card_enrollments.user_id AND method = card_enrollments.method AND retired_at_ms IS NULL), billing_email),
+      billing_email = COALESCE((SELECT billing_email FROM payment_source_context WHERE user_id = (SELECT user_id FROM subscriptions WHERE id=payment_enrollments.subscription_id) AND method = payment_enrollments.method AND retired_at_ms IS NULL), billing_email),
       contracts_json = ?, disclosure_json = ?
-    WHERE id = ? AND user_id = ? AND status = 'preparing'`)
+    WHERE id = ? AND subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND status = 'preparing'`)
         .bind(
           source === null ? "create" : "reuse",
           JSON.stringify(
@@ -732,9 +737,9 @@ const finish = ({
       ...(Option.isNone(wompiSourceId)
         ? []
         : [
-            environment.DB.prepare(`UPDATE card_enrollments SET payment_source_id=?1,source_wompi_id=?4,
-      source_billing_email=?5,source_created_at_ms=?6,source_method=?7
-      WHERE id=?3 AND user_id=?2 AND payment_source_id IS NULL`).bind(
+            environment.DB.prepare(`INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_source_id,billing_email,verified_at_ms,method,wompi_environment,archive_row_ref)
+      SELECT ?1,subscription_id,id,?4,?5,?6,?7,wompi_environment,'source:'||?1
+      FROM payment_enrollment_context WHERE id=?3 AND user_id=?2 AND payment_source_id IS NULL`).bind(
               sourceId,
               userId,
               row.id,
@@ -745,13 +750,13 @@ const finish = ({
             ),
           ]),
       environment.DB.prepare(
-        "UPDATE card_enrollments SET status = 'available' WHERE id = ? AND user_id = ? AND status IN ('creating', 'verifying') AND payment_request_id = ?"
+        "UPDATE payment_enrollments SET payment_source_id = COALESCE(payment_source_id, (SELECT id FROM payment_sources WHERE subscription_id=payment_enrollments.subscription_id AND retired_at_ms IS NULL)), status = 'available' WHERE id = ? AND subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND status IN ('creating', 'verifying') AND payment_request_id = ?"
       ).bind(row.id, userId, requestId),
       environment.DB.prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id,
       payment_request_id, payment_source_id, price_id, amount, currency, billing_period,
       service_market, tax_treatment, time_zone, wompi_environment, wompi_reference, created_at_ms)
       SELECT ?, ?, ?, ?, ?, p.id, p.amount, p.currency, p.billing_period, p.service_market,
-      p.tax_treatment, ?, ?, ?, ? FROM subscription_prices AS p JOIN card_enrollments AS e ON e.price_id = p.id
+      p.tax_treatment, ?, ?, ?, ? FROM subscription_prices AS p JOIN payment_enrollment_context AS e ON e.price_id = p.id
       WHERE e.id = ? AND e.user_id = ? AND e.status = 'available' AND e.payment_request_id = ?`).bind(
         attemptId,
         userId,
@@ -801,9 +806,9 @@ const resolveCandidate = ({
       return json({ status: "source-verifying", enrollmentId: row.id });
     }
     const claimedLookup = yield* waitFor(() =>
-      environment.DB.prepare(`UPDATE card_enrollments
+      environment.DB.prepare(`UPDATE payment_enrollments
     SET verification_attempts = verification_attempts + 1, last_verification_at_ms = ?
-    WHERE id = ? AND user_id = ? AND status = 'verifying' AND payment_request_id = ?
+    WHERE id = ? AND subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND status = 'verifying' AND payment_request_id = ?
       AND wompi_candidate_source_id = ? AND verification_attempts < ?
       AND (last_verification_at_ms IS NULL OR last_verification_at_ms <= ?)`)
         .bind(
@@ -830,7 +835,7 @@ const resolveCandidate = ({
     if (verified.value.billingEmail !== row.billing_email) {
       yield* waitFor(() =>
         environment.DB.prepare(
-          "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND user_id = ? AND status = 'verifying'"
+          "UPDATE payment_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND status = 'verifying'"
         )
           .bind(row.id, session.user_id)
           .run()
@@ -910,7 +915,7 @@ const authorizeSourcePost = (
     yield* waitFor(() =>
       input.db
         .prepare(
-          "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND user_id = ? AND status = 'creating'"
+          "UPDATE payment_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND status = 'creating'"
         )
         .bind(input.enrollmentId, input.session.user_id)
         .run()
@@ -1058,7 +1063,7 @@ const submit = ({
         Schema.Struct({ id: PaymentSourceId }),
         yield* waitFor(() =>
           environment.DB.prepare(
-            "SELECT id FROM verified_payment_sources WHERE user_id = ? AND method = ? AND retired_at_ms IS NULL"
+            "SELECT id FROM payment_source_context WHERE user_id = ? AND method = ? AND retired_at_ms IS NULL"
           )
             .bind(session.user_id, retained.method)
             .first()
@@ -1081,7 +1086,7 @@ const submit = ({
     if (Exit.isFailure(fresh)) {
       yield* waitFor(() =>
         environment.DB.prepare(
-          "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND status = 'creating'"
+          "UPDATE payment_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND status = 'creating'"
         )
           .bind(row.value.id)
           .run()
@@ -1101,7 +1106,7 @@ const submit = ({
     ) {
       yield* waitFor(() =>
         environment.DB.prepare(
-          "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'terms-changed' WHERE id = ? AND status = 'creating'"
+          "UPDATE payment_enrollments SET status = 'refused', refusal_reason = 'terms-changed' WHERE id = ? AND status = 'creating'"
         )
           .bind(row.value.id)
           .run()
@@ -1124,7 +1129,7 @@ const submit = ({
     if (Exit.isFailure(source)) {
       yield* waitFor(() =>
         environment.DB.prepare(
-          "UPDATE card_enrollments SET status = 'verifying' WHERE id = ? AND status = 'creating'"
+          "UPDATE payment_enrollments SET status = 'verifying' WHERE id = ? AND status = 'creating'"
         )
           .bind(row.value.id)
           .run()
@@ -1134,7 +1139,7 @@ const submit = ({
     if (source.value._tag === "Refused") {
       yield* waitFor(() =>
         environment.DB.prepare(
-          "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-declined' WHERE id = ? AND status = 'creating'"
+          "UPDATE payment_enrollments SET status = 'refused', refusal_reason = 'provider-declined' WHERE id = ? AND status = 'creating'"
         )
           .bind(row.value.id)
           .run()
@@ -1143,9 +1148,9 @@ const submit = ({
     }
     const createdSourceId = source.value.sourceId;
     const candidate = yield* waitFor(() =>
-      environment.DB.prepare(`UPDATE card_enrollments
+      environment.DB.prepare(`UPDATE payment_enrollments
     SET status = 'verifying', wompi_candidate_source_id = ?
-    WHERE id = ? AND user_id = ? AND status = 'creating' AND payment_request_id = ?`)
+    WHERE id = ? AND subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND status = 'creating' AND payment_request_id = ?`)
         .bind(createdSourceId, retained.id, session.user_id, input.paymentRequestId)
         .run()
     );

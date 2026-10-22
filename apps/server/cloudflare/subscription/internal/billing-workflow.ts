@@ -142,7 +142,7 @@ const snapshot = (
         .prepare(`SELECT a.id, a.user_id, a.amount, a.currency, a.billing_period, a.time_zone,
           a.wompi_environment, a.wompi_reference, s.billing_email, s.wompi_source_id, s.method,
           a.previous_paid_attempt_id, a.period_starts_at_ms, a.period_ends_at_ms
-        FROM billing_attempts AS a JOIN verified_payment_sources AS s ON s.id = a.payment_source_id
+        FROM billing_attempts AS a JOIN payment_source_context AS s ON s.id = a.payment_source_id
         WHERE a.id = ? AND a.user_id = s.user_id`)
         .bind(id)
         .first()

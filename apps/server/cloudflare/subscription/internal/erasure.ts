@@ -111,25 +111,25 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     quiescence: {
       _tag: "Durable",
       select: ({ userId }) => ({
-        sql: "SELECT 1 FROM card_enrollments WHERE user_id=? AND status IN('preparing','creating','verifying')",
+        sql: "SELECT 1 FROM payment_enrollment_context WHERE user_id=? AND status IN('preparing','creating','verifying')",
         params: [userId],
       }),
     },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'price_id',r.\"price_id\",'billing_email',r.\"billing_email\",'status',r.\"status\",'payment_source_mode',r.\"payment_source_mode\",'contracts_json',r.\"contracts_json\",'disclosure_json',r.\"disclosure_json\",'prepared_at_ms',r.\"prepared_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'accepted_at_ms',r.\"accepted_at_ms\",'payment_request_id',r.\"payment_request_id\",'wompi_candidate_source_id',r.\"wompi_candidate_source_id\",'verification_attempts',r.\"verification_attempts\",'last_verification_at_ms',r.\"last_verification_at_ms\",'refusal_reason',r.\"refusal_reason\",'method',r.\"method\",'wompi_environment',r.\"wompi_environment\") AS body FROM card_enrollments r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'price_id',r.\"price_id\",'billing_email',r.\"billing_email\",'status',r.\"status\",'payment_source_mode',r.\"payment_source_mode\",'contracts_json',r.\"contracts_json\",'disclosure_json',r.\"disclosure_json\",'prepared_at_ms',r.\"prepared_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'accepted_at_ms',r.\"accepted_at_ms\",'payment_request_id',r.\"payment_request_id\",'wompi_candidate_source_id',r.\"wompi_candidate_source_id\",'verification_attempts',r.\"verification_attempts\",'last_verification_at_ms',r.\"last_verification_at_ms\",'refusal_reason',r.\"refusal_reason\",'method',r.\"method\",'wompi_environment',r.\"wompi_environment\") AS body FROM payment_enrollment_context r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM card_enrollments r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM payment_enrollment_context r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM card_enrollments r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM payment_enrollment_context r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM card_enrollments AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM payment_enrollments AS r WHERE r.subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -140,20 +140,24 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: ["billing_history", "subscription_cancellations"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'enrollment_id',r.\"enrollment_id\",'wompi_source_id',r.\"wompi_source_id\",'billing_email',r.\"billing_email\",'created_at_ms',r.\"created_at_ms\",'method',r.\"method\",'retired_at_ms',r.\"retired_at_ms\") AS body FROM verified_payment_sources r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'enrollment_id',r.\"enrollment_id\",'wompi_source_id',r.\"wompi_source_id\",'billing_email',r.\"billing_email\",'created_at_ms',r.\"created_at_ms\",'method',r.\"method\",'retired_at_ms',r.\"retired_at_ms\") AS body FROM payment_source_context r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM verified_payment_sources r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM payment_source_context r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM verified_payment_sources r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM payment_source_context r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE card_enrollments AS r SET source_row_ref=NULL,payment_source_id=NULL,source_wompi_id=NULL,source_billing_email=NULL,source_created_at_ms=NULL,source_retired_at_ms=NULL,source_method=NULL WHERE r.payment_source_id IS NOT NULL AND r.user_id=? AND COALESCE(r.source_row_ref,'source:'||r.payment_source_id) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE payment_enrollments SET payment_source_id=NULL WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND payment_source_id IN(SELECT id FROM payment_sources WHERE archive_row_ref IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?))",
+        params: [scope.userId, scope.reference],
+      },
+      {
+        sql: "DELETE FROM payment_sources WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND archive_row_ref IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -216,23 +220,23 @@ export const projections: ReadonlyArray<ErasureProjection> = [
   {
     id: "subscription_identities",
     dataClass: "billing",
-    dependencies: ["refund_attempts"],
+    dependencies: ["refund_attempts", "card_enrollments", "card_payment_sources"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'id',r.\"id\") AS body FROM (SELECT rowid,id AS user_id,subscription_id AS id FROM users WHERE subscription_id IS NOT NULL) r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'id',r.\"id\") AS body FROM subscriptions r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,id AS user_id,subscription_id AS id FROM users WHERE subscription_id IS NOT NULL) r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM subscriptions r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM (SELECT rowid,id AS user_id,subscription_id AS id FROM users WHERE subscription_id IS NOT NULL) r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM subscriptions r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE users AS r SET subscription_id=NULL WHERE r.id=? AND r.subscription_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM subscriptions AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

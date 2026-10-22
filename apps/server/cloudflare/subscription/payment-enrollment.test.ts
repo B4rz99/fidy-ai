@@ -746,7 +746,7 @@ it.each(
           expect(
             yield* fromTestPromise(() =>
               environment.DB.prepare(
-                "SELECT count(*) AS count FROM verified_payment_sources WHERE retired_at_ms IS NOT NULL"
+                "SELECT count(*) AS count FROM payment_source_context WHERE retired_at_ms IS NOT NULL"
               ).first("count")
             )
           ).toBe(0);
@@ -816,7 +816,7 @@ it.each(
         ).toBe(1);
         expect(
           yield* fromTestPromise(() =>
-            environment.DB.prepare("SELECT count(*) AS count FROM verified_payment_sources").first(
+            environment.DB.prepare("SELECT count(*) AS count FROM payment_source_context").first(
               "count"
             )
           )
@@ -1067,7 +1067,7 @@ it.each([
       expect(provider).not.toHaveBeenCalled();
       expect(
         yield* fromTestPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM card_enrollments").first()
+          db.prepare("SELECT count(*) AS count FROM payment_enrollment_context").first()
         )
       ).toEqual({ count: 0 });
     })
@@ -1227,7 +1227,7 @@ it("requires Nequi approval before creating a reusable source and collecting one
         )
       ).toEqual({ count: 1 });
       const retained = yield* fromTestPromise(() =>
-        db.prepare("SELECT * FROM card_enrollments").all()
+        db.prepare("SELECT * FROM payment_enrollment_context").all()
       );
       const retainedText = yield* Schema.encodeEffect(UnknownJsonString)(retained.results);
       expect(retainedText).not.toContain("nequi_test_browser_only");
@@ -1422,7 +1422,7 @@ it.each(Object.values(SubscriptionEnrollmentGroup.endpoints))(
           }
         }
         expect(provider).not.toHaveBeenCalled();
-        for (const table of ["card_enrollments", "verified_payment_sources", "billing_attempts"]) {
+        for (const table of ["payment_enrollments", "payment_sources", "billing_attempts"]) {
           expect(
             yield* fromTestPromise(() =>
               fixture.db.prepare(`SELECT count(*) AS count FROM ${table}`).first()
@@ -1507,7 +1507,7 @@ it.each([
         expect(provider).not.toHaveBeenCalled();
         expect(
           yield* fromTestPromise(() =>
-            fixture.db.prepare("SELECT count(*) AS count FROM card_enrollments").first()
+            fixture.db.prepare("SELECT count(*) AS count FROM payment_enrollment_context").first()
           )
         ).toEqual({ count: 0 });
       })
@@ -1600,7 +1600,7 @@ it.each([
       });
       expect(
         yield* fromTestPromise(() =>
-          fixture.db.prepare("SELECT count(*) AS count FROM verified_payment_sources").first()
+          fixture.db.prepare("SELECT count(*) AS count FROM payment_source_context").first()
         )
       ).toEqual({ count: 0 });
       expect(
@@ -1617,7 +1617,7 @@ it.each([
         });
         yield* fromTestPromise(() =>
           fixture.db
-            .prepare("UPDATE card_enrollments SET last_verification_at_ms = ? WHERE id = ?")
+            .prepare("UPDATE payment_enrollments SET last_verification_at_ms = ? WHERE id = ?")
             .bind(DateTime.nowUnsafe().epochMilliseconds - 4_000, prepared.enrollmentId)
             .run()
         );
@@ -1699,14 +1699,14 @@ it.each(Object.entries(forbiddenDaviplataSubmissions))(
           yield* fromTestPromise(() =>
             fixture.db
               .prepare(
-                "SELECT status, authorization_digest, payment_request_id FROM card_enrollments"
+                "SELECT status, authorization_digest, payment_request_id FROM payment_enrollment_context"
               )
               .first()
           )
         ).toEqual({ status: "prepared", authorization_digest: null, payment_request_id: null });
         expect(
           yield* fromTestPromise(() =>
-            fixture.db.prepare("SELECT count(*) AS count FROM verified_payment_sources").first()
+            fixture.db.prepare("SELECT count(*) AS count FROM payment_source_context").first()
           )
         ).toEqual({ count: 0 });
         expect(
@@ -1926,8 +1926,8 @@ it.each([
         expect(otherUser.status).toBe(401);
         const retained = yield* fromTestPromise(() =>
           environment.DB.batch([
-            environment.DB.prepare("SELECT * FROM card_enrollments"),
-            environment.DB.prepare("SELECT * FROM verified_payment_sources"),
+            environment.DB.prepare("SELECT * FROM payment_enrollment_context"),
+            environment.DB.prepare("SELECT * FROM payment_source_context"),
             environment.DB.prepare("SELECT * FROM billing_attempts"),
             environment.DB.prepare(
               "SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
@@ -2177,7 +2177,7 @@ it("does not schedule a Nequi charge when the fresh session is revoked during so
       ).toEqual({ count: 0 });
       expect(
         yield* fromTestPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM verified_payment_sources").first()
+          db.prepare("SELECT count(*) AS count FROM payment_source_context").first()
         )
       ).toEqual({ count: 0 });
     })
@@ -2212,7 +2212,7 @@ it.each(["missing-consent", "revoked-consent", "stale-session"] as const)(
         expect(provider).not.toHaveBeenCalled();
         expect(
           yield* fromTestPromise(() =>
-            db.prepare("SELECT count(*) AS count FROM verified_payment_sources").first()
+            db.prepare("SELECT count(*) AS count FROM payment_source_context").first()
           )
         ).toEqual({ count: 0 });
       })
@@ -2304,7 +2304,7 @@ it.each([
       expect(response.status).toBe(scenario.stage === "source" ? 503 : 400);
       expect(posts).toBe(scenario.stage === "source" ? 1 : 0);
       for (const table of [
-        "verified_payment_sources",
+        "payment_sources",
         "billing_attempts",
         "(SELECT id FROM billing_attempts WHERE collection_state IS NOT NULL)",
       ]) {
@@ -2674,14 +2674,17 @@ it("bounds rejected card preparation attempts without invoking Wompi", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { db, environment, request } = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        db.prepare("INSERT INTO subscriptions(id,user_id) SELECT id,id FROM users").run()
+      );
       const now = yield* Clock.currentTimeMillis;
       const prior = Array.from({ length: 12 }, (_, index) =>
         db
           .prepare(
-            `INSERT INTO card_enrollments
-           (id, user_id, price_id, billing_email, status, payment_source_mode,
+            `INSERT INTO payment_enrollments
+           (id,subscription_id, price_id, billing_email, status, payment_source_mode,
             contracts_json, disclosure_json, prepared_at_ms, expires_at_ms)
-           VALUES (?, ?, ?, 'payer@example.com', 'refused', 'create', '{}', '{}', ?, ?)`
+           VALUES (?, (SELECT id FROM subscriptions WHERE user_id=?), ?, 'payer@example.com', 'refused', 'create', '{}', '{}', ?, ?)`
           )
           .bind(
             `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
@@ -2757,7 +2760,9 @@ it("fails closed before card preparation when the admission authority is unavail
       expect(refused.status).toBe(503);
       expect(provider).not.toHaveBeenCalled();
       const rows = yield* fromTestPromise(() =>
-        db.prepare("SELECT count(*) AS total FROM card_enrollments").first<{ total: number }>()
+        db
+          .prepare("SELECT count(*) AS total FROM payment_enrollment_context")
+          .first<{ total: number }>()
       );
       expect(rows?.total).toBe(0);
     })
@@ -2970,7 +2975,7 @@ it("prepares a Price and creates exactly one provider source and pending Billing
         status: "payment-pending",
       });
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM payment_source_context").all()))
           .results
       ).toHaveLength(1);
       expect(
@@ -3003,7 +3008,7 @@ it.each([8_640_000_000_000_001, 1_800_000_000_000.5])(
             key === "prepare"
               ? (sql: string): D1PreparedStatement => {
                   const statement = target.prepare(sql);
-                  if (!sql.startsWith("SELECT * FROM card_enrollments")) return statement;
+                  if (!sql.startsWith("SELECT * FROM payment_enrollment_context")) return statement;
                   const wrap = (bound: D1PreparedStatement): D1PreparedStatement =>
                     new Proxy(bound, {
                       get: (query, member): unknown => {
@@ -3056,10 +3061,12 @@ it.each([8_640_000_000_000_001, 1_800_000_000_000.5])(
         expect(repeatedPreparation.status).toBe(503);
         expect(provider).not.toHaveBeenCalled();
         expect(
-          yield* fromTestPromise(() => db.prepare("SELECT status FROM card_enrollments").first())
+          yield* fromTestPromise(() =>
+            db.prepare("SELECT status FROM payment_enrollment_context").first()
+          )
         ).toEqual({ status: "prepared" });
         for (const table of [
-          "verified_payment_sources",
+          "payment_sources",
           "billing_attempts",
           "(SELECT id FROM billing_attempts WHERE collection_state IS NOT NULL)",
         ]) {
@@ -3129,7 +3136,7 @@ it("inherits the workflow Clock through source authorization and live settlement
       });
       expect(
         yield* fromTestPromise(() =>
-          db.prepare("SELECT accepted_at_ms FROM card_enrollments").first()
+          db.prepare("SELECT accepted_at_ms FROM payment_enrollment_context").first()
         )
       ).toEqual({ accepted_at_ms: current });
       expect(
@@ -3170,7 +3177,7 @@ it("cancels an unfinished enrollment body without reserving provider work", () =
       expect(provider).not.toHaveBeenCalled();
       expect(
         yield* fromTestPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM card_enrollments").first()
+          db.prepare("SELECT count(*) AS count FROM payment_enrollment_context").first()
         )
       ).toEqual({ count: 0 });
     })
@@ -3283,7 +3290,7 @@ it.each(["contracts", "source", "commit"] as const)(
         ).toEqual({ count: stage === "commit" ? 1 : 0 });
         expect(
           yield* fromTestPromise(() =>
-            db.prepare("SELECT count(*) AS count FROM verified_payment_sources").first()
+            db.prepare("SELECT count(*) AS count FROM payment_source_context").first()
           )
         ).toEqual({ count: stage === "commit" ? 1 : 0 });
         const replay = yield* fromTestPromise(() =>
@@ -3318,18 +3325,19 @@ it("reserves preparation before calling Wompi and bounds failed preparations", (
       release(new Response("{}", { status: 400 }));
       expect((yield* fromTestPromise(() => first)).status).toBe(503);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT status FROM card_enrollments").first()))
-          ?.status
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT status FROM payment_enrollment_context").first()
+        ))?.status
       ).toBe("refused");
       const now = yield* Clock.currentTimeMillis;
       yield* fromTestPromise(() =>
         db.batch(
           Array.from({ length: 11 }, (_, offset) =>
             db
-              .prepare(`INSERT INTO card_enrollments
-      (id, user_id, price_id, billing_email, status, payment_source_mode,
+              .prepare(`INSERT INTO payment_enrollments
+      (id,subscription_id, price_id, billing_email, status, payment_source_mode,
        contracts_json, disclosure_json, prepared_at_ms, expires_at_ms)
-      VALUES (?, ?, ?, 'payer@example.com', 'refused', 'create', '{}', '{}', ?, ?)`)
+      VALUES (?, (SELECT id FROM subscriptions WHERE user_id=?), ?, 'payer@example.com', 'refused', 'create', '{}', '{}', ?, ?)`)
               .bind(
                 `20000000-0000-4000-8000-${String(offset + 2).padStart(12, "0")}`,
                 userA,
@@ -3343,7 +3351,9 @@ it("reserves preparation before calling Wompi and bounds failed preparations", (
       expect((yield* fromTestPromise(() => prepare())).status).toBe(503);
       expect(provider).toHaveBeenCalledTimes(1);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM card_enrollments").all())).results
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT id FROM payment_enrollment_context").all()
+        )).results
       ).toHaveLength(12);
     })
   ));
@@ -3380,7 +3390,9 @@ it("rejects a foreign Origin or missing session without provider or persistence 
       ).toBe(401);
       expect(provider).not.toHaveBeenCalled();
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM card_enrollments").all())).results
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT id FROM payment_enrollment_context").all()
+        )).results
       ).toEqual([]);
     })
   ));
@@ -3431,7 +3443,7 @@ it("never repeats a source POST after a provider timeout without a known candida
       });
       expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM payment_source_context").all()))
           .results
       ).toHaveLength(0);
       expect(
@@ -3519,7 +3531,7 @@ it("resolves a pending provider source by authenticated lookup without another s
         status: "source-verifying",
       });
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM payment_source_context").all()))
           .results
       ).toHaveLength(0);
       available = true;
@@ -3529,7 +3541,7 @@ it("resolves a pending provider source by authenticated lookup without another s
       expect(provider.mock.calls).toHaveLength(lookups);
       yield* fromTestPromise(() =>
         db
-          .prepare("UPDATE card_enrollments SET last_verification_at_ms = 0 WHERE id = ?")
+          .prepare("UPDATE payment_enrollments SET last_verification_at_ms = 0 WHERE id = ?")
           .bind(decoded.enrollmentId)
           .run()
       );
@@ -3550,7 +3562,7 @@ it("resolves a pending provider source by authenticated lookup without another s
         status: "source-verifying",
       });
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM payment_source_context").all()))
           .results
       ).toHaveLength(0);
       expect(
@@ -3559,7 +3571,7 @@ it("resolves a pending provider source by authenticated lookup without another s
       mismatched = false;
       yield* fromTestPromise(() =>
         db
-          .prepare("UPDATE card_enrollments SET last_verification_at_ms = 0 WHERE id = ?")
+          .prepare("UPDATE payment_enrollments SET last_verification_at_ms = 0 WHERE id = ?")
           .bind(decoded.enrollmentId)
           .run()
       );
@@ -3569,7 +3581,7 @@ it("resolves a pending provider source by authenticated lookup without another s
       });
       expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM payment_source_context").all()))
           .results
       ).toHaveLength(1);
       expect(

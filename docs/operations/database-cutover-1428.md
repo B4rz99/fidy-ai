@@ -1824,3 +1824,139 @@ DELETE FROM sql_assertions WHERE scope='pat_grants_cutover';
 ```
 
 <!-- pat-grants-verify:end -->
+
+## Subscription enrollment and reusable sources (#1449)
+
+`subscriptions` now owns the stable `(id,user_id)` identity formerly in `users.subscription_id`.
+An enrollment and its Subscription reservation commit together. Existing issued Subscription IDs
+are preserved; an owner with enrollment history but no issued Subscription receives one new stable
+identity during extraction. Free/trial Users without enrollment history need no row. The selected
+paid-attempt pointer and the remaining paid-standing copies are the separate #1450 slice; this
+branch is the integration branch for that dependent work, not a compatibility release.
+
+`payment_enrollments` has the accepted twenty fields. `payment_sources` has nine domain fields plus
+`archive_row_ref`, preserving the original source erasure address. Candidate IDs remain on enrollment;
+only authenticated verified observations establish a reusable source. Composite deferred foreign keys
+bind a source and its original enrollment to the same Subscription. An inserted verified source binds
+its origin in that same native statement; reuse resolves the existing active source, never a new
+source or origin. Method/environment and original source facts are immutable. Retirement retains the
+existing failed-card, cleared-attempt and no-paid-standing requirements. Provider candidate and source
+identities are unique within their recorded environment. Proof lifetime, browser freshness, acceptance
+binding, lookup cooldowns/eight-check budget and ambiguous-creation behavior are unchanged.
+
+The read-only `payment_enrollment_context` and `payment_source_context` projections resolve User
+ownership through Subscription for the owning adapter's reads and guards. They hold no state and
+have no write triggers. All mutations address the final tables. No old enrollment/source view remains.
+Erasure keeps the purpose identifiers `card_enrollments`, `card_payment_sources` and
+`subscription_identities`, original archive body keys and row addresses. Source erasure first clears
+resolved enrollment references, then deletes the selected sources; origin enrollments follow, then
+the Subscription identity. Billing/refund/cancellation history is disposed in its existing order.
+
+For existing D1, back up and fence enrollment, billing/renewal/settlement, refunds, cancellation,
+price publication, erasure and User creation. Complete the preceding identity/authentication cutovers.
+Inventory every table, view, trigger, index and incoming foreign key against the preceding baseline;
+stop on unknown dependencies or schema differences. This cutover also replaces the incoming source
+FKs in `billing_attempts` and `users`, and the Subscription FK in `refund_attempts`. Do not replay
+the baseline. The `source-cutover` native test executes the following plan against populated native D1.
+
+In **one native D1 batch**:
+
+1. Enable deferred foreign keys, run `subscription-source-preflight`, and require a clean FK check.
+2. Create the final `subscriptions`, `payment_enrollments` and `payment_sources` tables from the
+   baseline, without their indexes/triggers yet. Create final `users`, `billing_attempts` and
+   `refund_attempts` definitions under `_1449` shadow names, changing only each CREATE TABLE name.
+   Keep all incoming references addressed to their final table names.
+3. Run `subscription-source-copy`. Copy each shadow table using an explicit manifest of its final
+   non-generated columns from `PRAGMA table_xinfo`, preserving original rowid and every retained
+   column byte-for-byte. `users.subscription_id` is the sole removed User column; generated paid
+   identity helpers are recomputed from their unchanged inputs. No billing/refund fact is removed.
+4. Run `subscription-source-copy-check` before dropping originals. Preserve the original schema
+   inventory for rollback and verify each shadow table's rowid/common-column sets with bidirectional
+   EXCEPT. Preserve all unrelated tables, archives, migration-ledger rows and sequence watermarks.
+5. Drop inventoried views/triggers and explicit indexes (never SQLite autoindexes), then drop the
+   original `card_enrollments`, `users`, `billing_attempts`, `refund_attempts`. Rename shadows to their
+   final names. Reinstall all final views/triggers/indexes from the baseline, including erasure guards.
+6. Run `subscription-source-verify`, then align the existing baseline ledger in the same unit only
+   after verification. Any failure restores all original rows, schema and archives. After success,
+   rollback requires the backup and matching old code. Publish matching code and verify enrollment,
+   retry/reuse, retirement, billing and erasure before removing the fence.
+
+Missing source environments are resolved only from a single recorded billing environment for that
+exact source; never from current deployment configuration. A source with unknown/conflicting history,
+changed method/billing context, or a reuse enrollment with ambiguous source references stops the batch.
+The extraction performs no provider mutation and never invents acceptance or verification evidence.
+
+<!-- subscription-source-preflight:start -->
+
+```sql
+PRAGMA defer_foreign_keys=ON;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription_source_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_permits) AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM card_enrollments e WHERE e.payment_source_id IS NOT NULL AND (
+  e.source_method<>e.method OR e.source_billing_email<>e.billing_email
+  OR (e.wompi_environment IS NULL AND (SELECT count(DISTINCT a.wompi_environment) FROM billing_attempts a WHERE a.payment_source_id=e.payment_source_id)<>1)
+  OR EXISTS(SELECT 1 FROM billing_attempts a WHERE a.payment_source_id=e.payment_source_id
+   AND (a.user_id<>e.user_id OR (e.wompi_environment IS NOT NULL AND a.wompi_environment<>e.wompi_environment)))))
+ AND NOT EXISTS(SELECT 1 FROM billing_attempts a WHERE NOT EXISTS(SELECT 1 FROM card_enrollments e
+  JOIN card_enrollments origin ON origin.payment_source_id=a.payment_source_id
+  WHERE e.id=a.enrollment_id AND e.user_id=a.user_id AND origin.user_id=a.user_id
+   AND e.method=origin.source_method AND (e.wompi_environment IS NULL OR e.wompi_environment=a.wompi_environment)))
+ AND NOT EXISTS(SELECT 1 FROM card_enrollments e WHERE
+  (e.status='available' AND e.payment_source_id IS NULL AND (SELECT count(DISTINCT a.payment_source_id) FROM billing_attempts a WHERE a.enrollment_id=e.id)<>1)
+  OR (SELECT count(DISTINCT a.payment_source_id) FROM billing_attempts a WHERE a.enrollment_id=e.id)>1)
+ AND NOT EXISTS(SELECT 1 FROM refund_attempts r JOIN users u ON u.id=r.user_id WHERE u.subscription_id IS NOT r.subscription_id)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- subscription-source-preflight:end -->
+
+<!-- subscription-source-copy:start -->
+
+```sql
+INSERT INTO subscriptions(rowid,id,user_id)
+SELECT u.rowid,COALESCE(u.subscription_id,lower(hex(randomblob(4))||'-'||hex(randomblob(2))||'-4'||substr(hex(randomblob(2)),2)||'-a'||substr(hex(randomblob(2)),2)||'-'||hex(randomblob(6)))),u.id
+FROM users u WHERE u.subscription_id IS NOT NULL OR EXISTS(SELECT 1 FROM card_enrollments e WHERE e.user_id=u.id);
+INSERT INTO payment_enrollments(rowid,id,subscription_id,price_id,billing_email,status,payment_source_mode,contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,accepted_at_ms,payment_request_id,wompi_candidate_source_id,verification_attempts,last_verification_at_ms,refusal_reason,method,wompi_environment,authorization_digest,payment_source_id)
+SELECT e.rowid,e.id,s.id,e.price_id,e.billing_email,e.status,e.payment_source_mode,e.contracts_json,e.disclosure_json,e.prepared_at_ms,e.expires_at_ms,e.accepted_at_ms,e.payment_request_id,e.wompi_candidate_source_id,e.verification_attempts,e.last_verification_at_ms,e.refusal_reason,e.method,COALESCE(e.wompi_environment,(SELECT a.wompi_environment FROM billing_attempts a WHERE a.enrollment_id=e.id LIMIT 1)),e.authorization_digest,COALESCE(e.payment_source_id,(SELECT a.payment_source_id FROM billing_attempts a WHERE a.enrollment_id=e.id LIMIT 1))
+FROM card_enrollments e JOIN subscriptions s ON s.user_id=e.user_id;
+INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_environment,wompi_source_id,billing_email,method,verified_at_ms,retired_at_ms,archive_row_ref)
+SELECT e.payment_source_id,s.id,e.id,COALESCE(e.wompi_environment,(SELECT a.wompi_environment FROM billing_attempts a WHERE a.payment_source_id=e.payment_source_id LIMIT 1)),e.source_wompi_id,e.source_billing_email,e.source_method,e.source_created_at_ms,e.source_retired_at_ms,COALESCE(e.source_row_ref,'source:'||e.payment_source_id)
+FROM card_enrollments e JOIN subscriptions s ON s.user_id=e.user_id WHERE e.payment_source_id IS NOT NULL;
+```
+
+<!-- subscription-source-copy:end -->
+
+<!-- subscription-source-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription_source_cutover',CASE WHEN
+ (SELECT count(*) FROM card_enrollments)=(SELECT count(*) FROM payment_enrollments)
+ AND (SELECT count(*) FROM card_enrollments WHERE payment_source_id IS NOT NULL)=(SELECT count(*) FROM payment_sources)
+ AND NOT EXISTS(SELECT rowid,subscription_id,id FROM users WHERE subscription_id IS NOT NULL
+  EXCEPT SELECT rowid,id,user_id FROM subscriptions)
+ AND NOT EXISTS(SELECT e.rowid,e.id,e.user_id,e.price_id,e.billing_email,e.status,e.payment_source_mode,e.contracts_json,e.disclosure_json,e.prepared_at_ms,e.expires_at_ms,e.accepted_at_ms,e.payment_request_id,e.wompi_candidate_source_id,e.verification_attempts,e.last_verification_at_ms,e.refusal_reason,e.method,e.authorization_digest FROM card_enrollments e
+  EXCEPT SELECT e.rowid,e.id,s.user_id,e.price_id,e.billing_email,e.status,e.payment_source_mode,e.contracts_json,e.disclosure_json,e.prepared_at_ms,e.expires_at_ms,e.accepted_at_ms,e.payment_request_id,e.wompi_candidate_source_id,e.verification_attempts,e.last_verification_at_ms,e.refusal_reason,e.method,e.authorization_digest FROM payment_enrollments e JOIN subscriptions s ON s.id=e.subscription_id)
+ AND NOT EXISTS(SELECT e.payment_source_id,e.user_id,e.id,e.source_wompi_id,e.source_billing_email,e.source_method,e.source_created_at_ms,e.source_retired_at_ms,COALESCE(e.source_row_ref,'source:'||e.payment_source_id) FROM card_enrollments e WHERE e.payment_source_id IS NOT NULL
+  EXCEPT SELECT p.id,s.user_id,p.origin_enrollment_id,p.wompi_source_id,p.billing_email,p.method,p.verified_at_ms,p.retired_at_ms,p.archive_row_ref FROM payment_sources p JOIN subscriptions s ON s.id=p.subscription_id)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- subscription-source-copy-check:end -->
+
+<!-- subscription-source-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription_source_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM payment_enrollments e JOIN payment_sources p ON p.id=e.payment_source_id
+  WHERE e.subscription_id<>p.subscription_id OR e.method<>p.method OR e.wompi_environment IS NOT p.wompi_environment)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='subscription_source_cutover';
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- subscription-source-verify:end -->

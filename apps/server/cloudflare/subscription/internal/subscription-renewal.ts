@@ -63,7 +63,7 @@ const prepareRenewalClaim = (
       SELECT ?, a.user_id, a.enrollment_id, ?, a.payment_source_id, price.id, price.amount, price.currency,
       price.billing_period, price.service_market, price.tax_treatment, a.time_zone, a.wompi_environment, ?, ?, a.id, ?, ?, 1, COALESCE(a.calendar_anchor_ms, a.paid_starts_at_ms)
       FROM subscription_standing s JOIN billing_attempts a ON a.id = s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id = s.user_id
-      JOIN verified_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
+      JOIN payment_source_context source ON source.id = a.payment_source_id AND source.user_id = a.user_id
       JOIN subscription_prices price ON price.published_order IS NOT NULL AND price.billing_period = a.billing_period AND price.service_market = a.service_market
       WHERE s.user_id = ? AND a.id = ?
         AND a.wompi_environment = ? AND a.status = 'succeeded'
@@ -174,7 +174,7 @@ export const dispatchSubscriptionRenewals = (
       statement: {
         sql: `SELECT a.user_id, a.id
     FROM billing_attempts a JOIN subscription_standing s ON s.attempt_id = a.id AND a.user_id = s.user_id
-    JOIN verified_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
+    JOIN payment_source_context source ON source.id = a.payment_source_id AND source.user_id = a.user_id
     WHERE a.followup_due_at_ms <= ?
       AND a.wompi_environment = ?
       AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id = s.user_id)

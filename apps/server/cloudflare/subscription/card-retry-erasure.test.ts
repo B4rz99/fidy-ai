@@ -20,17 +20,18 @@ const seed = (db: D1Database, user: string, index: number): Promise<unknown> =>
         "INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) VALUES(?,'America/Bogota','CO','es-CO',1)"
       )
       .bind(user),
+    db.prepare("INSERT OR IGNORE INTO subscriptions(id,user_id) SELECT id,id FROM users"),
     db
-      .prepare(`INSERT INTO card_enrollments(id,user_id,price_id,billing_email,status,payment_source_mode,
+      .prepare(`INSERT INTO payment_enrollments(id,subscription_id,price_id,billing_email,status,payment_source_mode,
     contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,payment_request_id,wompi_candidate_source_id,method,wompi_environment)
-    VALUES(?,?,'22700000-0000-4000-8000-000000000001','qa@example.test','creating','create','{}','{}',0,900000,?,?,'card','sandbox')`)
+    VALUES(?,(SELECT id FROM subscriptions WHERE user_id=?),'22700000-0000-4000-8000-000000000001','qa@example.test','creating','create','{}','{}',0,900000,?,?,'card','sandbox')`)
       .bind(id(2, index), user, id(5, index), 40 + index),
     db
       .prepare(
-        "UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?,?,?,?,'qa@example.test',0,'card'))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id"
+        "INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_source_id,billing_email,verified_at_ms,method,wompi_environment,archive_row_ref)\n SELECT incoming.id,e.subscription_id,incoming.enrollment_id,incoming.wompi_source_id,incoming.billing_email,incoming.created_at_ms,incoming.method,e.wompi_environment,'source:'||incoming.id FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?,?,?,?,'qa@example.test',0,'card'))) incoming\n JOIN payment_enrollments e ON e.id=incoming.enrollment_id JOIN subscriptions sub ON sub.id=e.subscription_id AND sub.user_id=incoming.user_id"
       )
       .bind(id(3, index), user, id(2, index), 40 + index),
-    db.prepare("UPDATE card_enrollments SET status='available' WHERE id=?").bind(id(2, index)),
+    db.prepare("UPDATE payment_enrollments SET status='available' WHERE id=?").bind(id(2, index)),
     db
       .prepare(`INSERT INTO billing_attempts(id,user_id,enrollment_id,payment_request_id,payment_source_id,price_id,amount,currency,billing_period,service_market,tax_treatment,time_zone,wompi_environment,wompi_reference,created_at_ms)
     VALUES(?,?,?,?,?,'22700000-0000-4000-8000-000000000001','9900','COP','weekly','CO','not-taxable','America/Bogota','sandbox',?,0)`)
@@ -65,19 +66,22 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
       yield* wait(() => seed(db, foreignUser, 2));
       yield* wait(() =>
         db
-          .prepare("UPDATE card_enrollments SET source_retired_at_ms=200000 WHERE user_id=?")
+          .prepare(
+            "UPDATE payment_sources SET retired_at_ms=200000 WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?)"
+          )
           .bind(userId)
           .run()
       );
       yield* wait(() =>
         db.batch([
+          db.prepare("INSERT OR IGNORE INTO subscriptions(id,user_id) SELECT id,id FROM users"),
           db
-            .prepare(`INSERT INTO card_enrollments(id,user_id,price_id,billing_email,status,payment_source_mode,contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,wompi_candidate_source_id,method,wompi_environment)
-      VALUES(?,?,'22700000-0000-4000-8000-000000000001','qa@example.test','creating','create','{}','{}',0,900000,43,'card','sandbox')`)
+            .prepare(`INSERT INTO payment_enrollments(id,subscription_id,price_id,billing_email,status,payment_source_mode,contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,wompi_candidate_source_id,method,wompi_environment)
+      VALUES(?,(SELECT id FROM subscriptions WHERE user_id=?),'22700000-0000-4000-8000-000000000001','qa@example.test','creating','create','{}','{}',0,900000,43,'card','sandbox')`)
             .bind(id(2, 3), userId),
           db
             .prepare(
-              "UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?,?,?,43,'qa@example.test',0,'card'))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id"
+              "INSERT INTO payment_sources(id,subscription_id,origin_enrollment_id,wompi_source_id,billing_email,verified_at_ms,method,wompi_environment,archive_row_ref)\n SELECT incoming.id,e.subscription_id,incoming.enrollment_id,incoming.wompi_source_id,incoming.billing_email,incoming.created_at_ms,incoming.method,e.wompi_environment,'source:'||incoming.id FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?,?,?,43,'qa@example.test',0,'card'))) incoming\n JOIN payment_enrollments e ON e.id=incoming.enrollment_id JOIN subscriptions sub ON sub.id=e.subscription_id AND sub.user_id=incoming.user_id"
             )
             .bind(id(3, 3), userId, id(2, 3)),
         ])
@@ -95,14 +99,14 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
           .run()
       );
       for (const sql of [
-        "UPDATE card_enrollments SET source_row_ref=NULL,payment_source_id=NULL,source_wompi_id=NULL,source_billing_email=NULL,source_created_at_ms=NULL,source_retired_at_ms=NULL,source_method=NULL WHERE payment_source_id IS NOT NULL AND user_id=?",
-        "UPDATE card_enrollments SET source_retired_at_ms=1 WHERE user_id=?",
+        "DELETE FROM payment_sources WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?)",
+        "UPDATE payment_sources SET retired_at_ms=1 WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?)",
         "UPDATE billing_attempts AS billing_checkout_responses SET checkout_transaction_id=NULL WHERE checkout_transaction_id IS NOT NULL AND id IN(SELECT id FROM billing_attempts WHERE user_id=?)",
         "UPDATE billing_attempts SET checkout_transaction_id=checkout_transaction_id||'x' WHERE user_id=?",
       ]) {
         yield* wait(() =>
           expect(db.prepare(sql).bind(userId).run()).rejects.toThrow(
-            /erasure_fenced|card_source_immutable|billing_checkout_response_immutable/
+            /erasure_fenced|payment_source_immutable|billing_checkout_response_immutable/
           )
         );
       }
@@ -135,12 +139,14 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
         db.prepare("UPDATE erasure_requests SET state='Draining' WHERE id=?").bind(reference).run()
       );
       yield* wait(() =>
-        db
-          .prepare(
-            "UPDATE card_enrollments SET source_row_ref=NULL,payment_source_id=NULL,source_wompi_id=NULL,source_billing_email=NULL,source_created_at_ms=NULL,source_retired_at_ms=NULL,source_method=NULL WHERE payment_source_id=?"
-          )
-          .bind(id(3, 3))
-          .run()
+        db.batch([
+          db
+            .prepare(
+              "UPDATE payment_enrollments SET payment_source_id=NULL WHERE payment_source_id=?"
+            )
+            .bind(id(3, 3)),
+          db.prepare("DELETE FROM payment_sources WHERE id=?").bind(id(3, 3)),
+        ])
       );
       expect(
         yield* wait(() =>
@@ -221,7 +227,7 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
       expect(
         yield* wait(() =>
           db
-            .prepare("SELECT count(*) FROM verified_payment_sources WHERE user_id=?")
+            .prepare("SELECT count(*) FROM payment_source_context WHERE user_id=?")
             .bind(userId)
             .first("count(*)")
         )

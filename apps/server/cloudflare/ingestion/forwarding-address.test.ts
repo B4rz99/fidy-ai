@@ -170,9 +170,7 @@ it("returns unavailable without a defect when a retained forwarding creation dat
       const db = yield* setup();
       yield* wait(() =>
         db
-          .prepare(
-            "UPDATE users AS email_forwarding_addresses SET forwarding_issued_at_ms = ? WHERE forwarding_address_id IS NOT NULL AND id = ?"
-          )
+          .prepare("UPDATE forwarding_addresses SET issued_at_ms = ? WHERE user_id = ?")
           .bind(8_640_000_000_000_001, userA)
           .run()
       );

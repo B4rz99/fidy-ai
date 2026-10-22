@@ -551,9 +551,7 @@ it(
         ]);
         const addresses = yield* fromTestPromise(() =>
           runtime.db
-            .prepare(
-              "SELECT count(*) AS total FROM (SELECT rowid,id AS user_id,forwarding_address_id AS id,forwarding_local_part AS local_part,forwarding_issued_at_ms AS created_at_ms FROM users WHERE forwarding_address_id IS NOT NULL) AS email_forwarding_addresses WHERE user_id = ?"
-            )
+            .prepare("SELECT count(*) AS total FROM forwarding_addresses WHERE user_id = ?")
             .bind(userA)
             .first<{ total: number }>()
         );

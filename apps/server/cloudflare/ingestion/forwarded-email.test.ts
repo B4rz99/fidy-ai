@@ -267,9 +267,7 @@ const setup = Effect.fn(function* () {
   ]) {
     yield* wait(() =>
       db
-        .prepare(
-          "UPDATE users AS email_forwarding_addresses SET forwarding_local_part = ? WHERE forwarding_address_id IS NOT NULL AND id = ?"
-        )
+        .prepare("UPDATE forwarding_addresses SET local_part = ? WHERE user_id = ?")
         .bind(local, userId)
         .run()
     );

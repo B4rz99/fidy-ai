@@ -52,7 +52,7 @@ export const prepareForwardingAddress = Effect.fn(function* (work: CanonicalPrep
       subject: { _tag: "User", userId: work.subject.userId },
       requirement: "active",
       statement: {
-        sql: "SELECT forwarding_address_id AS id FROM users WHERE id=? AND forwarding_address_id IS NOT NULL",
+        sql: "SELECT id FROM forwarding_addresses WHERE user_id=?",
         params: [work.subject.userId],
       },
     }).first()

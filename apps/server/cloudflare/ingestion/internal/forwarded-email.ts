@@ -173,7 +173,7 @@ const resolveForwardingRecipient = (
   Effect.gen(function* () {
     const subjectRow = yield* io(() =>
       db
-        .prepare("SELECT id AS user_id FROM users WHERE forwarding_local_part=?")
+        .prepare("SELECT user_id FROM forwarding_addresses WHERE local_part=?")
         .bind(localPart)
         .first()
     );
@@ -187,11 +187,11 @@ const resolveForwardingRecipient = (
         db,
         userId: subject.value.user_id,
         statement: protectConsentStatement({
-          subject: { _tag: "Owner", column: "a.id" },
+          subject: { _tag: "Owner", column: "a.user_id" },
           requirement: "active",
           statement: {
-            sql: `SELECT a.id AS user_id, u.timeZone FROM users a
-            JOIN identity_user_context u ON u.userId = a.id WHERE a.forwarding_local_part = ?`,
+            sql: `SELECT a.user_id, u.timeZone FROM forwarding_addresses a
+            JOIN identity_user_context u ON u.userId = a.user_id WHERE a.local_part = ?`,
             params: [localPart],
           },
         }),

@@ -123,34 +123,23 @@ export const installTestSchemaWithPrefix = (
   return pending;
 };
 
-/** Forwarding owner fixtures keep small caller stubs and install current field guards and receipt constraints. */
+/** Forwarding owner fixtures keep small caller stubs and install current address guards and receipt constraints. */
 export const installForwardingTestSchema = ({
   db,
   tables,
 }: Readonly<{ db: D1Database; tables: ReadonlyArray<string> }>): Promise<void> =>
-  db
-    .batch([
-      db.prepare("ALTER TABLE users ADD COLUMN forwarding_address_id TEXT"),
-      db.prepare("ALTER TABLE users ADD COLUMN forwarding_local_part TEXT"),
-      db.prepare("ALTER TABLE users ADD COLUMN forwarding_issued_at_ms INTEGER"),
-    ])
-    .then(() =>
-      installCurrentTestObjects({
-        db,
-        tables: [
-          "forwarded_email_receipts",
-          "canonical_child_guard",
-          "commercial_allowance_consumptions",
-          "canonical_request_replays",
-          ...tables,
-        ],
-        objects: [
-          "users_forwarding_",
-          "email_forwarding_addresses_field_",
-          "issue_forwarding_address",
-        ],
-      })
-    );
+  installCurrentTestObjects({
+    db,
+    tables: [
+      "forwarding_addresses",
+      "forwarded_email_receipts",
+      "canonical_child_guard",
+      "commercial_allowance_consumptions",
+      "canonical_request_replays",
+      ...tables,
+    ],
+    objects: ["email_forwarding_addresses_field_", "issue_forwarding_address"],
+  });
 
 type BindingSlot = Readonly<{ runtime: Miniflare; index: number; images: NativeImagePool }>;
 type TestDatabaseTransport = "proxy" | "fetch";

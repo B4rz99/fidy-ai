@@ -2446,3 +2446,79 @@ SELECT 'subscription-price-notice-final',CASE WHEN NOT EXISTS(SELECT 1 FROM prag
 ```
 
 <!-- subscription-price-notice-verify:end -->
+
+## Forwarding address extraction (#1456)
+
+Source checkpoint: `1217883c0`, after Subscription and allowance integration. The accepted
+`forwarding_addresses` record owns `id`, unique `user_id`, unique `local_part`, and `issued_at_ms`.
+Issuance remains in the processing-grant transaction. An address routes email; it supplies no
+browser-login, mailbox-credential, or canonical caller authority. Admission still rechecks current
+Consent and institution Connection eligibility before retaining bytes.
+
+With writers quiesced, run the following in one native D1 batch: preflight, create the exact target
+`forwarding_addresses` definition from the baseline, copy and compare, remove the source checkpoint's
+explicit views/triggers/indexes, swap, recreate the target baseline's views/triggers/indexes, then
+verify. Keep implicit constraint indexes. Do not drop/rebuild User or disable foreign keys.
+A failure rolls back the complete batch. #1494 owns final live cutover verification.
+
+Preserve each original User rowid as the new address rowid so the logical
+`email_forwarding_addresses` erasure store's existing chunk references remain valid. Its archive
+shape retains `created_at_ms` as the historical serialization of the original issuance instant;
+existing archives are not rewritten. User rows without an address remain absent. No allowance or
+email-receipt state moves. The new Consent trigger retains an existing address on a later grant.
+
+<!-- forwarding-address-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'forwarding-address-preflight',CASE WHEN NOT EXISTS(
+ SELECT 1 FROM users WHERE
+ (forwarding_address_id IS NULL OR forwarding_local_part IS NULL OR forwarding_issued_at_ms IS NULL)
+ AND (forwarding_address_id IS NOT NULL OR forwarding_local_part IS NOT NULL OR forwarding_issued_at_ms IS NOT NULL)
+) THEN 1 ELSE 0 END;
+```
+
+<!-- forwarding-address-preflight:end -->
+
+<!-- forwarding-address-copy:start -->
+
+```sql
+INSERT INTO forwarding_addresses(rowid,id,user_id,local_part,issued_at_ms)
+SELECT rowid,forwarding_address_id,id,forwarding_local_part,forwarding_issued_at_ms
+FROM users WHERE forwarding_address_id IS NOT NULL;
+```
+
+<!-- forwarding-address-copy:end -->
+
+<!-- forwarding-address-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'forwarding-address-copy',CASE WHEN NOT EXISTS(
+ SELECT rowid,id,user_id,local_part,issued_at_ms FROM forwarding_addresses
+ EXCEPT SELECT rowid,forwarding_address_id,id,forwarding_local_part,forwarding_issued_at_ms
+ FROM users WHERE forwarding_address_id IS NOT NULL
+) AND (SELECT COUNT(*) FROM forwarding_addresses)=(SELECT COUNT(*) FROM users WHERE forwarding_address_id IS NOT NULL)
+THEN 1 ELSE 0 END;
+```
+
+<!-- forwarding-address-copy-check:end -->
+
+<!-- forwarding-address-swap:start -->
+
+```sql
+ALTER TABLE users DROP COLUMN forwarding_issued_at_ms;
+ALTER TABLE users DROP COLUMN forwarding_local_part;
+ALTER TABLE users DROP COLUMN forwarding_address_id;
+```
+
+<!-- forwarding-address-swap:end -->
+
+<!-- forwarding-address-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'forwarding-address-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END;
+```
+
+<!-- forwarding-address-verify:end -->

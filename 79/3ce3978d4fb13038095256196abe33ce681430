@@ -1,0 +1,29 @@
+apps/web/e2e/oauth-review.spec.ts
+  s_241024bc81d268::t_d153adb65c2f66 92,97,152,690
+  s_241024bc81d268::t_8754cda719a012 113-115
+  s_241024bc81d268::t_202ce3dc4e7898 88-91,93-96,98,172
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_241024bc81d268::t_46af790db186e1 25,421
+apps/web/src/features/pats/FEATURE.md
+  s_241024bc81d268::t_a79df27465b058 11-16
+docs/operations/audit-20261022-schema-mismatch.md
+  s_241024bc81d268::t_a79df27465b058 80-92
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_241024bc81d268::t_46af790db186e1 27,115-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "793ce3978d4fb13038095256196abe33ce681430",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

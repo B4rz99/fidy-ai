@@ -206,6 +206,16 @@ it.each(["valid", "changed-deadline", "interrupted-copy", "interrupted-swap"] as
           )
         ).toEqual({ pending_count: 2 });
         yield* io(() =>
+          expect(
+            db
+              .prepare(
+                "UPDATE ingestion_review_items SET evidence_state='resolved',original_evidence=NULL,known_money_json=NULL,suggestions_json=NULL WHERE id=?"
+              )
+              .bind(id(7))
+              .run()
+          ).rejects.toThrow("review_immutable")
+        );
+        yield* io(() =>
           db
             .prepare(
               "UPDATE ingestion_review_items SET workspace_state='pending',workspace_revision=4,workspace_updated_at_ms=? WHERE id=?"

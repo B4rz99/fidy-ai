@@ -2133,8 +2133,7 @@ unchanged. The existing provider workflow telemetry remains at the same orchestr
 
 Provider observations now launch `billing-lookup-v2-<digest>` for the retained transaction and signed
 hint generation. The digest includes the exact provider-native signed timestamp and status; it has
-no wall-clock bucket. The payload contains only these identities and the already charged budget
-ordinals. A lost launch response is recovered with `get` of that same execution id.
+no wall-clock bucket. The payload contains only these identities. A lost launch response is recovered with `get` and native status inspection of that same execution id. Queued, running, waiting and paused executions keep their existing reservation; scheduler reoffers do not charge them again. A terminal execution with remaining eligible budget is restarted only after a new atomic prelaunch reservation.
 
 Each execution has at most eight named lookup steps separated by native durable cooldown sleeps.
 The initial reservation remains charged before handoff, including failed handoffs. Later steps

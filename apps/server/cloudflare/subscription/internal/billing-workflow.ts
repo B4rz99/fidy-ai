@@ -36,6 +36,7 @@ import { type WompiTransportFactory } from "./wompi-runtime";
 import {
   type BillingCollectionEnvironment,
   BillingCollectionFailure,
+  type BillingObservationWorkflow,
   BillingPriceNoticeWork,
   type BillingRuntime,
   type BillingWorkflowStarter,
@@ -59,26 +60,13 @@ const LookupWork = Schema.Struct({
   transactionId: WompiTransactionId,
   signedAt: Schema.NullOr(Schema.Finite),
   signedStatus: Schema.NullOr(Schema.String),
-  attemptReservation: Schema.NullOr(Schema.Int),
-  eventReservation: Schema.NullOr(Schema.Int),
-});
-const LookupReservation = Schema.Struct({
-  lookup_attempts: Schema.Int,
-  event_lookup_attempts: Schema.NullOr(Schema.Int),
 });
 const workflowRetention = { successRetention: "3 days", errorRetention: "3 days" } as const;
 type CollectionQueue = Readonly<{
   send: (work: typeof CollectionMessage.Type) => Promise<unknown>;
 }>;
 type CollectionWorkflow = BillingWorkflowStarter;
-type LookupWorkflowBinding = Readonly<{
-  create: (options: {
-    id: string;
-    params: typeof LookupWork.Type;
-    retention: typeof workflowRetention;
-  }) => Promise<unknown>;
-  get: (id: string) => Promise<unknown>;
-}>;
+type LookupWorkflowBinding = BillingObservationWorkflow;
 /** Identify this Queue payload without interpreting any provider data as authority. */
 export const isBillingCollectionWork = (body: unknown): boolean =>
   Option.isSome(
@@ -673,13 +661,22 @@ const observeLookup = (
     const reserved =
       index === 0
         ? yield* initialLookupReservation(execution.environment.DB, work, now)
-        : yield* reserveLookup(execution.environment.DB, work, now).pipe(Effect.map(Option.isSome));
+        : yield* reserveLookup(execution.environment.DB, work, now);
     if (!reserved) return;
     yield* reconcileEventCandidate(execution.environment, work.transactionId, {
       wompiHttp: execution.wompiHttp,
       generation: work,
-    }).pipe(Effect.exit);
+    });
   });
+const runObservedLookup = (
+  input: Readonly<{
+    execution: BillingWorkflowExecution;
+    work: typeof LookupWork.Type;
+    index: number;
+    runActivity: RunActivity;
+  }>
+): Promise<void> => input.runActivity(observeLookup(input)).catch(() => undefined);
+
 const runLookupLoop = ({
   input,
   work,
@@ -700,7 +697,7 @@ const runLookupLoop = ({
         }
         yield* attempt(() =>
           input.activity(`lookup-wompi-billing-v2-${index}`, options, () =>
-            runActivity(observeLookup({ execution: input, work, index }))
+            runObservedLookup({ execution: input, work, index, runActivity })
           )
         );
       }
@@ -719,10 +716,7 @@ const reserveLookup = (
   db: D1Database,
   generation: LookupGeneration,
   now: number
-): Effect.Effect<
-  Option.Option<Pick<typeof LookupWork.Type, "attemptReservation" | "eventReservation">>,
-  BillingCollectionFailure
-> =>
+): Effect.Effect<boolean, BillingCollectionFailure> =>
   Effect.gen(function* () {
     const key = [generation.transactionId, generation.signedAt, generation.signedStatus];
     const results = yield* attempt(() =>
@@ -744,12 +738,8 @@ const reserveLookup = (
     const first = results[0];
     const second = results[1];
     if (first === undefined || second === undefined) return yield* failure();
-    if (first.meta.changes === 0 && second.meta.changes === 0) return Option.none();
-    const row = yield* decode(LookupReservation, second.results[0] ?? first.results[0]);
-    return Option.some({
-      attemptReservation: first.meta.changes > 0 ? row.lookup_attempts : null,
-      eventReservation: second.meta.changes > 0 ? row.event_lookup_attempts : null,
-    });
+    if (first.meta.changes === 0 && second.meta.changes === 0) return false;
+    return true;
   });
 const initialLookupReservation = (
   db: D1Database,
@@ -760,34 +750,25 @@ const initialLookupReservation = (
     const row = yield* attempt(() =>
       db
         .prepare(`SELECT c.transaction_id ${lookupEligibility}
-      AND ((a.status='pending' AND c.lookup_attempts=?) OR
-        (c.event_received_at_ms>=? AND c.event_resolved_at_ms IS NULL AND c.event_lookup_attempts=?
+      AND ((a.status='pending' AND c.lookup_attempts>0) OR
+        (c.event_received_at_ms>=? AND c.event_resolved_at_ms IS NULL AND c.event_lookup_attempts>0
         AND (a.id IS NULL OR a.status='pending' OR (a.status='failed' AND c.event_received_at_ms>=a.finalized_at_ms))))`)
-        .bind(
-          work.transactionId,
-          work.signedAt,
-          work.signedStatus,
-          work.attemptReservation,
-          now - eventCandidateLifetimeMs,
-          work.eventReservation
-        )
+        .bind(work.transactionId, work.signedAt, work.signedStatus, now - eventCandidateLifetimeMs)
         .first()
     );
     return row !== null;
   });
 
-const offerBillingLookup = (
-  input: Readonly<{
-    db: D1Database;
-    workflow: LookupWorkflowBinding;
-    transactionId: WompiTransactionId;
-    signedAt: Option.Option<number>;
-    signedStatus: Option.Option<string>;
-    now: number;
-  }>
-): Effect.Effect<boolean, BillingCollectionFailure> =>
+const lookupExecutionId = ({
+  transactionId,
+  signedAt,
+  signedStatus,
+}: Readonly<{
+  transactionId: WompiTransactionId;
+  signedAt: Option.Option<number>;
+  signedStatus: Option.Option<string>;
+}>): Effect.Effect<string, BillingCollectionFailure> =>
   Effect.gen(function* () {
-    const { db, workflow, transactionId, signedAt, signedStatus, now } = input;
     const fingerprint = Hex.encode(
       new Uint8Array(
         yield* attempt(() =>
@@ -800,26 +781,54 @@ const offerBillingLookup = (
         )
       )
     );
-    const id = `billing-lookup-v2-${fingerprint}`;
+    return `billing-lookup-v2-${fingerprint}`;
+  });
+const terminalObservationStatuses: ReadonlySet<InstanceStatus["status"]> = new Set([
+  "errored",
+  "terminated",
+  "complete",
+]);
+const offerBillingLookup = (
+  input: Readonly<{
+    db: D1Database;
+    workflow: LookupWorkflowBinding;
+    transactionId: WompiTransactionId;
+    signedAt: Option.Option<number>;
+    signedStatus: Option.Option<string>;
+    now: number;
+  }>
+): Effect.Effect<boolean, BillingCollectionFailure> =>
+  Effect.gen(function* () {
+    const { db, workflow, transactionId, signedAt, signedStatus, now } = input;
+    const id = yield* lookupExecutionId({ transactionId, signedAt, signedStatus });
+    const existing = yield* Effect.exit(attempt(() => workflow.get(id)));
+    if (Exit.isSuccess(existing)) {
+      const current = yield* attempt(() => existing.value.status());
+      if (!terminalObservationStatuses.has(current.status)) return true;
+    }
     const generation = {
       transactionId,
       signedAt: Option.getOrNull(signedAt),
       signedStatus: Option.getOrNull(signedStatus),
     };
-    const recorded = yield* reserveLookup(db, generation, now);
-    if (Option.isNone(recorded)) return true;
-    const created = yield* Effect.exit(
+    if (!(yield* reserveLookup(db, generation, now))) return true;
+    const started = yield* Effect.exit(
       attempt(() =>
-        workflow.create({
-          id,
-          params: { version: 2, kind: "lookup", ...generation, ...recorded.value },
-          retention: workflowRetention,
-        })
+        Exit.isSuccess(existing)
+          ? existing.value.restart()
+          : workflow.create({
+              id,
+              params: { version: 2, kind: "lookup", ...generation },
+              retention: workflowRetention,
+            })
       )
     );
-    if (Exit.isFailure(created)) {
-      const existing = yield* Effect.exit(attempt(() => workflow.get(id)));
-      if (Exit.isFailure(existing)) return false;
+    if (Exit.isFailure(started)) {
+      const recovered = yield* attempt(() => workflow.get(id));
+      const status = yield* attempt(() => recovered.status());
+      return (
+        status.status === "queued" || status.status === "running" || status.status === "waiting"
+      );
     }
     return true;
   });

@@ -47,6 +47,7 @@ import { handleRefundSupport as supportRefund } from "./internal/refund-support"
 import {
   type BillingCollectionEnvironment,
   type BillingCollectionFailure,
+  type BillingObservationWorkflow,
   type BillingQueuePublisher,
   type BillingRuntime,
   type BillingWorkflowStarter,
@@ -194,7 +195,7 @@ export const receiveWompiBillingEvent = (
 ): Effect.Effect<Response> => acceptEvent(input);
 /** Start bounded reconciliation of retained unresolved billing identities. */
 export const reconcileBillingCandidates = (
-  input: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: BillingWorkflowStarter }>
+  input: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: BillingObservationWorkflow }>
 ): Effect.Effect<void, BillingCollectionFailure> => reconcile(input);
 /** Classify the bounded versioned billing Queue identity without granting billing authority. */
 export const isBillingCollectionWork = (body: unknown): boolean => recognizesWork(body);

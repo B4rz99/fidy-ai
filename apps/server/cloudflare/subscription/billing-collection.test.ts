@@ -378,7 +378,10 @@ it("holds verified negative until the retry opportunity and admits a later verif
       yield* verify();
       expect(yield* Effect.tryPromise(() => state(db))).toBe("failed");
       const create = vi.fn((_options: { id: string; params: unknown }) => Promise.resolve({}));
-      const workflow = { create, get: (_id: string): Promise<unknown> => Promise.resolve({}) };
+      const workflow = {
+        create,
+        get: (_id: string): Promise<never> => Promise.reject(new Error("missing execution")),
+      };
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(create).not.toHaveBeenCalled();
       const callbackAt = yield* Clock.currentTimeMillis;
@@ -561,7 +564,7 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
             },
           }).then(() => ({}))
         ),
-        get: vi.fn((_id: string) => Promise.resolve({})),
+        get: vi.fn((_id: string) => Promise.reject(new Error("missing execution"))),
       };
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(workflow.create).toHaveBeenCalledTimes(1);
@@ -627,7 +630,7 @@ it("retains ambiguity without a callback and settles a privileged provider-ID re
             sleep: (_name, _duration) => Promise.resolve(),
           }).then(() => ({}))
         ),
-        get: (_id: string): Promise<unknown> => Promise.resolve({}),
+        get: (_id: string): Promise<never> => Promise.reject(new Error("missing execution")),
       };
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(workflow.create).not.toHaveBeenCalled();
@@ -681,7 +684,7 @@ it("rejects forged callback evidence across Public and Core ingress without writ
     })
   ));
 
-it("keeps the same observation execution identity when a launch response is lost across cooldowns", () =>
+it("recovers a lost launch response without charging a live execution again", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => fixture());
@@ -692,7 +695,13 @@ it("keeps the same observation execution identity when a launch response is lost
           ids.push(options.id);
           return Promise.reject(new Error("response lost"));
         },
-        get: (_id: string): Promise<unknown> => Promise.resolve({}),
+        get: (id: string): Promise<Pick<WorkflowInstance, "status" | "restart">> =>
+          ids.includes(id)
+            ? Promise.resolve({
+                status: () => Promise.resolve({ status: "queued" }),
+                restart: () => Promise.reject(new Error("must not restart active execution")),
+              })
+            : Promise.reject(new Error("missing execution")),
       };
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       yield* Effect.tryPromise(() =>
@@ -702,15 +711,18 @@ it("keeps the same observation execution identity when a launch response is lost
           )
           .run()
       );
-      const originalNow = yield* Clock.currentTimeMillis;
-      vi.spyOn(Date, "now").mockReturnValue(originalNow + 120000);
-      try {
-        yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
-      } finally {
-        vi.restoreAllMocks();
-      }
-      expect(ids).toHaveLength(2);
-      expect(ids[1]).toBe(ids[0]);
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(ids).toHaveLength(1);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT lookup_attempts FROM billing_provider_transactions WHERE transaction_id=?"
+            )
+            .bind(transactionId)
+            .first()
+        )
+      ).toEqual({ lookup_attempts: 1 });
     })
   ));
 
@@ -739,7 +751,7 @@ it("runs the bounded provider checks in one execution with durable cooldowns", (
             },
           }).then(() => ({}))
         ),
-        get: (_id: string): Promise<unknown> => Promise.reject(new Error("unexpected duplicate")),
+        get: (_id: string): Promise<never> => Promise.reject(new Error("unexpected duplicate")),
       };
       try {
         yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
@@ -802,7 +814,7 @@ it("stops an old signed generation from spending a newer hint's budget and settl
             },
           }).then(() => ({}));
         },
-        get: (_id: string): Promise<unknown> => Promise.reject(new Error("unexpected duplicate")),
+        get: (_id: string): Promise<never> => Promise.reject(new Error("unexpected duplicate")),
       };
       try {
         yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
@@ -829,6 +841,95 @@ it("stops an old signed generation from spending a newer hint's budget and settl
     })
   ));
 
+it("keeps queued and waiting work uncharged and restarts a failed execution within the original budget", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      const context = yield* Effect.context<never>();
+      yield* verifyProviderTransaction(db, () => transaction("PENDING"));
+      let now = yield* Clock.currentTimeMillis;
+      vi.spyOn(Date, "now").mockImplementation(() => now);
+      let payload = Option.none<unknown>();
+      let status: InstanceStatus["status"] = "queued";
+      let failStep = true;
+      const provider = vi.fn(() =>
+        Promise.resolve(Response.json({ data: transaction(failStep ? "PENDING" : "APPROVED") }))
+      );
+      vi.stubGlobal("fetch", provider);
+      const run = (): Promise<void> =>
+        runBillingCollectionWorkflow({
+          environment: billingRuntime(db),
+          payload: Option.getOrThrow(payload),
+          activity: (name, _options, execute) => {
+            status = "running";
+            if (name === "lookup-wompi-billing-v2-1" && failStep) {
+              status = "errored";
+              return Promise.reject(new Error("native step interrupted"));
+            }
+            return execute();
+          },
+          sleep: (_name, duration) => {
+            status = "waiting";
+            now += duration;
+            return Effect.runPromiseWith(context)(
+              reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow })
+            );
+          },
+        });
+      const restart = vi.fn(() => {
+        failStep = false;
+        return run().then(() => {
+          status = "complete";
+        });
+      });
+      const workflow = {
+        create: vi.fn((options: { params: unknown }) => {
+          payload = Option.some(options.params);
+          return Promise.resolve({});
+        }),
+        get: (_id: string): Promise<Pick<WorkflowInstance, "status" | "restart">> =>
+          Option.isNone(payload)
+            ? Promise.reject(new Error("missing execution"))
+            : Promise.resolve({ status: () => Promise.resolve({ status }), restart }),
+      };
+      try {
+        yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+        now += 60001;
+        yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT lookup_attempts FROM billing_provider_transactions WHERE transaction_id=?"
+              )
+              .bind(transactionId)
+              .first()
+          )
+        ).toEqual({ lookup_attempts: 1 });
+        const interrupted = yield* Effect.exit(Effect.tryPromise(run));
+        expect(interrupted._tag).toBe("Failure");
+        expect(provider).toHaveBeenCalledTimes(1);
+        yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+        expect(workflow.create).toHaveBeenCalledTimes(1);
+        expect(restart).toHaveBeenCalledTimes(1);
+        expect(provider).toHaveBeenCalledTimes(2);
+        expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT lookup_attempts FROM billing_provider_transactions WHERE transaction_id=?"
+              )
+              .bind(transactionId)
+              .first()
+          )
+        ).toEqual({ lookup_attempts: 2 });
+      } finally {
+        vi.restoreAllMocks();
+      }
+    })
+  ));
+
 it("durably claims each lookup before Workflow handoff, even if the handoff is ambiguous", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -839,7 +940,7 @@ it("durably claims each lookup before Workflow handoff, even if the handoff is a
       );
       const workflow = {
         create,
-        get: (_id: string): Promise<unknown> => Promise.reject(new Error("status unavailable")),
+        get: (_id: string): Promise<never> => Promise.reject(new Error("status unavailable")),
       };
       for (let index = 0; index < 8; index++) {
         yield* Effect.exit(
@@ -872,7 +973,10 @@ it("bounds pending provider-ID lookups and resumes only from a confirmed lookup 
       const db = yield* Effect.tryPromise(() => fixture());
       yield* verifyProviderTransaction(db, () => transaction("PENDING"));
       const create = vi.fn((_options: { id: string; params: unknown }) => Promise.resolve({}));
-      const workflow = { create, get: (_id: string): Promise<unknown> => Promise.resolve({}) };
+      const workflow = {
+        create,
+        get: (_id: string): Promise<never> => Promise.reject(new Error("missing execution")),
+      };
       for (let index = 0; index < 8; index++) {
         yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
         yield* Effect.tryPromise(() =>
@@ -964,7 +1068,10 @@ it("bounds unrelated signed callback lookups and ignores identical event replay"
           () => ({})
         )
       );
-      const workflow = { create, get: (_id: string): Promise<unknown> => Promise.resolve({}) };
+      const workflow = {
+        create,
+        get: (_id: string): Promise<never> => Promise.reject(new Error("missing execution")),
+      };
       for (let index = 0; index < 8; index++) {
         yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
         yield* Effect.tryPromise(() =>
@@ -1018,7 +1125,7 @@ it("accepts same-second signed approval after a verified negative without replay
             activity: (_name, _options, run) => run(),
           }).then(() => ({}));
         }),
-        get: (_id: string): Promise<unknown> => Promise.resolve({}),
+        get: (_id: string): Promise<never> => Promise.reject(new Error("missing execution")),
       };
       expect(
         (yield* Effect.tryPromise(() =>
@@ -1128,7 +1235,7 @@ it("rejects a signed callback with another User's source even when its reference
             () => ({})
           )
         ),
-        get: (_id: string): Promise<unknown> => Promise.resolve({}),
+        get: (_id: string): Promise<never> => Promise.reject(new Error("missing execution")),
       };
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(provider).toHaveBeenCalledTimes(1);

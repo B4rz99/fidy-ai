@@ -37,7 +37,11 @@ it("derives each decision from one User's original trial and current settled pai
             "CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,id TEXT PRIMARY KEY, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
           ),
           db.prepare(
-            "CREATE VIEW subscription_standing AS SELECT id AS user_id,paid_attempt_id AS attempt_id,paid_price_id AS price_id,paid_period_ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM users WHERE paid_attempt_id IS NOT NULL"
+            "CREATE TABLE subscriptions (user_id TEXT PRIMARY KEY,current_paid_attempt_id TEXT)"
+          ),
+          db.prepare("CREATE VIEW billing_attempt_context AS SELECT * FROM billing_attempts"),
+          db.prepare(
+            "CREATE VIEW subscription_standing AS SELECT s.user_id,a.id AS attempt_id,a.paid_ends_at_ms AS paid_period_ends_at_ms,a.paid_renewal_anchor_ms AS renewal_anchor_ms FROM subscriptions s JOIN billing_attempts a ON a.id=s.current_paid_attempt_id AND a.user_id=s.user_id"
           ),
           db.prepare(
             "CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER)"
@@ -87,7 +91,7 @@ it("derives each decision from one User's original trial and current settled pai
         db.batch([
           db
             .prepare(
-              "UPDATE users SET paid_attempt_id='attempt',paid_period_ends_at_ms=500 WHERE id=?"
+              "INSERT INTO subscriptions(user_id,current_paid_attempt_id) VALUES(?,'attempt')"
             )
             .bind(userId),
           db
@@ -141,7 +145,7 @@ it("derives each decision from one User's original trial and current settled pai
           ),
           db
             .prepare(
-              "UPDATE users SET paid_attempt_id='newer-attempt',paid_period_ends_at_ms=550 WHERE id=?"
+              "UPDATE subscriptions SET current_paid_attempt_id='newer-attempt' WHERE user_id=?"
             )
             .bind(userId),
         ])

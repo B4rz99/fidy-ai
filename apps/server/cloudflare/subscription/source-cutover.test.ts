@@ -3,6 +3,7 @@ import { afterAll, expect, it } from "vitest";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import {
   documentedSqlBlock,
+  precedingSchema,
   schemaDefinition,
   schemaObjectName,
   schemaStatements,
@@ -34,11 +35,26 @@ it.each(["valid", "unknown-environment", "changed-method", "interrupted"] as con
             Bun.file(new URL("./source-cutover.test-fixture.json", import.meta.url)).text()
           )
         );
-        const source = schemaStatements(
+        const standingHistory = yield* Schema.decodeEffect(
+          Schema.fromJsonString(
+            Schema.Struct({
+              originalDefinitions: Schema.Array(Schema.String),
+              introducedNames: Schema.Array(Schema.String),
+            })
+          )
+        )(
           yield* wait(() =>
-            Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+            Bun.file(new URL("./standing-cutover.test-fixture.json", import.meta.url)).text()
           )
         );
+        const source = precedingSchema({
+          current: schemaStatements(
+            yield* wait(() =>
+              Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+            )
+          ),
+          history: standingHistory,
+        });
         const guide = yield* wait(() =>
           Bun.file(
             new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)

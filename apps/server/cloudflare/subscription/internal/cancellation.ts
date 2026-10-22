@@ -109,7 +109,7 @@ const cancellationStatements = (
     cancellation_verification_count=coalesce(cancellation_verification_count,0)
     FROM (SELECT s.user_id,s.attempt_id,a.payment_source_id,? AS cancelled_at_ms,? AS paid_through_ms,
       CASE WHEN source.method='daviplata' THEN 'void-pending' ELSE 'detached' END AS source_cancellation
-      FROM subscription_standing s JOIN billing_attempts a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
+      FROM subscription_standing s JOIN billing_attempt_context a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
       JOIN payment_source_context source ON source.id=a.payment_source_id AND source.user_id=s.user_id
       WHERE s.user_id=? AND s.attempt_id=? AND a.payment_source_id=?
       AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})) incoming
@@ -152,7 +152,7 @@ export const prepareCancellation = (
       db
         .prepare(`SELECT s.attempt_id,a.payment_source_id,
     MIN(a.paid_ends_at_ms, COALESCE((SELECT MIN(ends_at_ms) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments WHERE attempt_id=a.id),a.paid_ends_at_ms)) AS paid_through_ms
-    FROM subscription_standing s JOIN billing_attempts a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
+    FROM subscription_standing s JOIN billing_attempt_context a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
      WHERE s.user_id=?
     AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
         .bind(subject.userId, ...authority.bindings)

@@ -33,12 +33,12 @@ const Boundary = Schema.Struct({
 const renewalAdmissionJson = Schema.fromJsonString(SubscriptionRenewalAdmission);
 
 const unresolvedCollectionSql = (userColumn: "s.user_id" | "sub.user_id"): string => `EXISTS (
-  SELECT 1 FROM billing_attempts unresolved WHERE unresolved.user_id=${userColumn}
+  SELECT 1 FROM billing_attempt_context unresolved WHERE unresolved.user_id=${userColumn}
     AND (unresolved.status='pending' OR (unresolved.status='failed' AND unresolved.previous_paid_attempt_id IS NULL))
     AND unresolved.no_charge_confirmed_at_ms IS NULL
     AND NOT (unresolved.collection_state='rejected'
       AND unresolved.previous_paid_attempt_id IS NOT NULL AND EXISTS (
-        SELECT 1 FROM billing_attempts success WHERE success.paid_starts_at_ms IS NOT NULL
+        SELECT 1 FROM billing_attempt_context success WHERE success.paid_starts_at_ms IS NOT NULL
         AND success.previous_paid_attempt_id=unresolved.previous_paid_attempt_id)))`;
 
 type RenewalClaimInput = Readonly<{
@@ -56,19 +56,13 @@ const prepareRenewalClaim = (
     subject: { _tag: "User", userId: input.userId },
     requirement: "active",
     statement: {
-      sql: `INSERT INTO billing_attempts
-      (id, user_id, enrollment_id, payment_request_id, payment_source_id, price_id, amount, currency,
-      billing_period, service_market, tax_treatment, time_zone, wompi_environment, wompi_reference,
-      created_at_ms, previous_paid_attempt_id, period_starts_at_ms, period_ends_at_ms, renewal_attempt_number, calendar_anchor_ms)
-      SELECT ?, a.user_id, a.enrollment_id, ?, a.payment_source_id, price.id, price.amount, price.currency,
-      price.billing_period, price.service_market, price.tax_treatment, a.time_zone, a.wompi_environment, ?, ?, a.id, ?, ?, 1, COALESCE(a.calendar_anchor_ms, a.paid_starts_at_ms)
-      FROM subscription_standing s JOIN billing_attempts a ON a.id = s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id = s.user_id
+      sql: `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms, previous_paid_attempt_id, period_starts_at_ms, period_ends_at_ms, renewal_attempt_number, calendar_anchor_ms) SELECT ?, (SELECT id FROM subscriptions WHERE user_id=a.user_id), a.enrollment_id, ?, a.payment_source_id, price.id, a.time_zone, a.wompi_environment, ?, ?, a.id, ?, ?, 1, COALESCE(a.calendar_anchor_ms, a.paid_starts_at_ms) FROM subscription_standing s JOIN billing_attempt_context a ON a.id = s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id = s.user_id
       JOIN payment_source_context source ON source.id = a.payment_source_id AND source.user_id = a.user_id
       JOIN subscription_prices price ON price.published_order IS NOT NULL AND price.billing_period = a.billing_period AND price.service_market = a.service_market
       WHERE s.user_id = ? AND a.id = ?
         AND a.wompi_environment = ? AND a.status = 'succeeded'
         AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id = s.user_id)
-        AND NOT EXISTS (SELECT 1 FROM billing_attempts renewal WHERE renewal.previous_paid_attempt_id = a.id)
+        AND NOT EXISTS (SELECT 1 FROM billing_attempt_context renewal WHERE renewal.previous_paid_attempt_id = a.id)
         AND NOT (${unresolvedCollectionSql("s.user_id")})`,
       params: [
         id,
@@ -90,20 +84,13 @@ const prepareRetryClaim = (input: RenewalClaimInput & Readonly<{ id: string }>):
     subject: { _tag: "User", userId: input.userId },
     requirement: "active",
     statement: {
-      sql: `INSERT INTO billing_attempts
-          (id,user_id,enrollment_id,payment_request_id,payment_source_id,price_id,amount,currency,billing_period,
-          service_market,tax_treatment,time_zone,wompi_environment,wompi_reference,created_at_ms,
-          previous_paid_attempt_id,period_starts_at_ms,period_ends_at_ms,renewal_attempt_number,calendar_anchor_ms)
-          SELECT ?, first.user_id,first.enrollment_id,?,first.payment_source_id,first.price_id,first.amount,first.currency,
-          first.billing_period,first.service_market,first.tax_treatment,first.time_zone,first.wompi_environment,?,?,
-          first.previous_paid_attempt_id,first.period_starts_at_ms,first.period_ends_at_ms,last.renewal_attempt_number+1,first.calendar_anchor_ms
-          FROM billing_attempts first JOIN billing_attempts last ON last.previous_paid_attempt_id=first.previous_paid_attempt_id
+      sql: `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms, previous_paid_attempt_id, period_starts_at_ms, period_ends_at_ms, renewal_attempt_number, calendar_anchor_ms) SELECT ?, (SELECT id FROM subscriptions WHERE user_id=first.user_id), first.enrollment_id, ?, first.payment_source_id, first.price_id, first.time_zone, first.wompi_environment, ?, ?, first.previous_paid_attempt_id, first.period_starts_at_ms, first.period_ends_at_ms, last.renewal_attempt_number+1, first.calendar_anchor_ms FROM billing_attempt_context first JOIN billing_attempt_context last ON last.previous_paid_attempt_id=first.previous_paid_attempt_id
           JOIN subscription_standing sub ON sub.attempt_id=first.previous_paid_attempt_id AND sub.user_id=first.user_id
           WHERE first.user_id=? AND first.previous_paid_attempt_id=? AND first.renewal_attempt_number=1
             AND first.wompi_environment=? AND last.status='failed' AND last.renewal_attempt_number<3
             AND ? >= first.period_starts_at_ms + last.renewal_attempt_number * 86400000
             AND ? < first.period_starts_at_ms + ${renewalGraceMs}
-            AND NOT EXISTS (SELECT 1 FROM billing_attempts sibling WHERE sibling.previous_paid_attempt_id=first.previous_paid_attempt_id
+            AND NOT EXISTS (SELECT 1 FROM billing_attempt_context sibling WHERE sibling.previous_paid_attempt_id=first.previous_paid_attempt_id
               AND (sibling.status<>'failed' OR sibling.renewal_attempt_number>last.renewal_attempt_number))
             AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id=sub.user_id)
             AND NOT (${unresolvedCollectionSql("sub.user_id")})`,
@@ -128,7 +115,7 @@ export const claimSubscriptionRenewal = (
     const row = yield* fromPromise(() =>
       input.db
         .prepare(`SELECT a.paid_ends_at_ms AS ends_at_ms, a.time_zone, a.billing_period, COALESCE(a.calendar_anchor_ms, a.paid_starts_at_ms) AS calendar_anchor_ms
-    FROM subscription_standing s JOIN billing_attempts a ON a.id = s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id = s.user_id
+    FROM subscription_standing s JOIN billing_attempt_context a ON a.id = s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id = s.user_id
     WHERE s.user_id = ? AND a.id = ? AND a.status = 'succeeded'
     AND a.wompi_environment = ? AND a.paid_ends_at_ms <= ?`)
         .bind(input.userId, input.previousPaidAttemptId, input.environment, input.now)
@@ -173,16 +160,16 @@ export const dispatchSubscriptionRenewals = (
       requirement: "active",
       statement: {
         sql: `SELECT a.user_id, a.id
-    FROM billing_attempts a JOIN subscription_standing s ON s.attempt_id = a.id AND a.user_id = s.user_id
+    FROM billing_attempt_context a JOIN subscription_standing s ON s.attempt_id = a.id AND a.user_id = s.user_id
     JOIN payment_source_context source ON source.id = a.payment_source_id AND source.user_id = a.user_id
     WHERE a.followup_due_at_ms <= ?
       AND a.wompi_environment = ?
       AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id = s.user_id)
-      AND (NOT EXISTS (SELECT 1 FROM billing_attempts r WHERE r.previous_paid_attempt_id = a.id)
-        OR EXISTS (SELECT 1 FROM billing_attempts r WHERE r.previous_paid_attempt_id = a.id AND r.status='failed'
+      AND (NOT EXISTS (SELECT 1 FROM billing_attempt_context r WHERE r.previous_paid_attempt_id = a.id)
+        OR EXISTS (SELECT 1 FROM billing_attempt_context r WHERE r.previous_paid_attempt_id = a.id AND r.status='failed'
           AND r.renewal_attempt_number < 3 AND ? >= r.period_starts_at_ms + r.renewal_attempt_number * 86400000
           AND ? < r.period_starts_at_ms + ${renewalGraceMs}
-          AND NOT EXISTS (SELECT 1 FROM billing_attempts newer WHERE newer.previous_paid_attempt_id=a.id
+          AND NOT EXISTS (SELECT 1 FROM billing_attempt_context newer WHERE newer.previous_paid_attempt_id=a.id
             AND (newer.status<>'failed' OR newer.renewal_attempt_number>r.renewal_attempt_number))))
       AND NOT (${unresolvedCollectionSql("s.user_id")})
     `,

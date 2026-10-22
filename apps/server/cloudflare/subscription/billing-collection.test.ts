@@ -57,11 +57,9 @@ const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
             .prepare("UPDATE payment_enrollments SET status = 'available' WHERE id = ?")
             .bind(enrollmentId),
           db
-            .prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id, payment_request_id,
-        payment_source_id, price_id, amount, currency, billing_period, service_market,
-        tax_treatment, time_zone, wompi_environment, wompi_reference, created_at_ms)
-        VALUES (?, ?, ?, ?, ?, ?, '9900', 'COP', 'weekly', 'CO', 'not-taxable',
-          'America/Bogota', 'sandbox', ?, 0)`)
+            .prepare(
+              `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms) VALUES (?, (SELECT id FROM subscriptions WHERE user_id=?), ?, ?, ?, ?, 'America/Bogota', 'sandbox', ?, 0)`
+            )
             .bind(attemptId, userId, enrollmentId, paymentRequestId, sourceId, priceId, reference),
         ])
       );
@@ -183,14 +181,17 @@ it("collects a Nequi source without card installment fields and settles the comm
       expect(posts).toBe(1);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT status FROM billing_attempts WHERE id = ?").bind(attemptId).first()
+          db
+            .prepare("SELECT status FROM billing_attempt_context WHERE id = ?")
+            .bind(attemptId)
+            .first()
         )
       ).toEqual({ status: "succeeded" });
       expect(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
             )
             .first()
         )
@@ -243,7 +244,7 @@ const sendSignedEvent = (
 
 const state = (db: D1Database): Promise<string> =>
   db
-    .prepare("SELECT status FROM billing_attempts WHERE id = ?")
+    .prepare("SELECT status FROM billing_attempt_context WHERE id = ?")
     .bind(attemptId)
     .first<{ status: string }>()
     .then((row) => row?.status ?? "missing");
@@ -255,8 +256,57 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
       let observed = transaction("APPROVED");
       const verify = (): Effect.Effect<void, Cause.UnknownError> =>
         verifyProviderTransaction(db, () => observed);
+      yield* Effect.tryPromise(() =>
+        expect(
+          db
+            .prepare("UPDATE subscriptions SET current_paid_attempt_id=? WHERE user_id=?")
+            .bind(attemptId, userId)
+            .run()
+        ).rejects.toThrow("subscription_paid_attempt_invalid")
+      );
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM subscription_standing").all()))
+          .results
+      ).toEqual([]);
       yield* verify();
       expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT current_paid_attempt_id FROM subscriptions WHERE user_id=?")
+            .bind(userId)
+            .first("current_paid_attempt_id")
+        )
+      ).toBe(attemptId);
+      const otherUser = "10000000-0000-4000-8000-000000000002";
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) VALUES(?,'America/Bogota','CO','es-CO',0)"
+            )
+            .bind(otherUser),
+          db
+            .prepare("INSERT INTO subscriptions(id,user_id) VALUES(?,?)")
+            .bind(otherUser, otherUser),
+        ])
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          db
+            .prepare("UPDATE subscriptions SET current_paid_attempt_id=? WHERE user_id=?")
+            .bind(attemptId, otherUser)
+            .run()
+        ).rejects.toThrow("subscription_paid_attempt_invalid")
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT current_paid_attempt_id FROM subscriptions WHERE user_id=?")
+            .bind(otherUser)
+            .first("current_paid_attempt_id")
+        )
+      ).toBeNull();
       observed = transaction("DECLINED");
       yield* verify();
       yield* verify();
@@ -273,7 +323,7 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
       const standing = yield* Effect.tryPromise(() =>
         db
           .prepare(`SELECT s.price_id, p.starts_at_ms, p.ends_at_ms
-        FROM subscription_standing AS s JOIN (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS p ON p.attempt_id = s.attempt_id`)
+        FROM subscription_standing AS s JOIN (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS p ON p.attempt_id = s.attempt_id`)
           .all()
       );
       expect(standing.results).toEqual([
@@ -287,7 +337,7 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,'renewal_due' AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_due_at_ms IS NOT NULL) AS billing_followup_outbox"
+              "SELECT * FROM (SELECT id AS attempt_id,'renewal_due' AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempt_context WHERE followup_due_at_ms IS NOT NULL) AS billing_followup_outbox"
             )
             .all()
         )).results
@@ -356,7 +406,7 @@ it("holds verified negative until the retry opportunity and admits a later verif
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            `UPDATE billing_attempts SET no_charge_reference=incoming.wompi_reference,no_charge_environment=incoming.wompi_environment,no_charge_case_id=incoming.provider_case_id,no_charge_operator_id=incoming.operator_id,no_charge_confirmed_at_ms=incoming.confirmed_at_ms FROM (SELECT ? AS attempt_id,? AS wompi_reference,'sandbox' AS wompi_environment,'case-123' AS provider_case_id,'operator-42' AS operator_id,180002 AS confirmed_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.no_charge_confirmed_at_ms IS NULL`
+            `UPDATE billing_attempts SET no_charge_case_id=incoming.provider_case_id,no_charge_operator_id=incoming.operator_id,no_charge_confirmed_at_ms=incoming.confirmed_at_ms FROM (SELECT ? AS attempt_id,? AS wompi_reference,'sandbox' AS wompi_environment,'case-123' AS provider_case_id,'operator-42' AS operator_id,180002 AS confirmed_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.no_charge_confirmed_at_ms IS NULL`
           )
           .bind(attemptId, reference)
           .run()
@@ -377,7 +427,7 @@ it("holds verified negative until the retry opportunity and admits a later verif
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT provider_case_id FROM (SELECT rowid,id AS attempt_id,recovery_case_id AS provider_case_id,recovery_reviewed_at_ms AS occurred_at_ms FROM billing_attempts WHERE recovery_case_id IS NOT NULL) AS billing_recovery_reviews"
+              "SELECT provider_case_id FROM (SELECT rowid,id AS attempt_id,recovery_case_id AS provider_case_id,recovery_reviewed_at_ms AS occurred_at_ms FROM billing_attempt_context WHERE recovery_case_id IS NOT NULL) AS billing_recovery_reviews"
             )
             .all()
         )).results
@@ -575,7 +625,7 @@ it("retains ambiguity without a callback and settles a privileged provider-ID re
         db
           .prepare(`INSERT INTO billing_provider_transactions
       (transaction_id,event_received_at_ms,event_signed_at,event_signed_status,event_lookup_attempts) SELECT ?, ?,0,'UNKNOWN',0 WHERE EXISTS
-      (SELECT 1 FROM billing_attempts WHERE wompi_reference = ? AND status = 'pending') ON CONFLICT(transaction_id) DO UPDATE SET event_received_at_ms=excluded.event_received_at_ms,event_signed_at=0,event_signed_status='UNKNOWN',event_lookup_attempts=0 WHERE event_received_at_ms IS NULL`)
+      (SELECT 1 FROM billing_attempt_context WHERE wompi_reference = ? AND status = 'pending') ON CONFLICT(transaction_id) DO UPDATE SET event_received_at_ms=excluded.event_received_at_ms,event_signed_at=0,event_signed_status='UNKNOWN',event_lookup_attempts=0 WHERE event_received_at_ms IS NULL`)
           .bind(transactionId, now, reference)
           .run()
       );
@@ -868,11 +918,9 @@ it("rejects a signed callback with another User's source even when its reference
             .prepare("UPDATE payment_enrollments SET status = 'available' WHERE id = ?")
             .bind(otherEnrollment),
           db
-            .prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id, payment_request_id,
-        payment_source_id, price_id, amount, currency, billing_period, service_market,
-        tax_treatment, time_zone, wompi_environment, wompi_reference, created_at_ms)
-        VALUES (?, ?, ?, ?, ?, ?, '9900', 'COP', 'weekly', 'CO', 'not-taxable',
-          'America/Bogota', 'sandbox', ?, 0)`)
+            .prepare(
+              `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms) VALUES (?, (SELECT id FROM subscriptions WHERE user_id=?), ?, ?, ?, ?, 'America/Bogota', 'sandbox', ?, 0)`
+            )
             .bind(
               otherAttempt,
               otherUser,
@@ -925,7 +973,7 @@ it("rejects a signed callback with another User's source even when its reference
       expect(
         (yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT status FROM billing_attempts WHERE id = ?")
+            .prepare("SELECT status FROM billing_attempt_context WHERE id = ?")
             .bind(otherAttempt)
             .first<{ status: string }>()
         ))?.status
@@ -1047,11 +1095,9 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
             .prepare("UPDATE payment_enrollments SET status = 'available' WHERE id = ?")
             .bind(secondEnrollment),
           db
-            .prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id, payment_request_id,
-        payment_source_id, price_id, amount, currency, billing_period, service_market,
-        tax_treatment, time_zone, wompi_environment, wompi_reference, created_at_ms)
-        VALUES (?, ?, ?, ?, ?, ?, '9900', 'COP', 'weekly', 'CO', 'not-taxable',
-          'America/Bogota', 'sandbox', ?, 0)`)
+            .prepare(
+              `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms) VALUES (?, (SELECT id FROM subscriptions WHERE user_id=?), ?, ?, ?, ?, 'America/Bogota', 'sandbox', ?, 0)`
+            )
             .bind(
               secondAttempt,
               userId,
@@ -1080,7 +1126,7 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
       const followup = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT attempt_id FROM (SELECT rowid,id AS attempt_id,'renewal_due' AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_due_at_ms IS NOT NULL) AS billing_followup_outbox"
+            "SELECT attempt_id FROM (SELECT rowid,id AS attempt_id,'renewal_due' AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempt_context WHERE followup_due_at_ms IS NOT NULL) AS billing_followup_outbox"
           )
           .all<{ attempt_id: string }>()
       );

@@ -32,3 +32,23 @@ export const documentedSqlBlock = ({
     .map((sql) => sql.trim())
     .filter((sql) => sql.length > 0);
 };
+
+export const precedingSchema = ({
+  current,
+  history,
+}: Readonly<{
+  current: ReadonlyArray<string>;
+  history: Readonly<{
+    originalDefinitions: ReadonlyArray<string>;
+    introducedNames: ReadonlyArray<string>;
+  }>;
+}>): ReadonlyArray<string> => {
+  const original = new Map(history.originalDefinitions.map((sql) => [schemaObjectName(sql), sql]));
+  const names = new Set(current.map(schemaObjectName));
+  return [
+    ...current
+      .filter((sql) => !history.introducedNames.includes(schemaObjectName(sql)))
+      .map((sql) => original.get(schemaObjectName(sql)) ?? sql),
+    ...history.originalDefinitions.filter((sql) => !names.has(schemaObjectName(sql))),
+  ];
+};

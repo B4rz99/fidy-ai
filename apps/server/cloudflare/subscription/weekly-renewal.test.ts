@@ -131,11 +131,9 @@ const fixture = (
             .prepare("UPDATE payment_enrollments SET status = 'available' WHERE id = ?")
             .bind(enrollmentId),
           db
-            .prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id, payment_request_id,
-        payment_source_id, price_id, amount, currency, billing_period, service_market,
-        tax_treatment, time_zone, wompi_environment, wompi_reference, created_at_ms)
-        SELECT ?, ?, ?, ?, ?, id, amount, currency, billing_period, service_market, tax_treatment,
-          'America/Bogota', 'sandbox', ?, 0 FROM subscription_prices WHERE id = ?`)
+            .prepare(
+              `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms) SELECT ?, (SELECT id FROM subscriptions WHERE user_id=?), ?, ?, ?, id, 'America/Bogota', 'sandbox', ?, 0 FROM subscription_prices WHERE id = ?`
+            )
             .bind(
               attemptId,
               userId,
@@ -165,16 +163,8 @@ const fixture = (
               Date.parse(calendar.endsAt)
             ),
           db
-            .prepare(
-              "UPDATE users SET paid_attempt_id=?2,paid_price_id=?3,paid_period_ends_at_ms=?4,paid_renewal_anchor_ms=?5 WHERE id=?1"
-            )
-            .bind(
-              userId,
-              attemptId,
-              selectedPriceId,
-              Date.parse(calendar.endsAt),
-              Date.parse(calendar.endsAt)
-            ),
+            .prepare("UPDATE subscriptions SET current_paid_attempt_id=?2 WHERE user_id=?1")
+            .bind(userId, attemptId),
           db
             .prepare(
               "UPDATE billing_attempts SET followup_due_at_ms=incoming.due_at_ms FROM (SELECT ? AS attempt_id,'renewal_due' AS kind,? AS due_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.followup_due_at_ms IS NULL"
@@ -227,7 +217,7 @@ it("converges concurrent due claims on one frozen pending weekly attempt and dur
       yield* Effect.all([admission(db), admission(db)], { concurrency: 2 });
       const rows = yield* fromPromise(() =>
         db
-          .prepare("SELECT * FROM billing_attempts WHERE previous_paid_attempt_id = ?")
+          .prepare("SELECT * FROM billing_attempt_context WHERE previous_paid_attempt_id = ?")
           .bind(attemptId)
           .all()
       );
@@ -244,7 +234,7 @@ it("converges concurrent due claims on one frozen pending weekly attempt and dur
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id <> ?"
+              "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id <> ?"
             )
             .bind(attemptId)
             .all()
@@ -254,7 +244,7 @@ it("converges concurrent due claims on one frozen pending weekly attempt and dur
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+              "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
             )
             .all()
         )).results
@@ -270,7 +260,7 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
       const row = yield* fromPromise(() =>
         db
           .prepare(
-            "SELECT id, wompi_reference FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+            "SELECT id, wompi_reference FROM billing_attempt_context WHERE previous_paid_attempt_id = ?"
           )
           .bind(attemptId)
           .first<{ id: string; wompi_reference: string }>()
@@ -312,7 +302,7 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
         yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT starts_at_ms, ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
+              "SELECT starts_at_ms, ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
             )
             .bind(row.id)
             .first()
@@ -322,7 +312,7 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,'renewal_due' AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_due_at_ms IS NOT NULL) AS billing_followup_outbox"
+              "SELECT * FROM (SELECT id AS attempt_id,'renewal_due' AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempt_context WHERE followup_due_at_ms IS NOT NULL) AS billing_followup_outbox"
             )
             .all()
         )).results
@@ -356,9 +346,9 @@ it.each(renewalCalendars)(
         );
         const billingState = (): Promise<D1Result[]> =>
           db.batch([
-            db.prepare("SELECT * FROM billing_attempts ORDER BY id"),
+            db.prepare("SELECT * FROM billing_attempt_context ORDER BY id"),
             db.prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work ORDER BY attempt_id"
+              "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work ORDER BY attempt_id"
             ),
           ]);
         const before = (yield* fromPromise(billingState)).map((result) => result.results);
@@ -395,7 +385,9 @@ it.each(renewalCalendars)(
         expect(
           (yield* fromPromise(() =>
             db
-              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id IS NOT NULL")
+              .prepare(
+                "SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id IS NOT NULL"
+              )
               .all()
           )).results
         ).toEqual([]);
@@ -403,7 +395,7 @@ it.each(renewalCalendars)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work"
+                "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work"
               )
               .all()
           )).results
@@ -441,7 +433,7 @@ it.each(renewalCalendars)(
           yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
+                "SELECT ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
               )
               .bind(attemptId)
               .first()
@@ -480,7 +472,7 @@ it("publishes a changed weekly Price with immediate durable notice and charges i
         yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT price_id, amount FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+              "SELECT price_id, amount FROM billing_attempt_context WHERE previous_paid_attempt_id = ?"
             )
             .bind(attemptId)
             .first()
@@ -488,7 +480,10 @@ it("publishes a changed weekly Price with immediate durable notice and charges i
       ).toEqual({ price_id: newPrice.id, amount: "10900" });
       expect(
         yield* fromPromise(() =>
-          db.prepare("SELECT amount FROM billing_attempts WHERE id = ?").bind(attemptId).first()
+          db
+            .prepare("SELECT amount FROM billing_attempt_context WHERE id = ?")
+            .bind(attemptId)
+            .first()
         )
       ).toEqual({ amount: "9900" });
     })
@@ -568,7 +563,7 @@ it.each(renewalCalendars)(
         yield* admission(db, Date.parse(calendar.endsAt));
         const row = yield* fromPromise(() =>
           db
-            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+            .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
             .bind(attemptId)
             .first<{ id: string }>()
         );
@@ -603,7 +598,7 @@ it.each(renewalCalendars)(
           yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT state FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id=?"
+                "SELECT state FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id=?"
               )
               .bind(row.id)
               .first()
@@ -613,7 +608,7 @@ it.each(renewalCalendars)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
               )
               .all()
           )).results
@@ -639,7 +634,9 @@ it.each(
         expect(
           (yield* fromPromise(() =>
             db
-              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id IS NOT NULL")
+              .prepare(
+                "SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id IS NOT NULL"
+              )
               .all()
           )).results
         ).toHaveLength(1);
@@ -721,8 +718,9 @@ it("renews despite an older collection with confirmed no charge", () =>
               SELECT '20000000-0000-4000-8000-000000000009',subscription_id,price_id,billing_email,'available','reuse','{}','{}',0,900000,'50000000-0000-4000-8000-000000000009',method,wompi_environment FROM payment_enrollment_context WHERE id='20000000-0000-4000-8000-000000000001'`
           ),
           db
-            .prepare(`INSERT INTO billing_attempts (id,user_id,enrollment_id,payment_request_id,payment_source_id,price_id,amount,currency,billing_period,service_market,tax_treatment,time_zone,wompi_environment,wompi_reference,created_at_ms)
-      SELECT ?,user_id,'20000000-0000-4000-8000-000000000009',?,payment_source_id,price_id,amount,currency,billing_period,service_market,tax_treatment,time_zone,wompi_environment,?,0 FROM billing_attempts WHERE id=?`)
+            .prepare(
+              `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms) SELECT ?, (SELECT id FROM subscriptions WHERE user_id=user_id), '20000000-0000-4000-8000-000000000009', ?, payment_source_id, price_id, time_zone, wompi_environment, ?, 0 FROM billing_attempt_context WHERE id=?`
+            )
             .bind(
               historicalId,
               "50000000-0000-4000-8000-000000000009",
@@ -736,7 +734,7 @@ it("renews despite an older collection with confirmed no charge", () =>
             .bind(historicalId),
           db
             .prepare(
-              "UPDATE billing_attempts SET no_charge_reference=incoming.wompi_reference,no_charge_environment=incoming.wompi_environment,no_charge_case_id=incoming.provider_case_id,no_charge_operator_id=incoming.operator_id,no_charge_confirmed_at_ms=incoming.confirmed_at_ms FROM (SELECT ? AS attempt_id,? AS wompi_reference,'sandbox' AS wompi_environment,'case-9' AS provider_case_id,'operator-9' AS operator_id,1 AS confirmed_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.no_charge_confirmed_at_ms IS NULL"
+              "UPDATE billing_attempts SET no_charge_case_id=incoming.provider_case_id,no_charge_operator_id=incoming.operator_id,no_charge_confirmed_at_ms=incoming.confirmed_at_ms FROM (SELECT ? AS attempt_id,? AS wompi_reference,'sandbox' AS wompi_environment,'case-9' AS provider_case_id,'operator-9' AS operator_id,1 AS confirmed_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.no_charge_confirmed_at_ms IS NULL"
             )
             .bind(historicalId, `fidy-${historicalId}`),
         ])
@@ -745,7 +743,7 @@ it("renews despite an older collection with confirmed no charge", () =>
       expect(
         (yield* fromPromise(() =>
           db
-            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+            .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
             .bind(attemptId)
             .all()
         )).results
@@ -888,7 +886,7 @@ it("freezes one March 31 monthly renewal across duplicate delayed scheduler clai
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT status, period_starts_at_ms, period_ends_at_ms FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+              "SELECT status, period_starts_at_ms, period_ends_at_ms FROM billing_attempt_context WHERE previous_paid_attempt_id = ?"
             )
             .bind(attemptId)
             .all()
@@ -904,7 +902,7 @@ it("freezes one March 31 monthly renewal across duplicate delayed scheduler clai
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+              "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
             )
             .all()
         )).results
@@ -924,7 +922,7 @@ it("freezes one March 31 monthly renewal across duplicate delayed scheduler clai
         yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT calendar_anchor_ms FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+              "SELECT calendar_anchor_ms FROM billing_attempt_context WHERE previous_paid_attempt_id = ?"
             )
             .bind(attemptId)
             .first()
@@ -989,7 +987,7 @@ it.each(
           const row = yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT id, wompi_reference, calendar_anchor_ms FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+                "SELECT id, wompi_reference, calendar_anchor_ms FROM billing_attempt_context WHERE previous_paid_attempt_id = ?"
               )
               .bind(previousPaidAttemptId)
               .first<{ id: string; wompi_reference: string; calendar_anchor_ms: number }>()
@@ -1054,7 +1052,7 @@ it.each(
             (yield* fromPromise(() =>
               db
                 .prepare(
-                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
                 )
                 .all()
             )).results
@@ -1067,7 +1065,7 @@ it.each(
             (yield* fromPromise(() =>
               db
                 .prepare(
-                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
                 )
                 .all()
             )).results
@@ -1085,7 +1083,7 @@ it.each(
             yield* fromPromise(() =>
               db
                 .prepare(
-                  "SELECT starts_at_ms, ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
+                  "SELECT starts_at_ms, ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
                 )
                 .bind(row.id)
                 .first()
@@ -1096,7 +1094,7 @@ it.each(
             (yield* fromPromise(() =>
               db
                 .prepare(
-                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
                 )
                 .all()
             )).results
@@ -1168,7 +1166,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
         const row = yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT id, wompi_reference FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+              "SELECT id, wompi_reference FROM billing_attempt_context WHERE previous_paid_attempt_id = ?"
             )
             .bind(attemptId)
             .first<{ id: string; wompi_reference: string }>()
@@ -1209,7 +1207,10 @@ it.each(["card", "nequi", "daviplata"] as const)(
         );
         expect(
           yield* fromPromise(() =>
-            db.prepare("SELECT status FROM billing_attempts WHERE id = ?").bind(row.id).first()
+            db
+              .prepare("SELECT status FROM billing_attempt_context WHERE id = ?")
+              .bind(row.id)
+              .first()
           )
         ).toEqual({ status: "failed" });
         yield* admission(db, boundary + 240000);
@@ -1217,7 +1218,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
               )
               .all()
           )).results
@@ -1225,7 +1226,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
         expect(
           (yield* fromPromise(() =>
             db
-              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id = ?")
+              .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id = ?")
               .bind(attemptId)
               .all()
           )).results
@@ -1247,7 +1248,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT renewal_attempt_number, price_id, period_starts_at_ms, period_ends_at_ms FROM billing_attempts WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
+                "SELECT renewal_attempt_number, price_id, period_starts_at_ms, period_ends_at_ms FROM billing_attempt_context WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
               )
               .bind(attemptId)
               .all()
@@ -1448,7 +1449,9 @@ it.each(["card", "nequi", "daviplata"] as const)(
         expect(
           (yield* fromPromise(() =>
             db
-              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id IS NOT NULL")
+              .prepare(
+                "SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id IS NOT NULL"
+              )
               .all()
           )).results
         ).toHaveLength(0);
@@ -1566,7 +1569,7 @@ const latestRenewal = (db: D1Database): Effect.Effect<string, Cause.UnknownError
   fromPromise(() =>
     db
       .prepare(
-        "SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number DESC LIMIT 1"
+        "SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number DESC LIMIT 1"
       )
       .bind(attemptId)
       .first()
@@ -1600,7 +1603,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT renewal_attempt_number,status FROM billing_attempts WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
+                "SELECT renewal_attempt_number,status FROM billing_attempt_context WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
               )
               .bind(attemptId)
               .all()
@@ -1626,7 +1629,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
               )
               .all()
           )).results
@@ -1672,7 +1675,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT starts_at_ms,ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods ORDER BY starts_at_ms"
+                "SELECT starts_at_ms,ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods ORDER BY starts_at_ms"
               )
               .all()
           )).results
@@ -1698,7 +1701,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
         expect(
           (yield* fromPromise(() =>
             db
-              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+              .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
               .bind(retry)
               .all()
           )).results
@@ -1739,7 +1742,7 @@ it("recovers on an earlier verified success while a retry is still queued", () =
       expect(
         (yield* fromPromise(() =>
           db
-            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+            .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
             .bind(first)
             .all()
         )).results
@@ -1776,7 +1779,7 @@ it("refuses a borrowed or revoked browser credential before cancellation and rol
       expect(
         (yield* fromPromise(() =>
           db
-            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+            .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
             .bind(attemptId)
             .all()
         )).results
@@ -1953,7 +1956,7 @@ it("keeps retry Money and Price frozen after replacement publication", () =>
         yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT price_id,amount,renewal_attempt_number,period_starts_at_ms,period_ends_at_ms FROM billing_attempts WHERE id=?"
+              "SELECT price_id,amount,renewal_attempt_number,period_starts_at_ms,period_ends_at_ms FROM billing_attempt_context WHERE id=?"
             )
             .bind(retry)
             .first()
@@ -2018,8 +2021,8 @@ const cancellationEffects = (db: D1Database): Effect.Effect<unknown, Cause.Unkno
       .prepare(`SELECT
   (SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL)) AS cancellations,
   (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
-  (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE state='armed') AS armed,
-  (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work) AS offers,
+  (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE state='armed') AS armed,
+  (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work) AS offers,
   (SELECT COUNT(*) FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome='accepted') AS accepted`)
       .first()
   );

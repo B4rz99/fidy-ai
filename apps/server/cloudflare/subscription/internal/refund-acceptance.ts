@@ -116,7 +116,7 @@ const loadCharge = (call: RefundStartCall): Effect.Effect<typeof Charge.Type, Na
     const charges = yield* Effect.tryPromise(() =>
       call.db
         .prepare(`SELECT a.id,a.price_id,a.amount,a.currency,
-    a.tax_treatment,a.wompi_environment,e.transaction_id,p.method FROM billing_attempts a
+    a.tax_treatment,a.wompi_environment,e.transaction_id,p.method FROM billing_attempt_context a
     JOIN billing_provider_transactions e ON e.attempt_id=a.id AND e.status='APPROVED'
     JOIN payment_source_context p ON p.id=a.payment_source_id
     WHERE a.id=? AND a.user_id=? AND a.status='succeeded' AND a.paid_starts_at_ms IS NOT NULL LIMIT 2`)

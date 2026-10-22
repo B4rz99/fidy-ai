@@ -188,6 +188,7 @@ const setup = Effect.fn(function* () {
     CREATE TABLE consent_user_context (user_id TEXT PRIMARY KEY, time_zone TEXT);
     CREATE VIEW subscription_standing AS SELECT rowid,id AS user_id,paid_attempt_id AS attempt_id,paid_period_ends_at_ms FROM users WHERE paid_attempt_id IS NOT NULL;
     CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER);
+ CREATE VIEW billing_attempt_context AS SELECT * FROM billing_attempts;
  CREATE TABLE payment_source_context (id TEXT, user_id TEXT, method TEXT);
  CREATE TABLE subscription_renewal_stops (user_id TEXT); CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops;
 

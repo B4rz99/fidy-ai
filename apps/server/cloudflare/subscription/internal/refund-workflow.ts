@@ -148,7 +148,7 @@ const execute = (
     const raw = yield* Effect.tryPromise(() =>
       environment.DB.prepare(`SELECT r.id,r.kind,r.transaction_id,r.amount_in_cents,
     r.original_cents,a.wompi_reference,s.wompi_source_id FROM refund_attempts r
-    JOIN billing_attempts a ON a.id=r.billing_attempt_id JOIN payment_source_context s ON s.id=a.payment_source_id
+    JOIN billing_attempt_context a ON a.id=r.billing_attempt_id JOIN payment_source_context s ON s.id=a.payment_source_id
     WHERE r.id=? AND r.status='pending' AND a.wompi_environment='sandbox'
       AND (SELECT COUNT(*) FROM billing_provider_transactions WHERE attempt_id=a.id AND status='APPROVED')=1`)
         .bind(work.refundAttemptId)

@@ -142,7 +142,7 @@ const snapshot = (
         .prepare(`SELECT a.id, a.user_id, a.amount, a.currency, a.billing_period, a.time_zone,
           a.wompi_environment, a.wompi_reference, s.billing_email, s.wompi_source_id, s.method,
           a.previous_paid_attempt_id, a.period_starts_at_ms, a.period_ends_at_ms
-        FROM billing_attempts AS a JOIN payment_source_context AS s ON s.id = a.payment_source_id
+        FROM billing_attempt_context AS a JOIN payment_source_context AS s ON s.id = a.payment_source_id
         WHERE a.id = ? AND a.user_id = s.user_id`)
         .bind(id)
         .first()
@@ -194,7 +194,7 @@ export const dispatchBillingCollection = (
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* attempt(() =>
       environment.DB.prepare(`SELECT o.attempt_id
-      FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS o
+      FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS o
       WHERE o.state = 'armed' AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
         AND (? IS NULL OR o.attempt_id = ?)
       ORDER BY o.last_attempt_at_ms, o.attempt_id LIMIT ?`)
@@ -254,7 +254,7 @@ export const receiveBillingCollection = (
       const collection = work.value;
       const row = yield* attempt(() =>
         input.environment.DB.prepare(
-          "SELECT state FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id = ?"
+          "SELECT state FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id = ?"
         )
           .bind(collection.attemptId)
           .first()
@@ -322,7 +322,7 @@ const verifiedSnapshot = (
     const row = yield* attempt(() =>
       input.db
         .prepare(
-          "SELECT id FROM billing_attempts WHERE wompi_reference = ? AND wompi_environment = ?"
+          "SELECT id FROM billing_attempt_context WHERE wompi_reference = ? AND wompi_environment = ?"
         )
         .bind(input.found.reference, input.client.environment)
         .first()
@@ -412,7 +412,7 @@ const reconcileEventCandidate = (
       environment.DB.prepare(`UPDATE billing_provider_transactions
       SET event_resolved_at_ms = ? WHERE transaction_id = ? AND event_received_at_ms IS NOT NULL AND event_resolved_at_ms IS NULL
       AND EXISTS (SELECT 1 FROM billing_provider_transactions AS e
-        JOIN billing_attempts AS a ON a.id = e.attempt_id
+        JOIN billing_attempt_context AS a ON a.id = e.attempt_id
         WHERE e.transaction_id = ? AND a.status IN ('succeeded', 'failed'))`)
         .bind(now, transactionId, transactionId)
         .run()
@@ -458,7 +458,7 @@ export const receiveWompiBillingEvent = (
           AND excluded.event_signed_status = 'APPROVED'
           AND billing_provider_transactions.event_signed_status <> 'APPROVED'))
         AND NOT EXISTS (SELECT 1 FROM billing_provider_transactions AS e
-          JOIN billing_attempts AS a ON a.id = e.attempt_id
+          JOIN billing_attempt_context AS a ON a.id = e.attempt_id
           WHERE e.transaction_id = excluded.transaction_id AND a.status = 'succeeded'))`)
           .bind(transactionId, now, signedAt, signedStatus)
           .run()
@@ -489,7 +489,7 @@ const claimCollection = (
           sql: `${collectionClaim.sql}
             AND EXISTS (SELECT 1 FROM subscription_standing WHERE user_id = ? AND attempt_id = ?)
             AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences WHERE user_id = ?)
-            AND EXISTS (SELECT 1 FROM billing_attempts due WHERE due.id=? AND
+            AND EXISTS (SELECT 1 FROM billing_attempt_context due WHERE due.id=? AND
               (due.renewal_attempt_number=1 OR due.period_starts_at_ms + ${renewalGraceMs} > ?))`,
           params: [
             ...collectionClaim.params,
@@ -695,14 +695,14 @@ export const reconcileBillingCandidates = (
       SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, a.created_at_ms) AS priority,
         NULL AS signed_at, NULL AS signed_status
         FROM billing_provider_transactions AS c
-        JOIN billing_attempts AS a ON a.id = c.attempt_id WHERE a.status = 'pending'
+        JOIN billing_attempt_context AS a ON a.id = c.attempt_id WHERE a.status = 'pending'
           AND c.lookup_attempts < ?
           AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
       UNION
       SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, c.received_at_ms) AS priority,
         c.signed_at, c.signed_status FROM billing_callback_hints AS c
         LEFT JOIN billing_provider_transactions AS e ON e.transaction_id = c.transaction_id
-        LEFT JOIN billing_attempts AS a ON a.id = e.attempt_id
+        LEFT JOIN billing_attempt_context AS a ON a.id = e.attempt_id
         WHERE c.resolved_at_ms IS NULL AND c.lookup_attempts < ?
         AND c.received_at_ms >= ?
         AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)

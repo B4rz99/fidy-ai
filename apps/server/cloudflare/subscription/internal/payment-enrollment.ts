@@ -440,8 +440,8 @@ const prepare = ({
         `SELECT s.id FROM payment_source_context AS s WHERE s.user_id = ? AND s.retired_at_ms IS NULL AND (EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) c WHERE c.payment_source_id=s.id) OR (s.method <> ? AND NOT (? AND s.method='card'))
             OR NOT EXISTS (SELECT 1 FROM payment_enrollment_context AS origin WHERE origin.id = s.enrollment_id
               AND (origin.wompi_environment = ? OR (origin.wompi_environment IS NULL AND EXISTS
-                (SELECT 1 FROM billing_attempts AS a WHERE a.payment_source_id = s.id AND a.wompi_environment = ?))))
-            OR EXISTS (SELECT 1 FROM billing_attempts AS a WHERE a.payment_source_id = s.id AND a.wompi_environment <> ?))`
+                (SELECT 1 FROM billing_attempt_context AS a WHERE a.payment_source_id = s.id AND a.wompi_environment = ?))))
+            OR EXISTS (SELECT 1 FROM billing_attempt_context AS a WHERE a.payment_source_id = s.id AND a.wompi_environment <> ?))`
       )
         .bind(
           session.user_id,
@@ -651,7 +651,7 @@ const attemptFor = (
   attemptId: string
 ): Promise<Option.Option<BillingAttempt>> =>
   db
-    .prepare(`SELECT a.*, a.paid_ends_at_ms AS ends_at_ms, a.paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts AS a
+    .prepare(`SELECT a.*, a.paid_ends_at_ms AS ends_at_ms, a.paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context AS a
       WHERE a.id = ? AND a.user_id = ?`)
     .bind(attemptId, userId)
     .first()
@@ -752,11 +752,7 @@ const finish = ({
       environment.DB.prepare(
         "UPDATE payment_enrollments SET payment_source_id = COALESCE(payment_source_id, (SELECT id FROM payment_sources WHERE subscription_id=payment_enrollments.subscription_id AND retired_at_ms IS NULL)), status = 'available' WHERE id = ? AND subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND status IN ('creating', 'verifying') AND payment_request_id = ?"
       ).bind(row.id, userId, requestId),
-      environment.DB.prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id,
-      payment_request_id, payment_source_id, price_id, amount, currency, billing_period,
-      service_market, tax_treatment, time_zone, wompi_environment, wompi_reference, created_at_ms)
-      SELECT ?, ?, ?, ?, ?, p.id, p.amount, p.currency, p.billing_period, p.service_market,
-      p.tax_treatment, ?, ?, ?, ? FROM subscription_prices AS p JOIN payment_enrollment_context AS e ON e.price_id = p.id
+      environment.DB.prepare(`INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms) SELECT ?, (SELECT id FROM subscriptions WHERE user_id=?), ?, ?, ?, p.id, ?, ?, ?, ? FROM subscription_prices AS p JOIN payment_enrollment_context AS e ON e.price_id = p.id
       WHERE e.id = ? AND e.user_id = ? AND e.status = 'available' AND e.payment_request_id = ?`).bind(
         attemptId,
         userId,
@@ -961,7 +957,7 @@ const submit = ({
     }
     const existing = yield* waitFor(() =>
       environment.DB.prepare(
-        "SELECT id, enrollment_id FROM billing_attempts WHERE user_id = ? AND payment_request_id = ?"
+        "SELECT id, enrollment_id FROM billing_attempt_context WHERE user_id = ? AND payment_request_id = ?"
       )
         .bind(session.user_id, input.paymentRequestId)
         .first()
@@ -984,9 +980,9 @@ const submit = ({
       return json(presented);
     }
     const blocked = yield* waitFor(() =>
-      environment.DB.prepare(`SELECT 1 AS blocked FROM billing_attempts AS a
+      environment.DB.prepare(`SELECT 1 AS blocked FROM billing_attempt_context AS a
       WHERE a.user_id = ? AND a.status <> 'succeeded'
-        AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS attempt_id,no_charge_reference AS wompi_reference,no_charge_environment AS wompi_environment,no_charge_case_id AS provider_case_id,no_charge_operator_id AS operator_id,no_charge_confirmed_at_ms AS confirmed_at_ms FROM billing_attempts WHERE no_charge_confirmed_at_ms IS NOT NULL) AS c
+        AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS attempt_id,no_charge_reference AS wompi_reference,no_charge_environment AS wompi_environment,no_charge_case_id AS provider_case_id,no_charge_operator_id AS operator_id,no_charge_confirmed_at_ms AS confirmed_at_ms FROM billing_attempt_context WHERE no_charge_confirmed_at_ms IS NOT NULL) AS c
           WHERE c.attempt_id = a.id)
         AND NOT EXISTS (SELECT 1 FROM billing_retry_clearances c WHERE c.attempt_id=a.id) LIMIT 1`)
         .bind(session.user_id)

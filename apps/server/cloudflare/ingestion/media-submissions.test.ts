@@ -39,6 +39,7 @@ const setup = Effect.gen(function* () {
     db.exec(`CREATE TABLE users(paid_attempt_id TEXT,paid_period_ends_at_ms INTEGER,id TEXT PRIMARY KEY,service_market TEXT DEFAULT 'CO',locale TEXT DEFAULT 'es-CO',time_zone TEXT DEFAULT 'America/Bogota', trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER);
  CREATE VIEW subscription_standing AS SELECT rowid,id AS user_id,paid_attempt_id AS attempt_id,paid_period_ends_at_ms FROM users WHERE paid_attempt_id IS NOT NULL;
  CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER);
+ CREATE VIEW billing_attempt_context AS SELECT * FROM billing_attempts;
  CREATE TABLE payment_source_context (id TEXT, user_id TEXT, method TEXT);
  CREATE TABLE subscription_renewal_stops (user_id TEXT); CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops;
 

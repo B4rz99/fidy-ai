@@ -33,8 +33,9 @@ const seed = (db: D1Database, user: string, index: number): Promise<unknown> =>
       .bind(id(3, index), user, id(2, index), 40 + index),
     db.prepare("UPDATE payment_enrollments SET status='available' WHERE id=?").bind(id(2, index)),
     db
-      .prepare(`INSERT INTO billing_attempts(id,user_id,enrollment_id,payment_request_id,payment_source_id,price_id,amount,currency,billing_period,service_market,tax_treatment,time_zone,wompi_environment,wompi_reference,created_at_ms)
-    VALUES(?,?,?,?,?,'22700000-0000-4000-8000-000000000001','9900','COP','weekly','CO','not-taxable','America/Bogota','sandbox',?,0)`)
+      .prepare(
+        `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms) VALUES (?, (SELECT id FROM subscriptions WHERE user_id=?), ?, ?, ?, '22700000-0000-4000-8000-000000000001', 'America/Bogota', 'sandbox', ?, 0)`
+      )
       .bind(id(4, index), user, id(2, index), id(5, index), id(3, index), `fidy-${index}`),
     db
       .prepare(
@@ -101,8 +102,8 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
       for (const sql of [
         "DELETE FROM payment_sources WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?)",
         "UPDATE payment_sources SET retired_at_ms=1 WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?)",
-        "UPDATE billing_attempts AS billing_checkout_responses SET checkout_transaction_id=NULL WHERE checkout_transaction_id IS NOT NULL AND id IN(SELECT id FROM billing_attempts WHERE user_id=?)",
-        "UPDATE billing_attempts SET checkout_transaction_id=checkout_transaction_id||'x' WHERE user_id=?",
+        "UPDATE billing_attempts AS billing_checkout_responses SET checkout_transaction_id=NULL WHERE checkout_transaction_id IS NOT NULL AND id IN(SELECT id FROM billing_attempt_context WHERE user_id=?)",
+        "UPDATE billing_attempts SET checkout_transaction_id=checkout_transaction_id||'x' WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?)",
       ]) {
         yield* wait(() =>
           expect(db.prepare(sql).bind(userId).run()).rejects.toThrow(
@@ -211,7 +212,7 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
       expect(
         yield* wait(() =>
           db
-            .prepare("SELECT count(*) FROM billing_attempts WHERE user_id=?")
+            .prepare("SELECT count(*) FROM billing_attempt_context WHERE user_id=?")
             .bind(userId)
             .first("count(*)")
         )
@@ -219,7 +220,7 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
       expect(
         yield* wait(() =>
           db
-            .prepare("SELECT count(*) FROM billing_attempts WHERE user_id=?")
+            .prepare("SELECT count(*) FROM billing_attempt_context WHERE user_id=?")
             .bind(foreignUser)
             .first("count(*)")
         )

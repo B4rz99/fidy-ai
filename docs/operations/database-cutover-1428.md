@@ -1960,3 +1960,171 @@ PRAGMA defer_foreign_keys=OFF;
 ```
 
 <!-- subscription-source-verify:end -->
+
+## Subscription paid standing and billing facts — #1450
+
+Subscription selects one same-Subscription awarded BillingAttempt. User retains its original trial;
+Price supplies immutable Money and commercial terms. `billing_attempt_context` is a read-only owner
+projection, including historical archive keys, and holds no copied state. Intended renewal windows
+and verified awarded windows remain distinct. Cancellation and refund stops retain their existing
+meaning and are not reset by enrollment or an older settlement.
+
+For a populated database, fence all ordinary/background writers and provider publication, take a
+restorable backup and inventory every dependent schema object. Stop on any unexplained divergence.
+Do not replay the fresh-install baseline or infer historical values from the current environment.
+Use one native D1 batch with deferred foreign keys. Create `users_1450`, `subscriptions_1450` and
+`billing_attempts_1450` from the corresponding final baseline definitions by changing only the
+CREATE TABLE name and redirect references among these three replaced tables to their shadow names.
+Renaming the shadows restores their final reference names. Execute preflight and copy below,
+compare every copied row and exact rowid with its source, then remove dependent triggers/views/indexes,
+drop the three old tables, rename shadows to their final names and reinstall all final schema objects.
+Preserve every other row and existing erasure archive verbatim. Any failure must roll back the entire
+batch. Test interruption after copying and after replacement; retain the backup until #1494's full
+release verification is complete. Subsequent deployment must use this matching schema and code.
+
+<!-- subscription-standing-preflight:start -->
+
+```sql
+PRAGMA defer_foreign_keys=ON;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-standing-commercial',NOT EXISTS (
+ SELECT 1 FROM billing_attempts a LEFT JOIN subscription_prices p ON p.id=a.price_id
+ WHERE p.id IS NULL OR a.amount IS NOT p.amount OR a.currency IS NOT p.currency
+ OR a.billing_period IS NOT p.billing_period OR a.service_market IS NOT p.service_market
+ OR a.tax_treatment IS NOT p.tax_treatment);
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-standing-owner',NOT EXISTS (
+ SELECT 1 FROM billing_attempts a LEFT JOIN subscriptions s ON s.user_id=a.user_id
+ LEFT JOIN payment_enrollments e ON e.id=a.enrollment_id
+ LEFT JOIN payment_sources source ON source.id=a.payment_source_id
+ LEFT JOIN billing_attempts prior ON prior.id=a.previous_paid_attempt_id
+ WHERE s.id IS NULL OR e.subscription_id IS NOT s.id OR source.subscription_id IS NOT s.id
+ OR source.wompi_environment IS NOT a.wompi_environment
+ OR (a.previous_paid_attempt_id IS NOT NULL AND (prior.user_id IS NOT a.user_id OR prior.paid_starts_at_ms IS NULL)));
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-standing-selected',NOT EXISTS (
+ SELECT 1 FROM users u LEFT JOIN subscriptions s ON s.user_id=u.id
+ LEFT JOIN billing_attempts a ON a.id=u.paid_attempt_id
+ WHERE (u.paid_attempt_id IS NULL AND (u.paid_price_id IS NOT NULL OR u.paid_period_ends_at_ms IS NOT NULL OR u.paid_renewal_anchor_ms IS NOT NULL))
+ OR (u.paid_attempt_id IS NOT NULL AND (s.id IS NULL OR a.user_id IS NOT u.id OR a.status IS NOT 'succeeded'
+ OR a.paid_starts_at_ms IS NULL OR u.paid_price_id IS NOT a.price_id
+ OR u.paid_period_ends_at_ms IS NOT a.paid_ends_at_ms OR u.paid_renewal_anchor_ms IS NOT a.paid_renewal_anchor_ms)));
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-standing-no-charge',NOT EXISTS (
+ SELECT 1 FROM billing_attempts a WHERE
+ (a.no_charge_confirmed_at_ms IS NULL AND (a.no_charge_reference IS NOT NULL OR a.no_charge_environment IS NOT NULL OR a.no_charge_case_id IS NOT NULL OR a.no_charge_operator_id IS NOT NULL))
+ OR (a.no_charge_confirmed_at_ms IS NOT NULL AND (a.no_charge_reference IS NOT a.wompi_reference OR a.no_charge_environment IS NOT a.wompi_environment OR a.no_charge_case_id IS NULL OR a.no_charge_operator_id IS NULL))
+ OR ((a.recovery_case_id IS NULL)<>(a.recovery_reviewed_at_ms IS NULL))
+ OR (a.recovery_reviewed_at_ms IS NOT NULL AND (a.recovery_case_id IS NOT a.no_charge_case_id OR a.no_charge_confirmed_at_ms IS NULL OR a.status IS NOT 'succeeded')));
+```
+
+<!-- subscription-standing-preflight:end -->
+
+<!-- subscription-standing-copy:start -->
+
+```sql
+INSERT INTO users_1450(rowid,id,service_market,locale,time_zone,created_at_ms,trial_started_at_ms,trial_ends_at_ms,forwarding_address_id,forwarding_local_part,forwarding_issued_at_ms,backfill_present,backfill_submission_id,backfill_consumed_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms,route_portfolio_id,route_bsuid,route_phone_number_id,route_verified_at_ms,cancellation_paid_attempt_id,cancellation_payment_source_id,cancellation_cancelled_at_ms,cancellation_paid_through_ms,cancellation_source_cancellation,cancellation_void_started_at_ms,cancellation_void_verified_at_ms,cancellation_verification_count,cancellation_last_offered_at_ms)
+SELECT r.rowid,r.id,r.service_market,r.locale,r.time_zone,r.created_at_ms,r.trial_started_at_ms,r.trial_ends_at_ms,r.forwarding_address_id,r.forwarding_local_part,r.forwarding_issued_at_ms,r.backfill_present,r.backfill_submission_id,r.backfill_consumed_at_ms,r.whatsapp_portfolio_id,r.whatsapp_bsuid,r.whatsapp_verified_at_ms,r.route_portfolio_id,r.route_bsuid,r.route_phone_number_id,r.route_verified_at_ms,r.cancellation_paid_attempt_id,r.cancellation_payment_source_id,r.cancellation_cancelled_at_ms,r.cancellation_paid_through_ms,r.cancellation_source_cancellation,r.cancellation_void_started_at_ms,r.cancellation_void_verified_at_ms,r.cancellation_verification_count,r.cancellation_last_offered_at_ms FROM users r;
+INSERT INTO subscriptions_1450(rowid,id,user_id,current_paid_attempt_id)
+SELECT r.rowid,r.id,r.user_id,(SELECT paid_attempt_id FROM users WHERE id=r.user_id) FROM subscriptions r;
+INSERT INTO billing_attempts_1450(rowid,id,subscription_id,enrollment_id,payment_request_id,payment_source_id,price_id,time_zone,wompi_environment,wompi_reference,status,created_at_ms,finalized_at_ms,previous_paid_attempt_id,period_starts_at_ms,period_ends_at_ms,calendar_anchor_ms,renewal_attempt_number,paid_starts_at_ms,paid_ends_at_ms,paid_renewal_anchor_ms,checkout_transaction_id,collection_state,collection_sent_at_ms,collection_last_attempt_at_ms,followup_due_at_ms,no_charge_case_id,no_charge_operator_id,no_charge_confirmed_at_ms,late_approval_observed_at_ms)
+SELECT r.rowid,r.id,(SELECT id FROM subscriptions WHERE user_id=r.user_id),r.enrollment_id,r.payment_request_id,r.payment_source_id,r.price_id,r.time_zone,r.wompi_environment,r.wompi_reference,r.status,r.created_at_ms,r.finalized_at_ms,r.previous_paid_attempt_id,r.period_starts_at_ms,r.period_ends_at_ms,r.calendar_anchor_ms,r.renewal_attempt_number,r.paid_starts_at_ms,r.paid_ends_at_ms,r.paid_renewal_anchor_ms,r.checkout_transaction_id,r.collection_state,r.collection_sent_at_ms,r.collection_last_attempt_at_ms,r.followup_due_at_ms,r.no_charge_case_id,r.no_charge_operator_id,r.no_charge_confirmed_at_ms,r.recovery_reviewed_at_ms FROM billing_attempts r;
+```
+
+<!-- subscription-standing-copy:end -->
+
+<!-- subscription-standing-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'subscription-standing-copy-users',
+ (SELECT count(*) FROM users)=(SELECT count(*) FROM users_1450) AND NOT EXISTS (
+ SELECT 1 FROM users r LEFT JOIN users_1450 t ON t.rowid=r.rowid WHERE t.rowid IS NULL OR t.id IS NOT r.id
+ OR t.service_market IS NOT r.service_market
+ OR t.locale IS NOT r.locale
+ OR t.time_zone IS NOT r.time_zone
+ OR t.created_at_ms IS NOT r.created_at_ms
+ OR t.trial_started_at_ms IS NOT r.trial_started_at_ms
+ OR t.trial_ends_at_ms IS NOT r.trial_ends_at_ms
+ OR t.forwarding_address_id IS NOT r.forwarding_address_id
+ OR t.forwarding_local_part IS NOT r.forwarding_local_part
+ OR t.forwarding_issued_at_ms IS NOT r.forwarding_issued_at_ms
+ OR t.backfill_present IS NOT r.backfill_present
+ OR t.backfill_submission_id IS NOT r.backfill_submission_id
+ OR t.backfill_consumed_at_ms IS NOT r.backfill_consumed_at_ms
+ OR t.whatsapp_portfolio_id IS NOT r.whatsapp_portfolio_id
+ OR t.whatsapp_bsuid IS NOT r.whatsapp_bsuid
+ OR t.whatsapp_verified_at_ms IS NOT r.whatsapp_verified_at_ms
+ OR t.route_portfolio_id IS NOT r.route_portfolio_id
+ OR t.route_bsuid IS NOT r.route_bsuid
+ OR t.route_phone_number_id IS NOT r.route_phone_number_id
+ OR t.route_verified_at_ms IS NOT r.route_verified_at_ms
+ OR t.cancellation_paid_attempt_id IS NOT r.cancellation_paid_attempt_id
+ OR t.cancellation_payment_source_id IS NOT r.cancellation_payment_source_id
+ OR t.cancellation_cancelled_at_ms IS NOT r.cancellation_cancelled_at_ms
+ OR t.cancellation_paid_through_ms IS NOT r.cancellation_paid_through_ms
+ OR t.cancellation_source_cancellation IS NOT r.cancellation_source_cancellation
+ OR t.cancellation_void_started_at_ms IS NOT r.cancellation_void_started_at_ms
+ OR t.cancellation_void_verified_at_ms IS NOT r.cancellation_void_verified_at_ms
+ OR t.cancellation_verification_count IS NOT r.cancellation_verification_count
+ OR t.cancellation_last_offered_at_ms IS NOT r.cancellation_last_offered_at_ms);
+INSERT INTO sql_assertions(scope,accepted) SELECT 'subscription-standing-copy-subscriptions',
+ (SELECT count(*) FROM subscriptions)=(SELECT count(*) FROM subscriptions_1450) AND NOT EXISTS (
+ SELECT 1 FROM subscriptions r LEFT JOIN subscriptions_1450 t ON t.rowid=r.rowid WHERE t.rowid IS NULL OR t.id IS NOT r.id
+ OR t.user_id IS NOT r.user_id
+ OR t.current_paid_attempt_id IS NOT (SELECT paid_attempt_id FROM users WHERE id=r.user_id));
+INSERT INTO sql_assertions(scope,accepted) SELECT 'subscription-standing-copy-billing_attempts',
+ (SELECT count(*) FROM billing_attempts)=(SELECT count(*) FROM billing_attempts_1450) AND NOT EXISTS (
+ SELECT 1 FROM billing_attempts r LEFT JOIN billing_attempts_1450 t ON t.rowid=r.rowid WHERE t.rowid IS NULL OR t.id IS NOT r.id
+ OR t.subscription_id IS NOT (SELECT id FROM subscriptions WHERE user_id=r.user_id)
+ OR t.enrollment_id IS NOT r.enrollment_id
+ OR t.payment_request_id IS NOT r.payment_request_id
+ OR t.payment_source_id IS NOT r.payment_source_id
+ OR t.price_id IS NOT r.price_id
+ OR t.time_zone IS NOT r.time_zone
+ OR t.wompi_environment IS NOT r.wompi_environment
+ OR t.wompi_reference IS NOT r.wompi_reference
+ OR t.status IS NOT r.status
+ OR t.created_at_ms IS NOT r.created_at_ms
+ OR t.finalized_at_ms IS NOT r.finalized_at_ms
+ OR t.previous_paid_attempt_id IS NOT r.previous_paid_attempt_id
+ OR t.period_starts_at_ms IS NOT r.period_starts_at_ms
+ OR t.period_ends_at_ms IS NOT r.period_ends_at_ms
+ OR t.calendar_anchor_ms IS NOT r.calendar_anchor_ms
+ OR t.renewal_attempt_number IS NOT r.renewal_attempt_number
+ OR t.paid_starts_at_ms IS NOT r.paid_starts_at_ms
+ OR t.paid_ends_at_ms IS NOT r.paid_ends_at_ms
+ OR t.paid_renewal_anchor_ms IS NOT r.paid_renewal_anchor_ms
+ OR t.checkout_transaction_id IS NOT r.checkout_transaction_id
+ OR t.collection_state IS NOT r.collection_state
+ OR t.collection_sent_at_ms IS NOT r.collection_sent_at_ms
+ OR t.collection_last_attempt_at_ms IS NOT r.collection_last_attempt_at_ms
+ OR t.followup_due_at_ms IS NOT r.followup_due_at_ms
+ OR t.no_charge_case_id IS NOT r.no_charge_case_id
+ OR t.no_charge_operator_id IS NOT r.no_charge_operator_id
+ OR t.no_charge_confirmed_at_ms IS NOT r.no_charge_confirmed_at_ms
+ OR t.late_approval_observed_at_ms IS NOT r.recovery_reviewed_at_ms);
+```
+
+<!-- subscription-standing-copy-check:end -->
+
+<!-- subscription-standing-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-standing-final-owner',NOT EXISTS (
+ SELECT 1 FROM subscriptions s JOIN billing_attempts a ON a.id=s.current_paid_attempt_id
+ WHERE a.subscription_id<>s.id OR a.status<>'succeeded' OR a.paid_starts_at_ms IS NULL);
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-standing-final-fks',NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check);
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- subscription-standing-verify:end -->
+
+Native cutover evidence preserves rowids, selected standing, immutable Price values, intended and
+awarded periods, no-charge and late approval observations, provider evidence and retained archives.
+The paid-access lookup uses unique Subscription/User and attempt/Price keys; renewal discovery gains
+a due-work index rather than scanning historical attempts. Compare EXPLAIN QUERY PLAN before/after with representative populated data.
+History lookup has `(subscription_id,created_at_ms DESC,id DESC)` support. Renewal/grace, sibling
+races and late approval continue through the existing public workflows; commercial quotas remain
+unchanged. The existing provider workflow telemetry remains at the same orchestration boundary.

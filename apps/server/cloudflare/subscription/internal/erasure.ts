@@ -7,20 +7,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('transaction_id',r.\"transaction_id\",'received_at_ms',r.\"received_at_ms\",'signed_at',r.\"signed_at\",'signed_status',r.\"signed_status\",'lookup_attempts',r.\"lookup_attempts\",'last_checked_at_ms',r.\"last_checked_at_ms\",'resolved_at_ms',r.\"resolved_at_ms\") AS body FROM billing_callback_hints r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('transaction_id',r.\"transaction_id\",'received_at_ms',r.\"received_at_ms\",'signed_at',r.\"signed_at\",'signed_status',r.\"signed_status\",'lookup_attempts',r.\"lookup_attempts\",'last_checked_at_ms',r.\"last_checked_at_ms\",'resolved_at_ms',r.\"resolved_at_ms\") AS body FROM billing_callback_hints r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempt_context a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM billing_callback_hints r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM billing_callback_hints r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempt_context a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM billing_callback_hints r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
+      sql: "SELECT 1 FROM billing_callback_hints r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempt_context a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE billing_provider_transactions AS r SET event_row_ref=NULL,event_received_at_ms=NULL,event_signed_at=NULL,event_signed_status=NULL,event_lookup_attempts=NULL,event_last_checked_at_ms=NULL,event_resolved_at_ms=NULL WHERE r.event_received_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?) AND COALESCE(r.event_row_ref,'callback:'||r.transaction_id) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE billing_provider_transactions AS r SET event_row_ref=NULL,event_received_at_ms=NULL,event_signed_at=NULL,event_signed_status=NULL,event_lookup_attempts=NULL,event_last_checked_at_ms=NULL,event_resolved_at_ms=NULL WHERE r.event_received_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempt_context a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?) AND COALESCE(r.event_row_ref,'callback:'||r.transaction_id) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -57,20 +57,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(rowid AS TEXT) AS rowRef,json_object('attempt_id',id,'transaction_id',checkout_transaction_id) AS body FROM billing_attempts WHERE user_id=? AND checkout_transaction_id IS NOT NULL",
+      sql: "SELECT CAST(rowid AS TEXT) AS rowRef,json_object('attempt_id',id,'transaction_id',checkout_transaction_id) AS body FROM billing_attempt_context WHERE user_id=? AND checkout_transaction_id IS NOT NULL",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(rowid AS TEXT) AS rowRef FROM billing_attempts WHERE user_id=? AND checkout_transaction_id IS NOT NULL",
+      sql: "SELECT CAST(rowid AS TEXT) AS rowRef FROM billing_attempt_context WHERE user_id=? AND checkout_transaction_id IS NOT NULL",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM billing_attempts WHERE user_id=? AND checkout_transaction_id IS NOT NULL",
+      sql: "SELECT 1 FROM billing_attempt_context WHERE user_id=? AND checkout_transaction_id IS NOT NULL",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE billing_attempts SET checkout_transaction_id=NULL WHERE user_id=? AND checkout_transaction_id IS NOT NULL AND CAST(rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE billing_attempts SET checkout_transaction_id=NULL WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND checkout_transaction_id IS NOT NULL AND CAST(rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -81,24 +81,24 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: ["billing_checkout_responses", "billing_event_candidates", "refund_attempts"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('transaction_id',r.\"transaction_id\",'attempt_id',r.\"attempt_id\",'lookup_attempts',r.\"lookup_attempts\",'last_checked_at_ms',r.\"last_checked_at_ms\",'status',r.status,'first_observed_at_ms',r.first_observed_at_ms,'negative_observed_at_ms',r.negative_observed_at_ms,'finalized_at_ms',r.finalized_at_ms) AS body FROM billing_provider_transactions r WHERE EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?)",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('transaction_id',r.\"transaction_id\",'attempt_id',r.\"attempt_id\",'lookup_attempts',r.\"lookup_attempts\",'last_checked_at_ms',r.\"last_checked_at_ms\",'status',r.status,'first_observed_at_ms',r.first_observed_at_ms,'negative_observed_at_ms',r.negative_observed_at_ms,'finalized_at_ms',r.finalized_at_ms) AS body FROM billing_provider_transactions r WHERE EXISTS(SELECT 1 FROM billing_attempt_context p WHERE p.id=r.attempt_id AND p.user_id=?)",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM billing_provider_transactions r WHERE EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?)",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM billing_provider_transactions r WHERE EXISTS(SELECT 1 FROM billing_attempt_context p WHERE p.id=r.attempt_id AND p.user_id=?)",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM billing_provider_transactions r WHERE EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?)",
+      sql: "SELECT 1 FROM billing_provider_transactions r WHERE EXISTS(SELECT 1 FROM billing_attempt_context p WHERE p.id=r.attempt_id AND p.user_id=?)",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM billing_provider_transactions AS r WHERE r.event_received_at_ms IS NULL AND EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM billing_provider_transactions AS r WHERE r.event_received_at_ms IS NULL AND EXISTS(SELECT 1 FROM billing_attempt_context p WHERE p.id=r.attempt_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
       {
-        sql: "UPDATE billing_provider_transactions AS r SET attempt_id=NULL,lookup_attempts=0,last_checked_at_ms=NULL,status=NULL,first_observed_at_ms=NULL,negative_observed_at_ms=NULL,finalized_at_ms=NULL WHERE r.event_received_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE billing_provider_transactions AS r SET attempt_id=NULL,lookup_attempts=0,last_checked_at_ms=NULL,status=NULL,first_observed_at_ms=NULL,negative_observed_at_ms=NULL,finalized_at_ms=NULL WHERE r.event_received_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM billing_attempt_context p WHERE p.id=r.attempt_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -220,7 +220,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
   {
     id: "subscription_identities",
     dataClass: "billing",
-    dependencies: ["refund_attempts", "card_enrollments", "card_payment_sources"],
+    dependencies: [
+      "billing_history",
+      "refund_attempts",
+      "card_enrollments",
+      "card_payment_sources",
+    ],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'id',r.\"id\") AS body FROM subscriptions r WHERE r.user_id=?",
@@ -261,7 +266,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE users AS r SET paid_attempt_id=NULL,paid_price_id=NULL,paid_period_ends_at_ms=NULL,paid_renewal_anchor_ms=NULL WHERE r.id=? AND paid_attempt_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE subscriptions AS r SET current_paid_attempt_id=NULL WHERE r.user_id=? AND current_paid_attempt_id IS NOT NULL AND CAST((SELECT rowid FROM users WHERE id=r.user_id) AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -280,25 +285,25 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     quiescence: {
       _tag: "Durable",
       select: ({ userId }) => ({
-        sql: "SELECT 1 FROM billing_attempts WHERE user_id=? AND status='pending'",
+        sql: "SELECT 1 FROM billing_attempt_context WHERE user_id=? AND status='pending'",
         params: [userId],
       }),
     },
     select: (userId) => ({
-      sql: "SELECT 'attempt:'||a.id AS rowRef,json_object('id',a.id,'user_id',a.user_id,'enrollment_id',a.enrollment_id,'payment_request_id',a.payment_request_id,'payment_source_id',a.payment_source_id,'price_id',a.price_id,'amount',a.amount,'currency',a.currency,'billing_period',a.billing_period,'service_market',a.service_market,'tax_treatment',a.tax_treatment,'time_zone',a.time_zone,'wompi_environment',a.wompi_environment,'wompi_reference',a.wompi_reference,'status',a.status,'created_at_ms',a.created_at_ms,'finalized_at_ms',a.finalized_at_ms,'previous_paid_attempt_id',a.previous_paid_attempt_id,'period_starts_at_ms',a.period_starts_at_ms,'period_ends_at_ms',a.period_ends_at_ms,'attempt_number',1,'calendar_anchor_ms',a.calendar_anchor_ms,'renewal_attempt_number',a.renewal_attempt_number,'paid_starts_at_ms',a.paid_starts_at_ms,'paid_ends_at_ms',a.paid_ends_at_ms,'paid_renewal_anchor_ms',a.paid_renewal_anchor_ms,'checkout_transaction_id',a.checkout_transaction_id,'collection_state',a.collection_state,'collection_sent_at_ms',a.collection_sent_at_ms,'collection_last_attempt_at_ms',a.collection_last_attempt_at_ms,'followup_kind',CASE WHEN a.followup_due_at_ms IS NOT NULL THEN 'renewal_due' END,'followup_due_at_ms',a.followup_due_at_ms,'no_charge_reference',a.no_charge_reference,'no_charge_environment',a.no_charge_environment,'no_charge_case_id',a.no_charge_case_id,'no_charge_operator_id',a.no_charge_operator_id,'no_charge_confirmed_at_ms',a.no_charge_confirmed_at_ms,'recovery_case_id',a.recovery_case_id,'recovery_reviewed_at_ms',a.recovery_reviewed_at_ms) AS body FROM billing_attempts a WHERE a.user_id=?",
+      sql: "SELECT 'attempt:'||a.id AS rowRef,json_object('id',a.id,'user_id',a.user_id,'enrollment_id',a.enrollment_id,'payment_request_id',a.payment_request_id,'payment_source_id',a.payment_source_id,'price_id',a.price_id,'amount',a.amount,'currency',a.currency,'billing_period',a.billing_period,'service_market',a.service_market,'tax_treatment',a.tax_treatment,'time_zone',a.time_zone,'wompi_environment',a.wompi_environment,'wompi_reference',a.wompi_reference,'status',a.status,'created_at_ms',a.created_at_ms,'finalized_at_ms',a.finalized_at_ms,'previous_paid_attempt_id',a.previous_paid_attempt_id,'period_starts_at_ms',a.period_starts_at_ms,'period_ends_at_ms',a.period_ends_at_ms,'attempt_number',1,'calendar_anchor_ms',a.calendar_anchor_ms,'renewal_attempt_number',a.renewal_attempt_number,'paid_starts_at_ms',a.paid_starts_at_ms,'paid_ends_at_ms',a.paid_ends_at_ms,'paid_renewal_anchor_ms',a.paid_renewal_anchor_ms,'checkout_transaction_id',a.checkout_transaction_id,'collection_state',a.collection_state,'collection_sent_at_ms',a.collection_sent_at_ms,'collection_last_attempt_at_ms',a.collection_last_attempt_at_ms,'followup_kind',CASE WHEN a.followup_due_at_ms IS NOT NULL THEN 'renewal_due' END,'followup_due_at_ms',a.followup_due_at_ms,'no_charge_reference',a.no_charge_reference,'no_charge_environment',a.no_charge_environment,'no_charge_case_id',a.no_charge_case_id,'no_charge_operator_id',a.no_charge_operator_id,'no_charge_confirmed_at_ms',a.no_charge_confirmed_at_ms,'recovery_case_id',a.recovery_case_id,'recovery_reviewed_at_ms',a.recovery_reviewed_at_ms) AS body FROM billing_attempt_context a WHERE a.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT a.id AS rowRef FROM billing_attempts a WHERE a.user_id=? AND NOT EXISTS(SELECT 1 FROM billing_attempts later WHERE later.previous_paid_attempt_id=a.id)",
+      sql: "SELECT a.id AS rowRef FROM billing_attempt_context a WHERE a.user_id=? AND NOT EXISTS(SELECT 1 FROM billing_attempt_context later WHERE later.previous_paid_attempt_id=a.id)",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM billing_attempts WHERE user_id=?",
+      sql: "SELECT 1 FROM billing_attempt_context WHERE user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM billing_attempts WHERE user_id=? AND id IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM billing_attempts WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND id IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

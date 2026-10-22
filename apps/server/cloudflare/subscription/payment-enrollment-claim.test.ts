@@ -245,12 +245,9 @@ it.effect("rejects a pending BillingAttempt whose snapshot differs from the sele
         .bind(enrollmentId)
         .run()
     );
-    const insert = db.prepare(`INSERT INTO billing_attempts
-    (id, user_id, enrollment_id, payment_request_id, payment_source_id, price_id,
-     amount, currency, billing_period, service_market, tax_treatment, time_zone,
-     wompi_environment, wompi_reference, created_at_ms)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'COP', 'weekly', 'CO', 'not-taxable',
-      'America/Bogota', 'sandbox', ?, ?)`);
+    const insert = db.prepare(
+      `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms) VALUES (?, (SELECT id FROM subscriptions WHERE user_id=?), ?, ?, ?, ?, 'America/Bogota', 'sandbox', ?, ?)`
+    );
     yield* fromPromise(() =>
       expect(
         insert
@@ -260,8 +257,7 @@ it.effect("rejects a pending BillingAttempt whose snapshot differs from the sele
             enrollmentId,
             paymentRequestId,
             sourceId,
-            priceId,
-            "1",
+            "22700000-0000-4000-8000-000000000002",
             "fidy-60000000-0000-4000-8000-000000000001",
             nowMs
           )
@@ -269,7 +265,7 @@ it.effect("rejects a pending BillingAttempt whose snapshot differs from the sele
       ).rejects.toThrow()
     );
     expect(
-      (yield* fromPromise(() => db.prepare("SELECT id FROM billing_attempts").all())).results
+      (yield* fromPromise(() => db.prepare("SELECT id FROM billing_attempt_context").all())).results
     ).toEqual([]);
   })
 );

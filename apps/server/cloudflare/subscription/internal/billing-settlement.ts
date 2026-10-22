@@ -95,22 +95,22 @@ const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement
         Option.getOrNull(Option.map(period, (paid) => paid.startsAtMs))
       ),
     db
-      .prepare(`UPDATE users SET (paid_attempt_id,paid_price_id,paid_period_ends_at_ms,paid_renewal_anchor_ms)=
-      (SELECT id,price_id,paid_ends_at_ms,paid_renewal_anchor_ms FROM billing_attempts WHERE id=?1)
-      WHERE id=(SELECT user_id FROM billing_attempts WHERE id=?1 AND status='succeeded' AND paid_starts_at_ms IS NOT NULL)
-      AND (paid_period_ends_at_ms IS NULL OR paid_period_ends_at_ms<(SELECT paid_ends_at_ms FROM billing_attempts WHERE id=?1))`)
+      .prepare(`UPDATE subscriptions SET current_paid_attempt_id=?1
+      WHERE user_id=(SELECT user_id FROM billing_attempt_context WHERE id=?1 AND status='succeeded' AND paid_starts_at_ms IS NOT NULL)
+      AND (current_paid_attempt_id IS NULL OR (SELECT paid_ends_at_ms FROM billing_attempt_context WHERE id=current_paid_attempt_id)
+        <(SELECT paid_ends_at_ms FROM billing_attempt_context WHERE id=?1))`)
       .bind(attemptId),
     db
       .prepare(`INSERT OR IGNORE INTO audit_entries(record_type,attempt_id,transition,occurred_at_ms)
-      SELECT 'billing_transition',id,status,? FROM billing_attempts WHERE id=? AND status IN('succeeded','failed')`)
+      SELECT 'billing_transition',id,status,? FROM billing_attempt_context WHERE id=? AND status IN('succeeded','failed')`)
       .bind(observedAtMs, attemptId),
     db
-      .prepare(`UPDATE billing_attempts SET recovery_case_id=no_charge_case_id,recovery_reviewed_at_ms=?
-      WHERE id=? AND status='succeeded' AND no_charge_confirmed_at_ms IS NOT NULL AND recovery_case_id IS NULL`)
+      .prepare(`UPDATE billing_attempts SET late_approval_observed_at_ms=?
+      WHERE id=? AND status='succeeded' AND no_charge_confirmed_at_ms IS NOT NULL AND late_approval_observed_at_ms IS NULL`)
       .bind(observedAtMs, attemptId),
     db
       .prepare(`UPDATE billing_attempts SET followup_due_at_ms=NULL
-      WHERE user_id=(SELECT user_id FROM billing_attempts WHERE id=?) AND followup_due_at_ms IS NOT NULL
+      WHERE subscription_id=(SELECT subscription_id FROM billing_attempts WHERE id=?) AND followup_due_at_ms IS NOT NULL
       AND NOT EXISTS(SELECT 1 FROM subscription_standing s WHERE s.attempt_id=billing_attempts.id)`)
       .bind(attemptId),
     db

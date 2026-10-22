@@ -62,7 +62,7 @@ const prepareFile = Effect.fn(function* (root: string, uid: number) {
   if (
     file.type !== "File" ||
     !ownedPermissions({ info: file, uid, mode: privateFileMode }) ||
-    !Option.contains(1)(file.nlink)
+    !Option.contains(1n)(file.nlink)
   ) {
     return yield* new RegisterFailure({ reason: "UnsafeStorage" });
   }

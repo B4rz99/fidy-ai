@@ -1450,7 +1450,9 @@ credential guard or inconsistent history requires investigation, not silent repl
 identity repair. Preserve every original rowid, field, disclosure byte, exact instant and archive
 address. Retained historical attempts do not require an independently erased current credential,
 Consent record or recovery credential to be recreated. New onboarding still requires all of them at
-its atomic completion boundary. Publish matching code and align the one-baseline ledger only after
+its atomic completion boundary. A pairing invalidated by five wrong private verifiers may have
+cleared its current User; retain the completed attempt's historical owner without restoring pairing
+authority. Publish matching code and align the one-baseline ledger only after
 successful verification. Failed preflight or installation rolls the whole batch back.
 
 <!-- provider-onboarding-preflight:start -->
@@ -1468,7 +1470,10 @@ SELECT 'provider_onboarding_cutover',CASE WHEN
    OR (a.completed_at_ms IS NOT NULL AND (
      a.user_id IS NULL OR a.issuer IS NULL OR a.subject IS NULL
      OR a.cookie_digest IS NOT zeroblob(32) OR a.nonce<>'' OR a.contact_email IS NOT NULL
-     OR a.created_user IS NULL OR p.user_id IS NOT a.user_id OR p.state NOT IN('ready','consumed')
+     OR a.created_user IS NULL
+     OR (p.state IN('ready','consumed') AND p.user_id IS NOT a.user_id)
+     OR p.state NOT IN('ready','consumed','invalidated')
+     OR (p.state='invalidated' AND (p.user_id IS NOT NULL OR p.wrong_attempts<>5))
      OR a.expires_at_ms<=a.completed_at_ms OR p.expires_at_ms<=a.completed_at_ms
      OR (c.user_id IS NOT NULL AND c.user_id IS NOT a.user_id))))
  THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;

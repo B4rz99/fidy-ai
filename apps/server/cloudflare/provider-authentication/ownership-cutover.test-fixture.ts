@@ -1,4 +1,5 @@
-import { Effect } from "effect";
+import { redeemBrowserPairing } from "../browser-login/operations";
+import { Effect, Schema } from "effect";
 import type { Cause } from "effect";
 import { expect } from "vitest";
 import {
@@ -8,6 +9,10 @@ import {
 } from "../schema-cutover.test-fixture";
 import { observeRetentionCost } from "../d1-test-fixture";
 import { sweepProviderAuthentication } from "./runtime";
+
+const wrongVerifierBudget = 5;
+const privateVerifierLength = 43;
+const invalidProofStatus = 400;
 
 type Cutover = Readonly<{
   db: D1Database;
@@ -99,8 +104,24 @@ export const verifyProviderOwnershipCutover = ({
   db,
   pairingId,
   subject,
-}: Omit<Cutover, "cutover">): Effect.Effect<void, Cause.UnknownError> =>
+}: Omit<Cutover, "cutover">): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
+    for (let attempt = 0; attempt < wrongVerifierBudget; attempt++) {
+      const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        pairingId,
+        privateVerifier: "x".repeat(privateVerifierLength),
+      });
+      expect(
+        (yield* redeemBrowserPairing({
+          db,
+          request: new Request("https://api.fidyapp.com/web/pairings/redeem", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body,
+          }),
+        })).status
+      ).toBe(invalidProofStatus);
+    }
     const cutover = yield* prepareCutover(db);
     yield* refuseConflictingHistory({ db, pairingId, subject, cutover });
     const before = yield* Effect.tryPromise(() => snapshot(db));

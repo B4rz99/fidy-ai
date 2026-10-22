@@ -1,0 +1,23 @@
+apps/web/e2e/consent-navigation.spec.ts
+  s_241024bc81d268::t_8cbdb1a9496ee7 82-102
+apps/web/e2e/browser-pairing.spec.ts
+  s_241024bc81d268::t_8cbdb1a9496ee7 24-25,675-685,699
+docs/operations/audit-20261022-schema-mismatch.md
+  s_241024bc81d268::t_2bf29371e0ec47 104-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "de6cbc88d194c526975005d5e5733375220cf169",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

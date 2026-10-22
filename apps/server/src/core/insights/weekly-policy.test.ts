@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { DateTime, Schema } from "effect";
+import { DateTime, Result, Schema } from "effect";
 import { WeeklyPeriods, WeeklyTiming } from "./contract";
 import { IanaTimeZone } from "~/core/_shared/context";
 import {
@@ -129,4 +129,23 @@ it("expires a Sunday summary after exactly 24 elapsed hours, or sooner at the ne
       })
     )
   ).toBe("2026-10-12T15:00:00.000Z");
+});
+
+it("rejects empty or reversed captured financial periods independently of adjacency", () => {
+  const decode = Schema.decodeUnknownResult(Schema.toCodecJson(WeeklyPeriods));
+  const current = { from: "2026-10-04T23:00:00Z", toExclusive: "2026-10-11T23:00:00Z" };
+  const previous = { from: "2026-09-27T23:00:00Z", toExclusive: current.from };
+  expect(Result.isSuccess(decode({ current, previous }))).toBe(true);
+  for (const period of [
+    { from: current.from, toExclusive: current.from },
+    { from: current.toExclusive, toExclusive: current.from },
+  ]) {
+    expect(Result.isFailure(decode({ current: period, previous }))).toBe(true);
+    expect(Result.isFailure(decode({ current, previous: period }))).toBe(true);
+  }
+  expect(
+    Result.isFailure(
+      decode({ current, previous: { ...previous, toExclusive: "2026-10-03T23:00:00Z" } })
+    )
+  ).toBe(true);
 });

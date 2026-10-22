@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
-import { BigDecimal, DateTime, Option, Schema } from "effect";
+import { BigDecimal, DateTime, Option, Result, Schema } from "effect";
 import { Currency } from "~/core/_shared/money";
-import { CaptureProposal } from "./contract";
+import { CaptureOccurrence, CaptureProposal } from "./contract";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { interpretCapture } from "./operations";
 
@@ -197,4 +197,36 @@ it("rejects malformed explicitly supplied Currency and date shapes at the propos
       })
     )
   ).toBe(true);
+});
+
+it("bounds explicit local occurrence spellings before calendar interpretation", () => {
+  const decode = Schema.decodeUnknownResult(CaptureOccurrence);
+  for (const date of ["2026-01-01", "2026-09-10", "2026-10-20", "2026-11-30", "2026-12-31"]) {
+    expect(Result.isSuccess(decode({ _tag: "LocalDate", date }))).toBe(true);
+  }
+  for (const date of [
+    "x2026-01-01",
+    "2026-01-01x",
+    "2026-00-01",
+    "2026-13-01",
+    "2026-01-00",
+    "2026-01-32",
+  ]) {
+    expect(Result.isFailure(decode({ _tag: "LocalDate", date }))).toBe(true);
+  }
+  for (const time of ["00:00:00", "19:59:59", "20:00:00", "23:59:59"]) {
+    expect(Result.isSuccess(decode({ _tag: "LocalDate", date: "2026-01-01", time }))).toBe(true);
+  }
+  for (const time of [
+    "x00:00:00",
+    "00:00:00x",
+    "24:00:00",
+    "00:60:00",
+    "00:00:60",
+    "0:00:00",
+    "00:0:00",
+    "00:00:0",
+  ]) {
+    expect(Result.isFailure(decode({ _tag: "LocalDate", date: "2026-01-01", time }))).toBe(true);
+  }
 });

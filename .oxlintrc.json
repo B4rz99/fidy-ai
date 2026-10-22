@@ -509,6 +509,7 @@
       "files": [
         "apps/server/vitest.config.ts",
         "apps/server/vitest.core.config.ts",
+        "apps/server/vitest.mutation.config.ts",
         "apps/server/vitest.email-interpretation.config.ts",
         "apps/server/vitest.whatsapp.config.ts",
         "apps/server/stryker.config.mjs",

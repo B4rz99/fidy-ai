@@ -27,9 +27,10 @@ it.effect("accepts only positive revisions and non-negative cursors", () =>
 
 it.effect("rejects empty or structurally malformed hosted replacements", () =>
   Effect.gen(function* () {
-    expect(
-      Exit.isSuccess(yield* Effect.exit(decodeOutput({ compactedConversation: "fiel" })))
-    ).toBe(true);
+    const output = yield* decodeOutput({ compactedConversation: "fiel" });
+    expect(yield* Schema.encodeEffect(CompactedConversationOutput)(output)).toEqual({
+      compactedConversation: "fiel",
+    });
     expect(Exit.isFailure(yield* Effect.exit(decodeOutput({ compactedConversation: "" })))).toBe(
       true
     );

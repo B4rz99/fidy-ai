@@ -1,10 +1,10 @@
 import { expect, it } from "vitest";
-import { DateTime, Option, Schema } from "effect";
+import { DateTime, Option, Result, Schema } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Money } from "~/core/_shared/money";
 import { TransactionId } from "~/core/transactions/contract";
-import { decideAnnouncement, detectMonthlySeries } from "./operations";
-import type { RecurringFact } from "./contract";
+import { decideAnnouncement, detectMonthlySeries, normalizeCounterparty } from "./operations";
+import { type RecurringFact, RecurringProposal, RecurringSeriesPage } from "./contract";
 
 const defaults = {
   amount: "30000",
@@ -193,4 +193,139 @@ it("ignores ambiguous later months while extending to the latest unique charge a
   expect(extended).toHaveLength(1);
   expect(extended[0]?.latestTransactionId).toBe(nextYear.id);
   expect(extended[0]?.supportingTransactionIds).toEqual([fact(1).id, fact(2).id, fact(3).id]);
+});
+
+it("normalizes explicit Counterparty formatting without removing accents or joining separate words", () => {
+  expect(normalizeCounterparty("  CAFÉ\u00a0  CENTRAL  ")).toBe("café central");
+  expect(normalizeCounterparty("ＣＡＦＥ")).toBe("cafe");
+  expect(normalizeCounterparty("A B")).not.toBe(normalizeCounterparty("AB"));
+});
+
+it("includes the three-day drift boundary and preserves backfill from any confirming month", () => {
+  for (const month of [1, 2, 3]) {
+    const facts = [
+      fact(1, { backfill: month === 1 }),
+      fact(2, { day: "18", backfill: month === 2 }),
+      fact(3, { backfill: month === 3 }),
+    ];
+    const proposals = detectMonthlySeries({ facts, timeZone: zone });
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0]?.backfill).toBe(true);
+  }
+  expect(
+    detectMonthlySeries({ facts: [fact(1), fact(2), fact(3)], timeZone: zone })[0]?.backfill
+  ).toBe(false);
+});
+
+it("confirms across a year boundary regardless of input order and preserves the original Money reference", () => {
+  const january = { ...fact(1), occurredAt: DateTime.makeUnsafe("2027-01-15T12:00:00Z") };
+  const february = { ...fact(2), occurredAt: DateTime.makeUnsafe("2027-02-15T12:00:00Z") };
+  const december = fact(12);
+  const proposals = detectMonthlySeries({ facts: [february, december, january], timeZone: zone });
+  expect(proposals).toHaveLength(1);
+  expect(proposals[0]?.supportingTransactionIds).toEqual([december.id, january.id, february.id]);
+  expect(proposals[0]?.latestTransactionId).toBe(february.id);
+  expect(proposals[0]?.referenceMoney).toEqual(december.money);
+});
+
+it("keeps equal-Money recurring charges for distinct explicit Counterparties independent", () => {
+  const netflix = [fact(1), fact(2), fact(3)];
+  const spotify = [1, 2, 3, 6].map((month) => ({
+    ...fact(month, { counterparty: "Spotify" }),
+    id: TransactionId.make(`90000000-0000-4000-8000-${String(month).padStart(12, "0")}`),
+  }));
+  const proposals = detectMonthlySeries({
+    facts: [...netflix, ...spotify].toReversed(),
+    timeZone: zone,
+  });
+  expect(proposals).toHaveLength(2);
+  expect(
+    proposals.find((proposal) => proposal.counterparty === "Netflix")?.latestTransactionId
+  ).toBe(fact(3).id);
+  expect(
+    proposals.find((proposal) => proposal.counterparty === "Spotify")?.latestTransactionId
+  ).toBe(spotify[3]?.id);
+});
+
+it("keeps distinct non-overlapping Money bands for the same Counterparty as separate historical patterns", () => {
+  const lower = [
+    fact(1, { amount: "100" }),
+    fact(2, { amount: "100" }),
+    fact(3, { amount: "100" }),
+  ];
+  const higher = [
+    fact(4, { amount: "200" }),
+    fact(5, { amount: "200" }),
+    fact(6, { amount: "200" }),
+  ];
+  const proposals = detectMonthlySeries({ facts: [...lower, ...higher], timeZone: zone });
+  expect(proposals).toHaveLength(2);
+  expect(proposals.map((proposal) => proposal.supportingTransactionIds)).toEqual([
+    [fact(1).id, fact(2).id, fact(3).id],
+    [fact(4).id, fact(5).id, fact(6).id],
+  ]);
+});
+
+it("freezes the first confirming triple, reference Money and backfill status when later triples extend it", () => {
+  const facts = [
+    fact(1, { backfill: true }),
+    fact(2, { amount: "30600" }),
+    fact(3, { amount: "31000" }),
+    fact(4, { amount: "31200" }),
+  ];
+  const proposals = detectMonthlySeries({ facts, timeZone: zone });
+  expect(proposals).toHaveLength(1);
+  expect(proposals[0]?.supportingTransactionIds).toEqual([fact(1).id, fact(2).id, fact(3).id]);
+  expect(proposals[0]?.referenceMoney).toEqual(fact(1).money);
+  expect(proposals[0]?.firstOccurredAt).toEqual(fact(1).occurredAt);
+  expect(proposals[0]?.backfill).toBe(true);
+  expect(proposals[0]?.latestTransactionId).toBe(fact(4).id);
+});
+
+it("validates unique supporting Transaction identities before retaining a recurring proposal", () => {
+  const proposal = {
+    counterparty: "Netflix",
+    money: { amount: "30000", currency: "COP" },
+    referenceMoney: { amount: "30000", currency: "COP" },
+    firstOccurredAt: "2026-01-15T12:00:00.000Z",
+    lastOccurredAt: "2026-03-15T12:00:00.000Z",
+    supportingTransactionIds: [fact(1).id, fact(2).id, fact(3).id],
+    latestTransactionId: fact(3).id,
+    backfill: false,
+  };
+  expect(Result.isSuccess(Schema.decodeUnknownResult(RecurringProposal)(proposal))).toBe(true);
+  expect(
+    Result.isFailure(
+      Schema.decodeUnknownResult(RecurringProposal)({
+        ...proposal,
+        supportingTransactionIds: [fact(1).id, fact(1).id, fact(3).id],
+      })
+    )
+  ).toBe(true);
+  expect(
+    Result.isFailure(
+      Schema.decodeUnknownResult(RecurringProposal)({
+        ...proposal,
+        money: { amount: "0", currency: "COP" },
+      })
+    )
+  ).toBe(true);
+  const page = {
+    series: [
+      {
+        id: fact(1).id,
+        counterparty: "Netflix",
+        money: proposal.money,
+        cadence: { kind: "monthly" },
+        firstOccurredAt: proposal.firstOccurredAt,
+        lastOccurredAt: proposal.lastOccurredAt,
+        confirmedAt: proposal.lastOccurredAt,
+        announcement: { kind: "suppressed", reason: "backfill" },
+      },
+    ],
+    evaluation: { kind: "updating" },
+  };
+  expect(
+    Schema.encodeSync(RecurringSeriesPage)(Schema.decodeUnknownSync(RecurringSeriesPage)(page))
+  ).toEqual(page);
 });

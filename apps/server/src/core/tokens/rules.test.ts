@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect } from "effect";
 import { PATRecipientLabel } from "./contract";
-import { buildPATDisclosure, computePATExpiration } from "./operations";
+import { buildPATDisclosure, buildPairedPATDisclosure, computePATExpiration } from "./operations";
 
 it("includes the named recipient and every granted scope in Spanish disclosure", () => {
   const disclosure = buildPATDisclosure({
@@ -38,3 +38,18 @@ it.effect("computes every fixed PAT lifetime from the issuance instant", () =>
     ]);
   })
 );
+
+it("discloses the fixed lifetime in days and hours and names direct paired-client delivery", () => {
+  const grant = {
+    recipientLabel: PATRecipientLabel.make("Mi agente"),
+    scopes: ["read"] as const,
+    lifetimeDays: 7 as const,
+  };
+  const expiresAt = DateTime.makeUnsafe("2026-01-08T00:00:00Z");
+  const text = buildPairedPATDisclosure({ grant, expiresAt });
+  expect(text).toContain("7 días (168 horas)");
+  expect(text).toContain("2026-01-08T00:00:00.000Z");
+  expect(text).toContain(
+    "directamente al cliente que inició esta vinculación; este navegador no lo recibirá"
+  );
+});

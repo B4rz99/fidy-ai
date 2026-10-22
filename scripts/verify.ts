@@ -237,6 +237,11 @@ const checks: Array<Check> = [
     cwd: `${workspaceRoot}/tools/mutation`,
     env: Bun.env,
   },
+  rootCheck("mutation", "Mutation runner regression", [
+    "node",
+    "--test",
+    "tools/mutation/runner.test.mjs",
+  ]),
   rootCheck("mutation", "Mutation tests", ["bun", "run", "test:mutation"]),
 ];
 

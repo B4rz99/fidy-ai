@@ -2,10 +2,14 @@ import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import {
   type CsvRowEvidence,
+  EmailForwardingLocalPart,
   NeedsReviewItem,
   NeedsReviewReason,
   NeedsReviewStatus,
   ParsedStatementRow,
+  ReviewCommand,
+  ReviewSummary,
+  ReviewWorkspaceQuery,
   StagedStatementReference,
   StatementAccounting,
   StatementFailureReason,
@@ -261,4 +265,81 @@ it("keeps NeedsReviewItem lifecycle evidence and format consistent", () => {
   ]) {
     expect(Result.isSuccess(Schema.decodeUnknownResult(NeedsReviewReason)(value))).toBe(true);
   }
+});
+
+it("preserves partial review drafts and requires a Transaction identity only after creation", () => {
+  const metadata = {
+    id: reviewId,
+    source: "statement",
+    revision: 0,
+    timeZone: "America/Bogota",
+    reason: "missing-required-fact",
+    createdAt: "2026-10-22T12:00:00.000Z",
+    expiresAt: "2026-10-23T12:00:00.000Z",
+  };
+  for (const outcome of [
+    { status: "pending" },
+    { status: "created", transactionId },
+    { status: "skipped" },
+    { status: "expired" },
+  ]) {
+    const value = { ...metadata, ...outcome };
+    expect(
+      Schema.encodeSync(ReviewSummary)(Schema.decodeUnknownSync(ReviewSummary)(value))
+    ).toEqual(value);
+  }
+  const draft = {
+    amount: "100",
+    currency: "COP",
+    direction: "outflow",
+    counterparty: "Mercado",
+    occurredAt: "2026-10-22T12:00:00Z",
+    categoryId: "10000000-0000-4000-8000-000000000001",
+    userProvidedFields: ["money"],
+  };
+  const command = { _tag: "SaveDraft", id: reviewId, revision: 0, draft };
+  expect(
+    Schema.encodeSync(ReviewCommand)(Schema.decodeUnknownSync(ReviewCommand)(command))
+  ).toEqual(command);
+  expect(
+    Result.isSuccess(Schema.decodeResult(ReviewWorkspaceQuery)({ status: "history", offset: 0 }))
+  ).toBe(true);
+  expect(
+    Result.isFailure(Schema.decodeUnknownResult(ReviewSummary)({ ...metadata, status: "created" }))
+  ).toBe(true);
+  expect(
+    Result.isFailure(
+      Schema.decodeUnknownResult(ReviewSummary)({ ...metadata, status: "pending", transactionId })
+    )
+  ).toBe(true);
+});
+
+it("validates a bounded opaque forwarding local part without accepting surrounding text", () => {
+  const decode = Schema.decodeUnknownResult(EmailForwardingLocalPart);
+  for (const value of ["a".repeat(24), "z0_-".repeat(16)]) {
+    expect(Result.isSuccess(decode(value))).toBe(true);
+  }
+  for (const value of [
+    "a".repeat(23),
+    "a".repeat(65),
+    `!${"a".repeat(24)}`,
+    `${"a".repeat(24)}!`,
+    "A".repeat(24),
+  ]) {
+    expect(Result.isFailure(decode(value))).toBe(true);
+  }
+});
+
+it("counts skipped and abandoned statement rows as accounted-for outcomes", () => {
+  const value = {
+    inputRows: 10,
+    acceptedRows: 1,
+    needsReviewRows: 2,
+    skippedRows: 3,
+    abandonedRows: 4,
+  };
+  expect(Result.isSuccess(Schema.decodeResult(StatementAccounting)(value))).toBe(true);
+  expect(
+    Result.isFailure(Schema.decodeResult(StatementAccounting)({ ...value, inputRows: 9 }))
+  ).toBe(true);
 });

@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { DateTime, Schema } from "effect";
+import { DateTime, Result, Schema } from "effect";
 import { ConfirmationDay, RecurringDigestPayload } from "./contract";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { captureConfirmationDay, recurringDigestTiming } from "./operations";
@@ -66,5 +66,70 @@ it("rejects empty, duplicate, unordered and out-of-window digest items without l
     ],
   ]) {
     expect(Schema.decodeOption(codec)({ confirmationDay, items })._tag).toBe("None");
+  }
+});
+
+it("rejects a captured ConfirmationDay with a changed date, midnight or closing bound", () => {
+  const value = {
+    localDate: "2026-10-06",
+    timeZone: "America/Bogota",
+    from: "2026-10-06T05:00:00Z",
+    toExclusive: "2026-10-07T05:00:00Z",
+  };
+  const decode = Schema.decodeUnknownResult(Schema.toCodecJson(ConfirmationDay));
+  expect(Result.isSuccess(decode(value))).toBe(true);
+  for (const change of [
+    { localDate: "2026-10-07" },
+    { from: "2026-10-06T05:00:00.001Z" },
+    { toExclusive: "2026-10-07T04:59:59.999Z" },
+    { toExclusive: "2026-10-07T05:00:00.001Z" },
+    { timeZone: "Asia/Tokyo" },
+  ]) {
+    expect(Result.isFailure(decode({ ...value, ...change }))).toBe(true);
+  }
+});
+
+it("orders digest items by Currency, Counterparty and identity while retaining the exact day endpoints", () => {
+  const confirmationDay = {
+    localDate: "2026-10-06",
+    timeZone: "America/Bogota",
+    from: "2026-10-06T05:00:00Z",
+    toExclusive: "2026-10-07T05:00:00Z",
+  };
+  const first = {
+    confirmationId: "10000000-0000-4000-8000-000000000001",
+    seriesId: "20000000-0000-4000-8000-000000000001",
+    counterparty: "Amazon",
+    money: { amount: "100", currency: "COP" },
+    cadence: { kind: "monthly" },
+    confirmedAt: confirmationDay.from,
+  };
+  const second = {
+    ...first,
+    confirmationId: "10000000-0000-4000-8000-000000000002",
+    confirmedAt: "2026-10-07T04:59:59.999Z",
+  };
+  const third = {
+    ...first,
+    confirmationId: "10000000-0000-4000-8000-000000000003",
+    counterparty: "Netflix",
+  };
+  const fourth = {
+    ...first,
+    confirmationId: "10000000-0000-4000-8000-000000000004",
+    money: { amount: "1", currency: "USD" },
+  };
+  const decode = Schema.decodeUnknownResult(Schema.toCodecJson(RecurringDigestPayload));
+  expect(Result.isSuccess(decode({ confirmationDay, items: [first, second, third, fourth] }))).toBe(
+    true
+  );
+  for (const items of [
+    [second, first],
+    [third, first],
+    [fourth, first],
+    [{ ...first, confirmedAt: "2026-10-06T04:59:59.999Z" }],
+    [{ ...first, confirmedAt: confirmationDay.toExclusive }],
+  ]) {
+    expect(Result.isFailure(decode({ confirmationDay, items }))).toBe(true);
   }
 });

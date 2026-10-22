@@ -225,8 +225,29 @@ it("keeps fixed PAT expiration independent from successful use", () => {
   expect(String(Option.getOrThrow(Result.getFailure(invalidEarlyUse)))).toContain(
     'at ["lastUsedAt"]'
   );
+  expect(
+    Result.isFailure(decodeToken({ ...validToken, lastUsedAt: Option.some(validToken.expiresAt) }))
+  ).toBe(true);
+  expect(
+    Result.isSuccess(
+      decodeToken({
+        ...validToken,
+        lastUsedAt: Option.some(usedAt),
+        revokedAt: Option.some(usedAt),
+      })
+    )
+  ).toBe(true);
   expect(Result.isFailure(invalidRevocationBeforeUse)).toBe(true);
   expect(String(Option.getOrThrow(Result.getFailure(invalidRevocationBeforeUse)))).toContain(
     'at ["revokedAt"]'
   );
+});
+
+it("bounds recipient labels by Unicode characters and publishes the same limit to clients", () => {
+  const decode = Schema.decodeUnknownResult(PATRecipientLabel);
+  expect(Result.isSuccess(decode("💰".repeat(80)))).toBe(true);
+  expect(Result.isFailure(decode("💰".repeat(81)))).toBe(true);
+  expect(
+    Schema.toJsonSchemaDocument(PATRecipientLabel).definitions.PATRecipientLabel
+  ).toMatchObject({ maxLength: 80 });
 });

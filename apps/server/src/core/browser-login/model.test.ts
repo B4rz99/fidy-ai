@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { BrowserLoginPrivateVerifier } from "./contract";
+import { BrowserLoginPrivateVerifier, BrowserLoginPublicCodeInput } from "./contract";
 
 const decodePrivateVerifier = Schema.decodeUnknownResult(BrowserLoginPrivateVerifier);
 const validPrivateVerifier = "A".repeat(43);
@@ -26,4 +26,10 @@ it("rejects a private verifier containing a character outside the base64url alph
 it("rejects private verifiers shorter or longer than 43 characters", () => {
   expect(Result.isFailure(decodePrivateVerifier(validPrivateVerifier.slice(0, 42)))).toBe(true);
   expect(Result.isFailure(decodePrivateVerifier(`${validPrivateVerifier}A`))).toBe(true);
+});
+
+it("preserves an already canonical browser pairing code through its input codec", () => {
+  const decoded = Schema.decodeSync(BrowserLoginPublicCodeInput)("BCDF-GHJK");
+  expect(decoded).toBe("BCDF-GHJK");
+  expect(Schema.encodeSync(BrowserLoginPublicCodeInput)(decoded)).toBe("BCDF-GHJK");
 });

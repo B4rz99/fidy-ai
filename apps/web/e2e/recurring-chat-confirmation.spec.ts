@@ -6,6 +6,7 @@ import { signInRecurringThroughCore } from "./real-core-fixture";
 
 const { expect, test } = playwright;
 const nonceHexLength = 64;
+const progressIntervalMilliseconds = 5000;
 const command = `CONFIRMAR ${"b".repeat(nonceHexLength)}`;
 const description =
   "Dejar de seguir «Plan de prueba» desde el 15-10-2026. Conserva el historial y no cancela servicios ni mueve dinero.";
@@ -81,8 +82,9 @@ for (const delivery of ["direct", "recovered"] as const) {
         yield* Effect.tryPromise(() => openAndSend(page, "Deja de seguir Plan de prueba"));
         if (delivery === "recovered") {
           yield* Effect.tryPromise(() =>
-            page.getByRole("button", { name: "Consultar estado", exact: true }).click()
+            expect(page.getByLabel("Mensaje", { exact: true })).toHaveValue("")
           );
+          yield* Effect.tryPromise(() => page.clock.fastForward(progressIntervalMilliseconds));
         }
         yield* Effect.tryPromise(() =>
           expect(page.getByText(description, { exact: true })).toBeVisible()

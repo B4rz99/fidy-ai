@@ -1,3 +1,12 @@
+import { Schema } from "effect";
+
+export const CutoverHistory = Schema.fromJsonString(
+  Schema.Struct({
+    originalDefinitions: Schema.Array(Schema.String),
+    introducedNames: Schema.Array(Schema.String),
+  })
+);
+
 export const schemaStatements = (source: string): ReadonlyArray<string> =>
   source
     .split("--> statement-breakpoint")

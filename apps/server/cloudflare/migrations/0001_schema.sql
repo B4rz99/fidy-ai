@@ -1401,8 +1401,22 @@ CREATE TABLE sql_assertions (
 ) STRICT;
 --> statement-breakpoint
 
+CREATE TABLE statement_materializations (
+ submission_id TEXT PRIMARY KEY NOT NULL REFERENCES statement_submissions(id) ON DELETE CASCADE,
+ source_sha256 TEXT NOT NULL CHECK(length(source_sha256)=64),
+ parts_sha256 TEXT NOT NULL CHECK(length(parts_sha256)=64),
+ representation_revision TEXT NOT NULL,
+ expires_at_ms INTEGER NOT NULL,
+ headers_json TEXT NOT NULL CHECK(json_valid(headers_json) AND length(CAST(headers_json AS BLOB))<=524288),
+ row_count INTEGER NOT NULL CHECK(row_count BETWEEN 1 AND 20000),
+ part_count INTEGER NOT NULL CHECK(part_count BETWEEN 1 AND 1024),
+ byte_length INTEGER NOT NULL CHECK(byte_length BETWEEN 1 AND 16777216),
+ state TEXT NOT NULL CHECK(state IN ('building','ready'))
+) STRICT;
+--> statement-breakpoint
+
 CREATE TABLE "statement_materialization_parts" (
-  submission_id TEXT NOT NULL REFERENCES statement_submissions(id) ON DELETE CASCADE,
+  submission_id TEXT NOT NULL REFERENCES statement_materializations(submission_id) ON DELETE CASCADE,
   chunk_index INTEGER NOT NULL CHECK(chunk_index BETWEEN 0 AND 624),
   part_index INTEGER NOT NULL CHECK(part_index BETWEEN 0 AND 1023),
   body TEXT NOT NULL CHECK(length(CAST(body AS BLOB)) BETWEEN 1 AND 524288),
@@ -1484,7 +1498,7 @@ CREATE TABLE statement_submissions (
   CHECK (source_format IS NULL OR source_format IN ('csv', 'xlsx')), parser_revision TEXT, service_market TEXT, locale TEXT, time_zone TEXT, status TEXT NOT NULL DEFAULT 'queued'
   CHECK (status IN ('queued', 'processing', 'completed', 'failed')), started_at_ms INTEGER, completed_at_ms INTEGER, input_rows INTEGER, accepted_rows INTEGER, needs_review_rows INTEGER, retention_expires_at_ms INTEGER, failure_reason TEXT
   CHECK (failure_reason IS NULL OR failure_reason IN ('unsupported-format', 'resource-limit',
-    'malformed-file', 'mapping-unavailable', 'retention-expired')), source_parse_attempts INTEGER NOT NULL DEFAULT 0 CHECK(source_parse_attempts BETWEEN 0 AND 3), processed_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_rows>=0), processed_accepted_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_accepted_rows>=0), processed_review_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_review_rows>=0), material_source_sha256 TEXT, material_parts_sha256 TEXT, material_representation_revision TEXT, material_expires_at_ms INTEGER, material_headers_json TEXT, material_row_count INTEGER, material_part_count INTEGER, material_byte_length INTEGER, material_state TEXT, hosted_session_id TEXT, hosted_turn_id TEXT, hosted_expires_at_ms INTEGER, hosted_abandoned_at_ms INTEGER, clarification_state TEXT, clarification_expires_at_ms INTEGER, clarification_ended_at_ms INTEGER, work_published_at_ms INTEGER, work_last_attempt_at_ms INTEGER, work_last_reconciled_at_ms INTEGER CHECK((work_published_at_ms IS NULL AND work_last_attempt_at_ms IS NULL AND work_last_reconciled_at_ms IS NULL) OR (work_published_at_ms IS NOT NULL AND (work_published_at_ms >= 0) AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms >= 0) AND (work_last_reconciled_at_ms IS NULL OR work_last_reconciled_at_ms >= 0))),
+    'malformed-file', 'mapping-unavailable', 'retention-expired')), source_parse_attempts INTEGER NOT NULL DEFAULT 0 CHECK(source_parse_attempts BETWEEN 0 AND 3), processed_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_rows>=0), processed_accepted_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_accepted_rows>=0), processed_review_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_review_rows>=0), hosted_session_id TEXT, hosted_turn_id TEXT, hosted_expires_at_ms INTEGER, hosted_abandoned_at_ms INTEGER, clarification_state TEXT, clarification_expires_at_ms INTEGER, clarification_ended_at_ms INTEGER, work_published_at_ms INTEGER, work_last_attempt_at_ms INTEGER, work_last_reconciled_at_ms INTEGER CHECK((work_published_at_ms IS NULL AND work_last_attempt_at_ms IS NULL AND work_last_reconciled_at_ms IS NULL) OR (work_published_at_ms IS NOT NULL AND (work_published_at_ms >= 0) AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms >= 0) AND (work_last_reconciled_at_ms IS NULL OR work_last_reconciled_at_ms >= 0))),
   UNIQUE (user_id, idempotency_key)
 ) STRICT;
 --> statement-breakpoint
@@ -6351,7 +6365,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'statement_submissions','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'idempotency_key',OLD."idempotency_key",'staging_id',OLD."staging_id",'submitted_at_ms',OLD."submitted_at_ms",'source_format',OLD."source_format",'parser_revision',OLD."parser_revision",'service_market',OLD."service_market",'locale',OLD."locale",'time_zone',OLD."time_zone",'status',OLD."status",'started_at_ms',OLD."started_at_ms",'completed_at_ms',OLD."completed_at_ms",'input_rows',OLD."input_rows",'accepted_rows',OLD."accepted_rows",'needs_review_rows',OLD."needs_review_rows",'retention_expires_at_ms',OLD."retention_expires_at_ms",'failure_reason',OLD."failure_reason",'source_parse_attempts',OLD."source_parse_attempts",'processed_rows',OLD."processed_rows",'processed_accepted_rows',OLD."processed_accepted_rows",'processed_review_rows',OLD."processed_review_rows",'material_source_sha256',OLD.material_source_sha256,'material_parts_sha256',OLD.material_parts_sha256,'material_parser_revision',CASE WHEN OLD.material_state IS NOT NULL THEN OLD.parser_revision END,'material_source_format',CASE WHEN OLD.material_state IS NOT NULL THEN OLD.source_format END,'material_representation_revision',OLD.material_representation_revision,'material_service_market',CASE WHEN OLD.material_state IS NOT NULL THEN OLD.service_market END,'material_locale',CASE WHEN OLD.material_state IS NOT NULL THEN OLD.locale END,'material_time_zone',CASE WHEN OLD.material_state IS NOT NULL THEN OLD.time_zone END,'material_expires_at_ms',OLD.material_expires_at_ms,'material_headers_json',OLD.material_headers_json,'material_row_count',OLD.material_row_count,'material_part_count',OLD.material_part_count,'material_byte_length',OLD.material_byte_length,'material_state',OLD.material_state,'hosted_session_id',OLD.hosted_session_id,'hosted_turn_id',OLD.hosted_turn_id,'hosted_expires_at_ms',OLD.hosted_expires_at_ms,'hosted_abandoned_at_ms',OLD.hosted_abandoned_at_ms,'clarification_state',OLD.clarification_state,'clarification_expires_at_ms',OLD.clarification_expires_at_ms,'clarification_ended_at_ms',OLD.clarification_ended_at_ms,'work_user_id',CASE WHEN OLD.work_published_at_ms IS NOT NULL THEN OLD.user_id END,'work_revision',CASE WHEN OLD.work_published_at_ms IS NOT NULL THEN 1 END,'work_published_at_ms',OLD.work_published_at_ms,'work_last_attempt_at_ms',OLD.work_last_attempt_at_ms,'work_last_reconciled_at_ms',OLD.work_last_reconciled_at_ms)
+  SELECT q.id,'statement_submissions','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'idempotency_key',OLD."idempotency_key",'staging_id',OLD."staging_id",'submitted_at_ms',OLD."submitted_at_ms",'source_format',OLD."source_format",'parser_revision',OLD."parser_revision",'service_market',OLD."service_market",'locale',OLD."locale",'time_zone',OLD."time_zone",'status',OLD."status",'started_at_ms',OLD."started_at_ms",'completed_at_ms',OLD."completed_at_ms",'input_rows',OLD."input_rows",'accepted_rows',OLD."accepted_rows",'needs_review_rows',OLD."needs_review_rows",'retention_expires_at_ms',OLD."retention_expires_at_ms",'failure_reason',OLD."failure_reason",'source_parse_attempts',OLD."source_parse_attempts",'processed_rows',OLD."processed_rows",'processed_accepted_rows',OLD."processed_accepted_rows",'processed_review_rows',OLD."processed_review_rows",'hosted_session_id',OLD.hosted_session_id,'hosted_turn_id',OLD.hosted_turn_id,'hosted_expires_at_ms',OLD.hosted_expires_at_ms,'hosted_abandoned_at_ms',OLD.hosted_abandoned_at_ms,'clarification_state',OLD.clarification_state,'clarification_expires_at_ms',OLD.clarification_expires_at_ms,'clarification_ended_at_ms',OLD.clarification_ended_at_ms,'work_user_id',CASE WHEN OLD.work_published_at_ms IS NOT NULL THEN OLD.user_id END,'work_revision',CASE WHEN OLD.work_published_at_ms IS NOT NULL THEN 1 END,'work_published_at_ms',OLD.work_published_at_ms,'work_last_attempt_at_ms',OLD.work_last_attempt_at_ms,'work_last_reconciled_at_ms',OLD.work_last_reconciled_at_ms)
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
@@ -7553,12 +7567,12 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_companions_valid_insert BEFORE INSERT ON statement_submissions WHEN coalesce(((NEW.hosted_session_id IS NULL AND NEW.hosted_turn_id IS NULL AND NEW.hosted_expires_at_ms IS NULL AND NEW.hosted_abandoned_at_ms IS NULL) OR (NEW.hosted_session_id IS NOT NULL AND NEW.hosted_turn_id IS NOT NULL AND NEW.hosted_expires_at_ms IS NOT NULL)) AND ((NEW.clarification_state IS NULL AND NEW.clarification_expires_at_ms IS NULL AND NEW.clarification_ended_at_ms IS NULL) OR (NEW.clarification_state IN ('awaiting','completed','abandoned') AND NEW.clarification_expires_at_ms IS NOT NULL AND ((NEW.clarification_state='awaiting')=(NEW.clarification_ended_at_ms IS NULL)))) AND ((NEW.material_source_sha256 IS NULL AND NEW.material_parts_sha256 IS NULL AND NEW.material_representation_revision IS NULL AND NEW.material_expires_at_ms IS NULL AND NEW.material_headers_json IS NULL AND NEW.material_row_count IS NULL AND NEW.material_part_count IS NULL AND NEW.material_byte_length IS NULL AND NEW.material_state IS NULL) OR (NEW.material_source_sha256 IS NOT NULL AND NEW.material_parts_sha256 IS NOT NULL AND NEW.material_representation_revision IS NOT NULL AND NEW.material_expires_at_ms IS NOT NULL AND NEW.material_headers_json IS NOT NULL AND NEW.material_row_count IS NOT NULL AND NEW.material_part_count IS NOT NULL AND NEW.material_byte_length IS NOT NULL AND NEW.material_state IS NOT NULL AND NEW.material_state IN ('building','ready') AND length(NEW.material_source_sha256)=64 AND length(NEW.material_parts_sha256)=64 AND json_valid(NEW.material_headers_json) AND length(CAST(NEW.material_headers_json AS BLOB))<=524288 AND NEW.material_row_count BETWEEN 1 AND 20000 AND NEW.material_part_count BETWEEN 1 AND 1024 AND NEW.material_byte_length BETWEEN 1 AND 16777216)),0)=0 BEGIN
+CREATE TRIGGER statement_companions_valid_insert BEFORE INSERT ON statement_submissions WHEN coalesce(((NEW.hosted_session_id IS NULL AND NEW.hosted_turn_id IS NULL AND NEW.hosted_expires_at_ms IS NULL AND NEW.hosted_abandoned_at_ms IS NULL) OR (NEW.hosted_session_id IS NOT NULL AND NEW.hosted_turn_id IS NOT NULL AND NEW.hosted_expires_at_ms IS NOT NULL)) AND ((NEW.clarification_state IS NULL AND NEW.clarification_expires_at_ms IS NULL AND NEW.clarification_ended_at_ms IS NULL) OR (NEW.clarification_state IN ('awaiting','completed','abandoned') AND NEW.clarification_expires_at_ms IS NOT NULL AND ((NEW.clarification_state='awaiting')=(NEW.clarification_ended_at_ms IS NULL)))),0)=0 BEGIN
  SELECT RAISE(ABORT,'statement_companions_invalid');
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_companions_valid_update BEFORE UPDATE ON statement_submissions WHEN coalesce(((NEW.hosted_session_id IS NULL AND NEW.hosted_turn_id IS NULL AND NEW.hosted_expires_at_ms IS NULL AND NEW.hosted_abandoned_at_ms IS NULL) OR (NEW.hosted_session_id IS NOT NULL AND NEW.hosted_turn_id IS NOT NULL AND NEW.hosted_expires_at_ms IS NOT NULL)) AND ((NEW.clarification_state IS NULL AND NEW.clarification_expires_at_ms IS NULL AND NEW.clarification_ended_at_ms IS NULL) OR (NEW.clarification_state IN ('awaiting','completed','abandoned') AND NEW.clarification_expires_at_ms IS NOT NULL AND ((NEW.clarification_state='awaiting')=(NEW.clarification_ended_at_ms IS NULL)))) AND ((NEW.material_source_sha256 IS NULL AND NEW.material_parts_sha256 IS NULL AND NEW.material_representation_revision IS NULL AND NEW.material_expires_at_ms IS NULL AND NEW.material_headers_json IS NULL AND NEW.material_row_count IS NULL AND NEW.material_part_count IS NULL AND NEW.material_byte_length IS NULL AND NEW.material_state IS NULL) OR (NEW.material_source_sha256 IS NOT NULL AND NEW.material_parts_sha256 IS NOT NULL AND NEW.material_representation_revision IS NOT NULL AND NEW.material_expires_at_ms IS NOT NULL AND NEW.material_headers_json IS NOT NULL AND NEW.material_row_count IS NOT NULL AND NEW.material_part_count IS NOT NULL AND NEW.material_byte_length IS NOT NULL AND NEW.material_state IS NOT NULL AND NEW.material_state IN ('building','ready') AND length(NEW.material_source_sha256)=64 AND length(NEW.material_parts_sha256)=64 AND json_valid(NEW.material_headers_json) AND length(CAST(NEW.material_headers_json AS BLOB))<=524288 AND NEW.material_row_count BETWEEN 1 AND 20000 AND NEW.material_part_count BETWEEN 1 AND 1024 AND NEW.material_byte_length BETWEEN 1 AND 16777216)),0)=0 BEGIN
+CREATE TRIGGER statement_companions_valid_update BEFORE UPDATE ON statement_submissions WHEN coalesce(((NEW.hosted_session_id IS NULL AND NEW.hosted_turn_id IS NULL AND NEW.hosted_expires_at_ms IS NULL AND NEW.hosted_abandoned_at_ms IS NULL) OR (NEW.hosted_session_id IS NOT NULL AND NEW.hosted_turn_id IS NOT NULL AND NEW.hosted_expires_at_ms IS NOT NULL)) AND ((NEW.clarification_state IS NULL AND NEW.clarification_expires_at_ms IS NULL AND NEW.clarification_ended_at_ms IS NULL) OR (NEW.clarification_state IN ('awaiting','completed','abandoned') AND NEW.clarification_expires_at_ms IS NOT NULL AND ((NEW.clarification_state='awaiting')=(NEW.clarification_ended_at_ms IS NULL)))),0)=0 BEGIN
  SELECT RAISE(ABORT,'statement_companions_invalid');
 END;
 --> statement-breakpoint
@@ -7587,49 +7601,25 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_interpretation_context_immutable BEFORE UPDATE OF id,user_id,staging_id,parser_revision,source_format,service_market,locale,time_zone ON statement_submissions WHEN OLD.material_state IS NOT NULL AND (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.staging_id IS NOT OLD.staging_id OR NEW.parser_revision IS NOT OLD.parser_revision OR NEW.source_format IS NOT OLD.source_format OR NEW.service_market IS NOT OLD.service_market OR NEW.locale IS NOT OLD.locale OR NEW.time_zone IS NOT OLD.time_zone) BEGIN SELECT RAISE(ABORT,'statement_interpretation_context_immutable'); END;
+CREATE TRIGGER statement_interpretation_context_immutable BEFORE UPDATE OF id,user_id,staging_id,parser_revision,source_format,service_market,locale,time_zone ON statement_submissions WHEN EXISTS(SELECT 1 FROM statement_materializations WHERE submission_id=OLD.id) AND (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.staging_id IS NOT OLD.staging_id OR NEW.parser_revision IS NOT OLD.parser_revision OR NEW.source_format IS NOT OLD.source_format OR NEW.service_market IS NOT OLD.service_market OR NEW.locale IS NOT OLD.locale OR NEW.time_zone IS NOT OLD.time_zone) BEGIN SELECT RAISE(ABORT,'statement_interpretation_context_immutable'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_materialization_clear BEFORE UPDATE OF material_state ON statement_submissions WHEN OLD.material_state IS NOT NULL AND NEW.material_state IS NULL AND NEW.status NOT IN ('completed','failed') BEGIN
- SELECT RAISE(ABORT,'statement_materialization_identity');
-END;
+CREATE TRIGGER statement_materialization_identity BEFORE UPDATE ON statement_materializations
+WHEN (NEW.submission_id IS NOT OLD.submission_id OR NEW.source_sha256 IS NOT OLD.source_sha256 OR NEW.parts_sha256 IS NOT OLD.parts_sha256 OR NEW.representation_revision IS NOT OLD.representation_revision OR NEW.expires_at_ms IS NOT OLD.expires_at_ms OR NEW.headers_json IS NOT OLD.headers_json OR NEW.row_count IS NOT OLD.row_count OR NEW.part_count IS NOT OLD.part_count OR NEW.byte_length IS NOT OLD.byte_length OR OLD.state='ready' OR NEW.state<>'ready')
+BEGIN SELECT RAISE(ABORT,'statement_materialization_identity'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER statement_materialization_identity BEFORE UPDATE OF material_source_sha256,material_parts_sha256,material_representation_revision,material_expires_at_ms,material_headers_json,material_row_count,material_part_count,material_byte_length,material_state ON statement_submissions
-WHEN OLD.material_state IS NOT NULL AND NEW.material_state IS NOT NULL AND (NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id
-  OR NEW.material_source_sha256<>OLD.material_source_sha256
-  OR NEW.material_parts_sha256<>OLD.material_parts_sha256 OR NEW.material_expires_at_ms<>OLD.material_expires_at_ms
-  OR NEW.material_representation_revision<>OLD.material_representation_revision
-  OR NEW.material_headers_json<>OLD.material_headers_json OR NEW.material_row_count<>OLD.material_row_count
-  OR NEW.material_part_count<>OLD.material_part_count OR NEW.material_byte_length<>OLD.material_byte_length OR OLD.material_state='ready'
-)
-BEGIN
- SELECT RAISE(ABORT,'statement_materialization_identity');
-END;
---> statement-breakpoint
-
-CREATE TRIGGER statement_materialization_initial BEFORE INSERT ON statement_submissions
-WHEN NEW.material_state IS NOT NULL
-BEGIN
- SELECT RAISE(ABORT,'statement_materialization_owner');
-END;
---> statement-breakpoint
-
-CREATE TRIGGER statement_materialization_owner BEFORE UPDATE OF material_state ON statement_submissions
-WHEN OLD.material_state IS NULL AND NEW.material_state IS NOT NULL AND NOT EXISTS (SELECT 1 FROM statement_submissions s JOIN statement_staging_objects o
-  ON o.id=s.staging_id AND o.user_id=s.user_id
-  WHERE s.id=NEW.id AND s.user_id=NEW.user_id AND s.status IN ('queued','processing') AND s.parser_revision=NEW.parser_revision AND s.source_format=NEW.source_format AND s.service_market=NEW.service_market AND s.locale=NEW.locale AND s.time_zone=NEW.time_zone
-
-
-    AND o.sha256=NEW.material_source_sha256 AND s.retention_expires_at_ms=NEW.material_expires_at_ms)
-BEGIN
- SELECT RAISE(ABORT,'statement_materialization_owner');
-END;
+CREATE TRIGGER statement_materialization_owner BEFORE INSERT ON statement_materializations
+WHEN NEW.state<>'building' OR NOT EXISTS(SELECT 1 FROM statement_submissions s JOIN statement_staging_objects o ON o.id=s.staging_id AND o.user_id=s.user_id
+ WHERE s.id=NEW.submission_id AND s.status IN ('queued','processing') AND s.parser_revision IS NOT NULL AND s.source_format IS NOT NULL
+ AND s.service_market IS NOT NULL AND s.locale IS NOT NULL AND s.time_zone IS NOT NULL
+ AND o.sha256=NEW.source_sha256 AND s.retention_expires_at_ms=NEW.expires_at_ms)
+BEGIN SELECT RAISE(ABORT,'statement_materialization_owner'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER statement_materialization_part_guard BEFORE INSERT ON statement_materialization_parts
-WHEN NOT EXISTS (SELECT 1 FROM statement_submissions m WHERE m.id=NEW.submission_id
-  AND m.material_state='building' AND m.status IN ('queued','processing'))
+WHEN NOT EXISTS (SELECT 1 FROM statement_materializations m JOIN statement_submissions s ON s.id=m.submission_id WHERE m.submission_id=NEW.submission_id
+  AND m.state='building' AND s.status IN ('queued','processing'))
 BEGIN
  SELECT RAISE(ABORT,'statement_materialization_part_guard');
 END;
@@ -7640,10 +7630,8 @@ BEGIN SELECT RAISE(ABORT,'statement_materialization_part_immutable'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER statement_materialization_terminal AFTER UPDATE OF status ON statement_submissions
-WHEN NEW.status IN ('completed','failed')
-BEGIN
- DELETE FROM statement_materialization_parts WHERE submission_id=NEW.id;
- UPDATE statement_submissions SET material_source_sha256=NULL,material_parts_sha256=NULL,material_representation_revision=NULL,material_expires_at_ms=NULL,material_headers_json=NULL,material_row_count=NULL,material_part_count=NULL,material_byte_length=NULL,material_state=NULL WHERE id=NEW.id AND material_state IS NOT NULL;
+WHEN NEW.status IN ('completed','failed') BEGIN
+ DELETE FROM statement_materializations WHERE submission_id=NEW.id;
 END;
 --> statement-breakpoint
 
@@ -8410,3 +8398,44 @@ CREATE TRIGGER billing_price_notice_identity BEFORE UPDATE OF subscription_id,pr
 WHEN NEW.subscription_id IS NOT OLD.subscription_id OR NEW.price_id IS NOT OLD.price_id OR NEW.created_at_ms IS NOT OLD.created_at_ms
 BEGIN SELECT RAISE(ABORT,'billing_price_notice_identity'); END;
 --> statement-breakpoint
+--> statement-breakpoint
+
+CREATE TRIGGER erasure_fence_statement_materializations_delete BEFORE DELETE ON statement_materializations
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=OLD.submission_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_materializations'))
+BEGIN
+ SELECT RAISE(ABORT,'erasure_fenced');
+END;
+--> statement-breakpoint
+
+CREATE TRIGGER erasure_fence_statement_materializations_insert BEFORE INSERT ON statement_materializations
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=NEW.submission_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_materializations'))
+BEGIN
+ SELECT RAISE(ABORT,'erasure_fenced');
+END;
+--> statement-breakpoint
+
+CREATE TRIGGER erasure_fence_statement_materializations_update BEFORE UPDATE ON statement_materializations
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=NEW.submission_id AND p.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=OLD.submission_id AND p.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_materializations'))
+BEGIN
+ SELECT RAISE(ABORT,'erasure_fenced');
+END;
+--> statement-breakpoint
+
+CREATE TRIGGER erasure_preserve_statement_materializations_delete BEFORE DELETE ON statement_materializations
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=OLD.submission_id AND p.user_id=q.user_id))
+  AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
+  AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000)
+BEGIN
+ INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
+  SELECT q.id,'statement_materializations','drain:'||lower(hex(randomblob(16))),json_object('submission_id',OLD."submission_id",'source_sha256',OLD."source_sha256",'parts_sha256',OLD."parts_sha256",'representation_revision',OLD."representation_revision",'expires_at_ms',OLD."expires_at_ms",'headers_json',OLD."headers_json",'row_count',OLD."row_count",'part_count',OLD."part_count",'byte_length',OLD."byte_length",'state',OLD."state")
+  FROM erasure_requests q WHERE q.state='Draining' AND (EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=OLD.submission_id AND p.user_id=q.user_id))
+    AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
+    AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
+END;
+--> statement-breakpoint
+
+CREATE TRIGGER statement_materialization_clear BEFORE DELETE ON statement_materializations
+WHEN EXISTS(SELECT 1 FROM statement_submissions s WHERE s.id=OLD.submission_id AND s.status NOT IN ('completed','failed')
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=s.user_id AND q.state NOT IN ('AwaitingReview','Draining'))
+ AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=s.user_id AND p.store_id='statement_materializations'))
+BEGIN SELECT RAISE(ABORT,'statement_materialization_identity'); END;

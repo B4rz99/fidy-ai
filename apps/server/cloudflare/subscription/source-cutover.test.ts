@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import {
+  CutoverHistory,
   documentedSqlBlock,
   precedingSchema,
   schemaDefinition,
@@ -23,26 +24,12 @@ it.each(["valid", "unknown-environment", "changed-method", "interrupted"] as con
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* wait(() => databases.acquire());
-        const original = yield* Schema.decodeEffect(
-          Schema.fromJsonString(
-            Schema.Struct({
-              originalDefinitions: Schema.Array(Schema.String),
-              introducedNames: Schema.Array(Schema.String),
-            })
-          )
-        )(
+        const original = yield* Schema.decodeEffect(CutoverHistory)(
           yield* wait(() =>
             Bun.file(new URL("./source-cutover.test-fixture.json", import.meta.url)).text()
           )
         );
-        const standingHistory = yield* Schema.decodeEffect(
-          Schema.fromJsonString(
-            Schema.Struct({
-              originalDefinitions: Schema.Array(Schema.String),
-              introducedNames: Schema.Array(Schema.String),
-            })
-          )
-        )(
+        const standingHistory = yield* Schema.decodeEffect(CutoverHistory)(
           yield* wait(() =>
             Bun.file(new URL("./standing-cutover.test-fixture.json", import.meta.url)).text()
           )
@@ -52,19 +39,24 @@ it.each(["valid", "unknown-environment", "changed-method", "interrupted"] as con
             current: precedingSchema({
               current: precedingSchema({
                 current: precedingSchema({
-                  current: schemaStatements(
-                    yield* wait(() =>
-                      Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-                    )
-                  ),
-                  history: yield* Schema.decodeEffect(
-                    Schema.fromJsonString(
-                      Schema.Struct({
-                        originalDefinitions: Schema.Array(Schema.String),
-                        introducedNames: Schema.Array(Schema.String),
-                      })
-                    )
-                  )(
+                  current: precedingSchema({
+                    current: schemaStatements(
+                      yield* wait(() =>
+                        Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+                      )
+                    ),
+                    history: yield* Schema.decodeEffect(CutoverHistory)(
+                      yield* wait(() =>
+                        Bun.file(
+                          new URL(
+                            "../ingestion/materialization-cutover.test-fixture.json",
+                            import.meta.url
+                          )
+                        ).text()
+                      )
+                    ),
+                  }),
+                  history: yield* Schema.decodeEffect(CutoverHistory)(
                     yield* wait(() =>
                       Bun.file(
                         new URL(
@@ -75,14 +67,7 @@ it.each(["valid", "unknown-environment", "changed-method", "interrupted"] as con
                     )
                   ),
                 }),
-                history: yield* Schema.decodeEffect(
-                  Schema.fromJsonString(
-                    Schema.Struct({
-                      originalDefinitions: Schema.Array(Schema.String),
-                      introducedNames: Schema.Array(Schema.String),
-                    })
-                  )
-                )(
+                history: yield* Schema.decodeEffect(CutoverHistory)(
                   yield* wait(() =>
                     Bun.file(
                       new URL("./price-notice-cutover.test-fixture.json", import.meta.url)
@@ -90,27 +75,13 @@ it.each(["valid", "unknown-environment", "changed-method", "interrupted"] as con
                   )
                 ),
               }),
-              history: yield* Schema.decodeEffect(
-                Schema.fromJsonString(
-                  Schema.Struct({
-                    originalDefinitions: Schema.Array(Schema.String),
-                    introducedNames: Schema.Array(Schema.String),
-                  })
-                )
-              )(
+              history: yield* Schema.decodeEffect(CutoverHistory)(
                 yield* wait(() =>
                   Bun.file(new URL("./refund-cutover.test-fixture.json", import.meta.url)).text()
                 )
               ),
             }),
-            history: yield* Schema.decodeEffect(
-              Schema.fromJsonString(
-                Schema.Struct({
-                  originalDefinitions: Schema.Array(Schema.String),
-                  introducedNames: Schema.Array(Schema.String),
-                })
-              )
-            )(
+            history: yield* Schema.decodeEffect(CutoverHistory)(
               yield* wait(() =>
                 Bun.file(
                   new URL("./cancellation-cutover.test-fixture.json", import.meta.url)

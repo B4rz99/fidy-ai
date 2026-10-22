@@ -2522,3 +2522,103 @@ SELECT 'forwarding-address-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_fore
 ```
 
 <!-- forwarding-address-verify:end -->
+
+## Statement materialization extraction (#1457)
+
+Source checkpoint: `6adb8d86d`. Parsed cache metadata moves to `statement_materializations`;
+its parts reference that cache row. Submission identity, captured parser/format/market/locale/zone,
+parse-attempt budget, durable cursor, row outcomes, final totals and work reconciliation stay on the
+submission. Cache publication still verifies ordered part hashes, total bytes and dimensions before
+processing. A corrupt cache cannot reinterpret or undo already captured rows. Terminal settlement
+removes cache and parts atomically; native Workflow reconciliation remains independent of parsing.
+
+Quiesce writers. In one D1 batch: preflight; create the exact baseline cache table and a
+`statement_materialization_parts_1457` copy of the target parts definition; copy and compare; drop
+explicit source views/triggers/indexes; swap; recreate baseline views/triggers/indexes; verify.
+Keep constraint indexes. Do not rebuild the submission or disable foreign keys. The old submission
+rowid becomes cache rowid and every original part rowid is preserved. Historical archive bodies
+remain unchanged; new cache archives use their own ingestion store. Erasure removes parts before
+cache, then submission, retaining purpose-specific guards. #1494 owns final live verification.
+
+<!-- statement-materialization-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'statement-materialization-preflight',CASE WHEN NOT EXISTS(
+ SELECT 1 FROM statement_submissions s LEFT JOIN statement_staging_objects o ON o.id=s.staging_id
+ WHERE (s.material_state IS NULL AND (s.material_source_sha256 IS NOT NULL OR s.material_parts_sha256 IS NOT NULL
+ OR s.material_representation_revision IS NOT NULL OR s.material_expires_at_ms IS NOT NULL OR s.material_headers_json IS NOT NULL
+ OR s.material_row_count IS NOT NULL OR s.material_part_count IS NOT NULL OR s.material_byte_length IS NOT NULL))
+ OR (s.material_state IS NOT NULL AND (s.material_source_sha256 IS NULL OR s.material_parts_sha256 IS NULL
+ OR s.material_representation_revision IS NULL OR s.material_expires_at_ms IS NULL OR s.material_headers_json IS NULL
+ OR s.material_row_count IS NULL OR s.material_part_count IS NULL OR s.material_byte_length IS NULL
+ OR s.material_source_sha256 IS NOT o.sha256 OR s.material_expires_at_ms IS NOT s.retention_expires_at_ms
+ OR s.parser_revision IS NULL OR s.source_format IS NULL OR s.service_market IS NULL OR s.locale IS NULL OR s.time_zone IS NULL
+ OR s.status NOT IN ('queued','processing')
+ OR (s.material_state='ready' AND (s.material_part_count<>(SELECT COUNT(*) FROM statement_materialization_parts p WHERE p.submission_id=s.id)
+ OR s.material_byte_length IS NOT (SELECT SUM(length(CAST(body AS BLOB))) FROM statement_materialization_parts p WHERE p.submission_id=s.id)))))
+) AND NOT EXISTS(SELECT 1 FROM statement_materialization_parts p LEFT JOIN statement_submissions s ON s.id=p.submission_id
+ WHERE s.id IS NULL OR s.material_state IS NULL) THEN 1 ELSE 0 END;
+```
+
+<!-- statement-materialization-preflight:end -->
+
+<!-- statement-materialization-copy:start -->
+
+```sql
+INSERT INTO statement_materializations(rowid,submission_id,source_sha256,parts_sha256,representation_revision,expires_at_ms,headers_json,row_count,part_count,byte_length,state)
+SELECT rowid,id,material_source_sha256,material_parts_sha256,material_representation_revision,material_expires_at_ms,material_headers_json,material_row_count,material_part_count,material_byte_length,material_state
+FROM statement_submissions WHERE material_state IS NOT NULL;
+INSERT INTO statement_materialization_parts_1457(rowid,submission_id,chunk_index,part_index,body,sha256)
+SELECT rowid,submission_id,chunk_index,part_index,body,sha256 FROM statement_materialization_parts;
+```
+
+<!-- statement-materialization-copy:end -->
+
+<!-- statement-materialization-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'statement-materialization-copy',CASE WHEN NOT EXISTS(
+ SELECT rowid,submission_id,source_sha256,parts_sha256,representation_revision,expires_at_ms,headers_json,row_count,part_count,byte_length,state FROM statement_materializations
+ EXCEPT SELECT rowid,id,material_source_sha256,material_parts_sha256,material_representation_revision,material_expires_at_ms,material_headers_json,material_row_count,material_part_count,material_byte_length,material_state FROM statement_submissions WHERE material_state IS NOT NULL
+) AND (SELECT COUNT(*) FROM statement_materializations)=(SELECT COUNT(*) FROM statement_submissions WHERE material_state IS NOT NULL)
+AND NOT EXISTS(SELECT rowid,submission_id,chunk_index,part_index,body,sha256 FROM statement_materialization_parts_1457
+ EXCEPT SELECT rowid,submission_id,chunk_index,part_index,body,sha256 FROM statement_materialization_parts)
+AND (SELECT COUNT(*) FROM statement_materialization_parts_1457)=(SELECT COUNT(*) FROM statement_materialization_parts)
+THEN 1 ELSE 0 END;
+```
+
+<!-- statement-materialization-copy-check:end -->
+
+<!-- statement-materialization-swap:start -->
+
+```sql
+DROP TABLE statement_materialization_parts;
+ALTER TABLE statement_materialization_parts_1457 RENAME TO statement_materialization_parts;
+ALTER TABLE statement_submissions DROP COLUMN material_state;
+ALTER TABLE statement_submissions DROP COLUMN material_byte_length;
+ALTER TABLE statement_submissions DROP COLUMN material_part_count;
+ALTER TABLE statement_submissions DROP COLUMN material_row_count;
+ALTER TABLE statement_submissions DROP COLUMN material_headers_json;
+ALTER TABLE statement_submissions DROP COLUMN material_expires_at_ms;
+ALTER TABLE statement_submissions DROP COLUMN material_representation_revision;
+ALTER TABLE statement_submissions DROP COLUMN material_parts_sha256;
+ALTER TABLE statement_submissions DROP COLUMN material_source_sha256;
+```
+
+<!-- statement-materialization-swap:end -->
+
+<!-- statement-materialization-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'statement-materialization-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END;
+```
+
+<!-- statement-materialization-verify:end -->
+
+Native processing-cost examples after cache extraction read 2,258 rows for 96 processed source rows
+and 4,460 for 192, versus 2,247 and 4,437 at the preceding checkpoint. The existing native linear
+cost and bounded-chunk checks remain green; cache reads add indexed parent joins without rescanning
+unrelated submissions or rereading source bytes on resume.

@@ -2,7 +2,7 @@ import { afterAll, expect, it } from "vitest";
 import { Data, Effect, Schema } from "effect";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 
-import { precedingSchema } from "../schema-cutover.test-fixture";
+import { CutoverHistory, precedingSchema } from "../schema-cutover.test-fixture";
 
 class FixtureFailure extends Data.TaggedError("FixtureFailure")<{ cause: unknown }> {}
 const native = <A>(run: () => PromiseLike<A>): Effect.Effect<A, FixtureFailure> =>
@@ -265,21 +265,23 @@ it.each(cases)(
       Effect.gen(function* () {
         const outcome = fixture.outcome;
         const db = yield* native(() => databases.acquire());
-        const latest = objects(
-          yield* native(() =>
-            Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-          )
-        );
+        const latest = precedingSchema({
+          current: objects(
+            yield* native(() =>
+              Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+            )
+          ),
+          history: yield* Schema.decodeEffect(CutoverHistory)(
+            yield* native(() =>
+              Bun.file(
+                new URL("../ingestion/materialization-cutover.test-fixture.json", import.meta.url)
+              ).text()
+            )
+          ),
+        });
         const baseline = precedingSchema({
           current: latest,
-          history: yield* Schema.decodeEffect(
-            Schema.fromJsonString(
-              Schema.Struct({
-                originalDefinitions: Schema.Array(Schema.String),
-                introducedNames: Schema.Array(Schema.String),
-              })
-            )
-          )(
+          history: yield* Schema.decodeEffect(CutoverHistory)(
             yield* native(() =>
               Bun.file(
                 new URL("../ingestion/forwarding-cutover.test-fixture.json", import.meta.url)

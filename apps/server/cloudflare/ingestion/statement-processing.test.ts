@@ -9,12 +9,7 @@ import { statementReviewAdmission } from "./internal/statement-review-budget";
 import { deepStrictEqual } from "node:assert/strict";
 import { inspect } from "node:util";
 import { StatementProcessingUnavailable } from "./contract";
-import {
-  installCurrentTestObjects,
-  installTestSchema,
-  isolatedTestStorage,
-  observeRetentionCost,
-} from "../d1-test-fixture";
+import { installTestSchema, isolatedTestStorage, observeRetentionCost } from "../d1-test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { currentMillis } from "../runtime/operations";
@@ -1032,11 +1027,7 @@ effectIt.effect(
       expect(entitlement?.consumed_at_ms).toBeNull();
       expect(
         yield* fromTestPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM statement_submissions WHERE material_state IS NOT NULL"
-            )
-            .first()
+          db.prepare("SELECT count(*) AS count FROM statement_materializations").first()
         )
       ).toEqual({ count: 0 });
       expect(
@@ -1231,7 +1222,7 @@ const observeDerivedReads = (
         if (property === "prepare") {
           return (sql: string) =>
             sql.includes("p.body") && sql.includes("SELECT p.")
-              ? instrument(target.prepare(sql), sql.includes("m.material_state='building'"))
+              ? instrument(target.prepare(sql), sql.includes("m.state='building'"))
               : target.prepare(sql);
         }
         const method: unknown = Reflect.get(target, property, target);
@@ -1297,7 +1288,7 @@ effectIt.effect("deleting an interrupted submission reclaims its owned derived p
       yield* fromTestPromise(() =>
         db
           .prepare(`SELECT
-      (SELECT count(*) FROM statement_submissions WHERE material_state IS NOT NULL) AS manifests,
+      (SELECT count(*) FROM statement_materializations) AS manifests,
       (SELECT count(*) FROM statement_materialization_parts) AS parts`)
           .first()
       )
@@ -1327,7 +1318,7 @@ effectIt.effect(
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "UPDATE statement_submissions SET material_representation_revision='statement-material-v1'"
+            "UPDATE statement_materializations SET representation_revision='statement-material-v1'"
           )
           .run()
       );
@@ -1456,7 +1447,7 @@ it.each(["body", "body-and-checksum"] as const)(
             db
               .prepare(`SELECT status,failure_reason,
         (SELECT count(*) FROM transactions) AS captures,
-        (SELECT count(*) FROM statement_submissions WHERE material_state IS NOT NULL) AS materializations
+        (SELECT count(*) FROM statement_materializations) AS materializations
         FROM statement_submissions WHERE id=?`)
               .bind(submissionId)
               .first()
@@ -2042,11 +2033,7 @@ effectIt.effect(
       ).toEqual({ count: 32 });
       expect(
         yield* fromTestPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM statement_submissions WHERE material_state IS NOT NULL"
-            )
-            .first()
+          db.prepare("SELECT count(*) AS count FROM statement_materializations").first()
         )
       ).toEqual({ count: 0 });
     })
@@ -2080,59 +2067,54 @@ effectIt.effect("a foreign User cannot read or finalize a published materializat
   })
 );
 
-effectIt.effect(
-  "migration preserves existing row receipts and atomically rejects a skipped cursor",
-  () =>
-    Effect.gen(function* () {
-      const { db } = yield* fromTestPromise(() => setup("Header\nvalue", "csv"));
-      yield* fromTestPromise(() =>
+effectIt.effect("advances durable row receipts atomically and rejects a skipped cursor", () =>
+  Effect.gen(function* () {
+    const { db } = yield* fromTestPromise(() => setup("Header\nvalue", "csv"));
+    yield* fromTestPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,1,'needs-review'),(?,?,2,'needs-review')"
+        )
+        .bind(userA, submissionId, userA, submissionId)
+        .run()
+    );
+    const progress = (): ReturnType<D1PreparedStatement["first"]> =>
+      db
+        .prepare(
+          "SELECT processed_rows,processed_accepted_rows,processed_review_rows FROM statement_submissions WHERE id=?"
+        )
+        .bind(submissionId)
+        .first();
+    expect(yield* fromTestPromise(progress)).toEqual({
+      processed_rows: 2,
+      processed_accepted_rows: 0,
+      processed_review_rows: 2,
+    });
+    yield* fromTestPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,3,'needs-review')"
+        )
+        .bind(userA, submissionId)
+        .run()
+    );
+    const skipped = yield* Effect.exit(
+      Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,1,'needs-review'),(?,?,2,'needs-review')"
-          )
-          .bind(userA, submissionId, userA, submissionId)
-          .run()
-      );
-      yield* fromTestPromise(() =>
-        installCurrentTestObjects({ db, tables: ["statement_materialization_parts"] })
-      );
-      const progress = (): ReturnType<D1PreparedStatement["first"]> =>
-        db
-          .prepare(
-            "SELECT processed_rows,processed_accepted_rows,processed_review_rows FROM statement_submissions WHERE id=?"
-          )
-          .bind(submissionId)
-          .first();
-      expect(yield* fromTestPromise(progress)).toEqual({
-        processed_rows: 2,
-        processed_accepted_rows: 0,
-        processed_review_rows: 2,
-      });
-      yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,3,'needs-review')"
+            "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,5,'needs-review')"
           )
           .bind(userA, submissionId)
           .run()
-      );
-      const skipped = yield* Effect.exit(
-        Effect.tryPromise(() =>
-          db
-            .prepare(
-              "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,5,'needs-review')"
-            )
-            .bind(userA, submissionId)
-            .run()
-        )
-      );
-      expect(Exit.isFailure(skipped)).toBe(true);
-      expect(yield* fromTestPromise(progress)).toEqual({
-        processed_rows: 3,
-        processed_accepted_rows: 0,
-        processed_review_rows: 3,
-      });
-    })
+      )
+    );
+    expect(Exit.isFailure(skipped)).toBe(true);
+    expect(yield* fromTestPromise(progress)).toEqual({
+      processed_rows: 3,
+      processed_accepted_rows: 0,
+      processed_review_rows: 3,
+    });
+  })
 );
 
 effectIt.effect(
@@ -2706,7 +2688,7 @@ effectIt.effect(
       (SELECT count(*) FROM source_attestations) AS attestations,
       (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
       (SELECT count(*) FROM statement_needs_review) AS reviews,
-      (SELECT count(*) FROM statement_submissions WHERE material_state IS NOT NULL) AS manifests,
+      (SELECT count(*) FROM statement_materializations) AS manifests,
       (SELECT count(*) FROM statement_materialization_parts) AS parts,
       (SELECT count(*) FROM (SELECT rowid,id AS submission_id,user_id AS user_id,1 AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_published_at_ms IS NOT NULL) AS statement_ingestion_outbox) AS outbox,
       (SELECT status FROM statement_staging_objects WHERE id=?) AS staging,
@@ -2868,7 +2850,7 @@ it.skipIf(!measureFullStatements)(
 );
 
 it(
-  "upgrades populated review capacity and preserves the global cap through settlement, deletion and rollback",
+  "preserves global review capacity through settlement, deletion and rollback",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -2882,9 +2864,6 @@ it(
         'CO', 'es-CO', 'America/Bogota', 'csv', 'fixture', 'fixture')`)
             .bind(reviewId, userA, submissionId, record);
         yield* fromTestPromise(() => insert("template", 1).run());
-        yield* fromTestPromise(() =>
-          installCurrentTestObjects({ db, tables: ["statement_review_capacity"] })
-        );
         const count = (): Promise<number> =>
           db
             .prepare("SELECT pending_count FROM statement_review_capacity WHERE id = 1")

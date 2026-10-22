@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import {
+  CutoverHistory,
   documentedSqlBlock,
   precedingSchema,
   schemaDefinition,
@@ -24,21 +25,23 @@ it.each(["valid", "partial-address", "interrupted-copy", "interrupted-swap"] as 
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* wait(() => databases.acquire());
-        const current = schemaStatements(
-          yield* wait(() =>
-            Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-          )
-        );
+        const current = precedingSchema({
+          current: schemaStatements(
+            yield* wait(() =>
+              Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+            )
+          ),
+          history: yield* Schema.decodeEffect(CutoverHistory)(
+            yield* wait(() =>
+              Bun.file(
+                new URL("./materialization-cutover.test-fixture.json", import.meta.url)
+              ).text()
+            )
+          ),
+        });
         const previous = precedingSchema({
           current,
-          history: yield* Schema.decodeEffect(
-            Schema.fromJsonString(
-              Schema.Struct({
-                originalDefinitions: Schema.Array(Schema.String),
-                introducedNames: Schema.Array(Schema.String),
-              })
-            )
-          )(
+          history: yield* Schema.decodeEffect(CutoverHistory)(
             yield* wait(() =>
               Bun.file(new URL("./forwarding-cutover.test-fixture.json", import.meta.url)).text()
             )

@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import {
+  CutoverHistory,
   documentedSqlBlock,
   precedingSchema,
   schemaDefinition,
@@ -22,19 +23,21 @@ it.each(["valid", "missing-owner", "interrupted-copy", "interrupted-swap"] as co
       Effect.gen(function* () {
         const db = yield* wait(() => databases.acquire());
         const current = precedingSchema({
-          current: schemaStatements(
-            yield* wait(() =>
-              Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-            )
-          ),
-          history: yield* Schema.decodeEffect(
-            Schema.fromJsonString(
-              Schema.Struct({
-                originalDefinitions: Schema.Array(Schema.String),
-                introducedNames: Schema.Array(Schema.String),
-              })
-            )
-          )(
+          current: precedingSchema({
+            current: schemaStatements(
+              yield* wait(() =>
+                Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+              )
+            ),
+            history: yield* Schema.decodeEffect(CutoverHistory)(
+              yield* wait(() =>
+                Bun.file(
+                  new URL("../ingestion/materialization-cutover.test-fixture.json", import.meta.url)
+                ).text()
+              )
+            ),
+          }),
+          history: yield* Schema.decodeEffect(CutoverHistory)(
             yield* wait(() =>
               Bun.file(
                 new URL("../ingestion/forwarding-cutover.test-fixture.json", import.meta.url)
@@ -44,14 +47,7 @@ it.each(["valid", "missing-owner", "interrupted-copy", "interrupted-swap"] as co
         });
         const previous = precedingSchema({
           current,
-          history: yield* Schema.decodeEffect(
-            Schema.fromJsonString(
-              Schema.Struct({
-                originalDefinitions: Schema.Array(Schema.String),
-                introducedNames: Schema.Array(Schema.String),
-              })
-            )
-          )(
+          history: yield* Schema.decodeEffect(CutoverHistory)(
             yield* wait(() =>
               Bun.file(new URL("./price-notice-cutover.test-fixture.json", import.meta.url)).text()
             )

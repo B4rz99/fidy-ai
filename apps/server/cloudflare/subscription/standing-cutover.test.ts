@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import {
+  CutoverHistory,
   documentedSqlBlock,
   precedingSchema,
   schemaDefinition,
@@ -17,12 +18,6 @@ const id = (kind: number): string => `${kind}4500000-0000-4000-8000-000000000001
 const targets = ["users", "subscriptions", "billing_attempts"];
 const selected = 1800000000123;
 const ends = selected + 604800000;
-const historySchema = Schema.fromJsonString(
-  Schema.Struct({
-    originalDefinitions: Schema.Array(Schema.String),
-    introducedNames: Schema.Array(Schema.String),
-  })
-);
 
 const workPlans = (db: D1Database): Promise<ReadonlyArray<D1Result>> =>
   db.batch([
@@ -63,19 +58,21 @@ it.each([
       Effect.gen(function* () {
         const db = yield* wait(() => databases.acquire());
         const noticeTarget = precedingSchema({
-          current: schemaStatements(
-            yield* wait(() =>
-              Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-            )
-          ),
-          history: yield* Schema.decodeEffect(
-            Schema.fromJsonString(
-              Schema.Struct({
-                originalDefinitions: Schema.Array(Schema.String),
-                introducedNames: Schema.Array(Schema.String),
-              })
-            )
-          )(
+          current: precedingSchema({
+            current: schemaStatements(
+              yield* wait(() =>
+                Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+              )
+            ),
+            history: yield* Schema.decodeEffect(CutoverHistory)(
+              yield* wait(() =>
+                Bun.file(
+                  new URL("../ingestion/materialization-cutover.test-fixture.json", import.meta.url)
+                ).text()
+              )
+            ),
+          }),
+          history: yield* Schema.decodeEffect(CutoverHistory)(
             yield* wait(() =>
               Bun.file(
                 new URL("../ingestion/forwarding-cutover.test-fixture.json", import.meta.url)
@@ -85,14 +82,7 @@ it.each([
         });
         const refundTarget = precedingSchema({
           current: noticeTarget,
-          history: yield* Schema.decodeEffect(
-            Schema.fromJsonString(
-              Schema.Struct({
-                originalDefinitions: Schema.Array(Schema.String),
-                introducedNames: Schema.Array(Schema.String),
-              })
-            )
-          )(
+          history: yield* Schema.decodeEffect(CutoverHistory)(
             yield* wait(() =>
               Bun.file(new URL("./price-notice-cutover.test-fixture.json", import.meta.url)).text()
             )
@@ -100,7 +90,7 @@ it.each([
         });
         const latest = precedingSchema({
           current: refundTarget,
-          history: yield* Schema.decodeEffect(historySchema)(
+          history: yield* Schema.decodeEffect(CutoverHistory)(
             yield* wait(() =>
               Bun.file(new URL("./refund-cutover.test-fixture.json", import.meta.url)).text()
             )
@@ -108,7 +98,7 @@ it.each([
         });
         const current = precedingSchema({
           current: latest,
-          history: yield* Schema.decodeEffect(historySchema)(
+          history: yield* Schema.decodeEffect(CutoverHistory)(
             yield* wait(() =>
               Bun.file(new URL("./cancellation-cutover.test-fixture.json", import.meta.url)).text()
             )
@@ -116,7 +106,7 @@ it.each([
         });
         const previous = precedingSchema({
           current,
-          history: yield* Schema.decodeEffect(historySchema)(
+          history: yield* Schema.decodeEffect(CutoverHistory)(
             yield* wait(() =>
               Bun.file(new URL("./standing-cutover.test-fixture.json", import.meta.url)).text()
             )

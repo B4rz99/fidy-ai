@@ -79,25 +79,27 @@ const installConsentPressure = (
   page.on("request", (incoming) => {
     if (incoming.url() === `${api}/web/pairings` && incoming.method() === "POST") counts.pairings++;
   });
-  return page.route(`${api}/web/consent`, (route) => {
-    counts.reads++;
-    return counts.reads === 1
-      ? route.fulfill({
-          status: 429,
-          contentType: "application/json",
-          headers: { "retry-after": "1" },
-          body: JSON.stringify({
-            _tag: "ResourceLimited",
-            error: {
-              code: "rate_limited",
-              message: "Try again later.",
-              retryAfterSeconds: 1,
-            },
-            next: [],
-          }),
-        })
-      : route.continue();
-  });
+  return page
+    .route(`${api}/web/consent`, (route) => {
+      counts.reads++;
+      return counts.reads === 1
+        ? route.fulfill({
+            status: 429,
+            contentType: "application/json",
+            headers: { "retry-after": "1" },
+            body: JSON.stringify({
+              _tag: "ResourceLimited",
+              error: {
+                code: "rate_limited",
+                message: "Try again later.",
+                retryAfterSeconds: 1,
+              },
+              next: [],
+            }),
+          })
+        : route.continue();
+    })
+    .then(() => undefined);
 };
 
 test("Transactions retries an explicitly refused Consent read without replacing its session", ({

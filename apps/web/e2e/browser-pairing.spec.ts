@@ -21,6 +21,8 @@ const runFixture = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.run
 const opaqueProofEncodedLength = 43;
 const minimumPollIntervalMilliseconds = 5000;
 const advancePastExpiryMilliseconds = 2_000;
+const frozenExpiryClock = DateTime.makeUnsafe("2026-10-02T00:00:00Z");
+const frozenPairingExpiry = DateTime.formatIso(DateTime.add(frozenExpiryClock, { seconds: 6 }));
 const successStatus = 200;
 const pendingStatus = 202;
 const noContentStatus = 204;
@@ -670,22 +672,17 @@ const installExpiringPairingRoutes = (
   page
     .route("**/web/pairings", (route: Route) => {
       counts.start += 1;
-      return page
-        .evaluate(() => Date.now())
-        .then((now) => DateTime.formatIso(DateTime.add(DateTime.makeUnsafe(now), { seconds: 6 })))
-        .then((shortExpiry) =>
-          route.fulfill({
-            contentType: "application/json",
-            status: successStatus,
-            body: json({
-              pairingId,
-              privateVerifier,
-              publicCode,
-              expiresAt: shortExpiry,
-              pollingIntervalSeconds: 5,
-            }),
-          })
-        );
+      return route.fulfill({
+        contentType: "application/json",
+        status: successStatus,
+        body: json({
+          pairingId,
+          privateVerifier,
+          publicCode,
+          expiresAt: frozenPairingExpiry,
+          pollingIntervalSeconds: 5,
+        }),
+      });
     })
     .then(() =>
       page.route("**/web/pairings/redeem", () => {
@@ -699,7 +696,7 @@ test("stops at pairing expiry after a timed-out poll without creating a replacem
     Effect.gen(function* () {
       const counts = { start: 0, redeem: 0 };
       yield* wait(page.clock.install({ time: "2026-10-01T00:00:00Z" }));
-      yield* wait(page.clock.pauseAt("2026-10-02T00:00:00Z"));
+      yield* wait(page.clock.pauseAt(DateTime.toEpochMillis(frozenExpiryClock)));
       yield* wait(installExpiringPairingRoutes(page, counts));
       yield* wait(openBrowserLogin(page));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());

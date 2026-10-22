@@ -101,3 +101,11 @@ the isolated expiry mock starts from explicit clock anchors with expiry derived 
 All 26 focused provider, Pairing and Consent checks pass, including a new controlled 429 read
 recovery with no replacement pairing. No production limiter, app deadline or mutation retry policy
 was changed; the complete final browser run remains required.
+
+After rebasing onto the merged shared control fixes, the broad 185-case workstation run passed
+168, failed 14 and skipped three while local type checking and push scanning were also active.
+This is not a clean timing control and does not close the full browser gate. The final isolated
+Pairing/Consent rerun passes all eight cases, and full type checking passes after expressing the
+mock expiry entirely through its known clock anchors. Native admission, application deadlines
+and explicit financial confirmation remain intact. Final CI partition results are authoritative
+for the release gate; the broad local failures remain recorded rather than silently retried away.

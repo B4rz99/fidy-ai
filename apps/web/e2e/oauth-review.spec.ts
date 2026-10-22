@@ -85,11 +85,17 @@ const beginReview = (
     expect(started.status()).toBe(found);
     return new URL(started.headers().location ?? "").pathname;
   });
-const loginFromReview = (
-  page: Page,
-  request: APIRequestContext,
-  path: string
-): Effect.Effect<void, TestFailure> =>
+const loginFromReview = ({
+  page,
+  request,
+  path,
+  identity,
+}: Readonly<{
+  page: Page;
+  request: APIRequestContext;
+  path: string;
+  identity: "primary" | "oauthOperation";
+}>): Effect.Effect<void, TestFailure> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => page.clock.install());
     yield* Effect.tryPromise(() => page.goto(path));
@@ -104,7 +110,9 @@ const loginFromReview = (
     );
     const code = yield* Effect.tryPromise(() => visiblePairingCode(page));
     const approval = yield* Effect.tryPromise(() =>
-      request.post(`${operator}/approve?code=${code}&firstCard=false`)
+      request.post(
+        `${operator}/approve?code=${code}&oauthOperation=${identity === "oauthOperation"}`
+      )
     );
     expect(approval.status()).toBe(noContent);
     const redemption = page.waitForResponse("**/web/pairings/redeem");
@@ -141,7 +149,7 @@ test("built browser returns from established sign-in to a text-only request revi
   Effect.runPromise(
     Effect.gen(function* () {
       const path = yield* beginReview(request, yield* authorization(request));
-      yield* loginFromReview(page, request, path);
+      yield* loginFromReview({ page, request, path, identity: "primary" });
       yield* assertReview(page);
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
       yield* Effect.tryPromise(() => expect(page.getByRole("status")).toHaveText(cancelledMessage));
@@ -161,7 +169,7 @@ test("built browser approves an exact connection and exchanges its callback code
       query.set("state", "browser-callback-state");
       query.set("scope", "read write");
       const path = yield* beginReview(request, query);
-      yield* loginFromReview(page, request, path);
+      yield* loginFromReview({ page, request, path, identity: "oauthOperation" });
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Conectar", exact: true })).toBeEnabled()
       );
@@ -679,7 +687,7 @@ test("built agent settings report unavailable or malformed state without a false
   Effect.runPromise(
     Effect.gen(function* () {
       const path = yield* beginReview(request, yield* authorization(request));
-      yield* loginFromReview(page, request, path);
+      yield* loginFromReview({ page, request, path, identity: "primary" });
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
       yield* Effect.tryPromise(() => expect(page.getByRole("status")).toHaveText(cancelledMessage));
       yield* Effect.tryPromise(() => page.route("**/web/oauth/connections", unavailableManagement));

@@ -8,6 +8,7 @@ import {
   boundSessionRequests,
   openBrowserLogin,
   openUpgradeThroughCore,
+  reloadTransactionsThroughCore,
   visiblePairingCode,
 } from "./real-core-fixture";
 
@@ -20,6 +21,8 @@ const runFixture = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.run
 const opaqueProofEncodedLength = 43;
 const minimumPollIntervalMilliseconds = 5000;
 const advancePastExpiryMilliseconds = 2_000;
+const frozenExpiryClock = DateTime.makeUnsafe("2026-10-02T00:00:00Z");
+const frozenPairingExpiry = DateTime.formatIso(DateTime.add(frozenExpiryClock, { seconds: 6 }));
 const successStatus = 200;
 const pendingStatus = 202;
 const noContentStatus = 204;
@@ -461,9 +464,12 @@ const finishRealPairing = ({
       yield* wait(openUpgradeThroughCore(page));
       yield* wait(expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible());
       yield* wait(page.goto("/app/transactions"));
+      const loggedOut = page.waitForResponse("**/web/session/logout");
       yield* wait(page.getByRole("button", { name: "Cerrar sesión" }).click());
-      yield* wait(expect(page.getByRole("button", { name: "Continuar con Google" })).toBeVisible());
+      expect((yield* wait(loggedOut)).status()).toBe(noContentStatus);
       yield* wait(expect.poll(() => hasSessionCookie(context)).toBe(false));
+      yield* wait(expect(page).toHaveURL(/\/login$/u));
+      yield* wait(expect(page.getByRole("button", { name: "Continuar con Google" })).toBeVisible());
       const revoked = yield* wait(
         request.get(`${apiOrigin}/user`, {
           headers: {
@@ -569,7 +575,7 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
       yield* wait(page.getByLabel("Contraparte (opcional)").fill("Recuperación Fidy"));
       yield* wait(page.getByRole("button", { name: "Registrar transacción" }).click());
       yield* wait(expect(page.locator("[data-sonner-toast]")).toContainText("Recuperación Fidy"));
-      yield* wait(page.reload());
+      yield* wait(reloadTransactionsThroughCore(page));
       yield* wait(expect(page.getByText("Recuperación Fidy").first()).toBeVisible());
       expect(page.url()).not.toContain("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
       expect(yield* wait(page.evaluate(() => localStorage.length + sessionStorage.length))).toBe(0);
@@ -669,22 +675,17 @@ const installExpiringPairingRoutes = (
   page
     .route("**/web/pairings", (route: Route) => {
       counts.start += 1;
-      return page
-        .evaluate(() => performance.timeOrigin + performance.now())
-        .then((now) => DateTime.formatIso(DateTime.add(DateTime.makeUnsafe(now), { seconds: 6 })))
-        .then((shortExpiry) =>
-          route.fulfill({
-            contentType: "application/json",
-            status: successStatus,
-            body: json({
-              pairingId,
-              privateVerifier,
-              publicCode,
-              expiresAt: shortExpiry,
-              pollingIntervalSeconds: 5,
-            }),
-          })
-        );
+      return route.fulfill({
+        contentType: "application/json",
+        status: successStatus,
+        body: json({
+          pairingId,
+          privateVerifier,
+          publicCode,
+          expiresAt: frozenPairingExpiry,
+          pollingIntervalSeconds: 5,
+        }),
+      });
     })
     .then(() =>
       page.route("**/web/pairings/redeem", () => {
@@ -697,8 +698,8 @@ test("stops at pairing expiry after a timed-out poll without creating a replacem
   Effect.runPromise(
     Effect.gen(function* () {
       const counts = { start: 0, redeem: 0 };
-      yield* wait(page.clock.install());
-      yield* wait(page.clock.pauseAt(yield* Clock.currentTimeMillis));
+      yield* wait(page.clock.install({ time: "2026-10-01T00:00:00Z" }));
+      yield* wait(page.clock.pauseAt(DateTime.toEpochMillis(frozenExpiryClock)));
       yield* wait(installExpiringPairingRoutes(page, counts));
       yield* wait(openBrowserLogin(page));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());

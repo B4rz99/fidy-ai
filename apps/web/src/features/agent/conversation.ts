@@ -1,6 +1,6 @@
 import { browserCrypto } from "@/browser/crypto";
 import { useAtomSet } from "@effect/atom-react";
-import { Effect, Option, Schema } from "effect";
+import { type Context, Effect, Option, Schema } from "effect";
 import type { Atom } from "effect/reactivity";
 import { useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
@@ -16,7 +16,7 @@ type Processing = typeof HostedTurnProcessing.Type;
 type Turn =
   | Readonly<{ tag: "idle" | "waiting" | "error" | "quota" }>
   | Readonly<{ tag: "proposal"; value: Proposal }>
-  | Readonly<{ tag: "processing" | "uncertain"; value: Processing }>
+  | Readonly<{ tag: "polling" | "processing" | "uncertain"; value: Processing }>
   | Readonly<{ tag: "confirming" | "completed" | "unconfirmed"; value: Proposal }>;
 type Entry = Readonly<{ id: string; from: "user" | "assistant"; text: string }>;
 type Conversation = Readonly<{ turn: Turn; history: ReadonlyArray<Entry> }>;
@@ -32,6 +32,7 @@ const status: Readonly<Record<Turn["tag"], string>> = {
   quota:
     "El agente alcanzó su límite diario. Tu borrador sigue aquí. Inténtalo cuando se restablezca el acceso; si pediste cambios, revisa tus datos antes de reenviar.",
   proposal: "",
+  polling: "Esperando respuesta…",
   processing: "El turno sigue en curso. Consulta el estado antes de volver a intentarlo.",
   uncertain:
     "No se pudo recuperar el turno. Una operación podría haberse ejecutado: consulta tus datos antes de reintentar.",
@@ -64,6 +65,27 @@ const rejectSubmission = (
     }))
   );
 
+type Channel = Context.Service.Shape<HostedTurnClient>;
+const progressChecks = 12;
+const retainUncertain = (setConversation: SetConversation, reply: Proposal | Processing): void => {
+  if ("status" in reply) setTurn(setConversation, { tag: "uncertain", value: reply });
+};
+const followTurn = (
+  channel: Channel,
+  initial: Proposal | Processing,
+  setConversation: SetConversation
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    let current = initial;
+    for (let attempt = 0; "status" in current && attempt < progressChecks; attempt++) {
+      const pending = current;
+      yield* Effect.sync(() => setTurn(setConversation, { tag: "polling", value: pending }));
+      yield* Effect.sleep("5 seconds");
+      current = yield* channel.hostedTurn.progress({ payload: { turnId: current.turnId } });
+    }
+    yield* Effect.sync(() => setTurn(setConversation, proposedTurn(current)));
+  }).pipe(Effect.catch(() => Effect.sync(() => retainUncertain(setConversation, initial))));
+
 const conversationCommands = (
   client: HostedTurnClient,
   setConversation: SetConversation,
@@ -74,10 +96,8 @@ const conversationCommands = (
       Effect.gen(function* () {
         const channel = yield* client;
         const reply = yield* channel.hostedTurn.propose({ payload });
-        yield* Effect.sync(() => {
-          clearDraft();
-          setTurn(setConversation, proposedTurn(reply));
-        });
+        yield* Effect.sync(clearDraft);
+        yield* followTurn(channel, reply, setConversation);
       }).pipe(Effect.catch((failure) => rejectSubmission(setConversation, entryId, failure))),
     { concurrent: false }
   ),

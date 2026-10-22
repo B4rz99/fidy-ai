@@ -1,5 +1,34 @@
 # Recurrentes
 
+Local functional control, 22 October 2026, revision `de6cbc88d194c526975005d5e5733375220cf169`:
+the complete browser project passed 182 checks with three opt-in cost checks skipped under
+reviewed Bun and one worker. This is browser functional evidence, not production availability
+or concurrency capacity. The [incident evidence](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+retains the failed parallel diagnostics and the required live recovery checks.
+
+Latest production audit, 22 October 2026: protected reads became unavailable after release
+`ff37f818fbf86bc766e090dc5cba8ee746cdd80a`. The deployed standing query requires
+`payment_source_context`, which is absent from production D1; read-only preparation reproduces the
+missing-view error. This is confirmed code/schema mismatch evidence, not a renewed quota diagnosis.
+The guarded rollback failed closed. [Incident evidence and deferred checks](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+record the recovery boundary. Earlier successes below remain dated evidence; they do not establish
+availability after this deployment. No further production financial or access mutation was attempted.
+
+Current audit status, 22 October 2026, deployed release
+`20fd17a37458f54031c771d0b9e1de24a5e98933`: fresh canonical reads returned HTTP 200.
+`PRUEBA QA CHAT RECURRENTE 20261017` remained Activo in Todos los recurrentes, with its
+18 October occurrence Sin confirmar and its 18 November occurrence Próximos. No plan mutation
+was submitted. This independently establishes the expected maintained-plan lifecycle/date for the
+hosted lookup comparison; the chat comparison itself remains open.
+
+The first audit tab received repeated reads and `429 rate_limited`, retaining facts and disabling
+editing. A fresh tab was quiet during idle observation, and a new isolated built-browser case also
+stayed quiet after presentation and month changes. No uncontrolled render loop or cause was
+reproduced; no cache/freshness policy was weakened. The observation must not be recorded as a
+proven frontend fix or as D1 quota exhaustion. Chat processing observation is being fixed at its own
+command seam; accepted hosted lifecycle approval and stopped-state persistence remain live gaps.
+Native cancellation checks and revoked-grant cleanup below remain established.
+
 Current audit status, 21 October 2026: the User confirmed that the latest production read failures
 are caused by D1 quota exhaustion. Production testing is paused until database recovery. Native
 Codex, Claude Code and corrected Inspector cancellation returned the declared refusal without an

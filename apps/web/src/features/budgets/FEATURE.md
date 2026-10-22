@@ -1,5 +1,35 @@
 # Budgets
 
+Local functional control, 22 October 2026, revision `de6cbc88d194c526975005d5e5733375220cf169`:
+the complete browser project passed 182 checks with three opt-in cost checks skipped under
+reviewed Bun and one worker. This is browser functional evidence, not production availability
+or concurrency capacity. The [incident evidence](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+retains the failed parallel diagnostics and the required live recovery checks.
+
+Latest production audit, 22 October 2026: protected reads became unavailable after release
+`ff37f818fbf86bc766e090dc5cba8ee746cdd80a`. The deployed standing query requires
+`payment_source_context`, which is absent from production D1; read-only preparation reproduces the
+missing-view error. This is confirmed code/schema mismatch evidence, not a renewed quota diagnosis.
+The guarded rollback failed closed. [Incident evidence and deferred checks](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+record the recovery boundary. Earlier successes below remain dated evidence; they do not establish
+availability after this deployment. No further production financial or access mutation was attempted.
+
+Current audit status, 22 October 2026, deployed release
+`20fd17a37458f54031c771d0b9e1de24a5e98933`: the empty October plan loaded after D1 reset.
+Through the production browser, the audit created one Restaurantes cap in Alimentación for
+COP 12,345, reloaded and verified persistence, then updated it to COP 23,456. The existing cap
+editor kept COP fixed. October showed COP 0 spent in Restaurantes; the all-expense summary
+retained COP 10,103 spent and computed COP 13,353 remaining. November inherited COP 23,456,
+labelled the plan as inherited, and showed COP 0 spent. No November plan was saved. These checks
+close production cap create/update, reload persistence and read-only forward inheritance; they do
+not establish independent future-month writes, Currency changes or cleanup.
+
+The sole test cap remains COP 23,456 for Restaurantes, October 2026, pending exact permanent-deletion
+approval. No production Transaction was created, edited or deleted by this Budget test. The current
+browser editor has no Budget deletion action; canonical deletion is a separate capability. Cleanup
+must use a supported authorized path, not a direct database write. Historical statements below that
+no production cap was saved describe earlier runs and are superseded by this entry.
+
 Current local audit, 21 October 2026: the isolated current Budget Worker/D1 file passed all
 30 checks. Ten repeated built-browser cached-navigation journeys also passed with the existing
 10 ms median limit unchanged. CI separately observed an 11 ms median; the navigation check now

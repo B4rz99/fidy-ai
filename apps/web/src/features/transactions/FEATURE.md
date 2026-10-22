@@ -1,5 +1,19 @@
 # Transactions
 
+Local functional control, 22 October 2026, revision `de6cbc88d194c526975005d5e5733375220cf169`:
+the complete browser project passed 182 checks with three opt-in cost checks skipped under
+reviewed Bun and one worker. This is browser functional evidence, not production availability
+or concurrency capacity. The [incident evidence](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+retains the failed parallel diagnostics and the required live recovery checks.
+
+Latest production audit, 22 October 2026: protected reads became unavailable after release
+`ff37f818fbf86bc766e090dc5cba8ee746cdd80a`. The deployed standing query requires
+`payment_source_context`, which is absent from production D1; read-only preparation reproduces the
+missing-view error. This is confirmed code/schema mismatch evidence, not a renewed quota diagnosis.
+The guarded rollback failed closed. [Incident evidence and deferred checks](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+record the recovery boundary. Earlier successes below remain dated evidence; they do not establish
+availability after this deployment. No further production financial or access mutation was attempted.
+
 Production D1-reset read verification, 20-10-2026 Bogotá, release
 `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`: the current session loaded both October Transactions and the complete two-row
 summary, with COP 0 income and COP 10,103 spending. First/last dates displayed 01-10-2026 and

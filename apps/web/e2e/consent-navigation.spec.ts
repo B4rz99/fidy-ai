@@ -2,7 +2,11 @@ import type { Page } from "@playwright/test";
 import { Effect } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
-import { openUpgradeThroughCore, signInNavigationThroughCore } from "./real-core-fixture";
+import {
+  openTransactionsThroughCore,
+  openUpgradeThroughCore,
+  signInNavigationThroughCore,
+} from "./real-core-fixture";
 
 const { test, expect } = playwright;
 const { api } = browserAcceptanceTopology();
@@ -67,3 +71,54 @@ test("Upgrade observes its own Consent response after an outgoing page read is a
     }).pipe(Effect.ensuring(Effect.sync(() => abortOutgoing.resolve())))
   );
 });
+
+const installConsentPressure = (
+  page: Page,
+  counts: { reads: number; pairings: number }
+): Promise<void> => {
+  page.on("request", (incoming) => {
+    if (incoming.url() === `${api}/web/pairings` && incoming.method() === "POST") counts.pairings++;
+  });
+  return page
+    .route(`${api}/web/consent`, (route) => {
+      counts.reads++;
+      return counts.reads === 1
+        ? route.fulfill({
+            status: 429,
+            contentType: "application/json",
+            headers: { "retry-after": "1" },
+            body: JSON.stringify({
+              _tag: "ResourceLimited",
+              error: {
+                code: "rate_limited",
+                message: "Try again later.",
+                retryAfterSeconds: 1,
+              },
+              next: [],
+            }),
+          })
+        : route.continue();
+    })
+    .then(() => undefined);
+};
+
+test("Transactions retries an explicitly refused Consent read without replacing its session", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationThroughCore({ page, request, identity: "navigationConsent" })
+      );
+      yield* Effect.tryPromise(() => page.goto("/settings/account"));
+      const counts = { reads: 0, pairings: 0 };
+      yield* Effect.tryPromise(() => installConsentPressure(page, counts));
+      yield* Effect.tryPromise(() => openTransactionsThroughCore(page));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
+      );
+      expect(counts.reads).toBe(2);
+      expect(counts.pairings).toBe(0);
+    })
+  ));

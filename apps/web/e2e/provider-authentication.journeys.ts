@@ -3,6 +3,7 @@ import { playwright } from "./playwright-runtime";
 import { advanceAcceptancePoll, installAcceptanceClock } from "./acceptance-clock";
 import {
   boundSessionRequests,
+  openTransactionsThroughCore,
   reloadTransactionsThroughCore,
   visiblePairingCode,
 } from "./real-core-fixture";
@@ -351,7 +352,7 @@ const signupHistoryJourney = Effect.fn(function* (
   yield* Effect.tryPromise(() =>
     expect(page.getByLabel("Acepto el tratamiento de datos descrito")).toBeVisible()
   );
-  yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+  yield* Effect.tryPromise(() => openTransactionsThroughCore(page));
   yield* Effect.tryPromise(() =>
     expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
   );
@@ -379,7 +380,7 @@ const staleRecoverySessionJourney = Effect.fn(function* (
       "/login?resume=account"
     )
   );
-  yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+  yield* Effect.tryPromise(() => openTransactionsThroughCore(page));
   yield* Effect.tryPromise(() =>
     expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
   );
@@ -843,7 +844,7 @@ const verifyRecoveredSecretRotation = Effect.fn(function* (page: Page, backupRec
   yield* Effect.tryPromise(() => page.reload());
   yield* Effect.tryPromise(() => expect(page.locator("code")).toHaveCount(0));
   expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
-  yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+  yield* Effect.tryPromise(() => openTransactionsThroughCore(page));
 });
 
 const providerRecoveryJourney = Effect.fn(function* ({
@@ -1032,5 +1033,5 @@ const completePATReviewJourney = Effect.fn(function* ({
     row.getByRole("button", { name: "Sí, desactivar", exact: true }).click()
   );
   yield* Effect.tryPromise(() => expect(row).toHaveCount(0));
-  yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+  yield* Effect.tryPromise(() => openTransactionsThroughCore(page));
 });

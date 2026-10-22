@@ -1,5 +1,37 @@
 # Accesos
 
+Latest production audit, 22 October 2026: protected reads became unavailable after release
+`ff37f818fbf86bc766e090dc5cba8ee746cdd80a`. The deployed standing query requires
+`payment_source_context`, which is absent from production D1; read-only preparation reproduces the
+missing-view error. This is confirmed code/schema mismatch evidence, not a renewed quota diagnosis.
+The guarded rollback failed closed. [Incident evidence and deferred checks](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+record the recovery boundary. Earlier successes below remain dated evidence; they do not establish
+availability after this deployment. No further production financial or access mutation was attempted.
+
+Local OAuth operation audit, 22 October 2026: the accepted-connection journey now uses a dedicated
+synthetic User, separating its canonical admission from concurrent primary-User journeys. The
+production limiter and mutation retry policy are unchanged. Provider journeys also follow the
+selected token duration in the control’s accessible name. The complete serial browser project passes 182 checks with three opt-in cost checks skipped.
+The linked incident evidence retains the observed parallel-run failures; this functional control
+does not establish concurrency or production availability.
+
+The three opt-in resource probes and the isolated native CLI/browser journey pass locally; the OS
+credential cross-process probe also passes and cleans up its synthetic entry. These are local
+metadata, session-lifetime and synthetic authority checks, not a new production access grant.
+
+A fresh post-incident Accesos navigation still returned MCP metadata with all eight audit grants
+marked Revocado (HTTP 200), while PAT metadata returned HTTP 503 and offered Reintentar carga.
+The browser retained the signed-in session and did not ask for fresh identity merely to view it.
+
+Current audit status, 22 October 2026, deployed release
+`20fd17a37458f54031c771d0b9e1de24a5e98933`: after an intentional reload, PAT metadata
+and MCP connections both returned HTTP 200 under the existing session without an identity prompt.
+There were no active PATs, and all eight retained audit MCP grants displayed Revocado. This closes
+the fresh production read/recovery check after D1 reset and confirms cleanup; no issuance,
+permission expansion, revocation or sign-in was performed. Provider account replacement, Microsoft
+completion and populated production continuation beyond twenty-five connections remain live gaps.
+The local tests below do not substitute for those checks.
+
 Current audit status, 21 October 2026: all eight audit MCP grants were revoked before the latest
 database outage. The User confirmed D1 quota exhaustion; production issuance, revocation and
 read-recovery checks are paused. The latest combined local Accesos/OAuth rerun passed 13 browser

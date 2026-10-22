@@ -24,10 +24,12 @@ export const privacyErasureUserId = "24000000-0000-4000-8000-000000000441";
 export const privacyRenewalUserId = "24000000-0000-4000-8000-000000000431";
 export const accessUserId = "24000000-0000-4000-8000-000000000361";
 export const paginationUserId = "24000000-0000-4000-8000-000000000341";
+export const oauthOperationUserId = "24000000-0000-4000-8000-000000000671";
 export const recurringUserId = "24000000-0000-4000-8000-000000000401";
 export const recurringSummaryUserId = "24000000-0000-4000-8000-000000000411";
 export const recurringEditingUserId = "24000000-0000-4000-8000-000000000501";
 export const recurringIsolatedIdentities = [
+  { key: "recurringStableReads", userId: "24000000-0000-4000-8000-000000000661" },
   { key: "recurringRecoveryUnavailable", userId: "24000000-0000-4000-8000-000000000421" },
   { key: "recurringRecoveryMalformed", userId: "24000000-0000-4000-8000-000000000611" },
   { key: "recurringRecoveryLimited", userId: "24000000-0000-4000-8000-000000000621" },
@@ -110,6 +112,12 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
   );
 };
 await seedIdentity();
+await seedIdentity({
+  userId: oauthOperationUserId,
+  bsuid: "CO.OAuthOperation",
+  email: "oauth-operation@example.com",
+  consentId: "24000000-0000-4000-8000-000000000672",
+});
 await Promise.all(
   [...navigationIdentities, ...recurringIsolatedIdentities].map((identity) =>
     seedIdentity({

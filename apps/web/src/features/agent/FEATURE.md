@@ -1,5 +1,43 @@
 # Hosted Agent chat
 
+Local functional control, 22 October 2026, revision `de6cbc88d194c526975005d5e5733375220cf169`:
+the complete browser project passed 182 checks with three opt-in cost checks skipped under
+reviewed Bun and one worker. This is browser functional evidence, not production availability
+or concurrency capacity. The [incident evidence](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+retains the failed parallel diagnostics and the required live recovery checks.
+
+Latest production audit, 22 October 2026: protected reads became unavailable after release
+`ff37f818fbf86bc766e090dc5cba8ee746cdd80a`. The deployed standing query requires
+`payment_source_context`, which is absent from production D1; read-only preparation reproduces the
+missing-view error. This is confirmed code/schema mismatch evidence, not a renewed quota diagnosis.
+The guarded rollback failed closed. [Incident evidence and deferred checks](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+record the recovery boundary. Earlier successes below remain dated evidence; they do not establish
+availability after this deployment. No further production financial or access mutation was attempted.
+
+A post-incident no-data greeting returned HTTP 503. Its exact editable draft and safe failure
+feedback survived Accesos-to-Dashboard navigation, with no automatic hosted resubmission or false
+assistant success. The reviewed-runtime hosted Turn/public recovery suite passed all 34 cases.
+
+Current audit status, 22 October 2026: rebased onto deployed trunk
+`20fd17a37458f54031c771d0b9e1de24a5e98933`. Fresh production metadata and Recurring
+reads work after the D1 reset. A minimal greeting returned processing, and an explicit progress
+read recovered exactly one assistant greeting with a successful delivery receipt. This exposes a
+browser gap: known processing stopped at a manual check even when the reply became available.
+A new built-browser regression failed with zero progress reads before the fix and passed afterward.
+The conversation command now observes that same Turn at five-second intervals, at most twelve
+checks; it never resubmits the message. A failed check or exhausted bound retains explicit recovery
+and blocks a new submission. Privacy disposal stops pending checks. All twelve selected chat and
+Recurring recovery/quiet-read browser checks passed. This change is local until its deployment is
+recorded below.
+
+The ordinary-language maintained-plan lookup still is not verified: the first retained read could
+not be recovered, and a later lookup returned processing then `503 interrupted` when explicitly
+checked after its delivery window. These observations do not prove a model fact error, an AI quota
+refusal, or a database regression. The browser must be rerun promptly after deploying automatic
+observation. Accepted hosted lifecycle approval, stop persistence and Dashboard title edit/restore
+remain separate live checks. No financial mutation, new access grant or deletion was submitted by
+chat in this continuation.
+
 Current audit status, 21 October 2026: the latest production greeting and private live-provider
 conformance suite passed, so the earlier AI quota refusals below are historical observations.
 The User confirmed that the current production database failures are caused by D1 quota exhaustion.

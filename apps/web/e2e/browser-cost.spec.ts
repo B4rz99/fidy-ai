@@ -1,7 +1,14 @@
-import type { APIRequestContext, Page } from "@playwright/test";
-import { type Cause, Config, Effect, Schema } from "effect";
+import type { APIRequestContext, Page, Response } from "@playwright/test";
+import { type Cause, Config, Data, Effect, Option, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
-import { openBrowserLogin, signInThroughCore, visiblePairingCode } from "./real-core-fixture";
+import {
+  confirmConsentRead,
+  openBrowserLogin,
+  openTransactionsThroughCore,
+  openUpgradeThroughCore,
+  signInThroughCore,
+  visiblePairingCode,
+} from "./real-core-fixture";
 
 const { test, expect } = playwright;
 test.skip(
@@ -117,13 +124,18 @@ test("measures pending provider status, hidden continuation and cancellation", (
         yield* wait(page.waitForResponse("**/web/providers/google/status"));
       }
       observed.report("provider-hidden-three-status", hiddenBefore, yield* snapshot(request));
+      const visibleBefore = yield* snapshot(request);
+      const binding = page.waitForResponse("**/web/session/binding");
       yield* setVisibility(page, false);
+      expect((yield* wait(binding)).status()).toBe(successStatus);
+      observed.report("provider-visible-session-recheck", visibleBefore, yield* snapshot(request));
       yield* wait(page.getByRole("button", { name: "Cancelar", exact: true }).click());
       const cancelledBefore = yield* snapshot(request);
       yield* wait(page.clock.install());
       yield* wait(page.clock.runFor(cancelledWindowMilliseconds));
-      expect(observed.count()).toBe(0);
+      const cancelledRequests = observed.count();
       observed.report("provider-cancelled-20s", cancelledBefore, yield* snapshot(request));
+      expect(cancelledRequests).toBe(0);
     })
   ));
 
@@ -162,6 +174,32 @@ test("measures advertised pairing cadence and route unmount", ({ page, request }
     })
   ));
 
+class CostNavigationUnavailable extends Data.TaggedError("CostNavigationUnavailable") {}
+
+const resumeTransactionsLink = (
+  page: Page
+): Effect.Effect<void, Cause.UnknownError | CostNavigationUnavailable> => {
+  let status = Option.none<number>();
+  const capture = (response: Response): void => {
+    if (response.url() === `${api}/web/consent` && response.request().method() === "GET") {
+      status = Option.some(response.status());
+    }
+  };
+  return Effect.gen(function* () {
+    yield* Effect.sync(() => page.on("response", capture));
+    yield* wait(page.getByRole("link", { name: "Transacciones", exact: true }).first().click());
+    const register = page.getByRole("button", { name: "+ Registrar", exact: true });
+    const refused = page.getByText("No pudimos verificar tu acceso a las transacciones.", {
+      exact: true,
+    });
+    yield* wait(expect(register.or(refused)).toBeVisible());
+    if (yield* wait(register.isVisible())) return;
+    if (Option.isNone(status)) return yield* new CostNavigationUnavailable();
+    yield* wait(confirmConsentRead({ page, first: { status: status.value } }));
+    yield* wait(expect(register).toBeVisible());
+  }).pipe(Effect.ensuring(Effect.sync(() => page.off("response", capture))));
+};
+
 const measureNavigation = Effect.fn(function* (
   page: Page,
   request: APIRequestContext,
@@ -169,10 +207,10 @@ const measureNavigation = Effect.fn(function* (
 ) {
   const navigationBefore = yield* snapshot(request);
   for (let index = 0; index < 3; index += 1) {
-    yield* wait(page.goto("/upgrade"));
+    yield* wait(openUpgradeThroughCore(page));
     yield* wait(expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible());
     yield* wait(page.waitForLoadState("networkidle"));
-    yield* wait(page.goto("/app/transactions"));
+    yield* wait(openTransactionsThroughCore(page));
     yield* wait(
       expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
     );
@@ -184,11 +222,14 @@ const measureNavigation = Effect.fn(function* (
     yield* snapshot(request)
   );
   const routeBefore = yield* snapshot(request);
-  yield* wait(page.getByText("Ajustes", { exact: true }).first().click());
   for (let index = 0; index < 3; index += 1) {
-    yield* wait(page.getByRole("link", { name: "Cuenta", exact: true }).first().click());
+    const account = page.getByRole("link", { name: "Cuenta", exact: true }).first();
+    if (!(yield* wait(account.isVisible()))) {
+      yield* wait(page.getByText("Ajustes", { exact: true }).first().click());
+    }
+    yield* wait(account.click());
     yield* wait(expect(page).toHaveURL(/\/settings\/account$/u));
-    yield* wait(page.getByRole("link", { name: "Transacciones", exact: true }).first().click());
+    yield* resumeTransactionsLink(page);
     yield* wait(
       expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
     );
@@ -211,24 +252,38 @@ const measureSettlement = Effect.fn(function* (
   expect((yield* wait(request.post(`${operator}/billing/collect`))).status()).toBe(noContentStatus);
   const resumedBefore = yield* snapshot(request);
   const settled = page.waitForResponse("**/web/subscription/billing-attempts/*");
+  const binding = page.waitForResponse("**/web/session/binding");
   yield* setVisibility(page, false);
-  yield* wait(settled);
+  expect((yield* wait(settled)).status()).toBe(successStatus);
+  expect((yield* wait(binding)).status()).toBe(successStatus);
+  yield* wait(
+    expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible()
+  );
   yield* wait(page.clock.runFor(observationWindowMilliseconds));
-  expect(observed.count()).toBe(1);
+  const resumedRequests = observed.count();
+  const settlementReads = observed.count("/web/subscription/billing-attempts/");
+  const bindingReads = observed.count("/web/session/binding");
   observed.report(
     "payment-resumed-settlement-and-terminal-60s",
     resumedBefore,
     yield* snapshot(request)
   );
+  expect(settlementReads).toBe(1);
+  expect(bindingReads).toBe(1);
+  expect(resumedRequests).toBe(settlementReads + bindingReads);
   const navigationBefore = yield* snapshot(request);
-  yield* wait(page.goto("/app/transactions"));
+  yield* wait(openTransactionsThroughCore(page));
   yield* wait(expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible());
   yield* wait(page.waitForLoadState("networkidle"));
   observed.report("navigation-before-logout", navigationBefore, yield* snapshot(request));
   const logoutBefore = yield* snapshot(request);
   const logout = page.waitForResponse("**/web/session/logout");
+  const loggedOutBinding = page.waitForResponse("**/web/session/binding");
   yield* wait(page.getByRole("button", { name: "Cerrar sesión" }).click());
-  yield* wait(logout);
+  expect((yield* wait(logout)).status()).toBe(noContentStatus);
+  expect((yield* wait(loggedOutBinding)).status()).toBe(successStatus);
+  yield* wait(expect(page).toHaveURL(/\/login$/u));
+  yield* wait(page.getByRole("button", { name: "Continuar con Google" }).waitFor());
   observed.report("logout", logoutBefore, yield* snapshot(request));
   const replacedBefore = yield* snapshot(request);
   yield* wait(page.clock.runFor(observationWindowMilliseconds));
@@ -250,7 +305,7 @@ test("measures authenticated navigation, pending payment, visibility and settlem
       const observed = observeRequests(page);
       yield* measureNavigation(page, request, observed);
       const paymentSetupBefore = yield* snapshot(request);
-      yield* wait(page.goto("/upgrade"));
+      yield* wait(openUpgradeThroughCore(page));
       yield* wait(page.getByRole("button", { name: "Elegir mensual" }).click());
       yield* wait(page.getByLabel(/Acepto el reglamento/iu).check());
       yield* wait(page.getByLabel(/Autorizo el tratamiento/iu).check());

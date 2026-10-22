@@ -1,5 +1,27 @@
 # Dashboard
 
+Local functional control, 22 October 2026, revision `de6cbc88d194c526975005d5e5733375220cf169`:
+the complete browser project passed 182 checks with three opt-in cost checks skipped under
+reviewed Bun and one worker. This is browser functional evidence, not production availability
+or concurrency capacity. The [incident evidence](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+retains the failed parallel diagnostics and the required live recovery checks.
+
+Latest production audit, 22 October 2026: protected reads became unavailable after release
+`ff37f818fbf86bc766e090dc5cba8ee746cdd80a`. The deployed standing query requires
+`payment_source_context`, which is absent from production D1; read-only preparation reproduces the
+missing-view error. This is confirmed code/schema mismatch evidence, not a renewed quota diagnosis.
+The guarded rollback failed closed. [Incident evidence and deferred checks](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+record the recovery boundary. Earlier successes below remain dated evidence; they do not establish
+availability after this deployment. No further production financial or access mutation was attempted.
+
+Production cross-feature read, 22 October 2026, deployed release
+`20fd17a37458f54031c771d0b9e1de24a5e98933`: after the scoped Budget test updated the
+Restaurantes cap to COP 23,456, navigating to Dashboard displayed that same cap and available
+amount in its existing Budget Widget. The cash-flow Widget and recent-Transaction table agreed on
+COP 10,103 expenses (COP 10,000 plus COP 103), with COP 0 income. No Widget was edited in this
+check. Natural-language title edit/restore remains unverified after this reset. The test Budget cap
+is retained pending exact cleanup approval; the original Transactions remain untouched.
+
 Production D1-reset read verification, 20-10-2026 Bogotá: successful
 [deployment 39525764609](https://github.com/B4rz99/fidy-ai/actions/runs/39525764609)
 and API health identified release `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`. The existing session loaded catalog and

@@ -6,6 +6,10 @@ import { signInRecurringThroughCore } from "./real-core-fixture";
 
 const { expect, test } = playwright;
 const nonceHexLength = 64;
+const progressIntervalMilliseconds = 5000;
+const maximumProgressChecks = 12;
+const twoProgressIntervals = 10000;
+const observationWindowMilliseconds = 60000;
 const turnId = "20000000-0000-4000-8000-000000000991";
 const reply = (route: Route, body: unknown): Promise<void> =>
   route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify(body) });
@@ -311,6 +315,59 @@ const installRecovery = (
     );
   });
 
+const processingThenReply: Response = (route, count) =>
+  count === 1
+    ? processingReply(route)
+    : reply(route, {
+        text: "Respuesta sin intervención",
+        turnId,
+        receipt: "a".repeat(nonceHexLength),
+      });
+const expectProgressCount = (requests: Requests, count: number): Promise<void> =>
+  expect.poll(() => requests.length).toBe(count);
+
+test("processing chat completes without a progress click or a duplicate submission", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({ page, request, identity: "recurringChat" })
+      );
+      const submissions: unknown[] = [];
+      const progress: unknown[] = [];
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/web/hosted-turns`, recordRequests(submissions, processingReply))
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(
+          `${apiOrigin}/web/hosted-turns/progress`,
+          recordRequests(progress, processingThenReply)
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/web/hosted-turns/delivery`, acknowledge)
+      );
+      yield* Effect.tryPromise(() => openAndSend(page, "Saluda sin cambiar datos"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Mensaje", { exact: true })).toHaveValue("")
+      );
+      yield* Effect.tryPromise(() => page.clock.fastForward(progressIntervalMilliseconds));
+      yield* Effect.tryPromise(() => expectProgressCount(progress, 1));
+      yield* Effect.tryPromise(() => page.clock.fastForward(progressIntervalMilliseconds));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Respuesta sin intervención", { exact: true })).toHaveCount(1)
+      );
+      yield* Effect.tryPromise(() => expect(page.getByLabel("Mensaje")).toBeEnabled());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Consultar estado", exact: true })).toHaveCount(0)
+      );
+      expect(submissions).toEqual([{ text: "Saluda sin cambiar datos" }]);
+      expect(progress).toEqual([{ turnId }, { turnId }]);
+    })
+  ));
+
 test("uncertain chat progress and failed delivery recover without replaying the message", ({
   page,
   request,
@@ -327,10 +384,11 @@ test("uncertain chat progress and failed delivery recover without replaying the 
       yield* Effect.tryPromise(() => openAndSend(page, "Consulta sin cambios"));
       const composer = page.getByLabel("Mensaje", { exact: true });
       const check = page.getByRole("button", { name: "Consultar estado", exact: true });
-      yield* Effect.tryPromise(() => expect(check).toBeVisible());
+      yield* Effect.tryPromise(() => expect(composer).toHaveValue(""));
       yield* Effect.tryPromise(() => expect(composer).toBeDisabled());
       expect(progress).toEqual([]);
-      yield* Effect.tryPromise(() => check.click());
+      yield* Effect.tryPromise(() => expect(check).toHaveCount(0));
+      yield* Effect.tryPromise(() => page.clock.fastForward(progressIntervalMilliseconds));
       yield* Effect.tryPromise(() =>
         expect(page.getByText("No se pudo recuperar el turno.", { exact: false })).toBeVisible()
       );
@@ -358,5 +416,53 @@ test("uncertain chat progress and failed delivery recover without replaying the 
         { turnId, receipt: "a".repeat(nonceHexLength) },
         { turnId, receipt: "a".repeat(nonceHexLength) },
       ]);
+    })
+  ));
+
+test("processing observation stops at its bound and Privacy disposes pending checks", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({ page, request, identity: "recurringChat" })
+      );
+      const submissions: unknown[] = [];
+      const progress: unknown[] = [];
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/web/hosted-turns`, recordRequests(submissions, processingReply))
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(
+          `${apiOrigin}/web/hosted-turns/progress`,
+          recordRequests(progress, processingReply)
+        )
+      );
+      yield* Effect.tryPromise(() => openAndSend(page, "Consulta demorada"));
+      yield* Effect.tryPromise(() => expect(page.getByLabel("Mensaje")).toHaveValue(""));
+      for (let check = 1; check <= maximumProgressChecks; check++) {
+        yield* Effect.tryPromise(() => page.clock.fastForward(progressIntervalMilliseconds));
+        yield* Effect.tryPromise(() => expectProgressCount(progress, check));
+      }
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Consultar estado", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.clock.fastForward(twoProgressIntervals));
+      expect(progress).toHaveLength(maximumProgressChecks);
+      yield* Effect.tryPromise(() => expect(page.getByLabel("Mensaje")).toBeDisabled());
+      expect(submissions).toEqual([{ text: "Consulta demorada" }]);
+      yield* discardAtPrivacy(page);
+      yield* Effect.tryPromise(() => page.getByLabel("Mensaje").fill("Segunda consulta demorada"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Enviar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByLabel("Mensaje")).toHaveValue(""));
+      yield* Effect.tryPromise(() => page.clock.fastForward(progressIntervalMilliseconds));
+      yield* Effect.tryPromise(() => expectProgressCount(progress, maximumProgressChecks + 1));
+      yield* discardAtPrivacy(page);
+      yield* Effect.tryPromise(() => page.clock.fastForward(observationWindowMilliseconds));
+      expect(progress).toHaveLength(maximumProgressChecks + 1);
+      expect(submissions).toHaveLength(2);
     })
   ));

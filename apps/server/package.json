@@ -285,9 +285,9 @@
     "test:memory": "bun --bun vitest run --config vitest.config.ts src/shell/memory --coverage.enabled=false"
   },
   "dependencies": {
-    "@effect/sql-d1": "4.0.4",
+    "@effect/sql-d1": "4.0.5",
     "csv-parse": "7.0.3",
-    "effect": "4.0.4",
+    "effect": "4.0.5",
     "fflate": "0.8.3",
     "jose": "6.2.12",
     "mupdf": "1.28.1",
@@ -297,10 +297,10 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261014.1",
-    "@effect/platform-bun": "4.0.4",
-    "@effect/platform-node": "4.0.4",
-    "@effect/vitest": "4.0.4",
+    "@cloudflare/workers-types": "5.20261015.1",
+    "@effect/platform-bun": "4.0.5",
+    "@effect/platform-node": "4.0.5",
+    "@effect/vitest": "4.0.5",
     "@vitest/coverage-istanbul": "5.0.4",
     "bun-types": "1.4.3",
     "esbuild": "0.28.2",

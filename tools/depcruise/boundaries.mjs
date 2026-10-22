@@ -71,6 +71,8 @@ const compositionRoots = new Set([
   "cloudflare/oauth-agents/oauth-native-residency.test.ts",
   "cloudflare/transactions/transactions.test.ts",
   "cloudflare/audit/internal/audit.test.ts",
+  "cloudflare/audit/internal/retention-permit-cutover.test.ts",
+  "cloudflare/browser-login/operations.test.ts",
   "cloudflare/audit/internal/reminder-audit-migration.test.ts",
   "cloudflare/insights/reminder-canonical.test.ts",
 ]);
@@ -82,6 +84,7 @@ const testRunner = new Set([
   "cloudflare/test-shards.test.ts",
 ]);
 const sharedTestSupport = new Set([
+  "cloudflare/schema-cutover.test-fixture.ts",
   "cloudflare/browser-acceptance-clock.test-fixture.ts",
   "src/shell/testing/credential-evidence-harness.ts",
   "src/shell/testing/crypto-harness.ts",

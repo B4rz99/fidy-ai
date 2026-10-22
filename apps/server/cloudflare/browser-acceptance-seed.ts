@@ -115,7 +115,7 @@ await Promise.all(
     seedIdentity({
       userId: identity.userId,
       bsuid: `CO.${identity.key}`,
-      email: `${identity.key}@example.com`,
+      email: `${identity.key.toLowerCase()}@example.com`,
       consentId: `${identity.userId.slice(0, -1)}2`,
     })
   )

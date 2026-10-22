@@ -1,6 +1,7 @@
 import { Data, Effect } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { documentedSqlBlock } from "../schema-cutover.test-fixture";
 import { prepareResourceCounter, resourceCounterQuery } from "./operations";
 
 class NativeFailure extends Data.TaggedError("NativeFailure")<{ cause: unknown }> {}
@@ -99,16 +100,9 @@ it.each(["complete", "interrupted_cutover", "inconsistent_anchor"] as const)(
             new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)
           ).text()
         );
-        const copy = guide.match(
-          /<!-- email-counter-copy:start -->\s*```sql\s*([\s\S]*?)```\s*<!-- email-counter-copy:end -->/u
-        )?.[1];
-        if (copy === undefined) throw new Error("Missing documented email counter conversion");
         const cutover = [
           table,
-          ...copy
-            .split(";")
-            .map((sql) => sql.trim())
-            .filter((sql) => sql.length > 0),
+          ...documentedSqlBlock({ guide, marker: "email-counter-copy" }),
           ...objects.filter((sql) => sql !== table),
           ...(outcome === "interrupted_cutover"
             ? ["INSERT INTO sql_assertions(scope,accepted) VALUES('email_counter_cutover',0)"]

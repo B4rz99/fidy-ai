@@ -3374,3 +3374,18 @@ DELETE FROM sql_assertions WHERE scope='financial-projection-cutover';
 ```
 
 <!-- financial-projection-verify:end -->
+
+## Dashboard layout document verification (#1466)
+
+No schema conversion is needed: `user_documents(user_id,kind,document_json,revision)` already is the
+accepted four-column destination. Dashboard owns its bounded `DashboardDocument` codec; the shared
+owner supplies authenticated same-User reads and optimistic writes for `kind='dashboard'`. Missing
+layouts retain their explicit initialization behavior. No revision is copied into the layout JSON.
+
+The existing public Dashboard initialization/edit test now creates a Planning document through its
+public operation first, then verifies concurrent initialization/retries and two concurrent edits
+advance the Dashboard revision without changing the Planning row, body or revision. Native
+purpose-specific erasure verifies repeated Dashboard removal preserves the same User's Planning
+row and the other User's layout, while a foreign erasure scope is refused. These checks extend the
+existing authorization, malformed-layout, missing-layout and atomic mutation coverage. There is no
+new settings table, codec, generic document endpoint or migration for this verification ticket.

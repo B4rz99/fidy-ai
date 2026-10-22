@@ -808,6 +808,37 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
+        const planningReply = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/recurring-plans/edits",
+            method: "POST",
+            body: {
+              expectedRevision: 0,
+              edit: {
+                kind: "create",
+                id: "40000000-0000-4000-8000-000000000123",
+                plan: {
+                  name: "Arriendo",
+                  kind: "expense",
+                  currency: "COP",
+                  amountMode: "fixed",
+                  money: { amount: "1000000", currency: "COP" },
+                  firstDate: "2026-10-31",
+                  timeZone: "America/Bogota",
+                  frequency: "monthly",
+                },
+              },
+            },
+          })
+        );
+        expect(planningReply.status).toBe(200);
+        const retainedPlanning = (): Promise<D1Result> =>
+          db
+            .prepare(
+              "SELECT rowid,* FROM user_documents WHERE kind='recurring-plan' ORDER BY user_id"
+            )
+            .all();
+        const planningBefore = (yield* Effect.tryPromise(retainedPlanning)).results;
         const initialize = (): Promise<Response> =>
           send(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} });
         const replies = yield* Effect.tryPromise(() => Promise.all([initialize(), initialize()]));
@@ -860,6 +891,20 @@ it(
         ).toBe("Keep my edits");
         expect(yield* Effect.tryPromise(stored)).toEqual(before);
         expect(before).toMatchObject({ revision: 2 });
+        const edits = yield* Effect.tryPromise(() =>
+          Promise.all(
+            ["Concurrent first", "Concurrent second"].map((title) =>
+              send(db, 0, {
+                path: "/dashboard/edits",
+                method: "POST",
+                body: { op: "set-title", title },
+              })
+            )
+          )
+        );
+        expect(edits.map((reply) => reply.status)).toEqual([200, 200]);
+        expect(yield* Effect.tryPromise(stored)).toMatchObject({ revision: 4 });
+        expect((yield* Effect.tryPromise(retainedPlanning)).results).toEqual(planningBefore);
       })
     ),
   30_000

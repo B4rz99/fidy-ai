@@ -6,6 +6,7 @@ import { installRetentionTestSchema, isolatedTestDatabases } from "../d1-test-fi
 import { retainedReviewRows } from "./native.test-fixture";
 import { sweepReviewDrafts } from "../ingestion/runtime";
 import { makeMemoryErasureStores } from "../memory/runtime";
+import { makeDashboardErasureStores } from "../dashboard/runtime";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
@@ -271,3 +272,73 @@ it.each([
       })
     )
 );
+
+it("erases only the reviewed Dashboard document while preserving Planning and the other User's layout", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          ...[userId, foreignUser].map((id) =>
+            db
+              .prepare(
+                "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+              )
+              .bind(id)
+          ),
+          db
+            .prepare(
+              "INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(?,'dashboard','{\"title\":\"Reviewed layout\"}',3)"
+            )
+            .bind(userId),
+          db
+            .prepare(
+              "INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(?,'recurring-plan','{\"plans\":[],\"revision\":4}',4)"
+            )
+            .bind(userId),
+          db
+            .prepare(
+              "INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(?,'dashboard','{\"title\":\"Foreign layout\"}',7)"
+            )
+            .bind(foreignUser),
+          db
+            .prepare(
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'AwaitingReview')"
+            )
+            .bind(reference, userId),
+          db
+            .prepare(
+              "INSERT INTO erasure_steps(request_id,store_id,data_class,archive_done) VALUES(?,'dashboard_documents','projections',1)"
+            )
+            .bind(reference),
+        ])
+      );
+      const retained = (): Promise<D1Result> =>
+        db
+          .prepare(
+            "SELECT rowid,* FROM user_documents WHERE user_id<>? OR kind<>'dashboard' ORDER BY user_id,kind"
+          )
+          .bind(userId)
+          .all();
+      const before = (yield* Effect.tryPromise(retained)).results;
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference).run()
+      );
+      const store = Option.getOrThrow(Option.fromUndefinedOr(makeDashboardErasureStores(db)[0]));
+      expect((yield* Effect.result(store.remove({ reference, userId: foreignUser })))._tag).toBe(
+        "Failure"
+      );
+      expect(yield* store.remove(scope)).toBe(true);
+      expect(yield* store.remove(scope)).toBe(true);
+      expect((yield* Effect.tryPromise(retained)).results).toEqual(before);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT * FROM user_documents WHERE user_id=? AND kind='dashboard'")
+            .bind(userId)
+            .all()
+        )).results
+      ).toEqual([]);
+    })
+  ));

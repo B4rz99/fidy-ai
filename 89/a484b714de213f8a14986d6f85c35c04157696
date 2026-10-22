@@ -1,0 +1,42 @@
+apps/web/src/features/pats/FEATURE.md
+  s_241024bc81d268::t_cd0bdf2d8eae29 14-16
+  s_241024bc81d268::t_42fbd12cfaa9d8 17-20
+apps/web/src/features/budgets/FEATURE.md
+  s_241024bc81d268::t_cd0bdf2d8eae29 3-4,6-8
+  s_241024bc81d268::t_d8f4be3137f3c6 5
+apps/web/src/features/agent/FEATURE.md
+  s_241024bc81d268::t_cd0bdf2d8eae29 3-4,6-8
+  s_241024bc81d268::t_d8f4be3137f3c6 5
+docs/operations/audit-20261022-schema-mismatch.md
+  s_241024bc81d268::t_906a9636547d7b 106-123
+  s_241024bc81d268::t_30e74b8ce7c376 3-4,6,9-11,13-15,20-22,24-40,43-105,124-136
+apps/web/src/features/transactions/FEATURE.md
+  s_241024bc81d268::t_cd0bdf2d8eae29 3-4,6-8
+  s_241024bc81d268::t_d8f4be3137f3c6 5
+apps/web/src/features/dashboard/FEATURE.md
+  s_241024bc81d268::t_d8f4be3137f3c6 5
+  s_241024bc81d268::t_cd0bdf2d8eae29 3-4,6-8
+apps/web/src/features/recurring/FEATURE.md
+  s_241024bc81d268::t_cd0bdf2d8eae29 3-4,6-8
+  s_241024bc81d268::t_d8f4be3137f3c6 5
+apps/web/e2e/browser-cost.spec.ts
+  s_241024bc81d268::t_bde3d0091ae4a3 1-2,4-11,127-128,130-131,136,138,177-202,210,213,226-230,232,255,257-261,263-265,271-273,275,281,283-286,308
+apps/web/e2e/real-core-fixture.ts
+  s_241024bc81d268::t_89730897225cc7 45-48,72,155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "89a484b714de213f8a14986d6f85c35c04157696",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

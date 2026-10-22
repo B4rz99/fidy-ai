@@ -2169,7 +2169,7 @@ const cancellationEffects = (db: D1Database): Effect.Effect<unknown, Cause.Unkno
     db
       .prepare(`SELECT
   (SELECT COUNT(*) FROM subscription_cancellation_context) AS cancellations,
-  (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
+  (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
   (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE state='armed') AS armed,
   (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work) AS offers,
   (SELECT COUNT(*) FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome='accepted') AS accepted`)

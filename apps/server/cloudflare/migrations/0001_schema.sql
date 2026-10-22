@@ -1211,15 +1211,14 @@ CREATE TABLE recurring_series (
 
 CREATE TABLE "refund_attempts" (
 id TEXT PRIMARY KEY CHECK (length(id) = 36),
-user_id TEXT NOT NULL REFERENCES users(id),
-subscription_id TEXT NOT NULL REFERENCES subscriptions(id),
+user_id TEXT GENERATED ALWAYS AS (json_extract(intent_json,'$.userId')) VIRTUAL NOT NULL REFERENCES users(id),
 billing_attempt_id TEXT NOT NULL REFERENCES billing_attempts(id),
+wompi_environment TEXT NOT NULL CHECK(wompi_environment IN ('sandbox','production')),
 transaction_id TEXT NOT NULL REFERENCES billing_provider_transactions(evidence_transaction_id),
 request_id TEXT NOT NULL CHECK (length(request_id) = 36),
 intent_json TEXT NOT NULL CHECK (json_valid(intent_json)),
-snapshot_json TEXT NOT NULL CHECK (json_valid(snapshot_json)),
+treatment_json TEXT NOT NULL CHECK (json_valid(treatment_json)),
 amount_in_cents INTEGER NOT NULL CHECK (amount_in_cents BETWEEN 1 AND 9007199254740991),
-original_cents INTEGER NOT NULL CHECK (original_cents BETWEEN 1 AND 9007199254740991),
 kind TEXT NOT NULL CHECK (kind IN ('refund','card-void')),
 operator_id TEXT NOT NULL CHECK (length(operator_id) BETWEEN 1 AND 128),
 created_at_ms INTEGER NOT NULL,
@@ -1228,26 +1227,25 @@ progress TEXT NOT NULL DEFAULT 'queued' CHECK (progress IN ('queued','verifying'
 finalized_at_ms INTEGER,
 failure TEXT CHECK (failure IN ('provider-declined','provider-cancelled','provider-refused')),
 dispatch_last_attempt_at_ms INTEGER,
-published_at_ms INTEGER,
 verification_attempts INTEGER DEFAULT 0,
 last_verification_at_ms INTEGER,
 submission_claimed_at_ms INTEGER,
-provider_refund_id TEXT UNIQUE,
+provider_refund_id TEXT,
 verified_status TEXT,
 observed_at_ms INTEGER,
-adjusted_attempt_id TEXT REFERENCES billing_attempts(paid_attempt_id),
 access_ends_at_ms INTEGER,
-renewal_stopped_user_id TEXT REFERENCES users(id),
 renewal_stopped_at_ms INTEGER,
 UNIQUE (user_id,request_id),
+UNIQUE (wompi_environment,provider_refund_id),
+CHECK(json_extract(intent_json,'$.billingAttemptId') IS billing_attempt_id AND json_extract(intent_json,'$.requestId') IS request_id AND json_extract(intent_json,'$.intent.kind') IS kind),
 CHECK ((status='pending' AND finalized_at_ms IS NULL AND failure IS NULL)
     OR (status='succeeded' AND finalized_at_ms IS NOT NULL AND failure IS NULL)
     OR (status='failed' AND finalized_at_ms IS NOT NULL AND failure IS NOT NULL)),
-CHECK((dispatch_last_attempt_at_ms IS NULL AND published_at_ms IS NULL AND verification_attempts IS NULL AND last_verification_at_ms IS NULL) OR (verification_attempts IS NOT NULL AND (verification_attempts BETWEEN 0 AND 8))),
+CHECK((dispatch_last_attempt_at_ms IS NULL AND verification_attempts IS NULL AND last_verification_at_ms IS NULL) OR (verification_attempts IS NOT NULL AND (verification_attempts BETWEEN 0 AND 8))),
 CHECK((submission_claimed_at_ms IS NULL AND submission_claimed_at_ms IS NULL) OR (submission_claimed_at_ms IS NOT NULL AND submission_claimed_at_ms IS NOT NULL)),
 CHECK((verified_status IS NULL AND provider_refund_id IS NULL AND verified_status IS NULL AND observed_at_ms IS NULL) OR (verified_status IS NOT NULL AND (provider_refund_id IS NULL OR length(provider_refund_id) BETWEEN 1 AND 128) AND verified_status IS NOT NULL AND (verified_status IN ('APPROVED','DECLINED','CANCELLED','VOIDED')) AND observed_at_ms IS NOT NULL)),
-CHECK((adjusted_attempt_id IS NULL AND adjusted_attempt_id IS NULL AND access_ends_at_ms IS NULL) OR (adjusted_attempt_id IS NOT NULL AND adjusted_attempt_id IS NOT NULL AND access_ends_at_ms IS NOT NULL)),
-CHECK((renewal_stopped_at_ms IS NULL AND renewal_stopped_user_id IS NULL AND renewal_stopped_at_ms IS NULL) OR (renewal_stopped_at_ms IS NOT NULL AND renewal_stopped_user_id IS NOT NULL AND renewal_stopped_at_ms IS NOT NULL))) STRICT;
+CHECK(access_ends_at_ms IS NULL OR (status='succeeded' AND access_ends_at_ms=observed_at_ms)),
+CHECK(renewal_stopped_at_ms IS NULL OR (status='succeeded' AND renewal_stopped_at_ms=observed_at_ms))) STRICT;
 --> statement-breakpoint
 
 CREATE TABLE release_smoke_probes (
@@ -1762,7 +1760,7 @@ CREATE INDEX audit_entries_user ON audit_entries(user_id,record_type,occurred_at
 CREATE INDEX audit_entries_user_retention ON audit_entries(user_id,occurred_at_ms,id) WHERE record_type IN('session_call','credential_call','insight_call','publication');
 --> statement-breakpoint
 
-CREATE INDEX billing_access_by_period ON refund_attempts(adjusted_attempt_id,access_ends_at_ms) WHERE adjusted_attempt_id IS NOT NULL;
+CREATE INDEX billing_access_by_period ON refund_attempts(billing_attempt_id,access_ends_at_ms) WHERE access_ends_at_ms IS NOT NULL;
 --> statement-breakpoint
 
 CREATE INDEX billing_callback_pending ON billing_provider_transactions(event_resolved_at_ms,event_received_at_ms,event_last_checked_at_ms) WHERE event_received_at_ms IS NOT NULL;
@@ -2662,7 +2660,7 @@ CREATE VIEW reconciled_transactions AS SELECT COALESCE(reconciliation_row_ref,'m
 --> statement-breakpoint
 
 CREATE VIEW subscription_renewal_fences AS
-  SELECT refund_id,user_id,stopped_at_ms FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops
+  SELECT refund_id,user_id,stopped_at_ms FROM (SELECT rowid,id AS refund_id,user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops
   UNION ALL SELECT NULL,user_id,cancelled_at_ms FROM subscription_cancellation_context;
 --> statement-breakpoint
 
@@ -2798,8 +2796,8 @@ CREATE TRIGGER backup_recovery_credentials_field_fence_insert BEFORE INSERT ON b
 CREATE TRIGGER backup_recovery_credentials_field_fence_update BEFORE UPDATE ON backup_recovery_credentials WHEN (NEW.user_id IS NOT OLD.user_id OR NEW.code_digest IS NOT OLD.code_digest OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.consumed_at_ms IS NOT OLD.consumed_at_ms OR NEW.revision IS NOT OLD.revision) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER billing_access_adjustment_immutable BEFORE UPDATE OF adjusted_attempt_id,access_ends_at_ms ON refund_attempts
-WHEN OLD.adjusted_attempt_id IS NOT NULL AND (NEW.adjusted_attempt_id IS NOT OLD.adjusted_attempt_id OR NEW.access_ends_at_ms IS NOT OLD.access_ends_at_ms)
+CREATE TRIGGER billing_access_adjustment_immutable BEFORE UPDATE OF access_ends_at_ms ON refund_attempts
+WHEN OLD.access_ends_at_ms IS NOT NULL AND NEW.access_ends_at_ms IS NOT OLD.access_ends_at_ms
 BEGIN
  SELECT RAISE(ABORT, 'billing_access_adjustment_immutable');
 END;
@@ -2960,7 +2958,7 @@ END;
 --> statement-breakpoint
 
 CREATE TRIGGER billing_followup_refund_stop BEFORE UPDATE OF followup_due_at_ms ON billing_attempts
-WHEN OLD.followup_due_at_ms IS NULL AND NEW.followup_due_at_ms IS NOT NULL AND (EXISTS (SELECT 1 FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) s JOIN billing_attempt_context a ON a.user_id=s.user_id
+WHEN OLD.followup_due_at_ms IS NULL AND NEW.followup_due_at_ms IS NOT NULL AND (EXISTS (SELECT 1 FROM (SELECT rowid,id AS refund_id,user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) s JOIN billing_attempt_context a ON a.user_id=s.user_id
  WHERE a.id=NEW.id))
 BEGIN
  SELECT RAISE(IGNORE);
@@ -6232,13 +6230,13 @@ END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_refund_attempts_delete BEFORE DELETE ON refund_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+WHEN EXISTS(SELECT 1 FROM refund_attempt_context r,erasure_requests q WHERE r.rowid=OLD.rowid AND q.state='Draining' AND (OLD.user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'refund_attempts','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'subscription_id',OLD."subscription_id",'billing_attempt_id',OLD."billing_attempt_id",'transaction_id',OLD."transaction_id",'request_id',OLD."request_id",'intent_json',OLD."intent_json",'snapshot_json',OLD."snapshot_json",'amount_in_cents',OLD."amount_in_cents",'original_cents',OLD."original_cents",'kind',OLD."kind",'operator_id',OLD."operator_id",'created_at_ms',OLD."created_at_ms",'status',OLD."status",'progress',OLD."progress",'finalized_at_ms',OLD."finalized_at_ms",'failure',OLD."failure",'work_version',CASE WHEN OLD.verification_attempts IS NOT NULL THEN 1 END,'dispatch_last_attempt_at_ms',OLD.dispatch_last_attempt_at_ms,'published_at_ms',OLD.published_at_ms,'verification_attempts',OLD.verification_attempts,'last_verification_at_ms',OLD.last_verification_at_ms,'submission_claimed_at_ms',OLD.submission_claimed_at_ms,'provider_refund_id',OLD.provider_refund_id,'verified_status',OLD.verified_status,'observed_at_ms',OLD.observed_at_ms,'adjusted_attempt_id',OLD.adjusted_attempt_id,'access_ends_at_ms',OLD.access_ends_at_ms,'renewal_stopped_user_id',OLD.renewal_stopped_user_id,'renewal_stopped_at_ms',OLD.renewal_stopped_at_ms)
-  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+  SELECT q.id,'refund_attempts','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'subscription_id',r."subscription_id",'billing_attempt_id',OLD."billing_attempt_id",'transaction_id',OLD."transaction_id",'request_id',OLD."request_id",'intent_json',OLD."intent_json",'treatment_json',OLD."treatment_json",'amount_in_cents',OLD."amount_in_cents",'original_cents',r."original_cents",'kind',OLD."kind",'operator_id',OLD."operator_id",'created_at_ms',OLD."created_at_ms",'status',OLD."status",'progress',OLD."progress",'finalized_at_ms',OLD."finalized_at_ms",'failure',OLD."failure",'work_version',CASE WHEN OLD.verification_attempts IS NOT NULL THEN 1 END,'dispatch_last_attempt_at_ms',OLD.dispatch_last_attempt_at_ms,'verification_attempts',OLD.verification_attempts,'last_verification_at_ms',OLD.last_verification_at_ms,'submission_claimed_at_ms',OLD.submission_claimed_at_ms,'provider_refund_id',OLD.provider_refund_id,'verified_status',OLD.verified_status,'observed_at_ms',OLD.observed_at_ms,'adjusted_attempt_id',r.adjusted_attempt_id,'access_ends_at_ms',OLD.access_ends_at_ms,'renewal_stopped_user_id',r.renewal_stopped_user_id,'renewal_stopped_at_ms',OLD.renewal_stopped_at_ms)
+  FROM refund_attempt_context r,erasure_requests q WHERE r.rowid=OLD.rowid AND q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
@@ -7326,7 +7324,7 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER refund_companions_initial BEFORE INSERT ON refund_attempts WHEN NEW.dispatch_last_attempt_at_ms IS NOT NULL OR NEW.published_at_ms IS NOT NULL OR NEW.verification_attempts IS NOT 0 OR NEW.last_verification_at_ms IS NOT NULL OR NEW.submission_claimed_at_ms IS NOT NULL OR NEW.verified_status IS NOT NULL OR NEW.adjusted_attempt_id IS NOT NULL OR NEW.renewal_stopped_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'refund_companions_initial'); END;
+CREATE TRIGGER refund_companions_initial BEFORE INSERT ON refund_attempts WHEN NEW.dispatch_last_attempt_at_ms IS NOT NULL OR NEW.verification_attempts IS NOT 0 OR NEW.last_verification_at_ms IS NOT NULL OR NEW.submission_claimed_at_ms IS NOT NULL OR NEW.verified_status IS NOT NULL OR NEW.access_ends_at_ms IS NOT NULL OR NEW.renewal_stopped_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'refund_companions_initial'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER refund_evidence_immutable BEFORE UPDATE OF provider_refund_id,verified_status,observed_at_ms ON refund_attempts
@@ -7355,28 +7353,27 @@ END;
 
 CREATE TRIGGER refund_reservation_guard BEFORE INSERT ON refund_attempts
 WHEN NOT EXISTS (SELECT 1 FROM billing_attempt_context a
-  JOIN subscriptions s ON s.user_id=a.user_id
   JOIN (SELECT rowid,transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) e ON e.attempt_id=a.id
   JOIN payment_source_context p ON p.id=a.payment_source_id
-  WHERE a.id=NEW.billing_attempt_id AND a.user_id=NEW.user_id AND s.id=NEW.subscription_id
+  WHERE a.id=NEW.billing_attempt_id AND a.user_id=NEW.user_id AND a.wompi_environment=NEW.wompi_environment
     AND a.status='succeeded' AND a.wompi_environment='sandbox' AND a.currency='COP'
     AND e.transaction_id=NEW.transaction_id AND e.status='APPROVED'
     AND (NEW.kind='refund' OR p.method='card')
     AND (SELECT COUNT(*) FROM (SELECT rowid,transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) AS billing_transaction_evidence WHERE attempt_id=a.id AND status='APPROVED')=1)
-  OR NEW.amount_in_cents > NEW.original_cents - COALESCE((SELECT SUM(amount_in_cents)
+  OR NEW.amount_in_cents > (SELECT original_cents FROM refund_charge_context WHERE id=NEW.billing_attempt_id) - COALESCE((SELECT SUM(amount_in_cents)
     FROM refund_attempts WHERE billing_attempt_id=NEW.billing_attempt_id AND status<>'failed'),0)
-  OR EXISTS (SELECT 1 FROM refund_attempts WHERE billing_attempt_id=NEW.billing_attempt_id
-    AND original_cents<>NEW.original_cents)
+  OR NOT EXISTS (SELECT 1 FROM refund_charge_context a WHERE a.id=NEW.billing_attempt_id)
+  OR (NEW.kind='card-void' AND NEW.amount_in_cents<>(SELECT original_cents FROM refund_charge_context WHERE id=NEW.billing_attempt_id))
 BEGIN
  SELECT RAISE(IGNORE);
 END;
 --> statement-breakpoint
 
 CREATE TRIGGER refund_snapshot_immutable BEFORE UPDATE ON refund_attempts
-WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.subscription_id<>OLD.subscription_id
- OR NEW.billing_attempt_id<>OLD.billing_attempt_id OR NEW.transaction_id<>OLD.transaction_id
- OR NEW.request_id<>OLD.request_id OR NEW.intent_json<>OLD.intent_json OR NEW.snapshot_json<>OLD.snapshot_json
- OR NEW.amount_in_cents<>OLD.amount_in_cents OR NEW.original_cents<>OLD.original_cents
+WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id
+ OR NEW.billing_attempt_id<>OLD.billing_attempt_id OR NEW.transaction_id<>OLD.transaction_id OR NEW.wompi_environment<>OLD.wompi_environment
+ OR NEW.request_id<>OLD.request_id OR NEW.intent_json<>OLD.intent_json OR NEW.treatment_json<>OLD.treatment_json
+ OR NEW.amount_in_cents<>OLD.amount_in_cents
  OR NEW.kind<>OLD.kind OR NEW.operator_id<>OLD.operator_id OR NEW.created_at_ms<>OLD.created_at_ms
  OR (OLD.status<>'pending' AND (NEW.status<>OLD.status OR NEW.finalized_at_ms IS NOT OLD.finalized_at_ms
    OR NEW.failure IS NOT OLD.failure OR NEW.progress<>OLD.progress))
@@ -7393,9 +7390,9 @@ BEGIN
     failure=CASE NEW.verified_status WHEN 'DECLINED' THEN 'provider-declined'
       WHEN 'CANCELLED' THEN 'provider-cancelled' ELSE NULL END
     WHERE id=NEW.id AND status='pending';
- UPDATE refund_attempts SET adjusted_attempt_id=incoming.attempt_id,access_ends_at_ms=incoming.ends_at_ms FROM (SELECT id AS refund_id,billing_attempt_id AS attempt_id,NEW.observed_at_ms AS ends_at_ms FROM refund_attempts
-    WHERE id=NEW.id AND status='succeeded') AS incoming WHERE refund_attempts.id=incoming.refund_id AND refund_attempts.adjusted_attempt_id IS NULL;
- UPDATE refund_attempts SET renewal_stopped_user_id=incoming.user_id,renewal_stopped_at_ms=incoming.stopped_at_ms FROM (SELECT id AS refund_id,user_id AS user_id,NEW.observed_at_ms AS stopped_at_ms FROM refund_attempts
+ UPDATE refund_attempts SET access_ends_at_ms=incoming.ends_at_ms FROM (SELECT id AS refund_id,billing_attempt_id AS attempt_id,NEW.observed_at_ms AS ends_at_ms FROM refund_attempts
+    WHERE id=NEW.id AND status='succeeded') AS incoming WHERE refund_attempts.id=incoming.refund_id AND refund_attempts.access_ends_at_ms IS NULL;
+ UPDATE refund_attempts SET renewal_stopped_at_ms=incoming.stopped_at_ms FROM (SELECT id AS refund_id,user_id AS user_id,NEW.observed_at_ms AS stopped_at_ms FROM refund_attempts
     WHERE id=NEW.id AND status='succeeded') AS incoming WHERE refund_attempts.id=incoming.refund_id AND refund_attempts.renewal_stopped_at_ms IS NULL;
  UPDATE billing_attempts AS billing_followup_outbox SET followup_due_at_ms=NULL WHERE followup_due_at_ms IS NOT NULL AND id IN
     (SELECT a.id FROM billing_attempt_context a JOIN refund_attempts r ON r.user_id=a.user_id
@@ -7890,7 +7887,7 @@ CREATE TRIGGER subscription_cancellation_guard_insert BEFORE INSERT ON subscript
 WHEN NEW.cancelled_at_ms IS NOT NULL AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM subscription_standing) sub JOIN billing_attempt_context a ON a.id=sub.attempt_id AND a.user_id=sub.user_id
  JOIN (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) p ON p.attempt_id=a.id JOIN payment_source_context source ON source.id=a.payment_source_id AND source.user_id=a.user_id
  WHERE a.subscription_id=NEW.subscription_id AND a.id=NEW.paid_attempt_id AND a.payment_source_id=NEW.payment_source_id
- AND NEW.paid_through_ms=MIN(p.ends_at_ms, COALESCE((SELECT MIN(ends_at_ms) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments WHERE attempt_id=p.attempt_id),p.ends_at_ms))
+ AND NEW.paid_through_ms=MIN(p.ends_at_ms, COALESCE((SELECT MIN(ends_at_ms) FROM (SELECT rowid,id AS refund_id,billing_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE access_ends_at_ms IS NOT NULL) AS billing_access_adjustments WHERE attempt_id=p.attempt_id),p.ends_at_ms))
  AND NEW.source_cancellation_state=CASE WHEN source.method='daviplata' THEN 'void-pending' ELSE 'detached' END)
 BEGIN
  SELECT RAISE(ABORT, 'subscription_cancellation_invalid');
@@ -7926,8 +7923,8 @@ CREATE TRIGGER subscription_prices_no_delete BEFORE DELETE ON subscription_price
 BEGIN SELECT RAISE(ABORT, 'price_immutable'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER subscription_renewal_stop_immutable BEFORE UPDATE OF renewal_stopped_user_id,renewal_stopped_at_ms ON refund_attempts
-WHEN OLD.renewal_stopped_at_ms IS NOT NULL AND (NEW.renewal_stopped_user_id IS NOT OLD.renewal_stopped_user_id OR NEW.renewal_stopped_at_ms IS NOT OLD.renewal_stopped_at_ms)
+CREATE TRIGGER subscription_renewal_stop_immutable BEFORE UPDATE OF renewal_stopped_at_ms ON refund_attempts
+WHEN OLD.renewal_stopped_at_ms IS NOT NULL AND (NEW.renewal_stopped_at_ms IS NOT OLD.renewal_stopped_at_ms)
 BEGIN
  SELECT RAISE(ABORT, 'subscription_renewal_stop_immutable');
 END;
@@ -8099,7 +8096,7 @@ BEGIN
     JOIN billing_attempt_context a ON a.id=s.attempt_id AND a.user_id=s.user_id
     JOIN payment_source_context source ON source.id=a.payment_source_id AND source.user_id=s.user_id
     WHERE a.billing_period='weekly' AND source.method='card' AND a.price_id<>NEW.id
-      AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) stop WHERE stop.user_id=s.user_id);
+      AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS refund_id,user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) stop WHERE stop.user_id=s.user_id);
 END;
 --> statement-breakpoint
 
@@ -8393,3 +8390,24 @@ CREATE INDEX billing_attempts_subscription_history ON billing_attempts(subscript
 --> statement-breakpoint
 
 CREATE INDEX billing_followup_due ON billing_attempts(followup_due_at_ms,id) WHERE followup_due_at_ms IS NOT NULL;
+--> statement-breakpoint
+
+CREATE VIEW refund_charge_context AS
+SELECT a.*,CAST(substr(a.amount,1,instr(a.amount||'.','.')-1) AS INTEGER)*100
+  +CAST(substr(substr(a.amount,instr(a.amount||'.','.')+1)||'00',1,2) AS INTEGER) AS original_cents
+FROM billing_attempt_context a
+WHERE original_cents BETWEEN 1 AND 9007199254740991
+  AND a.currency='COP' AND length(a.amount) BETWEEN 1 AND 17
+  AND a.amount NOT GLOB '*[^0-9.]*'
+  AND length(a.amount)-length(replace(a.amount,'.',''))<=1
+  AND length(substr(a.amount,1,instr(a.amount||'.','.')-1)) BETWEEN 1 AND 14
+  AND (instr(a.amount,'.')=0 OR length(a.amount)-instr(a.amount,'.') BETWEEN 1 AND 2)
+  AND (length(substr(a.amount,1,instr(a.amount||'.','.')-1))=1 OR substr(a.amount,1,1)<>'0');
+--> statement-breakpoint
+
+CREATE VIEW refund_attempt_context AS
+SELECT r.rowid,r.*,a.subscription_id,a.price_id,a.currency,a.original_cents,
+ CASE WHEN r.access_ends_at_ms IS NOT NULL THEN r.billing_attempt_id END AS adjusted_attempt_id,
+ CASE WHEN r.renewal_stopped_at_ms IS NOT NULL THEN r.user_id END AS renewal_stopped_user_id
+FROM refund_attempts r JOIN refund_charge_context a ON a.id=r.billing_attempt_id;
+--> statement-breakpoint

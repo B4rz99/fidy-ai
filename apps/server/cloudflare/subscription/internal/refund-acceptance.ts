@@ -1,6 +1,7 @@
 import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import { Money } from "../../../src/core/_shared/money";
 import {
+  CorrectionTreatment,
   RefundAttempt,
   RefundStartFailure,
   StartRefundInput,
@@ -18,7 +19,16 @@ type NativeRefundError = RefundStartFailure | Schema.SchemaError | Cause.Unknown
 const RefundRow = Schema.Struct({
   id: Schema.String,
   intent_json: Schema.String,
-  snapshot_json: Schema.String,
+  user_id: Schema.String,
+  subscription_id: Schema.String,
+  billing_attempt_id: Schema.String,
+  request_id: Schema.String,
+  price_id: Schema.String,
+  currency: Schema.Literal("COP"),
+  amount_in_cents: Schema.Int,
+  kind: Schema.Literals(["refund", "card-void"]),
+  created_at_ms: Schema.DateTimeUtcFromMillis,
+  treatment_json: Schema.String,
   status: Schema.Literals(["pending", "succeeded", "failed"]),
   progress: Schema.Literals(["queued", "verifying", "outcome-unknown"]),
   finalized_at_ms: Schema.NullOr(Schema.DateTimeUtcFromMillis),
@@ -36,7 +46,7 @@ const Charge = Schema.Struct({
   transaction_id: Schema.String,
   method: Schema.Literals(["card", "nequi", "daviplata"]),
 });
-const codec = Schema.fromJsonString(RefundAttempt);
+const treatmentCodec = Schema.fromJsonString(CorrectionTreatment);
 type EncodedRefund = typeof RefundAttempt.Encoded;
 type RefundLifecycle =
   | Pick<Extract<EncodedRefund, { status: "pending" }>, "status" | "progress">
@@ -68,10 +78,28 @@ const view = (
   row: typeof RefundRow.Type
 ): Effect.Effect<RefundAttempt, Schema.SchemaError | RefundStartFailure> =>
   Effect.gen(function* () {
-    const retained = yield* Schema.decodeEffect(codec)(row.snapshot_json);
-    const snapshot = yield* Schema.encodeEffect(RefundAttempt)(retained);
+    const intent = yield* Schema.decodeEffect(Schema.fromJsonString(StartRefundInput))(
+      row.intent_json
+    );
+    const treatment = yield* Schema.decodeEffect(treatmentCodec)(row.treatment_json);
     const progress = yield* lifecycle(row);
-    return yield* Schema.decodeEffect(RefundAttempt)({ ...snapshot, ...progress });
+    const cents = BigInt(row.amount_in_cents);
+    const whole = cents / 100n;
+    const fraction = String(cents % 100n).padStart(2, "0");
+    return yield* Schema.decodeEffect(RefundAttempt)({
+      id: row.id,
+      userId: row.user_id,
+      subscriptionId: row.subscription_id,
+      billingAttemptId: row.billing_attempt_id,
+      requestId: row.request_id,
+      priceId: row.price_id,
+      kind: row.kind,
+      money: { amount: `${whole}.${fraction}`, currency: row.currency },
+      reason: intent.reason,
+      createdAt: DateTime.formatIso(row.created_at_ms),
+      treatment: yield* Schema.encodeEffect(CorrectionTreatment)(treatment),
+      ...progress,
+    });
   });
 const decodeRow = (
   row: unknown
@@ -86,7 +114,7 @@ const readRow = (
 ): Effect.Effect<Option.Option<typeof RefundRow.Type>, Cause.UnknownError | Schema.SchemaError> =>
   Effect.tryPromise(() =>
     db
-      .prepare("SELECT * FROM refund_attempts WHERE user_id=? AND request_id=?")
+      .prepare("SELECT * FROM refund_attempt_context r WHERE r.user_id=? AND r.request_id=?")
       .bind(userId, requestId)
       .first()
   ).pipe(Effect.flatMap(decodeRow));
@@ -102,7 +130,7 @@ export const getRefund = (call: RefundReadCall): Effect.Effect<RefundAttempt, Re
     if (!liveRefundAuthority(call.authority, current)) return yield* reject("unsupported");
     const row = yield* Effect.tryPromise(() =>
       call.db
-        .prepare("SELECT * FROM refund_attempts WHERE user_id=? AND id=?")
+        .prepare("SELECT * FROM refund_attempt_context r WHERE r.user_id=? AND r.id=?")
         .bind(call.userId, call.refundAttemptId)
         .first()
     );
@@ -138,9 +166,8 @@ type PreparedRefund = Readonly<{
   requested: number;
   total: number;
   id: string;
-  subscriptionId: string;
   now: number;
-  snapshot: string;
+  treatment: string;
 }>;
 const prepareRefund = (call: RefundStartCall): Effect.Effect<PreparedRefund, NativeRefundError> =>
   Effect.gen(function* () {
@@ -159,37 +186,20 @@ const prepareRefund = (call: RefundStartCall): Effect.Effect<PreparedRefund, Nat
     if (Option.isNone(total) || Option.isNone(requested)) return yield* reject("unsupported");
     const now = yield* Clock.currentTimeMillis;
     const id = newId();
-    const subscriptionId = newId();
-    const snapshotValue = yield* Schema.decodeEffect(RefundAttempt)({
-      id,
-      subscriptionId,
-      status: "pending",
-      progress: "queued",
-      userId: call.input.userId,
-      billingAttemptId: charge.id,
-      priceId: charge.price_id,
-      kind: call.input.intent.kind,
-      money: yield* Schema.encodeEffect(Money)(money),
-      requestId: call.input.requestId,
-      reason: call.input.reason,
-      createdAt: DateTime.formatIso(DateTime.makeUnsafe(now)),
-      treatment: {
-        policyId: "refund-ends-paid-period-v1",
-        taxTreatment: charge.tax_treatment,
-        paidPeriodEffect: "end-refunded-period-at-verification",
-        renewalEffect: "stop-future-renewals",
-        accounting: { kind: "sandbox-only" },
-      },
+    const treatment = yield* Schema.encodeEffect(treatmentCodec)({
+      policyId: "refund-ends-paid-period-v1",
+      taxTreatment: charge.tax_treatment,
+      paidPeriodEffect: "end-refunded-period-at-verification",
+      renewalEffect: "stop-future-renewals",
+      accounting: { kind: "sandbox-only" },
     });
-    const snapshot = yield* Schema.encodeEffect(codec)(snapshotValue);
     return {
       charge,
       requested: requested.value,
       total: total.value,
       id,
-      subscriptionId,
       now,
-      snapshot,
+      treatment,
     };
   });
 const reserve = (
@@ -197,36 +207,29 @@ const reserve = (
   prepared: PreparedRefund,
   intent: string
 ): Effect.Effect<void, Cause.UnknownError> => {
-  const { charge, id, subscriptionId, snapshot, requested, total, now } = prepared;
+  const { charge, id, treatment, requested, now } = prepared;
   return Effect.tryPromise(() =>
-    call.db.batch([
-      call.db
-        .prepare("INSERT OR IGNORE INTO subscriptions(user_id,id) VALUES(?1,?2)")
-        .bind(call.input.userId, subscriptionId),
-      call.db
-        .prepare(`INSERT INTO refund_attempts (id,user_id,subscription_id,billing_attempt_id,transaction_id,
-      request_id,intent_json,snapshot_json,amount_in_cents,original_cents,kind,operator_id,created_at_ms)
-      SELECT ?,?,s.id,?,?,?,?,json_set(?, '$.subscriptionId',s.id),?,?,?,?,?
-      FROM subscriptions s WHERE s.user_id=? AND ? > ?
+    call.db
+      .prepare(`INSERT INTO refund_attempts (id,billing_attempt_id,wompi_environment,transaction_id,
+      request_id,intent_json,treatment_json,amount_in_cents,kind,operator_id,created_at_ms)
+      SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ? > ?
       ON CONFLICT(user_id,request_id) DO NOTHING`)
-        .bind(
-          id,
-          call.input.userId,
-          charge.id,
-          charge.transaction_id,
-          call.input.requestId,
-          intent,
-          snapshot,
-          requested,
-          total,
-          call.input.intent.kind,
-          call.authority.operatorId,
-          now,
-          call.input.userId,
-          call.authority.expiresAtMs,
-          now
-        ),
-    ])
+      .bind(
+        id,
+        charge.id,
+        charge.wompi_environment,
+        charge.transaction_id,
+        call.input.requestId,
+        intent,
+        treatment,
+        requested,
+        call.input.intent.kind,
+        call.authority.operatorId,
+        now,
+        call.authority.expiresAtMs,
+        now
+      )
+      .run()
   ).pipe(Effect.asVoid);
 };
 const reservationFailure = (

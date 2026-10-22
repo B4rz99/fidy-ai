@@ -62,11 +62,19 @@ it.each([
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* wait(() => databases.acquire());
-        const latest = schemaStatements(
+        const refundTarget = schemaStatements(
           yield* wait(() =>
             Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
           )
         );
+        const latest = precedingSchema({
+          current: refundTarget,
+          history: yield* Schema.decodeEffect(historySchema)(
+            yield* wait(() =>
+              Bun.file(new URL("./refund-cutover.test-fixture.json", import.meta.url)).text()
+            )
+          ),
+        });
         const current = precedingSchema({
           current: latest,
           history: yield* Schema.decodeEffect(historySchema)(

@@ -43,7 +43,7 @@ const setup = Effect.gen(function* () {
  CREATE TABLE payment_source_context (id TEXT, user_id TEXT, method TEXT);
  CREATE TABLE subscription_renewal_stops (user_id TEXT); CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops;
 
- CREATE TABLE refund_attempts(id TEXT,adjusted_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT);
+ CREATE TABLE refund_attempts(id TEXT,billing_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT);
  CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER);
  ${consentHistoryTestSchema};
  `)

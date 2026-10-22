@@ -47,6 +47,8 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
         "payment_enrollment_context",
         "payment_source_context",
         "refund_attempts",
+        "refund_charge_context",
+        "refund_attempt_context",
         "subscription_prices",
         "subscription_renewal_fences",
         "subscription_standing",

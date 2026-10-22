@@ -16,9 +16,9 @@ const bindings = (
   Option.match(authority, { onNone: () => [], onSome: (value) => value.bindings });
 
 export const paidAccessEndSql = `MIN(a.paid_ends_at_ms, COALESCE(
-  (SELECT MIN(adjustment.access_ends_at_ms) FROM refund_attempts adjustment WHERE adjustment.adjusted_attempt_id=a.id), a.paid_ends_at_ms))
+  (SELECT MIN(adjustment.access_ends_at_ms) FROM refund_attempts adjustment WHERE adjustment.access_ends_at_ms IS NOT NULL AND adjustment.billing_attempt_id=a.id), a.paid_ends_at_ms))
   + CASE WHEN NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id=s.user_id)
-    AND NOT EXISTS (SELECT 1 FROM refund_attempts adjustment WHERE adjustment.adjusted_attempt_id=a.id)
+    AND NOT EXISTS (SELECT 1 FROM refund_attempts adjustment WHERE adjustment.access_ends_at_ms IS NOT NULL AND adjustment.billing_attempt_id=a.id)
     THEN ${renewalGraceMs} ELSE 0 END`;
 
 /** Published Prices are ordered and capped before projection as a complete three-Price set. */
@@ -47,7 +47,7 @@ export const subscriptionStandingQuery = ({
       s.price_id, a.amount, a.currency, a.billing_period, a.service_market, a.tax_treatment,
       a.paid_starts_at_ms AS starts_at_ms,
       MIN(a.paid_ends_at_ms,COALESCE((SELECT MIN(adjustment.access_ends_at_ms) FROM refund_attempts adjustment
-        WHERE adjustment.adjusted_attempt_id=a.id),a.paid_ends_at_ms)) AS ends_at_ms,
+        WHERE adjustment.access_ends_at_ms IS NOT NULL AND adjustment.billing_attempt_id=a.id),a.paid_ends_at_ms)) AS ends_at_ms,
       a.paid_renewal_anchor_ms AS renewal_anchor_ms,
       ${paidAccessEndSql} AS access_ends_at_ms
       FROM (${trial.sql}) AS t LEFT JOIN subscription_standing AS s ON s.user_id = ?

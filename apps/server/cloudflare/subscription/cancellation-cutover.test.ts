@@ -30,11 +30,19 @@ it.each(["valid", "changed-paid-through", "interrupted-copy", "interrupted-colum
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* wait(() => databases.acquire());
-        const current = schemaStatements(
+        const refundTarget = schemaStatements(
           yield* wait(() =>
             Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
           )
         );
+        const current = precedingSchema({
+          current: refundTarget,
+          history: yield* Schema.decodeEffect(historySchema)(
+            yield* wait(() =>
+              Bun.file(new URL("./refund-cutover.test-fixture.json", import.meta.url)).text()
+            )
+          ),
+        });
         const previous = precedingSchema({
           current,
           history: yield* Schema.decodeEffect(historySchema)(

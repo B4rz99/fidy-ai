@@ -2267,3 +2267,113 @@ while pending work and remaining budget exist. Every step reloads the retained o
 same-environment binding, so a replacement source cannot redirect the cleanup. Existing v1
 executions retain their one-step meaning for the existing three-day retention. #1494 owns final
 live cutover verification.
+
+## Subscription refunds (#1453)
+
+Apply after #1452 on its verified schema checkpoint `0297fbaa0`. Keep rollback evidence and existing
+archive bodies unchanged. Install the target `refund_charge_context` view, then execute the preflight,
+create the target refund table as `refund_attempts_1453`, copy, and compare. In the same D1 batch,
+drop all existing explicit views/triggers/indexes and the newly installed charge view, swap only the
+refund table, reinstall target views/triggers/indexes, and check foreign keys. Do not drop User,
+Subscription, charge, or Price tables. A failed assertion or interrupted batch rolls everything back.
+The clean baseline remains one file; this populated cutover does not replay it against existing data.
+
+The target has 24 logical fields plus one generated owner key. The generated `user_id` comes from the
+validated immutable request and is constrained against the charge owner at acceptance. This retains
+per-User retry uniqueness across different charges. Original charge value uses validated decimal
+text and integer arithmetic; no floating-point conversion is used for Money. Provider refund identity
+is unique within its environment. Retained treatment replaces the duplicated response; original
+response identities, exact Money and instants are checked before any copies disappear. The
+write-only publication timestamp is intentionally discarded; dispatch cooldown, claims, verification
+budgets, ambiguous reservations and verified access/renewal effects remain. Native migration tests
+exercise populated replay, preservation and rollback; #1494 owns final live cutover verification.
+
+<!-- subscription-refund-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-refund-preflight',CASE WHEN NOT EXISTS(
+ SELECT 1 FROM refund_attempts r LEFT JOIN refund_charge_context a ON a.id=r.billing_attempt_id
+ WHERE a.id IS NULL OR r.user_id IS NOT a.user_id OR r.subscription_id IS NOT a.subscription_id
+ OR r.original_cents IS NOT a.original_cents
+ OR json_extract(r.intent_json,'$.userId') IS NOT r.user_id
+ OR json_extract(r.intent_json,'$.billingAttemptId') IS NOT r.billing_attempt_id
+ OR json_extract(r.intent_json,'$.requestId') IS NOT r.request_id
+ OR json_extract(r.intent_json,'$.intent.kind') IS NOT r.kind
+ OR json_extract(r.snapshot_json,'$.id') IS NOT r.id
+ OR json_extract(r.snapshot_json,'$.userId') IS NOT r.user_id
+ OR json_extract(r.snapshot_json,'$.subscriptionId') IS NOT r.subscription_id
+ OR json_extract(r.snapshot_json,'$.billingAttemptId') IS NOT r.billing_attempt_id
+ OR json_extract(r.snapshot_json,'$.priceId') IS NOT a.price_id
+ OR json_extract(r.snapshot_json,'$.kind') IS NOT r.kind
+ OR json_extract(r.snapshot_json,'$.requestId') IS NOT r.request_id
+ OR json_extract(r.snapshot_json,'$.reason') IS NOT json_extract(r.intent_json,'$.reason')
+ OR json_extract(r.snapshot_json,'$.reason') NOT IN('user-request','duplicate-collection','service-error')
+ OR json_extract(r.snapshot_json,'$.money.currency') IS NOT a.currency
+ OR json_extract(r.snapshot_json,'$.money.amount') IS NOT
+   (CAST(CAST(r.amount_in_cents/100 AS INTEGER) AS TEXT)||CASE WHEN r.amount_in_cents%100=0 THEN '' ELSE '.'||rtrim(printf('%02d',r.amount_in_cents%100),'0') END)
+ OR (r.kind='refund' AND (json_extract(r.intent_json,'$.intent.money.amount') IS NOT json_extract(r.snapshot_json,'$.money.amount')
+   OR json_extract(r.intent_json,'$.intent.money.currency') IS NOT a.currency))
+ OR (r.kind='card-void' AND r.amount_in_cents<>a.original_cents)
+ OR json_extract(r.snapshot_json,'$.createdAt') IS NOT
+   (strftime('%Y-%m-%dT%H:%M:%S',CAST(r.created_at_ms/1000 AS INTEGER),'unixepoch')||printf('.%03dZ',r.created_at_ms%1000))
+ OR json_extract(r.snapshot_json,'$.status') IS NOT 'pending'
+ OR json_extract(r.snapshot_json,'$.progress') IS NOT 'queued'
+ OR json_extract(r.snapshot_json,'$.treatment.policyId') IS NOT 'refund-ends-paid-period-v1'
+ OR json_extract(r.snapshot_json,'$.treatment.taxTreatment') IS NOT a.tax_treatment
+ OR json_extract(r.snapshot_json,'$.treatment.paidPeriodEffect') IS NOT 'end-refunded-period-at-verification'
+ OR json_extract(r.snapshot_json,'$.treatment.renewalEffect') IS NOT 'stop-future-renewals'
+ OR json_extract(r.snapshot_json,'$.treatment.accounting.kind') IS NOT 'sandbox-only'
+ OR (r.adjusted_attempt_id IS NOT NULL AND r.adjusted_attempt_id IS NOT r.billing_attempt_id)
+ OR (r.renewal_stopped_user_id IS NOT NULL AND r.renewal_stopped_user_id IS NOT r.user_id)
+ OR NOT EXISTS(SELECT 1 FROM billing_provider_transactions e WHERE e.transaction_id=r.transaction_id AND e.attempt_id=r.billing_attempt_id AND e.status='APPROVED')
+ OR a.wompi_environment<>'sandbox' OR a.status<>'succeeded' OR a.paid_starts_at_ms IS NULL
+ OR (SELECT COUNT(*) FROM billing_provider_transactions e WHERE e.attempt_id=a.id AND e.status='APPROVED')<>1
+ OR (r.kind='card-void' AND NOT EXISTS(SELECT 1 FROM payment_source_context p WHERE p.id=a.payment_source_id AND p.method='card'))
+ OR (r.status='succeeded' AND (r.verified_status NOT IN('APPROVED','VOIDED') OR r.observed_at_ms IS NULL OR r.finalized_at_ms IS NOT r.observed_at_ms OR r.access_ends_at_ms IS NOT r.observed_at_ms OR r.renewal_stopped_at_ms IS NOT r.observed_at_ms))
+ OR (r.status='failed' AND (r.verified_status NOT IN('DECLINED','CANCELLED') OR r.observed_at_ms IS NULL OR r.finalized_at_ms IS NOT r.observed_at_ms))
+ OR (SELECT SUM(other.amount_in_cents) FROM refund_attempts other WHERE other.billing_attempt_id=r.billing_attempt_id AND other.status<>'failed')>a.original_cents
+) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-refund-preflight:end -->
+
+<!-- subscription-refund-copy:start -->
+
+```sql
+INSERT INTO refund_attempts_1453(rowid,id,billing_attempt_id,wompi_environment,transaction_id,request_id,intent_json,treatment_json,amount_in_cents,kind,operator_id,created_at_ms,status,progress,finalized_at_ms,failure,dispatch_last_attempt_at_ms,verification_attempts,last_verification_at_ms,submission_claimed_at_ms,provider_refund_id,verified_status,observed_at_ms,access_ends_at_ms,renewal_stopped_at_ms)
+ SELECT r.rowid,r.id,r.billing_attempt_id,a.wompi_environment,r.transaction_id,r.request_id,r.intent_json,json_extract(r.snapshot_json,'$.treatment'),r.amount_in_cents,r.kind,r.operator_id,r.created_at_ms,r.status,r.progress,r.finalized_at_ms,r.failure,r.dispatch_last_attempt_at_ms,r.verification_attempts,r.last_verification_at_ms,r.submission_claimed_at_ms,r.provider_refund_id,r.verified_status,r.observed_at_ms,r.access_ends_at_ms,r.renewal_stopped_at_ms
+ FROM refund_attempts r JOIN refund_charge_context a ON a.id=r.billing_attempt_id;
+```
+
+<!-- subscription-refund-copy:end -->
+
+<!-- subscription-refund-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-refund-copy',CASE WHEN NOT EXISTS(
+ SELECT rowid,id,billing_attempt_id,wompi_environment,transaction_id,request_id,intent_json,treatment_json,amount_in_cents,kind,operator_id,created_at_ms,status,progress,finalized_at_ms,failure,dispatch_last_attempt_at_ms,verification_attempts,last_verification_at_ms,submission_claimed_at_ms,provider_refund_id,verified_status,observed_at_ms,access_ends_at_ms,renewal_stopped_at_ms FROM refund_attempts_1453
+ EXCEPT SELECT r.rowid,r.id,r.billing_attempt_id,a.wompi_environment,r.transaction_id,r.request_id,r.intent_json,json_extract(r.snapshot_json,'$.treatment'),r.amount_in_cents,r.kind,r.operator_id,r.created_at_ms,r.status,r.progress,r.finalized_at_ms,r.failure,r.dispatch_last_attempt_at_ms,r.verification_attempts,r.last_verification_at_ms,r.submission_claimed_at_ms,r.provider_refund_id,r.verified_status,r.observed_at_ms,r.access_ends_at_ms,r.renewal_stopped_at_ms FROM refund_attempts r JOIN refund_charge_context a ON a.id=r.billing_attempt_id
+) AND (SELECT COUNT(*) FROM refund_attempts_1453)=(SELECT COUNT(*) FROM refund_attempts) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-refund-copy-check:end -->
+
+<!-- subscription-refund-swap:start -->
+
+```sql
+DROP TABLE refund_attempts;
+ALTER TABLE refund_attempts_1453 RENAME TO refund_attempts;
+```
+
+<!-- subscription-refund-swap:end -->
+
+<!-- subscription-refund-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-refund-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-refund-verify:end -->

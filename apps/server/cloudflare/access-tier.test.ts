@@ -52,7 +52,7 @@ it("derives each decision from one User's original trial and current settled pai
             "CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops"
           ),
           db.prepare(
-            "CREATE TABLE refund_attempts(id TEXT,adjusted_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT)"
+            "CREATE TABLE refund_attempts(id TEXT,billing_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT)"
           ),
           db
             .prepare(
@@ -127,7 +127,7 @@ it("derives each decision from one User's original trial and current settled pai
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO refund_attempts(adjusted_attempt_id,access_ends_at_ms) VALUES ('attempt',450)"
+            "INSERT INTO refund_attempts(billing_attempt_id,access_ends_at_ms) VALUES ('attempt',450)"
           )
           .run()
       );

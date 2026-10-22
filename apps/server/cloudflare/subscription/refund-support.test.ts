@@ -200,11 +200,11 @@ it.each([
       const retained = yield* Effect.tryPromise(() =>
         prepared.environment.DB.prepare(`SELECT
     (SELECT COUNT(*) FROM refund_attempts) AS attempts,
-    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,1 AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE verification_attempts IS NOT NULL) AS refund_outbox) AS outbox,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,1 AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE verification_attempts IS NOT NULL) AS refund_outbox) AS outbox,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) AS refund_submission_claims) AS claims,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL) AS refund_outcome_evidence) AS outcomes,
-    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments) AS adjustments,
-    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,billing_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE access_ends_at_ms IS NOT NULL) AS billing_access_adjustments) AS adjustments,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
     (SELECT COUNT(*) FROM subscription_standing) AS subscriptions`).first()
       );
       expect(retained).toEqual({
@@ -256,11 +256,11 @@ it.each(["missing", "recovery-audience", "expired", "mismatched-user"])(
             db.batch(
               [
                 "refund_attempts",
-                "(SELECT rowid,id AS refund_id,1 AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE verification_attempts IS NOT NULL)",
+                "(SELECT rowid,id AS refund_id,1 AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE verification_attempts IS NOT NULL)",
                 "(SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL)",
                 "(SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL)",
-                "(SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL)",
-                "(SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL)",
+                "(SELECT rowid,id AS refund_id,billing_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE access_ends_at_ms IS NOT NULL)",
+                "(SELECT rowid,id AS refund_id,user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL)",
                 "subscription_standing",
                 "billing_attempts",
                 "(SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL)",

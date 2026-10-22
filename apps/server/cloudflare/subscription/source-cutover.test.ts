@@ -49,11 +49,25 @@ it.each(["valid", "unknown-environment", "changed-method", "interrupted"] as con
         );
         const source = precedingSchema({
           current: precedingSchema({
-            current: schemaStatements(
-              yield* wait(() =>
-                Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-              )
-            ),
+            current: precedingSchema({
+              current: schemaStatements(
+                yield* wait(() =>
+                  Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+                )
+              ),
+              history: yield* Schema.decodeEffect(
+                Schema.fromJsonString(
+                  Schema.Struct({
+                    originalDefinitions: Schema.Array(Schema.String),
+                    introducedNames: Schema.Array(Schema.String),
+                  })
+                )
+              )(
+                yield* wait(() =>
+                  Bun.file(new URL("./refund-cutover.test-fixture.json", import.meta.url)).text()
+                )
+              ),
+            }),
             history: yield* Schema.decodeEffect(
               Schema.fromJsonString(
                 Schema.Struct({

@@ -61,7 +61,7 @@ const setup = Effect.fn(function* () {
  CREATE TABLE payment_source_context (id TEXT, user_id TEXT, method TEXT);
  CREATE TABLE subscription_renewal_stops (user_id TEXT); CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops;
 
-    CREATE TABLE refund_attempts(id TEXT,adjusted_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT);`)
+    CREATE TABLE refund_attempts(id TEXT,billing_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT);`)
   );
   for (const [name, event, table] of [
     ["statement_submission_audit_no_update", "UPDATE", "statement_submission_audit"],

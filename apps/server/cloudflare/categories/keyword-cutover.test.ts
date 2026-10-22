@@ -90,7 +90,7 @@ it.each([
               .bind(other, oldCategory),
             db
               .prepare(
-                "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at,created_at,counterparty) VALUES(?,?,'45000','COP','outflow',?,'2026-09-01T05:01:02.003Z','2026-09-01T05:01:02.003Z','CAFÉ')"
+                "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms,counterparty) VALUES(?,?,'45000','COP','outflow',?,1788238862003,1788238862003,'CAFÉ')"
               )
               .bind(transaction, owner, oldCategory),
             db.prepare(

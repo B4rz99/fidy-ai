@@ -290,7 +290,7 @@ export const seedWeeklySummaryActivity = ({
   Effect.tryPromise(() =>
     db
       .prepare(
-        "INSERT INTO transactions(id,user_id,amount,currency,category_id,direction,occurred_at,created_at,counterparty) VALUES (?,?, '10.25','COP',?,'outflow',?,?,NULL)"
+        "INSERT INTO transactions(id,user_id,amount,currency,category_id,direction,occurred_at_ms,created_at_ms,counterparty) VALUES (?,?, '10.25','COP',?,'outflow',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),NULL)"
       )
       .bind(
         "20000000-0000-4000-8000-000000000001",

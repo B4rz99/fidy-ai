@@ -1,3 +1,4 @@
+import { UtcTimestamp } from "../../../src/core/_shared/time";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { NotificationEmailSourceAttestation } from "../../../src/core/source-attestation/contract";
@@ -9,6 +10,9 @@ import type {
   ReviewedCaptureInput,
   StatementCaptureInput,
 } from "../contract";
+
+const storedInstant = (value: string): number =>
+  DateTime.toEpochMillis(Schema.decodeSync(UtcTimestamp)(value));
 
 const sourceAuthority = ({
   userId,
@@ -26,7 +30,7 @@ const transactionStatement = (
   const guard = sourceAuthority(input);
   return {
     sql: `INSERT INTO transactions (id, user_id, amount, currency,
-      direction, counterparty, category_id, notes, occurred_at, created_at)
+      direction, counterparty, category_id, notes, occurred_at_ms, created_at_ms)
       SELECT ?, ?, ?, ?, ?, ${Option.isSome(extraction.counterparty) ? "?" : "NULL"}, ?, NULL, ?, ?
       WHERE ${guard.sql}`,
     params: [
@@ -37,8 +41,8 @@ const transactionStatement = (
       extraction.direction,
       ...Option.toArray(extraction.counterparty),
       categoryId,
-      DateTime.formatIso(extraction.occurredAt),
-      createdAt,
+      DateTime.toEpochMillis(extraction.occurredAt),
+      storedInstant(createdAt),
       ...guard.params,
     ],
   };
@@ -61,7 +65,7 @@ export const prepareStatementCapture = (
     db.prepare(transaction.sql).bind(...transaction.params),
     db
       .prepare(`INSERT INTO source_attestations (id, user_id, transaction_id,
-        kind, service_market, locale, time_zone, interpretation_revision, created_at,
+        kind, service_market, locale, time_zone, interpretation_revision, created_at_ms,
         statement_submission_id, statement_record_number, statement_content_hash, source_format)
         SELECT ?, ?, ?, 'statement-line', ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard.sql}`)
       .bind(
@@ -72,7 +76,7 @@ export const prepareStatementCapture = (
         attestation.locale,
         attestation.timeZone,
         attestation.interpretationRevision,
-        attestation.createdAt,
+        storedInstant(attestation.createdAt),
         attestation.statementSubmissionId,
         attestation.statementRecordNumber,
         attestation.statementContentHash,
@@ -134,7 +138,7 @@ export const prepareNotificationEmailCapture = (
       prepareEmailAction(input, {
         sql: `INSERT INTO source_attestations
             (id, user_id, transaction_id, kind, service_market, locale, time_zone,
-             interpretation_revision, created_at, received_email_id, message_content_sha256,
+             interpretation_revision, created_at_ms, received_email_id, message_content_sha256,
              source_format, message_evidence, deterministic_interpretation, extractor_revision)
             SELECT ?, ?, ?, 'notification-email', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard.sql}`,
         params: [
@@ -145,7 +149,7 @@ export const prepareNotificationEmailCapture = (
           attestation.locale,
           attestation.timeZone,
           attestation.interpretationRevision,
-          attestation.createdAt,
+          storedInstant(attestation.createdAt),
           attestation.receivedEmailId,
           attestation.messageContentSha256,
           attestation.sourceFormat,
@@ -168,7 +172,7 @@ export const prepareReviewedCapture = (
     input.db.prepare(transaction.sql).bind(...transaction.params),
     input.db
       .prepare(`INSERT INTO source_attestations
-      (id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at,review_item_id,user_provided_fields)
+      (id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at_ms,review_item_id,user_provided_fields)
       SELECT ?,?,?,'manual',?,?,?,'user-reviewed-v1',?,?,? WHERE ${guard.sql}`)
       .bind(
         input.attestationId,
@@ -177,7 +181,7 @@ export const prepareReviewedCapture = (
         input.context.serviceMarket,
         input.context.locale,
         input.context.timeZone,
-        input.createdAt,
+        storedInstant(input.createdAt),
         input.reviewItemId,
         Schema.encodeSync(Schema.fromJsonString(Schema.Array(Schema.String)))(
           input.userProvidedFields

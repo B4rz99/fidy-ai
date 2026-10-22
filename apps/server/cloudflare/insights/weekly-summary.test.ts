@@ -60,7 +60,7 @@ it.live(
       const db = yield* weeklySummaryTestDatabase;
       const schedule = yield* enable(db);
       const sql =
-        "INSERT INTO transactions (id,user_id,amount,currency,category_id,direction,occurred_at,created_at,counterparty) VALUES (?,?,?,?,?,?,?,?,NULL)";
+        "INSERT INTO transactions (id,user_id,amount,currency,category_id,direction,occurred_at_ms,created_at_ms,counterparty) VALUES (?,?,?,?,?,?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),NULL)";
       const seedDefaults: Readonly<{
         userId: string;
         amount: string;

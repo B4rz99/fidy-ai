@@ -412,8 +412,8 @@ const seedTransaction = ({
   categoryId: string;
 }>): Promise<unknown> =>
   db
-    .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at)
-      VALUES (?, ?, '10.00', 'COP', 'outflow', ?, 'seed', '2025-01-05T12:00:00.000Z', '2025-01-05T12:00:00.000Z')`)
+    .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at_ms, created_at_ms)
+      VALUES (?, ?, '10.00', 'COP', 'outflow', ?, 'seed', 1736078400000, 1736078400000)`)
     .bind(id, userId, categoryId)
     .run();
 
@@ -455,7 +455,7 @@ const seedRetainedTransaction = ({
   const facts = { ...retainedTransactionDefaults, ...overrides };
   return db
     .prepare(`INSERT INTO transactions
-      (id, user_id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, user_decisions)
+      (id, user_id, amount, currency, direction, counterparty, category_id, notes, occurred_at_ms, created_at_ms, user_decisions)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(
       id,
@@ -466,8 +466,8 @@ const seedRetainedTransaction = ({
       counterparty ?? null,
       categoryId,
       notes ?? null,
-      facts.occurredAt,
-      facts.createdAt,
+      DateTime.toEpochMillis(DateTime.makeUnsafe(facts.occurredAt)),
+      DateTime.toEpochMillis(DateTime.makeUnsafe(facts.createdAt)),
       facts.userDecisions
     )
     .run();
@@ -487,8 +487,8 @@ const seedManualAttestation = ({
 }>): Promise<unknown> =>
   db
     .prepare(`INSERT INTO source_attestations
-      (id, user_id, transaction_id, kind, service_market, locale, time_zone, interpretation_revision, created_at)
-      VALUES (?, ?, ?, 'manual', 'CO', 'es-CO', 'America/Bogota', 'manual-v1', '2025-01-05T12:00:00.000Z')`)
+      (id, user_id, transaction_id, kind, service_market, locale, time_zone, interpretation_revision, created_at_ms)
+      VALUES (?, ?, ?, 'manual', 'CO', 'es-CO', 'America/Bogota', 'manual-v1', 1736078400000)`)
     .bind(id, userId, transactionId)
     .run();
 
@@ -553,8 +553,8 @@ const seedLinkedPair = ({
   db.batch([
     db
       .prepare(`INSERT INTO transaction_reconciliation_decisions
-        (user_id, first_transaction_id, second_transaction_id, state, visible_transaction_id, decided_at)
-        VALUES (?, ?, ?, 'linked', ?, '2025-01-05T12:00:00.000Z')`)
+        (user_id, first_transaction_id, second_transaction_id, state, visible_transaction_id, decided_at_ms)
+        VALUES (?, ?, ?, 'linked', ?, 1736078400000)`)
       .bind(userId, first, second, visible),
     db
       .prepare(
@@ -678,8 +678,8 @@ const concurrentCorrection = ({
   evidenceId: string;
 }>): Promise<unknown> =>
   db
-    .prepare(`INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at)
-      VALUES (?, ?, ?, 0, '["notes"]', '{"notes":"seed"}', '{"notes":"concurrent"}', '2025-01-06T12:00:00.000Z')`)
+    .prepare(`INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at_ms)
+      VALUES (?, ?, ?, 0, '["notes"]', '{"notes":"seed"}', '{"notes":"concurrent"}', 1736164800000)`)
     .bind(evidenceId, userId, transactionId)
     .run()
     .then(() =>
@@ -704,8 +704,8 @@ const concurrentMoneyCorrection = ({
   amount: string;
 }>): Promise<unknown> =>
   db
-    .prepare(`INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at)
-      VALUES (?, ?, ?, 0, '["money"]', '{"amount":"45000"}', ?, '2025-01-06T12:00:00.000Z')`)
+    .prepare(`INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at_ms)
+      VALUES (?, ?, ?, 0, '["money"]', '{"amount":"45000"}', ?, 1736164800000)`)
     .bind(evidenceId, userId, transactionId, JSON.stringify({ amount }))
     .run()
     .then(() =>
@@ -2358,8 +2358,8 @@ it("derives each effective fact group from the member the Transaction policy sel
           [visible, suppressed].map((transactionId, index) =>
             db
               .prepare(`INSERT INTO transaction_corrections
-                (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at)
-                VALUES (?, ?, ?, 0, '[]', '{}', '{}', '2025-02-01T00:00:00.000Z')`)
+                (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at_ms)
+                VALUES (?, ?, ?, 0, '[]', '{}', '{}', 1738368000000)`)
               .bind(`40000000-0000-4000-8000-00000000010${index}`, owner, transactionId)
               .run()
           )
@@ -3250,12 +3250,12 @@ for (const scenario of [
           db.batch([
             db
               .prepare(
-                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at) VALUES (?, ?, '12.34', 'USD', 'outflow', ?, 'Pago literal', '2025-01-10T12:00:00.000Z', '2025-01-10T12:00:00.000Z')"
+                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at_ms, created_at_ms) VALUES (?, ?, '12.34', 'USD', 'outflow', ?, 'Pago literal', 1736510400000, 1736510400000)"
               )
               .bind(ownId, users[0], category),
             db
               .prepare(
-                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at) VALUES (?, ?, '99', 'COP', 'outflow', ?, 'Pago literal', '2025-01-10T12:00:00.000Z', '2025-01-10T12:00:00.000Z')"
+                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at_ms, created_at_ms) VALUES (?, ?, '99', 'COP', 'outflow', ?, 'Pago literal', 1736510400000, 1736510400000)"
               )
               .bind(foreignId, users[1], category),
           ])
@@ -3347,16 +3347,15 @@ it("continues the canonical history beyond its first bounded page without losing
       yield* fromTestPromise(() =>
         db
           .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 101)
-    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at)
-    SELECT printf('00000000-0000-4000-8000-%012d', n), ?, '1', 'COP', 'outflow', ?, 'Pago literal', ?,
-      CASE WHEN n = 101 THEN ? ELSE ? END FROM seq`)
+    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at_ms, created_at_ms)
+    SELECT printf('00000000-0000-4000-8000-%012d', n), ?, '1', 'COP', 'outflow', ?, 'Pago literal',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(CASE WHEN n = 101 THEN ? ELSE ? END,'subsec')*1000) AS INTEGER) FROM seq`)
           .bind(users[0], category, previous, previous, createdAt)
           .run()
       );
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    VALUES (?, ?, '1', 'COP', 'inflow', ?, '2024-01-09T12:00:00.000Z', ?)`)
+          .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+    VALUES (?, ?, '1', 'COP', 'inflow', ?, 1704801600000,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
           .bind("00000000-0000-4000-8000-000000000999", users[0], category, previous)
           .run()
       );

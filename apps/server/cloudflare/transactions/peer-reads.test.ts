@@ -234,8 +234,8 @@ const movement = (
   const input = { ...movementDefaults, ...overrides };
   return db
     .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, category_id, direction, occurred_at, created_at, counterparty)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (id, user_id, amount, currency, category_id, direction, occurred_at_ms, created_at_ms, counterparty)
+    VALUES (?, ?, ?, ?, ?, ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER), ?)`)
     .bind(
       transactionId(index),
       input.userId,

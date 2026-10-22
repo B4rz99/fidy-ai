@@ -116,8 +116,8 @@ const setup = (): Effect.Effect<D1Database, TestAdapterFailure> =>
         ...[first, second, third].map((id) =>
           db
             .prepare(`INSERT INTO transactions
-      (id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at,created_at)
-      VALUES (?,?,'45000','COP','outflow',?,?,?,'2025-01-05T12:00:00.000Z',?)`)
+      (id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at_ms,created_at_ms)
+      VALUES (?,?,'45000','COP','outflow',?,?,?,1736078400000,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
             .bind(
               id,
               userId,
@@ -129,8 +129,8 @@ const setup = (): Effect.Effect<D1Database, TestAdapterFailure> =>
         ),
         db
           .prepare(`INSERT INTO transaction_reconciliation_decisions
-      (user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id,decided_at)
-      VALUES (?,?,?,'linked',?,'2025-01-07T12:00:00.000Z')`)
+      (user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id,decided_at_ms)
+      VALUES (?,?,?,'linked',?,1736251200000)`)
           .bind(userId, first, second, first),
         ...[first, second].map((id) =>
           db
@@ -297,8 +297,8 @@ const acceptedCommit = (
 const correctionRank = (db: D1Database, id = second): D1PreparedStatement =>
   db
     .prepare(`INSERT INTO transaction_corrections
-  (id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts,corrected_at)
-  VALUES ('50000000-0000-4000-8000-000000000001',?,?,0,'["notes"]','{}','{}','2025-01-08T12:00:00.000Z')`)
+  (id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts,corrected_at_ms)
+  VALUES ('50000000-0000-4000-8000-000000000001',?,?,0,'["notes"]','{}','{}',1736337600000)`)
     .bind(userId, id);
 const changedPremises: ReadonlyArray<
   Readonly<{ name: string; change: (db: D1Database) => Promise<unknown> }>
@@ -365,8 +365,8 @@ const changedPremises: ReadonlyArray<
           .bind(userId),
         db
           .prepare(`INSERT INTO source_attestations
-      (id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at,statement_submission_id,statement_record_number,statement_content_hash,source_format)
-      VALUES ('60000000-0000-4000-8000-000000000001',?,?,'statement-line','CO','es-CO','America/Bogota','statement-v1','2025-01-08T12:00:00.000Z','60000000-0000-4000-8000-000000000003',1,?,'csv')`)
+      (id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at_ms,statement_submission_id,statement_record_number,statement_content_hash,source_format)
+      VALUES ('60000000-0000-4000-8000-000000000001',?,?,'statement-line','CO','es-CO','America/Bogota','statement-v1',1736337600000,'60000000-0000-4000-8000-000000000003',1,?,'csv')`)
           .bind(userId, second, "a".repeat(64)),
       ]),
   },
@@ -374,7 +374,7 @@ const changedPremises: ReadonlyArray<
     name: "retained creation-order policy inputs",
     change: (db) =>
       db
-        .prepare("UPDATE transactions SET created_at = '2025-01-04T12:00:00.000Z' WHERE id = ?")
+        .prepare("UPDATE transactions SET created_at_ms = 1735992000000 WHERE id = ?")
         .bind(second)
         .run(),
   },

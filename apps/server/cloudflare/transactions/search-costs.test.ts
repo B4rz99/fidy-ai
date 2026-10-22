@@ -154,9 +154,9 @@ const notesFixture = (
   return db
     .prepare(`INSERT INTO transactions
       (id, user_id, amount, currency, direction, category_id, counterparty, notes,
-        occurred_at, created_at)
+        occurred_at_ms, created_at_ms)
       VALUES (?, ?, '1', 'COP', 'outflow', ?, ?, ?,
-        '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')`)
+        1767225600000, 1767225600000)`)
     .bind(
       recordId(index),
       input.userId,
@@ -267,8 +267,8 @@ it(
             db
               .prepare(`INSERT INTO transaction_reconciliation_decisions
                 (user_id, first_transaction_id, second_transaction_id, state,
-                  visible_transaction_id, decided_at)
-                VALUES (?, ?, ?, 'linked', ?, '2026-01-01T01:00:00.000Z')`)
+                  visible_transaction_id, decided_at_ms)
+                VALUES (?, ?, ?, 'linked', ?, 1767229200000)`)
               .bind(userId, recordId(1), recordId(2), recordId(1)),
             db
               .prepare(
@@ -295,8 +295,8 @@ it(
             db
               .prepare(`INSERT INTO transaction_corrections
                 (id, user_id, transaction_id, previous_revision, changed_fields,
-                  before_facts, after_facts, corrected_at)
-                VALUES (?, ?, ?, 0, '["notes"]', '{}', '{}', '2026-01-02T00:00:00.000Z')`)
+                  before_facts, after_facts, corrected_at_ms)
+                VALUES (?, ?, ?, 0, '["notes"]', '{}', '{}', 1767312000000)`)
               .bind("40000000-0000-4000-8000-000000000001", userId, recordId(2)),
             db
               .prepare(`UPDATE transactions SET notes = 'Replacement 😀', revision = 1

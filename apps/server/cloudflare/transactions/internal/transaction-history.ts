@@ -339,7 +339,7 @@ export const findTransaction = ({
   Option.Option<StoredTransaction>
 > =>
   db
-    .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, revision
+    .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') AS occurred_at, strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch') AS created_at, revision
       FROM transactions WHERE user_id = ? AND id = ? AND deleted_at_ms IS NULL`)
     .bind(userId, id)
     .first()

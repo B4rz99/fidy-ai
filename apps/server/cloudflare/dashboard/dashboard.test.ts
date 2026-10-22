@@ -2173,9 +2173,9 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    VALUES ('30000000-0000-4000-8000-000000000011', ?, '9007199254740993', 'COP', 'outflow', ?, ?, ?),
-      ('30000000-0000-4000-8000-000000000012', ?, '9007199254740994', 'COP', 'outflow', ?, ?, ?)`)
+    (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+    VALUES ('30000000-0000-4000-8000-000000000011', ?, '9007199254740993', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER)),
+      ('30000000-0000-4000-8000-000000000012', ?, '9007199254740994', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
             .bind(
               users[0],
               "10000000-0000-4000-8000-000000000001",
@@ -2204,10 +2204,10 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
     WITH RECURSIVE sequence(number) AS (SELECT 1 UNION ALL SELECT number + 1 FROM sequence WHERE number < 4100)
-    SELECT printf('30000000-0000-4000-8000-%012d', number), ?, '0.01', 'COP', 'outflow', ?, ?,
-      strftime('%Y-%m-%dT%H:%M:%fZ', date('now', '-' || CAST(number / 90 AS INTEGER) || ' days'))
+    SELECT printf('30000000-0000-4000-8000-%012d', number), ?, '0.01', 'COP', 'outflow', ?, CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),
+      CAST(unixepoch(date('now', '-' || CAST(number / 90 AS INTEGER) || ' days'))*1000 AS INTEGER)
     FROM sequence`)
             .bind(
               users[0],
@@ -2249,11 +2249,11 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at)
+    (id, user_id, amount, currency, direction, category_id, notes, occurred_at_ms, created_at_ms)
     WITH RECURSIVE sequence(number) AS (SELECT 1 UNION ALL SELECT number + 1 FROM sequence WHERE number < 8193)
     SELECT printf('30000000-0000-4000-8000-%012d', number), ?, '0.01', 'COP', 'outflow',
       CASE WHEN number = 1 THEN '10000000-0000-4000-8000-000000000002' ELSE ? END,
-      CASE WHEN number = 1 THEN 'Rare Café note' ELSE NULL END, ?, ?
+      CASE WHEN number = 1 THEN 'Rare Café note' ELSE NULL END, CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER), CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER)
     FROM sequence`)
             .bind(
               users[0],
@@ -2354,8 +2354,8 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    VALUES ('30000000-0000-4000-8000-000000009999', ?, '0.02', 'COP', 'outflow', ?, ?, ?)`)
+    (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+    VALUES ('30000000-0000-4000-8000-000000009999', ?, '0.02', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
             .bind(users[0], "10000000-0000-4000-8000-000000000001", time, time)
             .run()
         );

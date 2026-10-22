@@ -10,7 +10,7 @@ import {
   decideTransactionLink,
   orderTransactionPair,
 } from "../../../src/core/transactions/operations";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { prepareOwnerAuditCall } from "../../../src/shell/audit/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
@@ -78,7 +78,7 @@ export const transactionPairInput = (
   boundedJsonBody({ request, policy, schema: Input });
 
 const candidateQuery = `SELECT retained.id, retained.amount, retained.currency,
-  retained.direction, retained.created_at AS created_at,
+  retained.direction, strftime('%Y-%m-%dT%H:%M:%fZ',retained.created_at_ms/1000.0,'unixepoch') AS created_at,
   (retained.reconciliation_first_id IS NOT NULL) AS already_linked
 FROM transactions retained`;
 
@@ -226,11 +226,11 @@ const linkStatements = (
   work: PairWork & Readonly<{ visibleTransactionId: string; authority: TransactionAuthority }>
 ): ReadonlyArray<D1PreparedStatement> => {
   const { db, subject, pair, current, visibleTransactionId, authority } = work;
-  const decidedAt = DateTime.formatIso(DateTime.makeUnsafe(current));
+  const decidedAt = current;
   return [
     db
       .prepare(`INSERT INTO transaction_reconciliation_decisions
-        (user_id, first_transaction_id, second_transaction_id, state, visible_transaction_id, decided_at)
+        (user_id, first_transaction_id, second_transaction_id, state, visible_transaction_id, decided_at_ms)
         SELECT ?, ?, ?, 'linked', ?, ?
         WHERE EXISTS (
             SELECT 1 FROM transactions first_retained
@@ -246,7 +246,7 @@ const linkStatements = (
           AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
         ON CONFLICT (user_id, first_transaction_id, second_transaction_id) DO UPDATE SET
           state = 'linked', visible_transaction_id = excluded.visible_transaction_id,
-          decided_at = excluded.decided_at`)
+          decided_at_ms = excluded.decided_at_ms`)
       .bind(
         subject.userId,
         pair.firstTransactionId,
@@ -268,11 +268,11 @@ const unlinkStatements = (
   work: PairWork & Readonly<{ authority: TransactionAuthority }>
 ): ReadonlyArray<D1PreparedStatement> => {
   const { db, subject, pair, current, authority } = work;
-  const decidedAt = DateTime.formatIso(DateTime.makeUnsafe(current));
+  const decidedAt = current;
   return [
     db
       .prepare(`UPDATE transaction_reconciliation_decisions
-        SET state = 'keep-separate', visible_transaction_id = NULL, decided_at = ?
+        SET state = 'keep-separate', visible_transaction_id = NULL, decided_at_ms = ?
         WHERE user_id = ? AND first_transaction_id = ? AND second_transaction_id = ? AND state = 'linked'
           AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
       .bind(

@@ -314,7 +314,7 @@ it("production coordinator sends each summary once, asks separately, counts only
       yield* testPromise(() =>
         fixture.db
           .prepare(
-            "INSERT INTO transactions(id,user_id,amount,currency,category_id,direction,occurred_at,created_at) VALUES ('20000000-0000-4000-8000-000000000002',?,'12','COP',?,'outflow',?,?)"
+            "INSERT INTO transactions(id,user_id,amount,currency,category_id,direction,occurred_at_ms,created_at_ms) VALUES ('20000000-0000-4000-8000-000000000002',?,'12','COP',?,'outflow',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))"
           )
           .bind(
             userId,

@@ -290,7 +290,7 @@ it.each(queryGroups)(
               ),
             fixture.db
               .prepare(
-                "INSERT INTO transactions (id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at,created_at) VALUES (?,?,'9007199254740993','COP','outflow','Mercado',?,?,?,?)"
+                "INSERT INTO transactions (id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at_ms,created_at_ms) VALUES (?,?,'9007199254740993','COP','outflow','Mercado',?,?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))"
               )
               .bind(
                 resourceId,

@@ -2991,3 +2991,222 @@ PRAGMA defer_foreign_keys=OFF;
 ```
 
 <!-- category-keyword-verify:end -->
+
+## Transaction history instants (#1462)
+
+Checkpoint: `aab97f886`. Convert the four Transactions-owned tables together. Authoritative movement,
+attestation, correction and pair-decision instants become integer UTC milliseconds. Exact decimal
+Money, identities, rowids, User decisions, retained source context, deletion markers and reconciliation
+archive addresses stay intact. Before/after snapshot JSON and existing archives remain byte-for-byte
+unchanged. The effective-fact policy orders its authoritative instants numerically and projects UTC
+ISO text at the published read boundary; Dashboard query storage and public/peer cursors keep their
+existing ISO contracts. This is a representation boundary, not a second timestamp authority.
+
+Keep only `0001_schema.sql`; editing it alone never updates an existing database. Back up first and
+fence ALL financial, ingestion, correction, linking, projection, retention, erasure and source writes
+through the complete read/validation/commit window. Inventory incoming foreign keys, views, triggers
+and explicit indexes against the checkpoint; stop on unknown dependencies or cascades. Current incoming
+financial references have no delete cascades. Keep foreign keys enabled and defer them inside one
+native atomic batch. No source/evidence replay or repair is part of conversion.
+
+Read all four fenced sources in bounded rowid pages. Decode identity, Money/Currency, source-specific
+historical context, User decisions, corrected-field sets and snapshot JSON through the existing owning
+schemas. Require known keys and supported retained variants; investigate unexplained inconsistencies.
+Every original instant must decode through UtcTimestamp with no nonzero fractional digits beyond the
+third. Do not round away precision, infer a missing timezone or fix an invalid calendar date. Public
+UTC normalization of a valid offset is allowed. Supply each row preflight below once per observed
+row, including validation accepted (1/0), original rowid, then original text and exactly decoded
+milliseconds for each instant. Never skip failed decodes. Verify observed/source counts under the fence.
+After creating all four targets, run each row copy with decoded milliseconds, original rowid and
+original timestamp texts; its next assertion binds rowid and the same decoded milliseconds.
+Use these validated bound values directly: SQLite does not accept every offset allowed by our
+owning timestamp schema (including ±15:59). Do not parse the original spelling with SQLite.
+Run each table copy-check after all its rows have copied; it checks counts and all non-time facts,
+while the per-row assertions check every converted instant.
+Source/review uniqueness is checked before copying. Statement and email references must have the same
+User. A still-retained review must agree on owner and any resolved Transaction; an absent expired review
+remains historical evidence and does not acquire a destructive foreign key. New review-bound captures
+must still name an existing same-User review when written.
+
+Run preflight and all bound row checks first. Then temporarily drop inventoried triggers and views
+inside the batch so parent replacement cannot run business effects or leave invalid view references.
+Create each baseline target table as `<name>_1462`, copy and compare the complete rows below, drop ONLY
+the four source tables, and rename the replacements. Reinstall the exact baseline views/triggers and
+all four table-owned explicit indexes; other tables/indexes remain untouched. Verify all incoming
+foreign keys, unchanged dependent/archival data and sequence state, then protected capture/history,
+correction, stale-revision refusal, link/unlink and source replay. Any error, including interruption
+after copy or swap, must roll back the entire unit, including removed triggers/views. Retain the backup
+until code and schema verification succeeds; only then align the baseline ledger. Use the native
+query/batch transaction path described above, not a bulk-import claim based solely on local tests.
+
+<!-- transaction-history-preflight:start -->
+
+```sql
+PRAGMA defer_foreign_keys=ON;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-preflight',NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_permits) AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM source_attestations a JOIN statement_submissions s ON s.id=a.statement_submission_id WHERE s.user_id<>a.user_id)
+ AND NOT EXISTS(SELECT 1 FROM source_attestations a WHERE a.review_item_id IS NOT NULL AND ((NOT EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.id=a.review_item_id AND r.user_id=a.user_id) AND EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.id=a.review_item_id)) OR EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.id=a.review_item_id AND r.user_id=a.user_id AND r.transaction_id IS NOT NULL AND r.transaction_id<>a.transaction_id)))
+ AND NOT EXISTS(SELECT user_id,review_item_id FROM source_attestations WHERE review_item_id IS NOT NULL GROUP BY user_id,review_item_id HAVING count(*)>1);
+```
+
+<!-- transaction-history-preflight:end -->
+
+<!-- transaction-history-row-transactions:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row',?=1 AND EXISTS(SELECT 1 FROM transactions WHERE rowid=? AND occurred_at IS ? AND ? BETWEEN -62135596800000 AND 253402300799999 AND created_at IS ? AND ? BETWEEN -62135596800000 AND 253402300799999)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-row-transactions:end -->
+
+<!-- transaction-history-copy-transactions:start -->
+
+```sql
+INSERT INTO transactions_1462(rowid,id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at_ms,created_at_ms,revision,user_decisions,deleted_at_ms,reconciliation_row_ref,reconciliation_first_id,reconciliation_second_id)
+SELECT rowid,id,user_id,amount,currency,direction,counterparty,category_id,notes,?,?,revision,user_decisions,deleted_at_ms,reconciliation_row_ref,reconciliation_first_id,reconciliation_second_id FROM transactions WHERE rowid=? AND occurred_at IS ? AND created_at IS ?;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row-copy',changes()=1 AND EXISTS(SELECT 1 FROM transactions_1462 WHERE rowid=? AND occurred_at_ms IS ? AND created_at_ms IS ?)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-copy-transactions:end -->
+
+<!-- transaction-history-copy-check-transactions:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-copy-transactions',(SELECT count(*) FROM transactions)=(SELECT count(*) FROM transactions_1462)
+ AND NOT EXISTS(SELECT rowid,id,user_id,amount,currency,direction,counterparty,category_id,notes,revision,user_decisions,deleted_at_ms,reconciliation_row_ref,reconciliation_first_id,reconciliation_second_id FROM transactions
+ EXCEPT SELECT rowid,id,user_id,amount,currency,direction,counterparty,category_id,notes,revision,user_decisions,deleted_at_ms,reconciliation_row_ref,reconciliation_first_id,reconciliation_second_id FROM transactions_1462);
+```
+
+<!-- transaction-history-copy-check-transactions:end -->
+
+<!-- transaction-history-row-source_attestations:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row',?=1 AND EXISTS(SELECT 1 FROM source_attestations WHERE rowid=? AND created_at IS ? AND ? BETWEEN -62135596800000 AND 253402300799999)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-row-source_attestations:end -->
+
+<!-- transaction-history-copy-source_attestations:start -->
+
+```sql
+INSERT INTO source_attestations_1462(rowid,id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at_ms,statement_submission_id,statement_record_number,statement_content_hash,source_format,received_email_id,message_content_sha256,message_evidence,deterministic_interpretation,extractor_revision,review_item_id,user_provided_fields)
+SELECT rowid,id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,?,statement_submission_id,statement_record_number,statement_content_hash,source_format,received_email_id,message_content_sha256,message_evidence,deterministic_interpretation,extractor_revision,review_item_id,user_provided_fields FROM source_attestations WHERE rowid=? AND created_at IS ?;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row-copy',changes()=1 AND EXISTS(SELECT 1 FROM source_attestations_1462 WHERE rowid=? AND created_at_ms IS ?)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-copy-source_attestations:end -->
+
+<!-- transaction-history-copy-check-source_attestations:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-copy-source_attestations',(SELECT count(*) FROM source_attestations)=(SELECT count(*) FROM source_attestations_1462)
+ AND NOT EXISTS(SELECT rowid,id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,statement_submission_id,statement_record_number,statement_content_hash,source_format,received_email_id,message_content_sha256,message_evidence,deterministic_interpretation,extractor_revision,review_item_id,user_provided_fields FROM source_attestations
+ EXCEPT SELECT rowid,id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,statement_submission_id,statement_record_number,statement_content_hash,source_format,received_email_id,message_content_sha256,message_evidence,deterministic_interpretation,extractor_revision,review_item_id,user_provided_fields FROM source_attestations_1462);
+```
+
+<!-- transaction-history-copy-check-source_attestations:end -->
+
+<!-- transaction-history-row-transaction_corrections:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row',?=1 AND EXISTS(SELECT 1 FROM transaction_corrections WHERE rowid=? AND corrected_at IS ? AND ? BETWEEN -62135596800000 AND 253402300799999)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-row-transaction_corrections:end -->
+
+<!-- transaction-history-copy-transaction_corrections:start -->
+
+```sql
+INSERT INTO transaction_corrections_1462(rowid,id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts,corrected_at_ms)
+SELECT rowid,id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts,? FROM transaction_corrections WHERE rowid=? AND corrected_at IS ?;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row-copy',changes()=1 AND EXISTS(SELECT 1 FROM transaction_corrections_1462 WHERE rowid=? AND corrected_at_ms IS ?)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-copy-transaction_corrections:end -->
+
+<!-- transaction-history-copy-check-transaction_corrections:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-copy-transaction_corrections',(SELECT count(*) FROM transaction_corrections)=(SELECT count(*) FROM transaction_corrections_1462)
+ AND NOT EXISTS(SELECT rowid,id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts FROM transaction_corrections
+ EXCEPT SELECT rowid,id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts FROM transaction_corrections_1462);
+```
+
+<!-- transaction-history-copy-check-transaction_corrections:end -->
+
+<!-- transaction-history-row-transaction_reconciliation_decisions:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row',?=1 AND EXISTS(SELECT 1 FROM transaction_reconciliation_decisions WHERE rowid=? AND decided_at IS ? AND ? BETWEEN -62135596800000 AND 253402300799999)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-row-transaction_reconciliation_decisions:end -->
+
+<!-- transaction-history-copy-transaction_reconciliation_decisions:start -->
+
+```sql
+INSERT INTO transaction_reconciliation_decisions_1462(rowid,user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id,decided_at_ms)
+SELECT rowid,user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id,? FROM transaction_reconciliation_decisions WHERE rowid=? AND decided_at IS ?;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row-copy',changes()=1 AND EXISTS(SELECT 1 FROM transaction_reconciliation_decisions_1462 WHERE rowid=? AND decided_at_ms IS ?)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-copy-transaction_reconciliation_decisions:end -->
+
+<!-- transaction-history-copy-check-transaction_reconciliation_decisions:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-copy-transaction_reconciliation_decisions',(SELECT count(*) FROM transaction_reconciliation_decisions)=(SELECT count(*) FROM transaction_reconciliation_decisions_1462)
+ AND NOT EXISTS(SELECT rowid,user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id FROM transaction_reconciliation_decisions
+ EXCEPT SELECT rowid,user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id FROM transaction_reconciliation_decisions_1462);
+```
+
+<!-- transaction-history-copy-check-transaction_reconciliation_decisions:end -->
+
+<!-- transaction-history-swap:start -->
+
+```sql
+DROP TABLE transactions;
+DROP TABLE source_attestations;
+DROP TABLE transaction_corrections;
+DROP TABLE transaction_reconciliation_decisions;
+ALTER TABLE transactions_1462 RENAME TO transactions;
+ALTER TABLE source_attestations_1462 RENAME TO source_attestations;
+ALTER TABLE transaction_corrections_1462 RENAME TO transaction_corrections;
+ALTER TABLE transaction_reconciliation_decisions_1462 RENAME TO transaction_reconciliation_decisions;
+```
+
+<!-- transaction-history-swap:end -->
+
+<!-- transaction-history-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'transaction-history-final',NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check);
+DELETE FROM sql_assertions WHERE scope IN('transaction-history-preflight','transaction-history-row','transaction-history-row-copy','transaction-history-final','transaction-history-copy-transactions','transaction-history-copy-source_attestations','transaction-history-copy-transaction_corrections','transaction-history-copy-transaction_reconciliation_decisions');
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- transaction-history-verify:end -->

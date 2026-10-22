@@ -1355,7 +1355,7 @@ CREATE TABLE "source_attestations" (
   locale TEXT NOT NULL,
   time_zone TEXT NOT NULL,
   interpretation_revision TEXT NOT NULL,
-  created_at TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL CHECK(created_at_ms BETWEEN -62135596800000 AND 253402300799999),
   statement_submission_id TEXT,
   statement_record_number INTEGER,
   statement_content_hash TEXT,
@@ -1366,7 +1366,7 @@ CREATE TABLE "source_attestations" (
   deterministic_interpretation TEXT,
   extractor_revision TEXT, review_item_id TEXT, user_provided_fields TEXT,
   FOREIGN KEY (user_id, transaction_id) REFERENCES transactions(user_id, id),
-  FOREIGN KEY (statement_submission_id) REFERENCES statement_submissions(id),
+  FOREIGN KEY (user_id, statement_submission_id) REFERENCES statement_submissions(user_id, id),
   FOREIGN KEY (user_id, received_email_id) REFERENCES forwarded_email_receipts(user_id, id),
   CHECK ((kind = 'manual' AND statement_submission_id IS NULL AND statement_record_number IS NULL
     AND statement_content_hash IS NULL AND source_format IS NULL AND received_email_id IS NULL)
@@ -1562,7 +1562,7 @@ CREATE TABLE transaction_corrections (
   changed_fields TEXT NOT NULL,
   before_facts TEXT NOT NULL,
   after_facts TEXT NOT NULL,
-  corrected_at TEXT NOT NULL,
+  corrected_at_ms INTEGER NOT NULL CHECK(corrected_at_ms BETWEEN -62135596800000 AND 253402300799999),
   FOREIGN KEY (user_id, transaction_id) REFERENCES transactions(user_id, id),
   UNIQUE (user_id, transaction_id, previous_revision)
 ) STRICT;
@@ -1574,7 +1574,7 @@ CREATE TABLE transaction_reconciliation_decisions (
   second_transaction_id TEXT NOT NULL,
   state TEXT NOT NULL CHECK (state IN ('linked', 'keep-separate')),
   visible_transaction_id TEXT,
-  decided_at TEXT NOT NULL,
+  decided_at_ms INTEGER NOT NULL CHECK(decided_at_ms BETWEEN -62135596800000 AND 253402300799999),
   PRIMARY KEY (user_id, first_transaction_id, second_transaction_id),
   FOREIGN KEY (user_id, first_transaction_id) REFERENCES transactions(user_id, id),
   FOREIGN KEY (user_id, second_transaction_id) REFERENCES transactions(user_id, id),
@@ -1597,8 +1597,8 @@ CREATE TABLE transactions (
   counterparty TEXT,
   category_id TEXT NOT NULL REFERENCES categories(id),
   notes TEXT,
-  occurred_at TEXT NOT NULL,
-  created_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0), user_decisions TEXT NOT NULL DEFAULT '{}', deleted_at_ms INTEGER,
+  occurred_at_ms INTEGER NOT NULL CHECK(occurred_at_ms BETWEEN -62135596800000 AND 253402300799999),
+  created_at_ms INTEGER NOT NULL CHECK(created_at_ms BETWEEN -62135596800000 AND 253402300799999), revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0), user_decisions TEXT NOT NULL DEFAULT '{}', deleted_at_ms INTEGER,
 reconciliation_row_ref TEXT,reconciliation_first_id TEXT,reconciliation_second_id TEXT,
  FOREIGN KEY(user_id,reconciliation_first_id,reconciliation_second_id) REFERENCES transaction_reconciliation_decisions(user_id,first_transaction_id,second_transaction_id),
  CHECK((reconciliation_first_id IS NULL AND reconciliation_second_id IS NULL AND reconciliation_row_ref IS NULL) OR (reconciliation_first_id IS NOT NULL AND reconciliation_second_id IS NOT NULL AND id IN(reconciliation_first_id,reconciliation_second_id))),
@@ -2444,10 +2444,10 @@ CREATE INDEX support_recovery_cases_retention ON support_recovery_cases(closed_a
 CREATE INDEX support_recovery_cases_user ON support_recovery_cases(user_id, opened_at_ms);
 --> statement-breakpoint
 
-CREATE INDEX transactions_by_user_creation ON transactions(user_id, created_at);
+CREATE INDEX transactions_by_user_creation ON transactions(user_id, created_at_ms);
 --> statement-breakpoint
 
-CREATE INDEX transactions_by_user_occurrence ON transactions(user_id, occurred_at DESC, created_at DESC, id DESC);
+CREATE INDEX transactions_by_user_occurrence ON transactions(user_id, occurred_at_ms DESC, created_at_ms DESC, id DESC);
 --> statement-breakpoint
 
 CREATE INDEX transcript_entries_by_session ON transcript_entries(user_id, hosted_session_id, sequence);
@@ -2548,9 +2548,9 @@ WITH linked_decision AS (
   SELECT decision.user_id, decision.first_transaction_id, decision.second_transaction_id,
     retained.id, retained.amount, retained.currency, retained.direction,
     retained.counterparty, retained.category_id, retained.notes,
-    retained.occurred_at, retained.created_at, retained.revision,
-    (SELECT MAX(correction.corrected_at) FROM transaction_corrections correction
-      WHERE correction.user_id = retained.user_id AND correction.transaction_id = retained.id) AS corrected_at,
+    retained.occurred_at_ms, retained.created_at_ms, retained.revision,
+    (SELECT MAX(correction.corrected_at_ms) FROM transaction_corrections correction
+      WHERE correction.user_id = retained.user_id AND correction.transaction_id = retained.id) AS corrected_at_ms,
     EXISTS (SELECT 1 FROM source_attestations source
       WHERE source.user_id = retained.user_id AND source.transaction_id = retained.id
         AND source.kind = 'statement-line') AS has_statement_source,
@@ -2564,7 +2564,7 @@ WITH linked_decision AS (
 ), effective_transaction AS (
   SELECT retained.user_id, retained.id, retained.amount, retained.currency,
     retained.direction, retained.counterparty, retained.category_id, retained.notes,
-    retained.occurred_at, retained.created_at, retained.revision
+    retained.occurred_at_ms, retained.created_at_ms, retained.revision
   FROM transactions retained
   WHERE retained.deleted_at_ms IS NULL AND NOT EXISTS (SELECT 1 FROM reconciled_transactions member
     WHERE member.user_id = retained.user_id AND member.transaction_id = retained.id)
@@ -2572,7 +2572,7 @@ WITH linked_decision AS (
   SELECT decision.user_id, decision.visible_transaction_id,
     movement.amount, movement.currency, movement.direction,
     counterparty_member.counterparty, category_member.category_id, notes_member.notes,
-    movement.occurred_at, visible.created_at, visible.revision
+    movement.occurred_at_ms, visible.created_at_ms, visible.revision
   FROM linked_decision decision
   JOIN transactions visible ON visible.user_id = decision.user_id
     AND visible.id = decision.visible_transaction_id
@@ -2581,14 +2581,14 @@ WITH linked_decision AS (
       WHERE member.user_id = decision.user_id
         AND member.first_transaction_id = decision.first_transaction_id
         AND member.second_transaction_id = decision.second_transaction_id
-        AND member.corrected_at IS NOT NULL
-      ORDER BY COALESCE(member.corrected_at, member.created_at) DESC, member.id DESC LIMIT 1),
+        AND member.corrected_at_ms IS NOT NULL
+      ORDER BY COALESCE(member.corrected_at_ms, member.created_at_ms) DESC, member.id DESC LIMIT 1),
     (SELECT member.id FROM linked_member member
       WHERE member.user_id = decision.user_id
         AND member.first_transaction_id = decision.first_transaction_id
         AND member.second_transaction_id = decision.second_transaction_id
         AND member.has_statement_source = 1
-      ORDER BY COALESCE(member.corrected_at, member.created_at) DESC, member.id DESC LIMIT 1),
+      ORDER BY COALESCE(member.corrected_at_ms, member.created_at_ms) DESC, member.id DESC LIMIT 1),
     decision.visible_transaction_id)
   JOIN transactions category_member ON category_member.user_id = decision.user_id
     AND category_member.id = COALESCE(
@@ -2597,7 +2597,7 @@ WITH linked_decision AS (
           AND member.first_transaction_id = decision.first_transaction_id
           AND member.second_transaction_id = decision.second_transaction_id
           AND member.category_decided = 1
-        ORDER BY COALESCE(member.corrected_at, member.created_at) DESC, member.id DESC LIMIT 1),
+        ORDER BY COALESCE(member.corrected_at_ms, member.created_at_ms) DESC, member.id DESC LIMIT 1),
       decision.visible_transaction_id)
   JOIN transactions counterparty_member ON counterparty_member.user_id = decision.user_id
     AND counterparty_member.id = COALESCE(
@@ -2606,7 +2606,7 @@ WITH linked_decision AS (
           AND member.first_transaction_id = decision.first_transaction_id
           AND member.second_transaction_id = decision.second_transaction_id
           AND member.counterparty_decided = 1
-        ORDER BY COALESCE(member.corrected_at, member.created_at) DESC, member.id DESC LIMIT 1),
+        ORDER BY COALESCE(member.corrected_at_ms, member.created_at_ms) DESC, member.id DESC LIMIT 1),
       decision.visible_transaction_id)
   JOIN transactions notes_member ON notes_member.user_id = decision.user_id
     AND notes_member.id = COALESCE(
@@ -2615,7 +2615,7 @@ WITH linked_decision AS (
           AND member.first_transaction_id = decision.first_transaction_id
           AND member.second_transaction_id = decision.second_transaction_id
           AND member.notes_decided = 1
-        ORDER BY COALESCE(member.corrected_at, member.created_at) DESC, member.id DESC LIMIT 1),
+        ORDER BY COALESCE(member.corrected_at_ms, member.created_at_ms) DESC, member.id DESC LIMIT 1),
       decision.visible_transaction_id)
   WHERE EXISTS (SELECT 1 FROM reconciled_transactions first_member
     WHERE first_member.user_id = decision.user_id
@@ -2624,7 +2624,7 @@ WITH linked_decision AS (
       WHERE second_member.user_id = decision.user_id
         AND second_member.transaction_id = decision.second_transaction_id)
 )
-SELECT * FROM effective_transaction;
+SELECT user_id,id,amount,currency,direction,counterparty,category_id,notes,strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') AS occurred_at,strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch') AS created_at,revision FROM effective_transaction;
 --> statement-breakpoint
 
 CREATE VIEW ingestion_review_sources AS SELECT id,user_id,source_kind AS source,reason,created_at_ms,evidence_expires_at_ms AS expires_at_ms,service_market,locale,time_zone,
@@ -3066,15 +3066,15 @@ BEGIN SELECT RAISE(ABORT, 'budget_capacity_limit'); END;
 
 CREATE TRIGGER budget_capture_work AFTER INSERT ON transactions
 WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
-BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',NEW.user_id, NEW.occurred_at)
+BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ',NEW.occurred_at_ms/1000.0,'unixepoch'))
   ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET version = version + 1; END;
 --> statement-breakpoint
 
 CREATE TRIGGER budget_correction_work AFTER UPDATE ON transactions
-WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at IS NOT OLD.occurred_at OR NEW.created_at IS NOT OLD.created_at OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) AND EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
-BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',NEW.user_id, NEW.occurred_at)
+WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) AND EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
+BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ',NEW.occurred_at_ms/1000.0,'unixepoch'))
   ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET version = version + 1;
-  INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',OLD.user_id, OLD.occurred_at)
+  INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',OLD.user_id, strftime('%Y-%m-%dT%H:%M:%fZ',OLD.occurred_at_ms/1000.0,'unixepoch'))
   ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET version = version + 1; END;
 --> statement-breakpoint
 
@@ -3115,7 +3115,7 @@ END;
 
 CREATE TRIGGER budget_link_work AFTER INSERT ON transaction_reconciliation_decisions
 WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
-BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) SELECT 'work', NEW.user_id, occurred_at FROM transactions
+BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) SELECT 'work', NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') FROM transactions
   WHERE user_id = NEW.user_id AND id IN (NEW.first_transaction_id, NEW.second_transaction_id)
   ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET version = version + 1; END;
 --> statement-breakpoint
@@ -3146,7 +3146,7 @@ CREATE TRIGGER budget_state_kind_immutable BEFORE UPDATE OF kind ON budget_state
 
 CREATE TRIGGER budget_unlink_work AFTER UPDATE ON transaction_reconciliation_decisions
 WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
-BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) SELECT 'work', NEW.user_id, occurred_at FROM transactions
+BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) SELECT 'work', NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') FROM transactions
   WHERE user_id = NEW.user_id AND id IN (NEW.first_transaction_id, NEW.second_transaction_id)
   ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET version = version + 1; END;
 --> statement-breakpoint
@@ -3334,7 +3334,7 @@ END;
 --> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_corrected_transaction AFTER UPDATE ON transactions
-WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at IS NOT OLD.occurred_at OR NEW.created_at IS NOT OLD.created_at OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms)
+WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms)
 BEGIN
   DELETE FROM dashboard_projection_leaf WHERE user_id = NEW.user_id
     AND id IN (NEW.id, (SELECT decision.visible_transaction_id
@@ -3540,7 +3540,7 @@ CREATE TRIGGER deleted_transaction_no_link BEFORE UPDATE OF reconciliation_first
 --> statement-breakpoint
 
 CREATE TRIGGER deleted_transaction_no_update BEFORE UPDATE ON transactions
-WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at IS NOT OLD.occurred_at OR NEW.created_at IS NOT OLD.created_at OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) AND OLD.deleted_at_ms IS NOT NULL
+WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) AND OLD.deleted_at_ms IS NOT NULL
 BEGIN SELECT RAISE(ABORT, 'transaction_deleted'); END;
 --> statement-breakpoint
 
@@ -5073,7 +5073,7 @@ BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transactions_update BEFORE UPDATE ON transactions
-WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at IS NOT OLD.occurred_at OR NEW.created_at IS NOT OLD.created_at OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transactions'))
+WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transactions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -6227,7 +6227,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.transactions.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'source_attestations','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'transaction_id',OLD."transaction_id",'kind',OLD."kind",'service_market',OLD."service_market",'locale',OLD."locale",'time_zone',OLD."time_zone",'interpretation_revision',OLD."interpretation_revision",'created_at',OLD."created_at",'statement_submission_id',OLD."statement_submission_id",'statement_record_number',OLD."statement_record_number",'statement_content_hash',OLD."statement_content_hash",'source_format',OLD."source_format",'received_email_id',OLD."received_email_id",'message_content_sha256',OLD."message_content_sha256",'message_evidence',OLD."message_evidence",'deterministic_interpretation',OLD."deterministic_interpretation",'extractor_revision',OLD."extractor_revision",'review_item_id',OLD."review_item_id",'user_provided_fields',OLD."user_provided_fields")
+  SELECT q.id,'source_attestations','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'transaction_id',OLD."transaction_id",'kind',OLD."kind",'service_market',OLD."service_market",'locale',OLD."locale",'time_zone',OLD."time_zone",'interpretation_revision',OLD."interpretation_revision",'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',OLD.created_at_ms/1000.0,'unixepoch'),'statement_submission_id',OLD."statement_submission_id",'statement_record_number',OLD."statement_record_number",'statement_content_hash',OLD."statement_content_hash",'source_format',OLD."source_format",'received_email_id',OLD."received_email_id",'message_content_sha256',OLD."message_content_sha256",'message_evidence',OLD."message_evidence",'deterministic_interpretation',OLD."deterministic_interpretation",'extractor_revision',OLD."extractor_revision",'review_item_id',OLD."review_item_id",'user_provided_fields',OLD."user_provided_fields")
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.transactions.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.transactions.retention.untilMs')>unixepoch('subsec')*1000;
@@ -6342,7 +6342,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.transactions.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'transaction_corrections','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'transaction_id',OLD."transaction_id",'previous_revision',OLD."previous_revision",'changed_fields',OLD."changed_fields",'before_facts',OLD."before_facts",'after_facts',OLD."after_facts",'corrected_at',OLD."corrected_at")
+  SELECT q.id,'transaction_corrections','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'transaction_id',OLD."transaction_id",'previous_revision',OLD."previous_revision",'changed_fields',OLD."changed_fields",'before_facts',OLD."before_facts",'after_facts',OLD."after_facts",'corrected_at',strftime('%Y-%m-%dT%H:%M:%fZ',OLD.corrected_at_ms/1000.0,'unixepoch'))
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.transactions.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.transactions.retention.untilMs')>unixepoch('subsec')*1000;
@@ -6355,7 +6355,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'transaction_reconciliation_decisions','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'first_transaction_id',OLD."first_transaction_id",'second_transaction_id',OLD."second_transaction_id",'state',OLD."state",'visible_transaction_id',OLD."visible_transaction_id",'decided_at',OLD."decided_at")
+  SELECT q.id,'transaction_reconciliation_decisions','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'first_transaction_id',OLD."first_transaction_id",'second_transaction_id',OLD."second_transaction_id",'state',OLD."state",'visible_transaction_id',OLD."visible_transaction_id",'decided_at',strftime('%Y-%m-%dT%H:%M:%fZ',OLD.decided_at_ms/1000.0,'unixepoch'))
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
@@ -6394,7 +6394,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.transactions.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'transactions','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'amount',OLD."amount",'currency',OLD."currency",'direction',OLD."direction",'counterparty',OLD."counterparty",'category_id',OLD."category_id",'notes',OLD."notes",'occurred_at',OLD."occurred_at",'created_at',OLD."created_at",'revision',OLD."revision",'user_decisions',OLD."user_decisions",'deleted_at_ms',OLD."deleted_at_ms")
+  SELECT q.id,'transactions','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'amount',OLD."amount",'currency',OLD."currency",'direction',OLD."direction",'counterparty',OLD."counterparty",'category_id',OLD."category_id",'notes',OLD."notes",'occurred_at',strftime('%Y-%m-%dT%H:%M:%fZ',OLD.occurred_at_ms/1000.0,'unixepoch'),'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',OLD.created_at_ms/1000.0,'unixepoch'),'revision',OLD."revision",'user_decisions',OLD."user_decisions",'deleted_at_ms',OLD."deleted_at_ms")
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.transactions.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.transactions.retention.untilMs')>unixepoch('subsec')*1000;
@@ -7764,7 +7764,7 @@ BEGIN SELECT RAISE(ABORT, 'correction_append_only'); END;
 
 CREATE TRIGGER transaction_fact_attestation AFTER INSERT ON source_attestations BEGIN
   UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1,
-    time_zone = CASE WHEN NEW.transaction_id = (SELECT id FROM transactions WHERE user_id = NEW.user_id ORDER BY created_at, id LIMIT 1)
+    time_zone = CASE WHEN NEW.transaction_id = (SELECT id FROM transactions WHERE user_id = NEW.user_id ORDER BY created_at_ms, id LIMIT 1)
       AND (SELECT count(*) FROM source_attestations WHERE user_id = NEW.user_id AND transaction_id = NEW.transaction_id) = 1
       THEN NEW.time_zone ELSE time_zone END
   WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
@@ -7780,7 +7780,7 @@ END;
 
 CREATE TRIGGER transaction_fact_insert AFTER INSERT ON transactions BEGIN
   INSERT INTO dashboard_projection_state(user_id,version,readiness,fact_revision,first_captured_at,time_zone)
-  SELECT NEW.user_id,0,'dirty',1,NEW.created_at,time_zone FROM users WHERE id=NEW.user_id
+  SELECT NEW.user_id,0,'dirty',1,strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at_ms/1000.0,'unixepoch'),time_zone FROM users WHERE id=NEW.user_id
   ON CONFLICT(user_id) DO UPDATE SET fact_revision=coalesce(fact_revision,0)+1,
     first_captured_at=coalesce(first_captured_at,excluded.first_captured_at),
     time_zone=coalesce(dashboard_projection_state.time_zone,excluded.time_zone);
@@ -7805,13 +7805,13 @@ END;
 --> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_update AFTER UPDATE ON transactions
-WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at IS NOT OLD.occurred_at OR NEW.created_at IS NOT OLD.created_at OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) BEGIN
+WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) BEGIN
   UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
 END;
 --> statement-breakpoint
 
 CREATE TRIGGER transaction_user_decisions BEFORE UPDATE ON transactions
-WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at IS NOT OLD.occurred_at OR NEW.created_at IS NOT OLD.created_at OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) AND EXISTS (
+WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) AND EXISTS (
   SELECT 1 FROM json_each(OLD.user_decisions)
   WHERE value = 1 AND json_extract(NEW.user_decisions, '$.' || key) IS NOT 1
 ) OR (
@@ -7827,7 +7827,7 @@ WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NO
   )) AND (
   (json_extract(OLD.user_decisions, '$.money') = 1 AND (NEW.amount != OLD.amount OR NEW.currency != OLD.currency)) OR
   (json_extract(OLD.user_decisions, '$.direction') = 1 AND NEW.direction != OLD.direction) OR
-  (json_extract(OLD.user_decisions, '$.occurredAt') = 1 AND NEW.occurred_at != OLD.occurred_at) OR
+  (json_extract(OLD.user_decisions, '$.occurredAt') = 1 AND NEW.occurred_at_ms != OLD.occurred_at_ms) OR
   (json_extract(OLD.user_decisions, '$.categoryId') = 1 AND NEW.category_id != OLD.category_id) OR
   (json_extract(OLD.user_decisions, '$.counterparty') = 1 AND NEW.counterparty IS NOT OLD.counterparty) OR
   (json_extract(OLD.user_decisions, '$.notes') = 1 AND NEW.notes IS NOT OLD.notes)
@@ -8419,3 +8419,11 @@ CREATE VIEW statement_submission_context AS SELECT s.rowid AS rowid,s.*,
  CASE WHEN status='completed' OR (status='failed' AND processed_rows>0) THEN processed_accepted_rows END AS accepted_rows,
  CASE WHEN status='completed' OR (status='failed' AND processed_rows>0) THEN processed_review_rows END AS needs_review_rows
  FROM statement_submissions s;
+
+--> statement-breakpoint
+
+CREATE TRIGGER source_attestation_review_owner BEFORE INSERT ON source_attestations
+WHEN NEW.review_item_id IS NOT NULL AND NOT EXISTS (
+ SELECT 1 FROM ingestion_review_items review WHERE review.id=NEW.review_item_id
+ AND review.user_id=NEW.user_id AND (review.transaction_id IS NULL OR review.transaction_id=NEW.transaction_id))
+BEGIN SELECT RAISE(ABORT,'attestation_review_owner'); END;

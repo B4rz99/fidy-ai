@@ -131,7 +131,7 @@ const captureStatement = (
   const occurredAt = `2026-${String(month).padStart(2, "0")}-15T12:00:00.000Z`;
   return db
     .prepare(
-      `INSERT INTO transactions (id, user_id, amount, currency, direction, counterparty, category_id, occurred_at, created_at) VALUES (?, ?, ?, ?, ?, ?, '10000000-0000-4000-8000-000000000016', ?, ?)`
+      `INSERT INTO transactions (id, user_id, amount, currency, direction, counterparty, category_id, occurred_at_ms, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, '10000000-0000-4000-8000-000000000016',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`
     )
     .bind(
       `${input.idPrefix}-0000-4000-8000-${String(month).padStart(12, "0")}`,
@@ -708,7 +708,7 @@ it.effect(
         db.batch([
           db
             .prepare(
-              "INSERT INTO transaction_reconciliation_decisions (user_id, first_transaction_id, second_transaction_id, state, visible_transaction_id, decided_at) VALUES (?, ?, ?, 'linked', ?, ?)"
+              "INSERT INTO transaction_reconciliation_decisions (user_id, first_transaction_id, second_transaction_id, state, visible_transaction_id, decided_at_ms) VALUES (?, ?, ?, 'linked', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))"
             )
             .bind(
               userId,

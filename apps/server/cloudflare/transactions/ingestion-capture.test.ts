@@ -29,8 +29,8 @@ const setup = Effect.fn(function* () {
   yield* run(() => installCurrentTestObjects({ db, tables: [] }));
   yield* run(() =>
     db.exec(`CREATE TABLE capture_sources (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, active INTEGER NOT NULL);
-      CREATE TABLE transactions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, amount TEXT, currency TEXT, direction TEXT, counterparty TEXT, category_id TEXT, notes TEXT, occurred_at TEXT, created_at TEXT, UNIQUE (user_id, id));
-      CREATE TABLE source_attestations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, transaction_id TEXT NOT NULL, kind TEXT, service_market TEXT, locale TEXT, time_zone TEXT, interpretation_revision TEXT, created_at TEXT, statement_submission_id TEXT, statement_record_number INTEGER, statement_content_hash TEXT, source_format TEXT, received_email_id TEXT, message_content_sha256 TEXT, message_evidence TEXT, deterministic_interpretation TEXT, extractor_revision TEXT, FOREIGN KEY (user_id, transaction_id) REFERENCES transactions(user_id, id));
+      CREATE TABLE transactions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, amount TEXT, currency TEXT, direction TEXT, counterparty TEXT, category_id TEXT, notes TEXT, occurred_at_ms INTEGER, created_at_ms INTEGER, UNIQUE (user_id, id));
+      CREATE TABLE source_attestations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, transaction_id TEXT NOT NULL, kind TEXT, service_market TEXT, locale TEXT, time_zone TEXT, interpretation_revision TEXT, created_at_ms INTEGER, statement_submission_id TEXT, statement_record_number INTEGER, statement_content_hash TEXT, source_format TEXT, received_email_id TEXT, message_content_sha256 TEXT, message_evidence TEXT, deterministic_interpretation TEXT, extractor_revision TEXT, FOREIGN KEY (user_id, transaction_id) REFERENCES transactions(user_id, id));
       ${consentHistoryTestSchema};
       `)
   );
@@ -83,7 +83,7 @@ it.effect(
       const row = yield* run(() =>
         db
           .prepare(`SELECT t.user_id, t.amount, t.currency, t.direction, t.counterparty,
-        t.category_id, t.notes, t.occurred_at, t.created_at, a.kind, a.service_market, a.locale,
+        t.category_id, t.notes, strftime('%Y-%m-%dT%H:%M:%fZ',t.occurred_at_ms/1000.0,'unixepoch') AS occurred_at, strftime('%Y-%m-%dT%H:%M:%fZ',t.created_at_ms/1000.0,'unixepoch') AS created_at, a.kind, a.service_market, a.locale,
         a.time_zone, a.interpretation_revision, a.statement_submission_id,
         a.statement_record_number, a.statement_content_hash, a.source_format
         FROM transactions t JOIN source_attestations a ON a.user_id = t.user_id AND a.transaction_id = t.id`)

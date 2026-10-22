@@ -188,13 +188,13 @@ const identityRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> =
 
   input.db
     .prepare(
-      "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at,created_at) VALUES(?,?,'12000','COP','outflow','erasure-category','2026-10-15T12:00:00.000Z','2026-10-15T12:00:00.000Z')"
+      "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES(?,?,'12000','COP','outflow','erasure-category',1792065600000,1792065600000)"
     )
     .bind(input.userId, input.userId),
 
   input.db
     .prepare(
-      "INSERT INTO source_attestations(id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at) VALUES(?,?,?,'manual','CO','es-CO','America/Bogota','test','2026-10-15T12:00:00.000Z')"
+      "INSERT INTO source_attestations(id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at_ms) VALUES(?,?,?,'manual','CO','es-CO','America/Bogota','test',1792065600000)"
     )
     .bind(input.userId, input.userId, input.userId),
 

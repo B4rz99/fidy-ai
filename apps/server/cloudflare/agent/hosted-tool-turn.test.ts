@@ -234,7 +234,7 @@ it("executes filtered Transaction history in a hosted Turn without exposing anot
           [users[0], users[1]].map((user, index) =>
             db
               .prepare(
-                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at) VALUES (?, ?, '12.34', 'USD', 'outflow', '10000000-0000-4000-8000-000000000016', 'Pago literal', '2025-01-10T12:00:00.000Z', '2025-01-10T12:00:00.000Z')"
+                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at_ms, created_at_ms) VALUES (?, ?, '12.34', 'USD', 'outflow', '10000000-0000-4000-8000-000000000016', 'Pago literal', 1736510400000, 1736510400000)"
               )
               .bind(index === 0 ? ownId : foreignId, user)
           )

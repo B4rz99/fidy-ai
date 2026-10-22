@@ -278,7 +278,7 @@ const privacyHistorySetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
         users.map((userId, index) =>
           db
             .prepare(
-              "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,notes,occurred_at,created_at) VALUES(?,?,'12000','COP','outflow','10000000-0000-4000-8000-000000000001',?,'2026-10-01T12:00:00.000Z','2026-10-01T12:00:00.000Z')"
+              "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,notes,occurred_at_ms,created_at_ms) VALUES(?,?,'12000','COP','outflow','10000000-0000-4000-8000-000000000001',?,1790856000000,1790856000000)"
             )
             .bind(
               `40000000-0000-4000-8000-00000000000${index}`,
@@ -298,9 +298,9 @@ it("bounds privacy history pages and keeps every continuation bound to the authe
       yield* Effect.tryPromise(() =>
         db
           .prepare(`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value+1 FROM n WHERE value<100)
-      INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at,created_at)
+      INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
       SELECT printf('41000000-0000-4000-8000-%012d',value),?,'1000','COP','outflow','10000000-0000-4000-8000-000000000001',
-      '2026-10-02T12:00:00.000Z','2026-10-02T12:00:00.000Z' FROM n`)
+      1790942400000,1790942400000  FROM n`)
           .bind(users[0])
           .run()
       );

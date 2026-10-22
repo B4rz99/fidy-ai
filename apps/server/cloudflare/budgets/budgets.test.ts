@@ -278,10 +278,10 @@ const seedMonthlyMovements = (
     Effect.tryPromise(() =>
       db
         .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
     WITH RECURSIVE seq(n) AS (SELECT ? + 1 UNION ALL SELECT n + 1 FROM seq WHERE n < ?)
-    SELECT printf('30000000-0000-4000-8000-%012d', n), ?, '0.01', ?, 'outflow', ?, ?,
-      strftime('%Y-%m-%dT%H:%M:%fZ', date('2024-01-01', '+' || (n / 99) || ' days'))
+    SELECT printf('30000000-0000-4000-8000-%012d', n), ?, '0.01', ?, 'outflow', ?, CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),
+      CAST(unixepoch(date('2024-01-01', '+' || (n / 99) || ' days'))*1000 AS INTEGER)
     FROM seq`)
         .bind(
           input.offset,
@@ -1082,8 +1082,8 @@ it("reports only this User's exact same-Currency outflows in the applied half-op
       yield* Effect.tryPromise(() =>
         db
           .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    VALUES (?, ?, '900', 'COP', 'outflow', ?, ?, ?)`)
+    (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+    VALUES (?, ?, '900', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
           .bind(
             "30000000-0000-4000-8000-000000000093",
             users[0],
@@ -2196,8 +2196,8 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
           db.batch([
             db
               .prepare(`INSERT INTO transactions
-              (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-              VALUES (?, ?, '80.01', 'COP', 'outflow', ?, ?, ?)`)
+              (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+              VALUES (?, ?, '80.01', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
               .bind(
                 `30000000-0000-4000-8000-00000000009${index}`,
                 users[index],
@@ -2328,8 +2328,8 @@ it("does not drain another User's pending Budget alerts from a non-request evalu
       yield* Effect.tryPromise(() =>
         db
           .prepare(`INSERT INTO transactions
-        (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-        VALUES ('30000000-0000-4000-8000-000000000099', ?, '80.01', 'COP', 'outflow', ?, ?, ?)`)
+        (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+        VALUES ('30000000-0000-4000-8000-000000000099', ?, '80.01', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
           .bind(users[0], category, occurredAt, occurredAt)
           .run()
       );

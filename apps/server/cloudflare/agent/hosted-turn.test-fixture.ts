@@ -978,7 +978,7 @@ export const seedHistoryTransaction = ({
 }: Readonly<{ db: D1Database; counterparty: string }>): Promise<D1Result> =>
   db
     .prepare(
-      "INSERT INTO transactions (id,user_id,amount,currency,direction,counterparty,category_id,occurred_at,created_at) VALUES (?,?,'2500','COP','outflow',?,'10000000-0000-4000-8000-000000000001',?,?)"
+      "INSERT INTO transactions (id,user_id,amount,currency,direction,counterparty,category_id,occurred_at_ms,created_at_ms) VALUES (?,?,'2500','COP','outflow',?,'10000000-0000-4000-8000-000000000001',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))"
     )
     .bind(
       newId(),

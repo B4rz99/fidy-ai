@@ -169,7 +169,7 @@ await seedIdentity({
 });
 await db
   .prepare(
-    "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,notes,occurred_at,created_at) VALUES('24000000-0000-4000-8000-000000000383',?,'12000','COP','outflow','10000000-0000-4000-8000-000000000001','Solicitud de acceso de prueba','2026-10-01T12:00:00.000Z','2026-10-01T12:00:00.000Z')"
+    "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,notes,occurred_at_ms,created_at_ms) VALUES('24000000-0000-4000-8000-000000000383',?,'12000','COP','outflow','10000000-0000-4000-8000-000000000001','Solicitud de acceso de prueba',1790856000000,1790856000000)"
   )
   .bind(privacyUserId)
   .run();
@@ -236,8 +236,8 @@ await db.batch(
     const createdAt = now - (index < continuationRecords ? millisecondsPerDay : 0);
     return db
       .prepare(`INSERT INTO transactions
-      (id, user_id, amount, currency, direction, counterparty, category_id, occurred_at, created_at)
-      VALUES (?,?,?,?,?,?,?,?,?)`)
+      (id, user_id, amount, currency, direction, counterparty, category_id, occurred_at_ms, created_at_ms)
+      VALUES (?,?,?,?,?,?,?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
       .bind(
         `25000000-0000-4000-8000-${String(index + 1).padStart(uuidSuffixWidth, "0")}`,
         paginationUserId,
@@ -265,8 +265,8 @@ await db
   .run();
 await db
   .prepare(`INSERT INTO transactions
-  (id, user_id, amount, currency, direction, counterparty, category_id, occurred_at, created_at)
-  VALUES (?,?,?,?,?,?,?,?,?)`)
+  (id, user_id, amount, currency, direction, counterparty, category_id, occurred_at_ms, created_at_ms)
+  VALUES (?,?,?,?,?,?,?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
   .bind(
     otherTransactionId,
     otherUserId,

@@ -313,8 +313,8 @@ const correctNotes = (db: D1Database, index: number): Promise<ReadonlyArray<D1Re
   db.batch([
     db
       .prepare(`INSERT INTO transaction_corrections
-    (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at)
-    VALUES (?, ?, ?, 0, '["notes"]', '{}', '{}', '2026-10-09T00:00:00.000Z')`)
+    (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at_ms)
+    VALUES (?, ?, ?, 0, '["notes"]', '{}', '{}', 1791504000000)`)
       .bind(`correction-${index}`, userId, id(index)),
     db
       .prepare(`UPDATE transactions SET notes = 'corrected', revision = 1, user_decisions = '{"notes":true}'
@@ -451,8 +451,8 @@ it("preserves projection bucket pre-epoch boundaries or exact maximum replacemen
           dates.map((occurredAt, index) =>
             db
               .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    VALUES (?, ?, ?, 'COP', 'outflow', ?, ?, '2026-01-01T00:00:00.000Z')`)
+    (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+    VALUES (?, ?, ?, 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER), 1767225600000)`)
               .bind(
                 id(index),
                 userId,

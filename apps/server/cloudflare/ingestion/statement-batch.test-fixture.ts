@@ -45,8 +45,8 @@ export const seedTransaction = ({
   db
     .prepare(
       `INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes,
-         occurred_at, created_at)
-       VALUES (?, ?, '10.00', 'COP', 'outflow', ?, 'seed', ?, ?)`
+         occurred_at_ms, created_at_ms)
+       VALUES (?, ?, '10.00', 'COP', 'outflow', ?, 'seed',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`
     )
     .bind(id, userId, categoryId, occurredAt, occurredAt)
     .run();
@@ -71,8 +71,8 @@ export const concurrentCorrection = ({
   db
     .prepare(
       `INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision,
-         changed_fields, before_facts, after_facts, corrected_at)
-       VALUES (?, ?, ?, 0, '["notes"]', '{"notes":"seed"}', '{"notes":"concurrent"}', ?)`
+         changed_fields, before_facts, after_facts, corrected_at_ms)
+       VALUES (?, ?, ?, 0, '["notes"]', '{"notes":"seed"}', '{"notes":"concurrent"}',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`
     )
     .bind(evidenceId, userId, transactionId, correctedAt)
     .run()

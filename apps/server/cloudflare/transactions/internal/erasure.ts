@@ -127,7 +127,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'transaction_id',r.\"transaction_id\",'kind',r.\"kind\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'interpretation_revision',r.\"interpretation_revision\",'created_at',r.\"created_at\",'statement_submission_id',r.\"statement_submission_id\",'statement_record_number',r.\"statement_record_number\",'statement_content_hash',r.\"statement_content_hash\",'source_format',r.\"source_format\",'received_email_id',r.\"received_email_id\",'message_content_sha256',r.\"message_content_sha256\",'message_evidence',r.\"message_evidence\",'deterministic_interpretation',r.\"deterministic_interpretation\",'extractor_revision',r.\"extractor_revision\",'review_item_id',r.\"review_item_id\",'user_provided_fields',r.\"user_provided_fields\") AS body FROM source_attestations r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'transaction_id',r.\"transaction_id\",'kind',r.\"kind\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'interpretation_revision',r.\"interpretation_revision\",'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',r.created_at_ms/1000.0,'unixepoch'),'statement_submission_id',r.\"statement_submission_id\",'statement_record_number',r.\"statement_record_number\",'statement_content_hash',r.\"statement_content_hash\",'source_format',r.\"source_format\",'received_email_id',r.\"received_email_id\",'message_content_sha256',r.\"message_content_sha256\",'message_evidence',r.\"message_evidence\",'deterministic_interpretation',r.\"deterministic_interpretation\",'extractor_revision',r.\"extractor_revision\",'review_item_id',r.\"review_item_id\",'user_provided_fields',r.\"user_provided_fields\") AS body FROM source_attestations r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -151,7 +151,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'transaction_id',r.\"transaction_id\",'previous_revision',r.\"previous_revision\",'changed_fields',r.\"changed_fields\",'before_facts',r.\"before_facts\",'after_facts',r.\"after_facts\",'corrected_at',r.\"corrected_at\") AS body FROM transaction_corrections r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'transaction_id',r.\"transaction_id\",'previous_revision',r.\"previous_revision\",'changed_fields',r.\"changed_fields\",'before_facts',r.\"before_facts\",'after_facts',r.\"after_facts\",'corrected_at',strftime('%Y-%m-%dT%H:%M:%fZ',r.corrected_at_ms/1000.0,'unixepoch')) AS body FROM transaction_corrections r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -175,7 +175,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: ["transaction_reconciliation_members"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'first_transaction_id',r.\"first_transaction_id\",'second_transaction_id',r.\"second_transaction_id\",'state',r.\"state\",'visible_transaction_id',r.\"visible_transaction_id\",'decided_at',r.\"decided_at\") AS body FROM transaction_reconciliation_decisions r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'first_transaction_id',r.\"first_transaction_id\",'second_transaction_id',r.\"second_transaction_id\",'state',r.\"state\",'visible_transaction_id',r.\"visible_transaction_id\",'decided_at',strftime('%Y-%m-%dT%H:%M:%fZ',r.decided_at_ms/1000.0,'unixepoch')) AS body FROM transaction_reconciliation_decisions r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -231,7 +231,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'amount',r.\"amount\",'currency',r.\"currency\",'direction',r.\"direction\",'counterparty',r.\"counterparty\",'category_id',r.\"category_id\",'notes',r.\"notes\",'occurred_at',r.\"occurred_at\",'created_at',r.\"created_at\",'revision',r.\"revision\",'user_decisions',r.\"user_decisions\",'deleted_at_ms',r.\"deleted_at_ms\") AS body FROM transactions r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'amount',r.\"amount\",'currency',r.\"currency\",'direction',r.\"direction\",'counterparty',r.\"counterparty\",'category_id',r.\"category_id\",'notes',r.\"notes\",'occurred_at',strftime('%Y-%m-%dT%H:%M:%fZ',r.occurred_at_ms/1000.0,'unixepoch'),'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',r.created_at_ms/1000.0,'unixepoch'),'revision',r.\"revision\",'user_decisions',r.\"user_decisions\",'deleted_at_ms',r.\"deleted_at_ms\") AS body FROM transactions r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({

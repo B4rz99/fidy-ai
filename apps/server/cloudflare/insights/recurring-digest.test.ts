@@ -900,7 +900,7 @@ it("excludes earlier-day backlog and permanently suppressed confirmations while 
           [7, 8, 9].map((month) =>
             suppressedDb
               .prepare(
-                "INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at,created_at) VALUES(?,?,'100.00','COP','outflow','Suprimido','10000000-0000-4000-8000-000000000016',?,'2026-10-01T18:00:00Z')"
+                "INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at_ms,created_at_ms) VALUES(?,?,'100.00','COP','outflow','Suprimido','10000000-0000-4000-8000-000000000016',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),1790877600000)"
               )
               .bind(
                 `29000000-0000-4000-8000-${String(month).padStart(12, "0")}`,

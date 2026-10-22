@@ -864,7 +864,7 @@ it(
             Array.from({ length: 129 }, (_, index) =>
               db
                 .prepare(
-                  "INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at,created_at) VALUES (?,?,'1000','COP','outflow','10000000-0000-4000-8000-000000000001','2026-09-10T12:00:00.000Z',?)"
+                  "INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES (?,?,'1000','COP','outflow','10000000-0000-4000-8000-000000000001',1789041600000,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))"
                 )
                 .bind(
                   `40000000-0000-4000-8000-${String(index).padStart(12, "0")}`,

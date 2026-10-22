@@ -43,10 +43,8 @@ export const seedHistory = ({
       db
         .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
     INSERT INTO transactions(id, user_id, amount, currency, direction, counterparty,
-      category_id, occurred_at, created_at)
-    SELECT ? || printf('%012d', i), ?, '100', 'COP', 'outflow', 'shop', ?,
-      strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || (i * 20) || ' minutes'),
-      strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || i || ' days') FROM n`)
+      category_id, occurred_at_ms, created_at_ms)
+    SELECT ? || printf('%012d', i), ?, '100', 'COP', 'outflow', 'shop', ?,CAST(round(unixepoch(strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || (i * 20) || ' minutes'),'subsec')*1000) AS INTEGER),CAST(round(unixepoch(strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || i || ' days'),'subsec')*1000) AS INTEGER) FROM n`)
         .bind(count, transactionPrefix, subject, categoryId)
         .run()
     );
@@ -96,7 +94,7 @@ const seedReconciliation = ({
           .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
       INSERT INTO transaction_reconciliation_decisions
       SELECT ?, ? || printf('%012d', 2 * i - 1), ? || printf('%012d', 2 * i),
-        'linked', ? || printf('%012d', 2 * i - 1), '2026-01-01T00:00:00.000Z' FROM n`)
+        'linked', ? || printf('%012d', 2 * i - 1), 1767225600000  FROM n`)
           .bind(
             Math.floor((count * linkedFraction) / 2),
             subject,

@@ -3248,8 +3248,8 @@ it("gates every declared canonical path by live PAT and exact operation scope be
       const transactionId = "90000000-0000-4000-8000-000000000001";
       yield* awaitPromise(
         db
-          .prepare(`INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at,created_at)
-    VALUES (?,?,?,'COP','outflow',?,'2026-09-01T12:00:00.000Z','2026-09-01T12:00:00.000Z')`)
+          .prepare(`INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
+    VALUES (?,?,?,'COP','outflow',?,1788264000000,1788264000000)`)
           .bind(transactionId, userA, "1000.00", "10000000-0000-4000-8000-000000000001")
           .run()
       );
@@ -3324,8 +3324,8 @@ it("gates every declared canonical path by live PAT and exact operation scope be
       const foreignTransactionId = "90000000-0000-4000-8000-000000000002";
       yield* awaitPromise(
         db
-          .prepare(`INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at,created_at)
-    VALUES (?,?,?,'COP','outflow',?,'2026-09-01T12:00:00.000Z','2026-09-01T12:00:00.000Z')`)
+          .prepare(`INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
+    VALUES (?,?,?,'COP','outflow',?,1788264000000,1788264000000)`)
           .bind(foreignTransactionId, userB, "2000.00", "10000000-0000-4000-8000-000000000001")
           .run()
       );

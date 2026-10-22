@@ -667,7 +667,7 @@ it("four unavailable due Users do not starve a healthy fifth User's generation",
       yield* promise(() =>
         db
           .prepare(
-            "INSERT INTO transactions(id,user_id,amount,currency,category_id,direction,occurred_at,created_at,counterparty) SELECT '20000000-0000-4000-8000-000000000005',?,amount,currency,category_id,direction,occurred_at,created_at,counterparty FROM transactions WHERE user_id=? LIMIT 1"
+            "INSERT INTO transactions(id,user_id,amount,currency,category_id,direction,occurred_at_ms,created_at_ms,counterparty) SELECT '20000000-0000-4000-8000-000000000005',?,amount,currency,category_id,direction,occurred_at_ms,created_at_ms,counterparty FROM transactions WHERE user_id=? LIMIT 1"
           )
           .bind(healthy, userId)
           .run()

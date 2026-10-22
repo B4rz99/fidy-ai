@@ -1,5 +1,25 @@
 # Hosted Agent chat
 
+Current audit status, 22 October 2026: rebased onto deployed trunk
+`20fd17a37458f54031c771d0b9e1de24a5e98933`. Fresh production metadata and Recurring
+reads work after the D1 reset. A minimal greeting returned processing, and an explicit progress
+read recovered exactly one assistant greeting with a successful delivery receipt. This exposes a
+browser gap: known processing stopped at a manual check even when the reply became available.
+A new built-browser regression failed with zero progress reads before the fix and passed afterward.
+The conversation command now observes that same Turn at five-second intervals, at most twelve
+checks; it never resubmits the message. A failed check or exhausted bound retains explicit recovery
+and blocks a new submission. Privacy disposal stops pending checks. All twelve selected chat and
+Recurring recovery/quiet-read browser checks passed. This change is local until its deployment is
+recorded below.
+
+The ordinary-language maintained-plan lookup still is not verified: the first retained read could
+not be recovered, and a later lookup returned processing then `503 interrupted` when explicitly
+checked after its delivery window. These observations do not prove a model fact error, an AI quota
+refusal, or a database regression. The browser must be rerun promptly after deploying automatic
+observation. Accepted hosted lifecycle approval, stop persistence and Dashboard title edit/restore
+remain separate live checks. No financial mutation, new access grant or deletion was submitted by
+chat in this continuation.
+
 Current audit status, 21 October 2026: the latest production greeting and private live-provider
 conformance suite passed, so the earlier AI quota refusals below are historical observations.
 The User confirmed that the current production database failures are caused by D1 quota exhaustion.

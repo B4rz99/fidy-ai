@@ -79,6 +79,7 @@ export const openUpgradeThroughCore = (page: Page): Promise<void> => {
     .then((response) => confirmConsentRead(page, response));
 };
 type RecurringIdentity =
+  | "recurringStableReads"
   | "recurring"
   | "recurringSummary"
   | "recurringRecoveryUnavailable"

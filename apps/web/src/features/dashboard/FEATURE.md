@@ -1,5 +1,13 @@
 # Dashboard
 
+Production cross-feature read, 22 October 2026, deployed release
+`20fd17a37458f54031c771d0b9e1de24a5e98933`: after the scoped Budget test updated the
+Restaurantes cap to COP 23,456, navigating to Dashboard displayed that same cap and available
+amount in its existing Budget Widget. The cash-flow Widget and recent-Transaction table agreed on
+COP 10,103 expenses (COP 10,000 plus COP 103), with COP 0 income. No Widget was edited in this
+check. Natural-language title edit/restore remains unverified after this reset. The test Budget cap
+is retained pending exact cleanup approval; the original Transactions remain untouched.
+
 Production D1-reset read verification, 20-10-2026 Bogotá: successful
 [deployment 39525764609](https://github.com/B4rz99/fidy-ai/actions/runs/39525764609)
 and API health identified release `da6dc816e10655f8b21fe13d8e61801d0f9d4c1c`. The existing session loaded catalog and

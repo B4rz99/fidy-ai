@@ -1,5 +1,20 @@
 # Recurrentes
 
+Current audit status, 22 October 2026, deployed release
+`20fd17a37458f54031c771d0b9e1de24a5e98933`: fresh canonical reads returned HTTP 200.
+`PRUEBA QA CHAT RECURRENTE 20261017` remained Activo in Todos los recurrentes, with its
+18 October occurrence Sin confirmar and its 18 November occurrence Próximos. No plan mutation
+was submitted. This independently establishes the expected maintained-plan lifecycle/date for the
+hosted lookup comparison; the chat comparison itself remains open.
+
+The first audit tab received repeated reads and `429 rate_limited`, retaining facts and disabling
+editing. A fresh tab was quiet during idle observation, and a new isolated built-browser case also
+stayed quiet after presentation and month changes. No uncontrolled render loop or cause was
+reproduced; no cache/freshness policy was weakened. The observation must not be recorded as a
+proven frontend fix or as D1 quota exhaustion. Chat processing observation is being fixed at its own
+command seam; accepted hosted lifecycle approval and stopped-state persistence remain live gaps.
+Native cancellation checks and revoked-grant cleanup below remain established.
+
 Current audit status, 21 October 2026: the User confirmed that the latest production read failures
 are caused by D1 quota exhaustion. Production testing is paused until database recovery. Native
 Codex, Claude Code and corrected Inspector cancellation returned the declared refusal without an

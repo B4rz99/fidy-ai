@@ -1,5 +1,14 @@
 # Accesos
 
+Current audit status, 22 October 2026, deployed release
+`20fd17a37458f54031c771d0b9e1de24a5e98933`: after an intentional reload, PAT metadata
+and MCP connections both returned HTTP 200 under the existing session without an identity prompt.
+There were no active PATs, and all eight retained audit MCP grants displayed Revocado. This closes
+the fresh production read/recovery check after D1 reset and confirms cleanup; no issuance,
+permission expansion, revocation or sign-in was performed. Provider account replacement, Microsoft
+completion and populated production continuation beyond twenty-five connections remain live gaps.
+The local tests below do not substitute for those checks.
+
 Current audit status, 21 October 2026: all eight audit MCP grants were revoked before the latest
 database outage. The User confirmed D1 quota exhaustion; production issuance, revocation and
 read-recovery checks are paused. The latest combined local Accesos/OAuth rerun passed 13 browser

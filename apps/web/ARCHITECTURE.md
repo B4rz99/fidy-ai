@@ -54,6 +54,10 @@ and the browser visibility adapter remain with presentation. The feature's mount
 bounded visible conversation through popup dismissal and route navigation. `ApplicationFrame`
 retains one chat provider across independently authorized product routes; each route still gates
 chat visibility. Entering Privacy or ending the authentication lifetime discards that provider.
+An accepted processing response starts bounded observation of that exact Turn in the command's
+Effect lifetime, without resubmitting its message. Progress failures or an exhausted observation
+bound retain explicit recovery; unresolved execution still blocks new submissions. Disposal stops
+the pending checks.
 AI Elements conversation/message presentation uses Fidy primitives and the existing
 Effect hosted Turn client, without introducing another AI transport. Text is escaped, not executed
 as model-provided HTML. After a proposed reply renders in the open popup in a visible document,

@@ -221,7 +221,11 @@ it.each(cases)(
               ),
               "DROP TABLE verified_email_credentials",
               "DROP TABLE users",
-              schemaDefinition({ source, target: "users" }),
+              // Email's historical User fields coexist with the current billing owner.
+              schemaDefinition({ source, target: "users" }).replace(
+                'REFERENCES "card_enrollments"(payment_source_id)',
+                "REFERENCES payment_sources(id)"
+              ),
               ...userIndexes,
               ...userDependents,
               ...source.filter((sql) => !sql.startsWith("CREATE TABLE")),

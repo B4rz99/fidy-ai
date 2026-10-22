@@ -1,0 +1,19 @@
+docs/operations/audit-20261022-schema-mismatch.md
+  s_241024bc81d268::t_81cde6a3711950 74-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3910ca13df1ba53734e431802d8d1322ca1af199",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

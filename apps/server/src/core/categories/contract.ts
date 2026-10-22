@@ -1,4 +1,5 @@
 import { Data, Schema, Struct } from "effect";
+import { normalizeSearchText as normalizeCategoryKeyword } from "~/core/search/operations";
 import { UtcTimestamp } from "~/core/_shared/time";
 
 /** Stable Category identity, independent of label, display order, and taxonomy version. */
@@ -22,15 +23,18 @@ export const CategoryLabel = Schema.NonEmptyString.check(Schema.isTrimmed())
   .annotate({ identifier: "CategoryLabel" });
 export type CategoryLabel = typeof CategoryLabel.Type;
 
-/** User-authored counterparty fragment retained with its spelling but normalized only while matching. */
+/** Counterparty fragment; accepted writes retain its canonical case/accent-normalized spelling. */
 export const CategoryKeyword = Schema.NonEmptyString.check(Schema.isTrimmed())
   .check(Schema.isMaxLength(maximumCategoryTextLength))
   .check(
-    Schema.makeFilter((keyword) =>
-      /[^\u0300-\u036f]/u.test(keyword)
+    Schema.makeFilter((keyword) => {
+      const normalized = normalizeCategoryKeyword(keyword);
+      return normalized.length > 0 &&
+        normalized.length <= maximumCategoryTextLength &&
+        normalized === normalized.trim()
         ? undefined
-        : "Expected a keyword containing a letter or number"
-    )
+        : "Expected a normalized keyword of 1 to 80 characters without surrounding whitespace";
+    })
   )
   .pipe(Schema.brand("CategoryKeyword"))
   .annotate({ identifier: "CategoryKeyword" });

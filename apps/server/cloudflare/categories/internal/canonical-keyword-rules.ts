@@ -10,6 +10,7 @@ import {
   replaceKeywordRule,
 } from "./keyword-rules";
 import {
+  CategoryKeyword,
   CategoryNotFound,
   CreateKeywordRuleInput,
   KeywordRuleId,
@@ -301,8 +302,6 @@ const prepareRuleWrite = (
     });
   });
 
-const isoTimestamp = (current: number): string => DateTime.formatIso(DateTime.makeUnsafe(current));
-
 /** Create one keyword rule for future capture only; existing Transactions stay untouched. */
 export const prepareCreateKeywordRule = ({
   db,
@@ -317,13 +316,13 @@ export const prepareCreateKeywordRule = ({
 }>): Effect.Effect<CanonicalMutationPreparation> => {
   const ruleId = KeywordRuleId.make(uuid());
   const authority = callerAuthority({ subject, current });
+  const keyword = CategoryKeyword.make(normalizeCategoryKeyword(payload.keyword));
   const ruleStatement = insertKeywordRule({
     id: ruleId,
     userId: subject.userId,
-    keyword: payload.keyword,
-    normalizedKeyword: normalizeCategoryKeyword(payload.keyword),
+    keyword,
     categoryId: payload.categoryId,
-    timestamp: isoTimestamp(current),
+    timestamp: current,
     authority,
   });
   return prepareRuleWrite({
@@ -333,7 +332,7 @@ export const prepareCreateKeywordRule = ({
       _tag: "KeywordRule",
       operation: "categories.createKeywordRule",
       ruleId,
-      keyword: payload.keyword,
+      keyword,
       categoryId: payload.categoryId,
     },
     statement: db.prepare(ruleStatement.sql).bind(...ruleStatement.params),
@@ -357,13 +356,13 @@ export const prepareUpdateKeywordRule = ({
   current: number;
 }>): Effect.Effect<CanonicalMutationPreparation> => {
   const authority = callerAuthority({ subject, current });
+  const keyword = CategoryKeyword.make(normalizeCategoryKeyword(payload.keyword));
   const ruleStatement = replaceKeywordRule({
     id: ruleId,
     userId: subject.userId,
-    keyword: payload.keyword,
-    normalizedKeyword: normalizeCategoryKeyword(payload.keyword),
+    keyword,
     categoryId: payload.categoryId,
-    timestamp: isoTimestamp(current),
+    timestamp: current,
     authority,
   });
   return prepareRuleWrite({
@@ -373,7 +372,7 @@ export const prepareUpdateKeywordRule = ({
       _tag: "KeywordRule",
       operation: "categories.updateKeywordRule",
       ruleId,
-      keyword: payload.keyword,
+      keyword,
       categoryId: payload.categoryId,
     },
     statement: db.prepare(ruleStatement.sql).bind(...ruleStatement.params),

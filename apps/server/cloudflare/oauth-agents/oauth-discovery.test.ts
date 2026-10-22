@@ -277,15 +277,16 @@ it.each(queryGroups)(
               .prepare("INSERT INTO memories VALUES (?, ?, ?, ?, ?)")
               .bind(resourceId, "10000000-0000-4000-8000-000000000001", privateMarker, time, time),
             fixture.db
-              .prepare("INSERT INTO keyword_rules VALUES (?, ?, ?, ?, ?, ?, ?)")
+              .prepare(
+                "INSERT INTO keyword_rules(id,user_id,keyword,category_id,created_at_ms,updated_at_ms) VALUES (?, ?, ?, ?, ?, ?)"
+              )
               .bind(
                 resourceId,
                 "10000000-0000-4000-8000-000000000001",
                 privateMarker,
-                privateMarker,
                 "10000000-0000-4000-8000-000000000001",
-                time,
-                time
+                DateTime.toEpochMillis(DateTime.makeUnsafe(time)),
+                DateTime.toEpochMillis(DateTime.makeUnsafe(time))
               ),
             fixture.db
               .prepare(

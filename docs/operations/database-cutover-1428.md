@@ -2880,3 +2880,114 @@ THEN 1 ELSE 0 END;
 ```
 
 <!-- backfill-progress-verify:end -->
+
+## Canonical Category keywords (#1461)
+
+The Category catalog keeps its stable identities and presentation order. `keyword_rules` retains
+six fields: rule identity, User, canonical `keyword`, Category, and integer creation/update instants.
+Create/edit/list, OAuth reviewed facts and future capture use that same normalized spelling. The
+existing NFD/combining-mark removal/es-CO lowercasing algorithm is unchanged; original spelling is
+intentionally discarded. Rule replacement/deletion still affects future capture only.
+
+Checkpoint: `b26dd00018bec074432b1ddda363eb172229742f`. Keep the sole fresh-install baseline;
+editing it does not convert existing D1. Back up and fence rule/capture mutations, OAuth decisions,
+Audit/retention and erasure. Inspect source schema and incoming dependencies; stop on unknown objects.
+`keyword_rules` has no incoming foreign keys. User, Category, Transaction and archive tables stay in
+place. Preserve original rule rowids, IDs, owners and Category references. Existing archive JSON is
+never rewritten; new archives retain the historical keys, deriving `normalized_keyword` from the
+single keyword and serializing integer instants as UTC ISO timestamps.
+
+Before constructing one native atomic batch, page the fenced source rows in rowid order. Decode
+identities and both original timestamps using the existing owning schemas. Validate the original
+keyword and its canonical normalized value with `CategoryKeyword`; compare canonical normalization
+with the stored normalized value. Require an exact millisecond instant: reject nonzero fractional
+digits beyond the third rather than truncating them. Offset-bearing RFC 3339 instants may convert
+losslessly; their public representation remains UTC ISO. Do not use SQLite lower()/NOCASE as Unicode
+normalization. Do not silently repair a mismatch or choose a winner in a collision.
+
+Run the general preflight and, **once per observed source row**, the bound row preflight below.
+Its bindings are: validation accepted (1 or 0), original rowid, original keyword, canonically computed
+keyword, original creation text, original update text, and the two exactly decoded epoch-millisecond
+values. An invalid decode produces accepted=0 and must abort, not skip that row. The source fence
+covers the entire read/validation/commit window; verify the complete source count as well.
+
+Then create the baseline's target rule definition as `keyword_rules_1461`; copy and compare below.
+Drop only the old table's explicit triggers/index, swap the rule table, reinstall all current
+rule-owned indexes/triggers (including erasure/capacity guards), and verify. Keep foreign keys enabled.
+Failure after either copy or replacement must roll back all rows, schema, archives and sequence
+state. Preserve backups until matching code and protected CRUD/capture are verified. Old OAuth
+reviews whose exact rule snapshot changed require a fresh review; no old approval gains authority.
+Only align the baseline ledger after successful conversion and verification. Prefer the native
+atomic query/batch path: the October 22 recovery's bulk file import rejected a larger conversion
+that succeeded through the direct transaction path; local batch success alone is not live evidence.
+
+<!-- category-keyword-preflight:start -->
+
+```sql
+PRAGMA defer_foreign_keys=ON;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'category-keyword-preflight',NOT EXISTS(SELECT 1 FROM erasure_permits)
+ AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT user_id,normalized_keyword FROM keyword_rules GROUP BY user_id,normalized_keyword HAVING count(*)<>1);
+```
+
+<!-- category-keyword-preflight:end -->
+
+<!-- category-keyword-row-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'category-keyword-row',?=1 AND EXISTS(SELECT 1 FROM keyword_rules
+ WHERE rowid=? AND keyword IS ? AND normalized_keyword IS ? AND created_at IS ? AND updated_at IS ?
+ AND CAST(round(unixepoch(created_at,'subsec')*1000) AS INTEGER) IS ?
+ AND CAST(round(unixepoch(updated_at,'subsec')*1000) AS INTEGER) IS ?)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- category-keyword-row-preflight:end -->
+
+<!-- category-keyword-copy:start -->
+
+```sql
+INSERT INTO keyword_rules_1461(rowid,id,user_id,keyword,category_id,created_at_ms,updated_at_ms)
+SELECT rowid,id,user_id,normalized_keyword,category_id,
+ CAST(round(unixepoch(created_at,'subsec')*1000) AS INTEGER),
+ CAST(round(unixepoch(updated_at,'subsec')*1000) AS INTEGER) FROM keyword_rules;
+```
+
+<!-- category-keyword-copy:end -->
+
+<!-- category-keyword-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'category-keyword-copy',(SELECT count(*) FROM keyword_rules)=(SELECT count(*) FROM keyword_rules_1461)
+ AND NOT EXISTS(SELECT rowid,id,user_id,normalized_keyword,category_id,
+ CAST(round(unixepoch(created_at,'subsec')*1000) AS INTEGER),
+ CAST(round(unixepoch(updated_at,'subsec')*1000) AS INTEGER) FROM keyword_rules
+ EXCEPT SELECT rowid,id,user_id,keyword,category_id,created_at_ms,updated_at_ms FROM keyword_rules_1461);
+```
+
+<!-- category-keyword-copy-check:end -->
+
+<!-- category-keyword-swap:start -->
+
+```sql
+DROP TABLE keyword_rules;
+ALTER TABLE keyword_rules_1461 RENAME TO keyword_rules;
+```
+
+<!-- category-keyword-swap:end -->
+
+<!-- category-keyword-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'category-keyword-final',NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check);
+DELETE FROM sql_assertions WHERE scope IN('category-keyword-preflight','category-keyword-row','category-keyword-copy','category-keyword-final');
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- category-keyword-verify:end -->

@@ -864,12 +864,11 @@ CREATE TABLE "insight_reports" (
 CREATE TABLE keyword_rules (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),
-  keyword TEXT NOT NULL,
-  normalized_keyword TEXT NOT NULL CHECK (length(normalized_keyword) > 0),
+  keyword TEXT NOT NULL CHECK (length(keyword) BETWEEN 1 AND 80 AND keyword=trim(keyword)),
   category_id TEXT NOT NULL REFERENCES categories(id),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  UNIQUE (user_id, normalized_keyword)
+  created_at_ms INTEGER NOT NULL CHECK(created_at_ms BETWEEN -62135596800000 AND 253402300799999),
+  updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms BETWEEN -62135596800000 AND 253402300799999),
+  UNIQUE (user_id, keyword)
 ) STRICT;
 --> statement-breakpoint
 
@@ -2159,7 +2158,7 @@ CREATE UNIQUE INDEX insight_whatsapp_claims_identity ON whatsapp_deliveries(user
 CREATE INDEX insight_whatsapp_verified ON whatsapp_deliveries(state,user_id,insight_event_id) WHERE kind='insight';
 --> statement-breakpoint
 
-CREATE INDEX keyword_rules_by_user ON keyword_rules(user_id, created_at, id);
+CREATE INDEX keyword_rules_by_user ON keyword_rules(user_id, created_at_ms, id);
 --> statement-breakpoint
 
 CREATE INDEX media_accountability_retention ON media_submissions(accepted_at_ms,id);
@@ -5854,7 +5853,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'keyword_rules','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'keyword',OLD."keyword",'normalized_keyword',OLD."normalized_keyword",'category_id',OLD."category_id",'created_at',OLD."created_at",'updated_at',OLD."updated_at")
+  SELECT q.id,'keyword_rules','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'keyword',OLD."keyword",'normalized_keyword',OLD."keyword",'category_id',OLD."category_id",'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',OLD.created_at_ms/1000.0,'unixepoch'),'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',OLD.updated_at_ms/1000.0,'unixepoch'))
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;

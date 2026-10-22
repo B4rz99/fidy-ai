@@ -4813,7 +4813,7 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
           send(0, "/category-keyword-rules").then((value) => value.json())
         )
       ).pipe(Effect.orDie);
-      expect(rules.data.map(({ keyword }) => keyword)).toEqual(["Panadería"]);
+      expect(rules.data.map(({ keyword }) => keyword)).toEqual(["panaderia"]);
       expect(
         yield* fromTestPromise(() =>
           countRows(
@@ -4906,9 +4906,14 @@ it("rolls back every owner when a later mixed-owner keyword-rule child exceeds c
       yield* fromTestPromise(() =>
         db
           .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 99)
-            INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
-            SELECT printf('90000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, 'seed ' || n, ?, ?, ? FROM seq`)
-          .bind(users[0] ?? "", category, current, current)
+            INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
+            SELECT printf('90000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, ?, ?, ? FROM seq`)
+          .bind(
+            users[0] ?? "",
+            category,
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current))
+          )
           .run()
       );
       const response = yield* fromTestPromise(() =>
@@ -5205,9 +5210,15 @@ it("refuses two children addressing one retained rule or Memory before any child
       const memoryId = "70000000-0000-4000-8000-000000000002";
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
-            VALUES (?, ?, 'Original', 'original', ?, ?, ?)`)
-          .bind(ruleId, users[0] ?? "", category, current, current)
+          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
+            VALUES (?, ?, 'original', ?, ?, ?)`)
+          .bind(
+            ruleId,
+            users[0] ?? "",
+            category,
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current))
+          )
           .run()
       );
       yield* fromTestPromise(() =>
@@ -5250,7 +5261,7 @@ it("refuses two children addressing one retained rule or Memory before any child
           .bind(ruleId)
           .first<{ keyword: string }>()
       );
-      expect(rule).toEqual({ keyword: "Original" });
+      expect(rule).toEqual({ keyword: "original" });
       const memory = yield* fromTestPromise(() =>
         db
           .prepare("SELECT text FROM memories WHERE id = ?")
@@ -5287,19 +5298,19 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
       const forgottenMemoryId = "60000000-0000-4000-8000-000000000003";
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
-            VALUES (?, ?, 'Antes', 'antes', ?, ?, ?), (?, ?, 'Borrar', 'borrar', ?, ?, ?)`)
+          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
+            VALUES (?, ?, 'antes', ?, ?, ?), (?, ?, 'borrar', ?, ?, ?)`)
           .bind(
             updatedRuleId,
             users[0] ?? "",
             category,
-            current,
-            current,
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
             deletedRuleId,
             users[0] ?? "",
             category,
-            current,
-            current
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current))
           )
           .run()
       );
@@ -5338,7 +5349,7 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
           .bind(users[0] ?? "")
           .all<{ id: string; keyword: string }>()
       );
-      expect(rules.results).toEqual([{ id: updatedRuleId, keyword: "Después" }]);
+      expect(rules.results).toEqual([{ id: updatedRuleId, keyword: "despues" }]);
       expect(
         yield* fromTestPromise(() =>
           countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
@@ -5393,9 +5404,14 @@ it("fails closed on a cross-owner dependency defect without partial state", () =
       const current = DateTime.formatIso(DateTime.nowUnsafe());
       yield* fromTestPromise(() =>
         keywordDb
-          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
-            VALUES ('corrupt-rule', ?, 'corrupt', 'corrupt', ?, ?, ?)`)
-          .bind(users[0] ?? "", category, current, current)
+          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
+            VALUES ('corrupt-rule', ?, 'corrupt', ?, ?, ?)`)
+          .bind(
+            users[0] ?? "",
+            category,
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current))
+          )
           .run()
       );
       const keywordResponse = yield* fromTestPromise(() =>
@@ -5582,9 +5598,9 @@ it("attributes keyword capacity after a deletion and earlier creates without rec
       yield* fromTestPromise(() =>
         db
           .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 98)
-      INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
-      SELECT printf('40000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, 'seed ' || n, ?,
-      '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z' FROM seq`)
+      INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
+      SELECT printf('40000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, ?,
+      1788220800000, 1788220800000 FROM seq`)
           .bind(users[0], category)
           .run()
       );

@@ -346,7 +346,7 @@ it("applies a replaced keyword and Category only to future matching captures", (
         (yield* decodeJson(Schema.toCodecJson(KeywordRuleResponse), updated)).data
       ).toMatchObject({
         id: original.id,
-        keyword: "Éxito",
+        keyword: "exito",
         categoryId: mercado,
         createdAt: original.createdAt,
       });
@@ -437,11 +437,11 @@ it("lists and creates rules for exactly one User through the derived canonical c
     Effect.gen(function* () {
       const { send, sessions } = yield* awaitPromise(setup());
       const created = yield* awaitPromise(
-        createRule({ send, session: sessions[0], keyword: "Rappi Turbo", categoryId: domicilios })
+        createRule({ send, session: sessions[0], keyword: "RÁPPI Turbo", categoryId: domicilios })
       );
       expect(created.status).toBe(201);
       const rule = (yield* decodeJson(RuleEnvelope, created)).data;
-      expect(rule.keyword).toBe("Rappi Turbo");
+      expect(rule.keyword).toBe("rappi turbo");
       expect(rule.categoryId).toBe(domicilios);
 
       const listed = yield* awaitPromise(
@@ -449,7 +449,7 @@ it("lists and creates rules for exactly one User through the derived canonical c
       );
       expect(listed.status).toBe(200);
       const own = (yield* decodeJson(RuleListEnvelope, listed)).data;
-      expect(own.map((entry) => entry.id)).toEqual([rule.id]);
+      expect(own).toEqual([rule]);
 
       const other = yield* awaitPromise(
         send({ path: "/category-keyword-rules", method: "GET", session: sessions[1] })
@@ -491,10 +491,11 @@ it("rejects an unknown Category, an oversized keyword, and a malformed body with
           })
         )).status
       ).toBe(404);
-      expect(
-        (yield* awaitPromise(createRule({ send, session: sessions[0], keyword: "x".repeat(81) })))
-          .status
-      ).toBe(400);
+      for (const keyword of ["x".repeat(81), "각".repeat(80), "\u0301 café", "\u0301"]) {
+        expect(
+          (yield* awaitPromise(createRule({ send, session: sessions[0], keyword }))).status
+        ).toBe(400);
+      }
       expect(
         (yield* awaitPromise(
           send({
@@ -518,18 +519,17 @@ it("refuses excess rules but allows replacement at capacity and reuses a deleted
   runTest(
     Effect.gen(function* () {
       const { db, send, sessions } = yield* awaitPromise(setup());
-      const current = DateTime.formatIso(DateTime.makeUnsafe(clock()));
+      const current = clock();
       for (let index = 0; index < 100; index++) {
         yield* awaitPromise(
           db
             .prepare(
-              `INSERT INTO keyword_rules (id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at)
-               VALUES (?,?,?,?,?,?,?)`
+              `INSERT INTO keyword_rules (id,user_id,keyword,category_id,created_at_ms,updated_at_ms)
+               VALUES (?,?,?,?,?,?)`
             )
             .bind(
               `80000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
               userA,
-              `tienda ${index}`,
               `tienda ${index}`,
               domicilios,
               current,
@@ -626,7 +626,7 @@ it("updates and deletes only the caller's own rule", () =>
           .bind(created.id)
           .first<{ keyword: string; category_id: string; user_id: string }>()
       );
-      expect(untouched).toEqual({ keyword: "Rappi", category_id: domicilios, user_id: userA });
+      expect(untouched).toEqual({ keyword: "rappi", category_id: domicilios, user_id: userA });
 
       const updated = yield* awaitPromise(
         send({
@@ -639,7 +639,7 @@ it("updates and deletes only the caller's own rule", () =>
       expect(updated.status).toBe(200);
       expect((yield* decodeJson(RuleEnvelope, updated)).data).toMatchObject({
         id: created.id,
-        keyword: "Rappi Turbo",
+        keyword: "rappi turbo",
         categoryId: mercado,
       });
 
@@ -857,7 +857,7 @@ it("lets a write-scoped PAT manage rules while a read-scoped PAT cannot", () =>
       );
       expect(listed.status).toBe(200);
       expect((yield* decodeJson(RuleListEnvelope, listed)).data).toMatchObject([
-        { id: rule.id, keyword: "Agente", categoryId: mercado },
+        { id: rule.id, keyword: "agente", categoryId: mercado },
       ]);
 
       const refusedDelete = yield* awaitPromise(
@@ -934,7 +934,7 @@ it("refuses cookie-admitted keyword-rule work without the matching browser Origi
           .bind(created.id)
           .first<{ keyword: string; category_id: string }>()
       );
-      expect(untouched).toEqual({ keyword: "Rappi", category_id: domicilios });
+      expect(untouched).toEqual({ keyword: "rappi", category_id: domicilios });
       const audits = yield* awaitPromise(
         db
           .prepare(

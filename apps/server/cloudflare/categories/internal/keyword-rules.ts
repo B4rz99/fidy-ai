@@ -1,6 +1,7 @@
 import type { OAuthAuthority } from "../../../src/shell/oauth-agents/contract";
 import { Option, Schema } from "effect";
 import { recordAuthorizedCall } from "../../../src/shell/audit/operations";
+import { normalizeSearchText as normalizeCategoryKeyword } from "../../../src/core/search/operations";
 import { KeywordRule, maximumKeywordRulesPerUser } from "../../../src/core/categories/contract";
 
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
@@ -15,13 +16,23 @@ type Authority = Readonly<{
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;
 
-const ruleColumns = `id,keyword,category_id AS "categoryId",created_at AS "createdAt",updated_at AS "updatedAt"`;
+const ruleColumns = `id,keyword,category_id AS "categoryId",created_at_ms AS "createdAt",updated_at_ms AS "updatedAt"`;
+const RuleRow = KeywordRule.mapFields((fields) => ({
+  ...fields,
+  keyword: fields.keyword.check(
+    Schema.makeFilter(
+      (keyword) => keyword === normalizeCategoryKeyword(keyword) || "Expected a canonical keyword"
+    )
+  ),
+  createdAt: Schema.DateTimeUtcFromMillis,
+  updatedAt: Schema.DateTimeUtcFromMillis,
+}));
 const boundedRuleCount = maximumKeywordRulesPerUser + 1;
 
 /** One User's rules in stable creation order, for the capture-time precedence decision. */
 export const keywordRulesQuery = ({ userId }: Readonly<{ userId: string }>): OwnedStatement => ({
   sql: `SELECT ${ruleColumns} FROM keyword_rules WHERE user_id = ?
-    ORDER BY created_at, id LIMIT ${boundedRuleCount}`,
+    ORDER BY created_at_ms, id LIMIT ${boundedRuleCount}`,
   params: [userId],
 });
 
@@ -32,18 +43,18 @@ export const protectedKeywordRulesQuery = ({
 }: Readonly<{ userId: string; authority: Authority | OAuthAuthority }>): OwnedStatement => ({
   sql: `SELECT ${ruleColumns} FROM keyword_rules WHERE user_id = ?
     AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
-    ORDER BY created_at, id LIMIT ${boundedRuleCount}`,
+    ORDER BY created_at_ms, id LIMIT ${boundedRuleCount}`,
   params: [userId, ...authority.bindings],
 });
 
 /** Decode a bounded rule list; an over-limit result is unavailable rather than truncated. */
 export const keywordRulesFromRows = (rows: unknown): Option.Option<ReadonlyArray<KeywordRule>> =>
-  Option.flatMap(Schema.decodeUnknownOption(Schema.Array(KeywordRule))(rows), (rules) =>
+  Option.flatMap(Schema.decodeUnknownOption(Schema.Array(RuleRow))(rows), (rules) =>
     rules.length <= maximumKeywordRulesPerUser ? Option.some(rules) : Option.none()
   );
 
 export const keywordRuleFromRows = (row: unknown): Option.Option<KeywordRule> =>
-  Schema.decodeUnknownOption(KeywordRule)(row);
+  Schema.decodeUnknownOption(RuleRow)(row);
 
 /** One owned rule by stable id; a foreign or absent id returns no row. */
 export const keywordRuleQuery = ({
@@ -58,9 +69,8 @@ export type KeywordRuleWrite = Readonly<{
   id: string;
   userId: string;
   keyword: string;
-  normalizedKeyword: string;
   categoryId: string;
-  timestamp: string;
+  timestamp: number;
   authority: Authority;
 }>;
 
@@ -76,14 +86,13 @@ export type KeywordRuleRemoval = Readonly<{
  * between validation and commit changes no row.
  */
 export const insertKeywordRule = (input: KeywordRuleWrite): OwnedStatement => ({
-  sql: `INSERT OR IGNORE INTO keyword_rules (id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at)
-    SELECT ?,?,?,?,id,?,? FROM categories WHERE id = ?
+  sql: `INSERT OR IGNORE INTO keyword_rules (id,user_id,keyword,category_id,created_at_ms,updated_at_ms)
+    SELECT ?,?,?,id,?,? FROM categories WHERE id = ?
     AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`,
   params: [
     input.id,
     input.userId,
     input.keyword,
-    input.normalizedKeyword,
     input.timestamp,
     input.timestamp,
     input.categoryId,
@@ -93,12 +102,11 @@ export const insertKeywordRule = (input: KeywordRuleWrite): OwnedStatement => ({
 
 /** Replace one User-owned rule under the same live credential and Category guarantees. */
 export const replaceKeywordRule = (input: KeywordRuleWrite): OwnedStatement => ({
-  sql: `UPDATE OR IGNORE keyword_rules SET keyword = ?, normalized_keyword = ?, category_id = ?, updated_at = ?
+  sql: `UPDATE OR IGNORE keyword_rules SET keyword = ?, category_id = ?, updated_at_ms = ?
     WHERE id = ? AND user_id = ? AND EXISTS (SELECT 1 FROM categories WHERE id = ?)
     AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`,
   params: [
     input.keyword,
-    input.normalizedKeyword,
     input.categoryId,
     input.timestamp,
     input.id,

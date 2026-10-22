@@ -17,10 +17,9 @@ import type { KeywordRuleOutcome } from "../contract";
 const RuleSnapshot = Schema.Struct({
   id: KeywordRuleId,
   keyword: CategoryKeyword,
-  normalized_keyword: Schema.String,
   category_id: CategoryId,
-  created_at: Schema.String,
-  updated_at: Schema.String,
+  created_at_ms: Schema.Int,
+  updated_at_ms: Schema.Int,
 });
 const CategorySnapshot = Schema.Struct({
   id: CategoryId,
@@ -69,10 +68,9 @@ const snapshotGuard = (userId: string, snapshot: Snapshot): OwnedStatement => ({
       SELECT 1 FROM keyword_rules AS rule WHERE rule.user_id = ?
       AND rule.id = json_extract(expected.value, '$.id')
       AND rule.keyword = json_extract(expected.value, '$.keyword')
-      AND rule.normalized_keyword = json_extract(expected.value, '$.normalized_keyword')
       AND rule.category_id = json_extract(expected.value, '$.category_id')
-      AND rule.created_at = json_extract(expected.value, '$.created_at')
-      AND rule.updated_at = json_extract(expected.value, '$.updated_at')))
+      AND rule.created_at_ms = json_extract(expected.value, '$.created_at_ms')
+      AND rule.updated_at_ms = json_extract(expected.value, '$.updated_at_ms')))
     AND (SELECT count(*) FROM categories) = ?
     AND NOT EXISTS (SELECT 1 FROM json_each(?) AS expected WHERE NOT EXISTS (
       SELECT 1 FROM categories AS category WHERE category.id = json_extract(expected.value, '$.id')
@@ -118,7 +116,7 @@ export const ruleOAuthReview = (
     const rulesResult = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          `SELECT id,keyword,normalized_keyword,category_id,created_at,updated_at FROM keyword_rules WHERE user_id = ? ORDER BY id LIMIT ${maximumKeywordRulesPerUser + 1}`
+          `SELECT id,keyword,category_id,created_at_ms,updated_at_ms FROM keyword_rules WHERE user_id = ? ORDER BY id LIMIT ${maximumKeywordRulesPerUser + 1}`
         )
         .bind(input.subject.userId)
         .all()

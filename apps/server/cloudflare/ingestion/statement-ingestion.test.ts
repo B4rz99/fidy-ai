@@ -4665,7 +4665,7 @@ it("invalidates OAuth review when automatic Category changes without creating a 
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "INSERT INTO keyword_rules(id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at) VALUES (?,?,'Cafe','cafe',?,'2026-08-01T00:00:00.000Z','2026-08-01T00:00:00.000Z')"
+            "INSERT INTO keyword_rules(id,user_id,keyword,category_id,created_at_ms,updated_at_ms) VALUES (?,?,'cafe',?,1785542400000,1785542400000)"
           )
           .bind(newId(), userA, "10000000-0000-4000-8000-000000000003")
           .run()
@@ -4727,7 +4727,7 @@ it("prefills independently known facts when a statement date is missing", () =>
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "INSERT INTO keyword_rules(id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at) VALUES (?,?,'Cafe','cafe',?,'2026-08-01T00:00:00.000Z','2026-08-01T00:00:00.000Z')"
+            "INSERT INTO keyword_rules(id,user_id,keyword,category_id,created_at_ms,updated_at_ms) VALUES (?,?,'cafe',?,1785542400000,1785542400000)"
           )
           .bind(newId(), userA, suggestedCategory)
           .run()

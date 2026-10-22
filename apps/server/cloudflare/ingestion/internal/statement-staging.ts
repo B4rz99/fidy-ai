@@ -678,8 +678,8 @@ const readAdmissionState = (
              WHERE s.user_id = ? AND s.status IN ('queued', 'processing')) AS outstanding,
            (SELECT count(*) FROM statement_submissions AS s
              WHERE s.user_id = ? AND s.submitted_at_ms > ?) AS recent,
-           EXISTS (SELECT 1 FROM users AS e
-             WHERE e.id = ? AND (e.backfill_consumed_at_ms IS NOT NULL OR e.backfill_submission_id IS NOT NULL))
+           EXISTS (SELECT 1 FROM statement_backfill_entitlements AS e
+             WHERE e.user_id = ? AND (e.consumed_at_ms IS NOT NULL OR e.submission_id IS NOT NULL))
              AS backfill_reserved,
            ${pro.sql} AS pro`
       )
@@ -758,10 +758,10 @@ const submissionInsertStatement = (
                WHERE hourly.user_id = staging.user_id AND hourly.submitted_at_ms > ?)
              < ?
          AND (${pro.sql} OR NOT EXISTS (
-               SELECT 1 FROM users AS entitlement
-               WHERE entitlement.id = staging.user_id
-                 AND (entitlement.backfill_consumed_at_ms IS NOT NULL
-                   OR entitlement.backfill_submission_id IS NOT NULL)))
+               SELECT 1 FROM statement_backfill_entitlements AS entitlement
+               WHERE entitlement.user_id = staging.user_id
+                 AND (entitlement.consumed_at_ms IS NOT NULL
+                   OR entitlement.submission_id IS NOT NULL)))
          AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`,
       params: [
         submissionId,
@@ -885,11 +885,12 @@ const publicationAccountabilityStatements = (
       .bind(submissionId, stagingId, userId, nowEpochMs),
     database
       .prepare(
-        `UPDATE users SET backfill_present=1,backfill_submission_id=
-           CASE WHEN ${pro.sql} THEN backfill_submission_id ELSE ? END
-         WHERE id=? AND changes()=1`
+        `INSERT INTO statement_backfill_entitlements(user_id,submission_id)
+         SELECT ?,CASE WHEN ${pro.sql} THEN NULL ELSE ? END WHERE changes()=1
+         ON CONFLICT(user_id) DO UPDATE SET submission_id=
+           CASE WHEN excluded.submission_id IS NULL THEN statement_backfill_entitlements.submission_id ELSE excluded.submission_id END`
       )
-      .bind(...pro.params, submissionId, userId),
+      .bind(userId, ...pro.params, submissionId),
     prepareOwnerAuditCall({
       db: database,
       id: auditId,
@@ -1547,7 +1548,7 @@ export const readOwnedStatementSubmission: {
            s.needs_review_rows - (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id) AS needs_review_rows,
            (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'skipped') AS skipped_rows,
            (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'abandoned') AS abandoned_rows
-         FROM statement_submissions s
+         FROM statement_submission_context s
          WHERE s.id = ? AND s.user_id = ?`
         )
         .bind(input.submissionId, input.userId)

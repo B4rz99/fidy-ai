@@ -1,3 +1,12 @@
+import { Schema } from "effect";
+
+export const CutoverHistory = Schema.fromJsonString(
+  Schema.Struct({
+    originalDefinitions: Schema.Array(Schema.String),
+    introducedNames: Schema.Array(Schema.String),
+  })
+);
+
 export const schemaStatements = (source: string): ReadonlyArray<string> =>
   source
     .split("--> statement-breakpoint")
@@ -31,4 +40,29 @@ export const documentedSqlBlock = ({
     .split(";")
     .map((sql) => sql.trim())
     .filter((sql) => sql.length > 0);
+};
+
+export const precedingSchema = ({
+  current,
+  history,
+}: Readonly<{
+  current: ReadonlyArray<string>;
+  history: Readonly<{
+    originalDefinitions: ReadonlyArray<string>;
+    introducedNames: ReadonlyArray<string>;
+  }>;
+}>): ReadonlyArray<string> => {
+  const original = new Map(history.originalDefinitions.map((sql) => [schemaObjectName(sql), sql]));
+  const names = new Set(current.map(schemaObjectName));
+  const restored = [
+    ...current
+      .filter((sql) => !history.introducedNames.includes(schemaObjectName(sql)))
+      .map((sql) => original.get(schemaObjectName(sql)) ?? sql),
+    ...history.originalDefinitions.filter((sql) => !names.has(schemaObjectName(sql))),
+  ];
+  // Removed parent tables must exist before their restored triggers and indexes.
+  return [
+    ...restored.filter((sql) => sql.startsWith("CREATE TABLE ")),
+    ...restored.filter((sql) => !sql.startsWith("CREATE TABLE ")),
+  ];
 };

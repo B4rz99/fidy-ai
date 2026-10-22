@@ -1,8 +1,9 @@
 import { makeRecoveryErasureStores } from "../recovery/runtime";
 import { makeEmailAuthenticationErasureStores } from "../email-authentication/runtime";
 import { afterAll, expect, it } from "vitest";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { installRetentionTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { retainedReviewRows } from "./native.test-fixture";
 import { sweepReviewDrafts } from "../ingestion/runtime";
 import { makeMemoryErasureStores } from "../memory/runtime";
 
@@ -118,12 +119,16 @@ it("expires ordinary review drafts while a sealed User remains under erasure dis
             .bind(id)
         ),
         ...[userId, foreignUser].flatMap((id) =>
-          [0, 1].map((index) =>
-            db
-              .prepare(`INSERT INTO ingestion_review_state
-        (id,user_id,status,revision,draft_json,expires_at_ms,updated_at_ms,created_at_ms)
-        VALUES(?,?,'pending',1,'{"counterparty":"Personal draft"}',?,?,?)`)
-              .bind(`${id}-${index}`, id, current - 1, current, index === 0 ? current : 1)
+          [0, 1].flatMap((index) =>
+            retainedReviewRows({
+              db,
+              userId: id,
+              id: `${id}-${index}`,
+              created: index === 0 ? current - 31 * 86400000 : 1,
+              current,
+              status: "pending",
+              transactionId: Option.none(),
+            })
           )
         ),
         db
@@ -136,7 +141,9 @@ it("expires ordinary review drafts while a sealed User remains under erasure dis
       yield* sweepReviewDrafts({ db, current });
       const retained = yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT draft_json FROM ingestion_review_state WHERE user_id=? ORDER BY id")
+          .prepare(
+            "SELECT draft_json FROM ingestion_review_workspace_state WHERE user_id=? ORDER BY id"
+          )
           .bind(userId)
           .all()
       );
@@ -146,7 +153,9 @@ it("expires ordinary review drafts while a sealed User remains under erasure dis
       ]);
       const expired = yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT draft_json FROM ingestion_review_state WHERE user_id=? ORDER BY id")
+          .prepare(
+            "SELECT draft_json FROM ingestion_review_workspace_state WHERE user_id=? ORDER BY id"
+          )
           .bind(foreignUser)
           .all()
       );

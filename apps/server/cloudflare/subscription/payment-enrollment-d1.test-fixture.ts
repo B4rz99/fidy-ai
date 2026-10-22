@@ -27,22 +27,6 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
     )
   );
   yield* fromPromise(() =>
-    db.batch(
-      [
-        "cancellation_paid_attempt_id TEXT",
-        "cancellation_payment_source_id TEXT",
-        "cancellation_cancelled_at_ms INTEGER",
-        "cancellation_paid_through_ms INTEGER",
-        "cancellation_source_cancellation TEXT",
-        "cancellation_void_started_at_ms INTEGER",
-        "cancellation_void_verified_at_ms INTEGER",
-        "cancellation_verification_count INTEGER",
-        "cancellation_last_offered_at_ms INTEGER",
-      ].map((column) => db.prepare(`ALTER TABLE users ADD COLUMN ${column}`))
-    )
-  );
-
-  yield* fromPromise(() =>
     installCurrentTestObjects({
       db,
       tables: [
@@ -50,16 +34,22 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
         "resource_admission_grants",
         "resource_admission_events",
         "billing_attempts",
+        "billing_attempt_context",
         "billing_callback_hints",
         "billing_price_notices",
+        "billing_price_notice_context",
         "billing_provider_transactions",
         "billing_retry_clearances",
         "subscriptions",
+        "subscription_cancellations",
+        "subscription_cancellation_context",
         "payment_enrollments",
         "payment_sources",
         "payment_enrollment_context",
         "payment_source_context",
         "refund_attempts",
+        "refund_charge_context",
+        "refund_attempt_context",
         "subscription_prices",
         "subscription_renewal_fences",
         "subscription_standing",
@@ -67,4 +57,9 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
     })
   );
   return { db };
+});
+
+export const queuedBillingExecution = (): Pick<WorkflowInstance, "status" | "restart"> => ({
+  status: () => Promise.resolve({ status: "queued" }),
+  restart: () => Promise.resolve(),
 });

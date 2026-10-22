@@ -2,7 +2,9 @@ import { Effect, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import {
+  CutoverHistory,
   documentedSqlBlock,
+  precedingSchema,
   schemaDefinition,
   schemaObjectName,
   schemaStatements,
@@ -22,23 +24,111 @@ it.each(["valid", "unknown-environment", "changed-method", "interrupted"] as con
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* wait(() => databases.acquire());
-        const original = yield* Schema.decodeEffect(
-          Schema.fromJsonString(
-            Schema.Struct({
-              originalDefinitions: Schema.Array(Schema.String),
-              introducedNames: Schema.Array(Schema.String),
-            })
-          )
-        )(
+        const original = yield* Schema.decodeEffect(CutoverHistory)(
           yield* wait(() =>
             Bun.file(new URL("./source-cutover.test-fixture.json", import.meta.url)).text()
           )
         );
-        const source = schemaStatements(
+        const standingHistory = yield* Schema.decodeEffect(CutoverHistory)(
           yield* wait(() =>
-            Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+            Bun.file(new URL("./standing-cutover.test-fixture.json", import.meta.url)).text()
           )
         );
+        const source = precedingSchema({
+          current: precedingSchema({
+            current: precedingSchema({
+              current: precedingSchema({
+                current: precedingSchema({
+                  current: precedingSchema({
+                    current: precedingSchema({
+                      current: precedingSchema({
+                        current: precedingSchema({
+                          current: schemaStatements(
+                            yield* wait(() =>
+                              Bun.file(
+                                new URL("../migrations/0001_schema.sql", import.meta.url)
+                              ).text()
+                            )
+                          ),
+                          history: yield* Schema.decodeEffect(CutoverHistory)(
+                            yield* wait(() =>
+                              Bun.file(
+                                new URL(
+                                  "../ingestion/backfill-progress-cutover.test-fixture.json",
+                                  import.meta.url
+                                )
+                              ).text()
+                            )
+                          ),
+                        }),
+                        history: yield* Schema.decodeEffect(CutoverHistory)(
+                          yield* wait(() =>
+                            Bun.file(
+                              new URL(
+                                "../ingestion/email-media-review-cutover.test-fixture.json",
+                                import.meta.url
+                              )
+                            ).text()
+                          )
+                        ),
+                      }),
+                      history: yield* Schema.decodeEffect(CutoverHistory)(
+                        yield* wait(() =>
+                          Bun.file(
+                            new URL(
+                              "../ingestion/statement-review-cutover.test-fixture.json",
+                              import.meta.url
+                            )
+                          ).text()
+                        )
+                      ),
+                    }),
+                    history: yield* Schema.decodeEffect(CutoverHistory)(
+                      yield* wait(() =>
+                        Bun.file(
+                          new URL(
+                            "../ingestion/materialization-cutover.test-fixture.json",
+                            import.meta.url
+                          )
+                        ).text()
+                      )
+                    ),
+                  }),
+                  history: yield* Schema.decodeEffect(CutoverHistory)(
+                    yield* wait(() =>
+                      Bun.file(
+                        new URL(
+                          "../ingestion/forwarding-cutover.test-fixture.json",
+                          import.meta.url
+                        )
+                      ).text()
+                    )
+                  ),
+                }),
+                history: yield* Schema.decodeEffect(CutoverHistory)(
+                  yield* wait(() =>
+                    Bun.file(
+                      new URL("./price-notice-cutover.test-fixture.json", import.meta.url)
+                    ).text()
+                  )
+                ),
+              }),
+              history: yield* Schema.decodeEffect(CutoverHistory)(
+                yield* wait(() =>
+                  Bun.file(new URL("./refund-cutover.test-fixture.json", import.meta.url)).text()
+                )
+              ),
+            }),
+            history: yield* Schema.decodeEffect(CutoverHistory)(
+              yield* wait(() =>
+                Bun.file(
+                  new URL("./cancellation-cutover.test-fixture.json", import.meta.url)
+                ).text()
+              )
+            ),
+          }),
+          history: standingHistory,
+        });
         const guide = yield* wait(() =>
           Bun.file(
             new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)

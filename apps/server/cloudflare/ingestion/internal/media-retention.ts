@@ -24,6 +24,11 @@ export const sweepMedia = ({
           .bind(current, retentionBatchSize),
         db
           .prepare(
+            `DELETE FROM ingestion_review_items WHERE source_kind='media' AND media_submission_id IN(SELECT id FROM media_submissions WHERE accepted_at_ms<=? ORDER BY accepted_at_ms,id LIMIT ?)`
+          )
+          .bind(current - accountabilityLifetimeMs, retentionBatchSize),
+        db
+          .prepare(
             "DELETE FROM media_submissions WHERE id IN (SELECT id FROM media_submissions WHERE accepted_at_ms <= ? ORDER BY accepted_at_ms,id LIMIT ?)"
           )
           .bind(current - accountabilityLifetimeMs, retentionBatchSize),

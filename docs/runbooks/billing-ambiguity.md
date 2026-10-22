@@ -44,7 +44,9 @@ reconciler cannot resolve it.
 
 If support explicitly confirms no charge exists for the exact reference/environment and cannot
 later approve, retain its genuine case ID and accountable operator before recording the guarded,
-write-once `no_charge_*` fields on that BillingAttempt in privileged D1. This exception authorizes a
+write-once `no_charge_case_id`, `no_charge_operator_id` and `no_charge_confirmed_at_ms` fields on that BillingAttempt in privileged D1. This exception authorizes a
 new User decision, never another POST on the sent arm. Never invent support evidence or clear
-billing history. Inspect the attempt's `recovery_case_id`/`recovery_reviewed_at_ms` if later approval
-contradicts that confirmation, and investigate the resulting payment/refund obligations.
+billing history. Match the operator's reviewed reference/environment against the immutable attempt
+in the same guarded write; those identities are derived rather than copied into no-charge evidence.
+Inspect `no_charge_case_id` and `late_approval_observed_at_ms` if later approval contradicts that
+confirmation, and investigate the resulting payment/refund obligations.

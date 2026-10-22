@@ -298,8 +298,8 @@ it("staging reclaims only bounded due objects, resumes deleting objects and reta
       yield* io(() =>
         db
           .prepare(`INSERT INTO statement_submissions
-    (id,user_id,idempotency_key,staging_id,source_format,parser_revision,service_market,locale,time_zone,status,submitted_at_ms,started_at_ms,completed_at_ms,retention_expires_at_ms,input_rows,accepted_rows,needs_review_rows)
-    VALUES ('submission',?,'00000000-0000-4000-8000-000000000003','due-1','csv','v1','CO','es-CO','UTC','completed',1,1,1,2,0,0,0)`)
+    (id,user_id,idempotency_key,staging_id,source_format,parser_revision,service_market,locale,time_zone,status,submitted_at_ms,started_at_ms,completed_at_ms,retention_expires_at_ms)
+    VALUES ('submission',?,'00000000-0000-4000-8000-000000000003','due-1','csv','v1','CO','es-CO','UTC','completed',1,1,1,2)`)
           .bind(user)
           .run()
       );

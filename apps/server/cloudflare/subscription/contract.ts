@@ -153,6 +153,11 @@ export type BillingWorkflowStarter = Readonly<{
   get: (id: string) => Promise<unknown>;
 }>;
 
+export type BillingObservationWorkflow = Pick<BillingWorkflowStarter, "create"> &
+  Readonly<{
+    get: (id: string) => Promise<Pick<WorkflowInstance, "status" | "restart">>;
+  }>;
+
 /** Private same-User admission; a queued identity never authorizes a charge by itself. */
 export const SubscriptionRenewalAdmission = Schema.TaggedStruct("SubscriptionRenewal", {
   userId: UserId,

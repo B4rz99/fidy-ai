@@ -9,12 +9,7 @@ import { statementReviewAdmission } from "./internal/statement-review-budget";
 import { deepStrictEqual } from "node:assert/strict";
 import { inspect } from "node:util";
 import { StatementProcessingUnavailable } from "./contract";
-import {
-  installCurrentTestObjects,
-  installTestSchema,
-  isolatedTestStorage,
-  observeRetentionCost,
-} from "../d1-test-fixture";
+import { installTestSchema, isolatedTestStorage, observeRetentionCost } from "../d1-test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { currentMillis } from "../runtime/operations";
@@ -135,7 +130,7 @@ effectIt.effect(
       const state = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT status, input_rows, needs_review_rows FROM statement_submissions WHERE id = ?"
+            "SELECT status, input_rows, needs_review_rows FROM statement_submission_context WHERE id = ?"
           )
           .bind(submissionId)
           .first()
@@ -144,7 +139,7 @@ effectIt.effect(
       const reviews = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT original_evidence FROM statement_needs_review WHERE user_id = ? ORDER BY record_number"
+            "SELECT original_evidence FROM statement_review_context WHERE user_id = ? ORDER BY record_number"
           )
           .bind(userA)
           .all()
@@ -174,7 +169,9 @@ effectIt.effect(
       );
       yield* fromTestPromise(() =>
         db
-          .prepare("UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1")
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
+          )
           .bind(userA, submissionId)
           .run()
       );
@@ -221,7 +218,7 @@ effectIt.effect(
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT original_evidence,known_money FROM statement_needs_review WHERE submission_id = ?"
+              "SELECT original_evidence,known_money FROM statement_review_context WHERE submission_id = ?"
             )
             .bind(submissionId)
             .first()
@@ -241,7 +238,7 @@ effectIt.effect(
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT submission_id,consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
+              "SELECT submission_id,consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?"
             )
             .bind(userA)
             .first()
@@ -257,7 +254,9 @@ effectIt.effect("holds a zero-capture Free reservation while rows await clarific
     );
     yield* fromTestPromise(() =>
       db
-        .prepare("UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1")
+        .prepare(
+          "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
+        )
         .bind(userA, submissionId)
         .run()
     );
@@ -270,7 +269,7 @@ effectIt.effect("holds a zero-capture Free reservation while rows await clarific
     const entitlement = yield* fromTestPromise(() =>
       db
         .prepare(
-          "SELECT submission_id, consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
+          "SELECT submission_id, consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?"
         )
         .bind(userA)
         .first()
@@ -291,12 +290,11 @@ effectIt.effect(
         db
           .prepare(`WITH RECURSIVE numbered(n) AS (
     SELECT 1 UNION ALL SELECT n + 1 FROM numbered WHERE n < 101
-  ) INSERT INTO statement_needs_review
-    (id,user_id,submission_id,record_number,reason,original_evidence,known_money,
-      issues,status,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,
+  ) INSERT INTO ingestion_review_items (source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,known_money_json,
+      issues_json,evidence_state,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,
       source_format,parser_revision,extractor_revision)
-    SELECT printf('40000000-0000-4000-8000-%012d', n), ?, ?, n, 'mapping-unavailable',
-      '{"sourceFormat":"csv"}', NULL, '[]', 'pending', ?, ?, 'CO', 'es-CO',
+    SELECT 'statement',printf('40000000-0000-4000-8000-%012d', n), ?, ?, n, 'mapping-unavailable',
+      '{"sourceFormat":"csv"}', NULL, '[]', 'retained', ?, ?, 'CO', 'es-CO',
       'America/Bogota', 'csv', 'statement-parser-v1', 'statement-mechanical-v1'
     FROM numbered`)
           .bind(userA, submissionId, expiredAt, expiredAt)
@@ -305,13 +303,13 @@ effectIt.effect(
       yield* expireStatementReviewEvidence({ DB: db });
       const pending = yield* fromTestPromise(() =>
         db
-          .prepare(`SELECT count(*) AS count FROM statement_needs_review
+          .prepare(`SELECT count(*) AS count FROM statement_review_context
     WHERE status = 'pending' OR original_evidence IS NOT NULL`)
           .first<{ count: number }>()
       );
       const expired = yield* fromTestPromise(() =>
         db
-          .prepare(`SELECT count(*) AS count FROM statement_needs_review
+          .prepare(`SELECT count(*) AS count FROM statement_review_context
     WHERE status = 'expired'`)
           .first<{ count: number }>()
       );
@@ -405,7 +403,7 @@ effectIt.effect(
         db
           .prepare(`SELECT s.status, s.accepted_rows, s.needs_review_rows,
     (SELECT count(*) FROM source_attestations WHERE statement_submission_id = s.id) AS attestations
-    FROM statement_submissions s WHERE s.id = ?`)
+    FROM statement_submission_context s WHERE s.id = ?`)
           .bind(submissionId)
           .first<{
             status: string;
@@ -432,7 +430,9 @@ effectIt.effect(
       );
       yield* fromTestPromise(() =>
         db
-          .prepare("UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1")
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
+          )
           .bind(userA, submissionId)
           .run()
       );
@@ -445,7 +445,7 @@ effectIt.effect(
       const grant = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT consumed_at_ms,submission_id FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
+            "SELECT consumed_at_ms,submission_id FROM statement_backfill_entitlements WHERE user_id = ?"
           )
           .bind(userA)
           .first<{ consumed_at_ms: unknown; submission_id: unknown }>()
@@ -465,7 +465,9 @@ effectIt.effect(
       const { db, bucket } = yield* fromTestPromise(() => setup(csv));
       yield* fromTestPromise(() =>
         db
-          .prepare("UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1")
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
+          )
           .bind(userA, submissionId)
           .run()
       );
@@ -483,7 +485,7 @@ effectIt.effect(
       }> =>
         db
           .prepare(
-            "SELECT consumed_at_ms,submission_id FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
+            "SELECT consumed_at_ms,submission_id FROM statement_backfill_entitlements WHERE user_id = ?"
           )
           .bind(userA)
           .first<{ consumed_at_ms: unknown; submission_id: unknown }>()
@@ -510,7 +512,9 @@ effectIt.effect(
       );
       yield* fromTestPromise(() =>
         db
-          .prepare("UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1")
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
+          )
           .bind(userA, submissionId)
           .run()
       );
@@ -533,7 +537,7 @@ effectIt.effect(
       const grant = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT consumed_at_ms,submission_id FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
+            "SELECT consumed_at_ms,submission_id FROM statement_backfill_entitlements WHERE user_id = ?"
           )
           .bind(userA)
           .first<{ consumed_at_ms: unknown; submission_id: unknown }>()
@@ -701,7 +705,9 @@ effectIt.effect(
       });
       const item = yield* fromTestPromise(() =>
         db
-          .prepare("SELECT reason, original_evidence FROM statement_needs_review WHERE user_id = ?")
+          .prepare(
+            "SELECT reason, original_evidence FROM statement_review_context WHERE user_id = ?"
+          )
           .bind(userA)
           .first<{ reason: string; original_evidence: string }>()
       );
@@ -726,7 +732,9 @@ effectIt.effect(
       );
       yield* fromTestPromise(() =>
         db
-          .prepare("UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1")
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
+          )
           .bind(userA, submissionId)
           .run()
       );
@@ -750,9 +758,7 @@ effectIt.effect(
       );
       const reservation = yield* fromTestPromise(() =>
         db
-          .prepare(
-            "SELECT submission_id FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
-          )
+          .prepare("SELECT submission_id FROM statement_backfill_entitlements WHERE user_id = ?")
           .bind(userA)
           .first<{ submission_id: unknown }>()
       );
@@ -799,7 +805,9 @@ effectIt.effect(
       const { db, bucket } = yield* fromTestPromise(() => setup(csv));
       yield* fromTestPromise(() =>
         db
-          .prepare("UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1")
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
+          )
           .bind(userA, submissionId)
           .run()
       );
@@ -828,7 +836,7 @@ effectIt.effect(
       const state = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT status,input_rows,accepted_rows,needs_review_rows FROM statement_submissions WHERE id = ?"
+            "SELECT status,input_rows,accepted_rows,needs_review_rows FROM statement_submission_context WHERE id = ?"
           )
           .bind(submissionId)
           .first<{
@@ -840,9 +848,7 @@ effectIt.effect(
       );
       const entitlement = yield* fromTestPromise(() =>
         db
-          .prepare(
-            "SELECT consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
-          )
+          .prepare("SELECT consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?")
           .bind(userA)
           .first<{ consumed_at_ms: unknown }>()
       );
@@ -868,7 +874,7 @@ effectIt.effect(
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS count FROM statement_needs_review WHERE submission_id = ? AND (status='pending' OR original_evidence IS NOT NULL OR known_money IS NOT NULL)"
+              "SELECT count(*) AS count FROM statement_review_context WHERE submission_id = ? AND (status='pending' OR original_evidence IS NOT NULL OR known_money IS NOT NULL)"
             )
             .bind(submissionId)
             .first()
@@ -903,7 +909,7 @@ effectIt.effect(
       const result = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT status,input_rows,needs_review_rows FROM statement_submissions WHERE id = ?"
+            "SELECT status,input_rows,needs_review_rows FROM statement_submission_context WHERE id = ?"
           )
           .bind(submissionId)
           .first<{ status: string; input_rows: number; needs_review_rows: number }>()
@@ -929,7 +935,7 @@ effectIt.effect(
       const state = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT status,input_rows,needs_review_rows FROM statement_submissions WHERE id = ?"
+            "SELECT status,input_rows,needs_review_rows FROM statement_submission_context WHERE id = ?"
           )
           .bind(submissionId)
           .first<{ status: string; input_rows: number; needs_review_rows: number }>()
@@ -994,7 +1000,9 @@ effectIt.effect(
       const { db, bucket } = yield* fromTestPromise(() => setup(csv));
       yield* fromTestPromise(() =>
         db
-          .prepare("UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1")
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
+          )
           .bind(userA, submissionId)
           .run()
       );
@@ -1015,16 +1023,14 @@ effectIt.effect(
       const state = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT status,input_rows,needs_review_rows FROM statement_submissions WHERE id = ?"
+            "SELECT status,input_rows,needs_review_rows FROM statement_submission_context WHERE id = ?"
           )
           .bind(submissionId)
           .first<{ status: string; input_rows: number; needs_review_rows: number }>()
       );
       const entitlement = yield* fromTestPromise(() =>
         db
-          .prepare(
-            "SELECT consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
-          )
+          .prepare("SELECT consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?")
           .bind(userA)
           .first<{ consumed_at_ms: unknown }>()
       );
@@ -1032,11 +1038,7 @@ effectIt.effect(
       expect(entitlement?.consumed_at_ms).toBeNull();
       expect(
         yield* fromTestPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM statement_submissions WHERE material_state IS NOT NULL"
-            )
-            .first()
+          db.prepare("SELECT count(*) AS count FROM statement_materializations").first()
         )
       ).toEqual({ count: 0 });
       expect(
@@ -1231,7 +1233,7 @@ const observeDerivedReads = (
         if (property === "prepare") {
           return (sql: string) =>
             sql.includes("p.body") && sql.includes("SELECT p.")
-              ? instrument(target.prepare(sql), sql.includes("m.material_state='building'"))
+              ? instrument(target.prepare(sql), sql.includes("m.state='building'"))
               : target.prepare(sql);
         }
         const method: unknown = Reflect.get(target, property, target);
@@ -1279,11 +1281,7 @@ effectIt.effect("deleting an interrupted submission reclaims its owned derived p
             "UPDATE statement_submissions AS statement_ingestion_outbox SET work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_published_at_ms IS NOT NULL AND user_id=?"
           )
           .bind(userA),
-        db
-          .prepare(
-            "UPDATE users SET backfill_present=NULL,backfill_submission_id=NULL,backfill_consumed_at_ms=NULL WHERE id=?"
-          )
-          .bind(userA),
+        db.prepare("DELETE FROM statement_backfill_entitlements WHERE user_id=?").bind(userA),
         db
           .prepare(
             "UPDATE statement_staging_objects SET status='deleting',published_submission_id=NULL WHERE user_id=?"
@@ -1297,7 +1295,7 @@ effectIt.effect("deleting an interrupted submission reclaims its owned derived p
       yield* fromTestPromise(() =>
         db
           .prepare(`SELECT
-      (SELECT count(*) FROM statement_submissions WHERE material_state IS NOT NULL) AS manifests,
+      (SELECT count(*) FROM statement_materializations) AS manifests,
       (SELECT count(*) FROM statement_materialization_parts) AS parts`)
           .first()
       )
@@ -1327,7 +1325,7 @@ effectIt.effect(
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "UPDATE statement_submissions SET material_representation_revision='statement-material-v1'"
+            "UPDATE statement_materializations SET representation_revision='statement-material-v1'"
           )
           .run()
       );
@@ -1456,7 +1454,7 @@ it.each(["body", "body-and-checksum"] as const)(
             db
               .prepare(`SELECT status,failure_reason,
         (SELECT count(*) FROM transactions) AS captures,
-        (SELECT count(*) FROM statement_submissions WHERE material_state IS NOT NULL) AS materializations
+        (SELECT count(*) FROM statement_materializations) AS materializations
         FROM statement_submissions WHERE id=?`)
               .bind(submissionId)
               .first()
@@ -1600,7 +1598,9 @@ effectIt.effect(
       const { db, bucket } = yield* fromTestPromise(() => setup(source, "xlsx"));
       yield* fromTestPromise(() =>
         db
-          .prepare("UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1")
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
+          )
           .bind(userA, submissionId)
           .run()
       );
@@ -1617,7 +1617,7 @@ effectIt.effect(
       const state = yield* fromTestPromise(() =>
         db
           .prepare(`SELECT status,failure_reason,
-      input_rows,accepted_rows,needs_review_rows FROM statement_submissions WHERE id=?`)
+      input_rows,accepted_rows,needs_review_rows FROM statement_submission_context WHERE id=?`)
           .bind(submissionId)
           .first()
       );
@@ -1634,7 +1634,7 @@ effectIt.effect(
       (SELECT count(*) FROM transactions) AS transactions,
       (SELECT count(*) FROM source_attestations) AS attestations,
       (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
-      (SELECT count(*) FROM statement_needs_review) AS reviews`)
+      (SELECT count(*) FROM statement_review_context) AS reviews`)
           .first()
       );
       expect(counts).toEqual({ transactions: 33, attestations: 33, outcomes: 33, reviews: 0 });
@@ -1642,7 +1642,7 @@ effectIt.effect(
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT submission_id,consumed_at_ms IS NOT NULL AS consumed FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id=?"
+              "SELECT submission_id,consumed_at_ms IS NOT NULL AS consumed FROM statement_backfill_entitlements WHERE user_id=?"
             )
             .bind(userA)
             .first()
@@ -1689,7 +1689,7 @@ effectIt.effect(
       const state = yield* fromTestPromise(() =>
         db
           .prepare(`SELECT status,input_rows,accepted_rows,
-      needs_review_rows FROM statement_submissions WHERE id=?`)
+      needs_review_rows FROM statement_submission_context WHERE id=?`)
           .bind(submissionId)
           .first()
       );
@@ -1710,7 +1710,7 @@ effectIt.effect(
       expect(attested).toEqual({ count: 34 });
       expect(
         yield* fromTestPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM statement_needs_review").first()
+          db.prepare("SELECT count(*) AS count FROM statement_review_context").first()
         )
       ).toEqual({ count: 0 });
     })
@@ -1768,10 +1768,9 @@ effectIt.effect(
         const inserted = yield* Effect.exit(
           Effect.tryPromise(() =>
             db
-              .prepare(`INSERT INTO statement_needs_review
-        (id,user_id,submission_id,record_number,reason,original_evidence,known_money,issues,status,
-        evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,review_suggestions_json)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`)
+              .prepare(`INSERT INTO ingestion_review_items (source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,known_money_json,issues_json,evidence_state,
+        evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,suggestions_json)
+        VALUES ('statement',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`)
               .bind(
                 "10000000-0000-4000-8000-000000000701",
                 userA,
@@ -1781,7 +1780,7 @@ effectIt.effect(
                 evidence,
                 null,
                 issues,
-                "pending",
+                "retained",
                 context.expiresAt,
                 context.createdAt,
                 context.serviceMarket,
@@ -1819,7 +1818,9 @@ effectIt.effect("fails an already-processing oversized review row without undoin
           )
           .bind(currentMillis(), submissionId),
         db
-          .prepare("UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1")
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
+          )
           .bind(userA, submissionId),
       ])
     );
@@ -1837,7 +1838,7 @@ effectIt.effect("fails an already-processing oversized review row without undoin
       yield* fromTestPromise(() =>
         db
           .prepare(`SELECT status,failure_reason,input_rows,
-      accepted_rows,needs_review_rows FROM statement_submissions WHERE id=?`)
+      accepted_rows,needs_review_rows FROM statement_submission_context WHERE id=?`)
           .bind(submissionId)
           .first()
       )
@@ -1855,7 +1856,7 @@ effectIt.effect("fails an already-processing oversized review row without undoin
       (SELECT count(*) FROM transactions) AS transactions,
       (SELECT count(*) FROM source_attestations) AS attestations,
       (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
-      (SELECT count(*) FROM statement_needs_review) AS reviews`)
+      (SELECT count(*) FROM statement_review_context) AS reviews`)
           .first()
       )
     ).toEqual({ transactions: 33, attestations: 33, outcomes: 33, reviews: 0 });
@@ -1863,7 +1864,7 @@ effectIt.effect("fails an already-processing oversized review row without undoin
       yield* fromTestPromise(() =>
         db
           .prepare(`SELECT submission_id,
-      consumed_at_ms IS NOT NULL AS consumed FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id=?`)
+      consumed_at_ms IS NOT NULL AS consumed FROM statement_backfill_entitlements WHERE user_id=?`)
           .bind(userA)
           .first()
       )
@@ -1901,7 +1902,7 @@ effectIt.effect(
       (SELECT count(*) FROM transactions WHERE counterparty='Cafe') AS transactions,
       (SELECT count(*) FROM source_attestations) AS attestations,
       (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
-      (SELECT count(*) FROM statement_needs_review) AS reviews`)
+      (SELECT count(*) FROM statement_review_context) AS reviews`)
             .first()
         )
       ).toEqual({ transactions: 0, attestations: 0, outcomes: 0, reviews: 0 });
@@ -1922,7 +1923,9 @@ effectIt.effect("releases an unspent reservation when the first review row excee
     const { db, bucket } = yield* fromTestPromise(() => setup(source, "xlsx"));
     yield* fromTestPromise(() =>
       db
-        .prepare("UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1")
+        .prepare(
+          "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
+        )
         .bind(userA, submissionId)
         .run()
     );
@@ -1939,7 +1942,7 @@ effectIt.effect("releases an unspent reservation when the first review row excee
       yield* fromTestPromise(() =>
         db
           .prepare(`SELECT status,failure_reason,input_rows,
-      accepted_rows,needs_review_rows FROM statement_submissions WHERE id=?`)
+      accepted_rows,needs_review_rows FROM statement_submission_context WHERE id=?`)
           .bind(submissionId)
           .first()
       )
@@ -1957,7 +1960,7 @@ effectIt.effect("releases an unspent reservation when the first review row excee
       (SELECT count(*) FROM transactions) AS transactions,
       (SELECT count(*) FROM source_attestations) AS attestations,
       (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
-      (SELECT count(*) FROM statement_needs_review) AS reviews`)
+      (SELECT count(*) FROM statement_review_context) AS reviews`)
           .first()
       )
     ).toEqual({ transactions: 0, attestations: 0, outcomes: 0, reviews: 0 });
@@ -1965,7 +1968,7 @@ effectIt.effect("releases an unspent reservation when the first review row excee
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT submission_id,consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id=?"
+            "SELECT submission_id,consumed_at_ms FROM statement_backfill_entitlements WHERE user_id=?"
           )
           .bind(userA)
           .first()
@@ -2042,11 +2045,7 @@ effectIt.effect(
       ).toEqual({ count: 32 });
       expect(
         yield* fromTestPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM statement_submissions WHERE material_state IS NOT NULL"
-            )
-            .first()
+          db.prepare("SELECT count(*) AS count FROM statement_materializations").first()
         )
       ).toEqual({ count: 0 });
     })
@@ -2080,59 +2079,54 @@ effectIt.effect("a foreign User cannot read or finalize a published materializat
   })
 );
 
-effectIt.effect(
-  "migration preserves existing row receipts and atomically rejects a skipped cursor",
-  () =>
-    Effect.gen(function* () {
-      const { db } = yield* fromTestPromise(() => setup("Header\nvalue", "csv"));
-      yield* fromTestPromise(() =>
+effectIt.effect("advances durable row receipts atomically and rejects a skipped cursor", () =>
+  Effect.gen(function* () {
+    const { db } = yield* fromTestPromise(() => setup("Header\nvalue", "csv"));
+    yield* fromTestPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,1,'needs-review'),(?,?,2,'needs-review')"
+        )
+        .bind(userA, submissionId, userA, submissionId)
+        .run()
+    );
+    const progress = (): ReturnType<D1PreparedStatement["first"]> =>
+      db
+        .prepare(
+          "SELECT processed_rows,processed_accepted_rows,processed_review_rows FROM statement_submissions WHERE id=?"
+        )
+        .bind(submissionId)
+        .first();
+    expect(yield* fromTestPromise(progress)).toEqual({
+      processed_rows: 2,
+      processed_accepted_rows: 0,
+      processed_review_rows: 2,
+    });
+    yield* fromTestPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,3,'needs-review')"
+        )
+        .bind(userA, submissionId)
+        .run()
+    );
+    const skipped = yield* Effect.exit(
+      Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,1,'needs-review'),(?,?,2,'needs-review')"
-          )
-          .bind(userA, submissionId, userA, submissionId)
-          .run()
-      );
-      yield* fromTestPromise(() =>
-        installCurrentTestObjects({ db, tables: ["statement_materialization_parts"] })
-      );
-      const progress = (): ReturnType<D1PreparedStatement["first"]> =>
-        db
-          .prepare(
-            "SELECT processed_rows,processed_accepted_rows,processed_review_rows FROM statement_submissions WHERE id=?"
-          )
-          .bind(submissionId)
-          .first();
-      expect(yield* fromTestPromise(progress)).toEqual({
-        processed_rows: 2,
-        processed_accepted_rows: 0,
-        processed_review_rows: 2,
-      });
-      yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,3,'needs-review')"
+            "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,5,'needs-review')"
           )
           .bind(userA, submissionId)
           .run()
-      );
-      const skipped = yield* Effect.exit(
-        Effect.tryPromise(() =>
-          db
-            .prepare(
-              "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,5,'needs-review')"
-            )
-            .bind(userA, submissionId)
-            .run()
-        )
-      );
-      expect(Exit.isFailure(skipped)).toBe(true);
-      expect(yield* fromTestPromise(progress)).toEqual({
-        processed_rows: 3,
-        processed_accepted_rows: 0,
-        processed_review_rows: 3,
-      });
-    })
+      )
+    );
+    expect(Exit.isFailure(skipped)).toBe(true);
+    expect(yield* fromTestPromise(progress)).toEqual({
+      processed_rows: 3,
+      processed_accepted_rows: 0,
+      processed_review_rows: 3,
+    });
+  })
 );
 
 effectIt.effect(
@@ -2371,7 +2365,7 @@ const measureWholeProcessing = (
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT input_rows,accepted_rows,needs_review_rows FROM statement_submissions WHERE id=?"
+            "SELECT input_rows,accepted_rows,needs_review_rows FROM statement_submission_context WHERE id=?"
           )
           .bind(submissionId)
           .first()
@@ -2443,7 +2437,7 @@ const measurePartialFailure = (
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT status,input_rows,accepted_rows,needs_review_rows FROM statement_submissions WHERE id=?"
+            "SELECT status,input_rows,accepted_rows,needs_review_rows FROM statement_submission_context WHERE id=?"
           )
           .bind(submissionId)
           .first()
@@ -2546,7 +2540,7 @@ effectIt.effect("refuses forged progress and preserves captures after a lost row
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT input_rows,accepted_rows,needs_review_rows FROM statement_submissions WHERE id=?"
+            "SELECT input_rows,accepted_rows,needs_review_rows FROM statement_submission_context WHERE id=?"
           )
           .bind(submissionId)
           .first()
@@ -2685,7 +2679,9 @@ effectIt.effect(
       const { db, bucket } = yield* fromTestPromise(() => setup(source, "xlsx"));
       yield* fromTestPromise(() =>
         db
-          .prepare("UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1")
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
+          )
           .bind(userA, submissionId)
           .run()
       );
@@ -2705,14 +2701,14 @@ effectIt.effect(
       (SELECT count(*) FROM transactions) AS captures,
       (SELECT count(*) FROM source_attestations) AS attestations,
       (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
-      (SELECT count(*) FROM statement_needs_review) AS reviews,
-      (SELECT count(*) FROM statement_submissions WHERE material_state IS NOT NULL) AS manifests,
+      (SELECT count(*) FROM statement_review_context) AS reviews,
+      (SELECT count(*) FROM statement_materializations) AS manifests,
       (SELECT count(*) FROM statement_materialization_parts) AS parts,
-      (SELECT count(*) FROM (SELECT rowid,id AS submission_id,user_id AS user_id,1 AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_published_at_ms IS NOT NULL) AS statement_ingestion_outbox) AS outbox,
+      (SELECT count(*) FROM (SELECT rowid,id AS submission_id,user_id AS user_id,1 AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submission_context WHERE work_published_at_ms IS NOT NULL) AS statement_ingestion_outbox) AS outbox,
       (SELECT status FROM statement_staging_objects WHERE id=?) AS staging,
-      (SELECT submission_id FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id=?) AS reserved,
-      (SELECT consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id=?) AS consumed
-      FROM statement_submissions s WHERE id=?`)
+      (SELECT submission_id FROM statement_backfill_entitlements WHERE user_id=?) AS reserved,
+      (SELECT consumed_at_ms FROM statement_backfill_entitlements WHERE user_id=?) AS consumed
+      FROM statement_submission_context s WHERE id=?`)
             .bind(stagingId, userA, userA, submissionId)
             .first()
         )
@@ -2785,7 +2781,7 @@ it.skipIf(!measureFullStatements)(
             yield* fromTestPromise(() =>
               db
                 .prepare(
-                  "UPDATE users SET backfill_present=1,backfill_submission_id=?2 WHERE id=?1"
+                  "INSERT INTO statement_backfill_entitlements(user_id,submission_id) VALUES(?1,?2) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id"
                 )
                 .bind(userA, submissionId)
                 .run()
@@ -2825,7 +2821,7 @@ it.skipIf(!measureFullStatements)(
             yield* fromTestPromise(() =>
               db
                 .prepare(
-                  "SELECT status,input_rows,needs_review_rows FROM statement_submissions WHERE id = ?"
+                  "SELECT status,input_rows,needs_review_rows FROM statement_submission_context WHERE id = ?"
                 )
                 .bind(submissionId)
                 .first()
@@ -2868,23 +2864,19 @@ it.skipIf(!measureFullStatements)(
 );
 
 it(
-  "upgrades populated review capacity and preserves the global cap through settlement, deletion and rollback",
+  "preserves global review capacity through settlement, deletion and rollback",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const { db } = yield* fromTestPromise(() => setup("unmapped\nrow\n", "csv"));
         const insert = (reviewId: string, record: number): D1PreparedStatement =>
           db
-            .prepare(`INSERT INTO statement_needs_review
-      (id,user_id,submission_id,record_number,reason,original_evidence,known_money,issues,status,
+            .prepare(`INSERT INTO ingestion_review_items (source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,known_money_json,issues_json,evidence_state,
        evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision)
-      VALUES (?, ?, ?, ?, 'mapping-unavailable', '{}', NULL, '[]', 'pending', 9999999999999, 0,
+      VALUES ('statement',?, ?, ?, ?, 'mapping-unavailable', '{}', NULL, '[]', 'retained', 9999999999999, 0,
         'CO', 'es-CO', 'America/Bogota', 'csv', 'fixture', 'fixture')`)
             .bind(reviewId, userA, submissionId, record);
         yield* fromTestPromise(() => insert("template", 1).run());
-        yield* fromTestPromise(() =>
-          installCurrentTestObjects({ db, tables: ["statement_review_capacity"] })
-        );
         const count = (): Promise<number> =>
           db
             .prepare("SELECT pending_count FROM statement_review_capacity WHERE id = 1")
@@ -2894,10 +2886,10 @@ it(
         yield* fromTestPromise(() =>
           db
             .prepare(`WITH RECURSIVE n(i) AS (SELECT 2 UNION ALL SELECT i + 1 FROM n WHERE i < 5000)
-      INSERT INTO statement_needs_review SELECT 'capacity-' || i, user_id, submission_id, i, reason,
-        original_evidence, known_money, issues, status, evidence_expires_at_ms, created_at_ms,
+      INSERT INTO ingestion_review_items (source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,known_money_json,issues_json,evidence_state,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,suggestions_json) SELECT 'statement','capacity-' || i, user_id, statement_submission_id, i, reason,
+        original_evidence, known_money_json, issues_json, evidence_state, evidence_expires_at_ms, created_at_ms,
         service_market, locale, time_zone, source_format, parser_revision, extractor_revision, NULL
-      FROM statement_needs_review, n WHERE id = 'template'`)
+      FROM ingestion_review_items, n WHERE id = 'template'`)
             .run()
         );
         expect(yield* fromTestPromise(count)).toBe(5000);
@@ -2906,12 +2898,12 @@ it(
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "UPDATE statement_needs_review SET status = 'expired', original_evidence = NULL, known_money = NULL WHERE id = 'template'"
+              "UPDATE ingestion_review_items SET evidence_state = 'expired', original_evidence = NULL, known_money_json = NULL WHERE id = 'template'"
             )
             .run()
         );
         expect(yield* fromTestPromise(count)).toBe(4999);
-        yield* fromTestPromise(() => db.prepare("DELETE FROM statement_needs_review").run());
+        yield* fromTestPromise(() => db.prepare("DELETE FROM ingestion_review_items").run());
         expect(yield* fromTestPromise(count)).toBe(0);
         yield* fromTestPromise(() =>
           expect(db.batch([insert("rollback", 5002), insert("rollback", 5003)])).rejects.toThrow()

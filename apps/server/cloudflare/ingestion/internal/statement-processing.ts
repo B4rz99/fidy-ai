@@ -108,10 +108,7 @@ const markFailed = ({
       db.batch([
         db
           .prepare(`UPDATE statement_submissions SET status = 'failed',
-      started_at_ms = coalesce(started_at_ms, ?), completed_at_ms = ?, failure_reason = ?,
-      input_rows = nullif(processed_rows, 0),
-      accepted_rows = CASE WHEN processed_rows > 0 THEN processed_accepted_rows ELSE NULL END,
-      needs_review_rows = CASE WHEN processed_rows > 0 THEN processed_review_rows ELSE NULL END
+      started_at_ms = coalesce(started_at_ms, ?), completed_at_ms = ?, failure_reason = ?
       WHERE id = ? AND user_id = ? AND status IN ('queued', 'processing')`)
           .bind(current, current, reason, submissionId, userId),
         db
@@ -221,16 +218,16 @@ const reviewStatement = (
   const evidence = Schema.encodeUnknownSync(evidenceCodec)(result.evidence);
   const suggestions = knownReviewSuggestions(result);
   return db
-    .prepare(`INSERT INTO statement_needs_review
-      (id, user_id, submission_id, record_number, reason, original_evidence, known_money, review_suggestions_json,
-       issues, status, evidence_expires_at_ms, created_at_ms, service_market, locale,
+    .prepare(`INSERT INTO ingestion_review_items
+      (source_kind, id, user_id, statement_submission_id, record_number, reason, original_evidence, known_money_json, suggestions_json,
+       issues_json, evidence_state, evidence_expires_at_ms, created_at_ms, service_market, locale,
        time_zone, source_format, parser_revision, extractor_revision)
-      SELECT ?, ?, ?, ?, ?,
+      SELECT 'statement', ?, ?, ?, ?, ?,
         CASE WHEN COALESCE((SELECT pending_count FROM statement_review_capacity WHERE id = 1), 5000) < ?
           AND ? > ? THEN ? ELSE NULL END,
         NULL, ?, ?,
         CASE WHEN COALESCE((SELECT pending_count FROM statement_review_capacity WHERE id = 1), 5000) < ?
-          AND ? > ? THEN 'pending' ELSE 'expired' END,
+          AND ? > ? THEN 'retained' ELSE 'expired' END,
         ?, ?, ?, ?, ?, ?, ?, ? WHERE ${active}`)
     .bind(
       id,
@@ -467,23 +464,19 @@ const completeSubmission = (
     const finished = yield* attempt(() =>
       DB.batch([
         DB.prepare(`UPDATE statement_submissions
-    SET status = 'completed', completed_at_ms = ?, input_rows = ?,
-      accepted_rows = ?, needs_review_rows = ?
+    SET status = 'completed', completed_at_ms = ?
     WHERE id = ? AND user_id = ? AND status = 'processing'
       AND processed_rows = ? AND processed_accepted_rows = ? AND processed_review_rows = ?`).bind(
           current,
-          rows,
-          counts.accepted,
-          counts.review,
           submissionId,
           userId,
           rows,
           counts.accepted,
           counts.review
         ),
-        DB.prepare(`UPDATE users
-      SET backfill_submission_id = CASE WHEN backfill_consumed_at_ms IS NULL THEN NULL ELSE backfill_submission_id END
-      WHERE backfill_present IS NOT NULL AND id = ? AND backfill_submission_id = ? AND changes() = 1
+        DB.prepare(`UPDATE statement_backfill_entitlements
+      SET submission_id = CASE WHEN consumed_at_ms IS NULL THEN NULL ELSE submission_id END
+      WHERE user_id = ? AND submission_id = ? AND changes() = 1
         AND NOT EXISTS (SELECT 1 FROM statement_submissions
           WHERE id = ? AND clarification_state = 'awaiting')`).bind(
           userId,

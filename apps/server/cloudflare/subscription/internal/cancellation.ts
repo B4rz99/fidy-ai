@@ -39,7 +39,7 @@ const readCancellation = (
   Effect.tryPromise(() =>
     db
       .prepare(
-        "SELECT cancelled_at_ms,paid_through_ms,source_cancellation FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) WHERE user_id=?"
+        "SELECT cancelled_at_ms,paid_through_ms,source_cancellation FROM subscription_cancellation_context WHERE user_id=?"
       )
       .bind(userId)
       .first()
@@ -101,19 +101,15 @@ const cancellationStatements = (
   const { db, subject, current } = work;
   const authority = callerAuthority(work);
   const mutation = db
-    .prepare(`UPDATE users SET cancellation_paid_attempt_id=CASE WHEN cancellation_cancelled_at_ms IS NULL THEN incoming.attempt_id ELSE cancellation_paid_attempt_id END,
-    cancellation_payment_source_id=CASE WHEN cancellation_cancelled_at_ms IS NULL THEN incoming.payment_source_id ELSE cancellation_payment_source_id END,
-    cancellation_cancelled_at_ms=coalesce(cancellation_cancelled_at_ms,incoming.cancelled_at_ms),
-    cancellation_paid_through_ms=coalesce(cancellation_paid_through_ms,incoming.paid_through_ms),
-    cancellation_source_cancellation=coalesce(cancellation_source_cancellation,incoming.source_cancellation),
-    cancellation_verification_count=coalesce(cancellation_verification_count,0)
-    FROM (SELECT s.user_id,s.attempt_id,a.payment_source_id,? AS cancelled_at_ms,? AS paid_through_ms,
-      CASE WHEN source.method='daviplata' THEN 'void-pending' ELSE 'detached' END AS source_cancellation
-      FROM subscription_standing s JOIN billing_attempts a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
+    .prepare(`INSERT INTO subscription_cancellations(rowid,subscription_id,paid_attempt_id,payment_source_id,cancelled_at_ms,paid_through_ms,source_cancellation_state,verification_count)
+      SELECT u.rowid,a.subscription_id,s.attempt_id,a.payment_source_id,?, ?,
+        CASE WHEN source.method='daviplata' THEN 'void-pending' ELSE 'detached' END,0
+      FROM subscription_standing s JOIN users u ON u.id=s.user_id
+      JOIN billing_attempt_context a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
       JOIN payment_source_context source ON source.id=a.payment_source_id AND source.user_id=s.user_id
       WHERE s.user_id=? AND s.attempt_id=? AND a.payment_source_id=?
-      AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})) incoming
-    WHERE users.id=incoming.user_id`)
+      AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
+      ON CONFLICT(subscription_id) DO UPDATE SET subscription_id=excluded.subscription_id`)
     .bind(
       current,
       snapshot.paid_through_ms,
@@ -151,8 +147,8 @@ export const prepareCancellation = (
     const row = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT s.attempt_id,a.payment_source_id,
-    MIN(a.paid_ends_at_ms, COALESCE((SELECT MIN(ends_at_ms) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments WHERE attempt_id=a.id),a.paid_ends_at_ms)) AS paid_through_ms
-    FROM subscription_standing s JOIN billing_attempts a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
+    MIN(a.paid_ends_at_ms, COALESCE((SELECT MIN(ends_at_ms) FROM (SELECT rowid,id AS refund_id,billing_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE access_ends_at_ms IS NOT NULL) AS billing_access_adjustments WHERE attempt_id=a.id),a.paid_ends_at_ms)) AS paid_through_ms
+    FROM subscription_standing s JOIN billing_attempt_context a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
      WHERE s.user_id=?
     AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
         .bind(subject.userId, ...authority.bindings)

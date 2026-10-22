@@ -26,7 +26,7 @@ export const loadMediaItems = ({
       try: () =>
         db
           .prepare(
-            `SELECT r.id,r.review_reason AS reason,r.review_created_at_ms AS created_at_ms,r.expires_at_ms,r.service_market,r.locale,r.time_zone FROM media_submissions r WHERE r.review_reason IS NOT NULL AND r.user_id = ? AND NOT EXISTS (SELECT 1 FROM ingestion_review_state n WHERE n.id=r.id AND n.user_id=r.user_id AND n.status!='pending') ORDER BY r.review_created_at_ms DESC,r.id DESC LIMIT ?`
+            `SELECT r.id,r.reason,r.created_at_ms,r.evidence_expires_at_ms AS expires_at_ms,r.service_market,r.locale,r.time_zone FROM ingestion_review_items r WHERE r.source_kind='media' AND r.user_id = ? AND NOT EXISTS (SELECT 1 FROM ingestion_review_workspace_state n WHERE n.id=r.id AND n.user_id=r.user_id AND n.status!='pending') ORDER BY r.created_at_ms DESC,r.id DESC LIMIT ?`
           )
           .bind(userId, limit)
           .all(),

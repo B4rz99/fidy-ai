@@ -71,7 +71,7 @@ const emailSuggestion = ({
     const raw = yield* Effect.tryPromise(() =>
       db
         .prepare(
-          `SELECT s.id AS receipt_id,s.object_key,s.review_created_at_ms AS created_at_ms,s.time_zone FROM forwarded_email_receipts s WHERE s.review_id=? AND s.user_id=?`
+          `SELECT s.id AS receipt_id,s.object_key,r.created_at_ms,s.time_zone FROM ingestion_review_items r JOIN forwarded_email_receipts s ON s.user_id=r.user_id AND s.id=r.email_receipt_id WHERE r.source_kind='email' AND r.id=? AND r.user_id=?`
         )
         .bind(id, userId)
         .first()

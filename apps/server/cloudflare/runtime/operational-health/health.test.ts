@@ -64,7 +64,7 @@ it.live(
             yield* Effect.tryPromise(() =>
               db
                 .prepare(
-                  "CREATE TABLE statement_needs_review (evidence_expires_at_ms INTEGER, status TEXT, original_evidence TEXT, known_money TEXT)"
+                  "CREATE TABLE statement_review_context (evidence_expires_at_ms INTEGER, status TEXT, original_evidence TEXT, known_money TEXT)"
                 )
                 .run()
             );
@@ -102,7 +102,7 @@ it.live(
             yield* Effect.tryPromise(() =>
               db
                 .prepare(
-                  "INSERT INTO statement_needs_review VALUES (?, 'pending', 'private-financial-evidence', NULL)"
+                  "INSERT INTO statement_review_context VALUES (?, 'pending', 'private-financial-evidence', NULL)"
                 )
                 .bind(now - 86_400_000)
                 .run()

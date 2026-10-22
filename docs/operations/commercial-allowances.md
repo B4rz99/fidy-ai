@@ -19,6 +19,14 @@ and hosted canonical calls do not consume external-call units.
 Ordinary canonical work has no additional daily Audit or Transaction-count quota.
 The shared short-term request policy below remains effective for every tier.
 
+The ledger retains zero-unit Trial/Pro admissions, their original acceptance time and policy period.
+Its retry key is `(user_id, allowance, identity)` across periods. A later refund, trial expiry or new
+month does not charge that original action again. New work uses current standing from Identity's
+original Trial and Subscription's selected verified paid attempt, including its refund adjustment.
+#1455 verifies these transitions through native media admission and verified refund execution on the
+current schema; it replaces the corresponding billing stand-in tests. The existing six-field ledger,
+retention, erasure purpose and security admission remain separate and require no rebuild.
+
 ## Canonical admission and replay
 
 Authentication, live capabilities, and external input validation precede commercial consumption.

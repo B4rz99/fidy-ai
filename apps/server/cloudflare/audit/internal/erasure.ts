@@ -14,7 +14,7 @@ const entryProjection = ({
 }>): ErasureProjection => {
   const owner =
     recordType === "billing_transition"
-      ? "r.attempt_id IN (SELECT id FROM billing_attempts WHERE user_id=?)"
+      ? "r.attempt_id IN (SELECT a.id FROM billing_attempt_context a WHERE a.user_id=?)"
       : "r.user_id=?";
   const scope = owner + " AND r.record_type='" + recordType + "'";
   const body =

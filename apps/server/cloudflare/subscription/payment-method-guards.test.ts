@@ -73,11 +73,9 @@ const attempt = (
   }
 ): D1PreparedStatement =>
   db
-    .prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id, payment_request_id,
-    payment_source_id, price_id, amount, currency, billing_period, service_market,
-    tax_treatment, time_zone, wompi_environment, wompi_reference, created_at_ms)
-    VALUES (?, ?, ?, ?, ?, ?, '9900', 'COP', 'weekly', 'CO', 'not-taxable',
-    'America/Bogota', ?, ?, 400)`)
+    .prepare(
+      `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms) VALUES (?, (SELECT id FROM subscriptions WHERE user_id=?), ?, ?, ?, ?, 'America/Bogota', ?, ?, 400)`
+    )
     .bind(
       identity(4, index),
       identity(1, userIndex),
@@ -346,7 +344,13 @@ it("keeps attempt method, environment, ownership, price and replay guards atomic
       yield* rejectsAtomically(db, [attempt(db, 3)], "billing_user_collection_unresolved");
       yield* rejectsAtomically(
         db,
-        [db.prepare("UPDATE billing_attempts SET amount = '1' WHERE id = ?").bind(identity(4, 3))],
+        [
+          db
+            .prepare(
+              "UPDATE billing_attempts SET price_id = '22700000-0000-4000-8000-000000000002' WHERE id = ?"
+            )
+            .bind(identity(4, 3)),
+        ],
         "billing_attempt_snapshot_immutable"
       );
       yield* Effect.tryPromise(() =>

@@ -47,9 +47,9 @@ import { handleRefundSupport as supportRefund } from "./internal/refund-support"
 import {
   type BillingCollectionEnvironment,
   type BillingCollectionFailure,
+  type BillingObservationWorkflow,
   type BillingQueuePublisher,
   type BillingRuntime,
-  type BillingWorkflowStarter,
 } from "./contract";
 import {
   captureObservedProviderFetch,
@@ -181,7 +181,10 @@ export const dispatchBillingCollection = (
 /** Hand identity-only Queue work to its deterministic Workflow without repeating a charge. */
 export const receiveBillingCollection = (
   input: Readonly<{
-    environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: BillingWorkflowStarter }>;
+    environment: Readonly<{
+      DB: D1Database;
+      BILLING_COLLECTION_WORKFLOW: BillingObservationWorkflow;
+    }>;
     batch: Readonly<{ messages: ReadonlyArray<{ body: unknown; ack: () => void }> }>;
   }>
 ): Effect.Effect<void, BillingCollectionFailure> => receive(input);
@@ -194,7 +197,7 @@ export const receiveWompiBillingEvent = (
 ): Effect.Effect<Response> => acceptEvent(input);
 /** Start bounded reconciliation of retained unresolved billing identities. */
 export const reconcileBillingCandidates = (
-  input: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: BillingWorkflowStarter }>
+  input: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: BillingObservationWorkflow }>
 ): Effect.Effect<void, BillingCollectionFailure> => reconcile(input);
 /** Classify the bounded versioned billing Queue identity without granting billing authority. */
 export const isBillingCollectionWork = (body: unknown): boolean => recognizesWork(body);
@@ -212,6 +215,7 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRunti
             environment: withErasureRecovery(this.env),
             payload: event.payload,
             activity: (name, options, activity) => step.do(name, options, activity),
+            sleep: (name, duration) => step.sleep(name, duration),
           }),
         {
           environment: workerRelease(this.env),
@@ -230,6 +234,7 @@ export const runBillingCollectionWorkflow = (
   input: Readonly<{
     environment: BillingRuntime;
     payload: unknown;
+    sleep: (name: string, duration: number) => Promise<void>;
     activity: (
       name: string,
       options: WorkflowStepConfig,

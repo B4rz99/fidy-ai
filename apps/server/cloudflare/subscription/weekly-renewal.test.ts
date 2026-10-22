@@ -17,8 +17,12 @@ import coreWorker, { UserTransactionCoordinator } from "../core-worker";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
 import { afterEach, expect, it, vi } from "vitest";
-import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import {
+  makePaymentEnrollmentD1,
+  queuedBillingExecution,
+} from "./payment-enrollment-d1.test-fixture";
+import {
+  dispatchSubscriptionCancellations,
   dispatchSubscriptionRenewals,
   publishWeeklyPriceAndNotify,
   receiveBillingCollection,
@@ -131,11 +135,9 @@ const fixture = (
             .prepare("UPDATE payment_enrollments SET status = 'available' WHERE id = ?")
             .bind(enrollmentId),
           db
-            .prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id, payment_request_id,
-        payment_source_id, price_id, amount, currency, billing_period, service_market,
-        tax_treatment, time_zone, wompi_environment, wompi_reference, created_at_ms)
-        SELECT ?, ?, ?, ?, ?, id, amount, currency, billing_period, service_market, tax_treatment,
-          'America/Bogota', 'sandbox', ?, 0 FROM subscription_prices WHERE id = ?`)
+            .prepare(
+              `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms) SELECT ?, (SELECT id FROM subscriptions WHERE user_id=?), ?, ?, ?, id, 'America/Bogota', 'sandbox', ?, 0 FROM subscription_prices WHERE id = ?`
+            )
             .bind(
               attemptId,
               userId,
@@ -165,16 +167,8 @@ const fixture = (
               Date.parse(calendar.endsAt)
             ),
           db
-            .prepare(
-              "UPDATE users SET paid_attempt_id=?2,paid_price_id=?3,paid_period_ends_at_ms=?4,paid_renewal_anchor_ms=?5 WHERE id=?1"
-            )
-            .bind(
-              userId,
-              attemptId,
-              selectedPriceId,
-              Date.parse(calendar.endsAt),
-              Date.parse(calendar.endsAt)
-            ),
+            .prepare("UPDATE subscriptions SET current_paid_attempt_id=?2 WHERE user_id=?1")
+            .bind(userId, attemptId),
           db
             .prepare(
               "UPDATE billing_attempts SET followup_due_at_ms=incoming.due_at_ms FROM (SELECT ? AS attempt_id,'renewal_due' AS kind,? AS due_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.followup_due_at_ms IS NULL"
@@ -227,7 +221,7 @@ it("converges concurrent due claims on one frozen pending weekly attempt and dur
       yield* Effect.all([admission(db), admission(db)], { concurrency: 2 });
       const rows = yield* fromPromise(() =>
         db
-          .prepare("SELECT * FROM billing_attempts WHERE previous_paid_attempt_id = ?")
+          .prepare("SELECT * FROM billing_attempt_context WHERE previous_paid_attempt_id = ?")
           .bind(attemptId)
           .all()
       );
@@ -244,7 +238,7 @@ it("converges concurrent due claims on one frozen pending weekly attempt and dur
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id <> ?"
+              "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id <> ?"
             )
             .bind(attemptId)
             .all()
@@ -254,7 +248,7 @@ it("converges concurrent due claims on one frozen pending weekly attempt and dur
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+              "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
             )
             .all()
         )).results
@@ -270,7 +264,7 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
       const row = yield* fromPromise(() =>
         db
           .prepare(
-            "SELECT id, wompi_reference FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+            "SELECT id, wompi_reference FROM billing_attempt_context WHERE previous_paid_attempt_id = ?"
           )
           .bind(attemptId)
           .first<{ id: string; wompi_reference: string }>()
@@ -303,6 +297,7 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
             WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
           },
           payload: { version: 1, attemptId: row.id },
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (_name, _options, work) => work(),
         });
       yield* fromPromise(run);
@@ -312,7 +307,7 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
         yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT starts_at_ms, ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
+              "SELECT starts_at_ms, ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
             )
             .bind(row.id)
             .first()
@@ -322,7 +317,7 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,'renewal_due' AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_due_at_ms IS NOT NULL) AS billing_followup_outbox"
+              "SELECT * FROM (SELECT id AS attempt_id,'renewal_due' AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempt_context WHERE followup_due_at_ms IS NOT NULL) AS billing_followup_outbox"
             )
             .all()
         )).results
@@ -356,9 +351,9 @@ it.each(renewalCalendars)(
         );
         const billingState = (): Promise<D1Result[]> =>
           db.batch([
-            db.prepare("SELECT * FROM billing_attempts ORDER BY id"),
+            db.prepare("SELECT * FROM billing_attempt_context ORDER BY id"),
             db.prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work ORDER BY attempt_id"
+              "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work ORDER BY attempt_id"
             ),
           ]);
         const before = (yield* fromPromise(billingState)).map((result) => result.results);
@@ -395,7 +390,9 @@ it.each(renewalCalendars)(
         expect(
           (yield* fromPromise(() =>
             db
-              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id IS NOT NULL")
+              .prepare(
+                "SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id IS NOT NULL"
+              )
               .all()
           )).results
         ).toEqual([]);
@@ -403,7 +400,7 @@ it.each(renewalCalendars)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work"
+                "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work"
               )
               .all()
           )).results
@@ -441,7 +438,7 @@ it.each(renewalCalendars)(
           yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
+                "SELECT ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
               )
               .bind(attemptId)
               .first()
@@ -472,7 +469,7 @@ it("publishes a changed weekly Price with immediate durable notice and charges i
       yield* publishWeeklyPrice({ db, price: newPrice });
       expect(
         (yield* fromPromise(() =>
-          db.prepare("SELECT user_id, price_id FROM billing_price_notices").all()
+          db.prepare("SELECT user_id, price_id FROM billing_price_notice_context").all()
         )).results
       ).toEqual([{ user_id: userId, price_id: newPrice.id }]);
       yield* admission(db);
@@ -480,7 +477,7 @@ it("publishes a changed weekly Price with immediate durable notice and charges i
         yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT price_id, amount FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+              "SELECT price_id, amount FROM billing_attempt_context WHERE previous_paid_attempt_id = ?"
             )
             .bind(attemptId)
             .first()
@@ -488,7 +485,10 @@ it("publishes a changed weekly Price with immediate durable notice and charges i
       ).toEqual({ price_id: newPrice.id, amount: "10900" });
       expect(
         yield* fromPromise(() =>
-          db.prepare("SELECT amount FROM billing_attempts WHERE id = ?").bind(attemptId).first()
+          db
+            .prepare("SELECT amount FROM billing_attempt_context WHERE id = ?")
+            .bind(attemptId)
+            .first()
         )
       ).toEqual({ amount: "9900" });
     })
@@ -544,6 +544,7 @@ it("offers Price-change notices immediately and sends the retained billing email
             RESEND_API_KEY: "re_test",
           },
           payload: work,
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (_name, _options, activity) => activity(),
         });
       yield* fromPromise(run);
@@ -552,7 +553,9 @@ it("offers Price-change notices immediately and sends the retained billing email
       expect(
         yield* fromPromise(() =>
           db
-            .prepare("SELECT accepted_at_ms IS NOT NULL AS accepted FROM billing_price_notices")
+            .prepare(
+              "SELECT provider_accepted_at_ms IS NOT NULL AS accepted FROM billing_price_notices"
+            )
             .first()
         )
       ).toEqual({ accepted: 1 });
@@ -568,7 +571,7 @@ it.each(renewalCalendars)(
         yield* admission(db, Date.parse(calendar.endsAt));
         const row = yield* fromPromise(() =>
           db
-            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+            .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
             .bind(attemptId)
             .first<{ id: string }>()
         );
@@ -595,6 +598,7 @@ it.each(renewalCalendars)(
               WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
             },
             payload: { version: 1, attemptId: row.id },
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, activity) => activity(),
           })
         );
@@ -603,7 +607,7 @@ it.each(renewalCalendars)(
           yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT state FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id=?"
+                "SELECT state FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id=?"
               )
               .bind(row.id)
               .first()
@@ -613,7 +617,7 @@ it.each(renewalCalendars)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
               )
               .all()
           )).results
@@ -639,7 +643,9 @@ it.each(
         expect(
           (yield* fromPromise(() =>
             db
-              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id IS NOT NULL")
+              .prepare(
+                "SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id IS NOT NULL"
+              )
               .all()
           )).results
         ).toHaveLength(1);
@@ -672,6 +678,7 @@ const runNotice = (db: D1Database, payload: unknown = noticeWork): Promise<void>
   runBillingCollectionWorkflow({
     environment: noticeEnvironment(db),
     payload,
+    sleep: (_name, _duration) => Promise.resolve(),
     activity: (_name, _options, activity) => activity(),
   });
 
@@ -721,8 +728,9 @@ it("renews despite an older collection with confirmed no charge", () =>
               SELECT '20000000-0000-4000-8000-000000000009',subscription_id,price_id,billing_email,'available','reuse','{}','{}',0,900000,'50000000-0000-4000-8000-000000000009',method,wompi_environment FROM payment_enrollment_context WHERE id='20000000-0000-4000-8000-000000000001'`
           ),
           db
-            .prepare(`INSERT INTO billing_attempts (id,user_id,enrollment_id,payment_request_id,payment_source_id,price_id,amount,currency,billing_period,service_market,tax_treatment,time_zone,wompi_environment,wompi_reference,created_at_ms)
-      SELECT ?,user_id,'20000000-0000-4000-8000-000000000009',?,payment_source_id,price_id,amount,currency,billing_period,service_market,tax_treatment,time_zone,wompi_environment,?,0 FROM billing_attempts WHERE id=?`)
+            .prepare(
+              `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms) SELECT ?, (SELECT id FROM subscriptions WHERE user_id=user_id), '20000000-0000-4000-8000-000000000009', ?, payment_source_id, price_id, time_zone, wompi_environment, ?, 0 FROM billing_attempt_context WHERE id=?`
+            )
             .bind(
               historicalId,
               "50000000-0000-4000-8000-000000000009",
@@ -736,7 +744,7 @@ it("renews despite an older collection with confirmed no charge", () =>
             .bind(historicalId),
           db
             .prepare(
-              "UPDATE billing_attempts SET no_charge_reference=incoming.wompi_reference,no_charge_environment=incoming.wompi_environment,no_charge_case_id=incoming.provider_case_id,no_charge_operator_id=incoming.operator_id,no_charge_confirmed_at_ms=incoming.confirmed_at_ms FROM (SELECT ? AS attempt_id,? AS wompi_reference,'sandbox' AS wompi_environment,'case-9' AS provider_case_id,'operator-9' AS operator_id,1 AS confirmed_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.no_charge_confirmed_at_ms IS NULL"
+              "UPDATE billing_attempts SET no_charge_case_id=incoming.provider_case_id,no_charge_operator_id=incoming.operator_id,no_charge_confirmed_at_ms=incoming.confirmed_at_ms FROM (SELECT ? AS attempt_id,? AS wompi_reference,'sandbox' AS wompi_environment,'case-9' AS provider_case_id,'operator-9' AS operator_id,1 AS confirmed_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.no_charge_confirmed_at_ms IS NULL"
             )
             .bind(historicalId, `fidy-${historicalId}`),
         ])
@@ -745,7 +753,7 @@ it("renews despite an older collection with confirmed no charge", () =>
       expect(
         (yield* fromPromise(() =>
           db
-            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+            .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
             .bind(attemptId)
             .all()
         )).results
@@ -761,9 +769,9 @@ it("uses the current payer and retries a definitively rejected notice", () =>
         db.batch([
           db
             .prepare(
-              "INSERT INTO billing_price_notices (user_id,price_id,created_at_ms) VALUES (?, ?, 1)"
+              "INSERT INTO billing_price_notices (subscription_id,price_id,created_at_ms) SELECT id,?,1 FROM subscriptions WHERE user_id=?"
             )
-            .bind(userId, priceId),
+            .bind(priceId, userId),
         ])
       );
       const workflowIds: string[] = [];
@@ -776,7 +784,7 @@ it("uses the current payer and retries a definitively rejected notice", () =>
                 workflowIds.push(id);
                 return Promise.resolve({});
               },
-              get: (): Promise<unknown> => Promise.resolve({}),
+              get: () => Promise.resolve(queuedBillingExecution()),
             },
           },
           batch: { messages: [{ body: noticeWork, ack: (): void => {} }] },
@@ -829,9 +837,9 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
             .bind(foreignUserId),
           db
             .prepare(
-              "INSERT INTO billing_price_notices (user_id,price_id,created_at_ms) VALUES (?, ?, 1)"
+              "INSERT INTO billing_price_notices (subscription_id,price_id,created_at_ms) SELECT id,?,1 FROM subscriptions WHERE user_id=?"
             )
-            .bind(userId, priceId),
+            .bind(priceId, userId),
         ])
       );
       const fetch = vi.fn(() => Promise.reject(new Error("forbidden notice")));
@@ -841,7 +849,10 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
       yield* receiveBillingCollection({
         environment: {
           DB: db,
-          BILLING_COLLECTION_WORKFLOW: { create, get: () => Promise.resolve({}) },
+          BILLING_COLLECTION_WORKFLOW: {
+            create,
+            get: () => Promise.resolve(queuedBillingExecution()),
+          },
         },
         batch: { messages: [{ body: foreignWork, ack: (): void => {} }] },
       });
@@ -858,7 +869,10 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
       yield* receiveBillingCollection({
         environment: {
           DB: db,
-          BILLING_COLLECTION_WORKFLOW: { create, get: () => Promise.resolve({}) },
+          BILLING_COLLECTION_WORKFLOW: {
+            create,
+            get: () => Promise.resolve(queuedBillingExecution()),
+          },
         },
         batch: { messages: [{ body: noticeWork, ack: (): void => {} }] },
       });
@@ -866,9 +880,11 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
       expect(fetch).not.toHaveBeenCalled();
       expect(
         yield* fromPromise(() =>
-          db.prepare("SELECT send_started_at_ms,accepted_at_ms FROM billing_price_notices").first()
+          db
+            .prepare("SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices")
+            .first()
         )
-      ).toEqual({ send_started_at_ms: null, accepted_at_ms: null });
+      ).toEqual({ send_started_at_ms: null, provider_accepted_at_ms: null });
     })
   ));
 
@@ -888,7 +904,7 @@ it("freezes one March 31 monthly renewal across duplicate delayed scheduler clai
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT status, period_starts_at_ms, period_ends_at_ms FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+              "SELECT status, period_starts_at_ms, period_ends_at_ms FROM billing_attempt_context WHERE previous_paid_attempt_id = ?"
             )
             .bind(attemptId)
             .all()
@@ -904,7 +920,7 @@ it("freezes one March 31 monthly renewal across duplicate delayed scheduler clai
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+              "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
             )
             .all()
         )).results
@@ -924,7 +940,7 @@ it("freezes one March 31 monthly renewal across duplicate delayed scheduler clai
         yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT calendar_anchor_ms FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+              "SELECT calendar_anchor_ms FROM billing_attempt_context WHERE previous_paid_attempt_id = ?"
             )
             .bind(attemptId)
             .first()
@@ -989,7 +1005,7 @@ it.each(
           const row = yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT id, wompi_reference, calendar_anchor_ms FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+                "SELECT id, wompi_reference, calendar_anchor_ms FROM billing_attempt_context WHERE previous_paid_attempt_id = ?"
               )
               .bind(previousPaidAttemptId)
               .first<{ id: string; wompi_reference: string; calendar_anchor_ms: number }>()
@@ -1047,6 +1063,7 @@ it.each(
               payload: lookup
                 ? { version: 1, kind: "lookup", transactionId: `calendar-${row.id}` }
                 : { version: 1, attemptId: row.id },
+              sleep: (_name, _duration) => Promise.resolve(),
               activity: (_name, _options, work) => work(),
             });
           yield* fromPromise(() => run());
@@ -1054,7 +1071,7 @@ it.each(
             (yield* fromPromise(() =>
               db
                 .prepare(
-                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
                 )
                 .all()
             )).results
@@ -1067,7 +1084,7 @@ it.each(
             (yield* fromPromise(() =>
               db
                 .prepare(
-                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
                 )
                 .all()
             )).results
@@ -1085,7 +1102,7 @@ it.each(
             yield* fromPromise(() =>
               db
                 .prepare(
-                  "SELECT starts_at_ms, ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
+                  "SELECT starts_at_ms, ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
                 )
                 .bind(row.id)
                 .first()
@@ -1096,7 +1113,7 @@ it.each(
             (yield* fromPromise(() =>
               db
                 .prepare(
-                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
                 )
                 .all()
             )).results
@@ -1168,7 +1185,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
         const row = yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT id, wompi_reference FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+              "SELECT id, wompi_reference FROM billing_attempt_context WHERE previous_paid_attempt_id = ?"
             )
             .bind(attemptId)
             .first<{ id: string; wompi_reference: string }>()
@@ -1196,6 +1213,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           runBillingCollectionWorkflow({
             environment,
             payload: { version: 1, attemptId: row.id },
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, work) => work(),
           })
         );
@@ -1204,12 +1222,16 @@ it.each(["card", "nequi", "daviplata"] as const)(
           runBillingCollectionWorkflow({
             environment,
             payload: { version: 1, kind: "lookup", transactionId: `declined-${row.id}` },
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, work) => work(),
           })
         );
         expect(
           yield* fromPromise(() =>
-            db.prepare("SELECT status FROM billing_attempts WHERE id = ?").bind(row.id).first()
+            db
+              .prepare("SELECT status FROM billing_attempt_context WHERE id = ?")
+              .bind(row.id)
+              .first()
           )
         ).toEqual({ status: "failed" });
         yield* admission(db, boundary + 240000);
@@ -1217,7 +1239,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
               )
               .all()
           )).results
@@ -1225,7 +1247,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
         expect(
           (yield* fromPromise(() =>
             db
-              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id = ?")
+              .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id = ?")
               .bind(attemptId)
               .all()
           )).results
@@ -1247,7 +1269,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT renewal_attempt_number, price_id, period_starts_at_ms, period_ends_at_ms FROM billing_attempts WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
+                "SELECT renewal_attempt_number, price_id, period_starts_at_ms, period_ends_at_ms FROM billing_attempt_context WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
               )
               .bind(attemptId)
               .all()
@@ -1342,6 +1364,20 @@ it("cancels a paid Subscription through a write-scoped PAT", () =>
         },
       });
       expect(response.status).toBe(200);
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT paid_attempt_id,payment_source_id,source_cancellation_state FROM subscription_cancellations WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?)"
+            )
+            .bind(userId)
+            .first()
+        )
+      ).toEqual({
+        paid_attempt_id: attemptId,
+        payment_source_id: sourceId,
+        source_cancellation_state: "detached",
+      });
       expect(yield* fromPromise(() => response.json())).toMatchObject({
         data: { sourceCancellation: "detached" },
       });
@@ -1448,7 +1484,9 @@ it.each(["card", "nequi", "daviplata"] as const)(
         expect(
           (yield* fromPromise(() =>
             db
-              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id IS NOT NULL")
+              .prepare(
+                "SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id IS NOT NULL"
+              )
               .all()
           )).results
         ).toHaveLength(0);
@@ -1499,7 +1537,8 @@ it.each(["card", "nequi", "daviplata"] as const)(
               WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
               WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
             },
-            payload: { version: 1, kind: "source-cancellation", userId },
+            payload: { version: 2, kind: "source-cancellation", userId },
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, work) => work(),
           });
         yield* fromPromise(run);
@@ -1512,6 +1551,123 @@ it.each(["card", "nequi", "daviplata"] as const)(
       })
     )
 );
+it("recovers one cancellation execution after an engine interruption and preserves the eight-check budget and ambiguous void claim", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      let now = yield* Clock.currentTimeMillis;
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(now);
+      const sent: unknown[] = [];
+      yield* dispatchSubscriptionCancellations({
+        DB: db,
+        BILLING_COLLECTION_QUEUE: {
+          send: (work) => {
+            sent.push(work);
+            return Promise.resolve();
+          },
+        },
+      });
+      yield* dispatchSubscriptionCancellations({
+        DB: db,
+        BILLING_COLLECTION_QUEUE: {
+          send: (work) => {
+            sent.push(work);
+            return Promise.resolve();
+          },
+        },
+      });
+      expect(sent).toHaveLength(1);
+      let execution = Option.none<unknown>();
+      let status: InstanceStatus["status"] = "queued";
+      let interrupted = true;
+      let puts = 0;
+      let gets = 0;
+      vi.stubGlobal("fetch", (url: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(url, init);
+        expect(new URL(request.url).pathname).toBe(
+          request.method === "PUT" ? "/v1/payment_sources/3891/void" : "/v1/payment_sources/3891"
+        );
+        if (request.method === "PUT") {
+          puts++;
+          return Promise.reject(new Error("lost void response"));
+        }
+        gets++;
+        return Promise.resolve(
+          Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "AVAILABLE" } })
+        );
+      });
+      const run = (): Promise<void> =>
+        runBillingCollectionWorkflow({
+          environment: {
+            DB: db,
+            WOMPI_ENVIRONMENT: "sandbox",
+            WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+          },
+          payload: Option.getOrThrow(execution),
+          activity: (_name, _options, work) => {
+            if (interrupted) {
+              status = "errored";
+              return Promise.reject(new Error("engine interrupted"));
+            }
+            status = "running";
+            return work();
+          },
+          sleep: (_name, duration) => {
+            now += duration;
+            vi.setSystemTime(now);
+            return Promise.resolve();
+          },
+        });
+      const restart = vi.fn(() => {
+        interrupted = false;
+        return run().then(() => {
+          status = "complete";
+        });
+      });
+      const workflow = {
+        create: vi.fn((options: { id: string; params: unknown }) => {
+          expect(options.id).toBe(`source-cancel-v2-${userId}`);
+          execution = Option.some(options.params);
+          return Promise.reject(new Error("lost launch response"));
+        }),
+        get: (_id: string): Promise<Pick<WorkflowInstance, "status" | "restart">> =>
+          Option.isSome(execution)
+            ? Promise.resolve({ status: () => Promise.resolve({ status }), restart })
+            : Promise.reject(new Error("missing execution")),
+      };
+      const ack = vi.fn();
+      const receive = (): Effect.Effect<void, BillingCollectionFailure> =>
+        receiveBillingCollection({
+          environment: { DB: db, BILLING_COLLECTION_WORKFLOW: workflow },
+          batch: { messages: [{ body: sent[0], ack }] },
+        });
+      yield* receive();
+      yield* receive();
+      expect(workflow.create).toHaveBeenCalledTimes(1);
+      expect((yield* Effect.exit(fromPromise(run)))._tag).toBe("Failure");
+      yield* receive();
+      yield* receive();
+      expect(restart).toHaveBeenCalledTimes(1);
+      expect(ack).toHaveBeenCalledTimes(4);
+      expect(puts).toBe(1);
+      expect(gets).toBe(8);
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT verification_count,source_cancellation_state FROM subscription_cancellations"
+            )
+            .first()
+        )
+      ).toEqual({ verification_count: 8, source_cancellation_state: "void-pending" });
+      expect((yield* cancel(db, dueAt)).status).toBe(200);
+    })
+  ));
+
 const runObservedRenewal = ({
   db,
   id,
@@ -1556,6 +1712,7 @@ const runObservedRenewal = ({
         payload: lookup
           ? { version: 1, kind: "lookup", transactionId: `dunning-${id}` }
           : { version: 1, attemptId: id },
+        sleep: (_name, _duration) => Promise.resolve(),
         activity: (_name, _options, work) => work(),
       });
     yield* fromPromise(() => run(false));
@@ -1566,7 +1723,7 @@ const latestRenewal = (db: D1Database): Effect.Effect<string, Cause.UnknownError
   fromPromise(() =>
     db
       .prepare(
-        "SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number DESC LIMIT 1"
+        "SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number DESC LIMIT 1"
       )
       .bind(attemptId)
       .first()
@@ -1600,7 +1757,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT renewal_attempt_number,status FROM billing_attempts WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
+                "SELECT renewal_attempt_number,status FROM billing_attempt_context WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
               )
               .bind(attemptId)
               .all()
@@ -1626,7 +1783,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
               )
               .all()
           )).results
@@ -1672,7 +1829,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT starts_at_ms,ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods ORDER BY starts_at_ms"
+                "SELECT starts_at_ms,ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods ORDER BY starts_at_ms"
               )
               .all()
           )).results
@@ -1698,7 +1855,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
         expect(
           (yield* fromPromise(() =>
             db
-              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+              .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
               .bind(retry)
               .all()
           )).results
@@ -1739,7 +1896,7 @@ it("recovers on an earlier verified success while a retry is still queued", () =
       expect(
         (yield* fromPromise(() =>
           db
-            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+            .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
             .bind(first)
             .all()
         )).results
@@ -1765,18 +1922,14 @@ it("refuses a borrowed or revoked browser credential before cancellation and rol
       expect((yield* cancel(db, dueAt - 1000)).status).toBe(503);
       expect(
         (yield* fromPromise(() =>
-          db
-            .prepare(
-              "SELECT user_id FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL)"
-            )
-            .all()
+          db.prepare("SELECT user_id FROM subscription_cancellation_context").all()
         )).results
       ).toHaveLength(0);
       yield* admission(db, dueAt);
       expect(
         (yield* fromPromise(() =>
           db
-            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+            .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
             .bind(attemptId)
             .all()
         )).results
@@ -1805,6 +1958,7 @@ it("fences an already queued renewal at cancellation without submitting its char
             WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
           },
           payload: { version: 1, attemptId: queued },
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (_name, _options, work) => work(),
         })
       );
@@ -1839,6 +1993,7 @@ it("reconciles an ambiguous DaviPlata void without repeating PUT or trusting for
             WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
           },
           payload: { version: 1, kind: "source-cancellation", userId: subject },
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (_name, _options, work) => work(),
         });
       yield* fromPromise(() => run("10000000-0000-4000-8000-000000000009"));
@@ -1887,6 +2042,7 @@ it("does not submit a queued retry after its grace boundary", () =>
             WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
           },
           payload: { version: 1, attemptId: queued },
+          sleep: (_name, _duration) => Promise.resolve(),
           activity: (_name, _options, work) => work(),
         })
       );
@@ -1953,7 +2109,7 @@ it("keeps retry Money and Price frozen after replacement publication", () =>
         yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT price_id,amount,renewal_attempt_number,period_starts_at_ms,period_ends_at_ms FROM billing_attempts WHERE id=?"
+              "SELECT price_id,amount,renewal_attempt_number,period_starts_at_ms,period_ends_at_ms FROM billing_attempt_context WHERE id=?"
             )
             .bind(retry)
             .first()
@@ -2016,10 +2172,10 @@ const cancellationEffects = (db: D1Database): Effect.Effect<unknown, Cause.Unkno
   fromPromise(() =>
     db
       .prepare(`SELECT
-  (SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL)) AS cancellations,
-  (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
-  (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE state='armed') AS armed,
-  (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work) AS offers,
+  (SELECT COUNT(*) FROM subscription_cancellation_context) AS cancellations,
+  (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
+  (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE state='armed') AS armed,
+  (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work) AS offers,
   (SELECT COUNT(*) FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome='accepted') AS accepted`)
       .first()
   );
@@ -2122,4 +2278,52 @@ ${consentHistoryTestSchema};`)
         expect(yield* cancellationEffects(db)).toEqual(before);
       })
     )
+);
+
+it(
+  "retains an ambiguous Price-notice send claim after timeout and never resends it",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture());
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO billing_price_notices(subscription_id,price_id,created_at_ms) SELECT id,?,1 FROM subscriptions WHERE user_id=?"
+            )
+            .bind(priceId, userId)
+            .run()
+        );
+        const services = yield* Effect.context<never>();
+        const fetch = vi.fn((_input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
+          Effect.runPromiseWith(services)(Effect.never, { signal: init?.signal ?? undefined })
+        );
+        vi.stubGlobal("fetch", fetch);
+        expect((yield* Effect.exit(fromPromise(() => runNotice(db))))._tag).toBe("Failure");
+        const before = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ send_started_at_ms: Schema.Int, provider_accepted_at_ms: Schema.Null })
+        )(
+          yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices"
+              )
+              .first<unknown>()
+          )
+        );
+        expect(before.provider_accepted_at_ms).toBeNull();
+        yield* fromPromise(() => runNotice(db));
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices"
+              )
+              .first()
+          )
+        ).toEqual(before);
+      })
+    ),
+  25_000
 );

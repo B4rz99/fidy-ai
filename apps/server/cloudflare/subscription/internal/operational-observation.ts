@@ -12,7 +12,7 @@ export const pendingBillingWork = (
   input.db
     .prepare(
       `SELECT id,created,NULL AS deadline FROM (
-        SELECT id,created_at_ms AS created FROM billing_attempts WHERE status='pending'
+        SELECT id,created_at_ms AS created FROM billing_attempt_context WHERE status='pending'
         UNION ALL SELECT id,created_at_ms AS created FROM refund_attempts WHERE status='pending'
       ) ORDER BY created LIMIT ?`
     )

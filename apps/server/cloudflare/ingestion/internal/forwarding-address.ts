@@ -53,14 +53,14 @@ const rows = (db: D1Database, userId: string, current: number): D1PreparedStatem
   const pro = activeProUserCondition({ userId, nowEpochMs: current });
   return prepareConsentAction({
     db,
-    subject: { _tag: "Owner", column: "a.id" },
+    subject: { _tag: "Owner", column: "a.user_id" },
     requirement: "active",
     statement: {
-      sql: `SELECT a.forwarding_address_id AS id,a.forwarding_local_part AS local_part,a.forwarding_issued_at_ms AS created_at_ms,
+      sql: `SELECT a.id,a.local_part,a.issued_at_ms AS created_at_ms,
       (${consumption.sql}) AS consumed,
-      (SELECT count(*) FROM forwarded_email_receipts d WHERE d.user_id = a.id AND d.deferred_checked_at_ms IS NOT NULL) AS deferred,
+      (SELECT count(*) FROM forwarded_email_receipts d WHERE d.user_id = a.user_id AND d.deferred_checked_at_ms IS NOT NULL) AS deferred,
       ${pro.sql} AS pro
-     FROM users a WHERE a.id=? AND a.forwarding_address_id IS NOT NULL`,
+     FROM forwarding_addresses a WHERE a.user_id=?`,
       params: [...consumption.params, ...pro.params, userId],
     },
   });

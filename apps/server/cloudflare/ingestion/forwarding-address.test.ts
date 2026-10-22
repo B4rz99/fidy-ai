@@ -57,10 +57,11 @@ const setup = Effect.fn(function* () {
     CREATE TABLE memory_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE VIEW subscription_standing AS SELECT rowid,id AS user_id,paid_attempt_id AS attempt_id,paid_period_ends_at_ms FROM users WHERE paid_attempt_id IS NOT NULL;
     CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER);
+ CREATE VIEW billing_attempt_context AS SELECT * FROM billing_attempts;
  CREATE TABLE payment_source_context (id TEXT, user_id TEXT, method TEXT);
  CREATE TABLE subscription_renewal_stops (user_id TEXT); CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops;
 
-    CREATE TABLE refund_attempts(id TEXT,adjusted_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT);`)
+    CREATE TABLE refund_attempts(id TEXT,billing_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT);`)
   );
   for (const [name, event, table] of [
     ["statement_submission_audit_no_update", "UPDATE", "statement_submission_audit"],
@@ -169,9 +170,7 @@ it("returns unavailable without a defect when a retained forwarding creation dat
       const db = yield* setup();
       yield* wait(() =>
         db
-          .prepare(
-            "UPDATE users AS email_forwarding_addresses SET forwarding_issued_at_ms = ? WHERE forwarding_address_id IS NOT NULL AND id = ?"
-          )
+          .prepare("UPDATE forwarding_addresses SET issued_at_ms = ? WHERE user_id = ?")
           .bind(8_640_000_000_000_001, userA)
           .run()
       );

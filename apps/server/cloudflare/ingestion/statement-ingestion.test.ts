@@ -551,9 +551,7 @@ it(
         ]);
         const addresses = yield* fromTestPromise(() =>
           runtime.db
-            .prepare(
-              "SELECT count(*) AS total FROM (SELECT rowid,id AS user_id,forwarding_address_id AS id,forwarding_local_part AS local_part,forwarding_issued_at_ms AS created_at_ms FROM users WHERE forwarding_address_id IS NOT NULL) AS email_forwarding_addresses WHERE user_id = ?"
-            )
+            .prepare("SELECT count(*) AS total FROM forwarding_addresses WHERE user_id = ?")
             .bind(userA)
             .first<{ total: number }>()
         );
@@ -899,9 +897,6 @@ const relationSql = (relation: string): string => {
   if (relation === "publication" || relation === "session_call") {
     return `(SELECT * FROM audit_entries WHERE record_type='${relation}')`;
   }
-  if (relation === "statement_backfill_entitlements") {
-    return "(SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL)";
-  }
   return relation;
 };
 
@@ -979,10 +974,9 @@ const seedSubmission = (
         .prepare(
           `INSERT INTO statement_submissions (id, user_id, idempotency_key, staging_id, submitted_at_ms,
              source_format, parser_revision, service_market, locale, time_zone, status,
-             retention_expires_at_ms, started_at_ms, completed_at_ms, input_rows, accepted_rows,
-             needs_review_rows)
+             retention_expires_at_ms, started_at_ms, completed_at_ms)
            VALUES (?, ?, ?, ?, ?, 'csv', 'statement-parser-v1', 'CO', 'es-CO', 'America/Bogota',
-             'completed', ?, ?, ?, 0, 0, 0)`
+             'completed', ?, ?, ?)`
         )
         .bind(
           submissionId,
@@ -1414,7 +1408,7 @@ it.each([false, true])(
         const offered: Array<unknown> = [];
         const database: D1Database = {
           prepare: (query) => {
-            if (failReviewExpiry && query.includes("UPDATE statement_needs_review")) {
+            if (failReviewExpiry && query.includes("UPDATE ingestion_review_items")) {
               throw new Error("private sweep failure");
             }
             return runtime.db.prepare(query);
@@ -1686,7 +1680,7 @@ const clarifyStatement = (
       const rows = yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "SELECT id FROM statement_needs_review WHERE submission_id = ? ORDER BY record_number"
+            "SELECT id FROM statement_review_context WHERE submission_id = ? ORDER BY record_number"
           )
           .bind(submission.id)
           .all()
@@ -2447,7 +2441,7 @@ it("clarifies a mixed statement through canonical capture and erases evidence wi
       const retained = yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "SELECT status, original_evidence, known_money FROM statement_needs_review WHERE id = ?"
+            "SELECT status, original_evidence, known_money FROM statement_review_context WHERE id = ?"
           )
           .bind(id)
           .first()
@@ -2488,7 +2482,7 @@ it("all-skipped clarification completes without consuming the Free grant", () =>
       const grantBefore = yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "SELECT submission_id, consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
+            "SELECT submission_id, consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?"
           )
           .bind(userA)
           .first()
@@ -2504,7 +2498,7 @@ it("all-skipped clarification completes without consuming the Free grant", () =>
       const grantAfter = yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "SELECT submission_id, consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
+            "SELECT submission_id, consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?"
           )
           .bind(userA)
           .first()
@@ -2561,7 +2555,9 @@ it("explicit abandonment is permanent and retains captured Transactions", () =>
       expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
       const retained = yield* fromTestPromise(() =>
         runtime.db
-          .prepare("SELECT original_evidence, known_money FROM statement_needs_review WHERE id = ?")
+          .prepare(
+            "SELECT original_evidence, known_money FROM statement_review_context WHERE id = ?"
+          )
           .bind(id)
           .first()
       );
@@ -2639,7 +2635,7 @@ it("shows committed review rows only to their User through the canonical read", 
         yield* fromTestPromise(() =>
           runtime.db
             .prepare(
-              "SELECT count(*) AS count FROM statement_needs_review WHERE user_id=? AND status='pending' AND original_evidence IS NOT NULL"
+              "SELECT count(*) AS count FROM statement_review_context WHERE user_id=? AND status='pending' AND original_evidence IS NOT NULL"
             )
             .bind(userA)
             .first()
@@ -2648,14 +2644,13 @@ it("shows committed review rows only to their User through the canonical read", 
       const overdueDeadline = (yield* Clock.currentTimeMillis) - 1_000;
       yield* fromTestPromise(() =>
         runtime.db
-          .prepare(`INSERT INTO statement_needs_review
-          (id,user_id,submission_id,record_number,reason,original_evidence,known_money,issues,
-           status,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,
+          .prepare(`INSERT INTO ingestion_review_items (source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,known_money_json,issues_json,
+           evidence_state,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,
            source_format,parser_revision,extractor_revision)
-          SELECT ?,user_id,submission_id,999,reason,original_evidence,known_money,issues,
-           'pending',?,created_at_ms,service_market,locale,time_zone,
+          SELECT 'statement',?,user_id,statement_submission_id,999,reason,original_evidence,known_money_json,issues_json,
+           'retained',?,created_at_ms,service_market,locale,time_zone,
            source_format,parser_revision,extractor_revision
-          FROM statement_needs_review WHERE id = ?`)
+          FROM ingestion_review_items WHERE id = ?`)
           .bind("40000000-0000-4000-8000-000000000699", overdueDeadline, ownBody.data[0]?.id)
           .run()
       );
@@ -2670,7 +2665,9 @@ it("shows committed review rows only to their User through the canonical read", 
       expect(overdueItem?.originalEvidence).toBeUndefined();
       const stillRaw = yield* fromTestPromise(() =>
         runtime.db
-          .prepare("SELECT original_evidence FROM statement_needs_review WHERE record_number = 999")
+          .prepare(
+            "SELECT original_evidence FROM statement_review_context WHERE record_number = 999"
+          )
           .first<{ original_evidence: string }>()
       );
       expect(stillRaw?.original_evidence).not.toBeNull();
@@ -3371,7 +3368,7 @@ it(
           firstRow(
             runtime.db,
             entitlementRow,
-            "SELECT consumed_at_ms, submission_id FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements"
+            "SELECT consumed_at_ms, submission_id FROM statement_backfill_entitlements"
           )
         );
         expect(Option.isNone(entitlement.consumed_at_ms)).toBe(true);
@@ -4824,7 +4821,7 @@ const reviewRetentionRows = (db: D1Database): Effect.Effect<ReadonlyArray<unknow
   fromTestPromise(() =>
     db
       .prepare(
-        "SELECT r.user_id,sum(n.draft_json IS NOT NULL) AS drafts,sum(r.review_suggestions_json IS NOT NULL) AS suggestions FROM statement_needs_review r JOIN ingestion_review_state n ON n.id=r.id AND n.user_id=r.user_id GROUP BY r.user_id ORDER BY r.user_id"
+        "SELECT r.user_id,sum(n.draft_json IS NOT NULL) AS drafts,sum(r.review_suggestions_json IS NOT NULL) AS suggestions FROM statement_review_context r JOIN ingestion_review_workspace_state n ON n.id=r.id AND n.user_id=r.user_id GROUP BY r.user_id ORDER BY r.user_id"
       )
       .all()
   ).pipe(Effect.map((result) => result.results));

@@ -59,6 +59,7 @@ const compositionRoots = new Set([
   "cloudflare/subscription/payment-enrollment.test.ts",
   "cloudflare/subscription/refund-support.test.ts",
   "cloudflare/subscription/refunds.test.ts",
+  "cloudflare/subscription/card-retry-erasure.test.ts",
   "cloudflare/tokens/pats.test.ts",
   "cloudflare/oauth-agents/oauth-ingress.test-fixture.ts",
   "cloudflare/oauth-agents/oauth-ingress.test.ts",

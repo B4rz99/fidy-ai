@@ -720,7 +720,9 @@ const assertExtractedStatement = ({
     expect(
       (yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT record_number,reason,issues FROM statement_needs_review WHERE user_id=?")
+          .prepare(
+            "SELECT record_number,reason,issues FROM statement_review_context WHERE user_id=?"
+          )
           .bind(users[0])
           .all()
       )).results

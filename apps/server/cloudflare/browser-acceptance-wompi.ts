@@ -97,7 +97,7 @@ const transactionResponse = (request: Request): Promise<Response> =>
     const column = isCreate ? "a.wompi_reference" : "a.id";
     return db
       .prepare(`SELECT a.id, a.wompi_reference, a.amount, s.wompi_source_id,
-    s.billing_email, s.method FROM billing_attempts AS a JOIN payment_source_context AS s ON s.user_id = a.user_id
+    s.billing_email, s.method FROM billing_attempt_context AS a JOIN payment_source_context AS s ON s.user_id = a.user_id
     WHERE ${column} = ?`)
       .bind(key.value)
       .first()

@@ -1,6 +1,8 @@
 import { afterAll, expect, it } from "vitest";
-import { Data, Effect } from "effect";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { Data, Effect, Schema } from "effect";
+import { isolatedTestDatabases } from "../d1-test-fixture";
+
+import { CutoverHistory, precedingSchema } from "../schema-cutover.test-fixture";
 
 class FixtureFailure extends Data.TaggedError("FixtureFailure")<{ cause: unknown }> {}
 const native = <A>(run: () => PromiseLike<A>): Effect.Effect<A, FixtureFailure> =>
@@ -263,12 +265,67 @@ it.each(cases)(
       Effect.gen(function* () {
         const outcome = fixture.outcome;
         const db = yield* native(() => databases.acquire());
-        yield* native(() => installTestSchema({ db }));
-        const baseline = objects(
-          yield* native(() =>
-            Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-          )
-        );
+        const latest = precedingSchema({
+          current: precedingSchema({
+            current: precedingSchema({
+              current: precedingSchema({
+                current: objects(
+                  yield* native(() =>
+                    Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
+                  )
+                ),
+                history: yield* Schema.decodeEffect(CutoverHistory)(
+                  yield* native(() =>
+                    Bun.file(
+                      new URL(
+                        "../ingestion/backfill-progress-cutover.test-fixture.json",
+                        import.meta.url
+                      )
+                    ).text()
+                  )
+                ),
+              }),
+              history: yield* Schema.decodeEffect(CutoverHistory)(
+                yield* native(() =>
+                  Bun.file(
+                    new URL(
+                      "../ingestion/email-media-review-cutover.test-fixture.json",
+                      import.meta.url
+                    )
+                  ).text()
+                )
+              ),
+            }),
+            history: yield* Schema.decodeEffect(CutoverHistory)(
+              yield* native(() =>
+                Bun.file(
+                  new URL(
+                    "../ingestion/statement-review-cutover.test-fixture.json",
+                    import.meta.url
+                  )
+                ).text()
+              )
+            ),
+          }),
+          history: yield* Schema.decodeEffect(CutoverHistory)(
+            yield* native(() =>
+              Bun.file(
+                new URL("../ingestion/materialization-cutover.test-fixture.json", import.meta.url)
+              ).text()
+            )
+          ),
+        });
+        const baseline = precedingSchema({
+          current: latest,
+          history: yield* Schema.decodeEffect(CutoverHistory)(
+            yield* native(() =>
+              Bun.file(
+                new URL("../ingestion/forwarding-cutover.test-fixture.json", import.meta.url)
+              ).text()
+            )
+          ),
+        });
+        yield* native(() => db.batch(baseline.map((sql) => db.prepare(sql))));
         const source = objects(
           yield* native(() =>
             Bun.file(new URL("./history-before-1438.fixture.sql", import.meta.url)).text()

@@ -93,7 +93,7 @@ it.each(failures)("preserves populated OAuth lineage and rolls back $name", (fix
         yield* native(() =>
           Bun.file(new URL("./lineage-before-1446.fixture.sql", import.meta.url)).text()
         )
-      );
+      ).map((sql) => sql.replaceAll("FROM billing_attempts", "FROM billing_attempt_context"));
       yield* native(() =>
         db.batch(
           [

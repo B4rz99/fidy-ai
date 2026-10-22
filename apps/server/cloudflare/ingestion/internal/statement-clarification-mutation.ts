@@ -180,11 +180,11 @@ const eligibleReview = (work: StatementDecisionWork, id: string): OwnedStatement
   const authority = work.authority;
   const origin = originGuard({ work, submission: "r.submission_id" });
   return {
-    sql: `SELECT r.user_id FROM statement_needs_review r JOIN statement_submissions c
+    sql: `SELECT r.user_id FROM statement_review_context r JOIN statement_submissions c
       ON c.id = r.submission_id AND c.user_id = r.user_id
       WHERE r.id = ? AND r.user_id = ? AND r.status = 'pending' AND c.clarification_state = 'awaiting'
         AND c.clarification_expires_at_ms > ? AND r.evidence_expires_at_ms > ?
-        AND NOT EXISTS(SELECT 1 FROM ingestion_review_state n WHERE n.id=r.id AND n.user_id=r.user_id AND n.status!='pending')
+        AND NOT EXISTS(SELECT 1 FROM ingestion_review_workspace_state n WHERE n.id=r.id AND n.user_id=r.user_id AND n.status!='pending')
         AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) AND (${origin.sql})`,
     params: [id, work.userId, work.current, work.current, ...authority.bindings, ...origin.params],
   };
@@ -332,7 +332,7 @@ const loadEligibleReview = ({
     try: () =>
       work.db
         .prepare(`SELECT r.id, r.submission_id, r.record_number, r.service_market, r.locale, r.time_zone, r.source_format, r.parser_revision, o.sha256
-      FROM statement_needs_review r JOIN statement_submissions s ON s.id = r.submission_id AND s.user_id = r.user_id
+      FROM statement_review_context r JOIN statement_submissions s ON s.id = r.submission_id AND s.user_id = r.user_id
       JOIN statement_staging_objects o ON o.id = s.staging_id AND o.user_id = s.user_id
       WHERE r.id = ? AND r.user_id = ? AND EXISTS (${source.sql})`)
         .bind(id, work.userId, ...source.params)

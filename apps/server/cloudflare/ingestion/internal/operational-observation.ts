@@ -30,7 +30,7 @@ export const overdueIngestionRetention = (
           WHERE o.status = 'published' AND o.object_deleted_at_ms IS NULL AND s.retention_expires_at_ms <= ?
           UNION ALL SELECT expires_at_ms AS expires FROM forwarded_email_receipts
           WHERE state IN ('storing', 'queued') AND expires_at_ms <= ?
-          UNION ALL SELECT evidence_expires_at_ms AS expires FROM statement_needs_review
+          UNION ALL SELECT evidence_expires_at_ms AS expires FROM statement_review_context
           WHERE status = 'pending' AND evidence_expires_at_ms <= ?
             AND (original_evidence IS NOT NULL OR known_money IS NOT NULL)
         ) ORDER BY expires LIMIT ?`)

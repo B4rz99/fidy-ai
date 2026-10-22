@@ -1960,3 +1960,923 @@ PRAGMA defer_foreign_keys=OFF;
 ```
 
 <!-- subscription-source-verify:end -->
+
+## Subscription paid standing and billing facts — #1450
+
+Subscription selects one same-Subscription awarded BillingAttempt. User retains its original trial;
+Price supplies immutable Money and commercial terms. `billing_attempt_context` is a read-only owner
+projection, including historical archive keys, and holds no copied state. Intended renewal windows
+and verified awarded windows remain distinct. Cancellation and refund stops retain their existing
+meaning and are not reset by enrollment or an older settlement.
+
+For a populated database, fence all ordinary/background writers and provider publication, take a
+restorable backup and inventory every dependent schema object. Stop on any unexplained divergence.
+Do not replay the fresh-install baseline or infer historical values from the current environment.
+Use one native D1 batch with deferred foreign keys. Create `users_1450`, `subscriptions_1450` and
+`billing_attempts_1450` from the schema checkpoint at commit `8d5d210e7` (after #1450 and
+before #1452 removes cancellation fields), rather than the later final baseline, by changing only the
+CREATE TABLE name and redirect references to replaced Subscriptions and BillingAttempts to their
+shadow names. Keep all User references pointing to the original users table. Execute preflight and copy below,
+compare every copied row and exact rowid with its source, then remove dependent triggers/views/indexes,
+drop only the old subscriptions and billing_attempts tables, rename those two shadows to their final
+names, execute the User column-removal block below and reinstall all final schema objects. Users
+remain in place so cascading child data cannot be deleted. users_1450 is a validated copy only.
+Preserve every other row and existing erasure archive verbatim. Any failure must roll back the entire
+batch. Test interruption after copying and after replacement; retain the backup until #1494's full
+release verification is complete. Subsequent deployment must use this matching schema and code.
+
+<!-- subscription-standing-preflight:start -->
+
+```sql
+PRAGMA defer_foreign_keys=ON;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-standing-commercial',NOT EXISTS (
+ SELECT 1 FROM billing_attempts a LEFT JOIN subscription_prices p ON p.id=a.price_id
+ WHERE p.id IS NULL OR a.amount IS NOT p.amount OR a.currency IS NOT p.currency
+ OR a.billing_period IS NOT p.billing_period OR a.service_market IS NOT p.service_market
+ OR a.tax_treatment IS NOT p.tax_treatment);
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-standing-owner',NOT EXISTS (
+ SELECT 1 FROM billing_attempts a LEFT JOIN subscriptions s ON s.user_id=a.user_id
+ LEFT JOIN payment_enrollments e ON e.id=a.enrollment_id
+ LEFT JOIN payment_sources source ON source.id=a.payment_source_id
+ LEFT JOIN billing_attempts prior ON prior.id=a.previous_paid_attempt_id
+ WHERE s.id IS NULL OR e.subscription_id IS NOT s.id OR source.subscription_id IS NOT s.id
+ OR source.wompi_environment IS NOT a.wompi_environment
+ OR (a.previous_paid_attempt_id IS NOT NULL AND (prior.user_id IS NOT a.user_id OR prior.paid_starts_at_ms IS NULL)));
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-standing-selected',NOT EXISTS (
+ SELECT 1 FROM users u LEFT JOIN subscriptions s ON s.user_id=u.id
+ LEFT JOIN billing_attempts a ON a.id=u.paid_attempt_id
+ WHERE (u.paid_attempt_id IS NULL AND (u.paid_price_id IS NOT NULL OR u.paid_period_ends_at_ms IS NOT NULL OR u.paid_renewal_anchor_ms IS NOT NULL))
+ OR (u.paid_attempt_id IS NOT NULL AND (s.id IS NULL OR a.user_id IS NOT u.id OR a.status IS NOT 'succeeded'
+ OR a.paid_starts_at_ms IS NULL OR u.paid_price_id IS NOT a.price_id
+ OR u.paid_period_ends_at_ms IS NOT a.paid_ends_at_ms OR u.paid_renewal_anchor_ms IS NOT a.paid_renewal_anchor_ms)));
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-standing-no-charge',NOT EXISTS (
+ SELECT 1 FROM billing_attempts a WHERE
+ (a.no_charge_confirmed_at_ms IS NULL AND (a.no_charge_reference IS NOT NULL OR a.no_charge_environment IS NOT NULL OR a.no_charge_case_id IS NOT NULL OR a.no_charge_operator_id IS NOT NULL))
+ OR (a.no_charge_confirmed_at_ms IS NOT NULL AND (a.no_charge_reference IS NOT a.wompi_reference OR a.no_charge_environment IS NOT a.wompi_environment OR a.no_charge_case_id IS NULL OR a.no_charge_operator_id IS NULL))
+ OR ((a.recovery_case_id IS NULL)<>(a.recovery_reviewed_at_ms IS NULL))
+ OR (a.recovery_reviewed_at_ms IS NOT NULL AND (a.recovery_case_id IS NOT a.no_charge_case_id OR a.no_charge_confirmed_at_ms IS NULL OR a.status IS NOT 'succeeded')));
+```
+
+<!-- subscription-standing-preflight:end -->
+
+<!-- subscription-standing-copy:start -->
+
+```sql
+INSERT INTO users_1450(rowid,id,service_market,locale,time_zone,created_at_ms,trial_started_at_ms,trial_ends_at_ms,forwarding_address_id,forwarding_local_part,forwarding_issued_at_ms,backfill_present,backfill_submission_id,backfill_consumed_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms,route_portfolio_id,route_bsuid,route_phone_number_id,route_verified_at_ms,cancellation_paid_attempt_id,cancellation_payment_source_id,cancellation_cancelled_at_ms,cancellation_paid_through_ms,cancellation_source_cancellation,cancellation_void_started_at_ms,cancellation_void_verified_at_ms,cancellation_verification_count,cancellation_last_offered_at_ms)
+SELECT r.rowid,r.id,r.service_market,r.locale,r.time_zone,r.created_at_ms,r.trial_started_at_ms,r.trial_ends_at_ms,r.forwarding_address_id,r.forwarding_local_part,r.forwarding_issued_at_ms,r.backfill_present,r.backfill_submission_id,r.backfill_consumed_at_ms,r.whatsapp_portfolio_id,r.whatsapp_bsuid,r.whatsapp_verified_at_ms,r.route_portfolio_id,r.route_bsuid,r.route_phone_number_id,r.route_verified_at_ms,r.cancellation_paid_attempt_id,r.cancellation_payment_source_id,r.cancellation_cancelled_at_ms,r.cancellation_paid_through_ms,r.cancellation_source_cancellation,r.cancellation_void_started_at_ms,r.cancellation_void_verified_at_ms,r.cancellation_verification_count,r.cancellation_last_offered_at_ms FROM users r;
+INSERT INTO subscriptions_1450(rowid,id,user_id,current_paid_attempt_id)
+SELECT r.rowid,r.id,r.user_id,(SELECT paid_attempt_id FROM users WHERE id=r.user_id) FROM subscriptions r;
+INSERT INTO billing_attempts_1450(rowid,id,subscription_id,enrollment_id,payment_request_id,payment_source_id,price_id,time_zone,wompi_environment,wompi_reference,status,created_at_ms,finalized_at_ms,previous_paid_attempt_id,period_starts_at_ms,period_ends_at_ms,calendar_anchor_ms,renewal_attempt_number,paid_starts_at_ms,paid_ends_at_ms,paid_renewal_anchor_ms,checkout_transaction_id,collection_state,collection_sent_at_ms,collection_last_attempt_at_ms,followup_due_at_ms,no_charge_case_id,no_charge_operator_id,no_charge_confirmed_at_ms,late_approval_observed_at_ms)
+SELECT r.rowid,r.id,(SELECT id FROM subscriptions WHERE user_id=r.user_id),r.enrollment_id,r.payment_request_id,r.payment_source_id,r.price_id,r.time_zone,r.wompi_environment,r.wompi_reference,r.status,r.created_at_ms,r.finalized_at_ms,r.previous_paid_attempt_id,r.period_starts_at_ms,r.period_ends_at_ms,r.calendar_anchor_ms,r.renewal_attempt_number,r.paid_starts_at_ms,r.paid_ends_at_ms,r.paid_renewal_anchor_ms,r.checkout_transaction_id,r.collection_state,r.collection_sent_at_ms,r.collection_last_attempt_at_ms,r.followup_due_at_ms,r.no_charge_case_id,r.no_charge_operator_id,r.no_charge_confirmed_at_ms,r.recovery_reviewed_at_ms FROM billing_attempts r;
+```
+
+<!-- subscription-standing-copy:end -->
+
+<!-- subscription-standing-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'subscription-standing-copy-users',
+ (SELECT count(*) FROM users)=(SELECT count(*) FROM users_1450) AND NOT EXISTS (
+ SELECT 1 FROM users r LEFT JOIN users_1450 t ON t.rowid=r.rowid WHERE t.rowid IS NULL OR t.id IS NOT r.id
+ OR t.service_market IS NOT r.service_market
+ OR t.locale IS NOT r.locale
+ OR t.time_zone IS NOT r.time_zone
+ OR t.created_at_ms IS NOT r.created_at_ms
+ OR t.trial_started_at_ms IS NOT r.trial_started_at_ms
+ OR t.trial_ends_at_ms IS NOT r.trial_ends_at_ms
+ OR t.forwarding_address_id IS NOT r.forwarding_address_id
+ OR t.forwarding_local_part IS NOT r.forwarding_local_part
+ OR t.forwarding_issued_at_ms IS NOT r.forwarding_issued_at_ms
+ OR t.backfill_present IS NOT r.backfill_present
+ OR t.backfill_submission_id IS NOT r.backfill_submission_id
+ OR t.backfill_consumed_at_ms IS NOT r.backfill_consumed_at_ms
+ OR t.whatsapp_portfolio_id IS NOT r.whatsapp_portfolio_id
+ OR t.whatsapp_bsuid IS NOT r.whatsapp_bsuid
+ OR t.whatsapp_verified_at_ms IS NOT r.whatsapp_verified_at_ms
+ OR t.route_portfolio_id IS NOT r.route_portfolio_id
+ OR t.route_bsuid IS NOT r.route_bsuid
+ OR t.route_phone_number_id IS NOT r.route_phone_number_id
+ OR t.route_verified_at_ms IS NOT r.route_verified_at_ms
+ OR t.cancellation_paid_attempt_id IS NOT r.cancellation_paid_attempt_id
+ OR t.cancellation_payment_source_id IS NOT r.cancellation_payment_source_id
+ OR t.cancellation_cancelled_at_ms IS NOT r.cancellation_cancelled_at_ms
+ OR t.cancellation_paid_through_ms IS NOT r.cancellation_paid_through_ms
+ OR t.cancellation_source_cancellation IS NOT r.cancellation_source_cancellation
+ OR t.cancellation_void_started_at_ms IS NOT r.cancellation_void_started_at_ms
+ OR t.cancellation_void_verified_at_ms IS NOT r.cancellation_void_verified_at_ms
+ OR t.cancellation_verification_count IS NOT r.cancellation_verification_count
+ OR t.cancellation_last_offered_at_ms IS NOT r.cancellation_last_offered_at_ms);
+INSERT INTO sql_assertions(scope,accepted) SELECT 'subscription-standing-copy-subscriptions',
+ (SELECT count(*) FROM subscriptions)=(SELECT count(*) FROM subscriptions_1450) AND NOT EXISTS (
+ SELECT 1 FROM subscriptions r LEFT JOIN subscriptions_1450 t ON t.rowid=r.rowid WHERE t.rowid IS NULL OR t.id IS NOT r.id
+ OR t.user_id IS NOT r.user_id
+ OR t.current_paid_attempt_id IS NOT (SELECT paid_attempt_id FROM users WHERE id=r.user_id));
+INSERT INTO sql_assertions(scope,accepted) SELECT 'subscription-standing-copy-billing_attempts',
+ (SELECT count(*) FROM billing_attempts)=(SELECT count(*) FROM billing_attempts_1450) AND NOT EXISTS (
+ SELECT 1 FROM billing_attempts r LEFT JOIN billing_attempts_1450 t ON t.rowid=r.rowid WHERE t.rowid IS NULL OR t.id IS NOT r.id
+ OR t.subscription_id IS NOT (SELECT id FROM subscriptions WHERE user_id=r.user_id)
+ OR t.enrollment_id IS NOT r.enrollment_id
+ OR t.payment_request_id IS NOT r.payment_request_id
+ OR t.payment_source_id IS NOT r.payment_source_id
+ OR t.price_id IS NOT r.price_id
+ OR t.time_zone IS NOT r.time_zone
+ OR t.wompi_environment IS NOT r.wompi_environment
+ OR t.wompi_reference IS NOT r.wompi_reference
+ OR t.status IS NOT r.status
+ OR t.created_at_ms IS NOT r.created_at_ms
+ OR t.finalized_at_ms IS NOT r.finalized_at_ms
+ OR t.previous_paid_attempt_id IS NOT r.previous_paid_attempt_id
+ OR t.period_starts_at_ms IS NOT r.period_starts_at_ms
+ OR t.period_ends_at_ms IS NOT r.period_ends_at_ms
+ OR t.calendar_anchor_ms IS NOT r.calendar_anchor_ms
+ OR t.renewal_attempt_number IS NOT r.renewal_attempt_number
+ OR t.paid_starts_at_ms IS NOT r.paid_starts_at_ms
+ OR t.paid_ends_at_ms IS NOT r.paid_ends_at_ms
+ OR t.paid_renewal_anchor_ms IS NOT r.paid_renewal_anchor_ms
+ OR t.checkout_transaction_id IS NOT r.checkout_transaction_id
+ OR t.collection_state IS NOT r.collection_state
+ OR t.collection_sent_at_ms IS NOT r.collection_sent_at_ms
+ OR t.collection_last_attempt_at_ms IS NOT r.collection_last_attempt_at_ms
+ OR t.followup_due_at_ms IS NOT r.followup_due_at_ms
+ OR t.no_charge_case_id IS NOT r.no_charge_case_id
+ OR t.no_charge_operator_id IS NOT r.no_charge_operator_id
+ OR t.no_charge_confirmed_at_ms IS NOT r.no_charge_confirmed_at_ms
+ OR t.late_approval_observed_at_ms IS NOT r.recovery_reviewed_at_ms);
+```
+
+<!-- subscription-standing-copy-check:end -->
+
+<!-- subscription-standing-user-remove:start -->
+
+```sql
+DROP TABLE users_1450;
+ALTER TABLE users DROP COLUMN paid_renewal_anchor_ms;
+ALTER TABLE users DROP COLUMN paid_period_ends_at_ms;
+ALTER TABLE users DROP COLUMN paid_price_id;
+ALTER TABLE users DROP COLUMN paid_attempt_id;
+```
+
+<!-- subscription-standing-user-remove:end -->
+
+<!-- subscription-standing-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-standing-final-owner',NOT EXISTS (
+ SELECT 1 FROM subscriptions s JOIN billing_attempts a ON a.id=s.current_paid_attempt_id
+ WHERE a.subscription_id<>s.id OR a.status<>'succeeded' OR a.paid_starts_at_ms IS NULL);
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-standing-final-fks',NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check);
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- subscription-standing-verify:end -->
+
+Native cutover evidence preserves rowids, selected standing, immutable Price values, intended and
+awarded periods, no-charge and late approval observations, provider evidence and retained archives.
+The paid-access lookup uses unique Subscription/User and attempt/Price keys; renewal discovery gains
+a due-work index rather than scanning historical attempts. Compare EXPLAIN QUERY PLAN before/after with representative populated data.
+History lookup has `(subscription_id,created_at_ms DESC,id DESC)` support. Renewal/grace, sibling
+races and late approval continue through the existing public workflows; commercial quotas remain
+unchanged. The existing provider workflow telemetry remains at the same orchestration boundary.
+
+## Billing observation executions (#1451)
+
+Provider observations now launch `billing-lookup-v2-<digest>` for the retained transaction and signed
+hint generation. The digest includes the exact provider-native signed timestamp and status; it has
+no wall-clock bucket. The payload contains only these identities. A lost launch response is recovered with `get` and native status inspection of that same execution id. Queued, running, waiting and paused executions keep their existing reservation; scheduler reoffers do not charge them again. A terminal execution with remaining eligible budget is restarted only after a new atomic prelaunch reservation.
+
+Discovery rotates bounded batches independently of the provider lookup clocks so queued or paused
+executions cannot permanently occupy the oldest batch. Each execution has at most eight named
+lookup steps separated by native durable cooldown sleeps.
+The initial reservation remains charged before handoff, including failed handoffs. Later steps
+atomically reserve the applicable attempt and callback budgets before provider GET. Neither a new
+execution nor an engine replacement resets those counters. A newer signed hint resets only its
+callback budget and changes the execution identity; an older generation cannot charge that budget
+or mark the replacement hint resolved. Verified provider evidence, with the original environment,
+reference, source, amount and finalization checks, remains the only settlement authority.
+
+No schema or historical-row rewrite is needed. Existing v1 lookup executions retain their original
+one-step meaning during their existing three-day retention; new offers use v2. Do not manually
+restart an existing execution with its old charged payload. Recovery reoffers the retained database
+identity through the dispatcher, preserving its cumulative charging and deadline guards. Final live
+verification remains part of #1494.
+
+## Retained Subscription cancellation (#1452)
+
+Cancellation moves nine nullable User fields into the ten-field `subscription_cancellations` table.
+Its Subscription key and composite paid-attempt/source references enforce one owner. The read-only
+context supplies User identity and preserves existing archive keys. New rows keep the original User
+rowid, so retained archive locators remain unchanged. A cancellation remains a renewal stop after
+source replacement; it never revokes the already awarded paid period.
+
+Fence ordinary writers and take the same verified backup required above. Create the final empty
+`subscription_cancellations` table from the baseline. Execute the following blocks, removal of
+schema objects that depend on the old cancellation columns, and reinstallation of final views,
+indexes and triggers in one native atomic batch. Copy and validate before dropping columns.
+Drop `cancellation_last_offered_at_ms` first because its inline CHECK owns the old grouped-absence
+constraint. Dropping columns in place preserves the User table, rowids and every cascading child;
+this cutover does not drop or rename Users. Never disable foreign keys. Retain archives unchanged.
+
+<!-- subscription-cancellation-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-cancellation-preflight',CASE WHEN NOT EXISTS (
+ SELECT 1 FROM users u LEFT JOIN subscriptions s ON s.user_id=u.id
+ LEFT JOIN billing_attempts a ON a.id=u.cancellation_paid_attempt_id
+ LEFT JOIN payment_sources p ON p.id=u.cancellation_payment_source_id
+ WHERE u.cancellation_cancelled_at_ms IS NOT NULL AND (
+  s.id IS NULL OR a.id IS NULL OR p.id IS NULL OR a.subscription_id IS NOT s.id
+  OR p.subscription_id IS NOT s.id OR a.payment_source_id IS NOT p.id
+  OR a.status<>'succeeded' OR a.paid_starts_at_ms IS NULL
+  OR u.cancellation_paid_through_ms>a.paid_ends_at_ms
+  OR u.cancellation_verification_count NOT BETWEEN 0 AND 8
+  OR u.cancellation_source_cancellation NOT IN ('detached','void-pending','voided')
+ )) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-cancellation-preflight:end -->
+
+<!-- subscription-cancellation-copy:start -->
+
+```sql
+INSERT INTO subscription_cancellations(rowid,subscription_id,paid_attempt_id,payment_source_id,cancelled_at_ms,paid_through_ms,source_cancellation_state,void_started_at_ms,void_verified_at_ms,verification_count,last_offered_at_ms)
+SELECT u.rowid,s.id,u.cancellation_paid_attempt_id,u.cancellation_payment_source_id,u.cancellation_cancelled_at_ms,u.cancellation_paid_through_ms,u.cancellation_source_cancellation,u.cancellation_void_started_at_ms,u.cancellation_void_verified_at_ms,u.cancellation_verification_count,u.cancellation_last_offered_at_ms FROM users u JOIN subscriptions s ON s.user_id=u.id WHERE u.cancellation_cancelled_at_ms IS NOT NULL;
+```
+
+<!-- subscription-cancellation-copy:end -->
+
+<!-- subscription-cancellation-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-cancellation-copy',CASE WHEN
+ (SELECT count(*) FROM subscription_cancellations)=(SELECT count(*) FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL)
+ AND NOT EXISTS(SELECT 1 FROM users u JOIN subscriptions s ON s.user_id=u.id
+ LEFT JOIN subscription_cancellations c ON c.subscription_id=s.id
+ WHERE u.cancellation_cancelled_at_ms IS NOT NULL AND (c.rowid IS NOT u.rowid
+  OR c.paid_attempt_id IS NOT u.cancellation_paid_attempt_id
+  OR c.payment_source_id IS NOT u.cancellation_payment_source_id
+  OR c.cancelled_at_ms IS NOT u.cancellation_cancelled_at_ms
+  OR c.paid_through_ms IS NOT u.cancellation_paid_through_ms
+  OR c.source_cancellation_state IS NOT u.cancellation_source_cancellation
+  OR c.void_started_at_ms IS NOT u.cancellation_void_started_at_ms
+  OR c.void_verified_at_ms IS NOT u.cancellation_void_verified_at_ms
+  OR c.verification_count IS NOT u.cancellation_verification_count
+  OR c.last_offered_at_ms IS NOT u.cancellation_last_offered_at_ms
+)) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-cancellation-copy-check:end -->
+
+<!-- subscription-cancellation-remove:start -->
+
+```sql
+ALTER TABLE users DROP COLUMN cancellation_last_offered_at_ms;
+ALTER TABLE users DROP COLUMN cancellation_verification_count;
+ALTER TABLE users DROP COLUMN cancellation_void_verified_at_ms;
+ALTER TABLE users DROP COLUMN cancellation_void_started_at_ms;
+ALTER TABLE users DROP COLUMN cancellation_source_cancellation;
+ALTER TABLE users DROP COLUMN cancellation_paid_through_ms;
+ALTER TABLE users DROP COLUMN cancellation_cancelled_at_ms;
+ALTER TABLE users DROP COLUMN cancellation_payment_source_id;
+ALTER TABLE users DROP COLUMN cancellation_paid_attempt_id;
+```
+
+<!-- subscription-cancellation-remove:end -->
+
+<!-- subscription-cancellation-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-cancellation-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-cancellation-verify:end -->
+
+Cleanup uses `source-cancel-v2-<UserId>` with eight bounded native lookup steps and durable waits.
+Queue publication retains its original offer clock. The void mutation still needs its one durable
+claim; an ambiguous void is never repeated. Each source GET reserves the existing cumulative
+verification counter. Active executions are deduplicated; terminal executions may restart only
+while pending work and remaining budget exist. Every step reloads the retained original source and
+same-environment binding, so a replacement source cannot redirect the cleanup. Existing v1
+executions retain their one-step meaning for the existing three-day retention. #1494 owns final
+live cutover verification.
+
+## Subscription refunds (#1453)
+
+Apply after #1452 on its verified schema checkpoint `0297fbaa0`. Keep rollback evidence and existing
+archive bodies unchanged. Install the target `refund_charge_context` view, then execute the preflight,
+create the target refund table as `refund_attempts_1453`, copy, and compare. In the same D1 batch,
+drop all existing explicit views/triggers/indexes and the newly installed charge view, swap only the
+refund table, reinstall target views/triggers/indexes, and check foreign keys. Do not drop User,
+Subscription, charge, or Price tables. A failed assertion or interrupted batch rolls everything back.
+The clean baseline remains one file; this populated cutover does not replay it against existing data.
+
+The target has 24 logical fields plus one generated owner key. The generated `user_id` comes from the
+validated immutable request and is constrained against the charge owner at acceptance. This retains
+per-User retry uniqueness across different charges. Original charge value uses validated decimal
+text and integer arithmetic; no floating-point conversion is used for Money. Provider refund identity
+is unique within its environment. Retained treatment replaces the duplicated response; original
+response identities, exact Money and instants are checked before any copies disappear. The
+write-only publication timestamp is intentionally discarded; dispatch cooldown, claims, verification
+budgets, ambiguous reservations and verified access/renewal effects remain. Native migration tests
+exercise populated replay, preservation and rollback; #1494 owns final live cutover verification.
+
+<!-- subscription-refund-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-refund-preflight',CASE WHEN NOT EXISTS(
+ SELECT 1 FROM refund_attempts r LEFT JOIN refund_charge_context a ON a.id=r.billing_attempt_id
+ WHERE a.id IS NULL OR r.user_id IS NOT a.user_id OR r.subscription_id IS NOT a.subscription_id
+ OR r.original_cents IS NOT a.original_cents
+ OR json_extract(r.intent_json,'$.userId') IS NOT r.user_id
+ OR json_extract(r.intent_json,'$.billingAttemptId') IS NOT r.billing_attempt_id
+ OR json_extract(r.intent_json,'$.requestId') IS NOT r.request_id
+ OR json_extract(r.intent_json,'$.intent.kind') IS NOT r.kind
+ OR json_extract(r.snapshot_json,'$.id') IS NOT r.id
+ OR json_extract(r.snapshot_json,'$.userId') IS NOT r.user_id
+ OR json_extract(r.snapshot_json,'$.subscriptionId') IS NOT r.subscription_id
+ OR json_extract(r.snapshot_json,'$.billingAttemptId') IS NOT r.billing_attempt_id
+ OR json_extract(r.snapshot_json,'$.priceId') IS NOT a.price_id
+ OR json_extract(r.snapshot_json,'$.kind') IS NOT r.kind
+ OR json_extract(r.snapshot_json,'$.requestId') IS NOT r.request_id
+ OR json_extract(r.snapshot_json,'$.reason') IS NOT json_extract(r.intent_json,'$.reason')
+ OR json_extract(r.snapshot_json,'$.reason') NOT IN('user-request','duplicate-collection','service-error')
+ OR json_extract(r.snapshot_json,'$.money.currency') IS NOT a.currency
+ OR json_extract(r.snapshot_json,'$.money.amount') IS NOT
+   (CAST(CAST(r.amount_in_cents/100 AS INTEGER) AS TEXT)||CASE WHEN r.amount_in_cents%100=0 THEN '' ELSE '.'||rtrim(printf('%02d',r.amount_in_cents%100),'0') END)
+ OR (r.kind='refund' AND (json_extract(r.intent_json,'$.intent.money.amount') IS NOT json_extract(r.snapshot_json,'$.money.amount')
+   OR json_extract(r.intent_json,'$.intent.money.currency') IS NOT a.currency))
+ OR (r.kind='card-void' AND r.amount_in_cents<>a.original_cents)
+ OR json_extract(r.snapshot_json,'$.createdAt') IS NOT
+   (strftime('%Y-%m-%dT%H:%M:%S',CAST(r.created_at_ms/1000 AS INTEGER),'unixepoch')||printf('.%03dZ',r.created_at_ms%1000))
+ OR json_extract(r.snapshot_json,'$.status') IS NOT 'pending'
+ OR json_extract(r.snapshot_json,'$.progress') IS NOT 'queued'
+ OR json_extract(r.snapshot_json,'$.treatment.policyId') IS NOT 'refund-ends-paid-period-v1'
+ OR json_extract(r.snapshot_json,'$.treatment.taxTreatment') IS NOT a.tax_treatment
+ OR json_extract(r.snapshot_json,'$.treatment.paidPeriodEffect') IS NOT 'end-refunded-period-at-verification'
+ OR json_extract(r.snapshot_json,'$.treatment.renewalEffect') IS NOT 'stop-future-renewals'
+ OR json_extract(r.snapshot_json,'$.treatment.accounting.kind') IS NOT 'sandbox-only'
+ OR (r.adjusted_attempt_id IS NOT NULL AND r.adjusted_attempt_id IS NOT r.billing_attempt_id)
+ OR (r.renewal_stopped_user_id IS NOT NULL AND r.renewal_stopped_user_id IS NOT r.user_id)
+ OR NOT EXISTS(SELECT 1 FROM billing_provider_transactions e WHERE e.transaction_id=r.transaction_id AND e.attempt_id=r.billing_attempt_id AND e.status='APPROVED')
+ OR a.wompi_environment<>'sandbox' OR a.status<>'succeeded' OR a.paid_starts_at_ms IS NULL
+ OR (SELECT COUNT(*) FROM billing_provider_transactions e WHERE e.attempt_id=a.id AND e.status='APPROVED')<>1
+ OR (r.kind='card-void' AND NOT EXISTS(SELECT 1 FROM payment_source_context p WHERE p.id=a.payment_source_id AND p.method='card'))
+ OR (r.status='succeeded' AND (r.verified_status NOT IN('APPROVED','VOIDED') OR r.observed_at_ms IS NULL OR r.finalized_at_ms IS NOT r.observed_at_ms OR r.access_ends_at_ms IS NOT r.observed_at_ms OR r.renewal_stopped_at_ms IS NOT r.observed_at_ms))
+ OR (r.status='failed' AND (r.verified_status NOT IN('DECLINED','CANCELLED') OR r.observed_at_ms IS NULL OR r.finalized_at_ms IS NOT r.observed_at_ms))
+ OR (SELECT SUM(other.amount_in_cents) FROM refund_attempts other WHERE other.billing_attempt_id=r.billing_attempt_id AND other.status<>'failed')>a.original_cents
+) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-refund-preflight:end -->
+
+<!-- subscription-refund-copy:start -->
+
+```sql
+INSERT INTO refund_attempts_1453(rowid,id,billing_attempt_id,wompi_environment,transaction_id,request_id,intent_json,treatment_json,amount_in_cents,kind,operator_id,created_at_ms,status,progress,finalized_at_ms,failure,dispatch_last_attempt_at_ms,verification_attempts,last_verification_at_ms,submission_claimed_at_ms,provider_refund_id,verified_status,observed_at_ms,access_ends_at_ms,renewal_stopped_at_ms)
+ SELECT r.rowid,r.id,r.billing_attempt_id,a.wompi_environment,r.transaction_id,r.request_id,r.intent_json,json_extract(r.snapshot_json,'$.treatment'),r.amount_in_cents,r.kind,r.operator_id,r.created_at_ms,r.status,r.progress,r.finalized_at_ms,r.failure,r.dispatch_last_attempt_at_ms,r.verification_attempts,r.last_verification_at_ms,r.submission_claimed_at_ms,r.provider_refund_id,r.verified_status,r.observed_at_ms,r.access_ends_at_ms,r.renewal_stopped_at_ms
+ FROM refund_attempts r JOIN refund_charge_context a ON a.id=r.billing_attempt_id;
+```
+
+<!-- subscription-refund-copy:end -->
+
+<!-- subscription-refund-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-refund-copy',CASE WHEN NOT EXISTS(
+ SELECT rowid,id,billing_attempt_id,wompi_environment,transaction_id,request_id,intent_json,treatment_json,amount_in_cents,kind,operator_id,created_at_ms,status,progress,finalized_at_ms,failure,dispatch_last_attempt_at_ms,verification_attempts,last_verification_at_ms,submission_claimed_at_ms,provider_refund_id,verified_status,observed_at_ms,access_ends_at_ms,renewal_stopped_at_ms FROM refund_attempts_1453
+ EXCEPT SELECT r.rowid,r.id,r.billing_attempt_id,a.wompi_environment,r.transaction_id,r.request_id,r.intent_json,json_extract(r.snapshot_json,'$.treatment'),r.amount_in_cents,r.kind,r.operator_id,r.created_at_ms,r.status,r.progress,r.finalized_at_ms,r.failure,r.dispatch_last_attempt_at_ms,r.verification_attempts,r.last_verification_at_ms,r.submission_claimed_at_ms,r.provider_refund_id,r.verified_status,r.observed_at_ms,r.access_ends_at_ms,r.renewal_stopped_at_ms FROM refund_attempts r JOIN refund_charge_context a ON a.id=r.billing_attempt_id
+) AND (SELECT COUNT(*) FROM refund_attempts_1453)=(SELECT COUNT(*) FROM refund_attempts) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-refund-copy-check:end -->
+
+<!-- subscription-refund-swap:start -->
+
+```sql
+DROP TABLE refund_attempts;
+ALTER TABLE refund_attempts_1453 RENAME TO refund_attempts;
+```
+
+<!-- subscription-refund-swap:end -->
+
+<!-- subscription-refund-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-refund-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-refund-verify:end -->
+
+## Subscription price notices (#1454)
+
+Apply after #1453 at verified checkpoint `9e4e7a965`. In one D1 batch run the preflight,
+create the target table as `billing_price_notices_1454`, copy and compare, drop explicit
+views/triggers/indexes, swap only the notice table, reinstall target views/triggers/indexes,
+and verify foreign keys. Preserve original rowids and archive bodies. Missing Subscription
+ownership blocks the conversion; never invent it or discard the notice. User and Subscription
+tables remain in place.
+
+The six-field store is keyed by Subscription/Price. `provider_accepted_at_ms` records email
+provider acknowledgment, not User approval of a Price. The queue still carries the resolved User
+and exact Price; reads derive User ownership through Subscription and every write scopes the
+same Subscription. Offer cooldown and durable send claims retain their meaning: definitive refusal
+can release a claim for retry, while timeout or an ambiguous provider response leaves it claimed.
+Renewal admission does not acquire a Price-approval requirement. Erasure removes notices before
+their Subscription identity. #1494 owns final live cutover verification.
+
+<!-- subscription-price-notice-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-price-notice-preflight',CASE WHEN NOT EXISTS(
+ SELECT 1 FROM billing_price_notices n LEFT JOIN subscriptions s ON s.user_id=n.user_id
+ WHERE s.id IS NULL OR (n.accepted_at_ms IS NOT NULL AND n.send_started_at_ms IS NULL)
+) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-price-notice-preflight:end -->
+
+<!-- subscription-price-notice-copy:start -->
+
+```sql
+INSERT INTO billing_price_notices_1454(rowid,subscription_id,price_id,created_at_ms,last_offered_at_ms,send_started_at_ms,provider_accepted_at_ms)
+SELECT n.rowid,s.id,n.price_id,n.created_at_ms,n.last_offered_at_ms,n.send_started_at_ms,n.accepted_at_ms
+FROM billing_price_notices n JOIN subscriptions s ON s.user_id=n.user_id;
+```
+
+<!-- subscription-price-notice-copy:end -->
+
+<!-- subscription-price-notice-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-price-notice-copy',CASE WHEN NOT EXISTS(
+ SELECT rowid,subscription_id,price_id,created_at_ms,last_offered_at_ms,send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices_1454
+ EXCEPT SELECT n.rowid,s.id,n.price_id,n.created_at_ms,n.last_offered_at_ms,n.send_started_at_ms,n.accepted_at_ms FROM billing_price_notices n JOIN subscriptions s ON s.user_id=n.user_id
+) AND (SELECT COUNT(*) FROM billing_price_notices_1454)=(SELECT COUNT(*) FROM billing_price_notices) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-price-notice-copy-check:end -->
+
+<!-- subscription-price-notice-swap:start -->
+
+```sql
+DROP TABLE billing_price_notices;
+ALTER TABLE billing_price_notices_1454 RENAME TO billing_price_notices;
+```
+
+<!-- subscription-price-notice-swap:end -->
+
+<!-- subscription-price-notice-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'subscription-price-notice-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END;
+```
+
+<!-- subscription-price-notice-verify:end -->
+
+## Forwarding address extraction (#1456)
+
+Source checkpoint: `1217883c0`, after Subscription and allowance integration. The accepted
+`forwarding_addresses` record owns `id`, unique `user_id`, unique `local_part`, and `issued_at_ms`.
+Issuance remains in the processing-grant transaction. An address routes email; it supplies no
+browser-login, mailbox-credential, or canonical caller authority. Admission still rechecks current
+Consent and institution Connection eligibility before retaining bytes.
+
+With writers quiesced, run the following in one native D1 batch: preflight, create the exact target
+`forwarding_addresses` definition from the baseline, copy and compare, remove the source checkpoint's
+explicit views/triggers/indexes, swap, recreate the target baseline's views/triggers/indexes, then
+verify. Keep implicit constraint indexes. Do not drop/rebuild User or disable foreign keys.
+A failure rolls back the complete batch. #1494 owns final live cutover verification.
+
+Preserve each original User rowid as the new address rowid so the logical
+`email_forwarding_addresses` erasure store's existing chunk references remain valid. Its archive
+shape retains `created_at_ms` as the historical serialization of the original issuance instant;
+existing archives are not rewritten. User rows without an address remain absent. No allowance or
+email-receipt state moves. The new Consent trigger retains an existing address on a later grant.
+
+<!-- forwarding-address-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'forwarding-address-preflight',CASE WHEN NOT EXISTS(
+ SELECT 1 FROM users WHERE
+ (forwarding_address_id IS NULL OR forwarding_local_part IS NULL OR forwarding_issued_at_ms IS NULL)
+ AND (forwarding_address_id IS NOT NULL OR forwarding_local_part IS NOT NULL OR forwarding_issued_at_ms IS NOT NULL)
+) THEN 1 ELSE 0 END;
+```
+
+<!-- forwarding-address-preflight:end -->
+
+<!-- forwarding-address-copy:start -->
+
+```sql
+INSERT INTO forwarding_addresses(rowid,id,user_id,local_part,issued_at_ms)
+SELECT rowid,forwarding_address_id,id,forwarding_local_part,forwarding_issued_at_ms
+FROM users WHERE forwarding_address_id IS NOT NULL;
+```
+
+<!-- forwarding-address-copy:end -->
+
+<!-- forwarding-address-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'forwarding-address-copy',CASE WHEN NOT EXISTS(
+ SELECT rowid,id,user_id,local_part,issued_at_ms FROM forwarding_addresses
+ EXCEPT SELECT rowid,forwarding_address_id,id,forwarding_local_part,forwarding_issued_at_ms
+ FROM users WHERE forwarding_address_id IS NOT NULL
+) AND (SELECT COUNT(*) FROM forwarding_addresses)=(SELECT COUNT(*) FROM users WHERE forwarding_address_id IS NOT NULL)
+THEN 1 ELSE 0 END;
+```
+
+<!-- forwarding-address-copy-check:end -->
+
+<!-- forwarding-address-swap:start -->
+
+```sql
+ALTER TABLE users DROP COLUMN forwarding_issued_at_ms;
+ALTER TABLE users DROP COLUMN forwarding_local_part;
+ALTER TABLE users DROP COLUMN forwarding_address_id;
+```
+
+<!-- forwarding-address-swap:end -->
+
+<!-- forwarding-address-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'forwarding-address-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END;
+```
+
+<!-- forwarding-address-verify:end -->
+
+## Statement materialization extraction (#1457)
+
+Source checkpoint: `6adb8d86d`. Parsed cache metadata moves to `statement_materializations`;
+its parts reference that cache row. Submission identity, captured parser/format/market/locale/zone,
+parse-attempt budget, durable cursor, row outcomes, final totals and work reconciliation stay on the
+submission. Cache publication still verifies ordered part hashes, total bytes and dimensions before
+processing. A corrupt cache cannot reinterpret or undo already captured rows. Terminal settlement
+removes cache and parts atomically; native Workflow reconciliation remains independent of parsing.
+
+Quiesce writers. In one D1 batch: preflight; create the exact baseline cache table and a
+`statement_materialization_parts_1457` copy of the target parts definition; copy and compare; drop
+explicit source views/triggers/indexes; swap; recreate baseline views/triggers/indexes; verify.
+Keep constraint indexes. Do not rebuild the submission or disable foreign keys. The old submission
+rowid becomes cache rowid and every original part rowid is preserved. Historical archive bodies
+remain unchanged; new cache archives use their own ingestion store. Erasure removes parts before
+cache, then submission, retaining purpose-specific guards. #1494 owns final live verification.
+
+<!-- statement-materialization-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'statement-materialization-preflight',CASE WHEN NOT EXISTS(
+ SELECT 1 FROM statement_submissions s LEFT JOIN statement_staging_objects o ON o.id=s.staging_id
+ WHERE (s.material_state IS NULL AND (s.material_source_sha256 IS NOT NULL OR s.material_parts_sha256 IS NOT NULL
+ OR s.material_representation_revision IS NOT NULL OR s.material_expires_at_ms IS NOT NULL OR s.material_headers_json IS NOT NULL
+ OR s.material_row_count IS NOT NULL OR s.material_part_count IS NOT NULL OR s.material_byte_length IS NOT NULL))
+ OR (s.material_state IS NOT NULL AND (s.material_source_sha256 IS NULL OR s.material_parts_sha256 IS NULL
+ OR s.material_representation_revision IS NULL OR s.material_expires_at_ms IS NULL OR s.material_headers_json IS NULL
+ OR s.material_row_count IS NULL OR s.material_part_count IS NULL OR s.material_byte_length IS NULL
+ OR s.material_source_sha256 IS NOT o.sha256 OR s.material_expires_at_ms IS NOT s.retention_expires_at_ms
+ OR s.parser_revision IS NULL OR s.source_format IS NULL OR s.service_market IS NULL OR s.locale IS NULL OR s.time_zone IS NULL
+ OR s.status NOT IN ('queued','processing')
+ OR (s.material_state='ready' AND (s.material_part_count<>(SELECT COUNT(*) FROM statement_materialization_parts p WHERE p.submission_id=s.id)
+ OR s.material_byte_length IS NOT (SELECT SUM(length(CAST(body AS BLOB))) FROM statement_materialization_parts p WHERE p.submission_id=s.id)))))
+) AND NOT EXISTS(SELECT 1 FROM statement_materialization_parts p LEFT JOIN statement_submissions s ON s.id=p.submission_id
+ WHERE s.id IS NULL OR s.material_state IS NULL) THEN 1 ELSE 0 END;
+```
+
+<!-- statement-materialization-preflight:end -->
+
+<!-- statement-materialization-copy:start -->
+
+```sql
+INSERT INTO statement_materializations(rowid,submission_id,source_sha256,parts_sha256,representation_revision,expires_at_ms,headers_json,row_count,part_count,byte_length,state)
+SELECT rowid,id,material_source_sha256,material_parts_sha256,material_representation_revision,material_expires_at_ms,material_headers_json,material_row_count,material_part_count,material_byte_length,material_state
+FROM statement_submissions WHERE material_state IS NOT NULL;
+INSERT INTO statement_materialization_parts_1457(rowid,submission_id,chunk_index,part_index,body,sha256)
+SELECT rowid,submission_id,chunk_index,part_index,body,sha256 FROM statement_materialization_parts;
+```
+
+<!-- statement-materialization-copy:end -->
+
+<!-- statement-materialization-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'statement-materialization-copy',CASE WHEN NOT EXISTS(
+ SELECT rowid,submission_id,source_sha256,parts_sha256,representation_revision,expires_at_ms,headers_json,row_count,part_count,byte_length,state FROM statement_materializations
+ EXCEPT SELECT rowid,id,material_source_sha256,material_parts_sha256,material_representation_revision,material_expires_at_ms,material_headers_json,material_row_count,material_part_count,material_byte_length,material_state FROM statement_submissions WHERE material_state IS NOT NULL
+) AND (SELECT COUNT(*) FROM statement_materializations)=(SELECT COUNT(*) FROM statement_submissions WHERE material_state IS NOT NULL)
+AND NOT EXISTS(SELECT rowid,submission_id,chunk_index,part_index,body,sha256 FROM statement_materialization_parts_1457
+ EXCEPT SELECT rowid,submission_id,chunk_index,part_index,body,sha256 FROM statement_materialization_parts)
+AND (SELECT COUNT(*) FROM statement_materialization_parts_1457)=(SELECT COUNT(*) FROM statement_materialization_parts)
+THEN 1 ELSE 0 END;
+```
+
+<!-- statement-materialization-copy-check:end -->
+
+<!-- statement-materialization-swap:start -->
+
+```sql
+DROP TABLE statement_materialization_parts;
+ALTER TABLE statement_materialization_parts_1457 RENAME TO statement_materialization_parts;
+ALTER TABLE statement_submissions DROP COLUMN material_state;
+ALTER TABLE statement_submissions DROP COLUMN material_byte_length;
+ALTER TABLE statement_submissions DROP COLUMN material_part_count;
+ALTER TABLE statement_submissions DROP COLUMN material_row_count;
+ALTER TABLE statement_submissions DROP COLUMN material_headers_json;
+ALTER TABLE statement_submissions DROP COLUMN material_expires_at_ms;
+ALTER TABLE statement_submissions DROP COLUMN material_representation_revision;
+ALTER TABLE statement_submissions DROP COLUMN material_parts_sha256;
+ALTER TABLE statement_submissions DROP COLUMN material_source_sha256;
+```
+
+<!-- statement-materialization-swap:end -->
+
+<!-- statement-materialization-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'statement-materialization-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END;
+```
+
+<!-- statement-materialization-verify:end -->
+
+Native processing-cost examples after cache extraction read 2,258 rows for 96 processed source rows
+and 4,460 for 192, versus 2,247 and 4,437 at the preceding checkpoint. The existing native linear
+cost and bounded-chunk checks remain green; cache reads add indexed parent joins without rescanning
+unrelated submissions or rereading source bytes on resume.
+
+## Statement review ownership (#1458)
+
+Checkpoint: `013bd1b24`. Pause ingestion, review mutations, retention and erasure workers for
+this atomic cutover. Email and media retain their existing stores until #1459. The statement
+variant moves into `ingestion_review_items`; `statement_review_context` and
+`ingestion_review_workspace_state` are read-only owner projections, not extra copies.
+
+Read the current definitions from the checked-out baseline. In one D1 batch: run preflight;
+drop explicit views/triggers/indexes; create the target table and all current explicit indexes
+(including same-User parent keys); copy and compare; remove migrated overlays and the old evidence table;
+recreate all current explicit views/triggers;
+verify foreign keys. Do not drop User, submission, Transaction or archive tables. Apply this
+stage after #1457 and before #1459. Any failed assertion rolls back the whole batch.
+
+Original evidence rowids become target rowids. Original workspace rowids are independently
+retained as `workspace_archive_row_ref`, so existing `ingestion_review_state` chunks/archives
+remain meaningful. Workspace edits cannot recreate deleted evidence or change its deadline.
+A skipped workspace still counts toward the 5,000 retained statement-evidence capacity;
+only evidence settlement, expiry or deletion releases that capacity. Workspace history expires
+independently. Existing archives remain byte-for-byte unchanged.
+
+<!-- statement-review-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'statement-review-preflight',CASE WHEN
+NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+AND (SELECT pending_count FROM statement_review_capacity WHERE id=1)=
+ (SELECT count(*) FROM statement_needs_review WHERE status='pending')
+AND NOT EXISTS(SELECT 1 FROM statement_needs_review r JOIN ingestion_review_state w ON w.user_id=r.user_id AND w.id=r.id
+ WHERE w.created_at_ms IS NOT r.created_at_ms OR w.expires_at_ms IS NOT r.evidence_expires_at_ms)
+AND NOT EXISTS(SELECT 1 FROM statement_needs_review r JOIN forwarded_email_receipts e ON e.user_id=r.user_id AND e.review_id=r.id)
+AND NOT EXISTS(SELECT 1 FROM statement_needs_review r JOIN media_submissions m ON m.user_id=r.user_id AND m.id=r.id AND m.review_reason IS NOT NULL)
+THEN 1 ELSE 0 END;
+```
+
+<!-- statement-review-preflight:end -->
+
+<!-- statement-review-copy:start -->
+
+```sql
+INSERT INTO ingestion_review_items(rowid,id,user_id,source_kind,statement_submission_id,record_number,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,original_evidence,known_money_json,issues_json,evidence_state,suggestions_json,workspace_state,workspace_revision,draft_json,transaction_id,workspace_updated_at_ms,workspace_archive_row_ref)
+SELECT r.rowid,r.id,r.user_id,'statement',r.submission_id,r.record_number,r.reason,r.created_at_ms,r.evidence_expires_at_ms,r.service_market,r.locale,r.time_zone,r.source_format,r.parser_revision,r.extractor_revision,r.original_evidence,r.known_money,r.issues,CASE r.status WHEN 'pending' THEN 'retained' ELSE r.status END,r.review_suggestions_json,w.status,w.revision,w.draft_json,w.transaction_id,w.updated_at_ms,CAST(w.rowid AS TEXT)
+FROM statement_needs_review r LEFT JOIN ingestion_review_state w ON w.user_id=r.user_id AND w.id=r.id;
+```
+
+<!-- statement-review-copy:end -->
+
+<!-- statement-review-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'statement-review-copy',CASE WHEN
+(SELECT count(*) FROM ingestion_review_items)=(SELECT count(*) FROM statement_needs_review)
+AND NOT EXISTS(SELECT rowid,id,user_id,submission_id,record_number,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,original_evidence,known_money,issues,status,review_suggestions_json FROM statement_needs_review
+EXCEPT SELECT rowid,id,user_id,statement_submission_id,record_number,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,original_evidence,known_money_json,issues_json,CASE evidence_state WHEN 'retained' THEN 'pending' ELSE evidence_state END,suggestions_json FROM ingestion_review_items)
+AND NOT EXISTS(SELECT CAST(w.rowid AS TEXT),w.id,w.user_id,w.status,w.revision,w.draft_json,w.transaction_id,w.updated_at_ms FROM ingestion_review_state w JOIN statement_needs_review r ON r.user_id=w.user_id AND r.id=w.id
+EXCEPT SELECT workspace_archive_row_ref,id,user_id,workspace_state,workspace_revision,draft_json,transaction_id,workspace_updated_at_ms FROM ingestion_review_items WHERE workspace_updated_at_ms IS NOT NULL)
+THEN 1 ELSE 0 END;
+```
+
+<!-- statement-review-copy-check:end -->
+
+<!-- statement-review-swap:start -->
+
+```sql
+DELETE FROM ingestion_review_state WHERE (user_id,id) IN(SELECT user_id,id FROM ingestion_review_items);
+DROP TABLE statement_needs_review;
+```
+
+<!-- statement-review-swap:end -->
+
+<!-- statement-review-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'statement-review-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+AND (SELECT pending_count FROM statement_review_capacity WHERE id=1)=(SELECT count(*) FROM ingestion_review_items WHERE source_kind='statement' AND evidence_state='retained')
+AND NOT EXISTS(SELECT 1 FROM ingestion_review_state w JOIN ingestion_review_items r ON r.user_id=w.user_id AND r.id=w.id)
+THEN 1 ELSE 0 END;
+```
+
+<!-- statement-review-verify:end -->
+
+## Email and media review ownership (#1459)
+
+Checkpoint: `1bfb570bd`, after #1458. Quiesce all ingestion, review, retention and erasure
+execution during this atomic conversion. All sources use `ingestion_review_items`; the old
+workspace table and six source-only review fields are removed. Email dispatch keeps the same
+presence/sent distinction with `dispatch_pending`, removing its duplicated User key. The shared
+workspace owner now writes one table without source-specific branches.
+
+In one native D1 batch: enable deferred foreign keys; run preflight; drop explicit triggers and
+views, retaining existing indexes during copying; create a `forwarded_email_receipts_1459`
+shadow using the current receipt table definition with that table name; copy and compare;
+drop all old explicit indexes; run the swap; recreate all current explicit indexes, views and
+triggers; run final verification. Never disable foreign keys. Receipts have only NO ACTION
+incoming source references; retain their exact rowids and every source-attestation reference.
+Media stays in place because its admission Audit has a cascade relationship. Existing statement
+review rows and all archive bodies remain in place. Any error rolls the entire native batch back.
+
+Preflight rejects orphan or ambiguous historical overlays, altered original deadlines/creation
+instants and inconsistent outcome links. Do not invent missing source ownership. Original workspace
+archive references remain independent of newly allocated email/media source rowids. Metadata-only
+email replay tombstones keep their original deadlines; media still releases capacity once, clears
+private material at thirty days and removes accountability at one year. Workspace draft/history
+expiry remains independent of original evidence expiry. Anonymized samples retain their own owner.
+
+<!-- email-media-review-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email-media-review-preflight',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+AND NOT EXISTS(SELECT 1 FROM ingestion_review_state w WHERE
+ (SELECT count(*) FROM forwarded_email_receipts e WHERE e.user_id=w.user_id AND e.review_id=w.id AND e.review_created_at_ms=w.created_at_ms AND e.review_evidence_expires_at_ms=w.expires_at_ms)
+ +(SELECT count(*) FROM media_submissions m WHERE m.user_id=w.user_id AND m.id=w.id AND m.review_reason IS NOT NULL AND m.review_created_at_ms=w.created_at_ms AND m.expires_at_ms=w.expires_at_ms)<>1)
+AND NOT EXISTS(SELECT 1 FROM forwarded_email_receipts e JOIN media_submissions m ON m.user_id=e.user_id AND m.id=e.review_id WHERE m.review_reason IS NOT NULL)
+AND NOT EXISTS(SELECT 1 FROM forwarded_email_receipts e WHERE e.outcome='needs-review' AND e.outcome_review_id IS NOT e.review_id)
+THEN 1 ELSE 0 END;
+```
+
+<!-- email-media-review-preflight:end -->
+
+<!-- email-media-review-copy:start -->
+
+```sql
+INSERT INTO forwarded_email_receipts_1459(rowid,id,user_id,delivery_digest,object_key,byte_length,state,received_at_ms,expires_at_ms,time_zone,deferred_checked_at_ms,outcome,outcome_transaction_id,outcome_review_id,outcome_completed_at_ms,dispatch_pending,dispatch_sent_at_ms) SELECT rowid,id,user_id,delivery_digest,object_key,byte_length,state,received_at_ms,expires_at_ms,time_zone,deferred_checked_at_ms,outcome,outcome_transaction_id,outcome_review_id,outcome_completed_at_ms,(dispatch_user_id IS NOT NULL),dispatch_sent_at_ms FROM forwarded_email_receipts;
+INSERT INTO ingestion_review_items(id,user_id,source_kind,email_receipt_id,media_submission_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone,workspace_state,workspace_revision,draft_json,transaction_id,workspace_updated_at_ms,workspace_archive_row_ref)
+SELECT r.*,w.status,w.revision,w.draft_json,w.transaction_id,w.updated_at_ms,CAST(w.rowid AS TEXT)
+FROM (SELECT e.review_id AS id,e.user_id,'email' AS source_kind,e.id AS email_receipt_id,NULL AS media_submission_id,e.review_reason AS reason,e.review_created_at_ms AS created_at_ms,e.review_evidence_expires_at_ms AS evidence_expires_at_ms,'CO' AS service_market,'es-CO' AS locale,e.time_zone FROM forwarded_email_receipts e WHERE e.review_id IS NOT NULL UNION ALL SELECT m.id,m.user_id,'media',NULL,m.id,m.review_reason,m.review_created_at_ms,m.expires_at_ms,m.service_market,m.locale,m.time_zone FROM media_submissions m WHERE m.review_reason IS NOT NULL) r LEFT JOIN ingestion_review_state w ON w.user_id=r.user_id AND w.id=r.id;
+```
+
+<!-- email-media-review-copy:end -->
+
+<!-- email-media-review-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email-media-review-copy',CASE WHEN
+NOT EXISTS(SELECT rowid,id,user_id,delivery_digest,object_key,byte_length,state,received_at_ms,expires_at_ms,time_zone,deferred_checked_at_ms,outcome,outcome_transaction_id,outcome_review_id,outcome_completed_at_ms,(dispatch_user_id IS NOT NULL),dispatch_sent_at_ms FROM forwarded_email_receipts EXCEPT SELECT rowid,id,user_id,delivery_digest,object_key,byte_length,state,received_at_ms,expires_at_ms,time_zone,deferred_checked_at_ms,outcome,outcome_transaction_id,outcome_review_id,outcome_completed_at_ms,dispatch_pending,dispatch_sent_at_ms FROM forwarded_email_receipts_1459)
+AND (SELECT count(*) FROM forwarded_email_receipts)=(SELECT count(*) FROM forwarded_email_receipts_1459)
+AND NOT EXISTS(SELECT e.review_id,e.user_id,'email',e.id,NULL,e.review_reason,e.review_created_at_ms,e.review_evidence_expires_at_ms,'CO','es-CO',e.time_zone FROM forwarded_email_receipts e WHERE e.review_id IS NOT NULL UNION ALL SELECT m.id,m.user_id,'media',NULL,m.id,m.review_reason,m.review_created_at_ms,m.expires_at_ms,m.service_market,m.locale,m.time_zone FROM media_submissions m WHERE m.review_reason IS NOT NULL EXCEPT SELECT id,user_id,source_kind,email_receipt_id,media_submission_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone FROM ingestion_review_items WHERE source_kind<>'statement')
+AND (SELECT count(*) FROM ingestion_review_items WHERE source_kind<>'statement')=(SELECT count(*) FROM (SELECT e.review_id,e.user_id,'email',e.id,NULL,e.review_reason,e.review_created_at_ms,e.review_evidence_expires_at_ms,'CO','es-CO',e.time_zone FROM forwarded_email_receipts e WHERE e.review_id IS NOT NULL UNION ALL SELECT m.id,m.user_id,'media',NULL,m.id,m.review_reason,m.review_created_at_ms,m.expires_at_ms,m.service_market,m.locale,m.time_zone FROM media_submissions m WHERE m.review_reason IS NOT NULL))
+AND NOT EXISTS(SELECT CAST(rowid AS TEXT),id,user_id,status,revision,draft_json,transaction_id,updated_at_ms FROM ingestion_review_state EXCEPT SELECT workspace_archive_row_ref,id,user_id,workspace_state,workspace_revision,draft_json,transaction_id,workspace_updated_at_ms FROM ingestion_review_items WHERE source_kind<>'statement' AND workspace_updated_at_ms IS NOT NULL)
+THEN 1 ELSE 0 END;
+```
+
+<!-- email-media-review-copy-check:end -->
+
+<!-- email-media-review-swap:start -->
+
+```sql
+DROP TABLE forwarded_email_receipts;
+ALTER TABLE forwarded_email_receipts_1459 RENAME TO forwarded_email_receipts;
+DROP TABLE ingestion_review_state;
+ALTER TABLE media_submissions DROP COLUMN review_created_at_ms;
+ALTER TABLE media_submissions DROP COLUMN review_reason;
+```
+
+<!-- email-media-review-swap:end -->
+
+<!-- email-media-review-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'email-media-review-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+AND NOT EXISTS(SELECT 1 FROM forwarded_email_receipts e WHERE e.outcome='needs-review' AND NOT EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.source_kind='email' AND r.user_id=e.user_id AND r.email_receipt_id=e.id AND r.id=e.outcome_review_id))
+AND (SELECT pending_count FROM statement_review_capacity WHERE id=1)=(SELECT count(*) FROM ingestion_review_items WHERE source_kind='statement' AND evidence_state='retained')
+THEN 1 ELSE 0 END;
+```
+
+<!-- email-media-review-verify:end -->
+
+## Statement entitlement and authoritative totals (#1460)
+
+Checkpoint: `cca848e07`, after #1459. Quiesce statement publication, processing, review,
+retention and erasure for one atomic conversion. `statement_backfill_entitlements` owns the optional
+three-field record. User existence never grants a backfill: first accepted publication initializes
+it under the existing Free/Pro policy. Available, reserved, consumed and absent states retain their
+original meaning; useful partial capture consumes once, failure releases only unconsumed work.
+The composite submission reference enforces the same User. Consumed historical absence of a
+submission binding remains valid.
+
+`statement_submission_context` is a read-only projection: completed submissions, and failed
+submissions with positive progress, expose the three authoritative progress counters as final totals.
+Queued/processing and zero-progress failures expose absent totals. Preflight blocks every historical
+mismatch, including failed positive progress whose old final totals are absent. Investigate such
+history before proceeding; never invent totals or silently discard a historical exception.
+
+In one native D1 batch: defer foreign keys; run preflight; create the target entitlement table;
+copy and compare exact original User rowids (which are existing logical erasure addresses); drop
+explicit views, triggers and indexes; run the in-place column removals; recreate all target indexes,
+views and triggers; verify foreign keys. Neither User nor submission is dropped or rebuilt, so their
+children and source/review identities remain. Exact old archive JSON and chunk references remain
+untouched; new archives reconstruct the same final-total fields through the projection. A failed
+copy, swap or check rolls the whole batch back. Apply code and schema together. This baseline/runbook
+is not evidence that an already-applied live baseline has been upgraded; final integration #1494
+owns live cutover verification.
+
+<!-- backfill-progress-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'backfill-progress-preflight',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+AND NOT EXISTS(SELECT 1 FROM users u WHERE (u.backfill_present IS NULL AND (u.backfill_submission_id IS NOT NULL OR u.backfill_consumed_at_ms IS NOT NULL)) OR (u.backfill_present IS NOT NULL AND u.backfill_present IS NOT 1) OR (u.backfill_submission_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM statement_submissions s WHERE s.id=u.backfill_submission_id AND s.user_id=u.id)))
+AND NOT EXISTS(SELECT 1 FROM statement_submissions s WHERE processed_rows NOT BETWEEN 0 AND 20000 OR processed_rows<>processed_accepted_rows+processed_review_rows
+ OR input_rows IS NOT CASE WHEN status='completed' OR (status='failed' AND processed_rows>0) THEN processed_rows END
+ OR accepted_rows IS NOT CASE WHEN status='completed' OR (status='failed' AND processed_rows>0) THEN processed_accepted_rows END
+ OR needs_review_rows IS NOT CASE WHEN status='completed' OR (status='failed' AND processed_rows>0) THEN processed_review_rows END)
+THEN 1 ELSE 0 END;
+```
+
+<!-- backfill-progress-preflight:end -->
+
+<!-- backfill-progress-copy:start -->
+
+```sql
+INSERT INTO statement_backfill_entitlements(rowid,user_id,submission_id,consumed_at_ms)
+SELECT rowid,id,backfill_submission_id,backfill_consumed_at_ms FROM users WHERE backfill_present IS NOT NULL;
+```
+
+<!-- backfill-progress-copy:end -->
+
+<!-- backfill-progress-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'backfill-progress-copy',CASE WHEN (SELECT count(*) FROM statement_backfill_entitlements)=(SELECT count(*) FROM users WHERE backfill_present IS NOT NULL)
+AND NOT EXISTS(SELECT rowid,id,backfill_submission_id,backfill_consumed_at_ms FROM users WHERE backfill_present IS NOT NULL EXCEPT SELECT rowid,user_id,submission_id,consumed_at_ms FROM statement_backfill_entitlements)
+THEN 1 ELSE 0 END;
+```
+
+<!-- backfill-progress-copy-check:end -->
+
+<!-- backfill-progress-swap:start -->
+
+```sql
+ALTER TABLE users DROP COLUMN backfill_consumed_at_ms;
+ALTER TABLE users DROP COLUMN backfill_submission_id;
+ALTER TABLE users DROP COLUMN backfill_present;
+ALTER TABLE statement_submissions DROP COLUMN needs_review_rows;
+ALTER TABLE statement_submissions DROP COLUMN accepted_rows;
+ALTER TABLE statement_submissions DROP COLUMN input_rows;
+```
+
+<!-- backfill-progress-swap:end -->
+
+<!-- backfill-progress-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'backfill-progress-final',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+AND NOT EXISTS(SELECT 1 FROM statement_backfill_entitlements e WHERE e.submission_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM statement_submissions s WHERE s.user_id=e.user_id AND s.id=e.submission_id))
+THEN 1 ELSE 0 END;
+```
+
+<!-- backfill-progress-verify:end -->

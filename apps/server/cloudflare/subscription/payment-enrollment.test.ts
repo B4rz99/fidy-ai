@@ -214,9 +214,9 @@ const retainHistoricalConfirmation = Effect.fn(function* (
     yield* fromTestPromise(() =>
       input.db
         .prepare(
-          `UPDATE billing_attempts SET no_charge_reference=?,no_charge_environment='sandbox',no_charge_case_id='synthetic-provider-case',no_charge_operator_id='synthetic-operator',no_charge_confirmed_at_ms=? WHERE id=?`
+          `UPDATE billing_attempts SET no_charge_case_id='synthetic-provider-case',no_charge_operator_id='synthetic-operator',no_charge_confirmed_at_ms=? WHERE id=?`
         )
-        .bind(input.reference, input.now, input.attemptId)
+        .bind(input.now, input.attemptId)
         .run()
     );
   }
@@ -236,14 +236,14 @@ const retainHistoricalConfirmation = Effect.fn(function* (
 const restoreOriginalClearance = Effect.fn(function* (db: D1Database, enabled: boolean) {
   if (!enabled) return;
   const oldView = `CREATE VIEW billing_retry_clearances AS
-SELECT a.id AS attempt_id FROM billing_attempts a
-JOIN (SELECT rowid,id AS attempt_id,checkout_transaction_id AS transaction_id FROM billing_attempts WHERE checkout_transaction_id IS NOT NULL) response ON response.attempt_id=a.id
+SELECT a.id AS attempt_id FROM billing_attempt_context a
+JOIN (SELECT rowid,id AS attempt_id,checkout_transaction_id AS transaction_id FROM billing_attempt_context WHERE checkout_transaction_id IS NOT NULL) response ON response.attempt_id=a.id
 JOIN (SELECT rowid,transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) evidence ON evidence.transaction_id=response.transaction_id AND evidence.attempt_id=a.id
 WHERE a.status='failed' AND evidence.status='DECLINED' AND evidence.finalized_at_ms IS NOT NULL
   AND evidence.negative_observed_at_ms<=a.finalized_at_ms-180000
   AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,transaction_id,attempt_id,lookup_attempts,last_checked_at_ms FROM billing_provider_transactions) candidate
     WHERE candidate.attempt_id=a.id AND candidate.transaction_id<>response.transaction_id)
-  AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) paid WHERE paid.attempt_id=a.id);`;
+  AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) paid WHERE paid.attempt_id=a.id);`;
   yield* fromTestPromise(() =>
     db.batch([db.prepare("DROP VIEW billing_retry_clearances"), db.prepare(oldView)])
   );
@@ -287,7 +287,7 @@ const expectOriginalBillingEvidence = Effect.fn(function* (
     yield* fromTestPromise(() =>
       input.db
         .prepare(
-          "SELECT checkout_transaction_id,no_charge_confirmed_at_ms FROM billing_attempts WHERE id=?"
+          "SELECT checkout_transaction_id,no_charge_confirmed_at_ms FROM billing_attempt_context WHERE id=?"
         )
         .bind(input.attemptId)
         .first()
@@ -335,6 +335,7 @@ const retainUnclearedRetry = Effect.fn(function* (fixture: Awaited<ReturnType<ty
   yield* fromTestPromise(() =>
     runBillingCollectionWorkflow({
       environment: fixture.environment,
+      sleep: (_name, _duration) => Promise.resolve(),
       activity,
       payload: { version: 1, attemptId: payment.billingAttempt.id },
     })
@@ -653,6 +654,7 @@ it.each(
         yield* fromTestPromise(() =>
           runBillingCollectionWorkflow({
             environment,
+            sleep: (_name, _duration) => Promise.resolve(),
             activity,
             payload: { version: 1, attemptId: payment.billingAttempt.id },
           })
@@ -662,6 +664,7 @@ it.each(
         yield* fromTestPromise(() =>
           runBillingCollectionWorkflow({
             environment,
+            sleep: (_name, _duration) => Promise.resolve(),
             activity,
             payload: { version: 1, kind: "lookup", transactionId: "checkout-declined-1" },
           })
@@ -671,6 +674,7 @@ it.each(
         yield* fromTestPromise(() =>
           runBillingCollectionWorkflow({
             environment,
+            sleep: (_name, _duration) => Promise.resolve(),
             activity,
             payload: { version: 1, kind: "lookup", transactionId: "checkout-declined-1" },
           })
@@ -795,6 +799,7 @@ it.each(
         yield* fromTestPromise(() =>
           runBillingCollectionWorkflow({
             environment,
+            sleep: (_name, _duration) => Promise.resolve(),
             activity,
             payload: { version: 1, attemptId: retried.billingAttempt.id },
           })
@@ -803,14 +808,14 @@ it.each(
         expect(
           (yield* fromTestPromise(() =>
             environment.DB.prepare(
-              "SELECT status FROM billing_attempts ORDER BY created_at_ms"
+              "SELECT status FROM billing_attempt_context ORDER BY created_at_ms"
             ).all()
           )).results
         ).toEqual([{ status: "failed" }, { status: "succeeded" }]);
         expect(
           yield* fromTestPromise(() =>
             environment.DB.prepare(
-              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
             ).first("count")
           )
         ).toBe(1);
@@ -1223,7 +1228,7 @@ it("requires Nequi approval before creating a reusable source and collecting one
       });
       expect(
         yield* fromTestPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM billing_attempts").first()
+          db.prepare("SELECT count(*) AS count FROM billing_attempt_context").first()
         )
       ).toEqual({ count: 1 });
       const retained = yield* fromTestPromise(() =>
@@ -1605,7 +1610,7 @@ it.each([
       ).toEqual({ count: 0 });
       expect(
         yield* fromTestPromise(() =>
-          fixture.db.prepare("SELECT count(*) AS count FROM billing_attempts").first()
+          fixture.db.prepare("SELECT count(*) AS count FROM billing_attempt_context").first()
         )
       ).toEqual({ count: 0 });
       if (scenario.status === "source-verifying") {
@@ -1711,7 +1716,7 @@ it.each(Object.entries(forbiddenDaviplataSubmissions))(
         ).toEqual({ count: 0 });
         expect(
           yield* fromTestPromise(() =>
-            fixture.db.prepare("SELECT count(*) AS count FROM billing_attempts").first()
+            fixture.db.prepare("SELECT count(*) AS count FROM billing_attempt_context").first()
           )
         ).toEqual({ count: 0 });
       })
@@ -1876,7 +1881,7 @@ it.each([
         expect(
           yield* fromTestPromise(() =>
             environment.DB.prepare(
-              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
             ).first()
           )
         ).toEqual({ count: 0 });
@@ -1894,6 +1899,7 @@ it.each([
           runBillingCollectionWorkflow({
             environment,
             payload: { version: 1, attemptId: submission.billingAttempt.id },
+            sleep: (_name, _duration) => Promise.resolve(),
             activity: (_name, _options, run) => run(),
           })
         );
@@ -1928,7 +1934,7 @@ it.each([
           environment.DB.batch([
             environment.DB.prepare("SELECT * FROM payment_enrollment_context"),
             environment.DB.prepare("SELECT * FROM payment_source_context"),
-            environment.DB.prepare("SELECT * FROM billing_attempts"),
+            environment.DB.prepare("SELECT * FROM billing_attempt_context"),
             environment.DB.prepare(
               "SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
             ),
@@ -2091,7 +2097,7 @@ it.each(["nequi", "daviplata"] as const)(
         expect(
           yield* fromTestPromise(() =>
             db
-              .prepare("SELECT count(*) AS count FROM billing_attempts WHERE user_id = ?")
+              .prepare("SELECT count(*) AS count FROM billing_attempt_context WHERE user_id = ?")
               .bind(userB)
               .first()
           )
@@ -2163,14 +2169,14 @@ it("does not schedule a Nequi charge when the fresh session is revoked during so
       expect(response.status).toBe(503);
       expect(
         yield* fromTestPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM billing_attempts").first()
+          db.prepare("SELECT count(*) AS count FROM billing_attempt_context").first()
         )
       ).toEqual({ count: 0 });
       expect(
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work"
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work"
             )
             .first()
         )
@@ -2306,7 +2312,7 @@ it.each([
       for (const table of [
         "payment_sources",
         "billing_attempts",
-        "(SELECT id FROM billing_attempts WHERE collection_state IS NOT NULL)",
+        "(SELECT id FROM billing_attempt_context WHERE collection_state IS NOT NULL)",
       ]) {
         expect(
           yield* fromTestPromise(() => db.prepare(`SELECT count(*) AS count FROM ${table}`).first())
@@ -2330,6 +2336,7 @@ const proveSandboxSettlement = (
       runBillingCollectionWorkflow({
         environment,
         payload: work,
+        sleep: (_name, _duration) => Promise.resolve(),
         activity: (_name, _options, activity) => activity(),
       });
     yield* fromTestPromise(() => run({ version: 1, attemptId }));
@@ -2348,7 +2355,7 @@ const proveSandboxSettlement = (
         expect(
           yield* fromTestPromise(() =>
             environment.DB.prepare(
-              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
             )
               .bind(attemptId)
               .first()
@@ -2842,7 +2849,7 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       const stored = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT id, wompi_reference FROM billing_attempts WHERE user_id = ? AND payment_request_id = ?"
+            "SELECT id, wompi_reference FROM billing_attempt_context WHERE user_id = ? AND payment_request_id = ?"
           )
           .bind(userA, submission.paymentRequestId)
           .first()
@@ -2852,7 +2859,7 @@ it("prepares a Price and creates exactly one provider source and pending Billing
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT state FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id = ?"
+              "SELECT state FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id = ?"
             )
             .bind(expectedId)
             .first()
@@ -2862,7 +2869,7 @@ it("prepares a Price and creates exactly one provider source and pending Billing
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT last_attempt_at_ms FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id = ?"
+              "SELECT last_attempt_at_ms FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id = ?"
             )
             .bind(expectedId)
             .first()
@@ -2917,12 +2924,13 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       expect(reuse.status).toBe(503);
       expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM billing_attempts").all())).results
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM billing_attempt_context").all()))
+          .results
       ).toHaveLength(1);
       const confirmation = (ref: string): Promise<D1Result> =>
         db
           .prepare(
-            `UPDATE billing_attempts SET no_charge_reference=incoming.wompi_reference,no_charge_environment=incoming.wompi_environment,no_charge_case_id=incoming.provider_case_id,no_charge_operator_id=incoming.operator_id,no_charge_confirmed_at_ms=incoming.confirmed_at_ms FROM (SELECT ? AS attempt_id,? AS wompi_reference,'sandbox' AS wompi_environment,'case-123' AS provider_case_id,'operator-42' AS operator_id,180002 AS confirmed_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.no_charge_confirmed_at_ms IS NULL`
+            `UPDATE billing_attempts SET no_charge_case_id=incoming.provider_case_id,no_charge_operator_id=incoming.operator_id,no_charge_confirmed_at_ms=incoming.confirmed_at_ms FROM (SELECT ? AS attempt_id,? AS wompi_reference,'sandbox' AS wompi_environment,'case-123' AS provider_case_id,'operator-42' AS operator_id,180002 AS confirmed_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.wompi_reference=incoming.wompi_reference AND billing_attempts.wompi_environment=incoming.wompi_environment AND billing_attempts.no_charge_confirmed_at_ms IS NULL`
           )
           .bind(expectedId, ref)
           .run();
@@ -2935,7 +2943,7 @@ it("prepares a Price and creates exactly one provider source and pending Billing
           .bind(expectedId)
           .run()
       );
-      yield* fromTestPromise(() => expect(confirmation("fidy-foreign")).rejects.toThrow());
+      expect((yield* fromTestPromise(() => confirmation("fidy-foreign"))).meta.changes).toBe(0);
       yield* fromTestPromise(() =>
         db
           .prepare(`UPDATE billing_attempts SET status = 'failed',
@@ -2979,7 +2987,8 @@ it("prepares a Price and creates exactly one provider source and pending Billing
           .results
       ).toHaveLength(1);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM billing_attempts").all())).results
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM billing_attempt_context").all()))
+          .results
       ).toHaveLength(2);
     })
   ));
@@ -3068,7 +3077,7 @@ it.each([8_640_000_000_000_001, 1_800_000_000_000.5])(
         for (const table of [
           "payment_sources",
           "billing_attempts",
-          "(SELECT id FROM billing_attempts WHERE collection_state IS NOT NULL)",
+          "(SELECT id FROM billing_attempt_context WHERE collection_state IS NOT NULL)",
         ]) {
           expect(
             yield* fromTestPromise(() =>
@@ -3143,7 +3152,7 @@ it("inherits the workflow Clock through source authorization and live settlement
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work"
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS billing_collection_work"
             )
             .first()
         )
@@ -3285,7 +3294,7 @@ it.each(["contracts", "source", "commit"] as const)(
         expect(onAccepted).toHaveBeenCalledTimes(stage === "commit" ? 1 : 0);
         expect(
           yield* fromTestPromise(() =>
-            db.prepare("SELECT count(*) AS count FROM billing_attempts").first()
+            db.prepare("SELECT count(*) AS count FROM billing_attempt_context").first()
           )
         ).toEqual({ count: stage === "commit" ? 1 : 0 });
         expect(
@@ -3447,7 +3456,8 @@ it("never repeats a source POST after a provider timeout without a known candida
           .results
       ).toHaveLength(0);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM billing_attempts").all())).results
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM billing_attempt_context").all()))
+          .results
       ).toHaveLength(0);
     })
   ));
@@ -3566,7 +3576,8 @@ it("resolves a pending provider source by authenticated lookup without another s
           .results
       ).toHaveLength(0);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM billing_attempts").all())).results
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM billing_attempt_context").all()))
+          .results
       ).toHaveLength(0);
       mismatched = false;
       yield* fromTestPromise(() =>
@@ -3585,7 +3596,8 @@ it("resolves a pending provider source by authenticated lookup without another s
           .results
       ).toHaveLength(1);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT id FROM billing_attempts").all())).results
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM billing_attempt_context").all()))
+          .results
       ).toHaveLength(1);
     })
   ));

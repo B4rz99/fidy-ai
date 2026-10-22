@@ -19,12 +19,9 @@ export const seedRefundCharge = (db: D1Database): Effect.Effect<void, Cause.Unkn
         '20000000-0000-4000-8000-000000000001',3891,'payer@example.com',0,'card'))) incoming
  JOIN payment_enrollments e ON e.id=incoming.enrollment_id JOIN subscriptions sub ON sub.id=e.subscription_id AND sub.user_id=incoming.user_id`),
       db.prepare("UPDATE payment_enrollments SET status='available'"),
-      db.prepare(`INSERT INTO billing_attempts (id,user_id,enrollment_id,payment_request_id,payment_source_id,price_id,
-        amount,currency,billing_period,service_market,tax_treatment,time_zone,wompi_environment,wompi_reference,created_at_ms)
-        VALUES ('40000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
-        '20000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',
-        '30000000-0000-4000-8000-000000000001','22700000-0000-4000-8000-000000000001',
-        '9900','COP','weekly','CO','not-taxable','America/Bogota','sandbox','fidy-test',0)`),
+      db.prepare(
+        `INSERT INTO billing_attempts (id, subscription_id, enrollment_id, payment_request_id, payment_source_id, price_id, time_zone, wompi_environment, wompi_reference, created_at_ms) VALUES ('40000000-0000-4000-8000-000000000001', (SELECT id FROM subscriptions WHERE user_id='10000000-0000-4000-8000-000000000001'), '20000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '22700000-0000-4000-8000-000000000001', 'America/Bogota', 'sandbox', 'fidy-test', 0)`
+      ),
       db.prepare(`INSERT INTO billing_provider_transactions (transaction_id,attempt_id,status,first_observed_at_ms,finalized_at_ms)
         VALUES ('provider-charge','40000000-0000-4000-8000-000000000001','APPROVED',0,1)`),
       db.prepare(
@@ -34,7 +31,7 @@ export const seedRefundCharge = (db: D1Database): Effect.Effect<void, Cause.Unkn
         "UPDATE billing_attempts SET paid_starts_at_ms=incoming.starts_at_ms,paid_ends_at_ms=incoming.ends_at_ms,paid_renewal_anchor_ms=incoming.renewal_anchor_ms FROM (SELECT '40000000-0000-4000-8000-000000000001' AS attempt_id,1 AS starts_at_ms,9999999999999 AS ends_at_ms,9999999999999 AS renewal_anchor_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.paid_starts_at_ms IS NULL"
       ),
       db.prepare(
-        "UPDATE users SET paid_attempt_id='40000000-0000-4000-8000-000000000001',paid_price_id='22700000-0000-4000-8000-000000000001',paid_period_ends_at_ms=9999999999999,paid_renewal_anchor_ms=9999999999999 WHERE id='10000000-0000-4000-8000-000000000001'"
+        "UPDATE subscriptions SET current_paid_attempt_id='40000000-0000-4000-8000-000000000001' WHERE user_id='10000000-0000-4000-8000-000000000001'"
       ),
     ])
   ).pipe(Effect.asVoid);

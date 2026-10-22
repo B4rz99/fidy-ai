@@ -243,8 +243,9 @@ const reviewStatement = (settlement: Settlement): D1PreparedStatement => {
     userId: input.userId,
     queued: { sql: activeSource, params: guard },
     statement: {
-      sql: `UPDATE forwarded_email_receipts SET review_id=?,review_reason=?,review_created_at_ms=?,review_evidence_expires_at_ms=?
-    WHERE id=? AND user_id=? AND review_id IS NULL AND ${active}`,
+      sql: `INSERT INTO ingestion_review_items(id,user_id,source_kind,email_receipt_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone)
+    SELECT ?,user_id,'email',id,?,?,?,'CO','es-CO',time_zone FROM forwarded_email_receipts
+    WHERE id=? AND user_id=? AND NOT EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.source_kind='email' AND r.email_receipt_id=forwarded_email_receipts.id) AND ${active}`,
       params: [
         id,
         material.interpretation.reason,

@@ -1695,3 +1695,61 @@ DELETE FROM sql_assertions WHERE scope='oauth_lineage_cutover';
 ```
 
 <!-- oauth-lineage-verify:end -->
+
+## Exact OAuth operation approvals (#1447)
+
+`oauth_operation_intents` retains the agreed twelve fields and existing indexes, expiry cleanup,
+capacity, erasure address and deletion ordering. There is no table extraction or data copy. The new
+`oauth_intent_initial` guard requires the connection's same User and an initially absent browser
+proof. `oauth_intent_immutable` protects the exact review bytes, digest, revision bindings,
+disclosure and lifetime. Its only update is one same-User browser-session approval during that
+original lifetime. Approval does not consume the intent or execute the operation; its guarded DELETE,
+owner revision checks, live credential scope/Consent, mutation and Audit still commit together.
+
+Canonical policy continues to select browser-proof requirements for each operation and every batch
+child. A browser decision before review creation is refused without recording approval. Native
+continuation also rejects future review/approval timestamps relative to its current Clock. A browser
+session's later logout does not retroactively cancel its recorded decision; the current OAuth
+credential/grant, scope, Consent and owner revision must still hold when the operation commits.
+Existing work remains bounded by its original five-minute deadline.
+
+For an existing database, first apply the synchronized #1429, #1438 and #1446 changes. Back up D1
+and fence intent issuance, browser decisions, sensitive continuations, expiration cleanup and erasure.
+Inspect dependencies and stop on unexplained guards rather than replacing them. Execute the preflight,
+the two final guard definitions from `0001_schema.sql`, and final verification in one native D1 batch;
+align the existing baseline ledger only after verification. The preflight accepts expired or revoked
+pending work with coherent historical relationships; it does not invent approval or refresh authority.
+Foreign ownership, partial proof, or an approval outside its original lifetime stops installation.
+A failed batch preserves all original intent fields, rows, archives and schema. Validate a public
+review/approval/continuation against the matching new code before removing the write fence. Reverting
+the two guards and matching code is sufficient for this additive guard installation; never rewrite
+reviewed bytes or extend an existing approval to repair bad history.
+
+<!-- oauth-intent-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'oauth_intent_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_permits) AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM oauth_operation_intents i WHERE
+  NOT EXISTS(SELECT 1 FROM oauth_connections g WHERE g.id=i.connection_id AND g.user_id=i.user_id)
+  OR (i.browser_approved_at_ms IS NULL)<>(i.browser_session_id IS NULL)
+  OR (i.browser_approved_at_ms IS NOT NULL AND (
+   typeof(i.browser_approved_at_ms)<>'integer' OR i.browser_approved_at_ms<i.created_at_ms OR i.browser_approved_at_ms>=i.expires_at_ms
+   OR NOT EXISTS(SELECT 1 FROM web_sessions s WHERE s.id=i.browser_session_id AND s.user_id=i.user_id))))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- oauth-intent-preflight:end -->
+
+<!-- oauth-intent-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'oauth_intent_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='oauth_intent_cutover';
+```
+
+<!-- oauth-intent-verify:end -->

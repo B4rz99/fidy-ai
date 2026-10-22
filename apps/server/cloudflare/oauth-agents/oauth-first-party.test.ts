@@ -108,6 +108,7 @@ const attacks = [
   "changed-digest",
   "changed-disclosure",
   "client-approval-field",
+  "before-review",
 ] as const;
 it.each(attacks)("refuses first-party operation approval from %s", (attack) =>
   Effect.runPromise(
@@ -118,6 +119,17 @@ it.each(attacks)("refuses first-party operation approval from %s", (attack) =>
       let inputDigest = review.inputDigest;
       let disclosureRevision = review.disclosureRevision;
       yield* alterBrowserAuthority(fixture, attack, headers);
+      if (attack === "before-review") {
+        const created = yield* wait(
+          fixture.db
+            .prepare("SELECT created_at_ms FROM oauth_operation_intents WHERE reference=?")
+            .bind(fixture.reference)
+            .first<number>("created_at_ms")
+        );
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime((created ?? 0) - 1);
+      }
+
       if (attack === "changed-digest") inputDigest = "0".repeat(64);
       if (attack === "changed-disclosure") disclosureRevision = "invented";
       const choice: Schema.JsonObject = {
@@ -193,14 +205,8 @@ it("does not approve on GET and refuses expired browser decisions", () =>
       const review = yield* readFirstPartyOperation(fixture, fixture.reference);
       expect(review.approved).toBe(false);
       const current = yield* Clock.currentTimeMillis;
-      yield* wait(
-        fixture.db
-          .prepare(
-            "UPDATE oauth_operation_intents SET created_at_ms = ?, expires_at_ms = ? WHERE reference = ?"
-          )
-          .bind(current - 300001, current - 1, fixture.reference)
-          .run()
-      );
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(current + 300001);
       const response = yield* wait(
         fixture.send("/web/oauth/operation-decision", {
           method: "POST",
@@ -252,3 +258,49 @@ const alterBrowserAuthority = Effect.fn(function* (
     );
   }
 });
+
+it("refuses a future-dated browser approval without consuming it or changing the Budget", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* pendingBudgetDeletion();
+      const current = yield* Clock.currentTimeMillis;
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(current + 1000);
+      const review = yield* readFirstPartyOperation(fixture, fixture.reference);
+      const approval = yield* wait(
+        fixture.send("/web/oauth/operation-decision", {
+          method: "POST",
+          headers: fixture.headers,
+          body: yield* Schema.encodeEffect(Schema.fromJsonString(OAuthOperationDecision))({
+            reference: fixture.reference,
+            inputDigest: review.inputDigest,
+            disclosureRevision: review.disclosureRevision,
+            decision: "approve",
+          }),
+        })
+      );
+      expect(approval.status).toBe(200);
+      vi.setSystemTime(current + 500);
+      const refused = yield* wait(fixture.call({ action: "accept", content: { confirm: true } }));
+      expect(yield* wait(refused.json())).toMatchObject({ result: { isError: true } });
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) AS total FROM budgets WHERE id=?")
+            .bind(fixture.id)
+            .first()
+        )
+      ).toEqual({ total: 1 });
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) AS total FROM oauth_operation_intents WHERE reference=?")
+            .bind(fixture.reference)
+            .first()
+        )
+      ).toEqual({ total: 1 });
+      vi.setSystemTime(current + 1001);
+      const applied = yield* wait(fixture.call({ action: "accept", content: { confirm: true } }));
+      expect(yield* wait(applied.json())).toMatchObject({ result: { isError: false } });
+    })
+  ));

@@ -8353,3 +8353,21 @@ CREATE TRIGGER oauth_lineage_no_delete BEFORE DELETE ON oauth_credentials
 WHEN OLD.replacement_refresh_id IS NOT NULL OR OLD.refresh_event_id IS NOT NULL
 BEGIN SELECT RAISE(ABORT,'oauth_lineage_retained'); END;
 --> statement-breakpoint
+
+CREATE TRIGGER oauth_intent_initial BEFORE INSERT ON oauth_operation_intents
+WHEN NOT EXISTS(SELECT 1 FROM oauth_connections g WHERE g.id=NEW.connection_id AND g.user_id=NEW.user_id)
+ OR NEW.browser_approved_at_ms IS NOT NULL OR NEW.browser_session_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'oauth_intent_owner'); END;
+--> statement-breakpoint
+
+CREATE TRIGGER oauth_intent_immutable BEFORE UPDATE ON oauth_operation_intents
+WHEN NEW.reference IS NOT OLD.reference OR NEW.user_id IS NOT OLD.user_id OR NEW.connection_id IS NOT OLD.connection_id
+ OR NEW.operation IS NOT OLD.operation OR NEW.input_json IS NOT OLD.input_json OR NEW.input_digest IS NOT OLD.input_digest
+ OR NEW.binding_json IS NOT OLD.binding_json OR NEW.disclosure_revision IS NOT OLD.disclosure_revision
+ OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.expires_at_ms IS NOT OLD.expires_at_ms
+ OR ((NEW.browser_approved_at_ms IS NOT OLD.browser_approved_at_ms OR NEW.browser_session_id IS NOT OLD.browser_session_id)
+ AND NOT (OLD.browser_approved_at_ms IS NULL AND OLD.browser_session_id IS NULL
+ AND typeof(NEW.browser_approved_at_ms)='integer' AND NEW.browser_approved_at_ms>=OLD.created_at_ms AND NEW.browser_approved_at_ms<OLD.expires_at_ms
+ AND EXISTS(SELECT 1 FROM web_sessions s WHERE s.id=NEW.browser_session_id AND s.user_id=OLD.user_id)))
+BEGIN SELECT RAISE(ABORT,'oauth_intent_immutable'); END;
+--> statement-breakpoint

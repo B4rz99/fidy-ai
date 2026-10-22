@@ -219,14 +219,8 @@ it("rejects expired native intents and bounds outstanding intents per User", () 
       const fixture = yield* pendingBudgetDeletion();
       yield* approveFirstPartyOperation(fixture, fixture.reference);
       const current = yield* Clock.currentTimeMillis;
-      yield* wait(
-        fixture.db
-          .prepare(
-            "UPDATE oauth_operation_intents SET created_at_ms = ?, expires_at_ms = ? WHERE reference = ?"
-          )
-          .bind(current - 300001, current - 1, fixture.reference)
-          .run()
-      );
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(current + 300001);
       const expired = yield* wait(fixture.call(explicitNativeAccept));
       expect(yield* wait(expired.json())).toMatchObject({ result: { isError: true } });
       for (let index = 0; index < 5; index += 1) {

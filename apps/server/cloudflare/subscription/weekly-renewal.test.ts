@@ -1,6 +1,6 @@
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { type OAuthConfirmationWork } from "../oauth-confirmation/contract";
-import { type Cause, DateTime, Effect, Fiber, Option, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Fiber, Option, Schema } from "effect";
 import { type BillingCollectionFailure, type BillingRuntime } from "./contract";
 import {
   OAuthClientId,
@@ -2020,7 +2020,7 @@ const cancellationEffects = (db: D1Database): Effect.Effect<unknown, Cause.Unkno
       .first()
   );
 
-it.each(["missing", "declined", "expired", "borrowed", "replayed"] as const)(
+it.each(["missing", "declined", "expired", "replayed"] as const)(
   "refuses $0 OAuth cancellation confirmation without partial billing effects",
   (kind) =>
     Effect.runPromise(
@@ -2092,22 +2092,9 @@ ${consentHistoryTestSchema};`)
             Schema.Struct({ reference: Schema.String })
           )(retained);
           if (kind === "expired") {
-            yield* fromPromise(() =>
-              db.prepare("UPDATE oauth_operation_intents SET expires_at_ms=2,created_at_ms=1").run()
-            );
-          }
-          if (kind === "borrowed") {
-            yield* fromPromise(() =>
-              db
-                .prepare(
-                  "INSERT INTO oauth_connections SELECT ?,user_id,client_id,resource,scopes_json,revoked_at_ms,expires_at_ms FROM oauth_connections WHERE id=?"
-                )
-                .bind(attemptId, enrollmentId)
-                .run()
-            );
-            yield* fromPromise(() =>
-              db.prepare("UPDATE oauth_operation_intents SET connection_id=?").bind(attemptId).run()
-            );
+            const now = yield* Clock.currentTimeMillis;
+            vi.useFakeTimers({ toFake: ["Date"] });
+            vi.setSystemTime(now + 300001);
           }
           if (kind === "replayed") {
             yield* fromPromise(() => db.prepare("DELETE FROM oauth_operation_intents").run());
@@ -2127,13 +2114,6 @@ ${consentHistoryTestSchema};`)
             })
           );
           expect(response.status).toBe(kind === "declined" ? 403 : 503);
-          if (kind === "borrowed") {
-            expect(
-              yield* fromPromise(() =>
-                db.prepare("SELECT COUNT(*) AS count FROM oauth_operation_intents").first()
-              )
-            ).toEqual({ count: 1 });
-          }
         }
         expect(yield* cancellationEffects(db)).toEqual(before);
       })

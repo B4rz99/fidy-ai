@@ -21,7 +21,8 @@ Status: unresolved in production. Do not interpret the protected-read failures a
   Minimal D1 reads succeeded. Earlier HTTP 429 responses decoded as `rate_limited`; neither
   observation establishes renewed daily quota exhaustion.
 - [Guarded rollback 39789493011](https://github.com/B4rz99/fidy-ai/actions/runs/39789493011)
-  failed closed. The compatibility guard refuses schema-changing release pairs. No guard was
+  failed closed. Its exact internal refusal was not exported; the repository compatibility policy
+  also excludes schema-changing release pairs. No guard was
   weakened, and no direct production data or schema write was performed by this audit.
 
 ## Regression and limit
@@ -47,3 +48,15 @@ rename/restore and independent-month Budget write remain unverified after this i
 The October Restaurantes Budget cap of COP 23,456 remains the single Budget fixture created in this
 continuation; permanent cleanup requires the User's exact deletion confirmation. No November plan
 was saved. Existing Transactions were not deleted or modified.
+
+## Local verification boundary
+
+With locked Effect 4.0.5 and the reviewed Bun `13a98b0db`, the selected native Recurring,
+Budget, OAuth-agent and PAT run passed 373 checks with one existing skip (19 files).
+The selected browser runs passed 31 and 54 checks respectively; shared admission/performance
+prerequisites overlap. Native smoke/Worker checks passed 40, and the infrastructure suite excluding
+local Alchemy emulation passed 288. The complete static gate passed. The broad initial local native
+run hit socket failures under competing runtimes; the controlled reviewed-runtime rerun above is
+the completed evidence. Local Alchemy emulation failed first with stale-schema-style 503, then
+with a provider-sidecar connection failure and startup time bound in isolated stages. It remains
+inconclusive locally; do not report its failure as a production fix or suppress its CI gate.

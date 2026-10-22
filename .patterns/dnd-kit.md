@@ -1,7 +1,8 @@
 # dnd kit
 
-How the current `@dnd-kit/react` 0.5.0 system behaves, read from the checked-out upstream
-subtree. The package version is pinned in `.repos/dnd-kit/packages/react/package.json:1-9`.
+The application uses `@dnd-kit/react` / `@dnd-kit/dom` 0.5.1. This reference describes their
+shared API from the historical 0.5.0 upstream subtree; installed 0.5.1 exports/types and the
+Dashboard adapter tests verify the application boundary. The package version is pinned in `.repos/dnd-kit/packages/react/package.json:1-9`.
 Citations are relative to `.repos/dnd-kit/`. Use the installed public API as the application
 contract and this checkout to verify lifecycle, sensors, collision selection, and accessibility.
 

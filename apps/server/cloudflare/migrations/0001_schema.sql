@@ -8216,11 +8216,19 @@ CREATE TRIGGER whatsapp_identities_field_fence_insert BEFORE INSERT ON users WHE
 CREATE TRIGGER whatsapp_identities_field_fence_update BEFORE UPDATE ON users WHEN (NEW.id IS NOT OLD.id OR NEW.whatsapp_portfolio_id IS NOT OLD.whatsapp_portfolio_id OR NEW.whatsapp_bsuid IS NOT OLD.whatsapp_bsuid OR NEW.whatsapp_verified_at_ms IS NOT OLD.whatsapp_verified_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.whatsapp_portfolio_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='whatsapp_identities')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.whatsapp_portfolio_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='whatsapp_identities'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER whatsapp_provider_completion_consumes_confirmation AFTER UPDATE OF completed_at_ms ON provider_authentication_attempts
-WHEN OLD.completed_at_ms IS NULL AND NEW.completed_at_ms IS NOT NULL
-BEGIN
- UPDATE whatsapp_provider_handoffs SET consumed_at_ms=NEW.completed_at_ms WHERE id=(SELECT handoff_id FROM provider_authentication_attempts WHERE id=NEW.id);
-END;
+
+CREATE TRIGGER whatsapp_provider_handoff_immutable BEFORE UPDATE ON whatsapp_provider_handoffs
+WHEN NEW.id IS NOT OLD.id OR NEW.exchange_id IS NOT OLD.exchange_id
+ OR (OLD.handoff_send_started_ms IS NOT NULL AND NEW.handoff_send_started_ms IS NOT OLD.handoff_send_started_ms)
+ OR (OLD.pairing_id IS NOT NULL AND NEW.pairing_id IS NOT OLD.pairing_id)
+ OR (OLD.review_code IS NOT NULL AND NEW.review_code IS NOT OLD.review_code)
+ OR (OLD.review_started_ms IS NOT NULL AND NEW.review_started_ms IS NOT OLD.review_started_ms)
+ OR (OLD.review_message_id IS NOT NULL AND NEW.review_message_id IS NOT OLD.review_message_id)
+ OR (OLD.decision IS NOT NULL AND (NEW.decision IS NOT OLD.decision
+   OR NEW.decision_message_id IS NOT OLD.decision_message_id OR NEW.confirmed_at_ms IS NOT OLD.confirmed_at_ms
+   OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.expires_at_ms IS NOT OLD.expires_at_ms))
+ OR (OLD.consumed_at_ms IS NOT NULL AND NEW.consumed_at_ms IS NOT OLD.consumed_at_ms)
+BEGIN SELECT RAISE(ABORT,'whatsapp_handoff_immutable'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER whatsapp_provider_completion_requires_confirmation BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts

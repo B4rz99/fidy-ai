@@ -1486,3 +1486,72 @@ contact email, duplicate completion, concurrent single-use recovery disclosure a
 Consent, recovery or provider credential insertion produces no row. The populated native cutover
 reuses those real journey records, refuses conflicting ownership, preserves all retained values and
 archives, proves guard-installation rollback and checks the actual indexed expiry query.
+
+## WhatsApp-to-browser handoff (#1445)
+
+Keep the thirteen handoff fields and the separate send claim, review send, confirmation and
+consumption facts from #1403. Consent owns the immutable 27-field pre-User exchange and its original
+recipient/disclosure/decision proof. Provider Authentication owns the browser handoff; the public
+reference is neither a decision nor a browser credential. Existing-User initial association and
+conflict refusal remain unchanged. Do not add a workflow or copy the removed recipient snapshots.
+
+Handoff consumption is now an explicit, guarded statement after provider completion in the same D1
+batch. It addresses the exact completed attempt, same User, pairing and confirmed handoff, and must
+change one row. Its shared changed-row assertion rolls back User, trial, Consent, recovery,
+association, pairing and attempt changes if consumption fails or silently writes no row. The old
+`whatsapp_provider_completion_consumes_confirmation` AFTER trigger must be removed in this same
+cutover. `whatsapp_provider_completion_requires_confirmation` remains the commit-time proof guard.
+The new `whatsapp_provider_handoff_immutable` guard prevents replacing the parent exchange, an
+established browser binding, claimed sends, a sent review, a recorded decision or consumption.
+Decision evidence retains its original message and receipt instant, including denied decisions.
+
+For a populated database, fence handoff ingress, provider completion, expiry cleanup and erasure;
+back up the database and capture existing trigger definitions. In one native D1 batch, run the
+preflight below, drop the exact old consumption trigger, install the final baseline handoff
+immutability guard and delete the `provider_handoff_cutover` assertion. Stop on unexplained objects
+or historical inconsistency; never fabricate missing proof or infer a consumption instant. There is
+no table rebuild or field rewrite, and `0001_schema.sql` remains the only migration file. Publish
+matching callers and align the baseline ledger while the fence remains in place; do not run new
+callers with the old trigger or old callers without it. Failed preflight or guard installation
+rolls back the whole database batch.
+
+A completed attempt's pairing can legitimately have been invalidated later, clearing its current
+User. Do not use that current pairing authority to reinterpret original decision ownership.
+A consumed handoff can outlive independently expired attempt correlation; absence of an already
+purged attempt does not recreate a missing record. Retained linked attempts must agree with the
+handoff's original pairing and exact consumption/completion instant.
+
+<!-- provider-handoff-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'provider_handoff_cutover',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM whatsapp_provider_handoffs h
+   JOIN pending_consent_exchanges e ON e.id=h.exchange_id
+   WHERE e.state<>'accepted' OR e.decision_value IS NOT 'accepted' OR h.expires_at_ms>e.expires_at_ms
+   OR (h.pairing_id IS NULL)<>(h.review_code IS NULL)
+   OR (h.review_started_ms IS NOT NULL AND h.pairing_id IS NULL)
+   OR (h.review_message_id IS NOT NULL AND h.review_started_ms IS NULL)
+   OR (h.decision IS NULL AND (h.decision_message_id IS NOT NULL OR h.confirmed_at_ms IS NOT NULL))
+   OR (h.decision IS NOT NULL AND (h.decision_message_id IS NULL OR h.confirmed_at_ms IS NULL
+     OR h.review_message_id IS NULL OR h.review_started_ms IS NULL OR h.pairing_id IS NULL))
+   OR (h.consumed_at_ms IS NOT NULL AND h.decision IS NOT 'confirmed'))
+ AND NOT EXISTS(SELECT 1 FROM provider_authentication_attempts a
+   JOIN whatsapp_provider_handoffs h ON h.id=a.handoff_id
+   WHERE a.pairing_id IS NOT h.pairing_id
+   OR (a.completed_at_ms IS NOT NULL AND (h.decision IS NOT 'confirmed' OR h.consumed_at_ms IS NOT a.completed_at_ms))
+   OR (a.completed_at_ms IS NULL AND h.consumed_at_ms IS NOT NULL))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- provider-handoff-preflight:end -->
+
+Existing public handoff journeys exercise wrong recipient/reply, premature and repeated decisions,
+uncertain review sends, handoff/browser expiry, existing association refusal, single-use browser
+proof and concurrent completion. The populated native check installs the cutover on confirmed
+public-journey proof, refuses missing decision evidence without rewriting it, and verifies complete
+rollback after guard installation fails. All original parent, handoff and attempt fields, rowids,
+User/Consent/recovery records and archive addresses remain untouched by installation.

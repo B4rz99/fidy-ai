@@ -37,3 +37,16 @@ never creates verified-mailbox authority or merges identities.
 Established provider credentials and completed attempt evidence are immutable while retained;
 purpose-specific erasure and bounded attempt expiry remain available. The five- and eighteen-field
 records remain intact. See the [populated guard installation](database-cutover-1428.md#provider-onboarding-ownership-1444).
+
+### WhatsApp-to-browser handoff (#1445)
+
+The original accepted pre-User Consent exchange supplies recipient and disclosure authority.
+A separate thirteen-field handoff binds one browser and records send/review/decision/consumption
+facts. Confirmations require the originating authenticated chat, the exact review message and a
+later eligible reply. Ambiguous review delivery does not authorize sending the review again.
+
+Provider completion and checked handoff consumption now commit together in application-owned D1
+statements. A zero-row consumption rolls back signup and association; it cannot leave a completed
+attempt with unused confirmation. Claimed browser/review bindings and recorded decision evidence
+cannot be rewritten. Independent browser proof remains necessary to obtain a WebSession. See the
+[synchronized cutover](database-cutover-1428.md#whatsapp-to-browser-handoff-1445).

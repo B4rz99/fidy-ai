@@ -38,6 +38,31 @@ type CompletionContext = Readonly<{
   current: number;
   exchangeId: Option.Option<PendingConsentExchangeId>;
 }>;
+const prepareHandoffConsumption = (
+  context: CompletionContext,
+  userId: UserId
+): ReadonlyArray<D1PreparedStatement> =>
+  context.attempt.handoff_id === null
+    ? []
+    : [
+        context.input.db
+          .prepare(`UPDATE whatsapp_provider_handoffs SET consumed_at_ms=?
+      WHERE id=? AND pairing_id=? AND decision='confirmed' AND consumed_at_ms IS NULL AND expires_at_ms>?
+      AND EXISTS(SELECT 1 FROM provider_authentication_attempts a
+        WHERE a.id=? AND a.handoff_id=whatsapp_provider_handoffs.id
+        AND a.pairing_id=whatsapp_provider_handoffs.pairing_id AND a.user_id=?
+        AND a.state='completed' AND a.completed_at_ms=?)`)
+          .bind(
+            context.current,
+            context.attempt.handoff_id,
+            context.proof.pairingId,
+            context.current,
+            context.attempt.id,
+            userId,
+            context.current
+          ),
+        prepareChangedRowAssertion({ db: context.input.db, scope: "provider_completion" }),
+      ];
 const commit =
   (context: CompletionContext) =>
   ({
@@ -76,6 +101,7 @@ const commit =
           )
           .bind(userId, context.current, created ? 1 : 0, context.attempt.id),
         prepareChangedRowAssertion({ db: context.input.db, scope: "provider_completion" }),
+        ...prepareHandoffConsumption(context, userId),
       ])
       .then(() => undefined);
   };

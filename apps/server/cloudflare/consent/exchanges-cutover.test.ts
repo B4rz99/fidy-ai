@@ -171,12 +171,12 @@ const cases: ReadonlyArray<CutoverCase> = [
   {
     _tag: "BeforeVerify",
     outcome: "invalid_final_reference",
-    sql: "UPDATE whatsapp_provider_handoffs SET exchange_id='missing'",
+    sql: "INSERT INTO provider_credentials(issuer,subject,user_id,established_at_ms) VALUES('probe','probe','missing',0)",
   },
   {
     _tag: "AfterVerify",
     outcome: "invalid_after_checking_resumes",
-    sql: "UPDATE whatsapp_provider_handoffs SET exchange_id='missing'",
+    sql: "INSERT INTO provider_credentials(issuer,subject,user_id,established_at_ms) VALUES('probe','probe','missing',0)",
   },
 ];
 const assertCutoverFailure = (cause: Cause.Cause<FixtureFailure>, outcome: string): void => {

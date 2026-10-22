@@ -231,13 +231,11 @@ CREATE TABLE browser_login_pairings (
 CREATE TABLE budget_month_latches (
   user_id TEXT NOT NULL,
   budget_id TEXT NOT NULL,
-  from_utc TEXT NOT NULL,
+  from_utc_ms INTEGER NOT NULL,
   time_zone TEXT NOT NULL,
-  reached_80 INTEGER NOT NULL DEFAULT 0 CHECK(reached_80 IN (0, 1)),
-  reached_100 INTEGER NOT NULL DEFAULT 0 CHECK(reached_100 IN (0, 1)),
-  PRIMARY KEY(user_id, budget_id, from_utc, time_zone),
-  FOREIGN KEY(user_id, budget_id) REFERENCES budgets(user_id, id) ON DELETE CASCADE,
-  CHECK(reached_100 = 0 OR reached_80 = 1)
+  highest_reached INTEGER NOT NULL DEFAULT 0 CHECK(highest_reached IN(0,80,100)),
+  PRIMARY KEY(user_id, budget_id, from_utc_ms, time_zone),
+  FOREIGN KEY(user_id, budget_id) REFERENCES budgets(user_id, id) ON DELETE CASCADE
 ) STRICT;
 --> statement-breakpoint
 
@@ -273,12 +271,12 @@ CREATE TABLE "budget_state" (
 CREATE TABLE budget_threshold_alerts (
   user_id TEXT NOT NULL,
   budget_id TEXT NOT NULL,
-  from_utc TEXT NOT NULL,
+  from_utc_ms INTEGER NOT NULL,
   time_zone TEXT NOT NULL,
   threshold INTEGER NOT NULL CHECK(threshold IN (80, 100)),
   state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending', 'delivered', 'read', 'dismissed')), crossing_json TEXT
   CHECK(crossing_json IS NULL OR json_valid(crossing_json)), delivery_group_id TEXT, consent_grant_id TEXT,
-  PRIMARY KEY(user_id, budget_id, from_utc, time_zone, threshold),
+  PRIMARY KEY(user_id, budget_id, from_utc_ms, time_zone, threshold),
   FOREIGN KEY(user_id, budget_id) REFERENCES budgets(user_id, id) ON DELETE CASCADE
 ) STRICT;
 --> statement-breakpoint
@@ -289,8 +287,8 @@ CREATE TABLE budgets (
   category_id TEXT NOT NULL REFERENCES categories(id),
   currency TEXT NOT NULL,
   cap TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL, group_name TEXT, starts_month TEXT,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL, group_name TEXT, starts_month TEXT,
   UNIQUE(user_id, category_id, currency),
   UNIQUE(user_id, id)
 ) STRICT;
@@ -3110,7 +3108,7 @@ BEGIN SELECT RAISE(ABORT, 'budget_crossing_immutable'); END;
 
 CREATE TRIGGER budget_first_creation_capture AFTER INSERT ON budgets
 BEGIN
- INSERT INTO budget_state(kind,user_id,budget_id,created_at_ms,first_last_evaluated_at_ms,version,last_evaluated_at_ms) VALUES('user',NEW.user_id,NEW.id,CAST(unixepoch(NEW.created_at)*1000 AS INTEGER),0,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET budget_id=excluded.budget_id,created_at_ms=excluded.created_at_ms,first_last_evaluated_at_ms=0 WHERE budget_state.budget_id IS NULL;
+ INSERT INTO budget_state(kind,user_id,budget_id,created_at_ms,first_last_evaluated_at_ms,version,last_evaluated_at_ms) VALUES('user',NEW.user_id,NEW.id,NEW.created_at_ms,0,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET budget_id=excluded.budget_id,created_at_ms=excluded.created_at_ms,first_last_evaluated_at_ms=0 WHERE budget_state.budget_id IS NULL;
 END;
 --> statement-breakpoint
 
@@ -5444,7 +5442,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'budget_month_latches','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'budget_id',OLD."budget_id",'from_utc',OLD."from_utc",'time_zone',OLD."time_zone",'reached_80',OLD."reached_80",'reached_100',OLD."reached_100")
+  SELECT q.id,'budget_month_latches','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'budget_id',OLD."budget_id",'from_utc_ms',OLD."from_utc_ms",'time_zone',OLD."time_zone",'highest_reached',OLD."highest_reached")
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
@@ -5483,7 +5481,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'budget_threshold_alerts','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'budget_id',OLD."budget_id",'from_utc',OLD."from_utc",'time_zone',OLD."time_zone",'threshold',OLD."threshold",'state',OLD."state",'crossing_json',OLD."crossing_json",'delivery_group_id',OLD."delivery_group_id",'consent_grant_id',OLD."consent_grant_id")
+  SELECT q.id,'budget_threshold_alerts','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'budget_id',OLD."budget_id",'from_utc_ms',OLD."from_utc_ms",'time_zone',OLD."time_zone",'threshold',OLD."threshold",'state',OLD."state",'crossing_json',OLD."crossing_json",'delivery_group_id',OLD."delivery_group_id",'consent_grant_id',OLD."consent_grant_id")
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
@@ -5509,7 +5507,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'budgets','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'category_id',OLD."category_id",'currency',OLD."currency",'cap',OLD."cap",'created_at',OLD."created_at",'updated_at',OLD."updated_at",'group_name',OLD."group_name",'starts_month',OLD."starts_month")
+  SELECT q.id,'budgets','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'category_id',OLD."category_id",'currency',OLD."currency",'cap',OLD."cap",'created_at_ms',OLD."created_at_ms",'updated_at_ms',OLD."updated_at_ms",'group_name',OLD."group_name",'starts_month',OLD."starts_month")
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;

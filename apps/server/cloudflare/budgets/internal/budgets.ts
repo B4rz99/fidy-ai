@@ -9,7 +9,7 @@ import {
   type UpdateBudgetInput,
 } from "../../../src/core/budgets/contract";
 import { encodeMoneyAmount } from "../../../src/core/_shared/money";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { type OAuthMutationReview } from "../../oauth-confirmation/contract";
 import { oauthMutationReview } from "../../oauth-confirmation/operations";
 import {
@@ -150,12 +150,12 @@ export const createBudgetStatement = ({
   payload: CreateBudgetInput;
 }>): D1PreparedStatement => {
   const authority = callerAuthority({ subject, current });
-  const instant = DateTime.formatIso(DateTime.makeUnsafe(current));
+  const instant = current;
   return prepareCategoryReference({
     db,
     categoryId: payload.categoryId,
     statement: {
-      sql: `INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at, updated_at, group_name, starts_month)
+      sql: `INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at_ms, updated_at_ms, group_name, starts_month)
           SELECT ?, user_id, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, '') FROM ${authority.table} WHERE ${authority.predicate}
           AND EXISTS (SELECT 1 FROM category_reference)`,
       params: [
@@ -187,14 +187,14 @@ export const updateBudgetStatement = ({
   current: number;
 }>): D1PreparedStatement => {
   const authority = callerAuthority({ subject, current });
-  const instant = DateTime.formatIso(DateTime.makeUnsafe(current));
+  const instant = current;
   return prepareCategoryReference({
     db,
     categoryId: payload.categoryId,
     statement: {
       sql: `UPDATE budgets SET category_id = ?, cap = CASE WHEN ? = '' THEN ? ELSE cap END,
       group_name = COALESCE(NULLIF(?, ''), group_name),
-      starts_month = CASE WHEN ? <> '' AND starts_month > ? THEN ? ELSE starts_month END, updated_at = ?
+      starts_month = CASE WHEN ? <> '' AND starts_month > ? THEN ? ELSE starts_month END, updated_at_ms = ?
       WHERE id = ? AND user_id = ?
       AND EXISTS (SELECT 1 FROM category_reference)
       AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
@@ -261,12 +261,12 @@ export const prepareBudgetGroup = ({
   const authority = callerAuthority({ subject, current });
   return [
     db
-      .prepare(`UPDATE budgets SET group_name=?,updated_at=? WHERE user_id=?
+      .prepare(`UPDATE budgets SET group_name=?,updated_at_ms=? WHERE user_id=?
     AND category_id IN (${payload.groupCategoryIds.map(() => "?").join(",")})
     AND EXISTS(SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
       .bind(
         payload.groupName,
-        DateTime.formatIso(DateTime.makeUnsafe(current)),
+        current,
         subject.userId,
         ...payload.groupCategoryIds,
         ...authority.bindings
@@ -320,7 +320,7 @@ const groupReview = ({
     const groupSql =
       groupIds.length === 0
         ? ""
-        : ` AND (SELECT json_array(COALESCE((SELECT revision FROM (SELECT rowid,user_id,revision FROM budget_state WHERE kind='user' AND revision IS NOT NULL) AS budget_user_versions WHERE user_id=budgets.user_id),0),json_group_array(json_array(id,group_name,updated_at))) FROM (SELECT user_id,id,group_name,updated_at FROM budgets WHERE user_id=? AND category_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY id) budgets) = ?`;
+        : ` AND (SELECT json_array(COALESCE((SELECT revision FROM (SELECT rowid,user_id,revision FROM budget_state WHERE kind='user' AND revision IS NOT NULL) AS budget_user_versions WHERE user_id=budgets.user_id),0),json_group_array(json_array(id,group_name,updated_at_ms))) FROM (SELECT user_id,id,group_name,updated_at_ms FROM budgets WHERE user_id=? AND category_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY id) budgets) = ?`;
     const groupRevision =
       groupIds.length === 0
         ? ""
@@ -328,7 +328,7 @@ const groupReview = ({
             try: () =>
               db
                 .prepare(
-                  `SELECT json_array(COALESCE((SELECT revision FROM (SELECT rowid,user_id,revision FROM budget_state WHERE kind='user' AND revision IS NOT NULL) AS budget_user_versions WHERE user_id=budgets.user_id),0),json_group_array(json_array(id,group_name,updated_at))) AS revision FROM (SELECT user_id,id,group_name,updated_at FROM budgets WHERE user_id=? AND category_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY id) budgets`
+                  `SELECT json_array(COALESCE((SELECT revision FROM (SELECT rowid,user_id,revision FROM budget_state WHERE kind='user' AND revision IS NOT NULL) AS budget_user_versions WHERE user_id=budgets.user_id),0),json_group_array(json_array(id,group_name,updated_at_ms))) AS revision FROM (SELECT user_id,id,group_name,updated_at_ms FROM budgets WHERE user_id=? AND category_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY id) budgets`
                 )
                 .bind(userId, ...groupIds)
                 .first<string>("revision")
@@ -371,7 +371,7 @@ export const reviewBudget = (
                 : JSON.stringify({ budget: revision, group: groupRevision }),
             guard: {
               sql:
-                "SELECT 1 FROM budgets WHERE user_id = ? AND id = ? AND category_id = ? AND COALESCE((SELECT g.currency FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency') g WHERE g.user_id=budgets.user_id AND g.group_name=budgets.group_name ORDER BY g.month DESC LIMIT 1),currency) = ? AND cap = ? AND created_at = ? AND updated_at = ?" +
+                "SELECT 1 FROM budgets WHERE user_id = ? AND id = ? AND category_id = ? AND COALESCE((SELECT g.currency FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency') g WHERE g.user_id=budgets.user_id AND g.group_name=budgets.group_name ORDER BY g.month DESC LIMIT 1),currency) = ? AND cap = ? AND created_at_ms = ? AND updated_at_ms = ?" +
                 groupSql,
               params: [
                 input.userId,
@@ -379,8 +379,8 @@ export const reviewBudget = (
                 input.budget.categoryId,
                 input.budget.cap.currency,
                 encodeMoneyAmount(input.budget.cap.amount),
-                DateTime.formatIso(input.budget.createdAt),
-                DateTime.formatIso(input.budget.updatedAt),
+                input.budget.createdAt.epochMilliseconds,
+                input.budget.updatedAt.epochMilliseconds,
                 ...(groupIds.length === 0 ? [] : [input.userId, ...groupIds, groupRevision]),
               ],
             },

@@ -28,7 +28,7 @@ export const findOwnedBudget = ({
           COALESCE((SELECT g.currency FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency') g WHERE g.user_id=b.user_id AND g.group_name=b.group_name AND g.month<=COALESCE(?,'9999-12') ORDER BY g.month DESC LIMIT 1),b.currency) AS currency,
           CASE WHEN ? IS NULL THEN b.cap ELSE COALESCE((SELECT p.cap FROM (SELECT rowid,user_id,budget_id,month,cap FROM budget_month_plan_records WHERE kind='cap') p
             WHERE p.user_id=b.user_id AND p.budget_id=b.id AND p.month<=? ORDER BY p.month DESC LIMIT 1),b.cap) END AS cap,
-          b.created_at,b.updated_at,b.group_name FROM budgets b WHERE b.user_id=? AND b.id=?`
+          b.created_at_ms,b.updated_at_ms,b.group_name FROM budgets b WHERE b.user_id=? AND b.id=?`
         )
         .bind(Option.getOrNull(month), Option.getOrNull(month), Option.getOrNull(month), userId, id)
         .first()

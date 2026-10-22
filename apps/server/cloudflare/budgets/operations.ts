@@ -498,7 +498,7 @@ const readPlannedCaps = ({
         .prepare(`SELECT b.id,b.category_id,
       COALESCE((SELECT g.currency FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency') g WHERE g.user_id=b.user_id AND g.group_name=b.group_name AND g.month<=? ORDER BY g.month DESC LIMIT 1),b.currency) AS currency,
       COALESCE((SELECT p.cap FROM (SELECT rowid,user_id,budget_id,month,cap FROM budget_month_plan_records WHERE kind='cap') p WHERE p.user_id=b.user_id AND p.budget_id=b.id AND p.month<=? ORDER BY p.month DESC LIMIT 1),b.cap) AS cap,
-      b.created_at,b.updated_at,b.group_name FROM budgets b WHERE b.user_id=? AND (?=1 OR b.starts_month IS NULL OR b.starts_month<=?)
+      b.created_at_ms,b.updated_at_ms,b.group_name FROM budgets b WHERE b.user_id=? AND (?=1 OR b.starts_month IS NULL OR b.starts_month<=?)
       ORDER BY b.currency,b.category_id LIMIT ${maximumBudgetCount + 1}`)
         .bind(month, month, userId, includeInactive ? 1 : 0, month)
         .all()

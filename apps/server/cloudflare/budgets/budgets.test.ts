@@ -581,7 +581,7 @@ it("reports corrupt retained Budget state as unavailable without false caller re
       );
       yield* Effect.tryPromise(() =>
         db
-          .prepare("UPDATE budgets SET created_at='not-a-date' WHERE user_id=? AND id=?")
+          .prepare("UPDATE budgets SET created_at_ms=9000000000000000 WHERE user_id=? AND id=?")
           .bind(users[0], id)
           .run()
       );
@@ -611,10 +611,10 @@ it("attributes the second Budget create when the first fills the owner capacity"
       yield* Effect.tryPromise(() =>
         db
           .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 126)
-    INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at, updated_at)
+    INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at_ms, updated_at_ms)
     SELECT printf('40000000-0000-4000-8000-%012d', n), ?,
       printf('10000000-0000-4000-8000-%012d', n + 1000), 'COP', '100',
-      '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z' FROM seq`)
+      1788220800000,1788220800000 FROM seq`)
           .bind(users[0])
           .run()
       );
@@ -1646,12 +1646,12 @@ it("rolls back both threshold marks and frozen facts if one crossing cannot comm
       const marks = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT reached_80,reached_100 FROM budget_month_latches WHERE user_id=? AND budget_id=?"
+            "SELECT highest_reached FROM budget_month_latches WHERE user_id=? AND budget_id=?"
           )
           .bind(users[0], body.data.id)
           .first()
       );
-      expect(marks).toEqual({ reached_80: 0, reached_100: 0 });
+      expect(marks).toEqual({ highest_reached: 0 });
       yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER reject_crossing").run());
       yield* Effect.exit(recovery.sweep());
       expect((yield* readBudgetCrossings(input)).map((crossing) => crossing.threshold)).toEqual([
@@ -2217,11 +2217,11 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
         Promise.all([
           db.prepare("SELECT * FROM budgets ORDER BY user_id, id").all(),
           db
-            .prepare("SELECT * FROM budget_month_latches ORDER BY user_id, budget_id, from_utc")
+            .prepare("SELECT * FROM budget_month_latches ORDER BY user_id, budget_id, from_utc_ms")
             .all(),
           db
             .prepare(
-              "SELECT * FROM budget_threshold_alerts ORDER BY user_id, budget_id, from_utc, threshold"
+              "SELECT * FROM budget_threshold_alerts ORDER BY user_id, budget_id, from_utc_ms, threshold"
             )
             .all(),
           db

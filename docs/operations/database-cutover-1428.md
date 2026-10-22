@@ -3482,3 +3482,118 @@ DELETE FROM recurring_plans;
 ```
 
 <!-- recurring-planning-rollback:end -->
+
+## Budget monthly plans and threshold cutover (#1468)
+
+Budget creation/update and monthly threshold keys now use integer UTC milliseconds. Public instants
+remain the same RFC3339 contract. A single `highest_reached` (0/80/100) replaces two flags in both
+the owned domain latch and native storage; a jump to 100 still produces both original crossings.
+The compact cap/plan/currency variants and their qualified keys remain unchanged. No balance,
+spending counter, implicit conversion or carry-forward has been introduced.
+
+For existing state, stop writers and take a verified backup. Snapshot the four Budget tables and
+Budget work state. Validate every original timestamp through `UtcTimestamp` and reject nonzero
+fractional digits beyond milliseconds; bind exact validated milliseconds below rather than using
+SQLite parsing to interpret historical offsets. Validate original cap Money and crossing snapshots;
+missing historical crossing JSON stays absent. Original false/true flags refuse conversion.
+Refuse retained archives for the affected logical purposes until their existing lifecycle finishes.
+
+One native batch: the guard (four original row counts), four `cutover_` tables using final definitions
+from `0001_schema.sql` (child references point to `cutover_budgets`), per-row guards/copies below,
+then the monthly-record copy. Drop all old indexes/triggers/views referencing any of the four tables
+(including triggers attached to Transactions), drop old children before Budget, rename copied parent
+then children to their final names, and reinstall the final indexes/triggers/views verbatim. These
+scratch names exist only inside the atomic batch; no intermediate application release reads them.
+Preserve every rowid and original Budget work/offer state; copied inserts must not generate new work.
+The native fixture captures original definitions and exercises the documented blocks and whole swap.
+Run `foreign_key_check` and compare decoded public caps, monthly markers, original grants/crossings,
+work clocks and row identities before resuming. Failed preparation/copy/swap must leave originals intact.
+
+<!-- budget-months-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) VALUES('budget_mutation',CASE WHEN
+ (SELECT count(*) FROM budgets)=? AND (SELECT count(*) FROM budget_month_latches)=?
+ AND (SELECT count(*) FROM budget_threshold_alerts)=? AND (SELECT count(*) FROM budget_month_plan_records)=?
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN('budgets','budget_month_latches','budget_threshold_alerts','budget_month_caps','budget_plan_months','budget_group_currencies'))
+ THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-months-guard:end -->
+
+<!-- budget-months-budget-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) VALUES('budget_mutation',CASE WHEN ?=1 AND EXISTS(SELECT 1 FROM budgets WHERE rowid=? AND created_at=? AND updated_at=?) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-months-budget-guard:end -->
+
+<!-- budget-months-budget-copy:start -->
+
+```sql
+INSERT INTO cutover_budgets(rowid,id,user_id,category_id,currency,cap,created_at_ms,updated_at_ms,group_name,starts_month)
+SELECT rowid,id,user_id,category_id,currency,cap,?,?,group_name,starts_month FROM budgets WHERE rowid=?;
+```
+
+<!-- budget-months-budget-copy:end -->
+
+<!-- budget-months-budget_month_latches-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) VALUES('budget_mutation',CASE WHEN ?=1 AND EXISTS(SELECT 1 FROM budget_month_latches WHERE rowid=? AND from_utc=?) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-months-budget_month_latches-guard:end -->
+
+<!-- budget-months-budget_month_latches-copy:start -->
+
+```sql
+INSERT INTO cutover_budget_month_latches(rowid,user_id,budget_id,from_utc_ms,time_zone,highest_reached)
+SELECT rowid,user_id,budget_id,?,time_zone,CASE WHEN reached_80=0 AND reached_100=0 THEN 0 WHEN reached_80=1 AND reached_100=0 THEN 80 WHEN reached_80=1 AND reached_100=1 THEN 100 ELSE -1 END FROM budget_month_latches WHERE rowid=?;
+```
+
+<!-- budget-months-budget_month_latches-copy:end -->
+
+<!-- budget-months-budget_threshold_alerts-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) VALUES('budget_mutation',CASE WHEN ?=1 AND EXISTS(SELECT 1 FROM budget_threshold_alerts WHERE rowid=? AND from_utc=?) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-months-budget_threshold_alerts-guard:end -->
+
+<!-- budget-months-budget_threshold_alerts-copy:start -->
+
+```sql
+INSERT INTO cutover_budget_threshold_alerts(rowid,user_id,budget_id,from_utc_ms,time_zone,threshold,state,crossing_json,delivery_group_id,consent_grant_id)
+SELECT rowid,user_id,budget_id,?,time_zone,threshold,state,crossing_json,delivery_group_id,consent_grant_id FROM budget_threshold_alerts WHERE rowid=?;
+```
+
+<!-- budget-months-budget_threshold_alerts-copy:end -->
+
+<!-- budget-months-plans-copy:start -->
+
+```sql
+INSERT INTO cutover_budget_month_plan_records(rowid,kind,user_id,month,budget_id,group_name,cap,currency) SELECT rowid,kind,user_id,month,budget_id,group_name,cap,currency FROM budget_month_plan_records;
+```
+
+<!-- budget-months-plans-copy:end -->
+
+For rollback keep writers stopped, use the same guard and row counts, create scratch tables from
+the captured original definitions, run this inverse copy, swap children/parent in the same order,
+and reinstall original indexes/triggers/views. Integer instants are encoded to canonical UTC;
+original offset spelling may normalize but the represented millisecond and immutable crossing JSON
+do not change. Restore the verified backup if either guarded reconstruction or validation refuses.
+
+<!-- budget-months-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_budgets(rowid,id,user_id,category_id,currency,cap,created_at,updated_at,group_name,starts_month) SELECT rowid,id,user_id,category_id,currency,cap,strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch'),strftime('%Y-%m-%dT%H:%M:%fZ',updated_at_ms/1000.0,'unixepoch'),group_name,starts_month FROM budgets;
+INSERT INTO cutover_budget_month_latches(rowid,user_id,budget_id,from_utc,time_zone,reached_80,reached_100) SELECT rowid,user_id,budget_id,strftime('%Y-%m-%dT%H:%M:%fZ',from_utc_ms/1000.0,'unixepoch'),time_zone,CASE WHEN highest_reached>=80 THEN 1 ELSE 0 END,CASE WHEN highest_reached=100 THEN 1 ELSE 0 END FROM budget_month_latches;
+INSERT INTO cutover_budget_threshold_alerts(rowid,user_id,budget_id,from_utc,time_zone,threshold,state,crossing_json,delivery_group_id,consent_grant_id) SELECT rowid,user_id,budget_id,strftime('%Y-%m-%dT%H:%M:%fZ',from_utc_ms/1000.0,'unixepoch'),time_zone,threshold,state,crossing_json,delivery_group_id,consent_grant_id FROM budget_threshold_alerts;
+INSERT INTO cutover_budget_month_plan_records(rowid,kind,user_id,month,budget_id,group_name,cap,currency) SELECT rowid,kind,user_id,month,budget_id,group_name,cap,currency FROM budget_month_plan_records;
+```
+
+<!-- budget-months-rollback-copy:end -->

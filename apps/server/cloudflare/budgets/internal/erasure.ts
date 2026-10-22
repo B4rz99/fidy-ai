@@ -79,7 +79,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'budget_id',r.\"budget_id\",'from_utc',r.\"from_utc\",'time_zone',r.\"time_zone\",'reached_80',r.\"reached_80\",'reached_100',r.\"reached_100\") AS body FROM budget_month_latches r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'budget_id',r.\"budget_id\",'from_utc_ms',r.\"from_utc_ms\",'time_zone',r.\"time_zone\",'highest_reached',r.\"highest_reached\") AS body FROM budget_month_latches r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -151,7 +151,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'budget_id',r.\"budget_id\",'from_utc',r.\"from_utc\",'time_zone',r.\"time_zone\",'threshold',r.\"threshold\",'state',r.\"state\",'crossing_json',r.\"crossing_json\",'delivery_group_id',r.\"delivery_group_id\",'consent_grant_id',r.\"consent_grant_id\") AS body FROM budget_threshold_alerts r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'budget_id',r.\"budget_id\",'from_utc_ms',r.\"from_utc_ms\",'time_zone',r.\"time_zone\",'threshold',r.\"threshold\",'state',r.\"state\",'crossing_json',r.\"crossing_json\",'delivery_group_id',r.\"delivery_group_id\",'consent_grant_id',r.\"consent_grant_id\") AS body FROM budget_threshold_alerts r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -199,7 +199,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: ["budget_month_caps", "budget_month_latches", "budget_threshold_alerts"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'category_id',r.\"category_id\",'currency',r.\"currency\",'cap',r.\"cap\",'created_at',r.\"created_at\",'updated_at',r.\"updated_at\",'group_name',r.\"group_name\",'starts_month',r.\"starts_month\") AS body FROM budgets r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'category_id',r.\"category_id\",'currency',r.\"currency\",'cap',r.\"cap\",'created_at_ms',r.\"created_at_ms\",'updated_at_ms',r.\"updated_at_ms\",'group_name',r.\"group_name\",'starts_month',r.\"starts_month\") AS body FROM budgets r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({

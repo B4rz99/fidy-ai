@@ -45,31 +45,10 @@ type BudgetStatusInput = Readonly<{
 
 const threshold80 = 80;
 const threshold100 = 100;
-
-const markBudgetLatch = (
-  latch: BudgetMonthLatch,
-  reached80: boolean,
-  reached100: boolean
-): BudgetMonthLatch => {
-  const common = { budgetId: latch.budgetId, period: latch.period };
-  if (reached100) return { ...common, reached80: true, reached100: true };
-  if (reached80) return { ...common, reached80: true, reached100: false };
-  return { ...common, reached80: false, reached100: false };
-};
-
-const newlyReachedThresholds = (
-  latch: BudgetMonthLatch,
-  reached80: boolean,
-  reached100: boolean
-): ReadonlyArray<typeof threshold80 | typeof threshold100> => {
-  const thresholds: Array<typeof threshold80 | typeof threshold100> = [];
-  if (!latch.reached80 && reached80) thresholds.push(threshold80);
-  if (!latch.reached100 && reached100) thresholds.push(threshold100);
-  return thresholds;
-};
+const thresholds = [threshold80, threshold100] as const;
 
 /**
- * Advance the two monotone threshold marks for one Budget and applied month. The caller must
+ * Advance the monotone reached threshold for one Budget and applied month. The caller must
  * supply the latch belonging to this Budget and period. The adapter must commit durable,
  * versioned evaluation intent with the Transaction change, drain it before any later correction,
  * and persist marks with unique per-threshold occurrences; a correction never reopens a mark.
@@ -95,11 +74,15 @@ export const advanceBudgetLatch = ({
       return yield* new CurrencyMismatch({ left: budget.cap.currency, right: spent.currency });
     }
     const eighty = BigDecimal.multiply(budget.cap.amount, BigDecimal.make(8n, 1));
-    const reached80 = latch.reached80 || BigDecimal.Order(spent.amount, eighty) >= 0;
-    const reached100 = latch.reached100 || BigDecimal.Order(spent.amount, budget.cap.amount) >= 0;
+    let measured: 0 | typeof threshold80 | typeof threshold100 = 0;
+    if (BigDecimal.Order(spent.amount, eighty) >= 0) measured = threshold80;
+    if (BigDecimal.Order(spent.amount, budget.cap.amount) >= 0) measured = threshold100;
+    const highestReached = measured > latch.highestReached ? measured : latch.highestReached;
     return {
-      latch: markBudgetLatch(latch, reached80, reached100),
-      newlyReached: newlyReachedThresholds(latch, reached80, reached100),
+      latch: { ...latch, highestReached },
+      newlyReached: thresholds.filter(
+        (threshold) => threshold > latch.highestReached && threshold <= highestReached
+      ),
     };
   });
 

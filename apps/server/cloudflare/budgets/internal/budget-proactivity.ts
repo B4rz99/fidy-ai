@@ -11,7 +11,7 @@ const maximumGroups = 16;
 const maximumRows = 32;
 const Row = Schema.Struct({
   budget_id: BudgetId,
-  from_utc: Schema.DateTimeUtcFromString,
+  from_utc_ms: Schema.DateTimeUtcFromMillis,
   time_zone: IanaTimeZone,
   threshold: BudgetCrossing.fields.threshold,
   delivery_group_id: BudgetCrossingGroup.fields.id,
@@ -25,7 +25,7 @@ const matchesKey = (row: typeof Row.Type): boolean =>
   row.budget_id === row.crossing_json.budgetId &&
   row.threshold === row.crossing_json.threshold &&
   row.time_zone === row.crossing_json.period.timeZone &&
-  row.from_utc.epochMilliseconds === row.crossing_json.period.from.epochMilliseconds;
+  row.from_utc_ms.epochMilliseconds === row.crossing_json.period.from.epochMilliseconds;
 const decodeGroup = (
   group: Array.NonEmptyReadonlyArray<typeof Row.Type>
 ): Effect.Effect<BudgetCrossingGroup, BudgetCrossingUnavailable | Schema.SchemaError> =>
@@ -162,7 +162,7 @@ export const readGroups = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT budget_id,from_utc,time_zone,threshold,delivery_group_id,consent_grant_id,crossing_json FROM (SELECT a.budget_id,a.from_utc,a.time_zone,a.threshold,a.delivery_group_id,a.consent_grant_id,a.crossing_json FROM budget_threshold_alerts AS a WHERE a.user_id=? AND a.delivery_group_id IN (SELECT p.record_id FROM budget_state AS p WHERE p.kind='publication' AND p.user_id=? AND p.materialized_at_ms IS NULL ORDER BY p.detected_at_ms,p.record_id LIMIT ?) ORDER BY a.delivery_group_id,a.threshold LIMIT ?) WHERE 1=1",
+          sql: "SELECT budget_id,from_utc_ms,time_zone,threshold,delivery_group_id,consent_grant_id,crossing_json FROM (SELECT a.budget_id,a.from_utc_ms,a.time_zone,a.threshold,a.delivery_group_id,a.consent_grant_id,a.crossing_json FROM budget_threshold_alerts AS a WHERE a.user_id=? AND a.delivery_group_id IN (SELECT p.record_id FROM budget_state AS p WHERE p.kind='publication' AND p.user_id=? AND p.materialized_at_ms IS NULL ORDER BY p.detected_at_ms,p.record_id LIMIT ?) ORDER BY a.delivery_group_id,a.threshold LIMIT ?) WHERE 1=1",
           params: [input.userId, input.userId, maximumGroups, maximumRows],
         },
       }).all()

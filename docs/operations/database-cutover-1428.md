@@ -4363,3 +4363,27 @@ PRAGMA defer_foreign_keys=OFF;
 ```
 
 <!-- hosted-guard-verify:end -->
+
+## Indexed Transcript session reference (#1479)
+
+Retain hosted_session_id under the accepted query-cost fallback. The native indexed comparison in
+[the research record](../research/transcript-session-ownership-1479.md) found higher session and
+prefix read costs even with an additional covering parent index. Keep the current entry kinds,
+exact sequence/IDs, typed tool evidence, terminal markers and all existing public callers.
+
+Enforce equality to the immutable parent Turn with transcript_parent_session on insert. Existing
+same-User foreign keys and append-only Transcript/immutable Turn ownership remain. Stop writers,
+bind the observed Transcript count, and run this validation plus the final baseline's named trigger
+creation in one native D1 batch. Reject inconsistent historical User/Turn/session links rather than
+reassigning entries. Existing erasure archives and row addresses remain unchanged. No table rewrite
+or allocator adjustment is needed. Rollback drops only the new trigger in its own batch; original
+entry values, ordering, allocator and old constraints remain exact. Never weaken the live guard to
+accommodate an unexplained historical mismatch.
+
+<!-- transcript-session-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'transcript_session_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM transcript_entries)=? AND NOT EXISTS(SELECT 1 FROM transcript_entries e LEFT JOIN hosted_turns t ON t.user_id=e.user_id AND t.id=e.turn_id WHERE t.id IS NULL OR t.hosted_session_id IS NOT e.hosted_session_id) AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transcript-session-guard:end -->

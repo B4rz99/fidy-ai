@@ -7870,6 +7870,11 @@ WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NO
 BEGIN SELECT RAISE(ABORT, 'transaction_user_decision'); END;
 --> statement-breakpoint
 
+CREATE TRIGGER transcript_parent_session BEFORE INSERT ON transcript_entries
+WHEN NOT EXISTS(SELECT 1 FROM hosted_turns t WHERE t.user_id=NEW.user_id AND t.id=NEW.turn_id AND t.hosted_session_id=NEW.hosted_session_id)
+BEGIN SELECT RAISE(ABORT,'transcript_parent_session'); END;
+--> statement-breakpoint
+
 CREATE TRIGGER transcript_no_update BEFORE UPDATE ON transcript_entries
 BEGIN SELECT RAISE(ABORT, 'transcript_append_only'); END;
 --> statement-breakpoint

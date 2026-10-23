@@ -1,4 +1,5 @@
-import { Effect, Option } from "effect";
+import { measureTranscriptOwnership } from "./transcript-cost.test-fixture";
+import { Config, Effect, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { UserId } from "../../src/core/identity/contract";
@@ -144,6 +145,24 @@ it("cleans only the addressed User and retains discovery after a terminal marker
     (id,user_id,hosted_session_id,turn_id,kind,occurred_at_ms,text)
     VALUES ('cross-owner',?,?,'retired-2','user',1,'wrong owner')`)
             .bind(otherUserId, otherUserId)
+            .run()
+        ).rejects.toThrow()
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO hosted_agent_sessions(id,user_id,consent_basis_json,started_at_ms,status) VALUES('other-owned-session',?,'{}',0,'idle-ended')"
+          )
+          .bind(userId)
+          .run()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          db
+            .prepare(
+              "INSERT INTO transcript_entries(id,user_id,hosted_session_id,turn_id,kind,occurred_at_ms,text) VALUES('wrong-session',?,'other-owned-session','retired-2','user',1,'Wrong continuity')"
+            )
+            .bind(userId)
             .run()
         ).rejects.toThrow()
       );
@@ -372,3 +391,16 @@ it("drains channel event backlogs without losing their parent deadline or touchi
       ).toBe(otherUserId);
     })
   ));
+
+const measureOwnership =
+  Effect.runSync(Config.String("INFRA_PERFORMANCE_MEASURE").pipe(Config.withDefault("0"))) === "1";
+it.skipIf(!measureOwnership)(
+  "measures native session ownership reads and compaction/cleanup selection at retained bounds",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        yield* measureTranscriptOwnership(db, userId);
+      })
+    )
+);

@@ -49,6 +49,8 @@ it("accepts only six unambiguous uppercase groups at the browser proof boundary"
 it("preserves allowed local-part punctuation and accepts one-character and maximum-length domain labels", () => {
   for (const address of [
     "a@b.c",
+    "a@b.c.d",
+    "person@billing.mail.example.com",
     "0@1.9",
     "z@z.z",
     "a.b.c@a-b.c-d",

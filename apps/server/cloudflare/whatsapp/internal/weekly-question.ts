@@ -30,7 +30,7 @@ const QuestionRow = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   user_id: UserId,
   offer_id: ConsentRecordId,
-  grant_id: Schema.OptionFromNullOr(ConsentRecordId),
+  consent_grant_id: Schema.OptionFromNullOr(ConsentRecordId),
   correlation_token: HostedDeliveryCorrelationToken,
   portfolio_id: InsightRecipient.fields.portfolioId,
   bsuid: InsightRecipient.fields.bsuid,
@@ -95,7 +95,7 @@ export const stageWeeklyQuestion = (
       questionAction(
         input,
         {
-          sql: `INSERT INTO whatsapp_deliveries AS weekly_governor_questions(kind,id,user_id,offer_id,grant_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,text,offer_json,time_zone) SELECT 'weekly-question', ?,?,?,NULLIF(?,''),?,?,?,?,?,?,?,?,? WHERE EXISTS (${input.guard.sql}) AND EXISTS (${association.sql}) AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE user_id=? AND id=?)`,
+          sql: `INSERT INTO whatsapp_deliveries AS weekly_governor_questions(kind,id,user_id,offer_id,consent_grant_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,text,offer_json,time_zone) SELECT 'weekly-question', ?,?,?,NULLIF(?,''),?,?,?,?,?,?,?,?,? WHERE EXISTS (${input.guard.sql}) AND EXISTS (${association.sql}) AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE user_id=? AND id=?)`,
           params: [
             input.id,
             input.userId,
@@ -129,16 +129,16 @@ const readQuestionForClaim = (input: QuestionStart): Effect.Effect<unknown, What
     const raw = yield* Effect.tryPromise(() =>
       questionAction(
         input,
-        { sql: `SELECT q.grant_id ${predicate}`, params },
+        { sql: `SELECT q.consent_grant_id ${predicate}`, params },
         Option.none()
       ).first()
     );
     if (raw === null) return null;
     const metadata = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ grant_id: Schema.OptionFromNullOr(ConsentRecordId) })
+      Schema.Struct({ consent_grant_id: Schema.OptionFromNullOr(ConsentRecordId) })
     )(raw);
     const statement = { sql: `SELECT q.* ${predicate}`, params };
-    const authorized = questionAction(input, statement, metadata.grant_id);
+    const authorized = questionAction(input, statement, metadata.consent_grant_id);
     return yield* Effect.tryPromise(() => authorized.first());
   }).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
 
@@ -210,7 +210,7 @@ const prepareQuestionClaim = (
       ...association.params,
     ],
   };
-  return questionAction(input, statement, row.grant_id);
+  return questionAction(input, statement, row.consent_grant_id);
 };
 
 export const recordWeeklyQuestionSend = (

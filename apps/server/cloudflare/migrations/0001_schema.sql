@@ -1794,10 +1794,8 @@ CREATE TABLE "whatsapp_deliveries" (
  template_json TEXT,
  id TEXT,
  offer_id TEXT,
- grant_id TEXT,
  created_at_ms INTEGER,
  offer_json TEXT,
- last_attempt_at_ms INTEGER DEFAULT 0,
  turn_id TEXT,
  proposed_at_ms INTEGER,
  hosted_correlation_token TEXT GENERATED ALWAYS AS(CASE WHEN kind='hosted' THEN correlation_token END) VIRTUAL UNIQUE,
@@ -1806,7 +1804,7 @@ CREATE TABLE "whatsapp_deliveries" (
  FOREIGN KEY (user_id, turn_id) REFERENCES hosted_turns(user_id, inbound_turn_id),
  CHECK(kind<>'insight' OR coalesce((user_id IS NOT NULL AND insight_event_id IS NOT NULL AND correlation_token IS NOT NULL AND portfolio_id IS NOT NULL AND bsuid IS NOT NULL AND business_phone_number_id IS NOT NULL AND scheduled_at_ms IS NOT NULL AND expires_at_ms IS NOT NULL AND time_zone IS NOT NULL AND state IS NOT NULL) AND (state IN ('staged','sending','accepted','ambiguous','rejected','delivered','expired')) AND (expires_at_ms > scheduled_at_ms AND expires_at_ms <= scheduled_at_ms + 86400000) AND ((state IN ('staged','expired')) OR send_started_at_ms IS NOT NULL) AND (state <> 'delivered' OR (provider_message_id IS NOT NULL AND delivered_at_ms IS NOT NULL)),0)),
  CHECK(kind<>'proactivity' OR coalesce((user_id IS NOT NULL AND delivery_id IS NOT NULL AND role IS NOT NULL AND correlation_token IS NOT NULL AND portfolio_id IS NOT NULL AND bsuid IS NOT NULL AND business_phone_number_id IS NOT NULL AND scheduled_at_ms IS NOT NULL AND expires_at_ms IS NOT NULL AND time_zone IS NOT NULL AND state IS NOT NULL) AND (role IN ('budget-threshold','manual-entry-reminder','new-recurring-series','budget-offer','reminder-offer','recurring-offer','reminder-question')) AND (state IN ('staged','sending','accepted','ambiguous','rejected','delivered','expired')) AND ((role IN ('budget-offer','reminder-offer','recurring-offer') AND consent_grant_id IS NULL) OR (role IN ('budget-threshold','manual-entry-reminder','new-recurring-series','reminder-question') AND consent_grant_id IS NOT NULL)) AND (state NOT IN ('sending','accepted','ambiguous','rejected','delivered') OR send_started_at_ms IS NOT NULL) AND (state<>'delivered' OR (provider_message_id IS NOT NULL AND delivered_at_ms IS NOT NULL)),0)),
- CHECK(kind<>'weekly-question' OR coalesce((id IS NOT NULL AND user_id IS NOT NULL AND offer_id IS NOT NULL AND created_at_ms IS NOT NULL AND expires_at_ms IS NOT NULL AND state IS NOT NULL AND correlation_token IS NOT NULL AND portfolio_id IS NOT NULL AND bsuid IS NOT NULL AND business_phone_number_id IS NOT NULL AND time_zone IS NOT NULL AND last_attempt_at_ms IS NOT NULL) AND (state IN ('ready','sending','accepted','ambiguous','rejected','delivered','expired')) AND (offer_json IS NULL OR json_valid(offer_json)) AND (expires_at_ms > created_at_ms),0)),
+ CHECK(kind<>'weekly-question' OR coalesce((id IS NOT NULL AND user_id IS NOT NULL AND offer_id IS NOT NULL AND created_at_ms IS NOT NULL AND expires_at_ms IS NOT NULL AND state IS NOT NULL AND correlation_token IS NOT NULL AND portfolio_id IS NOT NULL AND bsuid IS NOT NULL AND business_phone_number_id IS NOT NULL AND time_zone IS NOT NULL) AND (state IN ('ready','sending','accepted','ambiguous','rejected','delivered','expired')) AND (offer_json IS NULL OR json_valid(offer_json)) AND (expires_at_ms > created_at_ms),0)),
  CHECK(kind<>'hosted' OR coalesce((turn_id IS NOT NULL AND user_id IS NOT NULL AND text IS NOT NULL AND correlation_token IS NOT NULL AND business_phone_number_id IS NOT NULL AND proposed_at_ms IS NOT NULL AND state IS NOT NULL) AND (length(text) > 0) AND (state IN ('sending','accepted','ambiguous','rejected','delivered','unconfirmed')) AND ((state = 'delivered' AND provider_message_id IS NOT NULL AND delivered_at_ms IS NOT NULL)
     OR (state <> 'delivered' AND delivered_at_ms IS NULL)),0))
 ) STRICT;
@@ -2554,7 +2552,7 @@ CREATE UNIQUE INDEX weekly_consent_offer_source ON consent_offers(user_id,source
 CREATE INDEX weekly_governor_deliveries_marker_user ON insight_events(user_id,id) WHERE weekly_governor_counted=1;
 --> statement-breakpoint
 
-CREATE INDEX weekly_governor_questions_due ON whatsapp_deliveries(state,last_attempt_at_ms,created_at_ms) WHERE kind='weekly-question';
+CREATE INDEX weekly_governor_questions_due ON whatsapp_deliveries(state,created_at_ms) WHERE kind='weekly-question';
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX weekly_governor_questions_identity ON whatsapp_deliveries(id) WHERE kind='weekly-question';
@@ -6470,7 +6468,7 @@ WHEN OLD.kind='weekly-question' AND (EXISTS(SELECT 1 FROM erasure_requests q WHE
 )
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'weekly_governor_questions','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'offer_id',OLD."offer_id",'grant_id',OLD."grant_id",'created_at_ms',OLD."created_at_ms",'expires_at_ms',OLD."expires_at_ms",'state',OLD."state",'portfolio_id',OLD."portfolio_id",'bsuid',OLD."bsuid",'business_phone_number_id',OLD."business_phone_number_id",'text',OLD."text",'offer_json',OLD."offer_json",'time_zone',OLD."time_zone",'send_started_at_ms',OLD."send_started_at_ms",'provider_message_id',OLD."provider_message_id",'delivered_at_ms',OLD."delivered_at_ms",'last_attempt_at_ms',OLD."last_attempt_at_ms")
+  SELECT q.id,'weekly_governor_questions','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'offer_id',OLD."offer_id",'grant_id',OLD.consent_grant_id,'created_at_ms',OLD."created_at_ms",'expires_at_ms',OLD."expires_at_ms",'state',OLD."state",'portfolio_id',OLD."portfolio_id",'bsuid',OLD."bsuid",'business_phone_number_id',OLD."business_phone_number_id",'text',OLD."text",'offer_json',OLD."offer_json",'time_zone',OLD."time_zone",'send_started_at_ms',OLD."send_started_at_ms",'provider_message_id',OLD."provider_message_id",'delivered_at_ms',OLD."delivered_at_ms",'last_attempt_at_ms',0)
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;

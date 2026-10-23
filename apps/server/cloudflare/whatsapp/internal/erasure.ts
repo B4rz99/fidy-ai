@@ -1,5 +1,13 @@
 import type { ErasureProjection } from "../../erasure-store/contract";
 
+const archiveField = (kind: string, field: string): string => {
+  if (kind === "weekly-question") {
+    if (field === "grant_id") return "r.consent_grant_id";
+    if (field === "last_attempt_at_ms") return "0";
+  }
+  return `r."${field}"`;
+};
+
 /** Keep exact logical permits and archive fields while sharing the delivery storage mechanics. */
 const recordProjection = ({
   id,
@@ -29,7 +37,10 @@ const recordProjection = ({
       ? "EXISTS(SELECT 1 FROM whatsapp_deliveries p WHERE p.kind='hosted' AND p.hosted_correlation_token=r.correlation_token AND p.user_id=?)"
       : "r.user_id=?";
   const owned = `r.kind='${kind}' AND ${subject}`;
-  const body = "json_object(" + fields.map((field) => `'${field}',r."${field}"`).join(",") + ")";
+  const body =
+    "json_object(" +
+    fields.map((field) => `'${field}',${archiveField(kind, field)}`).join(",") +
+    ")";
   return {
     id,
     dataClass: "conversation",

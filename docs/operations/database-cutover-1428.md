@@ -4499,3 +4499,64 @@ INSERT INTO cutover_hosted_whatsapp_windows(rowid,user_id,portfolio_id,bsuid,las
 ```
 
 <!-- whatsapp-window-rollback-copy:end -->
+
+## WhatsApp delivery authorization evidence (#1482)
+
+The 27 stored fields retain all four delivery variants and generated hosted correlation.
+Only weekly-question uses grant_id; other variants use consent_grant_id. Move the weekly value
+to consent_grant_id, retaining the exact original grant and null semantics. Refuse any populated
+non-applicable grant column or any last_attempt_at_ms other than its never-written default zero;
+these are unexplained history, not permission to overwrite evidence. The active weekly_question_requests
+retry clock is a different field and remains. Existing archives retain their original field names;
+new weekly archives project grant_id from consent_grant_id and the original retry default zero.
+
+Stop writers and unfinished erasure. Bind the observed delivery count and run guard, deferred-FK
+scratch creation, copy and swap atomically. Rebuild whatsapp_event_records before the delivery
+parent, preserving callback rowids, replay uniqueness and generated correlation references. Recreate
+all affected indexes/triggers and finish with the whole-graph assertion before clearing deferral.
+Inverse uses the frozen definitions in whatsapp/delivery-cutover.test-fixture.json and reverses
+the variant mapping exactly. No send claims, outcomes, original clocks, content retention, Consent
+requirements or provider callback rules change. Platform Workflow retries cannot replay ambiguous sends.
+
+<!-- whatsapp-delivery-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'whatsapp_delivery_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM whatsapp_deliveries)=? AND NOT EXISTS(SELECT 1 FROM whatsapp_deliveries WHERE last_attempt_at_ms IS NOT 0 OR (kind='weekly-question' AND consent_grant_id IS NOT NULL) OR (kind<>'weekly-question' AND grant_id IS NOT NULL)) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- whatsapp-delivery-guard:end -->
+
+<!-- whatsapp-delivery-copy:start -->
+
+```sql
+INSERT INTO cutover_whatsapp_deliveries(rowid,kind,user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,provider_message_id,delivered_at_ms,last_received_at_ms,delivery_id,role,consent_grant_id,template_json,id,offer_id,created_at_ms,offer_json,turn_id,proposed_at_ms) SELECT rowid,kind,user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,provider_message_id,delivered_at_ms,last_received_at_ms,delivery_id,role,CASE WHEN kind='weekly-question' THEN grant_id ELSE consent_grant_id END,template_json,id,offer_id,created_at_ms,offer_json,turn_id,proposed_at_ms FROM whatsapp_deliveries;
+INSERT INTO cutover_whatsapp_event_records(rowid,kind,portfolio_id,message_id,user_id,claimed_at_ms,outcome,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms) SELECT rowid,* FROM whatsapp_event_records;
+```
+
+<!-- whatsapp-delivery-copy:end -->
+
+<!-- whatsapp-delivery-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'whatsapp_delivery_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- whatsapp-delivery-rollback-guard:end -->
+
+<!-- whatsapp-delivery-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_whatsapp_deliveries(rowid,kind,user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,provider_message_id,delivered_at_ms,last_received_at_ms,delivery_id,role,consent_grant_id,template_json,id,offer_id,created_at_ms,offer_json,turn_id,proposed_at_ms,grant_id,last_attempt_at_ms) SELECT rowid,kind,user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,provider_message_id,delivered_at_ms,last_received_at_ms,delivery_id,role,CASE WHEN kind='weekly-question' THEN NULL ELSE consent_grant_id END,template_json,id,offer_id,created_at_ms,offer_json,turn_id,proposed_at_ms,CASE WHEN kind='weekly-question' THEN consent_grant_id END,0 FROM whatsapp_deliveries;
+INSERT INTO cutover_whatsapp_event_records(rowid,kind,portfolio_id,message_id,user_id,claimed_at_ms,outcome,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms) SELECT rowid,* FROM whatsapp_event_records;
+```
+
+<!-- whatsapp-delivery-rollback-copy:end -->
+
+<!-- whatsapp-delivery-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'whatsapp_delivery_foreign_keys',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- whatsapp-delivery-verify:end -->

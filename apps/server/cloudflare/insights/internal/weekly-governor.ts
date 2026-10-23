@@ -19,7 +19,7 @@ export const findGovernor = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT unanswered,question_needed,question_delivered,paused_at_ms FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS weekly_governors WHERE user_id=?",
+          sql: "SELECT unanswered,question_needed,question_delivered,paused_at_ms FROM weekly_proactivity_state AS weekly_governors WHERE user_id=?",
           params: [input.userId],
         },
       }).first()
@@ -65,7 +65,7 @@ const prepareQuestionIntent = (
     subject: { _tag: "User", userId: input.userId },
     requirement: "active",
     statement: {
-      sql: `INSERT INTO insight_reports(kind,delivery_id,user_id,origin,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) SELECT 'weekly-question',g.question_event_id,g.user_id,'proactive',v.delivered_at_ms,'ready',v.delivered_at_ms,0,0 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS g JOIN (${input.proof.sql}) AS v ON v.user_id=g.user_id AND v.insight_event_id=g.question_event_id WHERE g.user_id=? AND g.question_needed=1 AND g.paused_at_ms IS NULL`,
+      sql: `INSERT INTO weekly_question_requests(id,user_id,origin,created_at_ms,state,last_attempt_at_ms,restart_attempts) SELECT g.question_event_id,g.user_id,'proactive',v.delivered_at_ms,'ready',0,0 FROM weekly_proactivity_state AS g JOIN (${input.proof.sql}) AS v ON v.user_id=g.user_id AND v.insight_event_id=g.question_event_id WHERE g.user_id=? AND g.question_needed=1 AND g.paused_at_ms IS NULL`,
       params: [...input.proof.params, input.userId],
     },
   });
@@ -86,17 +86,17 @@ export const prepareCount = (
   return [
     db
       .prepare(
-        `INSERT INTO proactivity_governors AS weekly_governors(kind,user_id) SELECT 'weekly', ? WHERE EXISTS (SELECT 1 FROM insight_events WHERE user_id=? AND id=? AND kind='weekly-summary') AND EXISTS (SELECT 1 FROM (${proof.sql}) AS v WHERE v.user_id=? AND v.insight_event_id=?) ON CONFLICT(kind,user_id) DO NOTHING`
+        `INSERT INTO weekly_proactivity_state AS weekly_governors(user_id) SELECT ? WHERE EXISTS (SELECT 1 FROM insight_events WHERE user_id=? AND id=? AND kind='weekly-summary') AND EXISTS (SELECT 1 FROM (${proof.sql}) AS v WHERE v.user_id=? AND v.insight_event_id=?) ON CONFLICT(user_id) DO NOTHING`
       )
       .bind(userId, userId, insightEventId, ...proof.params, userId, insightEventId),
     db
       .prepare(
-        `UPDATE insight_events SET weekly_governor_counted=1 WHERE user_id=? AND id=? AND kind='weekly-summary' AND weekly_governor_counted IS NULL AND EXISTS (SELECT 1 FROM (${proof.sql}) AS v JOIN (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS g ON g.user_id=v.user_id JOIN insight_events AS e ON e.user_id=v.user_id AND e.id=v.insight_event_id AND e.kind='weekly-summary' WHERE v.user_id=? AND v.insight_event_id=? AND v.delivered_at_ms > g.last_reply_at_ms AND g.paused_at_ms IS NULL AND (g.question_needed=0 OR (g.question_delivered=1 AND v.delivered_at_ms > g.question_delivered_at_ms)))`
+        `UPDATE insight_events SET weekly_governor_counted=1 WHERE user_id=? AND id=? AND kind='weekly-summary' AND weekly_governor_counted IS NULL AND EXISTS (SELECT 1 FROM (${proof.sql}) AS v JOIN weekly_proactivity_state AS g ON g.user_id=v.user_id JOIN insight_events AS e ON e.user_id=v.user_id AND e.id=v.insight_event_id AND e.kind='weekly-summary' WHERE v.user_id=? AND v.insight_event_id=? AND v.delivered_at_ms > g.last_reply_at_ms AND g.paused_at_ms IS NULL AND (g.question_needed=0 OR (g.question_delivered=1 AND v.delivered_at_ms > g.question_delivered_at_ms)))`
       )
       .bind(userId, insightEventId, ...proof.params, userId, insightEventId),
     db
       .prepare(
-        `UPDATE proactivity_governors AS weekly_governors SET unanswered=min(unanswered+1,200),question_needed=CASE WHEN unanswered+1 >= ? AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id=weekly_governors.user_id) THEN 1 ELSE question_needed END,question_event_id=coalesce(question_event_id,CASE WHEN unanswered+1 >= ? AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id=weekly_governors.user_id) THEN ? ELSE NULL END),paused_at_ms=CASE WHEN question_delivered=1 AND unanswered+1 >= ? THEN (SELECT delivered_at_ms FROM (${proof.sql}) AS v WHERE v.user_id=? AND v.insight_event_id=?) ELSE paused_at_ms END,notice_completed=CASE WHEN question_delivered=1 AND unanswered+1 >= ? THEN 0 ELSE notice_completed END WHERE kind='weekly' AND user_id=? AND changes()=1`
+        `UPDATE weekly_proactivity_state AS weekly_governors SET unanswered=min(unanswered+1,200),question_needed=CASE WHEN unanswered+1 >= ? AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id=weekly_governors.user_id) THEN 1 ELSE question_needed END,question_event_id=coalesce(question_event_id,CASE WHEN unanswered+1 >= ? AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id=weekly_governors.user_id) THEN ? ELSE NULL END),paused_at_ms=CASE WHEN question_delivered=1 AND unanswered+1 >= ? THEN (SELECT delivered_at_ms FROM (${proof.sql}) AS v WHERE v.user_id=? AND v.insight_event_id=?) ELSE paused_at_ms END,notice_completed=CASE WHEN question_delivered=1 AND unanswered+1 >= ? THEN 0 ELSE notice_completed END WHERE user_id=? AND changes()=1`
       )
       .bind(
         thresholds.askAfter,
@@ -112,7 +112,7 @@ export const prepareCount = (
     prepareQuestionIntent(input),
     db
       .prepare(
-        "UPDATE schedules SET enabled=0 WHERE kind='weekly' AND user_id=? AND EXISTS (SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS weekly_governors WHERE user_id=? AND paused_at_ms IS NOT NULL)"
+        "UPDATE schedules SET enabled=0 WHERE kind='weekly' AND user_id=? AND EXISTS (SELECT 1 FROM weekly_proactivity_state AS weekly_governors WHERE user_id=? AND paused_at_ms IS NOT NULL)"
       )
       .bind(userId, userId),
   ];
@@ -123,7 +123,7 @@ export const prepareReply = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      `INSERT INTO proactivity_governors AS weekly_governors(kind,user_id,last_reply_at_ms) SELECT 'weekly', ?,max(v.occurred_at_ms) FROM (${input.proof.sql}) AS v LEFT JOIN insight_events AS e ON e.id=v.insight_event_id AND e.user_id=v.user_id WHERE v.user_id=? AND (e.kind='weekly-summary' OR v.question_id IS NOT NULL) AND v.occurred_at_ms+1000 >= v.delivered_at_ms GROUP BY v.user_id ON CONFLICT(kind,user_id) DO UPDATE SET unanswered=0,last_reply_at_ms=excluded.last_reply_at_ms,question_needed=0,question_delivered=0,question_delivered_at_ms=NULL,question_event_id=NULL WHERE excluded.last_reply_at_ms > weekly_governors.last_reply_at_ms`
+      `INSERT INTO weekly_proactivity_state AS weekly_governors(user_id,last_reply_at_ms) SELECT ?,max(v.occurred_at_ms) FROM (${input.proof.sql}) AS v LEFT JOIN insight_events AS e ON e.id=v.insight_event_id AND e.user_id=v.user_id WHERE v.user_id=? AND (e.kind='weekly-summary' OR v.question_id IS NOT NULL) AND v.occurred_at_ms+1000 >= v.delivered_at_ms GROUP BY v.user_id ON CONFLICT(user_id) DO UPDATE SET unanswered=0,last_reply_at_ms=excluded.last_reply_at_ms,question_needed=0,question_delivered=0,question_delivered_at_ms=NULL,question_event_id=NULL WHERE excluded.last_reply_at_ms > weekly_governors.last_reply_at_ms`
     )
     .bind(input.userId, ...input.proof.params, input.userId);
 
@@ -132,7 +132,7 @@ export const prepareQuestionDelivered = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      `UPDATE proactivity_governors AS weekly_governors SET question_delivered=1,question_delivered_at_ms=coalesce(question_delivered_at_ms,(SELECT min(v.delivered_at_ms) FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.question_id=question_event_id)) WHERE kind='weekly' AND user_id=? AND question_needed=1 AND paused_at_ms IS NULL AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivered_at_ms > last_reply_at_ms AND v.question_id=question_event_id)`
+      `UPDATE weekly_proactivity_state AS weekly_governors SET question_delivered=1,question_delivered_at_ms=coalesce(question_delivered_at_ms,(SELECT min(v.delivered_at_ms) FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.question_id=question_event_id)) WHERE user_id=? AND question_needed=1 AND paused_at_ms IS NULL AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivered_at_ms > last_reply_at_ms AND v.question_id=question_event_id)`
     )
     .bind(...input.proof.params, input.userId, input.userId, ...input.proof.params, input.userId);
 
@@ -141,7 +141,7 @@ export const prepareReset = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      "UPDATE proactivity_governors AS weekly_governors SET unanswered=0,last_reply_at_ms=?,question_needed=0,question_delivered=0,question_delivered_at_ms=NULL,question_event_id=NULL,paused_at_ms=NULL,notice_session_id=NULL,notice_turn_id=NULL,notice_completed=0 WHERE kind='weekly' AND user_id=?"
+      "UPDATE weekly_proactivity_state AS weekly_governors SET unanswered=0,last_reply_at_ms=?,question_needed=0,question_delivered=0,question_delivered_at_ms=NULL,question_event_id=NULL,paused_at_ms=NULL,notice_session_id=NULL,notice_turn_id=NULL,notice_completed=0 WHERE user_id=?"
     )
     .bind(input.now.epochMilliseconds, input.userId);
 
@@ -158,7 +158,7 @@ export const prepareNotice = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      `UPDATE proactivity_governors AS weekly_governors SET notice_session_id=?,notice_turn_id=? WHERE kind='weekly' AND user_id=? AND paused_at_ms IS NOT NULL AND notice_completed=0 AND (?=1 OR notice_session_id=?) AND EXISTS (${input.proof.sql})`
+      `UPDATE weekly_proactivity_state AS weekly_governors SET notice_session_id=?,notice_turn_id=? WHERE user_id=? AND paused_at_ms IS NOT NULL AND notice_completed=0 AND (?=1 OR notice_session_id=?) AND EXISTS (${input.proof.sql})`
     )
     .bind(
       input.sessionId,
@@ -175,7 +175,7 @@ export const readNotice = (
   Effect.tryPromise(() =>
     input.db
       .prepare(
-        "SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS weekly_governors WHERE user_id=? AND notice_turn_id=? AND paused_at_ms IS NOT NULL AND notice_completed=0"
+        "SELECT 1 FROM weekly_proactivity_state AS weekly_governors WHERE user_id=? AND notice_turn_id=? AND paused_at_ms IS NOT NULL AND notice_completed=0"
       )
       .bind(input.userId, input.turnId)
       .first()
@@ -189,7 +189,7 @@ export const prepareNoticeCompletion = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      `UPDATE proactivity_governors AS weekly_governors SET notice_completed=1 WHERE kind='weekly' AND user_id=? AND notice_turn_id=? AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.turn_id=? AND substr(v.text,1,length(?))=?)`
+      `UPDATE weekly_proactivity_state AS weekly_governors SET notice_completed=1 WHERE user_id=? AND notice_turn_id=? AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.turn_id=? AND substr(v.text,1,length(?))=?)`
     )
     .bind(
       input.userId,

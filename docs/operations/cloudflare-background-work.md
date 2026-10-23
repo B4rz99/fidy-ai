@@ -113,14 +113,27 @@ only after 100 new refusals; a backward clock cannot reopen an old minute. The b
 not a deployment-wide write cap: different isolates or User coordinators can each admit a write.
 This is telemetry, never authorization or request admission.
 
-The single `operational_core_rejection_burst` row stores only `id = 1` and the most recent
-minute timestamp; monotonic writes cannot replace it with older evidence. The scheduled health sweep
+Scheduled health logs include `severity: none | warning | critical`, selected by the existing
+alert policy for that observation. An `attention` sample below its alert threshold has `none`;
+an unavailable inspection has `warning`. Any critical alert for an owner takes precedence over
+its warnings. This field augments the same bounded observation, without another emission or
+retained state. Queries must distinguish missing observations from observations with `none`.
+
+Each detected burst also emits the closed `core-rejections / coreRejectionBursts / attention`
+warning directly to platform logs. Database failures or a previous unresolved native write do not
+suppress this observation; the existing threshold and one observation per observer per minute still
+apply. The record contains no request or error details. This emission is preparation for #1491,
+not evidence that platform alert queries and delivery are configured or verified.
+
+The single `operational_event_buckets` presence row with `kind = 'core_rejection'` and `bucket_ms = 0`
+stores the most recent minute timestamp; monotonic writes cannot replace it with older evidence. The scheduled health sweep
 emits `core_rejection_burst / coreRejectionBursts` as a warning while that minute is less than five
 minutes old. Missing evidence means no recorded burst, not absence of attacks. Failed reads or a
 future timestamp are unavailable, not healthy. The ordinary warning delivery/acknowledgement policy
 applies. Retention deletes the row at 24 hours; it remains at most one row even if cleanup stops.
 
-Restarts, low-rate or distributed traffic, stalled writes and scheduling outages can lose this signal.
+Restarts and low-rate or distributed traffic can lose this signal. Stalled writes and scheduling
+outages can also lose its D1-backed scheduled observation; the direct log emission is independent.
 It excludes edge refusals, OAuth provider refusals represented by redirects, and MCP SDK protocol
 errors carried in HTTP 200 before canonical dispatch. Native-confirmation failures projected as
 unavailable are not counted as client 4xx refusals. A warning is evidence of refusals, not proof of
@@ -129,6 +142,84 @@ No request path, IP, User, credential, body, error detail or caller-supplied dim
 The native MCP observation test substitutes canonical dispatch and proves protocol detection;
 existing canonical suites remain the authorization evidence. Live receipt and response evidence
 remains #1262.
+
+### Platform migration verification (#1491)
+
+On 2026-10-23, the account dashboard saved and enabled **Fidy production: Core rejection bursts**
+(`fc9c5304807746699773a58bb8287594`), scoped to the deployed Core Worker. It reports a one-minute
+check interval, threshold `>= 1`, one-minute averaging and four-hour notification repeats. Its email
+destination matches the existing deployed `OPERATOR_ALERT_EMAIL`. The saved query is:
+
+```sql
+SELECT count() AS "value"
+FROM "logs"."workersLogs"
+WHERE "scriptName" = 'fidycloudflare-core-production-hdv5cspnk7fai6vg'
+  AND "message" LIKE '%fidy.operational component=core-rejections operation=coreRejectionBursts state=attention severity=warning%'
+```
+
+The original message-word query was not coverage: live inspection showed that Cloudflare extracts
+Effect's object arguments into structured attributes while the message contains only the log prefix.
+The account's monitor SQL rejects custom columns (`component`) and filtering the JSON `attributes`
+column (HTTP422). The health records now supply an explicit closed `message` containing component,
+operation, state and policy severity, alongside their existing bounded fields. Match complete
+`state=unavailable` / `severity=warning` tokens, never the word `unavailable`, which also occurs in
+the healthy `unavailableWorkflows: 0` field. The direct burst uses the same fixed message format.
+These local changes still require deployment and verification of actual platform ingestion/query
+matches; saving the revised query does not establish runtime coverage.
+
+The fixed five-minute window for direct detections remains unverified: the documented
+`timestamp >= NOW() - INTERVAL '5' MINUTE` expression failed account preview with
+`RecursionLimitExceeded` (HTTP422). The saved query still uses the automatic interval; validate
+an account-supported five-minute window before retiring scheduled presence. Cloudflare's
+sample-notification action was submitted once to the configured operator. Submission and an enabled
+monitor are not evidence of actual threshold firing, mailbox receipt, resolution or absence handling.
+
+Additional saved, enabled monitors use that same operator recipient and report one-minute checks:
+
+| Monitor                                            | Saved identifier                   | Query / detection                                                                                                                                                                       | Repeat |
+| -------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Fidy production: Critical operational health       | `ad301e0eac8b4f99b375b07b909ace5a` | Core Workers Logs message `LIKE '%fidy.operational component=% severity=critical%'`; count >=1, average1m                                                                               | 30m    |
+| Fidy production: Operational health warnings       | `0735ba4d6f53402c976a3ad4ae6c16c1` | Core message `LIKE '%fidy.operational component=% severity=warning%'`, excluding `LIKE '% operation=coreRejectionBursts state=attention %'` already covered above; count >=1, average1m | 4h     |
+| Fidy production: Missing Queue canary execution    | `80833aeb00654828b52123b940170f1e` | Native `events.queuesMessages` successful `DeleteMessage` observations for the canary Queue; count ==0, average10m                                                                      | 30m    |
+| Fidy production: Missing completed Workflow canary | `db498d28ab1447b0acdd80ea6ce6ead8` | Native `events.workflows`, exact canary name and `eventType='WORKFLOW_SUCCESS'`; count ==0, average10m                                                                                  | 30m    |
+
+The canary queries have no grouping, so absence can produce numeric zero. Their ten-minute
+averaging setting and one-minute execution interval are independent; the average is zero only
+when the contributing nonnegative counts are all zero. Saved settings are not proof of the
+platform's initial-window, stale-data, sampling or evaluation semantics. Queue concurrency does
+not prove completion and is not used for this detection. Queue acknowledgment does not prove
+Workflow completion; the second query checks actual native Workflow success separately.
+
+The deployed canary Queue is `a0a2a566d54f4566905c769738b61078`; the Workflow is
+`fidycloudflare-core-production-hdv5cspnk7fai6vg-operati-a29777df`. Read-only Wrangler listing
+identified these resources. The Workflow success preview showed about one completion every five
+minutes, consistent with its deployed instance listing. The Queue acknowledgment preview showed
+a stable ten-minute average around 0.2, consistent with one success every five minutes, after removing `consumerType='worker'`: that filter incorrectly
+produced zero in this account's SQL dataset. Wrangler reports exactly one producer and one consumer,
+both the deployed Core Worker. The saved query therefore filters exact Queue identity,
+`actionType='DeleteMessage'` and `outcome='success'` without the consumer-type restriction. Neither
+preview establishes actual alert firing, notification receipt, controlled absence or recovery. Do not treat a missing Queue row as proof
+of zero backlog, or a successful Queue acknowledgment as successful business delivery.
+
+Completed Work and caught-failure exports also supply fixed platform-query messages, on the
+same records as before. `fidy.work` contains only the closed operation, outcome and HTTP status
+class (or `none`); `fidy.failure` contains only component, operation, safe error code and failure
+classification. Span events and the portable telemetry contracts are unchanged. Native tests
+exercise the production console exporter, preserve the original rejected Promise/success result
+when logging throws, and check the full captured output for private failure/prompt/credential
+sentinels. These exports still require deployment and actual platform ingestion/query evidence;
+they do not establish native runtime-limit coverage when execution cannot emit a record.
+
+The policy monitors currently combine owners by severity, whereas the old Fidy alert state
+has independent kind/owner cooldowns and acknowledgment. A new failing owner can therefore share
+an already-firing platform monitor and wait for its repeat; these definitions do not prove equivalent
+per-owner notification timing. Verify or resolve that difference, owner-specific stale/missing
+observations, platform initial-window behavior and independent outage delivery before retirement.
+
+The full #1491 coverage gate remains open. Required next evidence includes policy-severity queries,
+native Queue and completed Workflow observations, missing/stale inspections, actual firing and
+resolution, delivery results, account-supported execution cadence, privacy and independent outage
+behavior. Keep the operational tables and existing notification machinery until these pass.
 
 | Signal                                                      | Interpretation                                                                          | Action                                                                            |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |

@@ -1,13 +1,17 @@
+import { fixtureWorker as scheduledCoreWorker } from "../core-worker.test-fixture";
 import { type Cause, DateTime, Effect, Schema } from "effect";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
-import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
+import { makeCoreWorker } from "../core-worker";
+import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
 import publicWorker from "../public-worker";
-import { ConnectInstitutionResult } from "../../src/core/connections/contract";
+import { ConnectInstitutionResult, InstitutionId } from "../../src/core/connections/contract";
 import { handleConnectionBrowserRequest, sweepConnectionAttempts } from "./runtime";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
+
+const institutionRegistration = { enabled: false };
 
 const users = [
   "10000000-0000-4000-8000-000000000051",
@@ -83,7 +87,10 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     return db;
   });
 afterAll(() => databases.dispose());
-beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
+beforeEach(() => {
+  institutionRegistration.enabled = false;
+  vi.useFakeTimers({ toFake: ["Date"] });
+});
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -94,6 +101,11 @@ const send = (
   request: Request,
   beforeCoordinate?: (database: D1Database) => Promise<unknown>
 ): Promise<Response> => {
+  const institutions = institutionRegistration.enabled ? [InstitutionId.make("bancolombia")] : [];
+  const coreWorker = makeCoreWorker({
+    telemetry: cloudflareWorkerTelemetry,
+    institutions,
+  });
   vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
   request.headers.set("cf-connecting-ip", "192.0.2.35");
   const coordinators =
@@ -120,7 +132,7 @@ const send = (
           USER_TRANSACTION_COORDINATOR: {
             getByName: (name) => ({
               fetch: (command) => {
-                let coordinator = coordinators.get(name);
+                let coordinator = coordinators.get(`${name}:${institutionRegistration.enabled}`);
                 if (coordinator === undefined) {
                   coordinator = new UserTransactionCoordinator(
                     {
@@ -136,9 +148,10 @@ const send = (
                       DB: db,
                       AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
                       HOSTED_AI_MODEL: approvedWorkersAiModel,
-                    }
+                    },
+                    institutions
                   );
-                  coordinators.set(name, coordinator);
+                  coordinators.set(`${name}:${institutionRegistration.enabled}`, coordinator);
                 }
                 const admittedCoordinator = coordinator;
                 return beforeCoordinate === undefined
@@ -210,13 +223,7 @@ it("starts a stable Connecting association and reuses its original browser attem
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "UPDATE connection_institution_gate SET enabled = 1 WHERE institution_id = 'bancolombia'"
-          )
-          .run()
-      );
+      institutionRegistration.enabled = true;
       const first = yield* Effect.tryPromise(() =>
         send(db, request(0, "/connections", "POST", { institutionId: "bancolombia" }))
       );
@@ -271,9 +278,7 @@ it("prepares a browser authorization once without activating the Connection", ()
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const started = yield* Effect.tryPromise(() => start(db));
       if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
       const attempt = new URL(started.continuation.url).searchParams.get("attempt");
@@ -315,9 +320,7 @@ it.each(["expired", "stale-session", "revoked-session", "disabled-institution"] 
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        yield* Effect.tryPromise(() =>
-          db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-        );
+        institutionRegistration.enabled = true;
         const started = yield* Effect.tryPromise(() => start(db));
         if (started.type !== "continue_in_browser") {
           throw new Error("Expected browser continuation");
@@ -338,9 +341,7 @@ it.each(["expired", "stale-session", "revoked-session", "disabled-institution"] 
           );
         }
         if (condition === "disabled-institution") {
-          yield* Effect.tryPromise(() =>
-            db.prepare("UPDATE connection_institution_gate SET enabled = 0").run()
-          );
+          institutionRegistration.enabled = false;
         }
         const refused = yield* Effect.tryPromise(() =>
           send(db, request(0, "/web/connections/begin", "POST", { attempt }))
@@ -365,9 +366,7 @@ it("refuses hostile browser input and origins without consuming a live attempt",
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const started = yield* Effect.tryPromise(() => start(db));
       if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
       const attempt = new URL(started.continuation.url).searchParams.get("attempt");
@@ -477,9 +476,7 @@ it("commits only one concurrent browser preparation and retires old continuation
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const started = yield* Effect.tryPromise(() => start(db));
       if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
       const attempt = new URL(started.continuation.url).searchParams.get("attempt");
@@ -504,9 +501,7 @@ it("rolls back browser preparation when Audit fails and allows a safe retry", ()
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const started = yield* Effect.tryPromise(() => start(db));
       if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
       const attempt = new URL(started.continuation.url).searchParams.get("attempt");
@@ -543,9 +538,7 @@ it.each(["session-revocation", "consent-withdrawal"] as const)(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        yield* Effect.tryPromise(() =>
-          db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-        );
+        institutionRegistration.enabled = true;
         yield* Effect.tryPromise(() =>
           db
             .prepare(
@@ -594,9 +587,7 @@ it("shares canonical User request pressure before browser work is queued", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const started = yield* Effect.tryPromise(() => start(db));
       if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
       const attempt = new URL(started.continuation.url).searchParams.get("attempt");
@@ -634,9 +625,7 @@ it("isolates ready and prepared browser review from a different User holding the
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const started = yield* Effect.tryPromise(() => start(db));
       if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
       const attempt = new URL(started.continuation.url).searchParams.get("attempt");
@@ -682,9 +671,7 @@ it("reviews a live browser continuation without granting institution authority",
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const started = yield* Effect.tryPromise(() => start(db));
       if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
       const attempt = new URL(started.continuation.url).searchParams.get("attempt");
@@ -712,9 +699,7 @@ it("replaces an attempt at its exact expiry without changing stable Connection i
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const first = yield* Effect.tryPromise(() => start(db));
       if (first.type !== "continue_in_browser") throw new Error("Expected browser continuation");
       vi.setSystemTime(first.continuation.expiresAt.epochMilliseconds - 1000);
@@ -738,9 +723,7 @@ it("keeps one stable identity under concurrent starts and isolates another User"
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const starts = yield* Effect.tryPromise(() =>
         Promise.all(
           Array.from({ length: 3 }, () =>
@@ -820,14 +803,12 @@ it("returns an Active association without starting another attempt", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const original = yield* Effect.tryPromise(() => start(db));
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ? WHERE user_id = ? AND status = 'pending'"
+            "UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ? WHERE EXISTS(SELECT 1 FROM connections c WHERE c.id=connection_attempts.connection_id AND c.user_id=?) AND status = 'pending'"
           )
           .bind(DateTime.nowUnsafe().epochMilliseconds, users[0])
           .run()
@@ -879,9 +860,7 @@ it("uses read and write capabilities from the shared authorization algebra", () 
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const readToken = `fin_${"r".repeat(8)}_${"a".repeat(43)}`;
       const writeToken = `fin_${"w".repeat(8)}_${"b".repeat(43)}`;
       yield* seedPAT(db, {
@@ -940,9 +919,7 @@ it("rolls back Connection, attempt and success Audit when the final evidence wri
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       yield* Effect.tryPromise(() =>
         db
           .prepare(
@@ -976,9 +953,7 @@ it("composes a Connection start in the canonical atomic batch and refuses duplic
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const call = (index: number): object => ({
         callId: `20000000-0000-4000-8000-00000000000${index}`,
         operation: "connections.connectInstitution",
@@ -1010,9 +985,7 @@ it("persists immutable expiry, same-User ownership, and terminal single-use atte
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const started = yield* Effect.tryPromise(() => start(db));
       yield* Effect.tryPromise(() =>
         expect(
@@ -1021,7 +994,10 @@ it("persists immutable expiry, same-User ownership, and terminal single-use atte
       );
       yield* Effect.tryPromise(() =>
         expect(
-          db.prepare("UPDATE connection_attempts SET user_id = ?").bind(users[1]).run()
+          db
+            .prepare("UPDATE connection_attempts SET connection_id = ?")
+            .bind("foreign-connection")
+            .run()
         ).rejects.toThrow()
       );
       yield* Effect.tryPromise(() =>
@@ -1082,9 +1058,7 @@ it.each(["Action required", "Ended"] as const)(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        yield* Effect.tryPromise(() =>
-          db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-        );
+        institutionRegistration.enabled = true;
         const original = yield* Effect.tryPromise(() => start(db));
         yield* Effect.tryPromise(() =>
           db
@@ -1105,9 +1079,7 @@ it("refuses malformed and cross-origin starts before any lifecycle effect", () =
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const malformed = yield* Effect.tryPromise(() =>
         send(db, request(0, "/connections", "POST", { institutionId: "../bancolombia" }))
       );
@@ -1126,9 +1098,7 @@ it("removes expired attempts after their bounded retention while retaining the s
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const original = yield* Effect.tryPromise(() => start(db));
       if (original.type !== "continue_in_browser") throw new Error("Expected browser continuation");
       vi.setSystemTime(original.continuation.expiresAt.epochMilliseconds + 86400000);
@@ -1152,9 +1122,7 @@ it("scheduled retention erases abandoned preparation after Consent withdrawal wi
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       yield* Effect.tryPromise(() =>
         db
           .prepare(
@@ -1180,7 +1148,7 @@ it("scheduled retention erases abandoned preparation after Consent withdrawal wi
           .run()
       );
       const tick = (): Promise<void> =>
-        coreWorker
+        scheduledCoreWorker
           .scheduled(
             {
               cron: "* * * * *",
@@ -1246,18 +1214,16 @@ it("bounds independent retention and preserves live attempts and stable Connecti
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
+      institutionRegistration.enabled = true;
       const started = yield* Effect.tryPromise(() => start(db));
       const current = DateTime.nowUnsafe().epochMilliseconds;
       yield* Effect.tryPromise(() =>
         db
           .prepare(`INSERT INTO connection_attempts
-        (id,user_id,connection_id,institution_id,public_reference,status,created_at_ms,expires_at_ms)
+        (id,connection_id,public_reference,status,created_at_ms,expires_at_ms)
         WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 130)
-        SELECT 'retention-' || n, ?, ?, 'bancolombia', 'retention-reference-' || n, 'invalidated', ?, ? FROM seq`)
-          .bind(users[0], started.connection.id, current - 86400000 - 600000, current - 86400000)
+        SELECT 'retention-' || n, ?, 'retention-reference-' || n, 'invalidated', ?, ? FROM seq`)
+          .bind(started.connection.id, current - 86400000 - 600000, current - 86400000)
           .run()
       );
       yield* sweepConnectionAttempts({ db, current });

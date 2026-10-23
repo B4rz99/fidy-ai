@@ -1,3 +1,4 @@
+import { registeredConnectionInstitutionIds } from "../../src/shell/connections/contract";
 import { fixtureNativeHttpClient } from "../core-worker.test-fixture";
 import { HttpClient } from "effect/http";
 import { newId } from "../secret-material/operations";
@@ -1618,7 +1619,7 @@ it("keeps unexpected recovery defects out of operational failures and observes o
         });
       const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() =>
         setup("person@example.test", "CO.Person1", {
-          worker: makeCoreWorker(telemetry),
+          worker: makeCoreWorker({ telemetry, institutions: registeredConnectionInstitutionIds }),
           database,
           publication: Option.none(),
           accessIssuer: "https://defect.cloudflareaccess.com",

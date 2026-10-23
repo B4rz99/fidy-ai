@@ -24,9 +24,9 @@ export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>):
     <section className="flex flex-col gap-4 border-t pt-6" aria-label="Solicitud de eliminación">
       <h2 className="text-xl font-semibold">Eliminar tus datos</h2>
       <p>
-        Registra tu intención de eliminar los datos de tu cuenta. Necesitas un inicio de sesión
-        reciente. Revisaremos contigo el alcance y cómo recibirás la respuesta antes de comenzar.
-        Los datos que deban conservarse tendrán una justificación y un plazo de conservación.
+        Elimina los datos de tu cuenta. Necesitas un inicio de sesión reciente. Al confirmar,
+        bloquearemos nuevas operaciones y comenzaremos la eliminación. Las copias de respaldo y los
+        datos en proveedores pueden tardar más en eliminarse.
       </p>
       <label htmlFor="erasure-confirmation" className="flex items-center gap-3">
         <Checkbox
@@ -59,11 +59,11 @@ const ErasureFeedback = ({
   <>
     {accepted ? (
       <Alert>
-        <AlertTitle>Solicitud registrada para revisión</AlertTitle>
+        <AlertTitle>Solicitud de eliminación aceptada</AlertTitle>
         <AlertDescription>
-          Aún no hemos eliminado tus datos. Escribe a obarboza@fidyapp.com para continuar con la
-          revisión y acordar dónde recibirás la respuesta, incluso cuando ya no puedas entrar a tu
-          cuenta.
+          La eliminación está en curso y aún no ha finalizado. Puedes escribir a
+          obarboza@fidyapp.com para consultar el estado de tu solicitud, incluso cuando ya no puedas
+          entrar a tu cuenta.
         </AlertDescription>
       </Alert>
     ) : null}

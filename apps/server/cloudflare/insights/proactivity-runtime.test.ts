@@ -10,9 +10,11 @@ import {
   withdrawTestProcessingConsent,
 } from "../proactivity.test-fixture";
 import {
+  activateWeeklySummaryForUser,
   makeExecutingWeeklyFixtureStep,
   makeProactivityCoordinator,
   proactivityWorkflowHarness,
+  seedWeeklySummaryActivity,
 } from "../weekly-summary.test-fixture";
 import {
   controlManualReminders,
@@ -21,6 +23,7 @@ import {
   findReminderGovernor,
   findReminderSchedule,
   materializeReminder,
+  materializeWeeklySummary,
   prepareReminderRevision,
   readProactiveTranscript,
   recordProactivityDecision,
@@ -239,7 +242,7 @@ it("the installed User coordinator generates the latest reminder and frozen mess
       const report = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT role,text,expires_at_ms FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=?"
+            "SELECT role,text,expires_at_ms FROM proactive_messages WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=?"
           )
           .bind(proactivityTestUsers[0])
           .all()
@@ -268,6 +271,36 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
       });
       if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
       const id = generated.id;
+      const weekly = yield* activateWeeklySummaryForUser({
+        db,
+        now,
+        userId: proactivityTestUsers[0],
+        caller: proactivityTestCallers[0],
+      });
+      yield* seedWeeklySummaryActivity({ db, at: DateTime.formatIso(now) });
+      const weeklyReport = yield* materializeWeeklySummary({
+        db,
+        userId: proactivityTestUsers[0],
+        id: weekly.id,
+        now: weekly.nextScheduledAt,
+      });
+      if (weeklyReport._tag !== "Created") return yield* Effect.die("Expected weekly report");
+      // The old weekly/category namespaces permit the same message ID.
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO proactive_messages(kind,id,user_id,role,report_event_id,consent_grant_id,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) SELECT kind,?,user_id,role,report_event_id,consent_grant_id,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms FROM proactive_messages WHERE kind='weekly-summary' AND user_id=? AND id=?"
+            )
+            .bind(id, proactivityTestUsers[0], weeklyReport.id),
+          db
+            .prepare(
+              "UPDATE insight_events SET message_id=? WHERE user_id=? AND id=? AND message_kind='weekly-summary'"
+            )
+            .bind(id, proactivityTestUsers[0], weeklyReport.id),
+        ])
+      );
+
       const revision = yield* prepareReminderRevision({
         db,
         userId: proactivityTestUsers[0],
@@ -514,6 +547,20 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
       expect(
         Option.getOrThrow(yield* findReminderGovernor({ db, userId: proactivityTestUsers[0] }))
       ).toEqual({ _tag: "Attentive", unanswered: 1 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT lifecycle_state,delivery_receipt_id,transcript_id FROM insight_events WHERE user_id=? AND id=?"
+            )
+            .bind(proactivityTestUsers[0], weeklyReport.id)
+            .first()
+        )
+      ).toEqual({
+        lifecycle_state: "pending",
+        delivery_receipt_id: null,
+        transcript_id: null,
+      });
       const transcript = Option.getOrThrow(
         yield* readProactiveTranscript({
           db,
@@ -747,7 +794,7 @@ const executeDeliveryScenario = (
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT count(*) AS n FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=?"
+            "SELECT count(*) AS n FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=?"
           )
           .bind(scenario.workUser)
           .first()
@@ -828,7 +875,7 @@ it.each(refusalCases)(
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT state FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
+                "SELECT state FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
               )
               .bind(proactivityTestUsers[0], generated.id)
               .first()
@@ -901,7 +948,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT count(*) AS n FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role IN ('budget-offer','reminder-offer')"
+                "SELECT count(*) AS n FROM proactive_messages WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role IN ('budget-offer','reminder-offer')"
               )
               .bind(userId)
               .first()
@@ -1104,7 +1151,7 @@ it("sixteen unserviceable contextual offers cannot starve an eligible reminder d
               .bind(userId, now.epochMilliseconds),
             db
               .prepare(
-                "INSERT INTO insight_reports(kind,delivery_id,user_id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms) VALUES('offer-request',?,?,'manual-entry-reminder','request-offer',?,0)"
+                "INSERT INTO insight_offer_requests(id,user_id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms) VALUES(?,?,'manual-entry-reminder','request-offer',?,0)"
               )
               .bind(newId(), userId, now.epochMilliseconds),
           ])
@@ -1127,6 +1174,73 @@ it("sixteen unserviceable contextual offers cannot starve an eligible reminder d
             .first()
         )
       ).toEqual({ n: 1 });
+    })
+  ));
+
+it("rotates more than one batch of due reminders while every coordinator is unavailable", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const now = DateTime.makeUnsafe("2026-10-06T23:01:00Z");
+      vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
+      const schedule = yield* activateTestReminder(db);
+      const userId = proactivityTestUsers[0];
+      const others = Array.from({ length: 35 }, () => UserId.make(newId()));
+      yield* Effect.tryPromise(() =>
+        db.batch(
+          others.flatMap((owner) => [
+            db
+              .prepare(
+                "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?)"
+              )
+              .bind(owner, now.epochMilliseconds),
+            db
+              .prepare(
+                "INSERT INTO consent_offers(id,user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,disclosure_message_id,decision_message_id,decision) SELECT ?,?,kind,portfolio_id,?,disclosure_json,created_at_ms,expires_at_ms,?, ?,decision FROM consent_offers WHERE user_id=? AND kind='manual-entry-reminder'"
+              )
+              .bind(owner, owner, owner, owner, owner, userId),
+            db
+              .prepare(
+                "INSERT INTO consent_history(record_type,id,user_id,kind,offer_id,decision_message_id,record_json,occurred_at_ms) SELECT record_type,?,?,kind,?,?,record_json,occurred_at_ms FROM consent_history WHERE record_type='proactivity_grant' AND user_id=? AND kind='manual-entry-reminder'"
+              )
+              .bind(owner, owner, owner, owner, userId),
+            db
+              .prepare(
+                "INSERT INTO reminder_proactivity_state(user_id,standing_json) VALUES(?,json_object('_tag','Attentive','unanswered',0))"
+              )
+              .bind(owner),
+            db
+              .prepare(
+                "INSERT INTO schedules(kind,id,user_id,version,enabled,snapshot_json,next_scheduled_at,consent_grant_id) SELECT kind,?, ?,version,enabled,snapshot_json,next_scheduled_at,? FROM schedules WHERE kind='reminder' AND user_id=? AND id=?"
+              )
+              .bind(newId(), owner, owner, userId, schedule.id),
+          ])
+        )
+      );
+      const harness = proactivityWorkflowHarness({
+        environment: { DB: db, PROACTIVITY_ENABLED: "enabled" },
+        userId,
+        otherUserIds: others,
+        unavailableUserIds: [userId, ...others],
+      });
+      for (let sweep = 0; sweep < 9; sweep++) yield* Effect.exit(harness.sweep());
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS n FROM schedules WHERE kind='reminder' AND last_evaluated_at_ms=?"
+            )
+            .bind(now.epochMilliseconds)
+            .first()
+        )
+      ).toEqual({ n: 36 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT count(*) AS n FROM insight_events WHERE kind='manual-entry-reminder'")
+            .first()
+        )
+      ).toEqual({ n: 0 });
     })
   ));
 
@@ -1226,7 +1340,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT delivery_id FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question'"
+              "SELECT id AS delivery_id FROM proactive_messages WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question'"
             )
             .bind(userId)
             .first()
@@ -1235,7 +1349,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER crash_after_question_acceptance BEFORE UPDATE ON insight_reports WHEN NEW.dispatch_state='started' BEGIN SELECT RAISE(ABORT,'test_crash'); END"
+            "CREATE TRIGGER crash_after_question_acceptance BEFORE UPDATE ON proactive_messages WHEN NEW.dispatch_state='started' BEGIN SELECT RAISE(ABORT,'test_crash'); END"
           )
           .run()
       );
@@ -1255,7 +1369,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT state FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
+              "SELECT state FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
             )
             .bind(userId, question.delivery_id)
             .first()
@@ -1271,7 +1385,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT state FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
+              "SELECT state FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
             )
             .bind(userId, question.delivery_id)
             .first()
@@ -1330,7 +1444,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS n FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question'"
+              "SELECT count(*) AS n FROM proactive_messages WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question'"
             )
             .bind(userId)
             .first()
@@ -1429,7 +1543,7 @@ it.each(["paused", "stopped"] as const)(
                 yield* Effect.tryPromise(() =>
                   db
                     .prepare(
-                      "SELECT count(*) AS n FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question'"
+                      "SELECT count(*) AS n FROM proactive_messages WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question'"
                     )
                     .bind(userId)
                     .first()
@@ -1480,7 +1594,7 @@ it.each(["paused", "stopped"] as const)(
             const raw = yield* Effect.tryPromise(() =>
               db
                 .prepare(
-                  "SELECT delivery_id FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question'"
+                  "SELECT id AS delivery_id FROM proactive_messages WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question'"
                 )
                 .bind(userId)
                 .first()
@@ -1532,7 +1646,7 @@ it.each(["paused", "stopped"] as const)(
             const replacementRaw = yield* Effect.tryPromise(() =>
               db
                 .prepare(
-                  "SELECT delivery_id FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question' AND delivery_id<>?"
+                  "SELECT id AS delivery_id FROM proactive_messages WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question' AND id<>?"
                 )
                 .bind(userId, question.delivery_id)
                 .first()
@@ -1589,7 +1703,7 @@ it.each(["paused", "stopped"] as const)(
                 yield* Effect.tryPromise(() =>
                   db
                     .prepare(
-                      "SELECT count(*) AS n FROM (SELECT user_id,json_extract(id,'$[1]') AS message_id,outcome AS choice FROM audit_entries WHERE record_type='reminder_control') WHERE user_id=?"
+                      "SELECT count(*) AS n FROM proactive_messages WHERE control_message_id IS NOT NULL AND user_id=?"
                     )
                     .bind(userId)
                     .first()
@@ -1682,7 +1796,7 @@ it.each(["paused", "stopped"] as const)(
         const raw = yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT question_id FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=?"
+              "SELECT question_id FROM reminder_proactivity_state AS reminder_governors WHERE user_id=?"
             )
             .bind(userId)
             .first()
@@ -1706,9 +1820,59 @@ it.each(["paused", "stopped"] as const)(
         > =>
           Effect.gen(function* () {
             if (reactivationState === "stopped") {
+              const governorBefore = yield* findReminderGovernor({ db, userId });
+              const scheduleBefore = yield* findReminderSchedule({ db, userId });
+              yield* Effect.tryPromise(() =>
+                db
+                  .prepare(
+                    "CREATE TRIGGER refuse_reminder_control_schedule BEFORE UPDATE ON schedules WHEN OLD.kind='reminder' AND NEW.enabled=0 BEGIN SELECT RAISE(ABORT,'test_control_schedule_failure'); END"
+                  )
+                  .run()
+              );
+              expect(
+                (yield* Effect.exit(
+                  controlManualReminders({ db, proof, now: afterTime.epochMilliseconds })
+                ))._tag
+              ).toBe("Failure");
+              expect(yield* findReminderGovernor({ db, userId })).toEqual(governorBefore);
+              expect(yield* findReminderSchedule({ db, userId })).toEqual(scheduleBefore);
+              expect(
+                yield* Effect.tryPromise(() =>
+                  db
+                    .prepare(
+                      "SELECT control_message_id,control_choice FROM proactive_messages WHERE kind='proactivity-delivery' AND user_id=? AND id=?"
+                    )
+                    .bind(userId, question.question_id)
+                    .first()
+                )
+              ).toEqual({ control_message_id: null, control_choice: null });
+              yield* Effect.tryPromise(() =>
+                db.prepare("DROP TRIGGER refuse_reminder_control_schedule").run()
+              );
               expect(
                 yield* controlManualReminders({ db, proof, now: afterTime.epochMilliseconds })
               ).toBe(true);
+              expect(
+                yield* controlManualReminders({ db, proof, now: afterTime.epochMilliseconds })
+              ).toBe(true);
+              expect(
+                yield* Effect.tryPromise(() =>
+                  db
+                    .prepare(
+                      "SELECT control_message_id,control_choice FROM proactive_messages WHERE kind='proactivity-delivery' AND user_id=? AND id=?"
+                    )
+                    .bind(userId, question.question_id)
+                    .first()
+                )
+              ).toEqual({ control_message_id: proof.messageId, control_choice: proof.text });
+              yield* Effect.tryPromise(() =>
+                db
+                  .prepare(
+                    "UPDATE proactive_messages SET text=NULL WHERE kind='proactivity-delivery' AND user_id=? AND id=?"
+                  )
+                  .bind(userId, question.question_id)
+                  .run()
+              );
               expect(
                 yield* controlManualReminders({ db, proof, now: afterTime.epochMilliseconds })
               ).toBe(true);

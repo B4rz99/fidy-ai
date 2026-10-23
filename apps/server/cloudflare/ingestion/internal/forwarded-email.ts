@@ -1,4 +1,9 @@
-import { erasePrivateObject, writePrivateObject } from "../../private-objects/operations";
+import { PrivateObjectKey } from "../../private-objects/contract";
+import {
+  erasePrivateObject,
+  userPrivateObjectPrefix,
+  writePrivateObject,
+} from "../../private-objects/operations";
 import {
   originalWriteActive,
   prepareOriginalWrite,
@@ -93,7 +98,7 @@ const PendingJob = Schema.Struct({ receipt_id: uuid, user_id: UserId });
 const ExpiredReceipt = Schema.Struct({
   id: uuid,
   user_id: UserId,
-  object_key: Schema.String.check(Schema.isPattern(/^email\/v1\/[a-f0-9-]{36}$/u)),
+  object_key: PrivateObjectKey,
   state: Schema.Literals(["storing", "queued"]),
 });
 
@@ -311,7 +316,7 @@ export const receiveForwardedEmail = Effect.fn(function* (
   }
   const cryptoService = yield* Crypto.Crypto;
   const id = yield* cryptoService.randomUUIDv4();
-  const objectKey = `email/v1/${yield* cryptoService.randomUUIDv4()}`;
+  const objectKey = `${userPrivateObjectPrefix(approved.user_id)}email/v1/${yield* cryptoService.randomUUIDv4()}`;
   const reservation = yield* Effect.exit(
     io(() =>
       environment.DB.batch([
@@ -322,7 +327,6 @@ export const receiveForwardedEmail = Effect.fn(function* (
           bucket: "email",
           objectKey,
           current: now,
-          expiresAtMs: now + storingInterruptionMs,
         }),
         environment.DB.prepare(
           `INSERT INTO forwarded_email_receipts
@@ -484,7 +488,7 @@ const prepareCleanupSelection = (db: D1Database, now: number): D1PreparedStateme
     db,
     statement: {
       sql: `SELECT id, user_id, object_key, state FROM forwarded_email_receipts
-        WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=forwarded_email_receipts.user_id AND q.state<>'AwaitingReview')
+        WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=forwarded_email_receipts.user_id)
         AND state IN ('storing', 'queued') AND (expires_at_ms <= ?
           OR (state = 'storing' AND received_at_ms <= ?))
         ORDER BY expires_at_ms ASC, id ASC LIMIT ?`,

@@ -1,5 +1,6 @@
 import {
   documentedSqlBlock,
+  installHistoricalErasureChunk,
   schemaDefinition,
   schemaStatements,
 } from "../schema-cutover.test-fixture";
@@ -444,7 +445,7 @@ const seedExpiredAdmission = ({
       .bind(userId, `live-${userId}`, current, current),
     db
       .prepare(
-        "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,accepted_at_ms) VALUES ('request_admission',?,?,?,?,?)"
+        "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,occurred_at_ms) VALUES ('request_admission',?,?,?,?,?)"
       )
       .bind(
         `expired-${userId}`,
@@ -455,7 +456,7 @@ const seedExpiredAdmission = ({
       ),
     db
       .prepare(
-        "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,accepted_at_ms) VALUES ('request_admission',?,?,?,?,?)"
+        "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,occurred_at_ms) VALUES ('request_admission',?,?,?,?,?)"
       )
       .bind(`live-${userId}`, userId, patId, "categories.listCategories", current),
   ]);
@@ -502,7 +503,7 @@ it("Core maintenance removes expired replay bodies and admission state for inact
         (yield* awaitPromise(
           db
             .prepare(
-              "SELECT id FROM (SELECT id,user_id,pat_id,operation,accepted_at_ms FROM audit_entries WHERE record_type='request_admission') AS canonical_request_acceptances ORDER BY user_id"
+              "SELECT id FROM (SELECT id,user_id,pat_id,operation,occurred_at_ms FROM audit_entries WHERE record_type='request_admission') AS canonical_request_acceptances ORDER BY user_id"
             )
             .all()
         )).results
@@ -701,6 +702,7 @@ it.each(["valid", "foreign-owner", "changed-grant", "late-claim", "interrupted"]
         if (alterations[history].length > 0) {
           yield* awaitPromise(db.prepare(alterations[history]).run());
         }
+        yield* awaitPromise(installHistoricalErasureChunk(db));
         const snapshot = (): Promise<ReadonlyArray<D1Result>> =>
           db.batch(
             [
@@ -3248,8 +3250,8 @@ it("gates every declared canonical path by live PAT and exact operation scope be
       const transactionId = "90000000-0000-4000-8000-000000000001";
       yield* awaitPromise(
         db
-          .prepare(`INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at,created_at)
-    VALUES (?,?,?,'COP','outflow',?,'2026-09-01T12:00:00.000Z','2026-09-01T12:00:00.000Z')`)
+          .prepare(`INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
+    VALUES (?,?,?,'COP','outflow',?,1788264000000,1788264000000)`)
           .bind(transactionId, userA, "1000.00", "10000000-0000-4000-8000-000000000001")
           .run()
       );
@@ -3324,8 +3326,8 @@ it("gates every declared canonical path by live PAT and exact operation scope be
       const foreignTransactionId = "90000000-0000-4000-8000-000000000002";
       yield* awaitPromise(
         db
-          .prepare(`INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at,created_at)
-    VALUES (?,?,?,'COP','outflow',?,'2026-09-01T12:00:00.000Z','2026-09-01T12:00:00.000Z')`)
+          .prepare(`INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
+    VALUES (?,?,?,'COP','outflow',?,1788264000000,1788264000000)`)
           .bind(foreignTransactionId, userB, "2000.00", "10000000-0000-4000-8000-000000000001")
           .run()
       );

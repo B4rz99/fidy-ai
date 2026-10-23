@@ -336,9 +336,8 @@ const hostedFenceStatements = (
 ): ReadonlyArray<D1PreparedStatement> =>
   Option.match(input.fence, {
     onNone: () => [],
-    onSome: ({ turnId, toolCallId }) => [
+    onSome: ({ turnId, toolCallId }) =>
       prepareHostedMutationCommit({ ...input, turnId, toolCallId }),
-    ],
   });
 
 const validUnitSize = (mutations: ReadonlyArray<PreparedCanonicalMutation>): boolean =>

@@ -59,8 +59,8 @@ export const memoryOAuthReview = (
             SELECT 1 FROM memories AS memory WHERE memory.user_id = ?
             AND memory.id = json_extract(expected.value, '$.id')
             AND memory.text = json_extract(expected.value, '$.text')
-            AND memory.created_at = json_extract(expected.value, '$.createdAt')
-            AND memory.updated_at = json_extract(expected.value, '$.updatedAt')))`,
+            AND strftime('%Y-%m-%dT%H:%M:%fZ',memory.created_at_ms/1000.0,'unixepoch') = json_extract(expected.value, '$.createdAt')
+            AND strftime('%Y-%m-%dT%H:%M:%fZ',memory.updated_at_ms/1000.0,'unixepoch') = json_extract(expected.value, '$.updatedAt')))`,
         params: [input.subject.userId, snapshot.length, revision, input.subject.userId],
       },
     })

@@ -1,10 +1,4 @@
 import {
-  type InvalidRecurringEdit,
-  RecurringDocument,
-  RecurringPlanId,
-  RecurringPlanInput,
-} from "../../src/core/recurring-plans/contract";
-import {
   type HostedInferenceService,
   approvedWorkersAiModel,
 } from "../../src/shell/hosted-inference/contract";
@@ -27,10 +21,8 @@ import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "../../src/core/identity/contract";
-import {
-  applyRecurringEdit,
-  emptyRecurringDocument,
-} from "../../src/core/recurring-plans/operations";
+import { executeCanonicalWork } from "../canonical-operations/operations";
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { executeStatementExtraction, statementRetention } from "../ingestion/runtime";
@@ -690,7 +682,7 @@ export const assertSettledStatement = ({
       (yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT turn_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,document_created_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL) WHERE user_id=?"
+            "SELECT turn_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,started_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL) WHERE user_id=?"
           )
           .bind(users[0])
           .all()
@@ -978,7 +970,7 @@ export const seedHistoryTransaction = ({
 }: Readonly<{ db: D1Database; counterparty: string }>): Promise<D1Result> =>
   db
     .prepare(
-      "INSERT INTO transactions (id,user_id,amount,currency,direction,counterparty,category_id,occurred_at,created_at) VALUES (?,?,'2500','COP','outflow',?,'10000000-0000-4000-8000-000000000001',?,?)"
+      "INSERT INTO transactions (id,user_id,amount,currency,direction,counterparty,category_id,occurred_at_ms,created_at_ms) VALUES (?,?,'2500','COP','outflow',?,'10000000-0000-4000-8000-000000000001',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))"
     )
     .bind(
       newId(),
@@ -1085,36 +1077,39 @@ export const continuityCorruptions = [
 export const seedRecurringReview = ({
   db,
   planId,
-}: Readonly<{ db: D1Database; planId: string }>): Effect.Effect<
-  void,
-  Cause.UnknownError | Schema.SchemaError | InvalidRecurringEdit
-> =>
+}: Readonly<{ db: D1Database; planId: string }>): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const plan = yield* Schema.decodeEffect(RecurringPlanInput)({
-      name: "Plan de prueba",
-      kind: "expense",
-      currency: "COP",
-      amountMode: "unknown",
-      frequency: "monthly",
-      firstDate: "2026-10-15",
-      timeZone: "America/Bogota",
-    });
-    const document = yield* applyRecurringEdit({
-      document: emptyRecurringDocument(),
-      command: {
-        expectedRevision: 0,
-        edit: { kind: "create", id: RecurringPlanId.make(planId), plan },
+    const credential = yield* Effect.tryPromise(() => subject(0));
+    const response = yield* executeCanonicalWork({
+      db,
+      subject: credential,
+      current: now(),
+      bucket: Option.none(),
+      hostedFence: Option.none(),
+      oauthConfirmation: Option.none(),
+      inference: Option.none(),
+      work: {
+        _tag: "Call",
+        operation: CanonicalOperationId.make("recurringPlans.applyRecurringEdit"),
+        input: {
+          payload: {
+            expectedRevision: 0,
+            edit: {
+              kind: "create",
+              id: planId,
+              plan: {
+                name: "Plan de prueba",
+                kind: "expense",
+                currency: "COP",
+                amountMode: "unknown",
+                frequency: "monthly",
+                firstDate: "2026-10-15",
+                timeZone: "America/Bogota",
+              },
+            },
+          },
+        },
       },
     });
-    const encoded = yield* Schema.encodeEffect(
-      Schema.fromJsonString(Schema.toCodecJson(RecurringDocument))
-    )(document);
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(
-          "INSERT INTO user_documents (kind,user_id, document_json, revision) VALUES ('recurring-plan',?, ?, 1)"
-        )
-        .bind(users[0], encoded)
-        .run()
-    );
+    expect(response.status).toBe(200);
   });

@@ -1,3 +1,7 @@
+import {
+  installHistoricalErasureChunk,
+  installHistoricalErasureStorage,
+} from "../schema-cutover.test-fixture";
 import { Data, Effect } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
@@ -70,6 +74,8 @@ it.each([
       Effect.gen(function* () {
         const db = yield* native(() => databases.acquire());
         yield* native(() => installTestSchema({ db }));
+        yield* native(() => installHistoricalErasureStorage(db));
+        yield* native(() => installHistoricalErasureChunk(db));
         const baseline = yield* native(() =>
           Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
         );
@@ -131,7 +137,7 @@ it.each([
           yield* native(() =>
             db
               .prepare(
-                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Archiving')"
+                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Erasing')"
               )
               .bind(owner, owner)
               .run()
@@ -257,6 +263,8 @@ it("bounds compaction cleanup at the original retention boundary without deletin
     Effect.gen(function* () {
       const db = yield* native(() => databases.acquire());
       yield* native(() => installTestSchema({ db }));
+      yield* native(() => installHistoricalErasureStorage(db));
+      yield* native(() => installHistoricalErasureChunk(db));
       const legacy = originalSchema
         .split(";")
         .find((sql) => sql.includes("CREATE TABLE hosted_compaction_attempts"));
@@ -264,7 +272,7 @@ it("bounds compaction cleanup at the original retention boundary without deletin
       const originalObjects = `CREATE INDEX hosted_compaction_attempts_due ON hosted_compaction_attempts(day_ms, user_id);
 --> statement-breakpoint
 CREATE TRIGGER historical_erasure_fence_hosted_compaction_attempts_delete BEFORE DELETE ON hosted_compaction_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('Draining','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;`;
       yield* native(() =>
         db.batch([

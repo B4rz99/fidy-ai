@@ -95,10 +95,10 @@ const captureAudit = (
 
 const captureInsert = (db: D1Database, capture: Capture): D1PreparedStatement => {
   const { input, subject, id, current, categoryId } = capture;
-  const createdAt = DateTime.formatIso(DateTime.makeUnsafe(current));
+  const createdAt = current;
   const authority = callerAuthority({ subject, current });
   return db
-    .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, user_decisions)
+    .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, counterparty, category_id, notes, occurred_at_ms, created_at_ms, user_decisions)
       SELECT ?, user_id, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
     .bind(
       id,
@@ -108,7 +108,7 @@ const captureInsert = (db: D1Database, capture: Capture): D1PreparedStatement =>
       Option.getOrNull(input.counterparty),
       categoryId,
       Option.getOrNull(input.notes),
-      DateTime.formatIso(input.occurredAt),
+      DateTime.toEpochMillis(input.occurredAt),
       createdAt,
       Schema.encodeSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Boolean)))({
         money: true,
@@ -124,7 +124,7 @@ const captureInsert = (db: D1Database, capture: Capture): D1PreparedStatement =>
 
 const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedStatement> => {
   const { subject, context, id, current } = capture;
-  const createdAt = DateTime.formatIso(DateTime.makeUnsafe(current));
+  const createdAt = current;
   const accountability = (): ReadonlyArray<D1PreparedStatement> => {
     if (isPATCaller(subject)) {
       return acceptedPATStatements({
@@ -149,7 +149,7 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
   return [
     captureInsert(db, capture),
     db
-      .prepare(`INSERT INTO source_attestations (id, user_id, transaction_id, kind, service_market, locale, time_zone, interpretation_revision, created_at)
+      .prepare(`INSERT INTO source_attestations (id, user_id, transaction_id, kind, service_market, locale, time_zone, interpretation_revision, created_at_ms)
       SELECT ?, user_id, id, 'manual', ?, ?, ?, 'manual-v1', ? FROM transactions WHERE user_id = ? AND id = ?`)
       .bind(
         transactionId(),

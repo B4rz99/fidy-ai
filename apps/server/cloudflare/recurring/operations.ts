@@ -78,7 +78,7 @@ export const evaluateRecurringSeries = (work: Work): Effect.Effect<void, Recurri
     if (Option.isNone(snapshot)) return yield* new RecurringUnavailable();
     const rows = yield* query({
       db: work.db,
-      sql: "SELECT revision, phase, cursor_at, cursor_id, group_key, evaluated_at, first_captured_at, time_zone FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id = ?",
+      sql: "SELECT revision, phase, cursor_at_ms, cursor_id, group_key, evaluated_at_ms, first_captured_at_ms, time_zone FROM (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id = ?",
       values: [work.userId],
     });
     const first = rows[0];
@@ -91,7 +91,7 @@ export const evaluateRecurringSeries = (work: Work): Effect.Effect<void, Recurri
     if (progress.phase === "complete") return;
     const groups = yield* query({
       db: work.db,
-      sql: "SELECT group_key AS value FROM (SELECT rowid,user_id,id,group_key,occurred_at,fact_json FROM recurring_evaluation_records WHERE kind='fact') WHERE user_id = ? AND group_key > ? GROUP BY group_key ORDER BY group_key LIMIT 1",
+      sql: "SELECT group_key AS value FROM (SELECT rowid,user_id,id,group_key,occurred_at_ms,fact_json FROM recurring_evaluation_records WHERE kind='fact') WHERE user_id = ? AND group_key > ? GROUP BY group_key ORDER BY group_key LIMIT 1",
       values: [work.userId, progress.group_key],
     });
     const group = groups[0];
@@ -117,14 +117,14 @@ const discoveryStatement = ({
     ? prepareFactRevisionProjection({
         db,
         statement: {
-          sql: `SELECT f.userId FROM transaction_fact_revisions f LEFT JOIN (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') p ON p.user_id=f.userId
+          sql: `SELECT f.userId FROM transaction_fact_revisions f LEFT JOIN (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') p ON p.user_id=f.userId
           WHERE p.user_id IS NULL OR p.phase<>'complete'
-          OR (p.revision<>f.revision AND (p.evaluated_at IS NULL OR p.evaluated_at<=?)) ${discoveryOrder}`,
-          params: [DateTime.formatIso(DateTime.makeUnsafe(current - recurringWeekMs))],
+          OR (p.revision<>f.revision AND (p.evaluated_at_ms IS NULL OR p.evaluated_at_ms<=?)) ${discoveryOrder}`,
+          params: [current - recurringWeekMs],
         },
       })
     : db.prepare(
-        `SELECT user_id AS userId FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE phase<>'complete' ${discoveryOrder}`
+        `SELECT user_id AS userId FROM (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE phase<>'complete' ${discoveryOrder}`
       );
 const discoveryCheckpoint = ({
   db,
@@ -187,6 +187,14 @@ export const discoverRecurringWork = (
     return users;
   });
 
+const confirmationPosition = (
+  position: Option.Option<typeof Cursor.Type>
+): readonly [0 | 1, number, string] =>
+  Option.match(position, {
+    onNone: () => [0, 0, ""],
+    onSome: (value) => [1, value.confirmedAt.epochMilliseconds, value.id],
+  });
+
 /** Read immutable confirmation snapshots under current Consent inside this User's coordinator; invalid patterns are excluded. */
 export const readRecurringConfirmations = ({
   db,
@@ -201,15 +209,12 @@ export const readRecurringConfirmations = ({
     const position = Option.isSome(cursor)
       ? yield* Schema.decodeEffect(Schema.fromJsonString(Cursor))(cursor.value).pipe(Effect.asSome)
       : Option.none<typeof Cursor.Type>();
-    const after = Option.match(position, {
-      onNone: () => ["", ""],
-      onSome: (value) => [DateTime.formatIso(value.confirmedAt), value.id],
-    });
+    const after = confirmationPosition(position);
     const protectedRead = protectConsentStatement({
       subject: { _tag: "User", userId },
       requirement: "active",
       statement: {
-        sql: `SELECT confirmation_id AS id, confirmation_context_json AS context_json, confirmation_json FROM recurring_series WHERE user_id = ? AND ? = 1 AND valid = 1 AND confirmation_id IS NOT NULL AND json_type(confirmation_json,'$.counterparty') IS NOT NULL AND (confirmed_at, confirmation_id) > (?, ?)`,
+        sql: `SELECT confirmation_id AS id, confirmation_context_json AS context_json, confirmation_json FROM recurring_series WHERE user_id = ? AND ? = 1 AND valid = 1 AND confirmation_id IS NOT NULL AND json_type(confirmation_json,'$.counterparty') IS NOT NULL AND (? = 0 OR (confirmed_at_ms, confirmation_id) > (?, ?))`,
         params: [userId, Option.isSome(snapshot) ? 1 : 0, ...after],
       },
     });
@@ -226,7 +231,7 @@ export const readRecurringConfirmations = ({
           }),
           db
             .prepare(
-              `${protectedRead.sql} ORDER BY confirmed_at, confirmation_id LIMIT ${pageSize + 1}`
+              `${protectedRead.sql} ORDER BY confirmed_at_ms, confirmation_id LIMIT ${pageSize + 1}`
             )
             .bind(...protectedRead.params),
         ]),
@@ -282,7 +287,7 @@ export const findRecurringDiscovery = (
       subject: { _tag: "User", userId: input.userId },
       requirement: "active",
       statement: {
-        sql: "SELECT confirmation_id AS id FROM recurring_series WHERE user_id=? AND confirmation_id IS NOT NULL ORDER BY confirmed_at,confirmation_id LIMIT 1",
+        sql: "SELECT confirmation_id AS id FROM recurring_series WHERE user_id=? AND confirmation_id IS NOT NULL ORDER BY confirmed_at_ms,confirmation_id LIMIT 1",
         params: [input.userId],
       },
     });
@@ -301,7 +306,7 @@ export const findRecurringDiscovery = (
 
 /** Metadata-only complete evaluation identities for fair digest discovery; no financial content or execution authority is projected. */
 export const recurringDigestSourceIdentities = (): OwnedStatement => ({
-  sql: "SELECT p.user_id,p.evaluated_revision||':'||p.evaluated_at||':'||(SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=p.user_id AND confirmation_sequence IS NOT NULL)||':'||(SELECT count(*) FROM recurring_series WHERE user_id=p.user_id AND confirmation_sequence IS NOT NULL) AS source_identity FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') AS p WHERE p.phase='complete'",
+  sql: "SELECT p.user_id,p.evaluated_revision||':'||strftime('%Y-%m-%dT%H:%M:%fZ',p.evaluated_at_ms/1000.0,'unixepoch')||':'||(SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=p.user_id AND confirmation_sequence IS NOT NULL)||':'||(SELECT count(*) FROM recurring_series WHERE user_id=p.user_id AND confirmation_sequence IS NOT NULL) AS source_identity FROM (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') AS p WHERE p.phase='complete'",
   params: [],
 });
 

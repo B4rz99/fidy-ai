@@ -57,12 +57,125 @@ export const precedingSchema = ({
   const restored = [
     ...current
       .filter((sql) => !history.introducedNames.includes(schemaObjectName(sql)))
-      .map((sql) => original.get(schemaObjectName(sql)) ?? sql),
+      .map((sql) => original.get(schemaObjectName(sql)) ?? sql)
+      .map((sql) =>
+        schemaObjectName(sql) === "erasure_requests" && !sql.includes("decision_json")
+          ? sql.replace(
+              "CREATE TABLE erasure_requests (",
+              "CREATE TABLE erasure_requests (\n  decision_json TEXT,"
+            )
+          : sql
+      ),
     ...history.originalDefinitions.filter((sql) => !names.has(schemaObjectName(sql))),
   ];
+  if (!restored.some((sql) => schemaObjectName(sql) === "erasure_archives")) {
+    restored.push(...historicalErasureStorage);
+  }
   // Removed parent tables must exist before their restored triggers and indexes.
   return [
     ...restored.filter((sql) => sql.startsWith("CREATE TABLE ")),
     ...restored.filter((sql) => !sql.startsWith("CREATE TABLE ")),
   ];
 };
+
+type SchemaSwap = Readonly<{
+  db: D1Database;
+  source: ReadonlyArray<string>;
+  target: ReadonlyArray<string>;
+  sourceNames: ReadonlyArray<string>;
+  targetNames: ReadonlyArray<string>;
+}>;
+type SchemaCutover = Readonly<{
+  scratch: (source: ReadonlyArray<string>, names: ReadonlyArray<string>) => ReadonlyArray<string>;
+  swap: (input: SchemaSwap) => ReadonlyArray<D1PreparedStatement>;
+}>;
+
+/** Shared native DDL mechanics; each rehearsal supplies its owner tables, guards and copy SQL. */
+export const makeSchemaCutover = (tables: ReadonlyArray<string>): SchemaCutover => {
+  const related = (source: ReadonlyArray<string>): ReadonlyArray<string> =>
+    source.filter(
+      (sql) =>
+        !sql.startsWith("CREATE TABLE ") &&
+        tables.some((table) => new RegExp(`\\b${table}\\b`, "u").test(sql))
+    );
+  const objectType = (sql: string): string => {
+    if (sql.startsWith("CREATE TRIGGER ")) return "TRIGGER";
+    if (sql.startsWith("CREATE VIEW ")) return "VIEW";
+    return "INDEX";
+  };
+  return {
+    scratch: (source: ReadonlyArray<string>, names: ReadonlyArray<string>): ReadonlyArray<string> =>
+      names.map((target) => {
+        let sql = schemaDefinition({ source, target });
+        for (const name of names) {
+          sql = sql.replace(new RegExp(`\\b${name}\\b`, "gu"), `cutover_${name}`);
+        }
+        return sql;
+      }),
+    swap: ({
+      db,
+      source,
+      target,
+      sourceNames,
+      targetNames,
+    }: SchemaSwap): ReadonlyArray<D1PreparedStatement> => [
+      ...related(source).map((sql) =>
+        db.prepare(`DROP ${objectType(sql)} ${schemaObjectName(sql)}`)
+      ),
+      ...sourceNames.map((name) => db.prepare(`DROP TABLE ${name}`)),
+      ...targetNames.map((name) => db.prepare(`ALTER TABLE cutover_${name} RENAME TO ${name}`)),
+      ...related(target).map((sql) => db.prepare(sql)),
+    ],
+  };
+};
+
+/** Original transient selection table, explicitly restored only by pre-#1488 migration rehearsals. */
+export const installHistoricalErasureChunk = (db: D1Database): Promise<D1Result> =>
+  db
+    .prepare(`CREATE TABLE erasure_chunk (
+  request_id TEXT NOT NULL REFERENCES erasure_requests(id),
+  row_ref TEXT NOT NULL,
+  PRIMARY KEY(request_id,row_ref)
+) STRICT;`)
+    .run();
+
+/** Explicit pre-full-deletion source records for populated historical migration rehearsals. */
+const historicalErasureStorage = [
+  `CREATE TABLE erasure_archives (
+  request_id TEXT NOT NULL REFERENCES erasure_requests(id),
+  store_id TEXT NOT NULL,
+  row_ref TEXT NOT NULL,
+  body TEXT NOT NULL CHECK(length(body)<=1048576),
+  recovery_written INTEGER NOT NULL DEFAULT 0 CHECK(recovery_written IN(0,1)),
+  PRIMARY KEY(request_id,store_id,row_ref)
+) STRICT;`,
+  `CREATE TABLE erasure_objects (
+  request_id TEXT NOT NULL REFERENCES erasure_requests(id),
+  bucket TEXT NOT NULL CHECK(bucket IN ('email','statement')),
+  object_key TEXT NOT NULL CHECK(length(object_key) BETWEEN 1 AND 1024),
+  retained_key TEXT,
+  recovery_written INTEGER NOT NULL DEFAULT 0 CHECK(recovery_written IN(0,1)),
+  held_deleted INTEGER NOT NULL DEFAULT 0 CHECK(held_deleted IN(0,1)),
+  missing INTEGER NOT NULL DEFAULT 0 CHECK(missing IN (0,1)),
+  done INTEGER NOT NULL DEFAULT 0 CHECK(done IN (0,1)),
+  PRIMARY KEY(request_id,bucket,object_key)
+) STRICT;`,
+];
+
+export const installHistoricalErasureStorage = (db: D1Database): Promise<ReadonlyArray<D1Result>> =>
+  db
+    .prepare("PRAGMA table_info(erasure_requests)")
+    .all()
+    .then((columns) => {
+      const historical = columns.results.some((column) => column.name === "decision_json")
+        ? []
+        : ["ALTER TABLE erasure_requests ADD COLUMN decision_json TEXT"];
+      return db.batch(
+        [
+          ...historical,
+          ...historicalErasureStorage.map((sql) =>
+            sql.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ")
+          ),
+        ].map((sql) => db.prepare(sql))
+      );
+    });

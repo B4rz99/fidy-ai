@@ -337,29 +337,12 @@ export const BudgetStatusQuery = Schema.Struct({
 }).annotate({ identifier: "BudgetStatusQuery" });
 export type BudgetStatusQuery = typeof BudgetStatusQuery.Type;
 
-const BudgetMonthLatchCommon = {
+/** Highest threshold retained for one applied month; lower spending cannot reopen it. */
+export const BudgetMonthLatch = Schema.Struct({
   budgetId: BudgetId,
   period: AppliedBudgetMonth,
-} as const;
-
-/** Monthly boolean marks as a closed union excluding 100%-without-80%. */
-export const BudgetMonthLatch = Schema.Union([
-  Schema.Struct({
-    ...BudgetMonthLatchCommon,
-    reached80: Schema.Literal(false),
-    reached100: Schema.Literal(false),
-  }),
-  Schema.Struct({
-    ...BudgetMonthLatchCommon,
-    reached80: Schema.Literal(true),
-    reached100: Schema.Literal(false),
-  }),
-  Schema.Struct({
-    ...BudgetMonthLatchCommon,
-    reached80: Schema.Literal(true),
-    reached100: Schema.Literal(true),
-  }),
-]).annotate({ identifier: "BudgetMonthLatch" });
+  highestReached: Schema.Literals([0, budgetThreshold80, 100]),
+}).annotate({ identifier: "BudgetMonthLatch" });
 export type BudgetMonthLatch = typeof BudgetMonthLatch.Type;
 
 /** The requested Budget is absent or does not belong to the current User. */

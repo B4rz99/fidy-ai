@@ -498,7 +498,7 @@ const readPlannedCaps = ({
         .prepare(`SELECT b.id,b.category_id,
       COALESCE((SELECT g.currency FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency') g WHERE g.user_id=b.user_id AND g.group_name=b.group_name AND g.month<=? ORDER BY g.month DESC LIMIT 1),b.currency) AS currency,
       COALESCE((SELECT p.cap FROM (SELECT rowid,user_id,budget_id,month,cap FROM budget_month_plan_records WHERE kind='cap') p WHERE p.user_id=b.user_id AND p.budget_id=b.id AND p.month<=? ORDER BY p.month DESC LIMIT 1),b.cap) AS cap,
-      b.created_at,b.updated_at,b.group_name FROM budgets b WHERE b.user_id=? AND (?=1 OR b.starts_month IS NULL OR b.starts_month<=?)
+      b.created_at_ms,b.updated_at_ms,b.group_name FROM budgets b WHERE b.user_id=? AND (?=1 OR b.starts_month IS NULL OR b.starts_month<=?)
       ORDER BY b.currency,b.category_id LIMIT ${maximumBudgetCount + 1}`)
         .bind(month, month, userId, includeInactive ? 1 : 0, month)
         .all()
@@ -742,7 +742,10 @@ export const readBudgetCrossings = (
 
 const maximumPendingWork = 1;
 
-const PendingWork = Schema.Struct({ occurred_at: Schema.String, version: Schema.Int });
+const PendingWork = Schema.Struct({
+  occurred_at_ms: Schema.DateTimeUtcFromMillis,
+  version: Schema.Int,
+});
 
 const reconcilePendingPeriod = ({
   db,
@@ -784,32 +787,35 @@ export const evaluateBudgetAlerts = ({
     if (Option.isNone(context)) return false;
     const pending = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT occurred_at, version
-    FROM budget_state WHERE kind='work' AND user_id = ? ORDER BY occurred_at LIMIT ${maximumPendingWork}`)
+        .prepare(`SELECT occurred_at_ms, version
+    FROM budget_evaluation_work WHERE user_id = ? ORDER BY occurred_at_ms LIMIT ${maximumPendingWork}`)
         .bind(userId)
         .all()
     );
     for (const row of pending.results) {
       const item = Schema.decodeUnknownOption(PendingWork)(row);
       if (Option.isNone(item)) return false;
-      const instant = DateTime.make(item.value.occurred_at);
-      if (Option.isNone(instant)) return false;
       if (
-        !(yield* reconcilePendingPeriod({ db, userId, context: context.value, now: instant.value }))
+        !(yield* reconcilePendingPeriod({
+          db,
+          userId,
+          context: context.value,
+          now: item.value.occurred_at_ms,
+        }))
       ) {
         return false;
       }
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`DELETE FROM budget_state
-      WHERE kind='work' AND user_id = ? AND occurred_at = ? AND version = ?`)
-          .bind(userId, item.value.occurred_at, item.value.version)
+          .prepare(`DELETE FROM budget_evaluation_work
+      WHERE user_id = ? AND occurred_at_ms = ? AND version = ?`)
+          .bind(userId, item.value.occurred_at_ms.epochMilliseconds, item.value.version)
           .run()
       );
     }
     const remaining = yield* Effect.tryPromise(() =>
       db
-        .prepare("SELECT 1 FROM budget_state WHERE kind='work' AND user_id = ? LIMIT 1")
+        .prepare("SELECT 1 FROM budget_evaluation_work WHERE user_id = ? LIMIT 1")
         .bind(userId)
         .first()
     );

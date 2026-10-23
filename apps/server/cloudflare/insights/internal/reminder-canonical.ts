@@ -29,6 +29,7 @@ import {
 } from "../../canonical-work/operations";
 import { recordAuditedPATUseFromAuthority } from "../../../src/shell/tokens/operations";
 import { decodeScheduleSnapshot, findSchedule, prepareRevisionWrites } from "./reminder-schedule";
+import { decodeRecurringReport, recurringReportQuery } from "./recurring-report";
 import { type ReminderCanonicalWork as Work } from "../contract";
 
 type Operation =
@@ -322,6 +323,7 @@ export const readHeldRecurringDigestReport = (
     const work = bindUser(input);
     const params = Schema.decodeOption(RecurringDigestReportParams)({ id: input.id });
     if (Option.isNone(params)) return yield* rejectInvalidDigestIdentifier(work);
+    const reportQuery = recurringReportQuery({ userId: work.userId, id: params.value.id });
     const results = yield* Effect.tryPromise(() =>
       work.db.batch([
         ...audit({
@@ -333,9 +335,9 @@ export const readHeldRecurringDigestReport = (
         assertion(work),
         work.db
           .prepare(
-            `SELECT report_json FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL AND user_id=? AND delivery_id=? AND EXISTS(SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate})`
+            `${reportQuery.sql} AND EXISTS(SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate})`
           )
-          .bind(work.userId, params.value.id, ...work.authority.bindings),
+          .bind(...reportQuery.params, ...work.authority.bindings),
       ])
     );
     const rows = results.at(-1)?.results;
@@ -348,15 +350,8 @@ export const readHeldRecurringDigestReport = (
         message: "Recurring report unavailable.",
       });
     }
-    const row = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({
-        report_json: Schema.fromJsonString(Schema.toCodecJson(RecurringDigestReport)),
-      })
-    )(raw);
-    if (row.report_json.insightEventId !== params.value.id) return transactionUnavailable();
-    const data = yield* Schema.encodeEffect(Schema.toCodecJson(RecurringDigestReport))(
-      row.report_json
-    );
+    const report = yield* decodeRecurringReport(raw);
+    const data = yield* Schema.encodeEffect(Schema.toCodecJson(RecurringDigestReport))(report);
     return Response.json({ data, next: [] }, { headers: { "cache-control": "no-store" } });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 

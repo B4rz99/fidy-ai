@@ -38,7 +38,7 @@ export const sweepHostedTurns = ({
       WHERE retention_terminal_at_ms < ? ORDER BY retention_terminal_at_ms, user_id, id LIMIT ?
     ),
     compacted AS (
-      SELECT user_id, updated_at_ms AS due_ms FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations
+      SELECT user_id, updated_at_ms AS due_ms FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations
       WHERE updated_at_ms < ? ORDER BY updated_at_ms, user_id LIMIT ?
     ),
     attempts AS (${attempts.sql}),

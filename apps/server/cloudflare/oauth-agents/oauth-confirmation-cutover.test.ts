@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { expect, it } from "vitest";
 import {
   documentedSqlBlock,
+  installHistoricalErasureChunk,
   schemaDefinition,
   schemaStatements,
 } from "../schema-cutover.test-fixture";
@@ -22,6 +23,7 @@ it.each(histories)("preserves exact OAuth approvals or rejects %s history atomic
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* pendingBudgetDeletion();
+      yield* wait(installHistoricalErasureChunk(fixture.db));
       if (history !== "pending") yield* approveFirstPartyOperation(fixture, fixture.reference);
       yield* wait(
         fixture.db.batch(guards.map((name) => fixture.db.prepare(`DROP TRIGGER ${name}`)))

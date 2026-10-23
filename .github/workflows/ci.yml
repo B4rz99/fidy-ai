@@ -339,6 +339,7 @@ jobs:
             apps/web/test-results/browser-timings.json
             apps/web/test-results/cli-browser-timings.json
             apps/web/test-results/verify-browser.json
+            apps/web/test-results/dashboard-core-*/trace.zip
           if-no-files-found: error
           retention-days: 7
 

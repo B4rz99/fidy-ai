@@ -31,7 +31,7 @@ import { snapshotCompletions } from "./internal/snapshot";
 import { workspaceValue } from "./internal/query";
 import { outcome, validReversal, validateReferences } from "./internal/mutation";
 import { audit, credentialUse } from "./internal/audit";
-import { encodeDocument, readDocument, writeDocument } from "./internal/store";
+import { readDocument, writeDocument } from "./internal/store";
 
 const operation = "recurringPlans.applyRecurringEdit";
 
@@ -110,7 +110,7 @@ export const prepareRecurringEdit = ({
     if (!(yield* validateReferences({ work, command, document: decision.value }))) {
       return refusedPreparation(recurringRefusal(work));
     }
-    const encoded = yield* encodeDocument(decision.value);
+    const statements = yield* writeDocument({ work, base, document: decision.value });
     const edit = yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.toCodecJson(RecurringCommand))
     )(command);
@@ -142,8 +142,7 @@ export const prepareRecurringEdit = ({
         commitGuards: Option.none(),
         statements: [
           ...credentialUse(work),
-          writeDocument({ work, document: decision.value, encoded }),
-          prepareChangedRowAssertion({ db: work.db, scope: "recurring_plan" }),
+          ...statements,
           audit({ work, operation, outcome: "accepted" }),
         ],
         outcome: outcome(),

@@ -1,32 +1,32 @@
 import type { ErasureOriginals, ErasureStore, ErasureUnavailable } from "../erasure-store/contract";
 import type { Effect } from "effect";
 import { type Option, Schema } from "effect";
+import { WebSessionId } from "../../src/core/web-session/contract";
 import { UserId } from "../../src/core/identity/contract";
-import {
-  ErasureCustodyEvidence,
-  ErasureDecision,
-  ErasureReference,
-  ErasureRetention,
-} from "../../src/core/erasure/contract";
+import { ErasureCustodyEvidence, ErasureReference } from "../../src/core/erasure/contract";
 
 const maximumOperatorLength = 256;
 
-export const ErasureReviewAdmission = Schema.Struct({
+const digestLength = 32;
+export const ErasureBrowserAdmission = Schema.Struct({
   userId: UserId,
-  decision: ErasureDecision,
-  authority: Schema.Struct({
-    permission: Schema.Literal("titular.erase"),
-    operatorRef: Schema.String.check(Schema.isBetweenLength(1, maximumOperatorLength)),
-    expiresAtMs: Schema.Int,
-  }),
+  sessionId: WebSessionId,
+  digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))).check(
+    Schema.isBetweenLength(digestLength, digestLength)
+  ),
   deadlineMs: Schema.Int,
 });
-export type ErasureReviewAdmission = typeof ErasureReviewAdmission.Type;
+export type ErasureBrowserAdmission = typeof ErasureBrowserAdmission.Type;
+const ErasureAuthority = Schema.Struct({
+  permission: Schema.Literal("titular.erase"),
+  operatorRef: Schema.String.check(Schema.isBetweenLength(1, maximumOperatorLength)),
+  expiresAtMs: Schema.Int,
+});
 export const ErasureContinuation = Schema.Struct({
   userId: UserId,
   reference: ErasureReference,
   deadlineMs: Schema.Int,
-  authority: ErasureReviewAdmission.fields.authority,
+  authority: ErasureAuthority,
 });
 export type ErasureContinuation = typeof ErasureContinuation.Type;
 
@@ -47,17 +47,6 @@ export const ErasureCustodyAdmission = Schema.Struct({
   ...ErasureContinuation.fields,
   evidence: ErasureCustodyEvidence,
 });
-export const ErasureRetentionReview = Schema.Struct({
-  reference: ErasureReference,
-  userId: UserId,
-  previousReviewRef: ErasureReference,
-  receiptRetention: ErasureRetention,
-  recoveryRetention: ErasureRetention,
-});
-export const ErasureRetentionAdmission = Schema.Struct({
-  ...ErasureContinuation.fields,
-  ...ErasureRetentionReview.fields,
-});
 export const ErasureRestoreAdmission = Schema.Struct({
   ...ErasureContinuation.fields,
   generation: ErasureGeneration,
@@ -71,8 +60,6 @@ export const ErasureOperatorAction = Schema.Union([
     userId: UserId,
     evidence: ErasureCustodyEvidence,
   }),
-  Schema.Struct({ action: Schema.Literal("Review"), decision: ErasureDecision }),
-  Schema.Struct({ action: Schema.Literal("ReviewRetention"), ...ErasureRetentionReview.fields }),
   Schema.Struct({
     action: Schema.Literal("Continue"),
     userId: UserId,

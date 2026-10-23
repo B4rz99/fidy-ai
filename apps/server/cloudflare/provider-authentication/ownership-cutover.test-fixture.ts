@@ -4,6 +4,7 @@ import type { Cause } from "effect";
 import { expect } from "vitest";
 import {
   documentedSqlBlock,
+  installHistoricalErasureChunk,
   schemaDefinition,
   schemaStatements,
 } from "../schema-cutover.test-fixture";
@@ -30,13 +31,13 @@ const snapshot = (db: D1Database): Promise<ReadonlyArray<D1Result>> =>
       "consent_history",
       "browser_login_pairings",
       "web_sessions",
-      "erasure_archives",
     ].map((table) => db.prepare(`SELECT rowid,* FROM ${table} ORDER BY rowid`)),
     db.prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name"),
   ]);
 
 const prepareCutover = (db: D1Database): Effect.Effect<ReadonlyArray<string>, Cause.UnknownError> =>
   Effect.gen(function* () {
+    yield* Effect.tryPromise(() => installHistoricalErasureChunk(db));
     const baseline = schemaStatements(
       yield* Effect.tryPromise(() =>
         Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()

@@ -199,9 +199,9 @@ const listStatement = ({ db, userId, query, authority }: HistoryRow): D1Prepared
 
   const values: Array<string | number | Uint8Array> = [userId, ...authority.bindings];
 
-  const fields = [
-    ["occurred_at >=", Option.map(query.from, DateTime.formatIso)],
-    ["occurred_at <", Option.map(query.to, DateTime.formatIso)],
+  const fields: ReadonlyArray<readonly [string, Option.Option<string | number>]> = [
+    ["occurred_at_ms >=", Option.map(query.from, DateTime.toEpochMillis)],
+    ["occurred_at_ms <", Option.map(query.to, DateTime.toEpochMillis)],
     ["category_id =", query.categoryId],
     ["counterparty =", query.counterparty],
     ["direction =", query.direction],
@@ -221,8 +221,12 @@ const listStatement = ({ db, userId, query, authority }: HistoryRow): D1Prepared
   }
   if (Option.isSome(query.cursor)) {
     const [occurred, created, recordId] = Option.getOrThrow(decodeCursor(query.cursor.value));
-    conditions.push("(occurred_at, created_at, id) < (?, ?, ?)");
-    values.push(occurred, created, recordId);
+    conditions.push("(occurred_at_ms, created_at_ms, id) < (?, ?, ?) ");
+    values.push(
+      DateTime.toEpochMillis(DateTime.makeUnsafe(occurred)),
+      DateTime.toEpochMillis(DateTime.makeUnsafe(created)),
+      recordId
+    );
   }
   const page = effectiveHistoryPage({
     userId,
@@ -339,7 +343,7 @@ export const findTransaction = ({
   Option.Option<StoredTransaction>
 > =>
   db
-    .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, revision
+    .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') AS occurred_at, strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch') AS created_at, revision
       FROM transactions WHERE user_id = ? AND id = ? AND deleted_at_ms IS NULL`)
     .bind(userId, id)
     .first()

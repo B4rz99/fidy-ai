@@ -1,3 +1,4 @@
+import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
 import { captureWhatsApp, whatsappOperator } from "./browser-acceptance-whatsapp";
 import {
   AcceptanceClockAdvance,
@@ -19,6 +20,7 @@ import {
   budgetUserId,
   dashboardUserId,
   db,
+  erasureRegistry,
   firstCardUserId,
   fixtureUserId,
   navigationIdentities,
@@ -475,7 +477,7 @@ const operator = Bun.serve({
 process.stdout.write(`Browser approval fixture listening at ${operator.url}\n`);
 
 const telemetry = makeWorkerTelemetry(() => undefined);
-const core = makeCoreWorker(telemetry);
+const core = makeCoreWorker({ telemetry, institutions: registeredConnectionInstitutionIds });
 const worker = makePublicWorker(telemetry);
 const coordinators = new Map<string, Pick<Fetcher, "fetch">>();
 const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {
@@ -503,6 +505,8 @@ const admissionKeyLength = 32;
 const digestHexLength = 64;
 const coreEnvironment: Parameters<typeof core.fetch>[1] = {
   DB: browserDatabase,
+  ERASURE_REQUIRED: "true",
+  ERASURE_BUCKET: erasureRegistry,
   AI: { run: () => Promise.reject(new Error("unused")) },
   CONTRACT_DIGEST: "a".repeat(digestHexLength),
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",

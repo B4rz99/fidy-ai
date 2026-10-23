@@ -29,13 +29,19 @@ export const prepareProactivityWorkObservation = (
     ...(input.proactivityEnabled ? ["proactivity-delivery"] : []),
   ];
   for (const kind of kinds) {
+    if (kind === "weekly-question") {
+      sources.push(
+        `SELECT * FROM (SELECT user_id AS userId,'weekly-question' AS kind,NULL AS insightEventId,id,created_at_ms AS created,created_at_ms+86400000 AS deadline FROM weekly_question_requests INDEXED BY weekly_question_intents_health WHERE state='ready' ORDER BY created_at_ms,user_id,id LIMIT ${proactivityObservationLimit})`
+      );
+      continue;
+    }
     sources.push(`SELECT * FROM (SELECT user_id AS userId,kind,
-      CASE WHEN kind='weekly-summary' THEN delivery_id END AS insightEventId,
-      CASE WHEN kind<>'weekly-summary' THEN delivery_id END AS id,
-      dispatch_created_at_ms AS created,CASE WHEN kind='weekly-question' THEN created_at_ms+86400000 ELSE expires_at_ms END AS deadline
-      FROM insight_reports INDEXED BY report_dispatch_health
+      CASE WHEN kind='weekly-summary' THEN proactive_messages.id END AS insightEventId,
+      CASE WHEN kind<>'weekly-summary' THEN proactive_messages.id END AS id,
+      dispatch_created_at_ms AS created,expires_at_ms AS deadline
+      FROM proactive_messages INDEXED BY report_dispatch_health
       WHERE kind='${kind}' AND dispatch_state IN ('ready','started')
-      ORDER BY dispatch_created_at_ms,user_id,delivery_id LIMIT ${proactivityObservationLimit})`);
+      ORDER BY dispatch_created_at_ms,user_id,proactive_messages.id LIMIT ${proactivityObservationLimit})`);
   }
 
   return input.db.prepare(

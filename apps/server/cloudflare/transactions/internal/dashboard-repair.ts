@@ -28,30 +28,30 @@ const markForRepair = (db: D1Database, userId: string, nowMs: number): Promise<v
         db,
         userId: UserId.make(userId),
         statement: {
-          sql: `INSERT OR IGNORE INTO dashboard_projection_state
+          sql: `INSERT OR IGNORE INTO transaction_projection_state
           (user_id, version, readiness) SELECT userId, 1, 'clearing-buckets' FROM identity_user_context`,
           params: [],
         },
       }),
       db
-        .prepare(`UPDATE dashboard_projection_state SET readiness = 'clearing-buckets', cursor_id = ''
+        .prepare(`UPDATE transaction_projection_state SET readiness = 'clearing-buckets', cursor_id = ''
       WHERE user_id = ? AND (readiness IN ('dirty', 'linking') OR version != 1)`)
         .bind(userId),
       db
-        .prepare("UPDATE dashboard_projection_state SET attempted_at_ms = ? WHERE user_id = ?")
+        .prepare("UPDATE transaction_projection_state SET attempted_at_ms = ? WHERE user_id = ?")
         .bind(nowMs, userId),
     ])
     .then(() => undefined);
 
 type RepairTable =
-  | "dashboard_projection_bucket"
-  | "dashboard_projection_digit"
-  | "dashboard_projection_leaf";
+  | "transaction_projection_bucket"
+  | "transaction_projection_digit"
+  | "transaction_projection_leaf";
 
 const clearingPhases = {
-  "clearing-buckets": { table: "dashboard_projection_bucket", next: "clearing-digits" },
-  "clearing-digits": { table: "dashboard_projection_digit", next: "clearing" },
-  clearing: { table: "dashboard_projection_leaf", next: "rebuilding" },
+  "clearing-buckets": { table: "transaction_projection_bucket", next: "clearing-digits" },
+  "clearing-digits": { table: "transaction_projection_digit", next: "clearing" },
+  clearing: { table: "transaction_projection_leaf", next: "rebuilding" },
 } as const satisfies Record<string, Readonly<{ table: RepairTable; next: string }>>;
 
 type ClearingPhase = keyof typeof clearingPhases;
@@ -73,7 +73,7 @@ const clearPage = ({
   phase: string;
   next: string;
 }>): Promise<void> => {
-  const key = table === "dashboard_projection_leaf" ? "id" : "rowid";
+  const key = table === "transaction_projection_leaf" ? "id" : "rowid";
   return db
     .batch([
       db
@@ -81,7 +81,7 @@ const clearPage = ({
       (SELECT ${key} FROM ${table} WHERE user_id = ? ORDER BY ${key} LIMIT ${pageSize})`)
         .bind(userId, userId),
       db
-        .prepare(`UPDATE dashboard_projection_state SET readiness = ?, cursor_id = ''
+        .prepare(`UPDATE transaction_projection_state SET readiness = ?, cursor_id = ''
       WHERE user_id = ? AND readiness = ?
         AND NOT EXISTS (SELECT 1 FROM ${table} WHERE user_id = ?)`)
         .bind(next, userId, phase, userId),
@@ -93,43 +93,43 @@ const rebuildPage = (db: D1Database, userId: string, previousCursor: string): Pr
   db
     .batch([
       db
-        .prepare(`INSERT OR IGNORE INTO dashboard_projection_leaf
+        .prepare(`INSERT OR IGNORE INTO transaction_projection_leaf
       (user_id, id, amount, currency, direction, category_id, counterparty, notes,
-        occurred_at, created_at, revision)
+        occurred_at_ms, created_at_ms, revision)
       SELECT user_id, id, amount, currency, direction, category_id, counterparty, notes,
-        occurred_at, created_at, revision
-      FROM dashboard_effective_source WHERE user_id = ? AND id >
-        (SELECT cursor_id FROM dashboard_projection_state WHERE user_id = ?)
+        occurred_at_ms, created_at_ms, revision
+      FROM transaction_effective_source WHERE user_id = ? AND id >
+        (SELECT cursor_id FROM transaction_projection_state WHERE user_id = ?)
       ORDER BY id LIMIT ${pageSize}`)
         .bind(userId, userId),
       db
-        .prepare(`UPDATE dashboard_projection_state SET cursor_id = COALESCE(
-      (SELECT id FROM dashboard_effective_source WHERE user_id = ?
-        AND id > dashboard_projection_state.cursor_id ORDER BY id LIMIT 1 OFFSET ${pageSize - 1}),
-      (SELECT MAX(id) FROM dashboard_effective_source WHERE user_id = ?
-        AND id > dashboard_projection_state.cursor_id), cursor_id)
+        .prepare(`UPDATE transaction_projection_state SET cursor_id = COALESCE(
+      (SELECT id FROM transaction_effective_source WHERE user_id = ?
+        AND id > transaction_projection_state.cursor_id ORDER BY id LIMIT 1 OFFSET ${pageSize - 1}),
+      (SELECT MAX(id) FROM transaction_effective_source WHERE user_id = ?
+        AND id > transaction_projection_state.cursor_id), cursor_id)
       WHERE user_id = ? AND readiness = 'rebuilding'`)
         .bind(userId, userId, userId),
       db
-        .prepare(`UPDATE dashboard_projection_state SET readiness = 'dirty'
+        .prepare(`UPDATE transaction_projection_state SET readiness = 'dirty'
       WHERE user_id = ? AND readiness = 'rebuilding' AND EXISTS (
         SELECT 1 FROM (SELECT user_id, id, amount, currency, direction, category_id, counterparty, notes,
-          occurred_at, created_at, revision FROM dashboard_effective_source
+          occurred_at_ms, created_at_ms, revision FROM transaction_effective_source
           WHERE user_id = ? AND id > ?
           ORDER BY id LIMIT ${pageSize}) effective
-        LEFT JOIN dashboard_projection_leaf leaf ON leaf.user_id = effective.user_id
+        LEFT JOIN transaction_projection_leaf leaf ON leaf.user_id = effective.user_id
           AND leaf.id = effective.id
         WHERE leaf.id IS NULL OR leaf.amount != effective.amount
           OR leaf.currency != effective.currency OR leaf.direction != effective.direction
-          OR leaf.category_id != effective.category_id OR leaf.occurred_at != effective.occurred_at
-          OR leaf.created_at != effective.created_at OR leaf.revision != effective.revision
+          OR leaf.category_id != effective.category_id OR leaf.occurred_at_ms != effective.occurred_at_ms
+          OR leaf.created_at_ms != effective.created_at_ms OR leaf.revision != effective.revision
           OR leaf.counterparty IS NOT effective.counterparty OR leaf.notes IS NOT effective.notes)`)
         .bind(userId, userId, previousCursor),
       db
-        .prepare(`UPDATE dashboard_projection_state SET version = 1, readiness = 'ready'
+        .prepare(`UPDATE transaction_projection_state SET version = 1, readiness = 'ready'
       WHERE user_id = ? AND readiness = 'rebuilding'
-        AND NOT EXISTS (SELECT 1 FROM dashboard_effective_source effective
-          WHERE effective.user_id = ? AND effective.id > dashboard_projection_state.cursor_id)
+        AND NOT EXISTS (SELECT 1 FROM transaction_effective_source effective
+          WHERE effective.user_id = ? AND effective.id > transaction_projection_state.cursor_id)
         AND NOT EXISTS (SELECT 1 FROM transaction_reconciliation_decisions decision
           WHERE decision.user_id = ? AND (
             (decision.state = 'linked' AND (SELECT COUNT(*) FROM reconciled_transactions member
@@ -159,7 +159,7 @@ export const repairDashboardProjection = ({
     const raw = yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "SELECT version, readiness, cursor_id FROM dashboard_projection_state WHERE user_id = ?"
+          "SELECT version, readiness, cursor_id FROM transaction_projection_state WHERE user_id = ?"
         )
         .bind(userId)
         .first()
@@ -178,7 +178,7 @@ export const repairDashboardProjection = ({
     const after = yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "SELECT version, readiness, cursor_id FROM dashboard_projection_state WHERE user_id = ?"
+          "SELECT version, readiness, cursor_id FROM transaction_projection_state WHERE user_id = ?"
         )
         .bind(userId)
         .first()
@@ -202,7 +202,7 @@ export const repairDashboardProjections = (
     const result = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT user_id
-      FROM dashboard_projection_state WHERE version != 1 OR readiness != 'ready'
+      FROM transaction_projection_state WHERE version != 1 OR readiness != 'ready'
       ORDER BY attempted_at_ms, user_id LIMIT ${usersPerSweep}`)
         .all()
     );

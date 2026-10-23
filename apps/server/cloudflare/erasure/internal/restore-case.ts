@@ -1,16 +1,10 @@
 import { Clock, Effect, Option, Schema } from "effect";
 import { type ErasureRecoveryConfiguration, ErasureRestoreAdmission } from "../contract";
-import {
-  ErasureOriginalLocator,
-  type ErasureStore,
-  ErasureUnavailable,
-} from "../../erasure-store/contract";
+import { type ErasureStore, ErasureUnavailable } from "../../erasure-store/contract";
 import { RecoveryCase } from "./recovery-case";
 import { expectedGeneration } from "./generation";
 
-const maximumCaseBytes = 32768;
-const maximumLocatorBytes = 2048;
-const maximumObjects = 8;
+const maximumCaseBytes = 512;
 const admissionLifetimeMs = 5000;
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
@@ -51,13 +45,10 @@ export const restoreCase = (
     const generation = yield* expectedGeneration(input.configuration);
     if (generation.generation !== admission.generation) return yield* new ErasureUnavailable();
     const record = yield* reviewedCase({ configuration: input.configuration, admission });
-    const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(RecoveryCase.fields.decision))(
-      record.decision
-    );
     const inventory = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-      input.stores.map(({ id, dataClass }) => ({ id, dataClass }))
+      input.stores.map(({ id }) => id)
     );
-    yield* importCase({ ...input, admission, record, encoded, inventory });
+    yield* importCase({ ...input, admission, record, inventory });
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 const reviewedCase = (
   input: Readonly<{
@@ -68,17 +59,16 @@ const reviewedCase = (
   Effect.gen(function* () {
     const { admission } = input;
     if (Option.isNone(input.configuration.bucket)) return yield* new ErasureUnavailable();
-    const record = yield* Schema.decodeEffect(Schema.fromJsonString(RecoveryCase))(
+    const record = yield* Schema.decodeEffect(Schema.fromJsonString(RecoveryCase), {
+      onExcessProperty: "error",
+    })(
       yield* readMarker({
         bucket: input.configuration.bucket.value,
         key: `recovery/cases/${admission.reference}`,
         maximumBytes: maximumCaseBytes,
       })
     );
-    if (
-      record.decision.userId !== admission.userId ||
-      record.decision.reference !== admission.reference
-    ) {
+    if (record.userId !== admission.userId || record.reference !== admission.reference) {
       return yield* new ErasureUnavailable();
     }
     return record;
@@ -88,7 +78,6 @@ type CaseImport = Readonly<{
   configuration: ErasureRecoveryConfiguration;
   admission: typeof ErasureRestoreAdmission.Type;
   record: typeof RecoveryCase.Type;
-  encoded: string;
   inventory: string;
 }>;
 const importCase = (input: CaseImport): Effect.Effect<void, ErasureUnavailable> =>
@@ -96,21 +85,34 @@ const importCase = (input: CaseImport): Effect.Effect<void, ErasureUnavailable> 
     const {
       configuration: { db },
       admission,
-      encoded,
       inventory,
     } = input;
     yield* io(() =>
       db.batch([
         restoredCaseStatement(input),
+        // The independently read, same-User sealed marker proves these restored
+        // attempts had settled before deletion. An unsealed case never clears them.
         db
-          .prepare(`INSERT INTO erasure_steps(request_id,store_id,data_class,archive_done,delete_done)
-      SELECT q.id,json_extract(s.value,'$.id'),json_extract(s.value,'$.dataClass'),0,0 FROM erasure_requests q,json_each(?) s
-      WHERE q.id=? AND q.user_id=? AND q.state IN('Draining','Sealing') AND q.restore_generation=? AND q.decision_json=?
-      ON CONFLICT(request_id,store_id) DO UPDATE SET archive_done=0,delete_done=0`)
-          .bind(inventory, admission.reference, admission.userId, admission.generation, encoded),
+          .prepare(`DELETE FROM erasure_writers WHERE user_id=? AND ?=1
+          AND EXISTS(SELECT 1 FROM erasure_requests WHERE id=? AND user_id=?
+          AND state='Sealing' AND restoring=1 AND restore_generation=?)`)
+          .bind(
+            admission.userId,
+            input.record.sealed ? 1 : 0,
+            admission.reference,
+            admission.userId,
+            admission.generation
+          ),
+
+        db
+          .prepare(`INSERT INTO erasure_steps(request_id,store_id,delete_done)
+      SELECT q.id,s.value,0 FROM erasure_requests q,json_each(?) s
+      WHERE q.id=? AND q.user_id=? AND q.state IN('Draining','Sealing') AND q.restore_generation=?
+      ON CONFLICT(request_id,store_id) DO UPDATE SET delete_done=0`)
+          .bind(inventory, admission.reference, admission.userId, admission.generation),
         db
           .prepare(`INSERT INTO erasure_custody_records(record_type,request_id,custodian,state)
-      SELECT 'current',q.id,p.value,'Pending' FROM erasure_requests q,json_each('["Cloudflare","Kapso","Meta","Resend","Wompi","SupportInbox","CaseRegister","CaseEvidence"]') p
+      SELECT 'current',q.id,p.value,'Pending' FROM erasure_requests q,json_each('["Cloudflare","Kapso","Meta","Resend","Wompi"]') p
       WHERE q.id=? AND q.user_id=? AND q.restore_generation=? ON CONFLICT(request_id,custodian) WHERE record_type='current' DO NOTHING`)
           .bind(admission.reference, admission.userId, admission.generation),
         db
@@ -120,37 +122,28 @@ const importCase = (input: CaseImport): Effect.Effect<void, ErasureUnavailable> 
           .bind(admission.reference, admission.reference, admission.userId, admission.generation),
         db
           .prepare(`INSERT INTO erasure_restore_members(generation,request_id,user_id) SELECT restore_generation,id,user_id FROM erasure_requests
-      WHERE id=? AND user_id=? AND restore_generation=? AND decision_json=? ON CONFLICT DO NOTHING`)
-          .bind(admission.reference, admission.userId, admission.generation, encoded),
+      WHERE id=? AND user_id=? AND restore_generation=? ON CONFLICT DO NOTHING`)
+          .bind(admission.reference, admission.userId, admission.generation),
       ])
     );
     yield* ensureImported({ db, admission });
   });
 
 const restoredCaseStatement = (input: CaseImport): D1PreparedStatement => {
-  const { admission, record, encoded } = input;
+  const { admission, record } = input;
   const db = input.configuration.db;
   return db
-    .prepare(`INSERT INTO erasure_requests(id,user_id,case_ref,scope_ref,authority_ref,requested_at_ms,state,decision_json,reviewed_at_ms,operator_ref,restoring,restore_generation,archive_generation)
-      VALUES(?,?,?,?,?,?,?, ?,?,?,1,?,?)
-      ON CONFLICT(id) DO UPDATE SET state=excluded.state,decision_json=excluded.decision_json,case_ref=excluded.case_ref,
-      scope_ref=excluded.scope_ref,authority_ref=excluded.authority_ref,reviewed_at_ms=excluded.reviewed_at_ms,operator_ref=excluded.operator_ref,
-      restoring=1,restore_generation=excluded.restore_generation,archive_generation=excluded.archive_generation,
-      restore_cursor='',restore_objects_done=0,restore_records_cursor='',restore_records_done=0,objects_captured=0,coordinator_cleared=0,marker_written=0,next_continuation_at_ms=0
-      WHERE erasure_requests.user_id=excluded.user_id AND erasure_requests.restore_generation IS NOT excluded.restore_generation
-      AND (erasure_requests.decision_json IS NULL OR json_remove(erasure_requests.decision_json,'$.receiptRetention','$.recovery.retention')=json_remove(excluded.decision_json,'$.receiptRetention','$.recovery.retention'))`)
+    .prepare(`INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,restoring,restore_generation)
+      VALUES(?,?,?,?,1,?)
+      ON CONFLICT(id) DO UPDATE SET state=excluded.state,restoring=1,restore_generation=excluded.restore_generation,
+      coordinator_cleared=0,marker_written=0,next_continuation_at_ms=0
+      WHERE erasure_requests.user_id=excluded.user_id AND erasure_requests.requested_at_ms=excluded.requested_at_ms
+      AND erasure_requests.restore_generation IS NOT excluded.restore_generation`)
     .bind(
       admission.reference,
       admission.userId,
-      record.decision.caseRef,
-      record.decision.scopeRef,
-      record.decision.authorityRef,
       record.requestedAtMs,
       record.sealed ? "Sealing" : "Draining",
-      encoded,
-      record.reviewedAtMs,
-      record.operatorRef,
-      admission.generation,
       admission.generation
     );
 };
@@ -169,81 +162,4 @@ const ensureImported = (
         .first<number>("imported")
     );
     if (imported !== 1) return yield* new ErasureUnavailable();
-  });
-
-export const importOriginalLocators = (
-  input: Readonly<{
-    configuration: ErasureRecoveryConfiguration;
-    scope: Readonly<{ userId: string; reference: string }>;
-  }>
-): Effect.Effect<boolean, ErasureUnavailable> =>
-  Effect.gen(function* () {
-    const { db, bucket } = input.configuration;
-    if (Option.isNone(bucket)) return yield* new ErasureUnavailable();
-    const raw = yield* io(() =>
-      db
-        .prepare(
-          "SELECT restoring,restore_cursor AS cursor,restore_objects_done AS done FROM erasure_requests WHERE id=? AND user_id=? AND state='Sealing'"
-        )
-        .bind(input.scope.reference, input.scope.userId)
-        .first()
-    );
-    const row = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({
-        restoring: Schema.Literals([0, 1]),
-        cursor: Schema.String,
-        done: Schema.Literals([0, 1]),
-      })
-    )(raw);
-    if (row.restoring === 0 || row.done === 1) return true;
-    const page = yield* io(() =>
-      bucket.value.list({
-        prefix: `recovery/objects/${input.scope.reference}/`,
-        limit: maximumObjects,
-        ...(row.cursor === "" ? {} : { cursor: row.cursor }),
-      })
-    );
-    for (const object of page.objects) {
-      yield* importLocator({ ...input, key: object.key });
-    }
-    yield* io(() =>
-      db
-        .prepare(
-          "UPDATE erasure_requests SET restore_cursor=?,restore_objects_done=? WHERE id=? AND user_id=? AND state='Sealing'"
-        )
-        .bind(
-          page.truncated ? page.cursor : "",
-          page.truncated ? 0 : 1,
-          input.scope.reference,
-          input.scope.userId
-        )
-        .run()
-    );
-    return page.objects.length === 0 && !page.truncated;
-  }).pipe(Effect.mapError(() => new ErasureUnavailable()));
-
-const importLocator = (
-  input: Readonly<{
-    configuration: ErasureRecoveryConfiguration;
-    scope: Readonly<{ userId: string; reference: string }>;
-    key: string;
-  }>
-): Effect.Effect<void, ErasureUnavailable | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    const { db, bucket } = input.configuration;
-    if (Option.isNone(bucket)) return yield* new ErasureUnavailable();
-    const locator = yield* Schema.decodeEffect(Schema.fromJsonString(ErasureOriginalLocator))(
-      yield* readMarker({
-        bucket: bucket.value,
-        key: input.key,
-        maximumBytes: maximumLocatorBytes,
-      })
-    );
-    yield* io(() =>
-      db
-        .prepare(`INSERT INTO erasure_objects(request_id,bucket,object_key,recovery_written) VALUES(?,?,?,1)
-      ON CONFLICT(request_id,bucket,object_key) DO UPDATE SET done=0,recovery_written=1`)
-        .bind(input.scope.reference, locator.bucket, locator.key)
-        .run()
-    );
   });

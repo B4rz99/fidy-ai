@@ -1,7 +1,7 @@
 import { type PlatformMaintenanceInput, PlatformMaintenanceUnavailable } from "./contract";
 import { deepStrictEqual } from "node:assert";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Exit, FileSystem, Option } from "effect";
+import { Clock, Effect, Exit, FileSystem, Logger, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, expect, vi } from "vitest";
 import { Miniflare } from "miniflare";
@@ -15,12 +15,6 @@ const unavailable = (): never => {
   throw new Error("private platform diagnostic");
 };
 const queue: Queue = { send: unavailable, sendBatch: unavailable, metrics: unavailable };
-const workflow: Workflow = {
-  create: unavailable,
-  get: unavailable,
-  createBatch: unavailable,
-  deleteBatch: unavailable,
-};
 const input = (
   db: D1Database,
   overrides: Partial<PlatformMaintenanceInput> = {}
@@ -57,12 +51,6 @@ const input = (
   OPERATOR_ALERT_EMAIL: Option.none(),
   RESEND_API_KEY: Option.none(),
   WOMPI_EVENT_SECRET: Option.none(),
-  SMOKE_BUCKET: Option.none(),
-  SMOKE_QUEUE: Option.none(),
-  SMOKE_WORKFLOW: Option.none(),
-  SMOKE_QUEUE_NAME: Option.none(),
-  SMOKE_PROOF: Option.none(),
-  CF_VERSION_METADATA: Option.none(),
   ...overrides,
 });
 
@@ -73,7 +61,6 @@ it.effect("keeps disabled operational work inert but refuses an enabled missing 
     yield* disabled.inspectHealth();
     yield* disabled.retainEventBuckets(600_000);
     yield* disabled.publishCanary(600_000);
-    yield* disabled.expireSmokeProbes(600_000);
     const enabled = makePlatformMaintenance(
       input(db, { ASYNC_HEALTH_ENABLED: Option.some("enabled") })
     );
@@ -111,50 +98,6 @@ it.effect("publishes a period-bounded canary and closes Queue rejection details"
   })
 );
 
-it.effect("expires only older smoke probes when every required smoke binding is present", () =>
-  Effect.gen(function* () {
-    const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
-    yield* Effect.tryPromise(() =>
-      db.prepare("CREATE TABLE release_smoke_probes (probe_id TEXT, expires_at_ms INTEGER)").run()
-    );
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(
-          "INSERT INTO release_smoke_probes VALUES ('expired', 99), ('boundary', 100), ('fresh', 101)"
-        )
-        .run()
-    );
-    const configured = input(db, {
-      SMOKE_BUCKET: Option.some(bucket),
-      SMOKE_QUEUE: Option.some(queue),
-      SMOKE_WORKFLOW: Option.some(workflow),
-      SMOKE_QUEUE_NAME: Option.some(""),
-      SMOKE_PROOF: Option.some(""),
-      CF_VERSION_METADATA: Option.some({ id: "" }),
-    });
-    yield* makePlatformMaintenance({
-      ...configured,
-      CF_VERSION_METADATA: Option.none(),
-    }).expireSmokeProbes(100);
-    expect(
-      yield* Effect.tryPromise(() =>
-        db.prepare("SELECT COUNT(*) AS count FROM release_smoke_probes").first()
-      )
-    ).toEqual({ count: 3 });
-    yield* makePlatformMaintenance(configured).expireSmokeProbes(100);
-    expect(
-      yield* Effect.tryPromise(() =>
-        db.prepare("SELECT probe_id FROM release_smoke_probes ORDER BY probe_id").all()
-      )
-    ).toMatchObject({ results: [{ probe_id: "boundary" }, { probe_id: "fresh" }] });
-    yield* Effect.tryPromise(() => db.prepare("DROP TABLE release_smoke_probes").run());
-    deepStrictEqual(
-      yield* Effect.exit(makePlatformMaintenance(configured).expireSmokeProbes(100)),
-      Exit.fail(new PlatformMaintenanceUnavailable())
-    );
-  })
-);
-
 it.effect(
   "records unavailable measurements and readiness even when alert configuration is absent",
   () =>
@@ -167,10 +110,18 @@ it.effect(
           )
           .run()
       );
+      let backlogCount = 1000;
+      const logs: Array<unknown> = [];
+      const logger = Logger.make<unknown, void>(({ message }) => logs.push(message));
+      const loggers = new Set([logger]);
       const configured = input(db, {
         ASYNC_HEALTH_ENABLED: Option.some("enabled"),
         RESEND_API_KEY: Option.some("configured"),
         WOMPI_EVENT_SECRET: Option.some("configured"),
+        BILLING_COLLECTION_QUEUE: Option.some({
+          ...queue,
+          metrics: () => Promise.resolve({ backlogCount, backlogBytes: 1000 }),
+        }),
         USER_TRANSACTION_COORDINATOR: {
           getByName: () => ({
             fetch: (): Promise<Response> => Promise.resolve(new Response(null, { status: 204 })),
@@ -178,8 +129,48 @@ it.effect(
         },
       });
       deepStrictEqual(
-        yield* Effect.exit(makePlatformMaintenance(configured).inspectHealth()),
+        yield* Effect.exit(
+          makePlatformMaintenance(configured)
+            .inspectHealth()
+            .pipe(Effect.provideService(Logger.CurrentLoggers, loggers))
+        ),
         Exit.fail(new PlatformMaintenanceUnavailable())
+      );
+      expect(logs).toEqual(
+        expect.arrayContaining([
+          [
+            {
+              component: "capability",
+              operation: "d1",
+              state: "healthy",
+              severity: "none",
+              message:
+                "fidy.operational component=capability operation=d1 state=healthy severity=none",
+            },
+          ],
+          [
+            {
+              component: "capability",
+              operation: "requiredBindings",
+              state: "unavailable",
+              severity: "warning",
+              message:
+                "fidy.operational component=capability operation=requiredBindings state=unavailable severity=warning",
+            },
+          ],
+          [
+            {
+              component: "async-health",
+              operation: "billingQueue",
+              state: "attention",
+              backlogCount: 1000,
+              backlogBytes: 1000,
+              severity: "critical",
+              message:
+                "fidy.operational component=async-health operation=billingQueue state=attention severity=critical",
+            },
+          ],
+        ])
       );
       expect(
         yield* Effect.tryPromise(() =>
@@ -199,12 +190,28 @@ it.effect(
           { operation: "workflowFailures", state: "unavailable" },
         ],
       });
+      logs.length = 0;
+      backlogCount = 99;
       yield* Effect.exit(
         makePlatformMaintenance({
           ...configured,
           RESEND_API_KEY: Option.some("  "),
-        }).inspectHealth()
+        })
+          .inspectHealth()
+          .pipe(Effect.provideService(Logger.CurrentLoggers, loggers))
       );
+      expect(logs).toContainEqual([
+        {
+          component: "async-health",
+          operation: "billingQueue",
+          state: "attention",
+          backlogCount: 99,
+          backlogBytes: 1000,
+          severity: "none",
+          message:
+            "fidy.operational component=async-health operation=billingQueue state=attention severity=none",
+        },
+      ]);
       expect(
         yield* Effect.tryPromise(() =>
           db

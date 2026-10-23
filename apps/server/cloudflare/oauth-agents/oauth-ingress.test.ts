@@ -346,14 +346,14 @@ it.each(["abort", "deadline"])(
         yield* wait(
           fixture.db
             .prepare(
-              "INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at, updated_at) VALUES (?, ?, ?, 'COP', '1000', ?, ?)"
+              "INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at_ms, updated_at_ms) VALUES (?, ?, ?, 'COP', '1000', ?, ?)"
             )
             .bind(
               "30000000-0000-4000-8000-000000000001",
               "10000000-0000-4000-8000-000000000001",
               "10000000-0000-4000-8000-000000000001",
-              time,
-              time
+              DateTime.makeUnsafe(time).epochMilliseconds,
+              DateTime.makeUnsafe(time).epochMilliseconds
             )
             .run()
         );

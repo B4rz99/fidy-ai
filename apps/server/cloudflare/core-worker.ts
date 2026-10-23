@@ -1,3 +1,4 @@
+import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
 import { resumeErasureCases, sweepErasureControlObjects } from "./erasure/operations";
 import { withErasureRecovery } from "./erasure/runtime";
 import type { ProviderEnvironment } from "./provider-authentication/contract";
@@ -13,7 +14,6 @@ import type {
 } from "./email-authentication/contract";
 import type { BillingCollectionEnvironment } from "./subscription/contract";
 import type { SmokeEnvironment } from "./runtime/release-smoke/contract";
-import type { TelemetryService } from "../src/shell/observability/contract";
 import { Effect, Option, Schema } from "effect";
 import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/telemetry/operations";
@@ -31,7 +31,6 @@ export {
   runBillingCollectionWorkflow,
 } from "./subscription/runtime";
 export { ProactivityDeliveryWorkflow } from "./insights/runtime";
-export { ReleaseSmokeWorkflowV1 } from "./runtime/release-smoke/runtime";
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
 type CoreEnvironment = ProviderEnvironment &
@@ -183,12 +182,6 @@ const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput =>
   OPERATOR_ALERT_EMAIL: Option.fromUndefinedOr(environment.OPERATOR_ALERT_EMAIL),
   RESEND_API_KEY: Option.fromUndefinedOr(environment.RESEND_API_KEY),
   WOMPI_EVENT_SECRET: Option.fromUndefinedOr(environment.WOMPI_EVENT_SECRET),
-  SMOKE_BUCKET: Option.fromUndefinedOr(environment.SMOKE_BUCKET),
-  SMOKE_QUEUE: Option.fromUndefinedOr(environment.SMOKE_QUEUE),
-  SMOKE_WORKFLOW: Option.fromUndefinedOr(environment.SMOKE_WORKFLOW),
-  SMOKE_QUEUE_NAME: Option.fromUndefinedOr(environment.SMOKE_QUEUE_NAME),
-  SMOKE_PROOF: Option.fromUndefinedOr(environment.SMOKE_PROOF),
-  CF_VERSION_METADATA: Option.fromUndefinedOr(environment.CF_VERSION_METADATA),
 });
 
 /** Private, non-User executor; the object key coordinates ticks and grants no domain authority. */
@@ -321,8 +314,11 @@ export class UserTransactionCoordinator {
   }
 }
 
-export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
-  fetch: makeCoreHttp(telemetry),
+export const makeCoreWorker = ({
+  telemetry,
+  institutions,
+}: Parameters<typeof makeCoreHttp>[0]): CoreWorker => ({
+  fetch: makeCoreHttp({ telemetry, institutions }),
   queue: (batch, environment) => makeCoreQueue(telemetry)(batch, withErasureRecovery(environment)),
   scheduled: (controller, environment) =>
     Effect.gen(function* () {
@@ -351,4 +347,7 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
     ),
 });
 
-export default makeCoreWorker(cloudflareWorkerTelemetry);
+export default makeCoreWorker({
+  telemetry: cloudflareWorkerTelemetry,
+  institutions: registeredConnectionInstitutionIds,
+});

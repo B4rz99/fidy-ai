@@ -22,7 +22,7 @@ const GroupRow = Schema.Struct({
   direction: Schema.Literals(["inflow", "outflow"]),
   category_id: CategoryId,
   count: Schema.Int.check(Schema.isGreaterThan(0)),
-  maximum: Schema.String,
+  max_minor: Schema.String.check(Schema.isPattern(/^(?:0|[1-9][0-9]*)$/u)),
 });
 const DigitRow = Schema.Struct({
   currency: Currency,
@@ -74,14 +74,14 @@ const projectionRange = (
   });
 };
 
-const selectedBuckets = `FROM dashboard_projection_bucket
+const selectedBuckets = `FROM transaction_projection_bucket
   WHERE user_id = ? AND (
     (size_seconds = 86400 AND bucket >= ? AND bucket < ?)
     OR (size_seconds = 60 AND bucket >= ? AND bucket < ?
       AND (bucket < ? OR bucket >= ?)))`;
 const selectedDigits = selectedBuckets.replaceAll(
-  "dashboard_projection_bucket",
-  "dashboard_projection_digit"
+  "transaction_projection_bucket",
+  "transaction_projection_digit"
 );
 
 const projectionQueries = (
@@ -105,11 +105,11 @@ const projectionQueries = (
   ] as const;
   return [
     db
-      .prepare(`WITH chosen AS (SELECT currency, direction, category_id, count, maximum,
+      .prepare(`WITH chosen AS (SELECT currency, direction, category_id, count, max_minor,
       ROW_NUMBER() OVER (PARTITION BY currency, direction, category_id
         ORDER BY length(max_minor) DESC, max_minor DESC) AS rank ${selectedBuckets})
       SELECT currency, direction, category_id, SUM(count) AS count,
-        MAX(CASE WHEN rank = 1 THEN maximum END) AS maximum
+        MAX(CASE WHEN rank = 1 THEN max_minor END) AS max_minor
       FROM chosen GROUP BY currency, direction, category_id ORDER BY currency, direction, category_id`)
       .bind(...params),
     db
@@ -143,8 +143,8 @@ const decodeGroups = (
   const result: Array<EffectiveTransactionAggregate> = [];
   for (const group of groups.value) {
     const sum = sums.get(groupKey(group));
-    const maximum = Schema.decodeOption(Money)({
-      amount: group.maximum,
+    const maximum = Schema.decodeOption(Schema.toType(Money))({
+      amount: BigDecimal.make(BigInt(group.max_minor), minorScale),
       currency: group.currency,
     });
     if (sum === undefined || Option.isNone(maximum) || !Number.isSafeInteger(group.count)) {
@@ -205,7 +205,7 @@ const AggregateRevision = Schema.Struct({
 const revisionSelection = (
   userId: UserId
 ): Readonly<{ sql: string; params: readonly [UserId] }> => ({
-  sql: `SELECT COALESCE(p.fact_revision, 0) AS revision FROM dashboard_projection_state p
+  sql: `SELECT COALESCE(p.fact_revision, 0) AS revision FROM transaction_projection_state p
     WHERE p.user_id = ? AND p.version = 1 AND p.readiness = 'ready'`,
   params: [userId],
 });

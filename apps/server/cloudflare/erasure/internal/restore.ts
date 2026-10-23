@@ -1,3 +1,4 @@
+import { recoveryWindowMs } from "./retention-policy";
 import { Clock, Effect, Option, Schema } from "effect";
 import type { ErasureOperatorEnvironment } from "../contract";
 import { ErasureUnavailable } from "../../erasure-store/contract";
@@ -7,7 +8,7 @@ import { RecoveryCase } from "./recovery-case";
 const maximumCases = 4;
 const acceptedStatus = 202;
 const successStatus = 200;
-const maximumCaseBytes = 32768;
+const maximumCaseBytes = 512;
 const admissionLifetimeMs = 5000;
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
@@ -26,10 +27,10 @@ const readRecord = (
       yield* io(() => object.body.cancel());
       return yield* new ErasureUnavailable();
     }
-    const record = yield* Schema.decodeEffect(Schema.fromJsonString(RecoveryCase))(
-      yield* io(() => object.text())
-    );
-    if (input.key !== `recovery/cases/${record.decision.reference}`) {
+    const record = yield* Schema.decodeEffect(Schema.fromJsonString(RecoveryCase), {
+      onExcessProperty: "error",
+    })(yield* io(() => object.text()));
+    if (input.key !== `recovery/cases/${record.reference}`) {
       return yield* new ErasureUnavailable();
     }
     return record;
@@ -43,14 +44,14 @@ const restoreOne = (
       return yield* new ErasureUnavailable();
     }
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-      reference: input.record.decision.reference,
-      userId: input.record.decision.userId,
+      reference: input.record.reference,
+      userId: input.record.userId,
       generation: input.generation,
       deadlineMs: Math.min(current + admissionLifetimeMs, input.operator.expiresAtMs),
       authority: { permission: "titular.erase", ...input.operator },
     });
     const response = yield* io(() =>
-      input.environment.USER_TRANSACTION_COORDINATOR.getByName(input.record.decision.userId).fetch(
+      input.environment.USER_TRANSACTION_COORDINATOR.getByName(input.record.userId).fetch(
         new Request("https://coordinator.internal/erasure-restore", {
           method: "POST",
           body,
@@ -136,11 +137,18 @@ export const releaseRestore = (input: RestoreInput): Effect.Effect<Response, Era
     AND EXISTS(SELECT 1 FROM erasure_control WHERE kind='restore' AND generation=? AND scanned=1)
     AND NOT EXISTS(SELECT 1 FROM erasure_restore_members m LEFT JOIN erasure_requests q ON q.id=m.request_id
       WHERE m.generation=? AND (q.id IS NULL OR q.user_id<>m.user_id OR q.restore_generation IS NOT m.generation
-      OR q.state NOT IN('ExternalPending','Complete') OR NOT EXISTS(SELECT 1 FROM erasure_steps WHERE request_id=q.id) OR EXISTS(SELECT 1 FROM erasure_steps s WHERE s.request_id=q.id AND s.delete_done=0)
-      OR EXISTS(SELECT 1 FROM erasure_objects o WHERE o.request_id=q.id AND o.done=0)))
-    AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.decision_json IS NOT NULL
-      AND NOT EXISTS(SELECT 1 FROM erasure_restore_members m WHERE m.generation=? AND m.request_id=q.id AND m.user_id=q.user_id))`)
-        .bind(expected.generation, expected.generation, expected.generation, expected.generation)
+      OR q.state NOT IN('ExternalPending','Complete') OR NOT EXISTS(SELECT 1 FROM erasure_steps WHERE request_id=q.id) OR EXISTS(SELECT 1 FROM erasure_steps s WHERE s.request_id=q.id AND s.delete_done=0)))
+    AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE NOT EXISTS(SELECT 1 FROM erasure_restore_members m WHERE m.generation=? AND m.request_id=q.id AND m.user_id=q.user_id)
+      AND NOT(q.state='Complete' AND q.last_erased_at_ms IS NOT NULL AND q.last_erased_at_ms+?<=? AND q.marker_written=1 AND q.coordinator_cleared=1
+        AND NOT EXISTS(SELECT 1 FROM erasure_writers WHERE user_id=q.user_id)))`)
+        .bind(
+          expected.generation,
+          expected.generation,
+          expected.generation,
+          expected.generation,
+          recoveryWindowMs,
+          current
+        )
         .run()
     );
     return Response.json(

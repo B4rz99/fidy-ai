@@ -51,6 +51,7 @@ it.skipIf(!enabled)(
               .run()
           );
           yield* seedHistory({
+            spacingMinutes: 20,
             db,
             subject,
             transactionPrefix: "20000000-0000-4000-8000-",

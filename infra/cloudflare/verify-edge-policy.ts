@@ -2,12 +2,24 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "2f3c2cc4b92a61d3f55e8e2198bb5ea16feff34e43841d5e50edf5017f342947";
+const expectedEdgePolicyDigest = "a8d4d2c94d8587a86890d1b8c8a0446f7b86e84a720104716cdaee9feba77a43";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
   await Bun.file(new URL("worker-observability.ts", import.meta.url)).text(),
   await Bun.file(new URL("../../apps/server/cloudflare/public-worker.ts", import.meta.url)).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/release-smoke-worker.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/runtime/release-smoke/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/runtime/release-smoke/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/runtime/release-smoke/runtime.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/release-isolation/operations.ts", import.meta.url)
   ).text(),

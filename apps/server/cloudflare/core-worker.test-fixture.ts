@@ -1,3 +1,4 @@
+import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
 import { Clock, Context, Effect, Layer } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { OutboundHttpLive } from "./outbound-http/runtime";
@@ -36,7 +37,9 @@ const withMaintenanceExecutor = (worker: typeof coreWorker): typeof coreWorker =
 
 export const fixtureWorker = withMaintenanceExecutor(coreWorker);
 export const makeFixtureWorker = (telemetry: TelemetryService): typeof coreWorker =>
-  withMaintenanceExecutor(makeCoreWorker(telemetry));
+  withMaintenanceExecutor(
+    makeCoreWorker({ telemetry, institutions: registeredConnectionInstitutionIds })
+  );
 
 export { UserTransactionCoordinator } from "./core-worker";
 

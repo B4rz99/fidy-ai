@@ -258,27 +258,3 @@ export const recordPATActivityQuery = (
     FROM ${input.authority.table} WHERE ${input.authority.predicate}`,
   params: [input.id, ...input.grant.params, input.current, ...input.authority.bindings],
 });
-
-/** Exact same-User replay evidence for a reminder decision; independent of ordinary call retention. */
-export const reminderControlReceiptQuery = (
-  input: Readonly<{ userId: string; messageId: string; choice: string }>
-): OwnedStatement => ({
-  sql: "SELECT 1 FROM audit_entries WHERE record_type='reminder_control' AND id=json_array(?,?) AND user_id=? AND outcome=?",
-  params: [input.userId, input.messageId, input.userId, input.choice],
-});
-
-/** Append a reminder decision only under its owner's live proof in the same atomic unit. */
-export const prepareReminderControlReceipt = (
-  input: Readonly<{
-    db: D1Database;
-    userId: string;
-    messageId: string;
-    choice: string;
-    proof: OwnedStatement;
-  }>
-): D1PreparedStatement =>
-  input.db
-    .prepare(
-      `INSERT INTO audit_entries(record_type,id,user_id,outcome) SELECT 'reminder_control',json_array(?,?),?,? WHERE EXISTS (${input.proof.sql})`
-    )
-    .bind(input.userId, input.messageId, input.userId, input.choice, ...input.proof.params);

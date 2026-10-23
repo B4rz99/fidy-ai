@@ -128,7 +128,7 @@ const changeStatements = (
   return [
     db
       .prepare(`INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision,
-      changed_fields, before_facts, after_facts, corrected_at)
+      changed_fields, before_facts, after_facts, corrected_at_ms)
       SELECT ?, user_id, id, ?, ?, ?, ?, ? FROM transactions
       WHERE user_id = ? AND id = ? AND revision = ?
       AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
@@ -138,7 +138,7 @@ const changeStatements = (
         evidence.fields,
         evidence.before,
         evidence.after,
-        DateTime.formatIso(DateTime.makeUnsafe(current)),
+        current,
         subject.userId,
         id,
         input.expectedRevision,
@@ -146,7 +146,7 @@ const changeStatements = (
       ),
     db
       .prepare(`UPDATE transactions SET amount = ?, currency = ?, direction = ?, category_id = ?,
-      counterparty = ?, notes = ?, occurred_at = ?, revision = revision + 1,
+      counterparty = ?, notes = ?, occurred_at_ms = ?, revision = revision + 1,
       user_decisions = json_patch(user_decisions, ?) WHERE user_id = ? AND id = ? AND revision = ?
       AND changes() = 1 AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
       .bind(
@@ -156,7 +156,7 @@ const changeStatements = (
         updated.categoryId,
         Option.getOrNull(updated.counterparty),
         Option.getOrNull(updated.notes),
-        DateTime.formatIso(updated.occurredAt),
+        DateTime.toEpochMillis(updated.occurredAt),
         evidence.decisions,
         subject.userId,
         id,

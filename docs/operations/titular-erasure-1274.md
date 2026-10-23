@@ -1,9 +1,25 @@
+> **Current implementation:** authenticated full account deletion starts directly; selective retention,
+> operator retention review and the `titular:erasure:prepare` CLI have been removed on the integration
+> branch. This historical procedure is not the new release runbook. Follow the
+> [current cutover and evidence gates](database-cutover-1428.md#direct-account-deletion-and-minimal-metadata-1489--1490-integration).
+
+> **Local full-deletion integration:** the current branch no longer archives User records, copies
+> originals into holds, or stores file inventory. Cleanup deletes bounded owner records and all
+> canonical User-prefix objects after confirmed upload settlement. The historical selective-retention
+> procedure below is superseded for new requests. Do not use it as the current release runbook;
+> #1489/#1490 admission and minimal-marker conversion remain unfinished and undeployed.
+
 # Whole-Titular erasure — #1274
 
 Implementation, operator procedure and verification evidence. The Production bootstrap and release
 proof below do not establish execution of a real erasure case or processor deletion. This extends the approved [#1273 procedure](titular-requests-1273.md).
 `obarboza@fidyapp.com` remains the sole operator. There is no backup operator and no new document,
 selfie or emailed-ID verification. Exceptional entitlement remains #1326.
+
+The integration-branch full-deletion redesign in [#1425](https://github.com/B4rz99/fidy-ai/issues/1425)
+rejects new selective Retain decisions. Historical hold/archive descriptions below explain the
+existing data being converted; they do not authorize a new content hold. The final synchronized
+conversion is tracked by #1489/#1490, and this document does not claim its deployment.
 
 ## Verified request and review
 
@@ -84,8 +100,11 @@ After lost acknowledgements, timeouts, partial R2 success or worker restart, rep
 reference and decision. Do not create a second case or replay a payment/provider request as a
 cleanup shortcut. A missing original or a failed retained copy blocks its disposition rather than
 inventing a successful copy. Original payload writes use a private placeholder ETag and a live owner
-reservation; deletion changes that ETag before removing the object, so a delayed payload cannot
-recreate the financial bytes. Ambiguous control-object cleanup remains pending for reconciliation. A metadata-only maintenance
+reservation; deleting the object invalidates that ETag, so a delayed conditional payload cannot
+recreate the financial bytes. Owner-authorized deletion issues only DELETE, without first writing
+an erased nonce that could itself finish late. Unknown upload outcomes still remain tracked until
+confirmed settlement. Scanned control cleanup separately uses the observed ETag to preserve
+a replacement. Ambiguous control-object cleanup remains pending for reconciliation. A metadata-only maintenance
 sweep separately reconciles expired placeholders and erased nonces, including late orphan control
 writes after an owner row has gone. It never deletes financial payloads or held records by that
 control-only path. The scan is bounded and durable; eligibility at expiry is not a promise that a

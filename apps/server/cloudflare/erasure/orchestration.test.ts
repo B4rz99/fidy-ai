@@ -3,9 +3,9 @@ import {
   prepareResourceCounter,
 } from "../resource-admission/operations";
 import { it as effectIt } from "@effect/vitest";
-import { deletionDecision } from "./erasure.test-fixture";
 import { expect } from "vitest";
-import { type Cause, Clock, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, Deferred, Effect, Fiber, Option, Schema } from "effect";
+import { prepareOriginalWrite, trackOriginalWrite } from "../erasure-store/operations";
 import { installRetentionTestSchema } from "../d1-test-fixture";
 import {
   nativeErasurePlatform,
@@ -197,19 +197,14 @@ const verifyNativeErasure = Effect.gen(function* () {
       ),
       db
         .prepare(
-          "INSERT INTO memories VALUES('target-memory',?,'Borrar','2026-10-15','2026-10-15')"
+          "INSERT INTO memories VALUES('target-memory',?,'Borrar',1792022400000,1792022400000)"
         )
         .bind(userId),
       db
         .prepare(
-          "INSERT INTO memories VALUES('foreign-memory',?,'Conservar','2026-10-15','2026-10-15')"
+          "INSERT INTO memories VALUES('foreign-memory',?,'Conservar',1792022400000,1792022400000)"
         )
         .bind(foreignUser),
-      db
-        .prepare(
-          "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,?,'AwaitingReview')"
-        )
-        .bind(reference, userId, current),
     ])
   );
   for (const [index, id] of [userId, foreignUser].entries()) {
@@ -227,7 +222,7 @@ const verifyNativeErasure = Effect.gen(function* () {
         }),
       ])
     );
-    const key = `staging/statement/v1/${(index === 0 ? "a" : "b").repeat(64)}`;
+    const key = `users/${id}/staging/statement/v1/${(index === 0 ? "a" : "b").repeat(64)}`;
     yield* Effect.tryPromise(() =>
       db
         .prepare(
@@ -282,20 +277,69 @@ const verifyNativeErasure = Effect.gen(function* () {
         )
       ).pipe(Effect.orDie);
     });
-  const decision = deletionDecision({ userId, reference, current });
+  const delayedKey = `users/${userId}/staging/statement/v1/${"c".repeat(64)}`;
+  const delayedId = "12740000-0000-4000-8000-000000000003";
+  const admitted = yield* Deferred.make<void>();
+  const finishWrite = yield* Deferred.make<void>();
+  const writer = {
+    db,
+    userId,
+    reference: delayedId,
+    bucket: "statement" as const,
+    objectKey: delayedKey,
+  };
+  yield* Effect.tryPromise(() =>
+    db.batch(prepareOriginalWrite({ ...writer, current: current - 86400000 }).slice())
+  );
+  const pendingWrite = yield* trackOriginalWrite({
+    ...writer,
+    work: Effect.gen(function* () {
+      yield* Deferred.succeed(admitted, undefined);
+      yield* Deferred.await(finishWrite);
+      yield* Effect.tryPromise(() => native.originals.put(delayedKey, "Late"));
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_staging_objects(id,user_id,object_key,byte_length,sha256,status,created_at_ms,expires_at_ms) VALUES(?,?,?,4,?,'available',?,?)"
+          )
+          .bind(delayedId, userId, delayedKey, "c".repeat(64), current, current + 86400000)
+          .run()
+      );
+    }),
+  }).pipe(Effect.forkScoped);
+  yield* Deferred.await(admitted);
+  const admissionResponse = yield* send("erasure-admit", {
+    userId,
+    sessionId: userId,
+    digest: Array.from(new Uint8Array(32).fill(1)),
+    deadlineMs: (yield* Clock.currentTimeMillis) + 5000,
+  });
+  expect(admissionResponse.status).toBe(202);
+  const { reference } = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ reference: Schema.String })
+  )(yield* Effect.tryPromise(() => admissionResponse.json()));
+  yield* verifyRenewalFence({ db, current });
   expect(
-    (yield* send("erasure-review", {
+    (yield* send("erasure-continue", {
       userId,
-      decision,
+      reference,
       authority: {
         permission: "titular.erase",
         operatorRef: "operator",
         expiresAtMs: current + 300000,
       },
-      deadlineMs: current + 5000,
+      deadlineMs: (yield* Clock.currentTimeMillis) + 5000,
     })).status
   ).toBe(202);
-  yield* verifyRenewalFence({ db, current });
+  expect(
+    yield* Effect.tryPromise(() =>
+      db.prepare("SELECT state FROM erasure_requests WHERE id=?").bind(reference).first("state")
+    )
+  ).toBe("Draining");
+  expect(yield* Effect.tryPromise(() => native.originals.head(delayedKey))).toBeNull();
+  yield* Deferred.succeed(finishWrite, undefined);
+  yield* Fiber.join(pendingWrite);
+  expect(yield* Effect.tryPromise(() => native.originals.head(delayedKey))).not.toBeNull();
   expect(
     (yield* send("erasure-continue", {
       userId,
@@ -426,6 +470,10 @@ const verifyNativeErasure = Effect.gen(function* () {
     "hosted_agent_sessions",
     "transcript_entries",
     "recurring_series",
+    "recurring_plans",
+    "recurring_plan_revisions",
+    "recurring_plan_exceptions",
+    "recurring_plan_fulfillments",
     "(SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard')",
     "schedules",
     "web_sessions",
@@ -457,12 +505,15 @@ const verifyNativeErasure = Effect.gen(function* () {
     );
   }
   expect(
-    yield* Effect.tryPromise(() => native.originals.head(`staging/statement/v1/${"a".repeat(64)}`))
+    yield* Effect.tryPromise(() =>
+      native.originals.head(`users/${userId}/staging/statement/v1/${"a".repeat(64)}`)
+    )
   ).toBeNull();
+  expect(yield* Effect.tryPromise(() => native.originals.head(delayedKey))).toBeNull();
   expect(
     yield* Effect.tryPromise(() =>
       native.originals
-        .get(`staging/statement/v1/${"b".repeat(64)}`)
+        .get(`users/${foreignUser}/staging/statement/v1/${"b".repeat(64)}`)
         .then((object) => object?.text())
     )
   ).toBe("Personal");

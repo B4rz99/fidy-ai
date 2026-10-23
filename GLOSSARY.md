@@ -415,30 +415,23 @@ _Avoid_: Log, event, trace.
 The legal term under Ley 1581 for the person a piece of personal data is about. Used only when
 speaking about data-protection rights, never as a synonym for User.
 
-**ErasureDecision**:
-An authenticated decision to delete one stable User's application data in full, with deletion
-reapplied if a backup restores it. It stops new admissions while exact pre-cutoff work drains within
-its original bounds. Completion requires verified local deletion and applicable external cleanup;
-acceptance by a processor alone is insufficient. It is neither ordinary Transaction deletion nor
-a processing-Consent withdrawal. This is the accepted full-deletion meaning in #1425; the earlier
-selective-disposition model remains only until its cutover prerequisites pass.
-_Avoid_: Delete-account flag, automatic wipe, withdrawal receipt.
-
-**ErasureRetention**:
-The superseded selective-disposition model's restricted exception, tied to a reviewed legal or
-contractual source, exact data scope, limited purpose, finite expiry, review instant and terminal
-deletion. A reference only
-addresses the source evidence; it is not itself a retention basis. Linked/pseudonymous copies remain
-personal data and remain visible in the legacy disposition receipt. The accepted full-deletion
-design has no selective retention of deleted User content; ordinary feature retention remains a
-separate purpose.
-_Avoid_: Keep for audit, indefinite legal hold, anonymized identifier.
+**ErasureRequest**:
+A freshly authenticated User decision to delete that User's application data in full, with deletion
+reapplied if a supported backup restores it. It immediately fences new admissions while existing
+work drains and every outstanding upload is confirmed settled; an unknown write outcome can keep
+deletion pending indefinitely. Local deletion removes database records and User file prefixes.
+Completion additionally requires verified applicable external cleanup; processor acceptance alone
+is insufficient. A minimal independent marker protects restoration, without preserving User content
+or per-file locators. Deletion metadata expires after external completion and the supported backup
+horizon. Ordinary Transaction deletion and processing-Consent withdrawal have separate meanings.
+_Avoid_: Delete-account flag, selective retention, withdrawal receipt, operator retention approval.
 
 **ErasureCustodyEvidence**:
-The reviewed observation of an actual processor or restricted operator store's disposition.
-Acceptance, verified deletion, retained scope, non-applicability and unresolved capability/conflict
-are distinct outcomes; acceptance does not close the affected scope.
-_Avoid_: Provider success, deletion queued equals deleted.
+A bounded, metadata-only observation of an actual processor's deletion outcome. Acceptance, verified
+deletion, non-applicability and unresolved capability/conflict remain distinct; acceptance does not
+close the affected scope. Manual evidence retains the operator who recorded it and the original
+recording instant, without copies of erased content.
+_Avoid_: Provider success, deletion queued equals deleted, retained-content approval.
 
 **Asesoría**:
 Regulated financial advice. The product describes the user's own data and gives generic education

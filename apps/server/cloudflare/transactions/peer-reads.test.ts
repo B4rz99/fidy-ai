@@ -182,7 +182,7 @@ it("rolls back stale aggregate publication and distinguishes authorized empty hi
       ).toEqual([{ value: "empty" }]);
       yield* Effect.tryPromise(() =>
         db
-          .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
+          .prepare("UPDATE transaction_projection_state SET readiness = 'dirty' WHERE user_id = ?")
           .bind(userId)
           .run()
       );
@@ -190,32 +190,31 @@ it("rolls back stale aggregate publication and distinguishes authorized empty hi
     })
   ));
 
-it("fails malformed retained aggregate precision through the published typed channel", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      yield* Effect.tryPromise(() => movement(db, 1, { amount: "1" }).run());
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "UPDATE dashboard_projection_digit SET digit_sum = CASE WHEN position = 0 THEN 1 ELSE 0 END WHERE user_id = ?"
-          )
-          .bind(userId)
-          .run()
-      );
-      const outcome = yield* Effect.exit(
-        readCompletePeriodAggregates({
-          db,
-          userId: UserId.make(userId),
-          periods: [
-            { from, toExclusive: to },
-            { from: DateTime.makeUnsafe("2026-04-01T05:00:00.000Z"), toExclusive: from },
-          ],
-        })
-      );
-      expect(outcome).toEqual(Exit.fail(new TransactionAggregatesUnavailable()));
-    })
-  ));
+it.each([
+  "UPDATE transaction_projection_digit SET digit_sum = CASE WHEN position = 0 THEN 1 ELSE 0 END WHERE user_id = ?",
+  "UPDATE transaction_projection_bucket SET max_minor = '10001' WHERE user_id = ?",
+])(
+  "fails malformed retained aggregate precision through the published typed channel: %s",
+  (corrupt) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* Effect.tryPromise(() => movement(db, 1, { amount: "1" }).run());
+        yield* Effect.tryPromise(() => db.prepare(corrupt).bind(userId).run());
+        const outcome = yield* Effect.exit(
+          readCompletePeriodAggregates({
+            db,
+            userId: UserId.make(userId),
+            periods: [
+              { from, toExclusive: to },
+              { from: DateTime.makeUnsafe("2026-04-01T05:00:00.000Z"), toExclusive: from },
+            ],
+          })
+        );
+        expect(outcome).toEqual(Exit.fail(new TransactionAggregatesUnavailable()));
+      })
+    )
+);
 
 const movementDefaults = {
   userId,
@@ -234,8 +233,8 @@ const movement = (
   const input = { ...movementDefaults, ...overrides };
   return db
     .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, category_id, direction, occurred_at, created_at, counterparty)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (id, user_id, amount, currency, category_id, direction, occurred_at_ms, created_at_ms, counterparty)
+    VALUES (?, ?, ?, ?, ?, ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER), ?)`)
     .bind(
       transactionId(index),
       input.userId,
@@ -300,7 +299,7 @@ it("returns ready owned Dashboard pages with caller context and refuses incomple
       ).toBe(true);
       yield* Effect.tryPromise(() =>
         db
-          .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
+          .prepare("UPDATE transaction_projection_state SET readiness = 'dirty' WHERE user_id = ?")
           .bind(userId)
           .run()
       );
@@ -308,11 +307,13 @@ it("returns ready owned Dashboard pages with caller context and refuses incomple
       yield* Effect.tryPromise(() =>
         db.batch([
           db
-            .prepare("UPDATE dashboard_projection_state SET readiness = 'ready' WHERE user_id = ?")
+            .prepare(
+              "UPDATE transaction_projection_state SET readiness = 'ready' WHERE user_id = ?"
+            )
             .bind(userId),
           db
             .prepare(
-              "UPDATE dashboard_projection_leaf SET revision = -1 WHERE user_id = ? AND id = ?"
+              "UPDATE transaction_projection_leaf SET revision = -1 WHERE user_id = ? AND id = ?"
             )
             .bind(userId, transactionId(1)),
         ])

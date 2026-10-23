@@ -20,7 +20,7 @@ export const requestDiscoveryOffer = (
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT id,delivery_id FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE user_id=? AND current_recurring_opportunity=1"
+          "SELECT id,delivery_id FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE user_id=? AND current_recurring_opportunity=1"
         )
         .bind(input.userId)
         .first()
@@ -36,7 +36,7 @@ export const requestDiscoveryOffer = (
       const retry = yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            `SELECT 1 FROM insight_reports AS r WHERE r.kind='proactivity-delivery' AND r.scheduled_at_ms IS NOT NULL AND r.user_id=? AND r.delivery_id=? AND ((r.expires_at_ms<=? AND NOT EXISTS(SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=r.user_id AND c.delivery_id=r.delivery_id)) OR EXISTS(${rejected.sql}))`
+            `SELECT 1 FROM proactive_messages AS r WHERE r.kind='proactivity-delivery' AND r.scheduled_at_ms IS NOT NULL AND r.user_id=? AND r.id=? AND ((r.expires_at_ms<=? AND NOT EXISTS(SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=r.user_id AND c.delivery_id=r.id)) OR EXISTS(${rejected.sql}))`
           )
           .bind(input.userId, deliveryId, input.now.epochMilliseconds, ...rejected.params)
           .first()

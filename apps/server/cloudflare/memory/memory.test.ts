@@ -271,7 +271,7 @@ const recalled = (db: D1Database, session: string): Promise<Response> =>
 const memoryTextRows = (db: D1Database, user: string): Promise<Array<{ text: string }>> =>
   fromTestPromise(() =>
     db
-      .prepare("SELECT text FROM memories WHERE user_id = ? ORDER BY created_at, id")
+      .prepare("SELECT text FROM memories WHERE user_id = ? ORDER BY created_at_ms, id")
       .bind(user)
       .all<{ text: string }>()
   ).pipe(

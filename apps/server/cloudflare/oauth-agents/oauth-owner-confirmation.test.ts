@@ -46,7 +46,7 @@ const insightJourneyArgs = (
     yield* wait(
       fixture.db
         .prepare(
-          "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) VALUES(?,?,'weekly-summary','40000000-0000-4000-8000-000000000001',1,'CO','es-CO','America/Bogota','2026-10-03T12:00:00.000Z','[]')"
+          "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json) VALUES(?,?,'weekly-summary','40000000-0000-4000-8000-000000000001',1,'CO','es-CO','America/Bogota',1791028800000,'[]')"
         )
         .bind(id, "10000000-0000-4000-8000-000000000001")
         .run()
@@ -195,6 +195,50 @@ it.each(nativeOwnerJourneys)(
               .first<number>("count(*)")
           )
         ).toBe(0);
+      })
+    )
+);
+
+it.each(["created_at_ms", "updated_at_ms"] as const)(
+  "refuses an approved Memory revision after a one-millisecond change to %s",
+  (column) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* pendingBudgetDeletion(["write"]);
+        const name = "memory.revise";
+        const args = yield* ownerJourneyArgs(fixture, name);
+        const review = yield* wait(
+          nativeConfirmationCall({ fixture, params: { name, arguments: args }, name })
+        );
+        const pending = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ result: Schema.Struct({ requestState: Schema.String }) })
+        )(yield* wait(review.json()));
+        yield* approveFirstPartyOperation(fixture, pending.result.requestState);
+        yield* wait(fixture.db.prepare(`UPDATE memories SET ${column}=${column}+1`).run());
+        const accepted = yield* wait(
+          nativeConfirmationCall({
+            fixture,
+            params: {
+              name,
+              arguments: args,
+              requestState: pending.result.requestState,
+              inputResponses: { review: explicitNativeAccept },
+            },
+            name,
+          })
+        );
+        expect(yield* wait(accepted.json())).toMatchObject({ result: { isError: true } });
+        expect(
+          yield* wait(fixture.db.prepare("SELECT text FROM memories").first<string>("text"))
+        ).toBe("I plan monthly spending.");
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare("SELECT count(*) FROM oauth_operation_intents WHERE reference=?")
+              .bind(pending.result.requestState)
+              .first<number>("count(*)")
+          )
+        ).toBe(1);
       })
     )
 );

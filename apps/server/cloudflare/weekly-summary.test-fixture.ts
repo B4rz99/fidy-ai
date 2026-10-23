@@ -290,7 +290,7 @@ export const seedWeeklySummaryActivity = ({
   Effect.tryPromise(() =>
     db
       .prepare(
-        "INSERT INTO transactions(id,user_id,amount,currency,category_id,direction,occurred_at,created_at,counterparty) VALUES (?,?, '10.25','COP',?,'outflow',?,?,NULL)"
+        "INSERT INTO transactions(id,user_id,amount,currency,category_id,direction,occurred_at_ms,created_at_ms,counterparty) VALUES (?,?, '10.25','COP',?,'outflow',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),NULL)"
       )
       .bind(
         "20000000-0000-4000-8000-000000000001",
@@ -321,13 +321,13 @@ export const seedForeignProviderEvidence = (db: D1Database): Effect.Effect<void>
     yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "UPDATE insight_events SET delivery_receipt_id=?1,delivery_sent_at=?4,delivery_channel='whatsapp',delivery_provider='kapso',delivery_provider_message_id='wamid.proactive' WHERE user_id=?2 AND id=?3"
+          "UPDATE insight_events SET delivery_receipt_id=?1,delivery_sent_at_ms=?4,delivery_channel='whatsapp',delivery_provider='kapso',delivery_provider_message_id='wamid.proactive' WHERE user_id=?2 AND id=?3"
         )
         .bind(
           "30000000-0000-4000-8000-000000000002",
           weeklySummaryOtherUser,
           event.id,
-          DateTime.formatIso(weeklySummaryTestNow)
+          weeklySummaryTestNow.epochMilliseconds
         )
         .run()
     );

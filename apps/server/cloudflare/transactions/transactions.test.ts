@@ -412,8 +412,8 @@ const seedTransaction = ({
   categoryId: string;
 }>): Promise<unknown> =>
   db
-    .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at)
-      VALUES (?, ?, '10.00', 'COP', 'outflow', ?, 'seed', '2025-01-05T12:00:00.000Z', '2025-01-05T12:00:00.000Z')`)
+    .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at_ms, created_at_ms)
+      VALUES (?, ?, '10.00', 'COP', 'outflow', ?, 'seed', 1736078400000, 1736078400000)`)
     .bind(id, userId, categoryId)
     .run();
 
@@ -455,7 +455,7 @@ const seedRetainedTransaction = ({
   const facts = { ...retainedTransactionDefaults, ...overrides };
   return db
     .prepare(`INSERT INTO transactions
-      (id, user_id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, user_decisions)
+      (id, user_id, amount, currency, direction, counterparty, category_id, notes, occurred_at_ms, created_at_ms, user_decisions)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(
       id,
@@ -466,8 +466,8 @@ const seedRetainedTransaction = ({
       counterparty ?? null,
       categoryId,
       notes ?? null,
-      facts.occurredAt,
-      facts.createdAt,
+      DateTime.toEpochMillis(DateTime.makeUnsafe(facts.occurredAt)),
+      DateTime.toEpochMillis(DateTime.makeUnsafe(facts.createdAt)),
       facts.userDecisions
     )
     .run();
@@ -487,8 +487,8 @@ const seedManualAttestation = ({
 }>): Promise<unknown> =>
   db
     .prepare(`INSERT INTO source_attestations
-      (id, user_id, transaction_id, kind, service_market, locale, time_zone, interpretation_revision, created_at)
-      VALUES (?, ?, ?, 'manual', 'CO', 'es-CO', 'America/Bogota', 'manual-v1', '2025-01-05T12:00:00.000Z')`)
+      (id, user_id, transaction_id, kind, service_market, locale, time_zone, interpretation_revision, created_at_ms)
+      VALUES (?, ?, ?, 'manual', 'CO', 'es-CO', 'America/Bogota', 'manual-v1', 1736078400000)`)
     .bind(id, userId, transactionId)
     .run();
 
@@ -553,8 +553,8 @@ const seedLinkedPair = ({
   db.batch([
     db
       .prepare(`INSERT INTO transaction_reconciliation_decisions
-        (user_id, first_transaction_id, second_transaction_id, state, visible_transaction_id, decided_at)
-        VALUES (?, ?, ?, 'linked', ?, '2025-01-05T12:00:00.000Z')`)
+        (user_id, first_transaction_id, second_transaction_id, state, visible_transaction_id, decided_at_ms)
+        VALUES (?, ?, ?, 'linked', ?, 1736078400000)`)
       .bind(userId, first, second, visible),
     db
       .prepare(
@@ -678,8 +678,8 @@ const concurrentCorrection = ({
   evidenceId: string;
 }>): Promise<unknown> =>
   db
-    .prepare(`INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at)
-      VALUES (?, ?, ?, 0, '["notes"]', '{"notes":"seed"}', '{"notes":"concurrent"}', '2025-01-06T12:00:00.000Z')`)
+    .prepare(`INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at_ms)
+      VALUES (?, ?, ?, 0, '["notes"]', '{"notes":"seed"}', '{"notes":"concurrent"}', 1736164800000)`)
     .bind(evidenceId, userId, transactionId)
     .run()
     .then(() =>
@@ -704,8 +704,8 @@ const concurrentMoneyCorrection = ({
   amount: string;
 }>): Promise<unknown> =>
   db
-    .prepare(`INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at)
-      VALUES (?, ?, ?, 0, '["money"]', '{"amount":"45000"}', ?, '2025-01-06T12:00:00.000Z')`)
+    .prepare(`INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at_ms)
+      VALUES (?, ?, ?, 0, '["money"]', '{"amount":"45000"}', ?, 1736164800000)`)
     .bind(evidenceId, userId, transactionId, JSON.stringify({ amount }))
     .run()
     .then(() =>
@@ -1614,8 +1614,8 @@ it("links one exact pair into one effective Transaction while retaining both ori
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
       const owner = users[0] ?? "";
-      const visible = "30000000-0000-4000-8000-000000000101";
-      const suppressed = "30000000-0000-4000-8000-000000000102";
+      const visible = "30000000-0000-4000-8000-000000000102";
+      const suppressed = "30000000-0000-4000-8000-000000000101";
       yield* fromTestPromise(() =>
         Promise.all([
           seedRetainedTransaction({
@@ -1625,6 +1625,9 @@ it("links one exact pair into one effective Transaction while retaining both ori
             categoryId: category,
             counterparty: "Cafe Uno",
             notes: "notificacion",
+            amount: "9007199254740993.01",
+            occurredAt: "2025-01-05T12:00:00.003Z",
+            createdAt: "2025-01-05T12:00:00.001Z",
           }),
           seedRetainedTransaction({
             db,
@@ -1633,8 +1636,9 @@ it("links one exact pair into one effective Transaction while retaining both ori
             categoryId: category,
             counterparty: "Cafe Dos",
             notes: "extracto",
-            occurredAt: "2025-01-06T12:00:00.000Z",
-            createdAt: "2025-01-06T12:00:00.000Z",
+            amount: "9007199254740993.01",
+            occurredAt: "2025-01-05T12:00:00.004Z",
+            createdAt: "2025-01-05T12:00:00.002Z",
           }),
         ]).then(() =>
           Promise.all([
@@ -1678,6 +1682,10 @@ it("links one exact pair into one effective Transaction while retaining both ori
         yield* fromTestPromise(() => linked.json())
       ).pipe(Effect.orDie)).data;
       expect(effectiveTransaction.id).toBe(visible);
+      expect(encodeMoneyAmount(effectiveTransaction.money.amount)).toBe("9007199254740993.01");
+      expect(DateTime.formatIso(effectiveTransaction.createdAt)).toBe("2025-01-05T12:00:00.001Z");
+      expect(DateTime.formatIso(effectiveTransaction.occurredAt)).toBe("2025-01-05T12:00:00.003Z");
+      expect(effectiveTransaction.revision).toBe(0);
       expect(effectiveTransaction.presentation).toEqual({ kind: "visible-member" });
       expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([
         { operation: "transactions.linkTransactions", outcome: "success" },
@@ -1719,8 +1727,8 @@ it("links one exact pair into one effective Transaction while retaining both ori
           .all<{ id: string; counterparty: string; notes: string }>()
       );
       expect(retained.results).toEqual([
-        { id: visible, counterparty: "Cafe Uno", notes: "notificacion" },
         { id: suppressed, counterparty: "Cafe Dos", notes: "extracto" },
+        { id: visible, counterparty: "Cafe Uno", notes: "notificacion" },
       ]);
       expect(
         yield* fromTestPromise(() =>
@@ -1733,9 +1741,9 @@ it("links one exact pair into one effective Transaction while retaining both ori
       ).toBe(2);
       expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
         decisions: [
-          { first: visible, second: suppressed, state: "linked", visible: Option.some(visible) },
+          { first: suppressed, second: visible, state: "linked", visible: Option.some(visible) },
         ],
-        members: [{ transaction: visible }, { transaction: suppressed }],
+        members: [{ transaction: suppressed }, { transaction: visible }],
       });
     })
   ));
@@ -1747,14 +1755,28 @@ it("refuses ineligible pairs without writing any relation", () =>
       const owner = users[0] ?? "";
       const base = "30000000-0000-4000-8000-00000000015";
       const pairs = [
-        { first: `${base}1`, second: `${base}2`, secondFacts: { currency: "USD" } },
-        { first: `${base}3`, second: `${base}4`, secondFacts: { amount: "45000.01" } },
-        { first: `${base}5`, second: `${base}6`, secondFacts: { direction: "inflow" as const } },
+        {
+          first: `${base}1`,
+          second: `${base}2`,
+          secondFacts: { currency: "USD", amount: "9007199254740993.01" },
+        },
+        { first: `${base}3`, second: `${base}4`, secondFacts: { amount: "9007199254740993.02" } },
+        {
+          first: `${base}5`,
+          second: `${base}6`,
+          secondFacts: { direction: "inflow" as const, amount: "9007199254740993.01" },
+        },
       ];
       yield* fromTestPromise(() =>
         Promise.all(
           pairs.flatMap((pair) => [
-            seedRetainedTransaction({ db, userId: owner, id: pair.first, categoryId: category }),
+            seedRetainedTransaction({
+              db,
+              userId: owner,
+              id: pair.first,
+              categoryId: category,
+              amount: "9007199254740993.01",
+            }),
             seedRetainedTransaction({
               db,
               userId: owner,
@@ -1832,14 +1854,21 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
       const suppressed = "30000000-0000-4000-8000-000000000302";
       yield* fromTestPromise(() =>
         Promise.all([
-          seedRetainedTransaction({ db, userId: owner, id: visible, categoryId: category }),
+          seedRetainedTransaction({
+            db,
+            userId: owner,
+            id: visible,
+            categoryId: category,
+            occurredAt: "2025-01-05T12:00:00.001Z",
+            createdAt: "2025-01-05T12:00:00.002Z",
+          }),
           seedRetainedTransaction({
             db,
             userId: owner,
             id: suppressed,
             categoryId: category,
-            occurredAt: "2025-01-06T12:00:00.000Z",
-            createdAt: "2025-01-06T12:00:00.000Z",
+            occurredAt: "2025-01-06T12:00:00.003Z",
+            createdAt: "2025-01-06T12:00:00.004Z",
           }),
         ]).then(() =>
           seedManualAttestation({
@@ -1882,6 +1911,20 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
       ).pipe(Effect.orDie)).data;
       expect(restored.firstTransaction.id).toBe(visible);
       expect(restored.secondTransaction.id).toBe(suppressed);
+      expect(restored.firstTransaction.revision).toBe(0);
+      expect(restored.secondTransaction.revision).toBe(0);
+      expect(DateTime.formatIso(restored.firstTransaction.occurredAt)).toBe(
+        "2025-01-05T12:00:00.001Z"
+      );
+      expect(DateTime.formatIso(restored.firstTransaction.createdAt)).toBe(
+        "2025-01-05T12:00:00.002Z"
+      );
+      expect(DateTime.formatIso(restored.secondTransaction.occurredAt)).toBe(
+        "2025-01-06T12:00:00.003Z"
+      );
+      expect(DateTime.formatIso(restored.secondTransaction.createdAt)).toBe(
+        "2025-01-06T12:00:00.004Z"
+      );
       expect(restored.firstTransaction.presentation).toEqual({ kind: "independent" });
       expect(restored.secondTransaction.presentation).toEqual({ kind: "independent" });
       expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
@@ -2281,109 +2324,124 @@ it("keeps the effective Transaction consistent after corrections to either membe
     })
   ));
 
-it("derives each effective fact group from the member the Transaction policy selects", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const owner = users[0] ?? "";
-      const visible = "30000000-0000-4000-8000-000000000a01";
-      const suppressed = "30000000-0000-4000-8000-000000000a02";
-      const suppressedCategory = "10000000-0000-4000-8000-000000000012";
-      yield* fromTestPromise(() =>
-        Promise.all([
-          seedRetainedTransaction({
-            db,
-            userId: owner,
-            id: visible,
-            categoryId: category,
-            counterparty: "Uno",
-            notes: "visible",
-          }),
-          seedRetainedTransaction({
-            db,
-            userId: owner,
-            id: suppressed,
-            categoryId: suppressedCategory,
-            counterparty: "Dos",
-            notes: "suppressed",
-            occurredAt: "2025-01-06T12:00:00.000Z",
-            createdAt: "2025-01-06T12:00:00.000Z",
-            userDecisions: JSON.stringify({ categoryId: true, counterparty: true }),
-          }),
-        ])
-      );
-      expect(
-        (yield* fromTestPromise(() =>
-          sendPublicRequest(
-            db,
-            new Request("https://api.fidyapp.com/transactions/link", {
-              method: "POST",
-              headers: {
-                origin: "https://app.fidyapp.com",
-                "Fidy-Session-Binding": sessions[0] ?? "invalid",
-                cookie: `__Host-fidy_session=${bearer(0)}`,
-                "content-type": "application/json",
-              },
-              body: JSON.stringify({
-                firstTransactionId: visible,
-                secondTransactionId: suppressed,
-              }),
-            })
-          )
-        )).status
-      ).toBe(200);
-      const listed = (yield* Schema.decodeUnknownEffect(Listed)(
+it.each(["same-instant", "one-millisecond-newer"] as const)(
+  "derives each effective fact group with %s correction ordering",
+  (ordering) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromTestPromise(() => setup());
+        const owner = users[0] ?? "";
+        const visible = "30000000-0000-4000-8000-000000000a01";
+        const suppressed = "30000000-0000-4000-8000-000000000a02";
+        const suppressedCategory = "10000000-0000-4000-8000-000000000012";
         yield* fromTestPromise(() =>
-          sendPublicRequest(
-            db,
-            new Request("https://api.fidyapp.com/transactions", {
-              headers: {
-                origin: "https://app.fidyapp.com",
-                "Fidy-Session-Binding": sessions[0] ?? "invalid",
-                cookie: `__Host-fidy_session=${bearer(0)}`,
-              },
-            })
-          ).then((response) => response.json())
-        )
-      ).pipe(Effect.orDie)).data;
-      const effective = listed[0];
-      if (effective === undefined) throw new Error("Missing effective Transaction");
-      expect(listed).toHaveLength(1);
-      expect(effective.categoryId).toBe(suppressedCategory);
-      expect(Option.getOrNull(effective.counterparty)).toBe("Dos");
-      expect(Option.getOrNull(effective.notes)).toBe("visible");
-      expect(DateTime.formatIso(effective.occurredAt)).toBe("2025-01-05T12:00:00.000Z");
-      yield* fromTestPromise(() =>
-        Promise.all(
-          [visible, suppressed].map((transactionId, index) =>
-            db
-              .prepare(`INSERT INTO transaction_corrections
-                (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at)
-                VALUES (?, ?, ?, 0, '[]', '{}', '{}', '2025-02-01T00:00:00.000Z')`)
-              .bind(`40000000-0000-4000-8000-00000000010${index}`, owner, transactionId)
-              .run()
+          Promise.all([
+            seedRetainedTransaction({
+              db,
+              userId: owner,
+              id: visible,
+              categoryId: category,
+              counterparty: "Uno",
+              notes: "visible",
+            }),
+            seedRetainedTransaction({
+              db,
+              userId: owner,
+              id: suppressed,
+              categoryId: suppressedCategory,
+              counterparty: "Dos",
+              notes: "suppressed",
+              occurredAt: "2025-01-06T12:00:00.000Z",
+              createdAt: "2025-01-06T12:00:00.000Z",
+              userDecisions: JSON.stringify({ categoryId: true, counterparty: true }),
+            }),
+          ])
+        );
+        expect(
+          (yield* fromTestPromise(() =>
+            sendPublicRequest(
+              db,
+              new Request("https://api.fidyapp.com/transactions/link", {
+                method: "POST",
+                headers: {
+                  origin: "https://app.fidyapp.com",
+                  "Fidy-Session-Binding": sessions[0] ?? "invalid",
+                  cookie: `__Host-fidy_session=${bearer(0)}`,
+                  "content-type": "application/json",
+                },
+                body: JSON.stringify({
+                  firstTransactionId: visible,
+                  secondTransactionId: suppressed,
+                }),
+              })
+            )
+          )).status
+        ).toBe(200);
+        const listed = (yield* Schema.decodeUnknownEffect(Listed)(
+          yield* fromTestPromise(() =>
+            sendPublicRequest(
+              db,
+              new Request("https://api.fidyapp.com/transactions", {
+                headers: {
+                  origin: "https://app.fidyapp.com",
+                  "Fidy-Session-Binding": sessions[0] ?? "invalid",
+                  cookie: `__Host-fidy_session=${bearer(0)}`,
+                },
+              })
+            ).then((response) => response.json())
           )
-        )
-      );
-      const corrected = (yield* Schema.decodeUnknownEffect(Listed)(
+        ).pipe(Effect.orDie)).data;
+        const effective = listed[0];
+        if (effective === undefined) throw new Error("Missing effective Transaction");
+        expect(listed).toHaveLength(1);
+        expect(effective.categoryId).toBe(suppressedCategory);
+        expect(Option.getOrNull(effective.counterparty)).toBe("Dos");
+        expect(Option.getOrNull(effective.notes)).toBe("visible");
+        expect(DateTime.formatIso(effective.occurredAt)).toBe("2025-01-05T12:00:00.000Z");
         yield* fromTestPromise(() =>
-          sendPublicRequest(
-            db,
-            new Request("https://api.fidyapp.com/transactions", {
-              headers: {
-                origin: "https://app.fidyapp.com",
-                "Fidy-Session-Binding": sessions[0] ?? "invalid",
-                cookie: `__Host-fidy_session=${bearer(0)}`,
-              },
-            })
-          ).then((response) => response.json())
-        )
-      ).pipe(Effect.orDie)).data;
-      const afterTie = corrected[0];
-      if (afterTie === undefined) throw new Error("Missing effective Transaction");
-      expect(DateTime.formatIso(afterTie.occurredAt)).toBe("2025-01-06T12:00:00.000Z");
-    })
-  ));
+          Promise.all(
+            [visible, suppressed].map((transactionId, index) =>
+              db
+                .prepare(`INSERT INTO transaction_corrections
+                (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at_ms)
+                VALUES (?, ?, ?, 0, '[]', '{}', '{}', ?)`)
+                .bind(
+                  `40000000-0000-4000-8000-00000000010${index}`,
+                  owner,
+                  transactionId,
+                  ordering === "one-millisecond-newer" && index === 0
+                    ? 1738368000001
+                    : 1738368000000
+                )
+                .run()
+            )
+          )
+        );
+        const corrected = (yield* Schema.decodeUnknownEffect(Listed)(
+          yield* fromTestPromise(() =>
+            sendPublicRequest(
+              db,
+              new Request("https://api.fidyapp.com/transactions", {
+                headers: {
+                  origin: "https://app.fidyapp.com",
+                  "Fidy-Session-Binding": sessions[0] ?? "invalid",
+                  cookie: `__Host-fidy_session=${bearer(0)}`,
+                },
+              })
+            ).then((response) => response.json())
+          )
+        ).pipe(Effect.orDie)).data;
+        const correctedTransaction = corrected[0];
+        if (correctedTransaction === undefined) throw new Error("Missing effective Transaction");
+        expect(DateTime.formatIso(correctedTransaction.occurredAt)).toBe(
+          ordering === "same-instant" ? "2025-01-06T12:00:00.000Z" : "2025-01-05T12:00:00.000Z"
+        );
+        expect(correctedTransaction.categoryId).toBe(suppressedCategory);
+        expect(Option.getOrNull(correctedTransaction.counterparty)).toBe("Dos");
+        expect(Option.getOrNull(correctedTransaction.notes)).toBe("visible");
+      })
+    )
+);
 
 it("links and unlinks under the caller's live credential scope and records only metadata for an agent", () =>
   Effect.runPromise(
@@ -3250,12 +3308,12 @@ for (const scenario of [
           db.batch([
             db
               .prepare(
-                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at) VALUES (?, ?, '12.34', 'USD', 'outflow', ?, 'Pago literal', '2025-01-10T12:00:00.000Z', '2025-01-10T12:00:00.000Z')"
+                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at_ms, created_at_ms) VALUES (?, ?, '12.34', 'USD', 'outflow', ?, 'Pago literal', 1736510400000, 1736510400000)"
               )
               .bind(ownId, users[0], category),
             db
               .prepare(
-                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at) VALUES (?, ?, '99', 'COP', 'outflow', ?, 'Pago literal', '2025-01-10T12:00:00.000Z', '2025-01-10T12:00:00.000Z')"
+                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at_ms, created_at_ms) VALUES (?, ?, '99', 'COP', 'outflow', ?, 'Pago literal', 1736510400000, 1736510400000)"
               )
               .bind(foreignId, users[1], category),
           ])
@@ -3347,16 +3405,15 @@ it("continues the canonical history beyond its first bounded page without losing
       yield* fromTestPromise(() =>
         db
           .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 101)
-    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at)
-    SELECT printf('00000000-0000-4000-8000-%012d', n), ?, '1', 'COP', 'outflow', ?, 'Pago literal', ?,
-      CASE WHEN n = 101 THEN ? ELSE ? END FROM seq`)
+    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at_ms, created_at_ms)
+    SELECT printf('00000000-0000-4000-8000-%012d', n), ?, '1', 'COP', 'outflow', ?, 'Pago literal',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(CASE WHEN n = 101 THEN ? ELSE ? END,'subsec')*1000) AS INTEGER) FROM seq`)
           .bind(users[0], category, previous, previous, createdAt)
           .run()
       );
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    VALUES (?, ?, '1', 'COP', 'inflow', ?, '2024-01-09T12:00:00.000Z', ?)`)
+          .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+    VALUES (?, ?, '1', 'COP', 'inflow', ?, 1704801600000,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
           .bind("00000000-0000-4000-8000-000000000999", users[0], category, previous)
           .run()
       );
@@ -4813,7 +4870,7 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
           send(0, "/category-keyword-rules").then((value) => value.json())
         )
       ).pipe(Effect.orDie);
-      expect(rules.data.map(({ keyword }) => keyword)).toEqual(["Panadería"]);
+      expect(rules.data.map(({ keyword }) => keyword)).toEqual(["panaderia"]);
       expect(
         yield* fromTestPromise(() =>
           countRows(
@@ -4906,9 +4963,14 @@ it("rolls back every owner when a later mixed-owner keyword-rule child exceeds c
       yield* fromTestPromise(() =>
         db
           .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 99)
-            INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
-            SELECT printf('90000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, 'seed ' || n, ?, ?, ? FROM seq`)
-          .bind(users[0] ?? "", category, current, current)
+            INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
+            SELECT printf('90000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, ?, ?, ? FROM seq`)
+          .bind(
+            users[0] ?? "",
+            category,
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current))
+          )
           .run()
       );
       const response = yield* fromTestPromise(() =>
@@ -4988,9 +5050,14 @@ it("attributes a cross-owner Memory conflict at commit time and keeps no earlier
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES (?, ?, 'Original', ?, ?)"
+            "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, 'Original', ?, ?)"
           )
-          .bind(memoryId, users[0] ?? "", current, current)
+          .bind(
+            memoryId,
+            users[0] ?? "",
+            DateTime.makeUnsafe(current).epochMilliseconds,
+            DateTime.makeUnsafe(current).epochMilliseconds
+          )
           .run()
       );
       const response = yield* fromTestPromise(() =>
@@ -5205,17 +5272,28 @@ it("refuses two children addressing one retained rule or Memory before any child
       const memoryId = "70000000-0000-4000-8000-000000000002";
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
-            VALUES (?, ?, 'Original', 'original', ?, ?, ?)`)
-          .bind(ruleId, users[0] ?? "", category, current, current)
+          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
+            VALUES (?, ?, 'original', ?, ?, ?)`)
+          .bind(
+            ruleId,
+            users[0] ?? "",
+            category,
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current))
+          )
           .run()
       );
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES (?, ?, 'Repetida', ?, ?)"
+            "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, 'Repetida', ?, ?)"
           )
-          .bind(memoryId, users[0] ?? "", current, current)
+          .bind(
+            memoryId,
+            users[0] ?? "",
+            DateTime.makeUnsafe(current).epochMilliseconds,
+            DateTime.makeUnsafe(current).epochMilliseconds
+          )
           .run()
       );
       const repeatedRule = yield* fromTestPromise(() =>
@@ -5250,7 +5328,7 @@ it("refuses two children addressing one retained rule or Memory before any child
           .bind(ruleId)
           .first<{ keyword: string }>()
       );
-      expect(rule).toEqual({ keyword: "Original" });
+      expect(rule).toEqual({ keyword: "original" });
       const memory = yield* fromTestPromise(() =>
         db
           .prepare("SELECT text FROM memories WHERE id = ?")
@@ -5287,28 +5365,33 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
       const forgottenMemoryId = "60000000-0000-4000-8000-000000000003";
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
-            VALUES (?, ?, 'Antes', 'antes', ?, ?, ?), (?, ?, 'Borrar', 'borrar', ?, ?, ?)`)
+          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
+            VALUES (?, ?, 'antes', ?, ?, ?), (?, ?, 'borrar', ?, ?, ?)`)
           .bind(
             updatedRuleId,
             users[0] ?? "",
             category,
-            current,
-            current,
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
             deletedRuleId,
             users[0] ?? "",
             category,
-            current,
-            current
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current))
           )
           .run()
       );
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES (?, ?, 'Olvidar', ?, ?)"
+            "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, 'Olvidar', ?, ?)"
           )
-          .bind(forgottenMemoryId, users[0] ?? "", current, current)
+          .bind(
+            forgottenMemoryId,
+            users[0] ?? "",
+            DateTime.makeUnsafe(current).epochMilliseconds,
+            DateTime.makeUnsafe(current).epochMilliseconds
+          )
           .run()
       );
       const response = yield* fromTestPromise(() =>
@@ -5338,7 +5421,7 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
           .bind(users[0] ?? "")
           .all<{ id: string; keyword: string }>()
       );
-      expect(rules.results).toEqual([{ id: updatedRuleId, keyword: "Después" }]);
+      expect(rules.results).toEqual([{ id: updatedRuleId, keyword: "despues" }]);
       expect(
         yield* fromTestPromise(() =>
           countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
@@ -5393,9 +5476,14 @@ it("fails closed on a cross-owner dependency defect without partial state", () =
       const current = DateTime.formatIso(DateTime.nowUnsafe());
       yield* fromTestPromise(() =>
         keywordDb
-          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
-            VALUES ('corrupt-rule', ?, 'corrupt', 'corrupt', ?, ?, ?)`)
-          .bind(users[0] ?? "", category, current, current)
+          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
+            VALUES ('corrupt-rule', ?, 'corrupt', ?, ?, ?)`)
+          .bind(
+            users[0] ?? "",
+            category,
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+            DateTime.toEpochMillis(DateTime.makeUnsafe(current))
+          )
           .run()
       );
       const keywordResponse = yield* fromTestPromise(() =>
@@ -5436,9 +5524,13 @@ it("fails closed on a cross-owner dependency defect without partial state", () =
       yield* fromTestPromise(() =>
         memoryDb
           .prepare(
-            "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES ('corrupt-memory', ?, 'Corrupt', ?, ?)"
+            "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES ('corrupt-memory', ?, 'Corrupt', ?, ?)"
           )
-          .bind(users[0] ?? "", current, current)
+          .bind(
+            users[0] ?? "",
+            DateTime.makeUnsafe(current).epochMilliseconds,
+            DateTime.makeUnsafe(current).epochMilliseconds
+          )
           .run()
       );
       const memoryResponse = yield* fromTestPromise(() =>
@@ -5582,9 +5674,9 @@ it("attributes keyword capacity after a deletion and earlier creates without rec
       yield* fromTestPromise(() =>
         db
           .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 98)
-      INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
-      SELECT printf('40000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, 'seed ' || n, ?,
-      '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z' FROM seq`)
+      INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
+      SELECT printf('40000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, ?,
+      1788220800000, 1788220800000 FROM seq`)
           .bind(users[0], category)
           .run()
       );
@@ -6522,12 +6614,12 @@ it("permanently deletes visible history with provenance retained and rejects ano
       ).toBe(1);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_effective_source")
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_effective_source")
         )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_projection_leaf")
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_projection_leaf")
         )
       ).toBe(0);
       expect(
@@ -6662,7 +6754,7 @@ it("rolls back deletion and dashboard removal when a later batch child fails at 
       ).toMatchObject({ deleted_at_ms: null });
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_projection_leaf")
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_projection_leaf")
         )
       ).toBe(1);
       expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([]);
@@ -6720,7 +6812,7 @@ it("cannot link a hidden Transaction or restore its visibility", () =>
       });
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_effective_source")
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_effective_source")
         )
       ).toBe(1);
     })

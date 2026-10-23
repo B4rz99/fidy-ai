@@ -1,3 +1,6 @@
+import { executeCanonicalQuery } from "../canonical-operations/operations";
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
+import { RecurringWorkspace } from "../../src/shell/recurring-plans/contract";
 import { observeRetentionCost } from "../d1-test-fixture";
 import {
   HostedAgentSessionId,
@@ -22,7 +25,7 @@ import { readBrowserConfirmation } from "./internal/hosted-browser-confirmation"
 import { readAdmittedHostedConsent } from "./operations";
 import { makeAgentRetention, makeAgentService } from "./runtime";
 
-import { Cause, Clock, DateTime, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
+import { Cause, Clock, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import assert from "node:assert/strict";
 import { expect, it, vi } from "vitest";
 
@@ -425,7 +428,7 @@ it("does not replace continuity when Consent is revoked during Compaction genera
       const compacted = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations WHERE user_id = ?"
+            "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations WHERE user_id = ?"
           )
           .bind(users[0])
           .all()
@@ -736,7 +739,7 @@ it("expires old CompactedConversation content without exposing it in a later Wor
       const after = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations WHERE user_id = ?"
+            "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations WHERE user_id = ?"
           )
           .bind(users[0])
           .all()
@@ -768,21 +771,21 @@ it("prepares current evidence only for its User and session, never mixing a seco
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => setup());
-      const instant = DateTime.formatIso(DateTime.makeUnsafe(now()));
+      const instant = now();
       const memories = [
         {
           id: "20000000-0000-4000-8000-0000000000a1",
           user_id: users[0],
           text: "retained-Memory-A",
-          created_at: instant,
-          updated_at: instant,
+          created_at_ms: instant,
+          updated_at_ms: instant,
         },
         {
           id: "20000000-0000-4000-8000-0000000000a2",
           user_id: users[1],
           text: "retained-Memory-B",
-          created_at: instant,
-          updated_at: instant,
+          created_at_ms: instant,
+          updated_at_ms: instant,
         },
       ];
       yield* Effect.tryPromise(() =>
@@ -790,9 +793,15 @@ it("prepares current evidence only for its User and session, never mixing a seco
           memories.map((memory) =>
             db
               .prepare(
-                "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+                "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?)"
               )
-              .bind(memory.id, memory.user_id, memory.text, memory.created_at, memory.updated_at)
+              .bind(
+                memory.id,
+                memory.user_id,
+                memory.text,
+                memory.created_at_ms,
+                memory.updated_at_ms
+              )
           )
         )
       );
@@ -831,7 +840,7 @@ it("prepares current evidence only for its User and session, never mixing a seco
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT id, user_id, text, created_at, updated_at FROM memories ORDER BY user_id, id"
+              "SELECT id, user_id, text, created_at_ms, updated_at_ms FROM memories ORDER BY user_id, id"
             )
             .all()
         )).results
@@ -2367,6 +2376,47 @@ it("counts only selected Transcript rows when native D1 compaction triggers writ
     })
   ));
 
+it("rolls back continuity when a native deletion refuses part of its terminal prefix", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const fixture = yield* closedContinuityFixture(db);
+      const continuity = yield* readHostedContinuity({
+        db,
+        subject: fixture.caller,
+        sessionId: fixture.sessionId,
+        now: fixture.current,
+        admittedWhatsAppTurn: Option.none(),
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_prefix BEFORE DELETE ON transcript_entries BEGIN SELECT RAISE(IGNORE); END"
+          )
+          .run()
+      );
+      expect(
+        yield* commitHostedCompaction({
+          db,
+          subject: fixture.caller,
+          sessionId: fixture.sessionId,
+          continuity,
+          throughSequence: Option.getOrThrow(continuity.terminalThroughSequence),
+          text: "Must not commit",
+          signal: makeAbortController().signal,
+        })
+      ).toBe(false);
+      const after = yield* readHostedContinuity({
+        db,
+        subject: fixture.caller,
+        sessionId: fixture.sessionId,
+        now: fixture.current,
+        admittedWhatsAppTurn: Option.none(),
+      });
+      expect(after).toEqual(continuity);
+    })
+  ));
+
 it("awaits a dispatched compaction commit before releasing an interrupted owner", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -2412,7 +2462,7 @@ it("awaits a dispatched compaction commit before releasing an interrupted owner"
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations"
+              "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations"
             )
             .all()
         )).results
@@ -2750,7 +2800,7 @@ it("confirms a hosted Transaction deletion exactly once and retains the hidden o
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT COUNT(*) AS total FROM dashboard_effective_source WHERE user_id = ?")
+            .prepare("SELECT COUNT(*) AS total FROM transaction_effective_source WHERE user_id = ?")
             .bind(users[0])
             .first<number>("total")
         )
@@ -2765,7 +2815,7 @@ it("confirms a hosted Transaction deletion exactly once and retains the hidden o
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT COUNT(*) AS total FROM dashboard_effective_source WHERE user_id = ?")
+            .prepare("SELECT COUNT(*) AS total FROM transaction_effective_source WHERE user_id = ?")
             .bind(users[0])
             .first<number>("total")
         )
@@ -2894,15 +2944,19 @@ it("a recurring lifecycle challenge exposes a readable browser review and confir
         )
       ).toBe("Operación confirmada.");
       expect(yield* readBrowserConfirmation(metadata)).toEqual(Option.none());
-      const stored = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT document_json FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='recurring-plan') AS recurring_plan_documents WHERE user_id=?"
-          )
-          .bind(users[0])
-          .first<string>("document_json")
+      const workspaceResponse = yield* executeCanonicalQuery({
+        db,
+        subject: credential,
+        operation: CanonicalOperationId.make("recurringPlans.getRecurringWorkspace"),
+        input: { query: { month: "2026-10" } },
+        bucket: Option.none(),
+      });
+      const workspace = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(RecurringWorkspace) })
+      )(yield* Effect.tryPromise(() => Option.getOrThrow(workspaceResponse).json()));
+      expect(workspace.data.document.plans.find((plan) => plan.id === planId)?.stoppedOn).toBe(
+        "2026-10-15"
       );
-      expect(stored).toContain('"stoppedOn":"2026-10-15"');
       const transcript = yield* Effect.tryPromise(() => retained({ db, user: users[0] }));
       expect(transcript.results).toEqual(
         expect.arrayContaining([

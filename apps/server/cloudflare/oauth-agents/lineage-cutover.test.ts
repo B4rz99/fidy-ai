@@ -3,6 +3,8 @@ import { Data, Effect, Schema } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   documentedSqlBlock,
+  installHistoricalErasureChunk,
+  installHistoricalErasureStorage,
   schemaDefinition,
   schemaObjectName,
   schemaStatements,
@@ -84,6 +86,8 @@ it.each(failures)("preserves populated OAuth lineage and rolls back $name", (fix
     Effect.gen(function* () {
       const db = yield* native(() => databases.acquire());
       yield* native(() => installTestSchema({ db }));
+      yield* native(() => installHistoricalErasureStorage(db));
+      yield* native(() => installHistoricalErasureChunk(db));
       const baseline = schemaStatements(
         yield* native(() =>
           Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
@@ -157,12 +161,12 @@ it.each(failures)("preserves populated OAuth lineage and rolls back $name", (fix
             .bind(owner),
           db
             .prepare(
-              'INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,\'AwaitingReview\',\'{"dispositions":{"credentials":{"action":"Retain","retention":{"untilMs":4102444800000}}}}\')'
+              'INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,\'Draining\',\'{"dispositions":{"credentials":{"action":"Retain","retention":{"untilMs":4102444800000}}}}\')'
             )
             .bind(request, owner),
           db
             .prepare(
-              "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'oauth_refresh_events','credentials')"
+              "INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'oauth_refresh_events')"
             )
             .bind(request),
           db
@@ -318,28 +322,14 @@ it.each(failures)("preserves populated OAuth lineage and rolls back $name", (fix
         ])
       );
       yield* native(() =>
-        db.prepare("UPDATE erasure_requests SET state='Archiving' WHERE id=?").bind(request).run()
+        db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(request).run()
       );
       const store = makeOauthAgentsErasureStores(db).find(
         (entry) => entry.id === "oauth_refresh_events"
       );
       if (store === undefined) throw Error("Missing lineage erasure projection");
       const scope = { userId: owner, reference: request };
-      expect(yield* store.archive(scope)).toBe(true);
-      expect(
-        (yield* native(() =>
-          db
-            .prepare(
-              "SELECT row_ref,body FROM erasure_archives WHERE request_id=? ORDER BY row_ref"
-            )
-            .bind(request)
-            .all()
-        )).results
-      ).toEqual([
-        { row_ref: "initial:21", body: "{}" },
-        { row_ref: "initial:22", body: "{}" },
-        { row_ref: "initial:credential:last", body: "{}" },
-      ]);
+
       yield* native(() =>
         db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(request).run()
       );

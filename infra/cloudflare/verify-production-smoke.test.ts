@@ -766,7 +766,7 @@ describe("intermediate production smoke", () => {
       })
     )
   );
-  it.each(["admission", "secret-provider-body"])(
+  it.each(["schema", "secret-provider-body"])(
     "reports only an owned smoke failure stage (%s)",
     (stage) =>
       Effect.runPromise(
@@ -804,7 +804,7 @@ describe("intermediate production smoke", () => {
             if (Option.isSome(error)) {
               const reason =
                 "reason" in error.value ? String(error.value.reason) : String(error.value);
-              if (stage === "admission") expect(reason).toContain("stage=admission");
+              if (stage === "schema") expect(reason).toContain("stage=schema");
               expect(reason).not.toContain("secret-provider-body");
             }
           }

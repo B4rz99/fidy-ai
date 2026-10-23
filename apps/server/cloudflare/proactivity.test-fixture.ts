@@ -349,7 +349,7 @@ export const seedRecurringDigestSource = (
     const statements = [july, august, september].map((month) =>
       input.db
         .prepare(
-          "INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at,created_at) VALUES(?,?,'12345.67','COP','outflow',?,'10000000-0000-4000-8000-000000000016',?,?)"
+          "INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at_ms,created_at_ms) VALUES(?,?,'12345.67','COP','outflow',?,'10000000-0000-4000-8000-000000000016',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))"
         )
         .bind(
           `29000000-0000-4000-8000-${String(input.index * identityStride + month).padStart(identityLength, "0")}`,
@@ -381,7 +381,7 @@ export const seedLargeRecurringDigestSource = (
       [july, august, september].map((month) =>
         input.db
           .prepare(
-            "INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at,created_at) VALUES(?,?,'12345.67','COP','outflow',?,'10000000-0000-4000-8000-000000000016',?,?)"
+            "INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at_ms,created_at_ms) VALUES(?,?,'12345.67','COP','outflow',?,'10000000-0000-4000-8000-000000000016',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))"
           )
           .bind(
             `29000000-0000-4000-8000-${String(index * identityStride + month).padStart(identityLength, "0")}`,

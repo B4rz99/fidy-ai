@@ -27,7 +27,6 @@ const cadenceMinutes: Partial<Record<ScheduledOperation, number>> = {
   "agent.workersAiAdmissionSweep": 60,
   "billing.cardPreparationAdmissionSweep": 60,
   "provider.authenticationRetention": 60,
-  "release.smoke.expiry": 60,
   "canonical.admissionRetention": 60,
   "oauth.confirmationRetention": 60,
   "connections.attemptRetention": 60,

@@ -151,7 +151,7 @@ const bindPublicationOrigin = ({
 }>): ReadonlyArray<D1PreparedStatement> => [
   work.db
     .prepare(`UPDATE statement_submissions SET hosted_session_id=(SELECT session_id FROM (${origin.sql})),hosted_turn_id=(SELECT turn_id FROM (${origin.sql})),hosted_expires_at_ms=coalesce(hosted_expires_at_ms,(SELECT expires_at_ms FROM (${origin.sql})))
-      WHERE id=? AND user_id=? AND EXISTS (SELECT 1 FROM (${origin.sql}) AS proof JOIN (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,document_created_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL) d ON d.turn_id=proof.turn_id AND d.user_id=proof.user_id WHERE proof.user_id=? AND d.staging_id=? AND (hosted_session_id IS NULL OR (hosted_session_id=proof.session_id AND hosted_turn_id=proof.turn_id)))`)
+      WHERE id=? AND user_id=? AND EXISTS (SELECT 1 FROM (${origin.sql}) AS proof JOIN (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,started_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL) d ON d.turn_id=proof.turn_id AND d.user_id=proof.user_id WHERE proof.user_id=? AND d.staging_id=? AND (hosted_session_id IS NULL OR (hosted_session_id=proof.session_id AND hosted_turn_id=proof.turn_id)))`)
     .bind(
       ...origin.params,
       ...origin.params,

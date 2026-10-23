@@ -19,7 +19,7 @@ export const discoverProactivityUsers = (
     const rows = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT s.user_id FROM schedules AS s JOIN (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS g ON g.user_id=s.user_id WHERE s.kind='reminder' AND s.enabled=1 AND (s.next_scheduled_at<=? OR (json_extract(g.standing_json,'$._tag')='QuestionPending' AND (g.question_id IS NULL OR EXISTS (SELECT 1 FROM insight_reports AS o WHERE o.kind='proactivity-delivery' AND o.user_id=g.user_id AND o.delivery_id=g.question_id AND o.dispatch_state='expired')))) AND json_extract(g.standing_json,'$._tag')<>'Paused' ORDER BY s.last_evaluated_at_ms,s.next_scheduled_at,s.id LIMIT 16"
+          "SELECT s.user_id FROM schedules AS s JOIN reminder_proactivity_state AS g ON g.user_id=s.user_id WHERE s.kind='reminder' AND s.enabled=1 AND (s.next_scheduled_at<=? OR (json_extract(g.standing_json,'$._tag')='QuestionPending' AND (g.question_id IS NULL OR EXISTS (SELECT 1 FROM proactive_messages AS o WHERE o.kind='proactivity-delivery' AND o.user_id=g.user_id AND o.id=g.question_id AND o.dispatch_state='expired')))) AND json_extract(g.standing_json,'$._tag')<>'Paused' ORDER BY s.last_evaluated_at_ms,s.next_scheduled_at,s.id LIMIT 16"
         )
         .bind(DateTime.formatIso(input.now))
         .all()
@@ -84,16 +84,14 @@ export const noteProactivityEvaluation = (
     yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          `UPDATE insight_reports SET last_evaluated_at_ms=? WHERE kind='offer-request' AND user_id=? AND delivery_id IN (SELECT id FROM (${pending.sql}) WHERE user_id=?)`
+          `UPDATE insight_offer_requests SET last_evaluated_at_ms=? WHERE user_id=? AND id IN (SELECT id FROM (${pending.sql}) WHERE user_id=?)`
         )
         .bind(input.now.epochMilliseconds, input.userId, ...pending.params, input.userId)
         .run()
     );
     yield* Effect.tryPromise(() =>
       input.db
-        .prepare(
-          "UPDATE schedules SET last_evaluated_at_ms=? WHERE kind='digest' AND kind='reminder' AND user_id=?"
-        )
+        .prepare("UPDATE schedules SET last_evaluated_at_ms=? WHERE kind='reminder' AND user_id=?")
         .bind(input.now.epochMilliseconds, input.userId)
         .run()
     );

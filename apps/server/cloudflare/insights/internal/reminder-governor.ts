@@ -1,7 +1,3 @@
-import {
-  prepareReminderControlReceipt,
-  reminderControlReceiptQuery,
-} from "../../../src/shell/audit/operations";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { type Cause, Effect, Option, Schema } from "effect";
 import { ReminderStanding } from "../../../src/core/insights/contract";
@@ -24,7 +20,7 @@ export const findGovernor = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT standing_json FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=?",
+          sql: "SELECT standing_json FROM reminder_proactivity_state AS reminder_governors WHERE user_id=?",
           params: [input.userId],
         },
       }).first()
@@ -45,12 +41,12 @@ export const prepareDelivery = (
 ): ReadonlyArray<D1PreparedStatement> => [
   input.db
     .prepare(
-      `UPDATE insight_reports SET reminder_governor_counted=1 WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=? AND reminder_governor_counted IS NULL AND EXISTS(SELECT 1 FROM (${input.proof.sql}) AS v JOIN proactivity_governors g ON g.kind='reminder' AND g.user_id=v.user_id WHERE v.user_id=? AND v.delivery_id=? AND v.role IN ('manual-entry-reminder','reminder-question') AND v.delivered_at_ms>g.last_reply_at_ms)`
+      `UPDATE proactive_messages SET reminder_governor_counted=1 WHERE kind='proactivity-delivery' AND user_id=? AND id=? AND reminder_governor_counted IS NULL AND EXISTS(SELECT 1 FROM (${input.proof.sql}) AS v JOIN reminder_proactivity_state g ON g.user_id=v.user_id WHERE v.user_id=? AND v.delivery_id=? AND v.role IN ('manual-entry-reminder','reminder-question') AND v.delivered_at_ms>g.last_reply_at_ms)`
     )
     .bind(input.userId, input.id, ...input.proof.params, input.userId, input.id),
   input.db
     .prepare(
-      `UPDATE proactivity_governors AS reminder_governors SET standing_json=CASE WHEN (SELECT role FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)='reminder-question' THEN CASE WHEN json_extract(standing_json,'$._tag')='QuestionPending' AND question_id=? THEN json_object('_tag','QuestionDelivered','unanswered',3) ELSE standing_json END WHEN json_extract(standing_json,'$._tag')='Attentive' AND json_extract(standing_json,'$.unanswered')<2 THEN json_object('_tag','Attentive','unanswered',json_extract(standing_json,'$.unanswered')+1) WHEN json_extract(standing_json,'$._tag')='Attentive' THEN json_object('_tag','QuestionPending','unanswered',3) WHEN json_extract(standing_json,'$._tag')='QuestionDelivered' AND (SELECT delivered_at_ms FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)>question_delivered_at_ms THEN CASE WHEN json_extract(standing_json,'$.unanswered')=3 THEN json_object('_tag','QuestionDelivered','unanswered',4) ELSE json_object('_tag','Paused','unanswered',5,'pausedAt',(SELECT strftime('%Y-%m-%dT%H:%M:%fZ',delivered_at_ms/1000.0,'unixepoch') FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)) END ELSE standing_json END,question_delivered_at_ms=CASE WHEN question_id=? THEN coalesce(question_delivered_at_ms,(SELECT delivered_at_ms FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)) ELSE question_delivered_at_ms END,notice_completed=0 WHERE kind='reminder' AND user_id=? AND changes()=1`
+      `UPDATE reminder_proactivity_state AS reminder_governors SET standing_json=CASE WHEN (SELECT role FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)='reminder-question' THEN CASE WHEN json_extract(standing_json,'$._tag')='QuestionPending' AND question_id=? THEN json_object('_tag','QuestionDelivered','unanswered',3) ELSE standing_json END WHEN json_extract(standing_json,'$._tag')='Attentive' AND json_extract(standing_json,'$.unanswered')<2 THEN json_object('_tag','Attentive','unanswered',json_extract(standing_json,'$.unanswered')+1) WHEN json_extract(standing_json,'$._tag')='Attentive' THEN json_object('_tag','QuestionPending','unanswered',3) WHEN json_extract(standing_json,'$._tag')='QuestionDelivered' AND (SELECT delivered_at_ms FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)>question_delivered_at_ms THEN CASE WHEN json_extract(standing_json,'$.unanswered')=3 THEN json_object('_tag','QuestionDelivered','unanswered',4) ELSE json_object('_tag','Paused','unanswered',5,'pausedAt',(SELECT strftime('%Y-%m-%dT%H:%M:%fZ',delivered_at_ms/1000.0,'unixepoch') FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)) END ELSE standing_json END,question_delivered_at_ms=CASE WHEN question_id=? THEN coalesce(question_delivered_at_ms,(SELECT delivered_at_ms FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)) ELSE question_delivered_at_ms END,notice_completed=0 WHERE user_id=? AND changes()=1`
     )
     .bind(
       ...input.proof.params,
@@ -75,7 +71,7 @@ export const prepareReply = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      `UPDATE proactivity_governors AS reminder_governors SET standing_json=json_object('_tag','Attentive','unanswered',0),last_reply_at_ms=(SELECT max(v.occurred_at_ms) FROM (${input.proof.sql}) AS v WHERE v.user_id=?),question_id=NULL,question_delivered_at_ms=NULL,notice_turn_id=NULL,notice_completed=0 WHERE kind='reminder' AND user_id=? AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.role IN ('manual-entry-reminder','reminder-question') AND v.occurred_at_ms>last_reply_at_ms AND v.occurred_at_ms+1000>=v.delivered_at_ms)`
+      `UPDATE reminder_proactivity_state AS reminder_governors SET standing_json=json_object('_tag','Attentive','unanswered',0),last_reply_at_ms=(SELECT max(v.occurred_at_ms) FROM (${input.proof.sql}) AS v WHERE v.user_id=?),question_id=NULL,question_delivered_at_ms=NULL,notice_turn_id=NULL,notice_completed=0 WHERE user_id=? AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.role IN ('manual-entry-reminder','reminder-question') AND v.occurred_at_ms>last_reply_at_ms AND v.occurred_at_ms+1000>=v.delivered_at_ms)`
     )
     .bind(...input.proof.params, input.userId, input.userId, ...input.proof.params, input.userId);
 const controlChoice = Schema.Tuple([
@@ -102,17 +98,14 @@ const hasControlReceipt = (
   input: Readonly<{ db: D1Database; proof: WhatsAppTurnAdmission }>,
   association: OwnedStatement
 ): Effect.Effect<boolean, Cause.UnknownError> =>
-  Effect.tryPromise(() => {
-    const receipt = reminderControlReceiptQuery({
-      userId: input.proof.userId,
-      messageId: input.proof.messageId,
-      choice: input.proof.text,
-    });
-    return input.db
-      .prepare(`SELECT 1 FROM (${receipt.sql}) WHERE EXISTS (${association.sql})`)
-      .bind(...receipt.params, ...association.params)
-      .first();
-  }).pipe(Effect.map((row) => row !== null));
+  Effect.tryPromise(() =>
+    input.db
+      .prepare(
+        `SELECT 1 FROM proactive_messages WHERE kind='proactivity-delivery' AND role='reminder-question' AND user_id=? AND control_message_id=? AND control_choice=? AND EXISTS (${association.sql})`
+      )
+      .bind(input.proof.userId, input.proof.messageId, input.proof.text, ...association.params)
+      .first()
+  ).pipe(Effect.map((row) => row !== null));
 
 export const controlReminder = (
   input: Readonly<{ db: D1Database; proof: WhatsAppTurnAdmission; now: number }>
@@ -137,7 +130,7 @@ export const controlReminder = (
     const accepted = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          `SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=? AND question_id=? AND EXISTS (${association.sql})`
+          `SELECT 1 FROM reminder_proactivity_state AS reminder_governors WHERE user_id=? AND question_id=? AND EXISTS (${association.sql})`
         )
         .bind(proof.userId, choice.value[1], ...association.params)
         .first()
@@ -145,20 +138,24 @@ export const controlReminder = (
     if (accepted === null) return false;
     yield* Effect.tryPromise(() =>
       input.db.batch([
-        prepareReminderControlReceipt({
-          db: input.db,
-          userId: proof.userId,
-          messageId: proof.messageId,
-          choice: proof.text,
-          proof: {
-            sql: `SELECT 1 WHERE EXISTS (${association.sql}) AND EXISTS (SELECT 1 FROM proactivity_governors WHERE kind='reminder' AND user_id=? AND question_id=?) AND EXISTS (${liveControl.sql})`,
-            params: [...association.params, proof.userId, choice.value[1], ...liveControl.params],
-          },
-        }),
+        input.db
+          .prepare(
+            `UPDATE proactive_messages SET control_message_id=?,control_choice=? WHERE kind='proactivity-delivery' AND role='reminder-question' AND user_id=? AND id=? AND control_message_id IS NULL AND EXISTS (${association.sql}) AND EXISTS (SELECT 1 FROM reminder_proactivity_state WHERE user_id=? AND question_id=?) AND EXISTS (${liveControl.sql})`
+          )
+          .bind(
+            proof.messageId,
+            proof.text,
+            proof.userId,
+            choice.value[1],
+            ...association.params,
+            proof.userId,
+            choice.value[1],
+            ...liveControl.params
+          ),
         prepareChangedRowAssertion({ db: input.db, scope: "proactivity_message" }),
         input.db
           .prepare(
-            "UPDATE proactivity_governors AS reminder_governors SET standing_json=json_object('_tag','Attentive','unanswered',0),last_reply_at_ms=?,question_delivered_at_ms=NULL,question_id=NULL,notice_turn_id=NULL,notice_completed=0 WHERE kind='reminder' AND user_id=?"
+            "UPDATE reminder_proactivity_state AS reminder_governors SET standing_json=json_object('_tag','Attentive','unanswered',0),last_reply_at_ms=?,question_delivered_at_ms=NULL,question_id=NULL,notice_turn_id=NULL,notice_completed=0 WHERE user_id=?"
           )
           .bind(input.now, proof.userId),
         input.db
@@ -175,7 +172,7 @@ export const prepareNotice = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      `UPDATE proactivity_governors AS reminder_governors SET notice_turn_id=? WHERE kind='reminder' AND user_id=? AND json_extract(standing_json,'$._tag')='Paused' AND notice_completed=0 AND EXISTS (${input.proof.sql})`
+      `UPDATE reminder_proactivity_state AS reminder_governors SET notice_turn_id=? WHERE user_id=? AND json_extract(standing_json,'$._tag')='Paused' AND notice_completed=0 AND EXISTS (${input.proof.sql})`
     )
     .bind(input.turnId, input.userId, ...input.proof.params);
 export const readNotice = (
@@ -184,7 +181,7 @@ export const readNotice = (
   Effect.tryPromise(() =>
     input.db
       .prepare(
-        "SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=? AND notice_turn_id=? AND json_extract(standing_json,'$._tag')='Paused' AND notice_completed=0"
+        "SELECT 1 FROM reminder_proactivity_state AS reminder_governors WHERE user_id=? AND notice_turn_id=? AND json_extract(standing_json,'$._tag')='Paused' AND notice_completed=0"
       )
       .bind(input.userId, input.turnId)
       .first()
@@ -197,7 +194,7 @@ export const prepareNoticeCompletion = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      `UPDATE proactivity_governors AS reminder_governors SET notice_completed=1 WHERE kind='reminder' AND user_id=? AND notice_turn_id=? AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.turn_id=? AND instr(v.text,?)>0)`
+      `UPDATE reminder_proactivity_state AS reminder_governors SET notice_completed=1 WHERE user_id=? AND notice_turn_id=? AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.turn_id=? AND instr(v.text,?)>0)`
     )
     .bind(
       input.userId,

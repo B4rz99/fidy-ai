@@ -12,6 +12,7 @@ export const seedHistory = ({
   count,
   linked,
   linkedFraction,
+  spacingMinutes,
 }: Readonly<{
   db: D1Database;
   subject: string;
@@ -19,6 +20,7 @@ export const seedHistory = ({
   count: number;
   linked: boolean;
   linkedFraction: number;
+  spacingMinutes: number;
 }>): Effect.Effect<void> =>
   Effect.gen(function* () {
     const triggers = yield* Schema.decodeUnknownEffect(
@@ -32,7 +34,7 @@ export const seedHistory = ({
       (yield* fromTestPromise(() =>
         db
           .prepare(`SELECT name, sql FROM sqlite_master WHERE name IN
-    ('dashboard_projection_capture', 'dashboard_projection_link_member')`)
+    ('transaction_projection_capture', 'transaction_projection_link_member')`)
           .all()
       )).results
     ).pipe(Effect.orDie);
@@ -43,11 +45,9 @@ export const seedHistory = ({
       db
         .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
     INSERT INTO transactions(id, user_id, amount, currency, direction, counterparty,
-      category_id, occurred_at, created_at)
-    SELECT ? || printf('%012d', i), ?, '100', 'COP', 'outflow', 'shop', ?,
-      strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || (i * 20) || ' minutes'),
-      strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || i || ' days') FROM n`)
-        .bind(count, transactionPrefix, subject, categoryId)
+      category_id, occurred_at_ms, created_at_ms)
+    SELECT ? || printf('%012d', i), ?, '100', 'COP', 'outflow', 'shop', ?,CAST(round(unixepoch(strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || (i * ?) || ' minutes'),'subsec')*1000) AS INTEGER),CAST(round(unixepoch(strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || (i * ?) || ' minutes', '+1 second'),'subsec')*1000) AS INTEGER) FROM n`)
+        .bind(count, transactionPrefix, subject, categoryId, spacingMinutes, spacingMinutes)
         .run()
     );
     yield* seedReconciliation({ db, subject, transactionPrefix, count, linked, linkedFraction });
@@ -59,17 +59,19 @@ const prepareProjection = (db: D1Database, subject: string): Effect.Effect<unkno
   fromTestPromise(() =>
     db.batch([
       db
-        .prepare("UPDATE dashboard_projection_state SET readiness = 'rebuilding' WHERE user_id = ?")
+        .prepare(
+          "UPDATE transaction_projection_state SET readiness = 'rebuilding' WHERE user_id = ?"
+        )
         .bind(subject),
       db
-        .prepare(`INSERT INTO dashboard_projection_leaf
+        .prepare(`INSERT INTO transaction_projection_leaf
       (user_id, id, amount, currency, direction, counterparty, category_id, notes,
-        occurred_at, created_at, revision)
+        occurred_at_ms, created_at_ms, revision)
       SELECT user_id, id, amount, currency, direction, counterparty, category_id, notes,
-        occurred_at, created_at, revision FROM dashboard_effective_source WHERE user_id = ?`)
+        occurred_at_ms, created_at_ms, revision FROM transaction_effective_source WHERE user_id = ?`)
         .bind(subject),
       db
-        .prepare("UPDATE dashboard_projection_state SET readiness = 'ready' WHERE user_id = ?")
+        .prepare("UPDATE transaction_projection_state SET readiness = 'ready' WHERE user_id = ?")
         .bind(subject),
     ])
   );
@@ -96,7 +98,7 @@ const seedReconciliation = ({
           .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
       INSERT INTO transaction_reconciliation_decisions
       SELECT ?, ? || printf('%012d', 2 * i - 1), ? || printf('%012d', 2 * i),
-        'linked', ? || printf('%012d', 2 * i - 1), '2026-01-01T00:00:00.000Z' FROM n`)
+        'linked', ? || printf('%012d', 2 * i - 1), 1767225600000  FROM n`)
           .bind(
             Math.floor((count * linkedFraction) / 2),
             subject,

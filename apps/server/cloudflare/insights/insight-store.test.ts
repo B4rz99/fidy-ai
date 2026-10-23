@@ -423,13 +423,13 @@ effectIt.effect(
               .prepare(
                 `INSERT INTO insight_events
                   (id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,
-                    scheduled_at,money_groups_json,lifecycle_state)
+                    scheduled_at_ms,money_groups_json,lifecycle_state)
                 SELECT ?,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,
                   ?,money_groups_json,lifecycle_state FROM insight_events WHERE id = ?`
               )
               .bind(
                 `90000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-                DateTime.formatIso(DateTime.add(input.scheduledAt, { seconds: index + 1 })),
+                DateTime.add(input.scheduledAt, { seconds: index + 1 }).epochMilliseconds,
                 seed.id
               )
           )
@@ -574,7 +574,7 @@ effectIt.effect(
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "ALTER TABLE insight_events RENAME COLUMN delivery_sent_at TO unavailable_sent_at"
+            "ALTER TABLE insight_events RENAME COLUMN delivery_sent_at_ms TO unavailable_sent_at"
           )
           .run()
       );

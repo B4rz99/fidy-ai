@@ -45,14 +45,14 @@ const seedLeaves = (
       .prepare(`WITH RECURSIVE sequence(number) AS (
         SELECT 1 UNION ALL SELECT number + 1 FROM sequence WHERE number < 2000
       )
-      INSERT INTO dashboard_projection_leaf
+      INSERT INTO transaction_projection_leaf
         (user_id, id, amount, currency, direction, category_id, counterparty, notes,
-          occurred_at, created_at, revision)
+          occurred_at_ms, created_at_ms, revision)
       SELECT ?, ? || printf('%012d', number), '1', 'COP', 'outflow', ?, NULL,
         CASE WHEN ? = 1 THEN 'Café common unique foreignonly note'
           WHEN number = 1 THEN 'Café unique oldest note' ELSE 'Café common note' END,
-        strftime('%Y-%m-%dT%H:%M:%fZ', '2026-01-01', '+' || number || ' minutes'),
-        strftime('%Y-%m-%dT%H:%M:%fZ', '2026-01-01', '+' || number || ' minutes'), 0
+        1767225600000 + number * 60000,
+        1767225600000 + number * 60000, 0
       FROM sequence`)
       .bind(subject, transactionPrefix, categoryId, subject === foreignUserId ? 1 : 0)
       .run()
@@ -154,9 +154,9 @@ const notesFixture = (
   return db
     .prepare(`INSERT INTO transactions
       (id, user_id, amount, currency, direction, category_id, counterparty, notes,
-        occurred_at, created_at)
+        occurred_at_ms, created_at_ms)
       VALUES (?, ?, '1', 'COP', 'outflow', ?, ?, ?,
-        '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')`)
+        1767225600000, 1767225600000)`)
     .bind(
       recordId(index),
       input.userId,
@@ -267,8 +267,8 @@ it(
             db
               .prepare(`INSERT INTO transaction_reconciliation_decisions
                 (user_id, first_transaction_id, second_transaction_id, state,
-                  visible_transaction_id, decided_at)
-                VALUES (?, ?, ?, 'linked', ?, '2026-01-01T01:00:00.000Z')`)
+                  visible_transaction_id, decided_at_ms)
+                VALUES (?, ?, ?, 'linked', ?, 1767229200000)`)
               .bind(userId, recordId(1), recordId(2), recordId(1)),
             db
               .prepare(
@@ -295,8 +295,8 @@ it(
             db
               .prepare(`INSERT INTO transaction_corrections
                 (id, user_id, transaction_id, previous_revision, changed_fields,
-                  before_facts, after_facts, corrected_at)
-                VALUES (?, ?, ?, 0, '["notes"]', '{}', '{}', '2026-01-02T00:00:00.000Z')`)
+                  before_facts, after_facts, corrected_at_ms)
+                VALUES (?, ?, ?, 0, '["notes"]', '{}', '{}', 1767312000000)`)
               .bind("40000000-0000-4000-8000-000000000001", userId, recordId(2)),
             db
               .prepare(`UPDATE transactions SET notes = 'Replacement 😀', revision = 1

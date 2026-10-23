@@ -131,7 +131,7 @@ const captureStatement = (
   const occurredAt = `2026-${String(month).padStart(2, "0")}-15T12:00:00.000Z`;
   return db
     .prepare(
-      `INSERT INTO transactions (id, user_id, amount, currency, direction, counterparty, category_id, occurred_at, created_at) VALUES (?, ?, ?, ?, ?, ?, '10000000-0000-4000-8000-000000000016', ?, ?)`
+      `INSERT INTO transactions (id, user_id, amount, currency, direction, counterparty, category_id, occurred_at_ms, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, '10000000-0000-4000-8000-000000000016',CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`
     )
     .bind(
       `${input.idPrefix}-0000-4000-8000-${String(month).padStart(12, "0")}`,
@@ -708,7 +708,7 @@ it.effect(
         db.batch([
           db
             .prepare(
-              "INSERT INTO transaction_reconciliation_decisions (user_id, first_transaction_id, second_transaction_id, state, visible_transaction_id, decided_at) VALUES (?, ?, ?, 'linked', ?, ?)"
+              "INSERT INTO transaction_reconciliation_decisions (user_id, first_transaction_id, second_transaction_id, state, visible_transaction_id, decided_at_ms) VALUES (?, ?, ?, 'linked', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))"
             )
             .bind(
               userId,
@@ -927,12 +927,12 @@ const seedRetainedPatternLimit = (db: D1Database): Effect.Effect<void> =>
       db.batch([
         db
           .prepare(`UPDATE recurring_series SET evidence_json = json_set(evidence_json,
-        '$.evaluatedFactRevision', (SELECT fact_revision FROM dashboard_projection_state WHERE user_id = ?))
+        '$.evaluatedFactRevision', (SELECT fact_revision FROM transaction_projection_state WHERE user_id = ?))
         WHERE user_id = ?`)
           .bind(userId, userId),
         db
           .prepare(`WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM copies WHERE n < ?)
-        INSERT INTO recurring_series(user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,confirmed_at,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence)
+        INSERT INTO recurring_series(user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,confirmed_at_ms,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence)
         SELECT user_id, printf('51000000-0000-4000-8000-%012d',n), currency,
           printf('limit merchant %03d',n),
           json_set(series_json, '$.id', printf('51000000-0000-4000-8000-%012d',n),
@@ -942,7 +942,7 @@ const seedRetainedPatternLimit = (db: D1Database): Effect.Effect<void> =>
             printf('%08d-0000-4000-8000-000000000002',50000000+n),
             printf('%08d-0000-4000-8000-000000000003',50000000+n)),
             '$.latestTransactionId', printf('%08d-0000-4000-8000-000000000003',50000000+n)),
-          reference_json, valid, printf('52000000-0000-4000-8000-%012d',n), confirmed_at, confirmation_context_json,
+          reference_json, valid, printf('52000000-0000-4000-8000-%012d',n), confirmed_at_ms, confirmation_context_json,
           json_set(confirmation_json, '$.id', printf('52000000-0000-4000-8000-%012d',n),
             '$.seriesId', printf('51000000-0000-4000-8000-%012d',n)),digest_excluded,
           (SELECT max(confirmation_sequence) FROM recurring_series)+n
@@ -950,8 +950,8 @@ const seedRetainedPatternLimit = (db: D1Database): Effect.Effect<void> =>
           .bind(count - 1, userId, original),
         db
           .prepare(`UPDATE recurring_evaluation_records SET revision =
-        (SELECT fact_revision FROM dashboard_projection_state WHERE user_id = ?), evaluated_revision =
-        (SELECT fact_revision FROM dashboard_projection_state WHERE user_id = ?) WHERE user_id = ?`)
+        (SELECT fact_revision FROM transaction_projection_state WHERE user_id = ?), evaluated_revision =
+        (SELECT fact_revision FROM transaction_projection_state WHERE user_id = ?) WHERE user_id = ?`)
           .bind(userId, userId, userId),
       ])
     );
@@ -1040,10 +1040,16 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const db = yield* setup();
+      const completedAt = DateTime.makeUnsafe("2026-10-22T12:34:56.007Z");
+      yield* TestClock.setTime(completedAt.epochMilliseconds);
       for (const month of [1, 2, 3]) yield* capture(db, month);
       yield* evaluate(db);
       const page = yield* readRecurringDigestSource({ db, userId, cursor: Option.none() }).pipe(
         Effect.orDie
+      );
+      expect(page.sourceIdentity).toContain(":2026-10-22T12:34:56.007Z:");
+      expect(page.confirmations[0]?.confirmedAt.epochMilliseconds).toBe(
+        completedAt.epochMilliseconds
       );
       expect(page.complete).toBe(true);
       expect(page.confirmations).toHaveLength(1);
@@ -1089,7 +1095,7 @@ it.effect("restores fair discovery after erasure removes the dispatch cursor", (
             .bind(id),
           db
             .prepare(
-              "UPDATE dashboard_projection_state SET fact_revision=1,first_captured_at='2026-01-01T00:00:00Z',time_zone='America/Bogota' WHERE user_id=?"
+              "UPDATE transaction_projection_state SET fact_revision=1,first_captured_at_ms=1767225600000,time_zone='America/Bogota' WHERE user_id=?"
             )
             .bind(id),
         ])
@@ -1106,7 +1112,6 @@ it.effect("restores fair discovery after erasure removes the dispatch cursor", (
         db
           .prepare("INSERT INTO erasure_permits VALUES ('cursor-erasure',?,'recurring_dispatch')")
           .bind(userId),
-        db.prepare("INSERT INTO erasure_chunk VALUES ('cursor-erasure','1')"),
       ])
     );
     const cursor = projections.find((projection) => projection.id === "recurring_dispatch");
@@ -1115,7 +1120,7 @@ it.effect("restores fair discovery after erasure removes the dispatch cursor", (
     yield* fromPromise(() =>
       db.batch(
         cursor
-          .remove({ userId, reference: "cursor-erasure" })
+          .remove({ userId, reference: "cursor-erasure", rowRefsJson: '["1"]' })
           .map(({ sql, params }) => db.prepare(sql).bind(...params))
       )
     );
@@ -1174,7 +1179,7 @@ it.effect("discovers new Users hourly while resuming interrupted evaluation on t
     expect(observed.cost().rowsRead).toBeLessThanOrEqual(3);
     const plans = yield* fromPromise(() => observed.plans());
     expect(plans.some((plan) => plan.includes("recurring_unfinished_users"))).toBe(true);
-    expect(plans.some((plan) => plan.includes("dashboard_projection_state"))).toBe(false);
+    expect(plans.some((plan) => plan.includes("transaction_projection_state"))).toBe(false);
     yield* TestClock.setTime(start + 3600000);
     expect(yield* discoverRecurringWork(db)).toEqual([userId]);
     yield* evaluateRecurringSeries({ db, userId });
@@ -1184,7 +1189,7 @@ it.effect("discovers new Users hourly while resuming interrupted evaluation on t
       yield* fromPromise(() =>
         db
           .prepare(
-            "SELECT phase FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id=?"
+            "SELECT phase FROM (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id=?"
           )
           .bind(userId)
           .first("phase")

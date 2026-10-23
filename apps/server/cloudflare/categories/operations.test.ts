@@ -99,7 +99,7 @@ it("categorizes each User's captures without exposing or borrowing another User'
           ),
           db
             .prepare(
-              "INSERT INTO keyword_rules VALUES ('30000000-0000-4000-8000-000000000003', ?, 'Éxito', 'exito', ?, '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')"
+              "INSERT INTO keyword_rules VALUES ('30000000-0000-4000-8000-000000000003', ?, 'exito', ?, 1788220800000, 1788220800000)"
             )
             .bind(userA, mercado),
         ])
@@ -139,7 +139,7 @@ it("categorizes each User's captures without exposing or borrowing another User'
         Exit.fail(new CategoriesUnavailable())
       );
       yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE keyword_rules SET keyword = '' WHERE user_id = ?").bind(userA).run()
+        db.prepare("UPDATE keyword_rules SET keyword = 'Éxito' WHERE user_id = ?").bind(userA).run()
       );
       deepStrictEqual(
         yield* Effect.exit(categorizeCaptures({ db, userId: userA, captures })),

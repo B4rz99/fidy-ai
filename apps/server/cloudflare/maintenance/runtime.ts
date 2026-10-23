@@ -13,7 +13,6 @@ import { executeDueSchedule } from "./operations";
 import { sweepCanonicalAdmission } from "../canonical-admission/runtime";
 import { sweepCommercialAllowances } from "../quotas/runtime";
 import type { ForwardedEmailEnvironment } from "../ingestion/contract";
-import type { PlatformMaintenance } from "../runtime/contract";
 import { makePlatformMaintenance } from "../runtime/runtime";
 import { makeAgentRetention } from "../agent/runtime";
 import { sweepExpiredWorkersAiAdmission } from "../ai/runtime";
@@ -202,8 +201,7 @@ const stagingActivities = (
 
 const admissionActivities = (
   environment: CoreMaintenanceInput,
-  nowEpochMs: number,
-  platform: PlatformMaintenance
+  nowEpochMs: number
 ): ReadonlyArray<ScheduledActivity> => [
   activity(
     "ingestion.mediaRetention",
@@ -225,7 +223,6 @@ const admissionActivities = (
     "provider.authenticationRetention",
     sweepProviderAuthentication({ db: environment.DB, current: nowEpochMs })
   ),
-  activity("release.smoke.expiry", platform.expireSmokeProbes(nowEpochMs)),
   activity(
     "canonical.admissionRetention",
     sweepCanonicalAdmission({ db: environment.DB, current: nowEpochMs })
@@ -312,7 +309,7 @@ export const runCoreMaintenance = (
         activity("recurring.evaluate", advanceRecurringWork(environment)),
         activity("insights.weekly.dispatch", advanceProactivityWork(environment)),
         ...stagingActivities(environment, nowEpochMs),
-        ...admissionActivities(environment, nowEpochMs, platform),
+        ...admissionActivities(environment, nowEpochMs),
         ...statementActivities(environment),
       ],
       nowEpochMs: "environment" in input ? input.scheduledAtEpochMs : nowEpochMs,

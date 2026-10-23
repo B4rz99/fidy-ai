@@ -19,7 +19,7 @@ const backfillDays = 30;
 const millisecondsPerDay = 86_400_000;
 const Snapshot = Schema.Struct({
   revision: Schema.Int.check(Schema.isGreaterThan(0)),
-  firstCapturedAt: UtcTimestamp,
+  firstCapturedAt: Schema.DateTimeUtcFromMillis,
   timeZone: IanaTimeZone,
 });
 const Row = Schema.Struct({
@@ -39,7 +39,7 @@ const snapshotRead = ({
     subject: { _tag: "User", userId },
     requirement: "active",
     statement: {
-      sql: "SELECT fact_revision AS revision, first_captured_at AS firstCapturedAt, time_zone AS timeZone FROM dashboard_projection_state WHERE user_id = ? AND fact_revision IS NOT NULL",
+      sql: "SELECT fact_revision AS revision, first_captured_at_ms AS firstCapturedAt, time_zone AS timeZone FROM transaction_projection_state WHERE user_id = ? AND fact_revision IS NOT NULL",
       params: [userId],
     },
   });
@@ -117,7 +117,7 @@ export const readFacts = ({
               subject: { _tag: "User", userId },
               requirement: "active",
               statement: {
-                sql: `WITH ${relation.sql} SELECT id, amount, currency, counterparty, occurred_at, created_at FROM effective_transaction WHERE user_id = ? AND direction = 'outflow' AND (occurred_at, id) > (?, ?) AND EXISTS (SELECT 1 FROM dashboard_projection_state WHERE user_id = ? AND fact_revision = ?)`,
+                sql: `WITH ${relation.sql} SELECT id, amount, currency, counterparty, occurred_at, created_at FROM effective_transaction WHERE user_id = ? AND direction = 'outflow' AND (occurred_at, id) > (?, ?) AND EXISTS (SELECT 1 FROM transaction_projection_state WHERE user_id = ? AND fact_revision = ?)`,
                 params: [
                   ...relation.bindings,
                   userId,
@@ -151,7 +151,7 @@ export const revisionGuard = ({
     subject: { _tag: "User", userId },
     requirement: "active",
     statement: {
-      sql: "SELECT 1 FROM dashboard_projection_state WHERE user_id = ? AND fact_revision = ?",
+      sql: "SELECT 1 FROM transaction_projection_state WHERE user_id = ? AND fact_revision = ?",
       params: [userId, revision],
     },
   });
@@ -170,6 +170,6 @@ export const revisionProjection = ({
 }>): D1PreparedStatement =>
   db
     .prepare(
-      `WITH transaction_fact_revisions AS (SELECT user_id AS userId, fact_revision AS revision FROM dashboard_projection_state WHERE fact_revision IS NOT NULL) ${statement.sql}`
+      `WITH transaction_fact_revisions AS (SELECT user_id AS userId, fact_revision AS revision FROM transaction_projection_state WHERE fact_revision IS NOT NULL) ${statement.sql}`
     )
     .bind(...statement.params);

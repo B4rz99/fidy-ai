@@ -14,6 +14,7 @@ import {
   detectMonthlySeries,
   normalizeCounterparty,
 } from "../../../src/core/recurring/operations";
+import { UtcTimestamp } from "../../../src/core/_shared/time";
 import { Money } from "../../../src/core/_shared/money";
 import {
   type RecurringFactSnapshot,
@@ -94,12 +95,12 @@ export const initialize = ({
         .bind(work.userId),
       work.db
         .prepare(
-          `INSERT INTO recurring_evaluation_records (kind,id,user_id,revision,phase,first_captured_at,time_zone,cursor_at,cursor_id,group_key,evaluated_revision) VALUES ('progress','progress',?,?,'scan',?,?,'','','',0) ON CONFLICT(user_id,kind,id) DO UPDATE SET revision = excluded.revision, phase = 'scan', cursor_at = '', cursor_id = '', group_key = '', first_captured_at = excluded.first_captured_at, time_zone = excluded.time_zone`
+          `INSERT INTO recurring_evaluation_records (kind,id,user_id,revision,phase,first_captured_at_ms,time_zone,cursor_at_ms,cursor_id,group_key,evaluated_revision) VALUES ('progress','progress',?,?,'scan',?,?,NULL,'','',0) ON CONFLICT(user_id,kind,id) DO UPDATE SET revision = excluded.revision, phase = 'scan', cursor_at_ms = NULL, cursor_id = '', group_key = '', first_captured_at_ms = excluded.first_captured_at_ms, time_zone = excluded.time_zone`
         )
         .bind(
           work.userId,
           snapshot.revision,
-          DateTime.formatIso(snapshot.firstCapturedAt),
+          snapshot.firstCapturedAt.epochMilliseconds,
           snapshot.timeZone
         ),
     ],
@@ -112,7 +113,10 @@ export const scan = ({
     const read = yield* readRecurringFacts({
       ...work,
       revision: progress.revision,
-      cursor: { occurredAt: progress.cursor_at, transactionId: progress.cursor_id },
+      cursor: {
+        occurredAt: progress.cursor_at_ms === null ? "" : DateTime.formatIso(progress.cursor_at_ms),
+        transactionId: progress.cursor_id,
+      },
     });
     if (Option.isNone(read)) return yield* new RecurringUnavailable();
     const statements: D1PreparedStatement[] = [
@@ -124,24 +128,29 @@ export const scan = ({
       statements.push(
         work.db
           .prepare(
-            "INSERT INTO recurring_evaluation_records (kind,user_id,id,group_key,occurred_at,fact_json) VALUES ('fact',?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO NOTHING"
+            "INSERT INTO recurring_evaluation_records (kind,user_id,id,group_key,occurred_at_ms,fact_json) VALUES ('fact',?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO NOTHING"
           )
           .bind(
             work.userId,
             fact.id,
             `${fact.money.currency}|${normalizeCounterparty(fact.counterparty.value)}`,
-            DateTime.formatIso(fact.occurredAt),
+            fact.occurredAt.epochMilliseconds,
             encoded
           )
       );
     }
+    const cursorAt =
+      read.value.cursor.occurredAt === ""
+        ? null
+        : (yield* decode({ schema: UtcTimestamp, input: read.value.cursor.occurredAt }))
+            .epochMilliseconds;
     statements.push(
       work.db
         .prepare(
-          "UPDATE recurring_evaluation_records SET cursor_at = ?, cursor_id = ?, phase = ? WHERE kind='progress' AND user_id = ? AND revision = ?"
+          "UPDATE recurring_evaluation_records SET cursor_at_ms = ?, cursor_id = ?, phase = ? WHERE kind='progress' AND user_id = ? AND revision = ?"
         )
         .bind(
-          read.value.cursor.occurredAt,
+          cursorAt,
           read.value.cursor.transactionId,
           read.value.complete ? "detect" : "scan",
           work.userId,
@@ -162,7 +171,7 @@ export const processGroup = ({
   Effect.gen(function* () {
     const raw = yield* query({
       db: work.db,
-      sql: `SELECT fact_json AS value FROM (SELECT rowid,user_id,id,group_key,occurred_at,fact_json FROM recurring_evaluation_records WHERE kind='fact') WHERE user_id = ? AND group_key = ? ORDER BY occurred_at, id LIMIT ${maximumGroupFacts + 1}`,
+      sql: `SELECT fact_json AS value FROM (SELECT rowid,user_id,id,group_key,occurred_at_ms,fact_json FROM recurring_evaluation_records WHERE kind='fact') WHERE user_id = ? AND group_key = ? ORDER BY occurred_at_ms, id LIMIT ${maximumGroupFacts + 1}`,
       values: [work.userId, group],
     });
     if (raw.length > maximumGroupFacts) return yield* new RecurringUnavailable();
@@ -255,7 +264,7 @@ const makeSeries = ({ proposal, progress, current, retained }: SeriesInput): Rec
       onNone: () =>
         decideAnnouncement({
           backfill: proposal.backfill,
-          firstCapturedAt: progress.first_captured_at.epochMilliseconds,
+          firstCapturedAt: progress.first_captured_at_ms.epochMilliseconds,
           confirmedAt: current.epochMilliseconds,
         }),
       onSome: (old) => old.series.announcement,
@@ -294,7 +303,7 @@ const seriesStatement = (
     return work.db
       .prepare(`INSERT INTO recurring_series (
       user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,
-      confirmation_id,confirmed_at,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence
+      confirmation_id,confirmed_at_ms,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence
     ) VALUES (?,?,?,?,?,?,?,1,?,?,?,?,?,
       CASE WHEN ? IS NOT NULL THEN (SELECT coalesce(max(confirmation_sequence),0)+1 FROM recurring_series WHERE confirmation_sequence IS NOT NULL) END)
     ON CONFLICT(user_id,id) DO UPDATE SET series_json=excluded.series_json,
@@ -308,7 +317,7 @@ const seriesStatement = (
         evidence,
         reference,
         eventId,
-        eventId === null ? null : DateTime.formatIso(series.confirmedAt),
+        eventId === null ? null : series.confirmedAt.epochMilliseconds,
         contextJson,
         confirmation,
         eventId === null ? null : 0,
@@ -386,9 +395,9 @@ export const cutover = ({
     statements.push(
       work.db
         .prepare(
-          "UPDATE recurring_evaluation_records SET phase = 'complete', evaluated_at = ?, evaluated_revision = revision WHERE kind='progress' AND user_id = ? AND revision = ?"
+          "UPDATE recurring_evaluation_records SET phase = 'complete', evaluated_at_ms = ?, evaluated_revision = revision WHERE kind='progress' AND user_id = ? AND revision = ?"
         )
-        .bind(DateTime.formatIso(current), work.userId, progress.revision),
+        .bind(current.epochMilliseconds, work.userId, progress.revision),
       work.db
         .prepare(
           "DELETE FROM recurring_evaluation_records WHERE kind IN ('fact','proposal') AND user_id = ?"

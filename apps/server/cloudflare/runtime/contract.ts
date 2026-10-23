@@ -43,12 +43,6 @@ export type PlatformMaintenanceInput = Readonly<{
   OPERATOR_ALERT_EMAIL: Option.Option<string>;
   RESEND_API_KEY: Option.Option<string>;
   WOMPI_EVENT_SECRET: Option.Option<string>;
-  SMOKE_BUCKET: Option.Option<R2Bucket>;
-  SMOKE_QUEUE: Option.Option<Queue>;
-  SMOKE_WORKFLOW: Option.Option<Workflow>;
-  SMOKE_QUEUE_NAME: Option.Option<string>;
-  SMOKE_PROOF: Option.Option<string>;
-  CF_VERSION_METADATA: Option.Option<Readonly<{ id: string }>>;
 }> &
   Pick<ProactivityEnvironment, "WEEKLY_SUMMARY_ENABLED" | "PROACTIVITY_ENABLED"> &
   Partial<
@@ -63,7 +57,6 @@ export type PlatformMaintenance = Readonly<{
   inspectHealth: () => Effect.Effect<void, PlatformMaintenanceUnavailable>;
   retainEventBuckets: (nowEpochMs: number) => Effect.Effect<void, PlatformMaintenanceUnavailable>;
   publishCanary: (nowEpochMs: number) => Effect.Effect<void, PlatformMaintenanceUnavailable>;
-  expireSmokeProbes: (nowEpochMs: number) => Effect.Effect<void, PlatformMaintenanceUnavailable>;
 }>;
 
 /** Non-secret PAT fixture accepted only by the local canonical-operation harness. */

@@ -9,6 +9,7 @@ const compositionRoots = new Set([
   "src/client.ts",
   "src/shell/memory/memory-policy.test.ts",
   "cloudflare/core-worker.ts",
+  "cloudflare/release-smoke-worker.ts",
   "cloudflare/core-worker.test-fixture.ts",
   "cloudflare/public-worker.ts",
   "cloudflare/operational-canary-workflow.ts",
@@ -28,6 +29,7 @@ const compositionRoots = new Set([
   "cloudflare/maintenance/monitoring-isolation.test.ts",
   "cloudflare/maintenance-performance.test-fixture.ts",
   "cloudflare/transactions/performance.test.ts",
+  "cloudflare/erasure/erasure.test.ts",
   "cloudflare/erasure/orchestration.test.ts",
   "cloudflare/erasure/restore.test.ts",
   "cloudflare/erasure/originals.test.ts",
@@ -36,6 +38,7 @@ const compositionRoots = new Set([
   "cloudflare/agent/hosted-turn.test-fixture.ts",
   "cloudflare/agent/hosted-tool-turn.test.ts",
   "cloudflare/agent/hosted-continuity.test.ts",
+  "cloudflare/agent/document-clock-cutover.test.ts",
   "cloudflare/budgets/budgets.test.ts",
   "cloudflare/connections/connections.test.ts",
   "cloudflare/consent/browser.test.ts",
@@ -50,6 +53,9 @@ const compositionRoots = new Set([
   "cloudflare/agent/proactive-transcript.test.ts",
   "cloudflare/whatsapp/insight-delivery.test.ts",
   "cloudflare/recurring/recurring.test-fixture.ts",
+  // Native experimental Worker entrypoints must export their bound Durable Object class.
+  "cloudflare/recurring/digest-cost-worker.test-fixture.ts",
+  "cloudflare/recurring/workflow-cost-worker.test-fixture.ts",
   "cloudflare/recurring-plans/recurring-plans.test.ts",
   "cloudflare/memory/memory.test.ts",
   "cloudflare/onboarding/consent-ingress.test.ts",
@@ -85,6 +91,8 @@ const testRunner = new Set([
   "cloudflare/test-shards.test.ts",
 ]);
 const sharedTestSupport = new Set([
+  // Subscription and Audit proofs seed the same completed Sandbox charge and paid access.
+  "cloudflare/subscription/refund-charge.test-fixture.ts",
   "cloudflare/schema-cutover.test-fixture.ts",
   "cloudflare/browser-acceptance-clock.test-fixture.ts",
   "src/shell/testing/credential-evidence-harness.ts",

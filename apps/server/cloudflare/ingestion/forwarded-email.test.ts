@@ -172,7 +172,7 @@ const wait = <A>(run: () => Promise<A>): Effect.Effect<A> =>
 const setup = Effect.fn(function* () {
   const { db, bucket } = yield* wait(() => storage.acquire());
   yield* wait(() =>
-    db.exec(`CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,id TEXT PRIMARY KEY, time_zone TEXT NOT NULL DEFAULT 'America/Bogota', service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO', trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER);
+    db.exec(`CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,id TEXT PRIMARY KEY, time_zone TEXT NOT NULL DEFAULT 'America/Bogota', service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO', trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER);
     ${consentHistoryTestSchema};
 
     CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT, token_digest BLOB, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER);
@@ -182,8 +182,8 @@ const setup = Effect.fn(function* () {
     CREATE TABLE memory_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE categories (id TEXT PRIMARY KEY);
     INSERT INTO categories (id) VALUES ('10000000-0000-4000-8000-000000000016');
-    CREATE TABLE transactions (id TEXT PRIMARY KEY, user_id TEXT, amount TEXT, currency TEXT, direction TEXT, counterparty TEXT, category_id TEXT, notes TEXT, occurred_at TEXT, created_at TEXT, UNIQUE(user_id, id));
-    CREATE TABLE source_attestations (id TEXT PRIMARY KEY, user_id TEXT, transaction_id TEXT, kind TEXT, service_market TEXT, locale TEXT, time_zone TEXT, interpretation_revision TEXT, created_at TEXT, statement_submission_id TEXT, statement_record_number INTEGER, statement_content_hash TEXT, source_format TEXT,received_email_id TEXT,message_content_sha256 TEXT,message_evidence TEXT,deterministic_interpretation TEXT,extractor_revision TEXT);
+    CREATE TABLE transactions (id TEXT PRIMARY KEY, user_id TEXT, amount TEXT, currency TEXT, direction TEXT, counterparty TEXT, category_id TEXT, notes TEXT, occurred_at_ms INTEGER, created_at_ms INTEGER, UNIQUE(user_id, id));
+    CREATE TABLE source_attestations (id TEXT PRIMARY KEY, user_id TEXT, transaction_id TEXT, kind TEXT, service_market TEXT, locale TEXT, time_zone TEXT, interpretation_revision TEXT, created_at_ms INTEGER, statement_submission_id TEXT, statement_record_number INTEGER, statement_content_hash TEXT, source_format TEXT,received_email_id TEXT,message_content_sha256 TEXT,message_evidence TEXT,deterministic_interpretation TEXT,extractor_revision TEXT);
     CREATE TABLE statement_submissions (id TEXT PRIMARY KEY,user_id TEXT,clarification_state TEXT,clarification_expires_at_ms INTEGER,clarification_ended_at_ms INTEGER,UNIQUE(user_id,id));
     CREATE TABLE consent_user_context (user_id TEXT PRIMARY KEY, time_zone TEXT);
     CREATE VIEW subscription_standing AS SELECT rowid,id AS user_id,paid_attempt_id AS attempt_id,paid_period_ends_at_ms FROM users WHERE paid_attempt_id IS NOT NULL;

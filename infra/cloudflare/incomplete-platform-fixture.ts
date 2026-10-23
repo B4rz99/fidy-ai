@@ -51,6 +51,7 @@ export class SyntheticBindings {
 
 export const smokeEnvironment = (overrides: Partial<SmokeEnvironment> = {}): SmokeEnvironment => ({
   DB: unavailableDatabase,
+  SMOKE_LIMITER: { limit: (): Promise<{ success: boolean }> => Promise.resolve({ success: true }) },
   SMOKE_BUCKET: unavailableBucket,
   SMOKE_QUEUE: unavailableQueue,
   SMOKE_WORKFLOW: unavailableWorkflow,

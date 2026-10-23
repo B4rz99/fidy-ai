@@ -152,18 +152,16 @@ export const prepareWhatsAppInbound = ({
     db,
     userId: subject.userId,
     statement: {
-      sql: `INSERT INTO hosted_whatsapp_windows
-      (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms, closes_at_ms)
-      SELECT i.user_id, i.portfolio_id, i.bsuid, MIN(i.occurred_at_ms, i.received_at_ms),
-        MIN(i.occurred_at_ms, i.received_at_ms) + 86400000
+      sql: `INSERT INTO whatsapp_service_windows
+      (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms)
+      SELECT i.user_id, i.portfolio_id, i.bsuid, MIN(i.occurred_at_ms, i.received_at_ms)
       FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
       JOIN identity_associations AS w ON w.userId = i.user_id AND w.businessPortfolioId = i.portfolio_id
         AND w.businessScopedUserId = i.bsuid
       WHERE i.turn_id = ? AND i.user_id = ?
       ON CONFLICT (user_id, portfolio_id, bsuid) DO UPDATE SET
-        last_verified_inbound_at_ms = excluded.last_verified_inbound_at_ms,
-        closes_at_ms = excluded.closes_at_ms
-      WHERE excluded.last_verified_inbound_at_ms > hosted_whatsapp_windows.last_verified_inbound_at_ms`,
+        last_verified_inbound_at_ms = excluded.last_verified_inbound_at_ms
+      WHERE excluded.last_verified_inbound_at_ms > whatsapp_service_windows.last_verified_inbound_at_ms`,
       params: [id, subject.userId],
     },
   }),

@@ -13,6 +13,8 @@ import {
   sweepProactivityChannelEvidence,
 } from "./operations";
 
+import { sweepExpiredWhatsAppWindows } from "./runtime";
+
 class RetentionTestFailure extends Data.TaggedError("RetentionTestFailure")<{ cause: unknown }> {}
 const io = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise({ try: run, catch: (cause) => new RetentionTestFailure({ cause }) }).pipe(
@@ -106,8 +108,8 @@ const seed = (
         yield* io(() =>
           db.batch([
             db
-              .prepare(`${cte}INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json)
-        SELECT ?||i,?,'weekly-summary',?,1,'CO','es-CO','UTC',cast(i AS text),'[]' FROM n`)
+              .prepare(`${cte}INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json)
+        SELECT ?||i,?,'weekly-summary',?,1,'CO','es-CO','UTC',i,'[]' FROM n`)
               .bind(input.count, input.prefix, owner, input.prefix),
             db
               .prepare(
@@ -371,3 +373,45 @@ it.each(owners)(
       })
     )
 );
+
+it("expires only a bounded indexed page of service windows while retaining live recipient activity", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* io(() => prepare());
+      yield* io(() =>
+        db.batch([
+          db
+            .prepare(
+              "WITH RECURSIVE n(i) AS(SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<5000) INSERT INTO whatsapp_service_windows(user_id,portfolio_id,bsuid,last_verified_inbound_at_ms) SELECT ?,'portfolio','CO.expired-'||i,0 FROM n"
+            )
+            .bind(user),
+          db
+            .prepare(
+              "INSERT INTO whatsapp_service_windows(user_id,portfolio_id,bsuid,last_verified_inbound_at_ms) VALUES(?,'portfolio','CO.live',172800000)"
+            )
+            .bind(other),
+        ])
+      );
+      const observed = observeRetentionCost(db);
+      yield* sweepExpiredWhatsAppWindows({ db: observed.database, now: 172800000 });
+      expect(observed.cost().rowsRead).toBeLessThan(1_024);
+      expect(
+        yield* io(() =>
+          db
+            .prepare("SELECT count(*) AS remaining FROM whatsapp_service_windows WHERE user_id=?")
+            .bind(user)
+            .first<number>("remaining")
+        )
+      ).toBe(4872);
+      expect(
+        yield* io(() =>
+          db
+            .prepare(
+              "SELECT last_verified_inbound_at_ms FROM whatsapp_service_windows WHERE user_id=?"
+            )
+            .bind(other)
+            .first<number>("last_verified_inbound_at_ms")
+        )
+      ).toBe(172800000);
+    })
+  ));

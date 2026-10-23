@@ -25,7 +25,7 @@ const legacySchema = [
   "CREATE INDEX pat_review_expiry ON pat_review_attempts(occurred_at_ms)",
   "CREATE INDEX pat_review_rate ON pat_review_attempts(session_id,occurred_at_ms)",
   `CREATE TRIGGER historical_pat_review_attempts_delete BEFORE DELETE ON pat_review_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=OLD.session_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('Draining','Draining') AND (EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=OLD.session_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;`,
 ];
 const legacySweep = (

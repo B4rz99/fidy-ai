@@ -1234,7 +1234,7 @@ it("refuses a foreign Transaction child after preparing an owned child without c
       yield* wait(
         fixture.db
           .prepare(
-            "INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at,created_at) VALUES (?,?,'15000','COP','outflow',?,?,?)"
+            "INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES (?,?,'15000','COP','outflow',?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))"
           )
           .bind(
             foreignId,

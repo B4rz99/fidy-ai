@@ -1,7 +1,7 @@
 import { Effect, Exit, Schema } from "effect";
 import { hostedChannelTurnObservation } from "../../agent/operations";
 import { prepareConsentOperationalMetadata } from "../../consent/operations";
-import { type WhatsAppOperationalSignal } from "../contract";
+import { type WhatsAppOperationalSignal, whatsAppServiceWindowMilliseconds } from "../contract";
 
 const WhatsAppAge = Schema.Struct({ created: Schema.Int });
 const sampleLimit = 8;
@@ -66,10 +66,10 @@ export const inspectWhatsApp = ({
             db,
             statement: {
               sql: `SELECT created FROM (
-                SELECT closes_at_ms AS created FROM hosted_whatsapp_windows WHERE closes_at_ms <= ?
+                SELECT last_verified_inbound_at_ms + 86400000 AS created FROM whatsapp_service_windows WHERE last_verified_inbound_at_ms <= ?
                 UNION ALL SELECT expires_at_ms FROM consent_expiry_deadlines WHERE expires_at_ms <= ?
               ) ORDER BY created LIMIT ?`,
-              params: [current, current, sampleLimit],
+              params: [current - whatsAppServiceWindowMilliseconds, current, sampleLimit],
             },
           })
         ),

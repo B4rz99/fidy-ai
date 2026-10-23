@@ -1,11 +1,14 @@
+import {
+  ConnectionInstitutions,
+  registeredConnectionInstitutionIds,
+} from "../../src/shell/connections/contract";
 import { withErasureRecovery } from "../erasure/runtime";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import {
+  executeErasureAdmission,
   executeErasureContinuation,
   executeErasureControl,
   executeErasureRestore,
-  executeErasureRetentionReview,
-  executeErasureReview,
 } from "../erasure/operations";
 import { makeAuditErasureStores } from "../audit/runtime";
 import { makeBrowserLoginErasureStores } from "../browser-login/runtime";
@@ -17,7 +20,7 @@ import { makeConsentErasureStores } from "../consent/runtime";
 import { makeDashboardErasureStores } from "../dashboard/runtime";
 import { makeEmailAuthenticationErasureStores } from "../email-authentication/runtime";
 import { makeIdentityErasureStores } from "../identity/runtime";
-import { makeIngestionErasureOriginals, makeIngestionErasureStores } from "../ingestion/runtime";
+import { makeIngestionErasureStores } from "../ingestion/runtime";
 import { makeMemoryErasureStores } from "../memory/runtime";
 import { makeOauthAgentsErasureStores } from "../oauth-agents/runtime";
 import { makeOauthConfirmationErasureStores } from "../oauth-confirmation/runtime";
@@ -32,7 +35,7 @@ import { makeTokensErasureStores } from "../tokens/runtime";
 import { makeWebSessionErasureStores } from "../web-session/runtime";
 import { makeWhatsappErasureStores } from "../whatsapp/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
-import { makeErasureStore } from "../erasure-store/runtime";
+import { makeErasureOriginals, makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
@@ -416,9 +419,9 @@ const privateErasureActivity = (
   const restore = privateErasureRestore(input);
   if (Option.isSome(restore)) return restore;
   const erasurePath = new URL(input.request.url).pathname;
-  if (erasurePath === "/erasure-review") {
+  if (erasurePath === "/erasure-admit") {
     return Option.some(
-      executeErasureReview({
+      executeErasureAdmission({
         db: input.environment.DB,
         userId: input.userId,
         candidate: input.candidate,
@@ -438,11 +441,11 @@ const privateErasureActivity = (
         userId: input.userId,
         candidate: input.candidate,
         stores: erasureStores(input.environment.DB),
-        originals: makeIngestionErasureOriginals({
+        originals: makeErasureOriginals({
           db: input.environment.DB,
           email: Option.fromUndefinedOr(input.environment.EMAIL_BUCKET),
           statement: Option.fromUndefinedOr(input.environment.STATEMENT_STAGING_BUCKET),
-          retained: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
+          registry: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
         }),
         recovery: {
           db: input.environment.DB,
@@ -460,7 +463,6 @@ const privateErasureActivity = (
         candidate: input.candidate,
         operation: erasurePath === "/erasure-receipt" ? "Receipt" : "CustodyEvidence",
         stores: erasureStores(input.environment.DB),
-        bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
       })
     );
   }
@@ -470,19 +472,6 @@ const privateErasureRestore = (
   input: Parameters<typeof privateProactivityActivity>[0]
 ): Option.Option<Effect.Effect<Response>> => {
   const erasurePath = new URL(input.request.url).pathname;
-  if (input.request.method === "POST" && erasurePath === "/erasure-retention-review") {
-    return Option.some(
-      executeErasureRetentionReview({
-        userId: input.userId,
-        candidate: input.candidate,
-        stores: erasureStores(input.environment.DB),
-        recovery: {
-          db: input.environment.DB,
-          bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
-        },
-      })
-    );
-  }
   if (input.request.method === "POST" && erasurePath === "/erasure-restore") {
     return Option.some(
       executeErasureRestore({
@@ -646,14 +635,17 @@ export class UserTransactionCoordinator {
   private readonly env: CoordinatorEnvironment;
   private readonly erasureEnvironment: CoordinatorEnvironment;
   private readonly mcp: McpResidency;
+  private readonly institutions: typeof registeredConnectionInstitutionIds;
   constructor(
     state: Readonly<{
       id: Readonly<{ name: string }>;
       storage: Pick<DurableObjectStorage, "setAlarm" | "deleteAlarm" | "getAlarm">;
     }>,
-    env: CoordinatorEnvironment
+    env: CoordinatorEnvironment,
+    institutions = registeredConnectionInstitutionIds
   ) {
     this.state = state;
+    this.institutions = institutions;
     this.erasureEnvironment = env;
     this.env = withErasureRecovery(env);
     this.mcp = makeMcpResidency({
@@ -806,7 +798,9 @@ export class UserTransactionCoordinator {
           }
           return yield* executeCanonicalAdmission(admission.value, environment, Option.none());
         })
-      ).pipe((work) => observeCoordinatorRequest(work, request, environment))
+      ).pipe(Effect.provideService(ConnectionInstitutions, this.institutions), (work) =>
+        observeCoordinatorRequest(work, request, environment)
+      )
     );
   }
 

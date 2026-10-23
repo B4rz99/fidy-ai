@@ -275,21 +275,28 @@ it.each(queryGroups)(
               .bind("20000000-0000-4000-8000-000000000001"),
             fixture.db
               .prepare("INSERT INTO memories VALUES (?, ?, ?, ?, ?)")
-              .bind(resourceId, "10000000-0000-4000-8000-000000000001", privateMarker, time, time),
-            fixture.db
-              .prepare("INSERT INTO keyword_rules VALUES (?, ?, ?, ?, ?, ?, ?)")
               .bind(
                 resourceId,
                 "10000000-0000-4000-8000-000000000001",
                 privateMarker,
-                privateMarker,
-                "10000000-0000-4000-8000-000000000001",
-                time,
-                time
+                DateTime.makeUnsafe(time).epochMilliseconds,
+                DateTime.makeUnsafe(time).epochMilliseconds
               ),
             fixture.db
               .prepare(
-                "INSERT INTO transactions (id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at,created_at) VALUES (?,?,'9007199254740993','COP','outflow','Mercado',?,?,?,?)"
+                "INSERT INTO keyword_rules(id,user_id,keyword,category_id,created_at_ms,updated_at_ms) VALUES (?, ?, ?, ?, ?, ?)"
+              )
+              .bind(
+                resourceId,
+                "10000000-0000-4000-8000-000000000001",
+                privateMarker,
+                "10000000-0000-4000-8000-000000000001",
+                DateTime.toEpochMillis(DateTime.makeUnsafe(time)),
+                DateTime.toEpochMillis(DateTime.makeUnsafe(time))
+              ),
+            fixture.db
+              .prepare(
+                "INSERT INTO transactions (id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at_ms,created_at_ms) VALUES (?,?,'9007199254740993','COP','outflow','Mercado',?,?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))"
               )
               .bind(
                 resourceId,
@@ -306,14 +313,14 @@ it.each(queryGroups)(
               .bind(resourceId, "10000000-0000-4000-8000-000000000001"),
             fixture.db
               .prepare(
-                "INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at, updated_at) VALUES (?, ?, ?, 'COP', '9007199254740994', ?, ?)"
+                "INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at_ms, updated_at_ms) VALUES (?, ?, ?, 'COP', '9007199254740994', ?, ?)"
               )
               .bind(
                 resourceId,
                 "10000000-0000-4000-8000-000000000001",
                 "10000000-0000-4000-8000-000000000001",
-                time,
-                time
+                DateTime.makeUnsafe(time).epochMilliseconds,
+                DateTime.makeUnsafe(time).epochMilliseconds
               ),
           ])
         );

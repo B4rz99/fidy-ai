@@ -6,10 +6,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM backup_recovery_credentials r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM backup_recovery_credentials r WHERE r.user_id=?",
       params: [userId],
@@ -20,8 +17,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM backup_recovery_credentials AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM backup_recovery_credentials AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -30,10 +27,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: ["support_recovery_events"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM support_recovery_cases r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM support_recovery_cases r WHERE r.user_id=?",
       params: [userId],
@@ -44,8 +38,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM support_recovery_cases AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM support_recovery_cases AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -54,10 +48,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM (SELECT user_id,opened_event_row_ref AS rowid FROM support_recovery_cases WHERE opened_event_id IS NOT NULL UNION ALL SELECT user_id,decision_event_row_ref AS rowid FROM support_recovery_cases WHERE decision_event_id IS NOT NULL) r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT user_id,opened_event_row_ref AS rowid FROM support_recovery_cases WHERE opened_event_id IS NOT NULL UNION ALL SELECT user_id,decision_event_row_ref AS rowid FROM support_recovery_cases WHERE decision_event_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
@@ -68,8 +59,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "WITH selected AS (SELECT row_ref FROM erasure_chunk WHERE request_id=?) UPDATE support_recovery_cases SET opened_event_id=CASE WHEN opened_event_row_ref IN(SELECT row_ref FROM selected) THEN NULL ELSE opened_event_id END,opened_event_row_ref=CASE WHEN opened_event_row_ref IN(SELECT row_ref FROM selected) THEN NULL ELSE opened_event_row_ref END,decision_event_id=CASE WHEN decision_event_row_ref IN(SELECT row_ref FROM selected) THEN NULL ELSE decision_event_id END,decision_event_row_ref=CASE WHEN decision_event_row_ref IN(SELECT row_ref FROM selected) THEN NULL ELSE decision_event_row_ref END WHERE user_id=? AND (opened_event_row_ref IN(SELECT row_ref FROM selected) OR decision_event_row_ref IN(SELECT row_ref FROM selected))",
-        params: [scope.reference, scope.userId],
+        sql: "WITH selected AS (SELECT value AS row_ref FROM json_each(?)) UPDATE support_recovery_cases SET opened_event_id=CASE WHEN opened_event_row_ref IN(SELECT row_ref FROM selected) THEN NULL ELSE opened_event_id END,opened_event_row_ref=CASE WHEN opened_event_row_ref IN(SELECT row_ref FROM selected) THEN NULL ELSE opened_event_row_ref END,decision_event_id=CASE WHEN decision_event_row_ref IN(SELECT row_ref FROM selected) THEN NULL ELSE decision_event_id END,decision_event_row_ref=CASE WHEN decision_event_row_ref IN(SELECT row_ref FROM selected) THEN NULL ELSE decision_event_row_ref END WHERE user_id=? AND (opened_event_row_ref IN(SELECT row_ref FROM selected) OR decision_event_row_ref IN(SELECT row_ref FROM selected))",
+        params: [scope.rowRefsJson, scope.userId],
       },
     ],
   },

@@ -522,12 +522,23 @@ it.effect("admits 100000 XLSX cells and rejects the first surplus cell", () =>
   Effect.gen(function* () {
     const columns = 200;
     const rows = 500;
-    const book = XLSX.utils.book_new();
-    const data = Array.from({ length: rows }, () =>
-      Array.from({ length: columns }, () => "normal")
+    const columnNames = Array.from({ length: columns }, (_, column) =>
+      XLSX.utils.encode_col(column)
     );
-    XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(data), "Statement");
-    const source = writeWorkbook(book);
+    const sheetData = Array.from({ length: rows }, (_, index) => {
+      const row = index + 1;
+      const cells = columnNames
+        .map((column) => `<c r="${column}${row}" t="s"><v>1</v></c>`)
+        .join("");
+      return `<row r="${row}">${cells}</row>`;
+    }).join("");
+    const source = modify(workbook("normal"), (entries) =>
+      replacePart(entries, "xl/worksheets/sheet1.xml", (xml) =>
+        xml
+          .replace('ref="A1:A2"', `ref="A1:${columnNames.at(-1)}${rows}"`)
+          .replace(/<sheetData>[\s\S]*?<\/sheetData>/u, `<sheetData>${sheetData}</sheetData>`)
+      )
+    );
     expect((yield* parseStatementFile(source)).rows).toHaveLength(rows - 1);
     yield* reject(
       modify(source, (entries) =>

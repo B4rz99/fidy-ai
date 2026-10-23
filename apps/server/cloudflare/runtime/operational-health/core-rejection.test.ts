@@ -1,4 +1,4 @@
-import { type Cause, Effect, Schema } from "effect";
+import { type Cause, Effect, Logger, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { afterAll, expect } from "vitest";
 import { installCurrentTestObjects, isolatedTestDatabases } from "../../d1-test-fixture";
@@ -116,12 +116,37 @@ it.effect(
         },
       });
       const observe = makeCoreRejectionObserver();
-      yield* burst(observe, failed, { now: 1_800_000, count: 1_000 });
+      const logs: Array<unknown> = [];
+      const logger = Logger.make<unknown, void>(({ message, cause, logLevel }) => {
+        logs.push({ message, reasons: cause.reasons, logLevel });
+      });
+      const loggers = new Set([logger]);
+      yield* burst(observe, failed, { now: 1_800_000, count: 1_000 }).pipe(
+        Effect.provideService(Logger.CurrentLoggers, loggers)
+      );
       expect(attempts).toBe(1);
-      yield* burst(observe, failed, { now: 1_740_000, count: 100 });
+      yield* burst(observe, failed, { now: 1_740_000, count: 100 }).pipe(
+        Effect.provideService(Logger.CurrentLoggers, loggers)
+      );
       expect(attempts).toBe(1);
-      yield* burst(observe, failed, { now: 1_860_000, count: 100 });
+      yield* burst(observe, failed, { now: 1_860_000, count: 100 }).pipe(
+        Effect.provideService(Logger.CurrentLoggers, loggers)
+      );
       expect(attempts).toBe(2);
+      const expected = {
+        message: [
+          {
+            component: "core-rejections",
+            operation: "coreRejectionBursts",
+            state: "attention",
+            message:
+              "fidy.operational component=core-rejections operation=coreRejectionBursts state=attention severity=warning",
+          },
+        ],
+        reasons: [],
+        logLevel: "Warn",
+      };
+      expect(logs).toEqual([expected, expected]);
       yield* burst(makeCoreRejectionObserver(), db, { now: 1_920_000, count: 99 });
       yield* burst(makeCoreRejectionObserver(), db, { now: 1_920_000, count: 99 });
       expect((yield* observeCoreRejections({ db, now: 1_920_000 })).state).toBe("healthy");
@@ -129,6 +154,18 @@ it.effect(
       expect(decideOperationalAlerts([unavailable])).toEqual([
         { kind: "inspection_unavailable", owner: "coreRejectionBursts", severity: "warning" },
       ]);
+      const brokenLogger = Logger.make(() => {
+        throw new Error("private logging diagnostic");
+      });
+      const independent = makeCoreRejectionObserver();
+      yield* burst(independent, failed, { now: 2_040_000, count: 100 }).pipe(
+        Effect.provideService(Logger.CurrentLoggers, new Set([brokenLogger]))
+      );
+      expect(attempts).toBe(4);
+      yield* burst(independent, failed, { now: 2_100_000, count: 100 }).pipe(
+        Effect.provideService(Logger.CurrentLoggers, loggers)
+      );
+      expect(attempts).toBe(5);
     })
 );
 
@@ -162,9 +199,26 @@ it.live(
         },
       });
       const observe = makeCoreRejectionObserver();
-      yield* burst(observe, stalled, { now: 1_800_000, count: 100 });
-      yield* burst(observe, stalled, { now: 1_860_000, count: 100 });
+      const logs: Array<unknown> = [];
+      const logger = Logger.make<unknown, void>(({ message }) => logs.push(message));
+      const loggers = new Set([logger]);
+      yield* burst(observe, stalled, { now: 1_800_000, count: 100 }).pipe(
+        Effect.provideService(Logger.CurrentLoggers, loggers)
+      );
+      yield* burst(observe, stalled, { now: 1_860_000, count: 100 }).pipe(
+        Effect.provideService(Logger.CurrentLoggers, loggers)
+      );
       expect(attempts).toBe(1);
+      const expected = [
+        {
+          component: "core-rejections",
+          operation: "coreRejectionBursts",
+          state: "attention",
+          message:
+            "fidy.operational component=core-rejections operation=coreRejectionBursts state=attention severity=warning",
+        },
+      ];
+      expect(logs).toEqual([expected, expected]);
       pending.reject(new Error("late private failure"));
       yield* Effect.yieldNow;
       yield* burst(observe, db, { now: 1_920_000, count: 100 });

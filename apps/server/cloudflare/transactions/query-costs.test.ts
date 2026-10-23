@@ -57,6 +57,7 @@ it("bounds ready effective History pages while preserving authoritative rows", (
     Effect.gen(function* () {
       const db = yield* setup();
       yield* seedHistory({
+        spacingMinutes: 20,
         db,
         subject: userId,
         transactionPrefix: prefix,
@@ -76,6 +77,7 @@ it(
       Effect.gen(function* () {
         const db = yield* setup();
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: userId,
           transactionPrefix: prefix,
@@ -84,6 +86,7 @@ it(
           linkedFraction: 1,
         });
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: otherUserId,
           transactionPrefix: otherPrefix,
@@ -100,8 +103,8 @@ it(
             sql: "user_id = ? AND category_id = ? AND direction = ? AND counterparty = ?",
             values: [userId, categoryId, "outflow", "shop"],
           },
-          { sql: "user_id = ? AND occurred_at < ?", values: [userId, "2020-01-03T00:00:00.000Z"] },
-          { sql: "user_id = ? AND occurred_at < ?", values: [userId, "1900-01-01T00:00:00.000Z"] },
+          { sql: "user_id = ? AND occurred_at_ms < ?", values: [userId, 1578009600000] },
+          { sql: "user_id = ? AND occurred_at_ms < ?", values: [userId, -2208988800000] },
         ]) {
           const expected = yield* fromTestPromise(() =>
             db
@@ -132,10 +135,10 @@ it(
           db.batch([
             db
               .prepare(
-                "UPDATE dashboard_projection_state SET readiness = 'clearing' WHERE user_id = ?"
+                "UPDATE transaction_projection_state SET readiness = 'clearing' WHERE user_id = ?"
               )
               .bind(userId),
-            db.prepare("DELETE FROM dashboard_projection_leaf WHERE user_id = ?").bind(userId),
+            db.prepare("DELETE FROM transaction_projection_leaf WHERE user_id = ?").bind(userId),
           ])
         );
         for (const readiness of [
@@ -148,7 +151,7 @@ it(
         ]) {
           yield* fromTestPromise(() =>
             db
-              .prepare("UPDATE dashboard_projection_state SET readiness = ? WHERE user_id = ?")
+              .prepare("UPDATE transaction_projection_state SET readiness = ? WHERE user_id = ?")
               .bind(readiness, userId)
               .run()
           );
@@ -157,14 +160,17 @@ it(
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "UPDATE dashboard_projection_state SET readiness = 'ready', version = 0 WHERE user_id = ?"
+              "UPDATE transaction_projection_state SET readiness = 'ready', version = 0 WHERE user_id = ?"
             )
             .bind(userId)
             .run()
         );
         expect((yield* fromTestPromise(() => historyPage(db, userId))).results).toEqual(expected);
         yield* fromTestPromise(() =>
-          db.prepare("DELETE FROM dashboard_projection_state WHERE user_id = ?").bind(userId).run()
+          db
+            .prepare("DELETE FROM transaction_projection_state WHERE user_id = ?")
+            .bind(userId)
+            .run()
         );
         expect((yield* fromTestPromise(() => historyPage(db, userId))).results).toEqual(expected);
       })
@@ -197,6 +203,7 @@ it.skipIf(!measuringCapacity)(
           for (const count of [200, 2_000, 20_000]) {
             const db = yield* setup();
             yield* seedHistory({
+              spacingMinutes: 20,
               db,
               subject: userId,
               transactionPrefix: prefix,
@@ -205,6 +212,7 @@ it.skipIf(!measuringCapacity)(
               linkedFraction,
             });
             yield* seedHistory({
+              spacingMinutes: 20,
               db,
               subject: otherUserId,
               transactionPrefix: otherPrefix,
@@ -246,6 +254,7 @@ it(
       Effect.gen(function* () {
         const db = yield* setup();
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: userId,
           transactionPrefix: prefix,
@@ -253,6 +262,16 @@ it(
           linked: true,
           linkedFraction: 1,
         });
+        yield* fromTestPromise(() =>
+          db.batch([
+            db
+              .prepare(
+                "UPDATE transaction_projection_state SET readiness = 'dirty' WHERE user_id = ?"
+              )
+              .bind(userId),
+            db.prepare("DELETE FROM transaction_projection_leaf WHERE user_id = ?").bind(userId),
+          ])
+        );
         const before = yield* fromTestPromise(() => historyPage(db, userId));
         expect(before.results).toHaveLength(101);
         expect(before.results[0]).toMatchObject({
@@ -261,6 +280,7 @@ it(
         });
         expect(before.meta.rows_read).toBeLessThan(60_000);
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: otherUserId,
           transactionPrefix: otherPrefix,
@@ -277,7 +297,7 @@ it(
           const empty = yield* fromTestPromise(() =>
             db
               .prepare(`SELECT id, amount, currency, category_id, direction, occurred_at
-      FROM dashboard_effective_source WHERE user_id = ? AND occurred_at >= ? AND occurred_at < ?
+      FROM transaction_effective_source WHERE user_id = ? AND occurred_at >= ? AND occurred_at < ?
         AND category_id = ? AND currency = 'COP' AND direction = 'outflow'
         AND (occurred_at > ? OR (occurred_at = ? AND id > ''))
       ORDER BY occurred_at, id LIMIT 512`)
@@ -313,8 +333,8 @@ const correctNotes = (db: D1Database, index: number): Promise<ReadonlyArray<D1Re
   db.batch([
     db
       .prepare(`INSERT INTO transaction_corrections
-    (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at)
-    VALUES (?, ?, ?, 0, '["notes"]', '{}', '{}', '2026-10-09T00:00:00.000Z')`)
+    (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at_ms)
+    VALUES (?, ?, ?, 0, '["notes"]', '{}', '{}', 1791504000000)`)
       .bind(`correction-${index}`, userId, id(index)),
     db
       .prepare(`UPDATE transactions SET notes = 'corrected', revision = 1, user_decisions = '{"notes":true}'
@@ -324,10 +344,10 @@ const correctNotes = (db: D1Database, index: number): Promise<ReadonlyArray<D1Re
 const aggregateSnapshot = (db: D1Database): Promise<ReadonlyArray<D1Result>> =>
   db.batch([
     db.prepare(
-      "SELECT * FROM dashboard_projection_bucket ORDER BY user_id, size_seconds, bucket, currency, direction, category_id"
+      "SELECT * FROM transaction_projection_bucket ORDER BY user_id, size_seconds, bucket, currency, direction, category_id"
     ),
     db.prepare(
-      "SELECT * FROM dashboard_projection_digit WHERE digit_sum > 0 ORDER BY user_id, size_seconds, bucket, currency, direction, category_id, position"
+      "SELECT * FROM transaction_projection_digit WHERE digit_sum > 0 ORDER BY user_id, size_seconds, bucket, currency, direction, category_id, position"
     ),
   ]);
 it(
@@ -337,6 +357,7 @@ it(
       Effect.gen(function* () {
         const db = yield* setup();
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: userId,
           transactionPrefix: prefix,
@@ -345,6 +366,7 @@ it(
           linkedFraction: 1,
         });
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: otherUserId,
           transactionPrefix: otherPrefix,
@@ -405,7 +427,7 @@ it(
           yield* fromTestPromise(() =>
             db
               .prepare(
-                "SELECT SUM(count) AS count FROM dashboard_projection_bucket WHERE user_id = ? AND size_seconds = 86400"
+                "SELECT SUM(count) AS count FROM transaction_projection_bucket WHERE user_id = ? AND size_seconds = 86400"
               )
               .bind(userId)
               .first("count")
@@ -415,7 +437,7 @@ it(
           yield* fromTestPromise(() =>
             db
               .prepare(
-                "SELECT SUM(count) AS count FROM dashboard_projection_bucket WHERE user_id = ? AND size_seconds = 86400"
+                "SELECT SUM(count) AS count FROM transaction_projection_bucket WHERE user_id = ? AND size_seconds = 86400"
               )
               .bind(otherUserId)
               .first("count")
@@ -451,8 +473,8 @@ it("preserves projection bucket pre-epoch boundaries or exact maximum replacemen
           dates.map((occurredAt, index) =>
             db
               .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    VALUES (?, ?, ?, 'COP', 'outflow', ?, ?, '2026-01-01T00:00:00.000Z')`)
+    (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+    VALUES (?, ?, ?, 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER), 1767225600000)`)
               .bind(
                 id(index),
                 userId,
@@ -482,28 +504,28 @@ it("preserves projection bucket pre-epoch boundaries or exact maximum replacemen
         yield* fromTestPromise(() =>
           db
             .prepare(
-              "UPDATE dashboard_projection_state SET readiness = 'clearing' WHERE user_id = ?"
+              "UPDATE transaction_projection_state SET readiness = 'clearing' WHERE user_id = ?"
             )
             .bind(userId)
             .run()
         );
         yield* fromTestPromise(() =>
           db.batch([
-            db.prepare("DELETE FROM dashboard_projection_bucket WHERE user_id = ?").bind(userId),
-            db.prepare("DELETE FROM dashboard_projection_digit WHERE user_id = ?").bind(userId),
-            db.prepare("DELETE FROM dashboard_projection_leaf WHERE user_id = ?").bind(userId),
+            db.prepare("DELETE FROM transaction_projection_bucket WHERE user_id = ?").bind(userId),
+            db.prepare("DELETE FROM transaction_projection_digit WHERE user_id = ?").bind(userId),
+            db.prepare("DELETE FROM transaction_projection_leaf WHERE user_id = ?").bind(userId),
             db
               .prepare(
-                "UPDATE dashboard_projection_state SET readiness = 'rebuilding' WHERE user_id = ?"
+                "UPDATE transaction_projection_state SET readiness = 'rebuilding' WHERE user_id = ?"
               )
               .bind(userId),
             db
-              .prepare(`INSERT INTO dashboard_projection_leaf SELECT user_id, id, amount, currency, direction,
-        category_id, counterparty, notes, occurred_at, created_at, revision FROM dashboard_effective_source WHERE user_id = ?`)
+              .prepare(`INSERT INTO transaction_projection_leaf SELECT user_id, id, amount, currency, direction,
+        category_id, counterparty, notes, occurred_at_ms, created_at_ms, revision FROM transaction_effective_source WHERE user_id = ?`)
               .bind(userId),
             db
               .prepare(
-                "UPDATE dashboard_projection_state SET readiness = 'ready' WHERE user_id = ?"
+                "UPDATE transaction_projection_state SET readiness = 'ready' WHERE user_id = ?"
               )
               .bind(userId),
           ])
@@ -546,6 +568,7 @@ it.skipIf(!measuringCapacity)(
       Effect.gen(function* () {
         const db = yield* setup();
         yield* seedHistory({
+          spacingMinutes: 20,
           db,
           subject: userId,
           transactionPrefix: prefix,
@@ -602,6 +625,7 @@ it.skipIf(!measuringCapacity)(
           for (const linked of [false, true]) {
             const db = yield* setup();
             yield* seedHistory({
+              spacingMinutes: 20,
               db,
               subject: userId,
               transactionPrefix: prefix,
@@ -610,6 +634,7 @@ it.skipIf(!measuringCapacity)(
               linkedFraction: 1,
             });
             yield* seedHistory({
+              spacingMinutes: 20,
               db,
               subject: otherUserId,
               transactionPrefix: otherPrefix,

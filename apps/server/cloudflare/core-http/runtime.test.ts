@@ -1,3 +1,4 @@
+import { registeredConnectionInstitutionIds } from "../../src/shell/connections/contract";
 import { type Cause, Effect } from "effect";
 import { type CoreHttpEnvironment } from "./contract";
 import { it } from "@effect/vitest";
@@ -45,7 +46,10 @@ it.live("preserves actual Core callback refusals and never stores attacker reque
       Effect.sync(() => vi.spyOn(Date, "now").mockReturnValue(1_800_000)),
       (clock) => Effect.sync(() => clock.mockRestore())
     );
-    const core = makeCoreHttp(cloudflareWorkerTelemetry);
+    const core = makeCoreHttp({
+      telemetry: cloudflareWorkerTelemetry,
+      institutions: registeredConnectionInstitutionIds,
+    });
     const request = (): Request =>
       new Request("https://api.fidyapp.com/providers/kapso/callback?secret=private-query", {
         method: "POST",
@@ -92,7 +96,10 @@ it.live("preserves actual Core callback refusals and never stores attacker reque
         };
       },
     });
-    const failingCore = makeCoreHttp(cloudflareWorkerTelemetry);
+    const failingCore = makeCoreHttp({
+      telemetry: cloudflareWorkerTelemetry,
+      institutions: registeredConnectionInstitutionIds,
+    });
     for (let count = 0; count < 100; count += 1) {
       const response = yield* Effect.tryPromise(() => failingCore(request(), environment(failed)));
       expect(response.status).toBe(401);
@@ -111,7 +118,10 @@ it.live(
         Effect.sync(() => vi.spyOn(Date, "now").mockReturnValue(1_800_000)),
         (clock) => Effect.sync(() => clock.mockRestore())
       );
-      const core = makeCoreHttp(cloudflareWorkerTelemetry);
+      const core = makeCoreHttp({
+        telemetry: cloudflareWorkerTelemetry,
+        institutions: registeredConnectionInstitutionIds,
+      });
       const send = (path: string): Promise<Response> =>
         core(
           new Request(`https://api.fidyapp.com${path}?private=callback`, {

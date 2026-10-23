@@ -31,12 +31,12 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
         db.batch([
           db
             .prepare(
-              "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) VALUES (?,?,'manual-entry-reminder',?,1,'CO','es-CO','America/Bogota','2026-10-06T23:00:00Z','[]')"
+              "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json) VALUES (?,?,'manual-entry-reminder',?,1,'CO','es-CO','America/Bogota',1791327600000,'[]')"
             )
             .bind(occurrence.id, users[0], schedule.id),
           db
             .prepare(
-              "INSERT INTO insight_reports(kind,delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) SELECT 'proactivity-delivery',?,user_id,'manual-entry-reminder',consent_grant_id,'Reminder',?,?,'America/Bogota',? FROM schedules WHERE kind='reminder' AND user_id=?"
+              "INSERT INTO proactive_messages(kind,id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) SELECT 'proactivity-delivery',?,user_id,'manual-entry-reminder',consent_grant_id,'Reminder',?,?,'America/Bogota',? FROM schedules WHERE kind='reminder' AND user_id=?"
             )
             .bind(
               occurrence.id,
@@ -47,12 +47,12 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
             ),
           db
             .prepare(
-              "UPDATE insight_events SET report_delivery_id=?2 WHERE user_id=?1 AND id=?3 AND report_delivery_id IS NULL"
+              "UPDATE insight_events SET message_kind='proactivity-delivery',message_id=?2 WHERE user_id=?1 AND id=?3 AND message_id IS NULL"
             )
             .bind(users[0], occurrence.id, occurrence.id),
           db
             .prepare(
-              "UPDATE insight_reports SET dispatch_created_at_ms=incoming.created_at_ms,dispatch_state=incoming.state,dispatch_last_attempt_at_ms=incoming.last_attempt_at_ms,dispatch_restart_attempts=incoming.restart_attempts FROM (SELECT source.*, 0 AS restart_attempts FROM (SELECT source.*, 0 AS last_attempt_at_ms FROM (SELECT source.*, 'ready' AS state FROM (SELECT 'proactivity-delivery' AS kind,? AS user_id,? AS delivery_id,? AS created_at_ms) AS source) AS source) AS source) AS incoming WHERE insight_reports.user_id=incoming.user_id AND insight_reports.kind=incoming.kind AND insight_reports.delivery_id=incoming.delivery_id AND insight_reports.dispatch_state IS NULL"
+              "UPDATE proactive_messages SET dispatch_created_at_ms=incoming.created_at_ms,dispatch_state=incoming.state,dispatch_last_attempt_at_ms=incoming.last_attempt_at_ms,dispatch_restart_attempts=incoming.restart_attempts FROM (SELECT source.*, 0 AS restart_attempts FROM (SELECT source.*, 0 AS last_attempt_at_ms FROM (SELECT source.*, 'ready' AS state FROM (SELECT 'proactivity-delivery' AS kind,? AS user_id,? AS delivery_id,? AS created_at_ms) AS source) AS source) AS source) AS incoming WHERE proactive_messages.user_id=incoming.user_id AND proactive_messages.kind=incoming.kind AND proactive_messages.id=incoming.delivery_id AND proactive_messages.dispatch_state IS NULL"
             )
             .bind(users[0], occurrence.id, now.epochMilliseconds),
         ])
@@ -70,7 +70,7 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
         db.batch([
           db
             .prepare(
-              "INSERT INTO insight_reports(kind,delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES('proactivity-delivery',?,?,'reminder-offer',?,?,?,?,?,?)"
+              "INSERT INTO proactive_messages(kind,id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES('proactivity-delivery',?,?,'reminder-offer',?,?,?,?,?,?)"
             )
             .bind(
               offer.id,
@@ -84,7 +84,7 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
             ),
           db
             .prepare(
-              "UPDATE insight_reports SET dispatch_created_at_ms=incoming.created_at_ms,dispatch_state=incoming.state,dispatch_last_attempt_at_ms=incoming.last_attempt_at_ms,dispatch_restart_attempts=incoming.restart_attempts FROM (SELECT source.*, 0 AS restart_attempts FROM (SELECT source.*, 0 AS last_attempt_at_ms FROM (SELECT source.*, 'ready' AS state FROM (SELECT 'proactivity-delivery' AS kind,? AS user_id,? AS delivery_id,? AS created_at_ms) AS source) AS source) AS source) AS incoming WHERE insight_reports.user_id=incoming.user_id AND insight_reports.kind=incoming.kind AND insight_reports.delivery_id=incoming.delivery_id AND insight_reports.dispatch_state IS NULL"
+              "UPDATE proactive_messages SET dispatch_created_at_ms=incoming.created_at_ms,dispatch_state=incoming.state,dispatch_last_attempt_at_ms=incoming.last_attempt_at_ms,dispatch_restart_attempts=incoming.restart_attempts FROM (SELECT source.*, 0 AS restart_attempts FROM (SELECT source.*, 0 AS last_attempt_at_ms FROM (SELECT source.*, 'ready' AS state FROM (SELECT 'proactivity-delivery' AS kind,? AS user_id,? AS delivery_id,? AS created_at_ms) AS source) AS source) AS source) AS incoming WHERE proactive_messages.user_id=incoming.user_id AND proactive_messages.kind=incoming.kind AND proactive_messages.id=incoming.delivery_id AND proactive_messages.dispatch_state IS NULL"
             )
             .bind(users[0], offer.id, now.epochMilliseconds),
         ])
@@ -119,7 +119,7 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT offer_id,text FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND delivery_id=?"
+              "SELECT offer_id,text FROM proactive_messages WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND id=?"
             )
             .bind(users[0], offer.id)
             .first()
@@ -129,7 +129,7 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT insight_event_id FROM (SELECT rowid,user_id AS user_id,report_delivery_id AS delivery_id,id AS insight_event_id FROM insight_events WHERE report_delivery_id IS NOT NULL) WHERE user_id=? AND delivery_id=?"
+              "SELECT insight_event_id FROM (SELECT rowid,user_id AS user_id,message_id AS delivery_id,id AS insight_event_id FROM insight_events WHERE message_id IS NOT NULL) WHERE user_id=? AND delivery_id=?"
             )
             .bind(users[0], occurrence.id)
             .first()
@@ -139,7 +139,7 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT state FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
+              "SELECT state FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
             )
             .bind(users[0], occurrence.id)
             .first()

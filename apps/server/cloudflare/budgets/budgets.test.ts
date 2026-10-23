@@ -278,10 +278,10 @@ const seedMonthlyMovements = (
     Effect.tryPromise(() =>
       db
         .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
     WITH RECURSIVE seq(n) AS (SELECT ? + 1 UNION ALL SELECT n + 1 FROM seq WHERE n < ?)
-    SELECT printf('30000000-0000-4000-8000-%012d', n), ?, '0.01', ?, 'outflow', ?, ?,
-      strftime('%Y-%m-%dT%H:%M:%fZ', date('2024-01-01', '+' || (n / 99) || ' days'))
+    SELECT printf('30000000-0000-4000-8000-%012d', n), ?, '0.01', ?, 'outflow', ?, CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),
+      CAST(unixepoch(date('2024-01-01', '+' || (n / 99) || ' days'))*1000 AS INTEGER)
     FROM seq`)
         .bind(
           input.offset,
@@ -427,7 +427,7 @@ it.each([
             yield* Effect.tryPromise(() =>
               db
                 .prepare(
-                  "SELECT state FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
+                  "SELECT state FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
                 )
                 .bind(userId, prior.value.id)
                 .first()
@@ -581,7 +581,7 @@ it("reports corrupt retained Budget state as unavailable without false caller re
       );
       yield* Effect.tryPromise(() =>
         db
-          .prepare("UPDATE budgets SET created_at='not-a-date' WHERE user_id=? AND id=?")
+          .prepare("UPDATE budgets SET created_at_ms=9000000000000000 WHERE user_id=? AND id=?")
           .bind(users[0], id)
           .run()
       );
@@ -611,18 +611,15 @@ it("attributes the second Budget create when the first fills the owner capacity"
       yield* Effect.tryPromise(() =>
         db
           .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 126)
-    INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at, updated_at)
+    INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at_ms, updated_at_ms)
     SELECT printf('40000000-0000-4000-8000-%012d', n), ?,
       printf('10000000-0000-4000-8000-%012d', n + 1000), 'COP', '100',
-      '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z' FROM seq`)
+      1788220800000,1788220800000 FROM seq`)
           .bind(users[0])
           .run()
       );
       yield* Effect.tryPromise(() =>
-        db
-          .prepare("DELETE FROM budget_state WHERE kind='work' AND user_id = ?")
-          .bind(users[0])
-          .run()
+        db.prepare("DELETE FROM budget_evaluation_work WHERE user_id = ?").bind(users[0]).run()
       );
       const limited = yield* Effect.tryPromise(() =>
         send(
@@ -1082,8 +1079,8 @@ it("reports only this User's exact same-Currency outflows in the applied half-op
       yield* Effect.tryPromise(() =>
         db
           .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    VALUES (?, ?, '900', 'COP', 'outflow', ?, ?, ?)`)
+    (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+    VALUES (?, ?, '900', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
           .bind(
             "30000000-0000-4000-8000-000000000093",
             users[0],
@@ -1466,7 +1463,7 @@ it("installed category generation atomically materializes two Budget events and 
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT count(*) AS n FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=?"
+                "SELECT count(*) AS n FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=?"
               )
               .bind(userId)
               .first()
@@ -1582,7 +1579,7 @@ it("installed category generation atomically materializes two Budget events and 
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT count(*) AS n FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=?"
+                "SELECT count(*) AS n FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=?"
               )
               .bind(userId)
               .first()
@@ -1646,12 +1643,12 @@ it("rolls back both threshold marks and frozen facts if one crossing cannot comm
       const marks = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT reached_80,reached_100 FROM budget_month_latches WHERE user_id=? AND budget_id=?"
+            "SELECT highest_reached FROM budget_month_latches WHERE user_id=? AND budget_id=?"
           )
           .bind(users[0], body.data.id)
           .first()
       );
-      expect(marks).toEqual({ reached_80: 0, reached_100: 0 });
+      expect(marks).toEqual({ highest_reached: 0 });
       yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER reject_crossing").run());
       yield* Effect.exit(recovery.sweep());
       expect((yield* readBudgetCrossings(input)).map((crossing) => crossing.threshold)).toEqual([
@@ -1741,9 +1738,10 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
           [
             "insight_reports",
             "whatsapp_deliveries",
-            "(SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL)",
+            "(SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL)",
             "insight_events",
-            "proactivity_governors",
+            "weekly_proactivity_state",
+            "reminder_proactivity_state",
             "consent_offers",
             "consent_history",
             "proactive_transcript_entries",
@@ -1907,7 +1905,7 @@ it("accepting Budget opt-in drains pre-opt-in reconciliation as ineligible even 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS n FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='budget-threshold'"
+              "SELECT count(*) AS n FROM proactive_messages WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='budget-threshold'"
             )
             .bind(userId)
             .first()
@@ -1999,11 +1997,8 @@ it(
         const earlier = DateTime.makeUnsafe(instant.epochMilliseconds - 40 * 86400000);
         const work = Array.from({ length: 9 }, (_, index) =>
           db
-            .prepare(`INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',?, ?)`)
-            .bind(
-              users[0],
-              DateTime.formatIso(DateTime.makeUnsafe(earlier.epochMilliseconds + index * 1000))
-            )
+            .prepare(`INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(?,?)`)
+            .bind(users[0], earlier.epochMilliseconds + index * 1000)
         );
         yield* Effect.tryPromise(() => db.batch(work));
         const correction = (): Promise<Response> =>
@@ -2017,9 +2012,7 @@ it(
         expect((yield* Effect.tryPromise(() => correction())).status).toBe(503);
         const pending = yield* Effect.tryPromise(() =>
           db
-            .prepare(
-              "SELECT COUNT(*) AS count FROM (SELECT rowid,user_id,occurred_at,version,last_evaluated_at_ms FROM budget_state WHERE kind='work') AS budget_reconciliation_work WHERE user_id = ?"
-            )
+            .prepare("SELECT COUNT(*) AS count FROM budget_evaluation_work WHERE user_id = ?")
             .bind(users[0])
             .first<{ count: number }>()
         );
@@ -2196,8 +2189,8 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
           db.batch([
             db
               .prepare(`INSERT INTO transactions
-              (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-              VALUES (?, ?, '80.01', 'COP', 'outflow', ?, ?, ?)`)
+              (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+              VALUES (?, ?, '80.01', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
               .bind(
                 `30000000-0000-4000-8000-00000000009${index}`,
                 users[index],
@@ -2207,7 +2200,7 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
               ),
             db
               .prepare(
-                "INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',?, 'zz-invalid')"
+                "INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(?,9000000000000000)"
               )
               .bind(users[index]),
           ])
@@ -2217,18 +2210,14 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
         Promise.all([
           db.prepare("SELECT * FROM budgets ORDER BY user_id, id").all(),
           db
-            .prepare("SELECT * FROM budget_month_latches ORDER BY user_id, budget_id, from_utc")
+            .prepare("SELECT * FROM budget_month_latches ORDER BY user_id, budget_id, from_utc_ms")
             .all(),
           db
             .prepare(
-              "SELECT * FROM budget_threshold_alerts ORDER BY user_id, budget_id, from_utc, threshold"
+              "SELECT * FROM budget_threshold_alerts ORDER BY user_id, budget_id, from_utc_ms, threshold"
             )
             .all(),
-          db
-            .prepare(
-              "SELECT * FROM (SELECT user_id,occurred_at,version,last_evaluated_at_ms FROM budget_state WHERE kind='work') AS budget_reconciliation_work ORDER BY user_id, occurred_at"
-            )
-            .all(),
+          db.prepare("SELECT * FROM budget_evaluation_work ORDER BY user_id,occurred_at_ms").all(),
         ]).then((results) => results.map((result) => result.results));
       const before = yield* Effect.tryPromise(snapshot);
       const subject = {
@@ -2328,8 +2317,8 @@ it("does not drain another User's pending Budget alerts from a non-request evalu
       yield* Effect.tryPromise(() =>
         db
           .prepare(`INSERT INTO transactions
-        (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-        VALUES ('30000000-0000-4000-8000-000000000099', ?, '80.01', 'COP', 'outflow', ?, ?, ?)`)
+        (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+        VALUES ('30000000-0000-4000-8000-000000000099', ?, '80.01', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
           .bind(users[0], category, occurredAt, occurredAt)
           .run()
       );

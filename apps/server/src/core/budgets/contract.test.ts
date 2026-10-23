@@ -254,7 +254,7 @@ it("rejects boxed status discriminants even when their text matches a Budget var
   ).toBe(false);
 });
 
-it("accepts every reachable monthly threshold state and excludes 100% without 80%", () => {
+it("accepts every reachable monthly threshold and rejects other values", () => {
   const decode = Schema.decodeUnknownResult(BudgetMonthLatch);
   const common = {
     budgetId: budgetInput.id,
@@ -265,14 +265,10 @@ it("accepts every reachable monthly threshold state and excludes 100% without 80
     },
   };
 
-  for (const marks of [
-    { reached80: false, reached100: false },
-    { reached80: true, reached100: false },
-    { reached80: true, reached100: true },
-  ]) {
-    expect(Result.isSuccess(decode({ ...common, ...marks }))).toBe(true);
+  for (const highestReached of [0, 80, 100]) {
+    expect(Result.isSuccess(decode({ ...common, highestReached }))).toBe(true);
   }
-  expect(Result.isFailure(decode({ ...common, reached80: false, reached100: true }))).toBe(true);
+  expect(Result.isFailure(decode({ ...common, highestReached: 81 }))).toBe(true);
 });
 
 it("rejects mixed-Currency progress before comparing or subtracting its amounts", () => {

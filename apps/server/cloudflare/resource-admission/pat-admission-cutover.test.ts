@@ -1,3 +1,7 @@
+import {
+  installHistoricalErasureChunk,
+  installHistoricalErasureStorage,
+} from "../schema-cutover.test-fixture";
 import { Data, Effect } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
@@ -132,6 +136,8 @@ it.each(["complete", "interrupted", "invalid_history"] as const)(
       Effect.gen(function* () {
         const db = yield* native(() => databases.acquire());
         yield* native(() => installTestSchema({ db }));
+        yield* native(() => installHistoricalErasureStorage(db));
+        yield* native(() => installHistoricalErasureChunk(db));
         const baseline = yield* native(() =>
           Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
         );
@@ -179,7 +185,7 @@ it.each(["complete", "interrupted", "invalid_history"] as const)(
             db.prepare("INSERT INTO resource_admission_grants VALUES('existing',1000000,1)"),
             db
               .prepare(
-                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'AwaitingReview')"
+                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Draining')"
               )
               .bind(owner, owner),
             db

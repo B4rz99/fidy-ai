@@ -9,6 +9,6 @@ export const erasureAdmissionCondition = (
   }>
 ): OwnedStatement => ({
   sql: `NOT EXISTS(SELECT 1 FROM erasure_requests erasure_fence WHERE erasure_fence.user_id=${input.subject._tag === "User" ? "?" : input.subject.column}
-    AND erasure_fence.state NOT IN(${input.admitted ? "'AwaitingReview','Draining'" : "'AwaitingReview'"}))`,
+    ${input.admitted ? "AND erasure_fence.state<>'Draining'" : ""})`,
   params: input.subject._tag === "User" ? [input.subject.userId] : [],
 });

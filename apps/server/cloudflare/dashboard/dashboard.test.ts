@@ -808,6 +808,37 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
+        const planningReply = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/recurring-plans/edits",
+            method: "POST",
+            body: {
+              expectedRevision: 0,
+              edit: {
+                kind: "create",
+                id: "40000000-0000-4000-8000-000000000123",
+                plan: {
+                  name: "Arriendo",
+                  kind: "expense",
+                  currency: "COP",
+                  amountMode: "fixed",
+                  money: { amount: "1000000", currency: "COP" },
+                  firstDate: "2026-10-31",
+                  timeZone: "America/Bogota",
+                  frequency: "monthly",
+                },
+              },
+            },
+          })
+        );
+        expect(planningReply.status).toBe(200);
+        const retainedPlanning = (): Promise<D1Result> =>
+          db
+            .prepare(
+              "SELECT rowid,* FROM user_documents WHERE kind='recurring-plan' ORDER BY user_id"
+            )
+            .all();
+        const planningBefore = (yield* Effect.tryPromise(retainedPlanning)).results;
         const initialize = (): Promise<Response> =>
           send(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} });
         const replies = yield* Effect.tryPromise(() => Promise.all([initialize(), initialize()]));
@@ -860,6 +891,20 @@ it(
         ).toBe("Keep my edits");
         expect(yield* Effect.tryPromise(stored)).toEqual(before);
         expect(before).toMatchObject({ revision: 2 });
+        const edits = yield* Effect.tryPromise(() =>
+          Promise.all(
+            ["Concurrent first", "Concurrent second"].map((title) =>
+              send(db, 0, {
+                path: "/dashboard/edits",
+                method: "POST",
+                body: { op: "set-title", title },
+              })
+            )
+          )
+        );
+        expect(edits.map((reply) => reply.status)).toEqual([200, 200]);
+        expect(yield* Effect.tryPromise(stored)).toMatchObject({ revision: 4 });
+        expect((yield* Effect.tryPromise(retainedPlanning)).results).toEqual(planningBefore);
       })
     ),
   30_000
@@ -2103,7 +2148,7 @@ it(
                 path: "/transactions",
                 method: "POST",
                 body: {
-                  money: { amount: "7", currency: "COP" },
+                  money: { amount: "9007199254740993.01", currency: "COP" },
                   categoryId: "10000000-0000-4000-8000-000000000001",
                   direction: "outflow",
                   occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
@@ -2134,30 +2179,33 @@ it(
               yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))
             )).join(",");
           });
-        expect(yield* total()).toBe("14");
+        expect(yield* total()).toBe("18014398509481986.02");
         const pair = { firstTransactionId: first, secondTransactionId: second };
         expect(
           (yield* Effect.tryPromise(() =>
             send(db, 0, { path: "/transactions/link", method: "POST", body: pair })
           )).status
         ).toBe(200);
-        expect(yield* total()).toBe("7");
+        expect(yield* total()).toBe("9007199254740993.01");
         expect(
           (yield* Effect.tryPromise(() =>
             send(db, 0, {
               path: `/transactions/${first}`,
               method: "PUT",
-              body: { expectedRevision: 0, changes: { money: { amount: "9", currency: "COP" } } },
+              body: {
+                expectedRevision: 0,
+                changes: { money: { amount: "9007199254740993.02", currency: "COP" } },
+              },
             })
           )).status
         ).toBe(200);
-        expect(yield* total()).toBe("9");
+        expect(yield* total()).toBe("9007199254740993.02");
         expect(
           (yield* Effect.tryPromise(() =>
             send(db, 0, { path: "/transactions/unlink", method: "POST", body: pair })
           )).status
         ).toBe(200);
-        expect(yield* total()).toBe("16");
+        expect(yield* total()).toBe("18014398509481986.03");
       })
     ),
   30_000
@@ -2173,9 +2221,9 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    VALUES ('30000000-0000-4000-8000-000000000011', ?, '9007199254740993', 'COP', 'outflow', ?, ?, ?),
-      ('30000000-0000-4000-8000-000000000012', ?, '9007199254740994', 'COP', 'outflow', ?, ?, ?)`)
+    (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+    VALUES ('30000000-0000-4000-8000-000000000011', ?, '9007199254740993', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER)),
+      ('30000000-0000-4000-8000-000000000012', ?, '9007199254740994', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
             .bind(
               users[0],
               "10000000-0000-4000-8000-000000000001",
@@ -2204,10 +2252,10 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
     WITH RECURSIVE sequence(number) AS (SELECT 1 UNION ALL SELECT number + 1 FROM sequence WHERE number < 4100)
-    SELECT printf('30000000-0000-4000-8000-%012d', number), ?, '0.01', 'COP', 'outflow', ?, ?,
-      strftime('%Y-%m-%dT%H:%M:%fZ', date('now', '-' || CAST(number / 90 AS INTEGER) || ' days'))
+    SELECT printf('30000000-0000-4000-8000-%012d', number), ?, '0.01', 'COP', 'outflow', ?, CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),
+      CAST(unixepoch(date('now', '-' || CAST(number / 90 AS INTEGER) || ' days'))*1000 AS INTEGER)
     FROM sequence`)
             .bind(
               users[0],
@@ -2249,11 +2297,11 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at)
+    (id, user_id, amount, currency, direction, category_id, notes, occurred_at_ms, created_at_ms)
     WITH RECURSIVE sequence(number) AS (SELECT 1 UNION ALL SELECT number + 1 FROM sequence WHERE number < 8193)
     SELECT printf('30000000-0000-4000-8000-%012d', number), ?, '0.01', 'COP', 'outflow',
       CASE WHEN number = 1 THEN '10000000-0000-4000-8000-000000000002' ELSE ? END,
-      CASE WHEN number = 1 THEN 'Rare Café note' ELSE NULL END, ?, ?
+      CASE WHEN number = 1 THEN 'Rare Café note' ELSE NULL END, CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER), CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER)
     FROM sequence`)
             .bind(
               users[0],
@@ -2314,7 +2362,7 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "UPDATE dashboard_projection_digit SET digit_sum = digit_sum + 5 WHERE user_id = ? AND position = 0"
+              "UPDATE transaction_projection_digit SET digit_sum = digit_sum + 5 WHERE user_id = ? AND position = 0"
             )
             .bind(users[0])
             .run()
@@ -2335,7 +2383,9 @@ it(
         const beforeRepair = Option.getOrThrow(yield* findRecurringSnapshot(factQuery));
         yield* Effect.tryPromise(() =>
           db
-            .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
+            .prepare(
+              "UPDATE transaction_projection_state SET readiness = 'dirty' WHERE user_id = ?"
+            )
             .bind(users[0])
             .run()
         );
@@ -2354,8 +2404,8 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    VALUES ('30000000-0000-4000-8000-000000009999', ?, '0.02', 'COP', 'outflow', ?, ?, ?)`)
+    (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
+    VALUES ('30000000-0000-4000-8000-000000009999', ?, '0.02', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
             .bind(users[0], "10000000-0000-4000-8000-000000000001", time, time)
             .run()
         );
@@ -2501,7 +2551,7 @@ it.each(["/dashboard/view", "/dashboard/view?"])(
           });
         const delayed: D1Database = {
           prepare: (sql) =>
-            sql.includes("FROM dashboard_projection_bucket")
+            sql.includes("FROM transaction_projection_bucket")
               ? markAggregate(db.prepare(sql))
               : db.prepare(sql),
           batch: <Row = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>

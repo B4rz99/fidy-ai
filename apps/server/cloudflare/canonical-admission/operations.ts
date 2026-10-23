@@ -491,7 +491,7 @@ const acceptanceStatements = <E, R>(
       ? [
           db
             .prepare(
-              "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,accepted_at_ms) VALUES ('request_admission',?,?,?,?,?)"
+              "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,occurred_at_ms) VALUES ('request_admission',?,?,?,?,?)"
             )
             .bind(identity, caller.value.userId, caller.value.patId, operation.id, current),
         ]

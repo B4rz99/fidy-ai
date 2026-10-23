@@ -540,7 +540,7 @@ test("read-only Transactions retain loaded history through a failed continuation
     })
   ));
 
-test("an erasure intention uses fresh Core authority and an explicit retry returns the same request", ({
+test("account deletion uses fresh Core authority and an explicit retry returns the same request", ({
   page,
   request,
 }) =>
@@ -561,7 +561,7 @@ test("an erasure intention uses fresh Core authority and an explicit retry retur
       const initial: unknown = replies[0];
       expect(initial).toBeDefined();
       yield* Effect.tryPromise(() =>
-        expect(region.getByRole("alert")).toContainText("Aún no hemos eliminado tus datos")
+        expect(region.getByRole("alert")).toContainText("La eliminación está en curso")
       );
       yield* Effect.tryPromise(() => expect(button).toBeDisabled());
       yield* Effect.tryPromise(() => expect(region).not.toContainText("Referencia:"));

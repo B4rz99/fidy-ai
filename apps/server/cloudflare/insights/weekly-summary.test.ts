@@ -60,7 +60,7 @@ it.live(
       const db = yield* weeklySummaryTestDatabase;
       const schedule = yield* enable(db);
       const sql =
-        "INSERT INTO transactions (id,user_id,amount,currency,category_id,direction,occurred_at,created_at,counterparty) VALUES (?,?,?,?,?,?,?,?,NULL)";
+        "INSERT INTO transactions (id,user_id,amount,currency,category_id,direction,occurred_at_ms,created_at_ms,counterparty) VALUES (?,?,?,?,?,?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),NULL)";
       const seedDefaults: Readonly<{
         userId: string;
         amount: string;
@@ -135,7 +135,7 @@ it.live(
       const outbox = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT user_id,delivery_id AS insight_event_id,state FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='weekly-summary'"
+            "SELECT user_id,delivery_id AS insight_event_id,state FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='weekly-summary'"
           )
           .all()
       );
@@ -151,7 +151,7 @@ it.live("does not convert unavailable aggregates into an empty-week advancement"
     const snapshot = yield* enable(db);
     yield* Effect.tryPromise(() =>
       db
-        .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
+        .prepare("UPDATE transaction_projection_state SET readiness = 'dirty' WHERE user_id = ?")
         .bind(weeklySummaryTestUser)
         .run()
     );
@@ -168,7 +168,7 @@ it.live("does not convert unavailable aggregates into an empty-week advancement"
     const outbox = yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "SELECT delivery_id AS insight_event_id FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='weekly-summary'"
+          "SELECT delivery_id AS insight_event_id FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='weekly-summary'"
         )
         .all()
     );

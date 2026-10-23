@@ -12,18 +12,17 @@ type OriginalWrite = Readonly<{
 
 /** Commit with the owner's original reservation in one native batch. A refused writer aborts that complete reservation. */
 export const prepareOriginalWrite = (
-  input: OriginalWrite & Readonly<{ current: number; expiresAtMs: number }>
+  input: OriginalWrite & Readonly<{ current: number }>
 ): ReadonlyArray<D1PreparedStatement> => [
   input.db
-    .prepare(`INSERT INTO erasure_writers(id,user_id,bucket,object_key,started_at_ms,expires_at_ms)
-    SELECT ?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=? AND state<>'AwaitingReview')`)
+    .prepare(`INSERT INTO erasure_writers(id,user_id,bucket,object_key,started_at_ms)
+    SELECT ?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=?)`)
     .bind(
       input.reference,
       input.userId,
       input.bucket,
       input.objectKey,
       input.current,
-      input.expiresAtMs,
       input.userId
     ),
   prepareChangedRowAssertion({ db: input.db, scope: "erasure_writer" }),
@@ -61,21 +60,9 @@ export const originalWriteActive = (
       try: () =>
         input.db
           .prepare(`SELECT count(*) AS active FROM erasure_writers WHERE id=? AND user_id=? AND bucket=? AND object_key=?
-              AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=? AND state NOT IN('AwaitingReview','Draining'))`)
+              AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=? AND state <>'Draining')`)
           .bind(input.reference, input.userId, input.bucket, input.objectKey, input.userId)
           .first<number>("active"),
       catch: () => new ErasureUnavailable(),
     })
   ).pipe(Effect.map((active) => active === 1));
-
-export const originalWritesSettled = (
-  input: Readonly<{ db: D1Database; userId: string }>
-): Effect.Effect<boolean, ErasureUnavailable> =>
-  Effect.tryPromise({
-    try: () =>
-      input.db
-        .prepare("SELECT count(*) AS pending FROM erasure_writers WHERE user_id=?")
-        .bind(input.userId)
-        .first<number>("pending"),
-    catch: () => new ErasureUnavailable(),
-  }).pipe(Effect.map((pending) => pending === 0));

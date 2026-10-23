@@ -87,7 +87,7 @@ export const findStanding = (input: Scope): Effect.Effect<ReminderStanding, Insi
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT standing_json FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=?",
+          sql: "SELECT standing_json FROM reminder_proactivity_state AS reminder_governors WHERE user_id=?",
           params: [input.userId],
         },
       }).first()
@@ -101,7 +101,7 @@ export const findStanding = (input: Scope): Effect.Effect<ReminderStanding, Insi
 const resetStanding = (input: Scope & Readonly<{ now: DateTime.Utc }>): D1PreparedStatement =>
   input.db
     .prepare(
-      "INSERT INTO proactivity_governors AS reminder_governors(kind,user_id,standing_json,last_reply_at_ms) VALUES ('reminder',?, ?, ?) ON CONFLICT(kind,user_id) DO UPDATE SET standing_json=excluded.standing_json,last_reply_at_ms=excluded.last_reply_at_ms"
+      "INSERT INTO reminder_proactivity_state AS reminder_governors(user_id,standing_json,last_reply_at_ms) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET standing_json=excluded.standing_json,last_reply_at_ms=excluded.last_reply_at_ms"
     )
     .bind(
       input.userId,
@@ -255,7 +255,7 @@ const guard = (input: GenerationScope, statement: OwnedStatement): D1PreparedSta
     kind: "manual-entry-reminder",
     grantId: input.snapshot.consentGrantId,
     statement: {
-      sql: `${statement.sql} AND EXISTS (SELECT 1 FROM schedules AS s JOIN (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS g ON g.user_id=s.user_id WHERE s.kind='reminder' AND s.user_id=? AND s.id=? AND s.version=? AND s.enabled=1 AND s.next_scheduled_at=? AND s.next_scheduled_at<=? AND s.consent_grant_id=? AND json_extract(g.standing_json,'$._tag') IN ('Attentive','QuestionPending','QuestionDelivered'))`,
+      sql: `${statement.sql} AND EXISTS (SELECT 1 FROM schedules AS s JOIN reminder_proactivity_state AS g ON g.user_id=s.user_id WHERE s.kind='reminder' AND s.user_id=? AND s.id=? AND s.version=? AND s.enabled=1 AND s.next_scheduled_at=? AND s.next_scheduled_at<=? AND s.consent_grant_id=? AND json_extract(g.standing_json,'$._tag') IN ('Attentive','QuestionPending','QuestionDelivered'))`,
       params: [
         ...statement.params,
         input.userId,
@@ -287,7 +287,7 @@ const occurrence = (
     Readonly<{ scheduledAt: DateTime.Utc; expiresAt: DateTime.Utc; id: InsightEventId }>
 ): ReadonlyArray<D1PreparedStatement> => [
   guard(input, {
-    sql: "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) SELECT ?,?,'manual-entry-reminder',?,?,?,?,?,?,? WHERE 1=1",
+    sql: "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json,reminder_grant_id,reminder_evidence_expires_at_ms) SELECT ?,?,'manual-entry-reminder',?,?,?,?,?,?,?,?,? WHERE 1=1",
     params: [
       input.id,
       input.userId,
@@ -296,14 +296,16 @@ const occurrence = (
       input.snapshot.serviceMarket,
       input.snapshot.locale,
       input.snapshot.timeZone,
-      DateTime.formatIso(input.scheduledAt),
+      input.scheduledAt.epochMilliseconds,
       Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(MoneyGroups)))([]),
+      input.snapshot.consentGrantId,
+      input.expiresAt.epochMilliseconds,
     ],
   }),
   prepareChangedRowAssertion({ db: input.db, scope: "reminder_schedule" }),
   input.db
     .prepare(
-      "INSERT INTO insight_reports(kind,delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,reminder_grant_id,reminder_expires_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('proactivity-delivery',?,?,'manual-entry-reminder',?,?,?,?,?,?,?,? ,'ready',?8,0,0)"
+      "INSERT INTO proactive_messages(kind,id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('proactivity-delivery',?,?,'manual-entry-reminder',?,?,?,?,?,? ,'ready',?8,0,0)"
     )
     .bind(
       input.id,
@@ -313,13 +315,11 @@ const occurrence = (
       input.scheduledAt.epochMilliseconds,
       input.expiresAt.epochMilliseconds,
       input.snapshot.timeZone,
-      input.now.epochMilliseconds,
-      input.snapshot.consentGrantId,
-      input.expiresAt.epochMilliseconds
+      input.now.epochMilliseconds
     ),
   input.db
     .prepare(
-      "UPDATE insight_events SET report_delivery_id=?2 WHERE user_id=?1 AND id=?3 AND report_delivery_id IS NULL"
+      "UPDATE insight_events SET message_kind='proactivity-delivery',message_id=?2 WHERE user_id=?1 AND id=?3 AND message_id IS NULL"
     )
     .bind(input.userId, input.id, input.id),
 ];

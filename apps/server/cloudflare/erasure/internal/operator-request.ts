@@ -84,7 +84,7 @@ const forwardCommand = (
   Effect.gen(function* () {
     const { command, current } = input;
     const admission = {
-      userId: command.action === "Review" ? command.decision.userId : command.userId,
+      userId: command.userId,
       deadlineMs: Math.min(current + admissionLifetimeMs, input.operator.expiresAtMs),
       authority: { permission: "titular.erase", ...input.operator },
     };
@@ -112,10 +112,6 @@ const commandPath = (
   >
 ): string => {
   switch (command.action) {
-    case "Review":
-      return "erasure-review";
-    case "ReviewRetention":
-      return "erasure-retention-review";
     case "Continue":
       return "erasure-continue";
     case "Receipt":
@@ -135,16 +131,6 @@ const commandBody = (
     authority: Readonly<{ permission: string; operatorRef: string; expiresAtMs: number }>;
   }>
 ): unknown => {
-  if (command.action === "ReviewRetention") {
-    return {
-      ...admission,
-      reference: command.reference,
-      previousReviewRef: command.previousReviewRef,
-      receiptRetention: command.receiptRetention,
-      recoveryRetention: command.recoveryRetention,
-    };
-  }
-  if (command.action === "Review") return { ...admission, decision: command.decision };
   if (command.action === "CustodyEvidence") {
     return { ...admission, reference: command.evidence.reference, evidence: command.evidence };
   }

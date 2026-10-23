@@ -25,8 +25,7 @@ const period = deriveCurrentBudgetMonth({
 const initialLatch = (): Parameters<typeof advanceBudgetLatch>[0]["latch"] => ({
   budgetId: budget.id,
   period,
-  reached80: false,
-  reached100: false,
+  highestReached: 0,
 });
 
 it("calculates the half-open calendar month in the explicitly applied IANA time zone", () => {
@@ -61,6 +60,7 @@ it("latches each crossed threshold once, including a jump across both thresholds
     advanceBudgetLatch({ budget, spent: money("1000"), latch: initialLatch() })
   );
   expect(crossed.newlyReached).toEqual([80, 100]);
+  expect(crossed.latch.highestReached).toBe(100);
   expect(
     Effect.runSync(advanceBudgetLatch({ budget, spent: money("1200"), latch: crossed.latch }))
       .newlyReached
@@ -80,7 +80,7 @@ it("uses exact Money at the 80% boundary without rounding or reopening a mark", 
     advanceBudgetLatch({ budget: decimalBudget, spent: money("80.01"), latch: below.latch })
   );
   expect(above.newlyReached).toEqual([80]);
-  expect(above.latch.reached100).toBe(false);
+  expect(above.latch.highestReached).toBe(80);
 });
 
 it("does not compare a threshold with spending in another Currency", () => {
@@ -101,7 +101,7 @@ it("latches exactly eighty percent before the full cap and never reopens it afte
     advanceBudgetLatch({ budget, spent: money("800"), latch: initialLatch() })
   );
   expect(reached).toEqual({
-    latch: { ...initialLatch(), reached80: true },
+    latch: { ...initialLatch(), highestReached: 80 },
     newlyReached: [80],
   });
   expect(

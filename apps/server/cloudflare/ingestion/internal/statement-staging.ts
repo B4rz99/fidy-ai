@@ -1,4 +1,8 @@
-import { erasePrivateObject, writePrivateObject } from "../../private-objects/operations";
+import {
+  erasePrivateObject,
+  userPrivateObjectPrefix,
+  writePrivateObject,
+} from "../../private-objects/operations";
 import {
   originalWriteActive,
   prepareOriginalWrite,
@@ -264,11 +268,11 @@ const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effe
  * admission grant. It is never derived from User input, a digest, or a locator. */
 export const newIngestionId = (): string => newId();
 
-const randomObjectKey = (): string => {
+const randomObjectKey = (userId: UserId): string => {
   const entropy = Effect.runSync(
     workerCrypto.randomBytes(statementStagingObjectEntropyBytes).pipe(Effect.orDie)
   );
-  return `${statementStagingObjectPrefix}${Hex.encode(entropy)}`;
+  return `${userPrivateObjectPrefix(userId)}${statementStagingObjectPrefix}${Hex.encode(entropy)}`;
 };
 
 const digestUnavailable = (
@@ -425,7 +429,6 @@ const insertPendingStagingRow = (
       bucket: "statement",
       objectKey: input.objectKey,
       current: input.createdAtEpochMs,
-      expiresAtMs: input.expiresAtEpochMs,
     }),
     config.database
       .prepare(
@@ -551,7 +554,7 @@ const stageStatementBytes = (
       return yield* unavailable();
     }
     const stagingId = newId();
-    const objectKey = randomObjectKey();
+    const objectKey = randomObjectKey(UserId.make(input.userId));
     const sha256 = Hex.encode(new Uint8Array(digest));
     const pending = yield* insertPendingStagingRow(config, {
       byteLength: bytes.byteLength,
@@ -1641,14 +1644,14 @@ const prepareStagingRetention = (database: D1Database, nowEpochMs: number): D1Pr
              SELECT id FROM (
                SELECT id,expires_at_ms FROM (
                  SELECT id,expires_at_ms FROM statement_staging_objects
-                 WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=statement_staging_objects.user_id AND q.state<>'AwaitingReview')
+                 WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=statement_staging_objects.user_id)
                  AND status = 'deleting' AND object_deleted_at_ms IS NULL
                  ORDER BY expires_at_ms,id LIMIT ?
                )
                UNION ALL
                SELECT id,expires_at_ms FROM (
                  SELECT id,expires_at_ms FROM statement_staging_objects
-                 WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=statement_staging_objects.user_id AND q.state<>'AwaitingReview')
+                 WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=statement_staging_objects.user_id)
                  AND status IN ('pending','available') AND object_deleted_at_ms IS NULL
                    AND expires_at_ms <= ?
                  ORDER BY expires_at_ms,id LIMIT ?

@@ -1,3 +1,4 @@
+import type { UserId } from "../../src/core/identity/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { newId } from "../secret-material/operations";
 import {
@@ -5,6 +6,9 @@ import {
   PrivateObjectUnavailable,
   type PrivateObjectWrite,
 } from "./contract";
+
+/** Delimited stable-User namespace, shared across every private content bucket. */
+export const userPrivateObjectPrefix = (userId: UserId): string => `users/${userId}/`;
 
 const maximumEtagLength = 128;
 const controlLifetimeMs = 600000;
@@ -54,40 +58,31 @@ export const writePrivateObject = <E, R>(
     );
   });
 
-/** Call only for an owner-qualified key whose disposition permits deletion. Scanned objects require their observed ETag; superseded versions are preserved. The nonce write must settle before deletion; a lost acknowledgement leaves cleanup unresolved. */
-const eraseObject = (
-  input: Readonly<{ bucket: PrivateObjectBucket; key: string; observedEtag: Option.Option<string> }>
+/** Delete an owner-qualified key only after its disposition permits deletion. Removing the placeholder invalidates a delayed payload's ETag without creating another object; unknown upload outcomes remain the owner's drain responsibility. */
+export const erasePrivateObject = (
+  input: Readonly<{ bucket: PrivateObjectBucket; key: string }>
+): Effect.Effect<void, PrivateObjectUnavailable> =>
+  io(() => input.bucket.delete(input.key)).pipe(Effect.asVoid);
+
+/** Invalidate only the listed control version; a concurrent replacement is preserved. The conditional nonce must settle before deletion; a lost acknowledgement leaves cleanup unresolved. */
+export const eraseObservedPrivateObject = (
+  input: Readonly<{ bucket: PrivateObjectBucket; key: string; etag: string }>
 ): Effect.Effect<void, PrivateObjectUnavailable> =>
   Effect.gen(function* () {
     const nonce = yield* Effect.sync(newId);
     const current = yield* Clock.currentTimeMillis;
     const fenced = yield* io(() =>
       input.bucket.put(input.key, new TextEncoder().encode(nonce), {
-        ...Option.match(input.observedEtag, {
-          onNone: () => ({}),
-          onSome: (etag) => ({ onlyIf: { etagMatches: etag } }),
-        }),
+        onlyIf: { etagMatches: input.etag },
         customMetadata: {
           purpose: "private-object-erased",
           expiresAtMs: String(current + controlLifetimeMs),
         },
       })
     );
-    if (fenced === null && Option.isSome(input.observedEtag)) return;
+    if (fenced === null) return;
     yield* Schema.decodeUnknownEffect(Stored)(fenced).pipe(
       Effect.mapError(() => new PrivateObjectUnavailable())
     );
     yield* io(() => input.bucket.delete(input.key));
   });
-
-/** Delete an owner-qualified key only after its disposition permits deletion and new publications are fenced. */
-export const erasePrivateObject = (
-  input: Readonly<{ bucket: PrivateObjectBucket; key: string }>
-): Effect.Effect<void, PrivateObjectUnavailable> =>
-  eraseObject({ ...input, observedEtag: Option.none() });
-
-/** Invalidate only the listed control version; a concurrent replacement is preserved. */
-export const eraseObservedPrivateObject = (
-  input: Readonly<{ bucket: PrivateObjectBucket; key: string; etag: string }>
-): Effect.Effect<void, PrivateObjectUnavailable> =>
-  eraseObject({ ...input, observedEtag: Option.some(input.etag) });

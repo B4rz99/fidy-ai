@@ -1,6 +1,4 @@
-import { checkpointOriginals } from "./internal/original-checkpoint";
-import { holdOriginals, purgeHeldOriginals } from "./internal/original-holds";
-import { archive, remove } from "./internal/d1";
+import { remove } from "./internal/d1";
 import type {
   ErasureOriginalConfiguration,
   ErasureOriginals,
@@ -9,14 +7,13 @@ import type {
 } from "./contract";
 import * as originals from "./internal/originals";
 
-/** The owner supplies fixed SQL with a same-User predicate and deletion restricted to erasure_chunk. Values must remain bound parameters. */
+/** The owner supplies fixed SQL with a same-User predicate and deletion restricted to the supplied fixed, bounded JSON identifier set. Values must remain bound parameters. */
 export const makeErasureStore = (
   input: Readonly<{ db: D1Database; projection: ErasureProjection }>
 ): ErasureStore => ({
   id: input.projection.id,
   dataClass: input.projection.dataClass,
   dependencies: input.projection.dependencies,
-  archive: (scope) => archive({ ...input, scope }),
   remove: (scope) => remove({ ...input, scope }),
   protectDrained: ({ statement, scope, current }) => {
     if (input.projection.quiescence._tag === "Synchronous") return statement;
@@ -31,9 +28,5 @@ export const makeErasureStore = (
 export const makeErasureOriginals = (
   configuration: ErasureOriginalConfiguration
 ): ErasureOriginals => ({
-  checkpoint: (scope) => checkpointOriginals({ configuration, scope }),
-  purge: (scope) => purgeHeldOriginals({ configuration, scope }),
-  archive: (scope) => holdOriginals({ configuration, scope }),
-  capture: (scope) => originals.capture({ configuration, scope }),
   discard: (scope) => originals.discard({ configuration, scope }),
 });

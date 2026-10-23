@@ -950,9 +950,7 @@ const rowsJson = (result: D1Result<unknown>): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(result.results);
 
 const stagedObjectKeys = (runtime: Runtime): Promise<ReadonlyArray<string>> =>
-  runtime.bucket
-    .list({ prefix: "staging/statement/v1/" })
-    .then((result) => result.objects.map(({ key }) => key));
+  runtime.bucket.list({ prefix: "users/" }).then((result) => result.objects.map(({ key }) => key));
 
 const seedSubmission = (
   runtime: Runtime,
@@ -1083,7 +1081,7 @@ it(
         expect(staged.sourceFormat).toBe("csv");
         expect(staged.byteLength).toBe(statementBytes().byteLength);
         const [objectKey] = yield* fromTestPromise(() => stagedObjectKeys(runtime));
-        expect(objectKey?.startsWith("staging/statement/v1/")).toBe(true);
+        expect(objectKey?.startsWith(`users/${userA}/staging/statement/v1/`)).toBe(true);
         expect(Object.values(staged)).not.toContain(objectKey);
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
 
@@ -2092,9 +2090,9 @@ it("publishes a staged statement under held WhatsApp authority and atomically bi
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "WITH incoming(turn_id,user_id,media_id,staging_id,reference_json,created_at_ms) AS (VALUES (?,?,?,?,?,?)) UPDATE hosted_turns SET document_media_id=incoming.media_id,document_staging_id=incoming.staging_id,document_reference_json=incoming.reference_json,document_created_at_ms=incoming.created_at_ms FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id"
+            "WITH incoming(turn_id,user_id,media_id,staging_id,reference_json) AS (VALUES (?,?,?,?,?)) UPDATE hosted_turns SET document_media_id=incoming.media_id,document_staging_id=incoming.staging_id,document_reference_json=incoming.reference_json FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id"
           )
-          .bind(turnId, userA, "direct-document", staged.stagingId, JSON.stringify(staged), current)
+          .bind(turnId, userA, "direct-document", staged.stagingId, JSON.stringify(staged))
           .run()
       );
       const response = yield* executeHostedStatementCall({
@@ -4665,7 +4663,7 @@ it("invalidates OAuth review when automatic Category changes without creating a 
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "INSERT INTO keyword_rules(id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at) VALUES (?,?,'Cafe','cafe',?,'2026-08-01T00:00:00.000Z','2026-08-01T00:00:00.000Z')"
+            "INSERT INTO keyword_rules(id,user_id,keyword,category_id,created_at_ms,updated_at_ms) VALUES (?,?,'cafe',?,1785542400000,1785542400000)"
           )
           .bind(newId(), userA, "10000000-0000-4000-8000-000000000003")
           .run()
@@ -4727,7 +4725,7 @@ it("prefills independently known facts when a statement date is missing", () =>
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "INSERT INTO keyword_rules(id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at) VALUES (?,?,'Cafe','cafe',?,'2026-08-01T00:00:00.000Z','2026-08-01T00:00:00.000Z')"
+            "INSERT INTO keyword_rules(id,user_id,keyword,category_id,created_at_ms,updated_at_ms) VALUES (?,?,'cafe',?,1785542400000,1785542400000)"
           )
           .bind(newId(), userA, suggestedCategory)
           .run()

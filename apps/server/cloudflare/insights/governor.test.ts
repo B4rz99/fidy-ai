@@ -1,6 +1,6 @@
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
-import { DateTime, Effect, Exit, Option, Schema } from "effect";
+import { Effect, Exit, Option, Schema } from "effect";
 import {
   InsightTemplateConfiguration,
   WeeklyQuestionTemplateConfiguration,
@@ -33,7 +33,7 @@ it.live("rejects corrupt retained pause dates before materializing any report", 
     yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "INSERT INTO proactivity_governors AS weekly_governors(kind,user_id,paused_at_ms) VALUES ('weekly',?,?)"
+          "INSERT INTO weekly_proactivity_state AS weekly_governors(user_id,paused_at_ms) VALUES (?,?)"
         )
         .bind(userId, 8_640_000_000_000_001)
         .run()
@@ -57,7 +57,7 @@ it.live("rejects corrupt retained pause dates before materializing any report", 
       (yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT delivery_id AS insight_event_id FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='weekly-summary' AND user_id=?"
+            "SELECT delivery_id AS insight_event_id FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='weekly-summary' AND user_id=?"
           )
           .bind(userId)
           .all()
@@ -73,7 +73,7 @@ it.live("rejects a corrupt retained question origin without staging or sending w
     yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "INSERT INTO insight_reports(kind,delivery_id,user_id,origin,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES('weekly-question',?,?,'requested',?,'ready',?3,0,0)"
+          "INSERT INTO weekly_question_requests(id,user_id,origin,created_at_ms,state,last_attempt_at_ms,restart_attempts) VALUES(?,?,'requested',?,'ready',0,0)"
         )
         .bind(id, userId, 8_640_000_000_000_001)
         .run()
@@ -112,9 +112,7 @@ it.live("rejects a corrupt retained question origin without staging or sending w
     expect(
       yield* Effect.tryPromise(() =>
         db
-          .prepare(
-            "SELECT state FROM (SELECT rowid,delivery_id AS id,user_id,origin,request_message_id,rejection_offer_id,dispatch_state AS state,created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE kind='weekly-question') WHERE user_id=? AND id=?"
-          )
+          .prepare("SELECT state FROM weekly_question_requests WHERE user_id=? AND id=?")
           .bind(userId, id)
           .first()
       )
@@ -153,9 +151,9 @@ it.live(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) VALUES(?,?,'weekly-summary','40000000-0000-4000-8000-000000000001',1,'CO','es-CO','America/Bogota',?,'[]')"
+              "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json) VALUES(?,?,'weekly-summary','40000000-0000-4000-8000-000000000001',1,'CO','es-CO','America/Bogota',?,'[]')"
             )
-            .bind(id, userId, DateTime.formatIso(DateTime.makeUnsafe(index * 1000)))
+            .bind(id, userId, index * 1000)
             .run()
         );
         const statements = prepareWeeklyDeliverySettlement({
@@ -175,12 +173,7 @@ it.live(
         });
       }
       const questions = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT id FROM (SELECT rowid,delivery_id AS id,user_id,origin,request_message_id,rejection_offer_id,dispatch_state AS state,created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE kind='weekly-question') WHERE user_id=?"
-          )
-          .bind(userId)
-          .all()
+        db.prepare("SELECT id FROM weekly_question_requests WHERE user_id=?").bind(userId).all()
       );
       expect(questions.results).toEqual([]);
     })
@@ -194,9 +187,9 @@ it.live("counts verified scheduled deliveries once, asks at four and pauses afte
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) VALUES(?,?,'weekly-summary','40000000-0000-4000-8000-000000000001',1,'CO','es-CO','America/Bogota',?,'[]')"
+            "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json) VALUES(?,?,'weekly-summary','40000000-0000-4000-8000-000000000001',1,'CO','es-CO','America/Bogota',?,'[]')"
           )
-          .bind(id, userId, DateTime.formatIso(DateTime.makeUnsafe(index * 1000)))
+          .bind(id, userId, index * 1000)
           .run()
       );
       const input = {

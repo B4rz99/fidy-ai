@@ -1,3 +1,4 @@
+import { registeredConnectionInstitutionIds } from "../../src/shell/connections/contract";
 import { type TransactionSubject } from "../canonical-work/contract";
 import { newId } from "../secret-material/operations";
 import { UnknownJsonString } from "../../src/shell/schema-codecs/contract";
@@ -85,8 +86,8 @@ const setup = (): Promise<{
   Effect.runPromise(
     Effect.gen(function* () {
       const { db } = yield* makePaymentEnrollmentD1([
-        "CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO', trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
-        "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)",
+        "CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO', trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER) STRICT",
+        "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER)",
         consentHistoryTestSchema,
 
         `CREATE TABLE web_sessions (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, token_digest BLOB NOT NULL,
@@ -1283,7 +1284,10 @@ it.each(["sandbox", "production"] as const)(
           CLOUDFLARE_ACCESS_ISSUER: "https://fixture-unused.example",
           CLOUDFLARE_ACCESS_AUDIENCE: "fixture-unused",
         };
-        const core = makeCoreHttp(cloudflareWorkerTelemetry);
+        const core = makeCoreHttp({
+          telemetry: cloudflareWorkerTelemetry,
+          institutions: registeredConnectionInstitutionIds,
+        });
         const ingress = makePublicWorker(cloudflareWorkerTelemetry);
         const response = yield* fromTestPromise(() =>
           ingress.fetch(
@@ -1323,7 +1327,10 @@ const enrollmentWorkers = (
   publicFetch: (request: Request) => Promise<Response>;
   coreFetch: (request: Request) => Promise<Response>;
 }> => {
-  const core = makeCoreHttp(cloudflareWorkerTelemetry);
+  const core = makeCoreHttp({
+    telemetry: cloudflareWorkerTelemetry,
+    institutions: registeredConnectionInstitutionIds,
+  });
   const ingress = makePublicWorker(cloudflareWorkerTelemetry);
   const coreEnvironment = {
     ...environment,

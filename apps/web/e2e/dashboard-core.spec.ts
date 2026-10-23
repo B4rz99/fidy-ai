@@ -4,6 +4,7 @@ import { playwright } from "./playwright-runtime";
 import { signInDashboardThroughCore } from "./real-core-fixture";
 
 const { expect, test } = playwright;
+test.use({ trace: "retain-on-failure" });
 const successStatus = 200;
 const resourceLimitedStatus = 429;
 const noContentStatus = 204;

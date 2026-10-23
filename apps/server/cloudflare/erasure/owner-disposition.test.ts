@@ -1,11 +1,17 @@
+import {
+  documentedSqlBlock,
+  installHistoricalErasureChunk,
+  installHistoricalErasureStorage,
+} from "../schema-cutover.test-fixture";
 import { makeRecoveryErasureStores } from "../recovery/runtime";
 import { makeEmailAuthenticationErasureStores } from "../email-authentication/runtime";
 import { afterAll, expect, it } from "vitest";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option } from "effect";
 import { installRetentionTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { retainedReviewRows } from "./native.test-fixture";
 import { sweepReviewDrafts } from "../ingestion/runtime";
 import { makeMemoryErasureStores } from "../memory/runtime";
+import { makeDashboardErasureStores } from "../dashboard/runtime";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
@@ -14,19 +20,52 @@ const foreignUser = "12740000-0000-4000-8000-000000000099";
 const reference = "12740000-0000-4000-8000-000000000002";
 const scope = { userId, reference };
 
-it("archives reviewed Memory in bounded pages, resumes after reconstruction, and preserves the other User", () =>
+const rehearseSelectionCutover = Effect.fn(function* (db: D1Database) {
+  yield* Effect.tryPromise(() => installHistoricalErasureChunk(db));
+  yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
+  const guide = yield* Effect.tryPromise(() =>
+    Bun.file(
+      new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)
+    ).text()
+  );
+  const block = (name: string): ReadonlyArray<D1PreparedStatement> =>
+    documentedSqlBlock({ guide, marker: "erasure-selection-" + name }).map((sql) =>
+      db.prepare(sql)
+    );
+  const snapshot = (): Promise<ReadonlyArray<D1Result>> =>
+    db.batch([
+      db.prepare("SELECT rowid,* FROM memories ORDER BY rowid"),
+      db.prepare("SELECT rowid,* FROM erasure_requests ORDER BY rowid"),
+      db.prepare("SELECT rowid,* FROM erasure_steps ORDER BY rowid"),
+    ]);
+  const before = (yield* Effect.tryPromise(snapshot)).map((result) => result.results);
+  yield* Effect.tryPromise(() =>
+    expect(
+      db.batch([
+        ...block("guard"),
+        ...block("drop"),
+        db.prepare(
+          "INSERT INTO sql_assertions(scope,accepted) VALUES('interrupt_owner_selection',0)"
+        ),
+      ])
+    ).rejects.toThrow()
+  );
+  expect((yield* Effect.tryPromise(snapshot)).map((result) => result.results)).toEqual(before);
+  yield* Effect.tryPromise(() => db.batch([...block("guard"), ...block("drop")]));
+  expect((yield* Effect.tryPromise(snapshot)).map((result) => result.results)).toEqual(before);
+  yield* Effect.tryPromise(() => db.batch([...block("rollback")]));
+  expect((yield* Effect.tryPromise(snapshot)).map((result) => result.results)).toEqual(before);
+  yield* Effect.tryPromise(() => db.batch([...block("guard"), ...block("drop")]));
+  expect(
+    (yield* Effect.tryPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
+  ).toEqual([]);
+});
+
+it("deletes Memory in bounded pages, resumes after reconstruction, and preserves the other User", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
       yield* Effect.tryPromise(() => installRetentionTestSchema(db));
-      const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-        dispositions: {
-          memory: {
-            action: "Retain",
-            retention: { untilMs: (yield* Clock.currentTimeMillis) + 86400000 },
-          },
-        },
-      });
       const statements = [
         ...[userId, foreignUser].map((id) =>
           db
@@ -37,45 +76,68 @@ it("archives reviewed Memory in bounded pages, resumes after reconstruction, and
         ),
         db
           .prepare(
-            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,'AwaitingReview',?)"
+            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Draining')"
           )
-          .bind(reference, userId, decision),
+          .bind(reference, userId),
         db
-          .prepare(
-            "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'memories','memory')"
-          )
+          .prepare("INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'memories')")
           .bind(reference),
         ...Array.from({ length: 70 }, (_, index) =>
           db
             .prepare(
-              "INSERT INTO memories VALUES(?,?,'Contexto económico','2026-10-15','2026-10-15')"
+              "INSERT INTO memories VALUES(?,?,'Contexto económico',1792022400000,1792022400000)"
             )
             .bind(`memory-${index}`, userId)
         ),
         db
           .prepare(
-            "INSERT INTO memories VALUES('foreign-memory',?,'Privado','2026-10-15','2026-10-15')"
+            "INSERT INTO memories VALUES('foreign-memory',?,'Privado',1792022400000,1792022400000)"
           )
           .bind(foreignUser),
       ];
       yield* Effect.tryPromise(() => db.batch(statements));
       yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE erasure_requests SET state='Archiving' WHERE id=?").bind(reference).run()
+        db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference).run()
       );
-      const first = makeMemoryErasureStores(db)[0];
-      if (first === undefined) throw new Error("Missing Memory disposition");
-      expect(yield* first.archive(scope)).toBe(false);
+
       const resumed = makeMemoryErasureStores(db)[0];
       if (resumed === undefined) throw new Error("Missing Memory disposition");
-      expect(yield* resumed.archive(scope)).toBe(true);
-      expect(yield* resumed.archive(scope)).toBe(true);
+
       yield* Effect.tryPromise(() =>
         db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference).run()
       );
       expect((yield* Effect.result(resumed.remove({ reference, userId: foreignUser })))._tag).toBe(
         "Failure"
       );
-      expect(yield* resumed.remove(scope)).toBe(false);
+      yield* rehearseSelectionCutover(db);
+      // Another authorized cleanup removes the selected first page before this batch commits.
+      let competed = false;
+      const racingDb: D1Database = {
+        prepare: (sql) => db.prepare(sql),
+        batch: (batch) => {
+          if (competed) return db.batch(batch);
+          competed = true;
+          return db
+            .batch([
+              db
+                .prepare("INSERT INTO erasure_permits VALUES(?,?,'memories')")
+                .bind(reference, userId),
+              db
+                .prepare(
+                  "DELETE FROM memories WHERE user_id=? AND rowid IN(SELECT rowid FROM memories WHERE user_id=? ORDER BY rowid LIMIT 64)"
+                )
+                .bind(userId, userId),
+              db.prepare("DELETE FROM erasure_permits WHERE request_id=?").bind(reference),
+            ])
+            .then(() => db.batch(batch));
+        },
+        exec: (sql) => db.exec(sql),
+        withSession: (constraint) => db.withSession(constraint),
+        dump: () => db.dump(),
+      };
+      const competing = makeMemoryErasureStores(racingDb)[0];
+      if (competing === undefined) throw new Error("Missing concurrent Memory disposition");
+      expect(yield* competing.remove(scope)).toBe(false);
       expect(yield* resumed.remove(scope)).toBe(true);
       expect(yield* resumed.remove(scope)).toBe(true);
       expect(
@@ -88,14 +150,7 @@ it("archives reviewed Memory in bounded pages, resumes after reconstruction, and
           db.prepare("SELECT text FROM memories WHERE user_id=?").bind(foreignUser).first("text")
         )
       ).toBe("Privado");
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT count(*) FROM erasure_archives WHERE request_id=?")
-            .bind(reference)
-            .first("count(*)")
-        )
-      ).toBe(70);
+
       expect(
         yield* Effect.tryPromise(() =>
           db.prepare("SELECT count(*) FROM erasure_permits").first("count(*)")
@@ -205,15 +260,13 @@ it.each([
               .bind(userId, foreignUser),
             db
               .prepare(
-                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,'AwaitingReview',?)"
+                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Draining')"
               )
-              .bind(reference, userId, '{"dispositions":{"credentials":{"action":"Delete"}}}'),
+              .bind(reference, userId),
             db
-              .prepare(
-                `INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'${table}','credentials')`
-              )
+              .prepare(`INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'${table}')`)
               .bind(reference),
-            db.prepare("UPDATE erasure_requests SET state='Archiving' WHERE id=?").bind(reference),
+            db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference),
           ])
         );
         const before = yield* Effect.tryPromise(() =>
@@ -221,7 +274,7 @@ it.each([
         );
         const store = stores(db).find((item) => item.id === table);
         if (store === undefined) throw Error("Missing credential erasure owner");
-        expect(yield* store.archive(scope)).toBe(true);
+
         yield* Effect.tryPromise(() =>
           db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference).run()
         );
@@ -235,11 +288,6 @@ it.each([
         );
         yield* Effect.tryPromise(() =>
           db.batch([
-            db
-              .prepare(
-                `INSERT INTO erasure_chunk(request_id,row_ref) SELECT ?,CAST(rowid AS TEXT) FROM ${table} WHERE user_id=?`
-              )
-              .bind(reference, foreignUser),
             db.prepare(`CREATE TRIGGER interrupt_credential_delete AFTER DELETE ON ${table}
           BEGIN SELECT RAISE(ABORT,'interrupted credential deletion'); END`),
           ])
@@ -271,3 +319,73 @@ it.each([
       })
     )
 );
+
+it("erases only the reviewed Dashboard document while preserving Planning and the other User's layout", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          ...[userId, foreignUser].map((id) =>
+            db
+              .prepare(
+                "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+              )
+              .bind(id)
+          ),
+          db
+            .prepare(
+              "INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(?,'dashboard','{\"title\":\"Reviewed layout\"}',3)"
+            )
+            .bind(userId),
+          db
+            .prepare(
+              "INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(?,'recurring-plan','{\"plans\":[],\"revision\":4}',4)"
+            )
+            .bind(userId),
+          db
+            .prepare(
+              "INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(?,'dashboard','{\"title\":\"Foreign layout\"}',7)"
+            )
+            .bind(foreignUser),
+          db
+            .prepare(
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Draining')"
+            )
+            .bind(reference, userId),
+          db
+            .prepare(
+              "INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'dashboard_documents')"
+            )
+            .bind(reference),
+        ])
+      );
+      const retained = (): Promise<D1Result> =>
+        db
+          .prepare(
+            "SELECT rowid,* FROM user_documents WHERE user_id<>? OR kind<>'dashboard' ORDER BY user_id,kind"
+          )
+          .bind(userId)
+          .all();
+      const before = (yield* Effect.tryPromise(retained)).results;
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference).run()
+      );
+      const store = Option.getOrThrow(Option.fromUndefinedOr(makeDashboardErasureStores(db)[0]));
+      expect((yield* Effect.result(store.remove({ reference, userId: foreignUser })))._tag).toBe(
+        "Failure"
+      );
+      expect(yield* store.remove(scope)).toBe(true);
+      expect(yield* store.remove(scope)).toBe(true);
+      expect((yield* Effect.tryPromise(retained)).results).toEqual(before);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT * FROM user_documents WHERE user_id=? AND kind='dashboard'")
+            .bind(userId)
+            .all()
+        )).results
+      ).toEqual([]);
+    })
+  ));

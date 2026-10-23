@@ -82,9 +82,11 @@ export const prepareInsightRecipient = (
 ): D1PreparedStatement => {
   const association = whatsAppIdentityQuery({ ...input.recipient, userId: input.userId });
   return input.db
-    .prepare(`UPDATE users SET route_portfolio_id=?2,route_bsuid=?3,route_phone_number_id=?4,route_verified_at_ms=?5
- WHERE id=?1 AND (route_verified_at_ms IS NULL OR ?5>=route_verified_at_ms)
- AND EXISTS (${association.sql})`)
+    .prepare(`INSERT INTO whatsapp_recipients(rowid,user_id,portfolio_id,bsuid,business_phone_number_id,verified_at_ms)
+ SELECT rowid,id,?2,?3,?4,?5 FROM users WHERE id=?1 AND EXISTS (${association.sql})
+ ON CONFLICT(user_id) DO UPDATE SET portfolio_id=excluded.portfolio_id,bsuid=excluded.bsuid,
+ business_phone_number_id=excluded.business_phone_number_id,verified_at_ms=excluded.verified_at_ms
+ WHERE excluded.verified_at_ms>=whatsapp_recipients.verified_at_ms`)
     .bind(
       input.userId,
       input.recipient.portfolioId,
@@ -103,7 +105,7 @@ const readRecipient = (
 ): Effect.Effect<Option.Option<InsightRecipient>, InsightDeliveryFailure> =>
   Effect.gen(function* () {
     const statement = {
-      sql: "SELECT portfolio_id AS portfolioId,bsuid,business_phone_number_id AS businessPhoneNumberId FROM (SELECT rowid,id AS user_id,route_portfolio_id AS portfolio_id,route_bsuid AS bsuid,route_phone_number_id AS business_phone_number_id,route_verified_at_ms AS verified_at_ms FROM users WHERE route_portfolio_id IS NOT NULL) WHERE user_id = ?",
+      sql: "SELECT portfolio_id AS portfolioId,bsuid,business_phone_number_id AS businessPhoneNumberId FROM whatsapp_recipients WHERE user_id = ?",
       params: [input.userId],
     };
     const prepared = Option.match(input.queuedAdmission, {

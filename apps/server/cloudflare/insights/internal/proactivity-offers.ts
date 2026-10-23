@@ -36,7 +36,7 @@ export const requestOffer = (
       subject: { _tag: "User", userId: input.userId },
       requirement: "active",
       statement: {
-        sql: `INSERT OR IGNORE INTO insight_reports(kind,delivery_id,user_id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms) SELECT 'offer-request',?,?,?,?,?,0 WHERE EXISTS (${association.sql}) AND (SELECT count(*) FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE user_id=? AND created_at_ms>?)<?`,
+        sql: `INSERT OR IGNORE INTO insight_offer_requests(id,user_id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms) SELECT ?,?,?,?,?,0 WHERE EXISTS (${association.sql}) AND (SELECT count(*) FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE user_id=? AND created_at_ms>?)<?`,
         params: [
           newId(),
           input.userId,
@@ -55,12 +55,12 @@ export const requestOffer = (
       statements.push(
         input.db
           .prepare(
-            "UPDATE insight_reports SET current_recurring_opportunity=NULL WHERE kind='offer-request' AND user_id=? AND current_recurring_opportunity=1 AND EXISTS(SELECT 1 FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') q WHERE q.user_id=? AND q.kind='new-recurring-series' AND q.request_message_id=?)"
+            "UPDATE insight_offer_requests SET current_recurring_opportunity=NULL WHERE user_id=? AND current_recurring_opportunity=1 AND EXISTS(SELECT 1 FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) q WHERE q.user_id=? AND q.kind='new-recurring-series' AND q.request_message_id=?)"
           )
           .bind(input.userId, input.userId, input.messageId),
         input.db
           .prepare(
-            "UPDATE insight_reports SET current_recurring_opportunity=1 WHERE kind='offer-request' AND user_id=? AND request_kind='new-recurring-series' AND request_message_id=?"
+            "UPDATE insight_offer_requests SET current_recurring_opportunity=1 WHERE user_id=? AND request_kind='new-recurring-series' AND request_message_id=?"
           )
           .bind(input.userId, input.messageId)
       );
@@ -83,7 +83,7 @@ export const offerWindowOpen = (now: DateTime.Utc): boolean =>
 export const recoverableOfferRequests = (now: DateTime.Utc): OwnedStatement => {
   const started = proactivityStartedDeliveryQuery();
   return {
-    sql: `SELECT q.id,q.user_id,q.kind,q.created_at_ms,q.last_evaluated_at_ms FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') AS q WHERE (q.materialized_at_ms IS NULL OR (q.kind<>'new-recurring-series' AND EXISTS (SELECT 1 FROM insight_reports AS r WHERE r.kind='proactivity-delivery' AND r.scheduled_at_ms IS NOT NULL AND r.user_id=q.user_id AND r.delivery_id=q.delivery_id AND r.expires_at_ms<=? AND NOT EXISTS (SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=r.user_id AND c.delivery_id=r.delivery_id))))`,
+    sql: `SELECT q.id,q.user_id,q.kind,q.created_at_ms,q.last_evaluated_at_ms FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) AS q WHERE (q.materialized_at_ms IS NULL OR (q.kind<>'new-recurring-series' AND EXISTS (SELECT 1 FROM proactive_messages AS r WHERE r.kind='proactivity-delivery' AND r.scheduled_at_ms IS NOT NULL AND r.user_id=q.user_id AND r.id=q.delivery_id AND r.expires_at_ms<=? AND NOT EXISTS (SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=r.user_id AND c.delivery_id=r.id))))`,
     params: [now.epochMilliseconds],
   };
 };
@@ -157,7 +157,7 @@ const materializeOffer = (
           subject: { _tag: "User", userId: input.userId },
           requirement: "active",
           statement: {
-            sql: "INSERT OR IGNORE INTO insight_reports(kind,delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) SELECT 'proactivity-delivery',?,?,?,?,?,?,?,?,? ,'ready',?9,0,0 WHERE EXISTS (SELECT 1 FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE user_id=? AND id=? AND materialized_at_ms IS NULL)",
+            sql: "INSERT OR IGNORE INTO proactive_messages(kind,id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) SELECT 'proactivity-delivery',?,?,?,?,?,?,?,?,? ,'ready',?9,0,0 WHERE EXISTS (SELECT 1 FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE user_id=? AND id=? AND materialized_at_ms IS NULL)",
             params: [
               value.id,
               input.userId,
@@ -176,7 +176,7 @@ const materializeOffer = (
 
         input.db
           .prepare(
-            "UPDATE insight_reports SET materialized_at_ms=?,offer_delivery_id=? WHERE kind='offer-request' AND user_id=? AND delivery_id=? AND EXISTS (SELECT 1 FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND delivery_id=?)"
+            "UPDATE insight_offer_requests SET materialized_at_ms=?,offer_message_id=? WHERE user_id=? AND id=? AND EXISTS (SELECT 1 FROM proactive_messages WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND id=?)"
           )
           .bind(
             input.now.epochMilliseconds,
@@ -228,7 +228,7 @@ const requestFirstBudget = (
           budgetId: first.value,
           now: input.now.epochMilliseconds,
           proof: {
-            sql: "SELECT 1 FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE user_id=? AND kind='budget-threshold' AND request_message_id=?",
+            sql: "SELECT 1 FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE user_id=? AND kind='budget-threshold' AND request_message_id=?",
             params: [input.userId, messageId],
           },
         }),
@@ -248,7 +248,7 @@ export const generateOffers = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: `UPDATE insight_reports SET materialized_at_ms=NULL,offer_delivery_id=NULL WHERE kind='offer-request' AND user_id=? AND delivery_id IN (SELECT id FROM (${pending.sql}) WHERE user_id=? ORDER BY created_at_ms,id LIMIT ?)`,
+          sql: `UPDATE insight_offer_requests SET materialized_at_ms=NULL,offer_message_id=NULL WHERE user_id=? AND id IN (SELECT id FROM (${pending.sql}) WHERE user_id=? ORDER BY created_at_ms,id LIMIT ?)`,
           params: [input.userId, ...pending.params, input.userId, maximumRequests],
         },
       }).run()
@@ -259,7 +259,7 @@ export const generateOffers = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT id,kind FROM (SELECT id,kind FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE user_id=? AND materialized_at_ms IS NULL ORDER BY created_at_ms,id LIMIT ?) WHERE 1=1",
+          sql: "SELECT id,kind FROM (SELECT id,kind FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE user_id=? AND materialized_at_ms IS NULL ORDER BY created_at_ms,id LIMIT ?) WHERE 1=1",
           params: [input.userId, maximumRequests],
         },
       }).all()

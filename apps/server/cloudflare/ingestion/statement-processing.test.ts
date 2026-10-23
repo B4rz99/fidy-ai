@@ -581,8 +581,8 @@ effectIt.effect(
       yield* fromTestPromise(() =>
         db
           .prepare(`INSERT INTO keyword_rules
-    (id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at)
-    VALUES (?,?, 'Cafe', 'cafe', ?, '2026-08-01T00:00:00Z', '2026-08-01T00:00:00Z')`)
+    (id,user_id,keyword,category_id,created_at_ms,updated_at_ms)
+    VALUES (?,?, 'cafe', ?, 1785542400000, 1785542400000)`)
           .bind(
             "30000000-0000-4000-8000-000000000699",
             userA,

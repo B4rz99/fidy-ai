@@ -1,4 +1,4 @@
-import { Data } from "effect";
+import { Data, Schema } from "effect";
 import type { Effect, Option } from "effect";
 
 export class PrivateObjectUnavailable extends Data.TaggedError("PrivateObjectUnavailable") {}
@@ -16,3 +16,9 @@ export type PrivateObjectWrite<E, R> = Readonly<{
   predecessor: Option.Option<string>;
   authorise: Effect.Effect<boolean, E, R>;
 }>;
+
+const maximumPrivateObjectKeyLength = 1024;
+/** Opaque locator from an exact User-owned retained record, never caller authority. */
+export const PrivateObjectKey = Schema.String.check(
+  Schema.isBetweenLength(1, maximumPrivateObjectKeyLength)
+);

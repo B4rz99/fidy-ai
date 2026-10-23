@@ -22,7 +22,7 @@ const SourceRow = Schema.Struct({
   id: RecurringConfirmationId,
   context_json: Schema.String,
   confirmation_json: Schema.String,
-  confirmed_at: UtcTimestamp,
+  confirmed_at_ms: Schema.DateTimeUtcFromMillis,
   valid: Schema.Literals([0, 1]),
   legacy: Schema.Literals([0, 1]),
 });
@@ -37,12 +37,12 @@ const guards = (
   evaluationGuard({ ...input, revision: position.revision }),
   input.db
     .prepare(`INSERT INTO sql_assertions (scope, accepted) VALUES ('recurring',CASE WHEN EXISTS (
- SELECT 1 FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id=? AND phase='complete' AND evaluated_at=?
+ SELECT 1 FROM (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id=? AND phase='complete' AND evaluated_at_ms=?
  AND (SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL)=? AND (SELECT count(*) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL)=?
  ) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted`)
     .bind(
       input.userId,
-      DateTime.formatIso(position.evaluatedAt),
+      position.evaluatedAt.epochMilliseconds,
       input.userId,
       position.maximum,
       input.userId,
@@ -64,18 +64,22 @@ const readPosition = (
       const raw = yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            "SELECT evaluated_at,(SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL) AS maximum,(SELECT count(*) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL) AS total FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id=? AND phase='complete' AND evaluated_revision=?"
+            "SELECT evaluated_at_ms,(SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL) AS maximum,(SELECT count(*) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL) AS total FROM (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id=? AND phase='complete' AND evaluated_revision=?"
           )
           .bind(input.userId, input.userId, input.userId, facts.value.revision)
           .first()
       );
       const snapshot = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ evaluated_at: UtcTimestamp, maximum: Schema.Int, total: Schema.Int })
+        Schema.Struct({
+          evaluated_at_ms: Schema.DateTimeUtcFromMillis,
+          maximum: Schema.Int,
+          total: Schema.Int,
+        })
       )(raw);
       position = {
         userId: input.userId,
         revision: facts.value.revision,
-        evaluatedAt: snapshot.evaluated_at,
+        evaluatedAt: snapshot.evaluated_at_ms,
         cutoffAt: yield* DateTime.now,
         maximum: snapshot.maximum,
         total: snapshot.total,
@@ -93,7 +97,7 @@ export const readSource = (
       input.db.batch([
         ...guards(input, position),
         input.db
-          .prepare(`SELECT confirmation_sequence AS sequence,confirmation_id AS id,confirmation_context_json AS context_json,confirmation_json,confirmed_at,valid,
+          .prepare(`SELECT confirmation_sequence AS sequence,confirmation_id AS id,confirmation_context_json AS context_json,confirmation_json,confirmed_at_ms,valid,
  digest_excluded AS legacy FROM recurring_series
  WHERE user_id=? AND confirmation_sequence>? AND confirmation_sequence<=? ORDER BY confirmation_sequence LIMIT ?`)
           .bind(input.userId, position.after, position.maximum, pageSize + 1),
@@ -109,12 +113,12 @@ export const readSource = (
           row.legacy === 1
             ? Option.none()
             : Option.some(yield* decodeRow({ row, userId: input.userId }));
-        if (row.confirmed_at.epochMilliseconds > position.cutoffAt.epochMilliseconds) {
+        if (row.confirmed_at_ms.epochMilliseconds > position.cutoffAt.epochMilliseconds) {
           return yield* new RecurringUnavailable();
         }
         return {
           id: row.id,
-          confirmedAt: row.confirmed_at,
+          confirmedAt: row.confirmed_at_ms,
           context,
           valid: row.valid === 1,
           snapshot,

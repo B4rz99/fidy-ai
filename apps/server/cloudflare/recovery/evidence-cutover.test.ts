@@ -3,6 +3,8 @@ import { Cause, Data, Effect, Option, Schema } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   documentedSqlBlock,
+  installHistoricalErasureChunk,
+  installHistoricalErasureStorage,
   schemaDefinition,
   schemaObjectName,
   schemaStatements,
@@ -285,15 +287,15 @@ const eventMetadataErasure = (
       db.batch([
         db
           .prepare(
-            'INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,\'AwaitingReview\',\'{"dispositions":{"credentials":{"action":"Retain","retention":{"untilMs":4102444800000}}}}\')'
+            'INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,\'Draining\',\'{"dispositions":{"credentials":{"action":"Retain","retention":{"untilMs":4102444800000}}}}\')'
           )
           .bind(requestId, owner),
         db
           .prepare(
-            "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'support_recovery_events','credentials')"
+            "INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'support_recovery_events')"
           )
           .bind(requestId),
-        db.prepare("UPDATE erasure_requests SET state='Archiving' WHERE id=?").bind(requestId),
+        db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(requestId),
       ])
     );
     const store = makeRecoveryErasureStores(db).find(
@@ -301,23 +303,7 @@ const eventMetadataErasure = (
     );
     if (store === undefined) throw Error("Missing recovery metadata erasure");
     const scope = { userId: owner, reference: requestId };
-    expect(yield* store.archive(scope)).toBe(false);
-    expect(yield* store.archive(scope)).toBe(true);
-    const archives = yield* native(() =>
-      db
-        .prepare(
-          "SELECT store_id,row_ref,body FROM erasure_archives WHERE request_id=? ORDER BY row_ref"
-        )
-        .bind(requestId)
-        .all()
-    );
-    expect(archives.results).toHaveLength(66);
-    expect(
-      archives.results.filter((row) => row.row_ref === "initial:10" || row.row_ref === "initial:11")
-    ).toEqual([
-      { store_id: "support_recovery_events", row_ref: "initial:10", body: "{}" },
-      { store_id: "support_recovery_events", row_ref: "initial:11", body: "{}" },
-    ]);
+
     yield* native(() =>
       db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(requestId).run()
     );
@@ -345,12 +331,6 @@ const eventMetadataErasure = (
           db.prepare("DELETE FROM support_recovery_cases WHERE user_id=?").bind(owner),
         ])
       ).rejects.toThrow("erasure_fenced")
-    );
-    yield* native(() =>
-      db
-        .prepare("INSERT INTO erasure_chunk(request_id,row_ref) VALUES(?,'20')")
-        .bind(requestId)
-        .run()
     );
     yield* native(() =>
       db
@@ -515,6 +495,8 @@ it.each(cases)("preserves recovery evidence or refuses $description atomically",
     Effect.gen(function* () {
       const db = yield* native(() => databases.acquire());
       yield* native(() => installTestSchema({ db }));
+      yield* native(() => installHistoricalErasureStorage(db));
+      yield* native(() => installHistoricalErasureChunk(db));
       const baseline = schemaStatements(
         yield* native(() =>
           Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()

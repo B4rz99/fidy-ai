@@ -9,16 +9,24 @@ This checklist resolves cross-feature implementation obligations; it does not re
 The feature-design pass is complete. Earlier instructions to wait for the whole design, and headings
 calling the final workflow shapes proposed, describe earlier review stages. The concluding approval
 establishes the design basis for tickets #1428–#1494. The current implementation request covers
-#1428; publication of the remaining tickets is not authorization to execute them all. Design approval
-does not establish migration equivalence, benchmark results, upload safety, platform coverage, or
-deployment success.
+#1464–#1494. The accepted release sequence is to finish local integration checks and reviews, open
+and merge the coherent implementation with all three Operational Health stores retained, then verify
+platform alerts and dashboards against the deployed runtime. Only proven replacement coverage permits
+the follow-up removal under #1491/#1492. Those issues and #1494's live rollout evidence stay open until
+their respective checks complete. Design approval does not establish migration equivalence, benchmark
+results, upload safety, platform coverage, or deployment success.
 
-The accepted inventory contains **101 distinct named target tables**, including four conditional
-Transaction projections. Removing all four after measurement gives **97**. The recipient proposal
-below is **not accepted or included**: approval would make these counts 102 and 98 respectively.
-These are target counts, not a database inspection or a claim about Production.
+The reconciled inventory contains **108 distinct named target tables**, including the approved
+WhatsApp recipient table, four conditional Transaction projections, the four relational Planning
+stores accepted after its size gate, the compact Recovery admission exception, and the retained
+unresolved-upload writer safeguard. The original 102-name inventory did not include those last six
+outcomes. All four Transaction projections remain after measurement. The local baseline currently
+contains **111** tables: the seven-table Erasure design is implemented locally, while three
+Operational Health stores still await platform-coverage proofs. The
+[physical owner/relationship inventory](database-schema-inventory-1494.md) records that snapshot.
+These counts are not a live database inspection or a claim about Production.
 
-Work stays on `refactor/schema-low-medium` for the coupled schema/code integration. Independent,
+Work stays on `fix/live-schema-cutover` for the current coupled schema/code integration. Independent,
 green slices may commit there; mechanically incomplete steps must not be released. The final
 blocking verification ticket is [#1494](https://github.com/B4rz99/fidy-ai/issues/1494). Apply schema
 changes with all affected owner implementations, triggers, readers, erasure adapters and fixtures.
@@ -46,7 +54,7 @@ erasure store IDs identify permissions, not extra tables.
 | [#1401](https://github.com/B4rz99/fidy-ai/issues/1401)                                                         | WebSession (`web-session`)                          | `web_sessions`                                                                                                                                                                                                                                                                                                                                    |
 | [#1402](https://github.com/B4rz99/fidy-ai/issues/1402)                                                         | Email Authentication (`email-authentication`)       | `verified_email_credentials`, `email_replacements`                                                                                                                                                                                                                                                                                                |
 | [#1403](https://github.com/B4rz99/fidy-ai/issues/1403)                                                         | Provider Authentication (`provider-authentication`) | `provider_credentials`, `provider_authentication_attempts`, `whatsapp_provider_handoffs`                                                                                                                                                                                                                                                          |
-| [#1404](https://github.com/B4rz99/fidy-ai/issues/1404)                                                         | Recovery (`recovery`)                               | `backup_recovery_credentials`, `support_recovery_cases`                                                                                                                                                                                                                                                                                           |
+| [#1404](https://github.com/B4rz99/fidy-ai/issues/1404)                                                         | Recovery (`recovery`)                               | `backup_recovery_credentials`, `support_recovery_cases`, `support_recovery_admissions`                                                                                                                                                                                                                                                            |
 | [#1405](https://github.com/B4rz99/fidy-ai/issues/1405)                                                         | Resource Admission (`resource-admission`)           | `resource_admission_grants`, `resource_admission_events`, `resource_admission_counters`                                                                                                                                                                                                                                                           |
 | [#1405](https://github.com/B4rz99/fidy-ai/issues/1405)                                                         | Canonical Admission (`canonical-admission`)         | `canonical_request_buckets`, `canonical_request_leases`                                                                                                                                                                                                                                                                                           |
 | [#1406](https://github.com/B4rz99/fidy-ai/issues/1406)                                                         | Quotas (`quotas`)                                   | `commercial_allowance_consumptions`                                                                                                                                                                                                                                                                                                               |
@@ -56,29 +64,31 @@ erasure store IDs identify permissions, not extra tables.
 | [#1410](https://github.com/B4rz99/fidy-ai/issues/1410)                                                         | Budgets (`budgets`)                                 | `budgets`, `budget_month_plan_records`, `budget_month_latches`, `budget_threshold_alerts`, `budget_user_state`, `budget_evaluation_work`, `budget_publications`                                                                                                                                                                                   |
 | [#1411](https://github.com/B4rz99/fidy-ai/issues/1411)                                                         | Transactions (`transactions`), conditional          | `transaction_projection_leaf`, `transaction_projection_bucket`, `transaction_projection_digit`, `transaction_projection_state`                                                                                                                                                                                                                    |
 | [#1411](https://github.com/B4rz99/fidy-ai/issues/1411), [#1413](https://github.com/B4rz99/fidy-ai/issues/1413) | User Documents (`user-documents`)                   | `user_documents`                                                                                                                                                                                                                                                                                                                                  |
+| [#1413](https://github.com/B4rz99/fidy-ai/issues/1413)                                                         | Recurring Planning (`recurring-plans`)              | `recurring_plans`, `recurring_plan_revisions`, `recurring_plan_exceptions`, `recurring_plan_fulfillments`                                                                                                                                                                                                                                         |
 | [#1412](https://github.com/B4rz99/fidy-ai/issues/1412)                                                         | Recurring (`recurring`)                             | `recurring_series`, `recurring_evaluation_records`, `recurring_dispatch`                                                                                                                                                                                                                                                                          |
 | [#1414](https://github.com/B4rz99/fidy-ai/issues/1414)                                                         | Connections (`connections`)                         | `connections`, `connection_attempts`                                                                                                                                                                                                                                                                                                              |
 | [#1415](https://github.com/B4rz99/fidy-ai/issues/1415)                                                         | Consent (`consent`)                                 | `consent_offers`, `consent_history`, `pending_consent_exchanges`                                                                                                                                                                                                                                                                                  |
 | [#1416](https://github.com/B4rz99/fidy-ai/issues/1416)                                                         | Agent (`agent`)                                     | `hosted_agent_sessions`, `hosted_turns`, `hosted_confirmations`, `hosted_mutation_commits`, `transcript_entries`                                                                                                                                                                                                                                  |
 | [#1417](https://github.com/B4rz99/fidy-ai/issues/1417)                                                         | Memory (`memory`)                                   | `memories`                                                                                                                                                                                                                                                                                                                                        |
-| [#1418](https://github.com/B4rz99/fidy-ai/issues/1418)                                                         | WhatsApp (`whatsapp`)                               | `whatsapp_service_windows`, `whatsapp_deliveries`, `whatsapp_event_records`                                                                                                                                                                                                                                                                       |
-| [#1425](https://github.com/B4rz99/fidy-ai/issues/1425)                                                         | Erasure (`erasure`)                                 | `erasure_requests`, `erasure_steps`, `erasure_custody_records`, `erasure_permits`, `erasure_control`, `erasure_restore_members`                                                                                                                                                                                                                   |
+| [#1418](https://github.com/B4rz99/fidy-ai/issues/1418)                                                         | WhatsApp (`whatsapp`)                               | `whatsapp_service_windows`, `whatsapp_deliveries`, `whatsapp_event_records`, `whatsapp_recipients`                                                                                                                                                                                                                                                |
+| [#1425](https://github.com/B4rz99/fidy-ai/issues/1425)                                                         | Erasure (`erasure`)                                 | `erasure_requests`, `erasure_steps`, `erasure_custody_records`, `erasure_permits`, `erasure_control`, `erasure_restore_members`, `erasure_writers`                                                                                                                                                                                                |
 | [#1427](https://github.com/B4rz99/fidy-ai/issues/1427)                                                         | Canonical Admission (`canonical-admission`)         | `canonical_request_replays`                                                                                                                                                                                                                                                                                                                       |
 | [#1427](https://github.com/B4rz99/fidy-ai/issues/1427)                                                         | SQL Assertions (`src/shell/sql-assertions`)         | `sql_assertions`                                                                                                                                                                                                                                                                                                                                  |
 | [#1427](https://github.com/B4rz99/fidy-ai/issues/1427)                                                         | Canonical Operations (`canonical-operations`)       | `canonical_child_guard`                                                                                                                                                                                                                                                                                                                           |
 
-Dashboard owns its document codec and view policy; Recurring Planning owns its document codec and
-planning decisions. User Documents owns the common `(user_id, kind)` persistence and optimistic
-revision write. There is one physical table, not a table per consumer. Operations #1426 owns no
+Dashboard owns its document codec and view policy. Recurring Planning owns its decoded aggregate,
+shared root and four ordered relational stores. User Documents owns common `(user_id, kind)` root
+persistence and optimistic revision writes. Each mutation commits the root revision, changed Planning
+rows and Audit in the same atomic unit. The shared root table is counted once, not per consumer. Operations #1426 owns no
 application table; platform observability and exact-revision CI replace its stores only after the
 coverage gates pass. Onboarding composes owners and owns no persistent table.
 
-## Recipient routing: explicit review gate
+## Recipient routing: accepted destination
 
-**Proposed, awaiting User review:** `whatsapp_recipients`, owned by WhatsApp, one current route per
-User. This is a newly identified table, not an accepted addition to #1418. Do not implement it or
-remove the source fields before approval. [#1483](https://github.com/B4rz99/fidy-ai/issues/1483) and
-the route-dependent part of [#1485](https://github.com/B4rz99/fidy-ai/issues/1485) remain gated.
+**User-approved:** `whatsapp_recipients`, owned by WhatsApp, one current route per
+User. The User accepted this five-column addition to #1418 after reviewing its purpose and layout.
+[#1483](https://github.com/B4rz99/fidy-ai/issues/1483) implements it;
+[#1485](https://github.com/B4rz99/fidy-ai/issues/1485) consumes the final Identity separation.
 
 | Column                     | SQL type                  | Contract                                                                |
 | -------------------------- | ------------------------- | ----------------------------------------------------------------------- |
@@ -88,7 +98,9 @@ the route-dependent part of [#1485](https://github.com/B4rz99/fidy-ai/issues/148
 | `business_phone_number_id` | TEXT NOT NULL             | `WhatsAppBusinessPhoneNumberId`; sending endpoint                       |
 | `verified_at_ms`           | INTEGER NOT NULL          | Original authenticated receipt instant; preserve current integer bounds |
 
-Copy the four complete `users.route_*` fields exactly and use `users.id` as `user_id`. Complete
+Copy the four complete `users.route_*` fields exactly and use `users.id` as `user_id`. Preserve
+the original User rowid as the recipient rowid for unchanged erasure archive references; new route
+inserts use that same owning User rowid. Complete
 absence produces no recipient row. Partial groups block migration. Preserve the current update
 comparison `incoming_received_at_ms >= verified_at_ms`, including equal-time behavior. The channel
 must prepare the write inside the authenticated inbound/decision batch and recheck Identity's
@@ -96,7 +108,7 @@ current `(UserId, PortfolioId, BSUID)` association there. Reading a route is not
 egress must independently recheck current association and applicable Consent/queued-work authority.
 Do not repair historical route/association mismatches by rebinding their owner or fabricating proof.
 
-The proposed table has no login authority, window timestamp, delivery history, public operation,
+The table has no login authority, window timestamp, delivery history, public operation,
 new expiry policy or sandbox phone fallback. Existing route erasure remains channel-owned under
 the `insight_whatsapp_routes` logical purpose until the full-deletion cutover replaces that adapter.
 Historical Consent recipients and already-started deliveries retain their own frozen bindings.
@@ -156,7 +168,7 @@ composite foreign key alone does not reject a partially populated reference.
 | Backfill                             | `statement_backfill_entitlements(user_id)`                         | Row absence remains absence; validate same-User submission; reserve/release/consume with the submission transition                                       |
 | Mailbox                              | `verified_email_credentials(user_id)`; normalized unique `address` | Replacement validates prior credential snapshot and fresh session, installs the new credential and consumes proof together                               |
 | Recovery                             | `backup_recovery_credentials(user_id)`; unique `code_digest`       | Preserve digest bytes/revision/consumption; approval and code use commit together; never disclose a migrated code                                        |
-| Recipient                            | Proposed `whatsapp_recipients(user_id)`                            | Approval gate above; channel update and identity recheck remain in one unit                                                                              |
+| Recipient                            | Accepted `whatsapp_recipients(user_id)`                            | Channel update and current Identity recheck remain in one unit                                                                                           |
 | Ordinary Audit cutoff                | `audit_retention_permits(user_id)`                                 | Acquire, assert, delete only eligible kinds before cutoff, and clear in one batch; retained source permits are an anomaly to investigate                 |
 
 `completeEnrollment` remains a composition of published owner preparations. In one D1 batch:
@@ -243,7 +255,7 @@ its applicable deletion/expiry. No general retention shortening is authorized by
 Do not drop `erasure_archives`, clear archive-reference fields, delete recovery registry objects or
 remove hold-aware triggers as an incidental feature cleanup. Their final removal belongs to
 [#1489](https://github.com/B4rz99/fidy-ai/issues/1489) and
-[#1490](https://github.com/B4rz99/fidy-ai/issues/1490), after prefix/write-bound proofs in #1486/#1487
+[#1490](https://github.com/B4rz99/fidy-ai/issues/1490), after canonical-prefix and confirmed-upload-drain validation in #1486/#1487
 and bounded deletion in #1488. The accepted end state has no retained-content archive reader/writer.
 
 ### Conversion of retained erasure data
@@ -273,8 +285,9 @@ rolled back by SQL; the conversion must be resumable across a crash between R2 a
    retain independently enumerated expected membership. A marker must recreate deletion even when
    that request is absent from a restored D1. Publish before purging old cases or content; never
    reset the registry to `initial` or replace a missing checkpoint with an empty registry.
-4. **Drain and delete under the new authority.** Establish a proven `writes_quiescent_after_ms`
-   independently of scheduler continuation time, including restored/previously completed cases.
+4. **Drain and delete under the new authority.** Fence new admissions and retain every unresolved
+   same-User upload attempt until its full write outcome is confirmed, including restored/previously
+   completed cases. Unknown outcomes keep deletion pending; elapsed time cannot clear tracking.
    Delete source records and all User prefixes in every configured bucket. Use existing object
    locators to delete legacy objects outside those prefixes before removing their inventory.
    Retry ambiguous deletions and re-list after quiescence; an empty pre-drain listing is not proof.
@@ -330,14 +343,20 @@ archive-address-only physical column remains merely to preserve the superseded m
 | #1457–#1463 | Forwarding, parsed cache, review and backfill plus Transaction history; preserve review IDs, irreversible evidence expiry, exact Money and capture replay                                   |
 | #1464–#1466 | Measure direct financial reads and select projection design; deleting projection state must retain a Transaction-owned fact revision, original first-capture instant and zone for Recurring |
 | #1467–#1476 | Planning bounds, Budgets and fair User clock, weekly Recurring detection, Insights/report/message split and Audit evidence finalization; shared document counted once                       |
-| #1477–#1485 | Memory, hosted enforcement/Transcript, WhatsApp proof/window/delivery/route, Connections and final Identity cleanup; route removal remains pending the review above                         |
-| #1486–#1490 | Prefix discovery and enforced upload completion bounds, fixed bounded SQL selection, archive transition/full deletion and independent restore replay                                        |
+| #1477–#1485 | Memory, hosted enforcement/Transcript, WhatsApp proof/window/delivery/approved recipient route, Connections and final Identity cleanup                                                      |
+| #1486–#1490 | Prefix discovery and confirmed tracked-upload drain, fixed bounded SQL selection, archive transition/full deletion and independent restore replay                                           |
 | #1491–#1493 | Demonstrated platform alert/metric/dashboard coverage and exact-revision deployment verification before deleting custom operational state                                                   |
 | #1494       | Final populated migration, meaningful integrated behavior, native atomic rollback/restore, dependency/publication/format/lint/typecheck and measured cost gates before release              |
 
 These rows group work for navigation; the published tickets' native blocking edges define scheduling,
 not a blanket requirement to run each numeric range sequentially. In particular, coupled schema and
 caller work can assemble on the integration branch but must pass its final green gate together.
+
+The [#1464 financial-read comparison](../research/financial-projection-comparison.md) selects the four
+Transactions-owned projection tables for #1465. Preserve authoritative fact revision, original first
+capture and timezone on their state row. Rename the stores, convert true instants and validate exact
+maximum reconstruction; the measured write amplification and repair cost remain explicit tradeoffs.
+Historical maximum/digit coordinates use a fixed four-decimal scale, not Currency-specific minor units.
 
 Accepted workflow reductions retain their proof gates: Insights uses a generation-fenced native
 digest scan; Recurring uses bounded native cursor checkpoints; Budgets uses one fair User discovery
@@ -1656,7 +1675,7 @@ SELECT 'oauth_lineage_cutover',CASE WHEN NOT EXISTS(
 INSERT INTO oauth_credentials_1446(rowid,kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,consumed_at_ms,scopes_json,replacement_refresh_id,refresh_event_id,refresh_event_row_ref)
 SELECT c.rowid,c.kind,c.id,c.connection_id,c.user_id,c.digest,c.issued_at_ms,c.expires_at_ms,c.consumed_at_ms,c.scopes_json,e.issued_refresh_id,e.id,CAST(e.sequence AS TEXT)
 FROM oauth_credentials c LEFT JOIN audit_entries e ON e.record_type='oauth_refresh' AND c.kind='refresh' AND e.consumed_refresh_id=c.id;
-INSERT INTO audit_entries_1446(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries WHERE record_type<>'oauth_refresh';
+INSERT INTO audit_entries_1446(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,CASE WHEN record_type='request_admission' THEN accepted_at_ms ELSE occurred_at_ms END,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition FROM audit_entries WHERE record_type<>'oauth_refresh';
 UPDATE sqlite_sequence SET seq=(SELECT seq FROM sqlite_sequence WHERE name='audit_entries') WHERE name='audit_entries_1446';
 INSERT INTO sqlite_sequence(name,seq) SELECT 'audit_entries_1446',seq FROM sqlite_sequence WHERE name='audit_entries'
  AND NOT EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='audit_entries_1446');
@@ -1668,7 +1687,7 @@ SELECT 'oauth_lineage_cutover',CASE WHEN
  AND NOT EXISTS(SELECT sequence,id,user_id,refresh_connection_id,consumed_refresh_id,issued_refresh_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh'
  EXCEPT SELECT CAST(refresh_event_row_ref AS INTEGER),refresh_event_id,user_id,connection_id,id,replacement_refresh_id,consumed_at_ms FROM oauth_credentials_1446 WHERE replacement_refresh_id IS NOT NULL)
  AND (SELECT count(*) FROM audit_entries WHERE record_type<>'oauth_refresh')=(SELECT count(*) FROM audit_entries_1446)
- AND NOT EXISTS(SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries WHERE record_type<>'oauth_refresh' EXCEPT SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries_1446)
+ AND NOT EXISTS(SELECT sequence,record_type,id,user_id,session_id,operation,outcome,CASE WHEN record_type='request_admission' THEN accepted_at_ms ELSE occurred_at_ms END,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition FROM audit_entries WHERE record_type<>'oauth_refresh' EXCEPT SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition FROM audit_entries_1446)
  THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
 ```
 
@@ -2880,3 +2899,2654 @@ THEN 1 ELSE 0 END;
 ```
 
 <!-- backfill-progress-verify:end -->
+
+## Canonical Category keywords (#1461)
+
+The Category catalog keeps its stable identities and presentation order. `keyword_rules` retains
+six fields: rule identity, User, canonical `keyword`, Category, and integer creation/update instants.
+Create/edit/list, OAuth reviewed facts and future capture use that same normalized spelling. The
+existing NFD/combining-mark removal/es-CO lowercasing algorithm is unchanged; original spelling is
+intentionally discarded. Rule replacement/deletion still affects future capture only.
+
+Checkpoint: `b26dd00018bec074432b1ddda363eb172229742f`. Keep the sole fresh-install baseline;
+editing it does not convert existing D1. Back up and fence rule/capture mutations, OAuth decisions,
+Audit/retention and erasure. Inspect source schema and incoming dependencies; stop on unknown objects.
+`keyword_rules` has no incoming foreign keys. User, Category, Transaction and archive tables stay in
+place. Preserve original rule rowids, IDs, owners and Category references. Existing archive JSON is
+never rewritten; new archives retain the historical keys, deriving `normalized_keyword` from the
+single keyword and serializing integer instants as UTC ISO timestamps.
+
+Before constructing one native atomic batch, page the fenced source rows in rowid order. Decode
+identities and both original timestamps using the existing owning schemas. Validate the original
+keyword and its canonical normalized value with `CategoryKeyword`; compare canonical normalization
+with the stored normalized value. Require an exact millisecond instant: reject nonzero fractional
+digits beyond the third rather than truncating them. Offset-bearing RFC 3339 instants may convert
+losslessly; their public representation remains UTC ISO. Do not use SQLite lower()/NOCASE as Unicode
+normalization. Do not silently repair a mismatch or choose a winner in a collision.
+
+Run the general preflight and, **once per observed source row**, the bound row preflight below.
+Its bindings are: validation accepted (1 or 0), original rowid, original keyword, canonically computed
+keyword, original creation text, original update text, and the two exactly decoded epoch-millisecond
+values. An invalid decode produces accepted=0 and must abort, not skip that row. The source fence
+covers the entire read/validation/commit window; verify the complete source count as well.
+
+Then create the baseline's target rule definition as `keyword_rules_1461`; copy and compare below.
+Drop only the old table's explicit triggers/index, swap the rule table, reinstall all current
+rule-owned indexes/triggers (including erasure/capacity guards), and verify. Keep foreign keys enabled.
+Failure after either copy or replacement must roll back all rows, schema, archives and sequence
+state. Preserve backups until matching code and protected CRUD/capture are verified. Old OAuth
+reviews whose exact rule snapshot changed require a fresh review; no old approval gains authority.
+Only align the baseline ledger after successful conversion and verification. Prefer the native
+atomic query/batch path: the October 22 recovery's bulk file import rejected a larger conversion
+that succeeded through the direct transaction path; local batch success alone is not live evidence.
+
+<!-- category-keyword-preflight:start -->
+
+```sql
+PRAGMA defer_foreign_keys=ON;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'category-keyword-preflight',NOT EXISTS(SELECT 1 FROM erasure_permits)
+ AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT user_id,normalized_keyword FROM keyword_rules GROUP BY user_id,normalized_keyword HAVING count(*)<>1);
+```
+
+<!-- category-keyword-preflight:end -->
+
+<!-- category-keyword-row-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'category-keyword-row',?=1 AND EXISTS(SELECT 1 FROM keyword_rules
+ WHERE rowid=? AND keyword IS ? AND normalized_keyword IS ? AND created_at IS ? AND updated_at IS ?
+ AND CAST(round(unixepoch(created_at,'subsec')*1000) AS INTEGER) IS ?
+ AND CAST(round(unixepoch(updated_at,'subsec')*1000) AS INTEGER) IS ?)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- category-keyword-row-preflight:end -->
+
+<!-- category-keyword-copy:start -->
+
+```sql
+INSERT INTO keyword_rules_1461(rowid,id,user_id,keyword,category_id,created_at_ms,updated_at_ms)
+SELECT rowid,id,user_id,normalized_keyword,category_id,
+ CAST(round(unixepoch(created_at,'subsec')*1000) AS INTEGER),
+ CAST(round(unixepoch(updated_at,'subsec')*1000) AS INTEGER) FROM keyword_rules;
+```
+
+<!-- category-keyword-copy:end -->
+
+<!-- category-keyword-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'category-keyword-copy',(SELECT count(*) FROM keyword_rules)=(SELECT count(*) FROM keyword_rules_1461)
+ AND NOT EXISTS(SELECT rowid,id,user_id,normalized_keyword,category_id,
+ CAST(round(unixepoch(created_at,'subsec')*1000) AS INTEGER),
+ CAST(round(unixepoch(updated_at,'subsec')*1000) AS INTEGER) FROM keyword_rules
+ EXCEPT SELECT rowid,id,user_id,keyword,category_id,created_at_ms,updated_at_ms FROM keyword_rules_1461);
+```
+
+<!-- category-keyword-copy-check:end -->
+
+<!-- category-keyword-swap:start -->
+
+```sql
+DROP TABLE keyword_rules;
+ALTER TABLE keyword_rules_1461 RENAME TO keyword_rules;
+```
+
+<!-- category-keyword-swap:end -->
+
+<!-- category-keyword-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'category-keyword-final',NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check);
+DELETE FROM sql_assertions WHERE scope IN('category-keyword-preflight','category-keyword-row','category-keyword-copy','category-keyword-final');
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- category-keyword-verify:end -->
+
+## Transaction history instants (#1462)
+
+Checkpoint: `aab97f886`. Convert the four Transactions-owned tables together. Authoritative movement,
+attestation, correction and pair-decision instants become integer UTC milliseconds. Exact decimal
+Money, identities, rowids, User decisions, retained source context, deletion markers and reconciliation
+archive addresses stay intact. Before/after snapshot JSON and existing archives remain byte-for-byte
+unchanged. The effective-fact policy orders its authoritative instants numerically and projects UTC
+ISO text at the published read boundary; Dashboard query storage and public/peer cursors keep their
+existing ISO contracts. This is a representation boundary, not a second timestamp authority.
+
+Keep only `0001_schema.sql`; editing it alone never updates an existing database. Back up first and
+fence ALL financial, ingestion, correction, linking, projection, retention, erasure and source writes
+through the complete read/validation/commit window. Inventory incoming foreign keys, views, triggers
+and explicit indexes against the checkpoint; stop on unknown dependencies or cascades. Current incoming
+financial references have no delete cascades. Keep foreign keys enabled and defer them inside one
+native atomic batch. No source/evidence replay or repair is part of conversion.
+
+Read all four fenced sources in bounded rowid pages. Decode identity, Money/Currency, source-specific
+historical context, User decisions, corrected-field sets and snapshot JSON through the existing owning
+schemas. Require known keys and supported retained variants; investigate unexplained inconsistencies.
+Every original instant must decode through UtcTimestamp with no nonzero fractional digits beyond the
+third. Do not round away precision, infer a missing timezone or fix an invalid calendar date. Public
+UTC normalization of a valid offset is allowed. Supply each row preflight below once per observed
+row, including validation accepted (1/0), original rowid, then original text and exactly decoded
+milliseconds for each instant. Never skip failed decodes. Verify observed/source counts under the fence.
+After creating all four targets, run each row copy with decoded milliseconds, original rowid and
+original timestamp texts; its next assertion binds rowid and the same decoded milliseconds.
+Use these validated bound values directly: SQLite does not accept every offset allowed by our
+owning timestamp schema (including ±15:59). Do not parse the original spelling with SQLite.
+Run each table copy-check after all its rows have copied; it checks counts and all non-time facts,
+while the per-row assertions check every converted instant.
+Source/review uniqueness is checked before copying. Statement and email references must have the same
+User. A still-retained review must agree on owner and any resolved Transaction; an absent expired review
+remains historical evidence and does not acquire a destructive foreign key. New review-bound captures
+must still name an existing same-User review when written.
+
+Every linked decision must have exactly its two live members attached to that same ordered pair;
+keep-separate decisions must have no attached members. Refuse inconsistent historical membership
+instead of silently hiding or duplicating movements during conversion. Current linked amounts may
+differ after an accepted Correction: exact Money/Currency/direction equality is a link-admission rule,
+not a reason to reject later corrected facts.
+
+Run preflight and all bound row checks first. Then temporarily drop inventoried triggers and views
+inside the batch so parent replacement cannot run business effects or leave invalid view references.
+Create each baseline target table as `<name>_1462`, copy and compare the complete rows below, drop ONLY
+the four source tables, and rename the replacements. Reinstall the exact baseline views/triggers and
+all four table-owned explicit indexes; other tables/indexes remain untouched. Verify all incoming
+foreign keys, unchanged dependent/archival data and sequence state, then protected capture/history,
+correction, stale-revision refusal, link/unlink and source replay. Any error, including interruption
+after copy or swap, must roll back the entire unit, including removed triggers/views. Retain the backup
+until code and schema verification succeeds; only then align the baseline ledger. Use the native
+query/batch transaction path described above, not a bulk-import claim based solely on local tests.
+
+<!-- transaction-history-preflight:start -->
+
+```sql
+PRAGMA defer_foreign_keys=ON;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-preflight',NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_permits) AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM source_attestations a JOIN statement_submissions s ON s.id=a.statement_submission_id WHERE s.user_id<>a.user_id)
+ AND NOT EXISTS(SELECT 1 FROM source_attestations a WHERE a.review_item_id IS NOT NULL AND ((NOT EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.id=a.review_item_id AND r.user_id=a.user_id) AND EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.id=a.review_item_id)) OR EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.id=a.review_item_id AND r.user_id=a.user_id AND r.transaction_id IS NOT NULL AND r.transaction_id<>a.transaction_id)))
+ AND NOT EXISTS(SELECT user_id,review_item_id FROM source_attestations WHERE review_item_id IS NOT NULL GROUP BY user_id,review_item_id HAVING count(*)>1)
+ AND NOT EXISTS(SELECT 1 FROM transaction_reconciliation_decisions d WHERE
+   (d.state='linked' AND (SELECT count(*) FROM transactions t WHERE t.user_id=d.user_id AND t.reconciliation_first_id=d.first_transaction_id AND t.reconciliation_second_id=d.second_transaction_id AND t.deleted_at_ms IS NULL)<>2)
+   OR (d.state='keep-separate' AND EXISTS(SELECT 1 FROM transactions t WHERE t.user_id=d.user_id AND t.reconciliation_first_id=d.first_transaction_id AND t.reconciliation_second_id=d.second_transaction_id)));
+```
+
+<!-- transaction-history-preflight:end -->
+
+<!-- transaction-history-row-transactions:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row',?=1 AND EXISTS(SELECT 1 FROM transactions WHERE rowid=? AND occurred_at IS ? AND ? BETWEEN -62135596800000 AND 253402300799999 AND created_at IS ? AND ? BETWEEN -62135596800000 AND 253402300799999)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-row-transactions:end -->
+
+<!-- transaction-history-copy-transactions:start -->
+
+```sql
+INSERT INTO transactions_1462(rowid,id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at_ms,created_at_ms,revision,user_decisions,deleted_at_ms,reconciliation_row_ref,reconciliation_first_id,reconciliation_second_id)
+SELECT rowid,id,user_id,amount,currency,direction,counterparty,category_id,notes,?,?,revision,user_decisions,deleted_at_ms,reconciliation_row_ref,reconciliation_first_id,reconciliation_second_id FROM transactions WHERE rowid=? AND occurred_at IS ? AND created_at IS ?;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row-copy',changes()=1 AND EXISTS(SELECT 1 FROM transactions_1462 WHERE rowid=? AND occurred_at_ms IS ? AND created_at_ms IS ?)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-copy-transactions:end -->
+
+<!-- transaction-history-copy-check-transactions:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-copy-transactions',(SELECT count(*) FROM transactions)=(SELECT count(*) FROM transactions_1462)
+ AND NOT EXISTS(SELECT rowid,id,user_id,amount,currency,direction,counterparty,category_id,notes,revision,user_decisions,deleted_at_ms,reconciliation_row_ref,reconciliation_first_id,reconciliation_second_id FROM transactions
+ EXCEPT SELECT rowid,id,user_id,amount,currency,direction,counterparty,category_id,notes,revision,user_decisions,deleted_at_ms,reconciliation_row_ref,reconciliation_first_id,reconciliation_second_id FROM transactions_1462);
+```
+
+<!-- transaction-history-copy-check-transactions:end -->
+
+<!-- transaction-history-row-source_attestations:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row',?=1 AND EXISTS(SELECT 1 FROM source_attestations WHERE rowid=? AND created_at IS ? AND ? BETWEEN -62135596800000 AND 253402300799999)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-row-source_attestations:end -->
+
+<!-- transaction-history-copy-source_attestations:start -->
+
+```sql
+INSERT INTO source_attestations_1462(rowid,id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at_ms,statement_submission_id,statement_record_number,statement_content_hash,source_format,received_email_id,message_content_sha256,message_evidence,deterministic_interpretation,extractor_revision,review_item_id,user_provided_fields)
+SELECT rowid,id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,?,statement_submission_id,statement_record_number,statement_content_hash,source_format,received_email_id,message_content_sha256,message_evidence,deterministic_interpretation,extractor_revision,review_item_id,user_provided_fields FROM source_attestations WHERE rowid=? AND created_at IS ?;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row-copy',changes()=1 AND EXISTS(SELECT 1 FROM source_attestations_1462 WHERE rowid=? AND created_at_ms IS ?)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-copy-source_attestations:end -->
+
+<!-- transaction-history-copy-check-source_attestations:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-copy-source_attestations',(SELECT count(*) FROM source_attestations)=(SELECT count(*) FROM source_attestations_1462)
+ AND NOT EXISTS(SELECT rowid,id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,statement_submission_id,statement_record_number,statement_content_hash,source_format,received_email_id,message_content_sha256,message_evidence,deterministic_interpretation,extractor_revision,review_item_id,user_provided_fields FROM source_attestations
+ EXCEPT SELECT rowid,id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,statement_submission_id,statement_record_number,statement_content_hash,source_format,received_email_id,message_content_sha256,message_evidence,deterministic_interpretation,extractor_revision,review_item_id,user_provided_fields FROM source_attestations_1462);
+```
+
+<!-- transaction-history-copy-check-source_attestations:end -->
+
+<!-- transaction-history-row-transaction_corrections:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row',?=1 AND EXISTS(SELECT 1 FROM transaction_corrections WHERE rowid=? AND corrected_at IS ? AND ? BETWEEN -62135596800000 AND 253402300799999)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-row-transaction_corrections:end -->
+
+<!-- transaction-history-copy-transaction_corrections:start -->
+
+```sql
+INSERT INTO transaction_corrections_1462(rowid,id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts,corrected_at_ms)
+SELECT rowid,id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts,? FROM transaction_corrections WHERE rowid=? AND corrected_at IS ?;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row-copy',changes()=1 AND EXISTS(SELECT 1 FROM transaction_corrections_1462 WHERE rowid=? AND corrected_at_ms IS ?)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-copy-transaction_corrections:end -->
+
+<!-- transaction-history-copy-check-transaction_corrections:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-copy-transaction_corrections',(SELECT count(*) FROM transaction_corrections)=(SELECT count(*) FROM transaction_corrections_1462)
+ AND NOT EXISTS(SELECT rowid,id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts FROM transaction_corrections
+ EXCEPT SELECT rowid,id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts FROM transaction_corrections_1462);
+```
+
+<!-- transaction-history-copy-check-transaction_corrections:end -->
+
+<!-- transaction-history-row-transaction_reconciliation_decisions:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row',?=1 AND EXISTS(SELECT 1 FROM transaction_reconciliation_decisions WHERE rowid=? AND decided_at IS ? AND ? BETWEEN -62135596800000 AND 253402300799999)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-row-transaction_reconciliation_decisions:end -->
+
+<!-- transaction-history-copy-transaction_reconciliation_decisions:start -->
+
+```sql
+INSERT INTO transaction_reconciliation_decisions_1462(rowid,user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id,decided_at_ms)
+SELECT rowid,user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id,? FROM transaction_reconciliation_decisions WHERE rowid=? AND decided_at IS ?;
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-row-copy',changes()=1 AND EXISTS(SELECT 1 FROM transaction_reconciliation_decisions_1462 WHERE rowid=? AND decided_at_ms IS ?)
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transaction-history-copy-transaction_reconciliation_decisions:end -->
+
+<!-- transaction-history-copy-check-transaction_reconciliation_decisions:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'transaction-history-copy-transaction_reconciliation_decisions',(SELECT count(*) FROM transaction_reconciliation_decisions)=(SELECT count(*) FROM transaction_reconciliation_decisions_1462)
+ AND NOT EXISTS(SELECT rowid,user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id FROM transaction_reconciliation_decisions
+ EXCEPT SELECT rowid,user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id FROM transaction_reconciliation_decisions_1462);
+```
+
+<!-- transaction-history-copy-check-transaction_reconciliation_decisions:end -->
+
+<!-- transaction-history-swap:start -->
+
+```sql
+DROP TABLE transactions;
+DROP TABLE source_attestations;
+DROP TABLE transaction_corrections;
+DROP TABLE transaction_reconciliation_decisions;
+ALTER TABLE transactions_1462 RENAME TO transactions;
+ALTER TABLE source_attestations_1462 RENAME TO source_attestations;
+ALTER TABLE transaction_corrections_1462 RENAME TO transaction_corrections;
+ALTER TABLE transaction_reconciliation_decisions_1462 RENAME TO transaction_reconciliation_decisions;
+```
+
+<!-- transaction-history-swap:end -->
+
+<!-- transaction-history-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'transaction-history-final',NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check);
+DELETE FROM sql_assertions WHERE scope IN('transaction-history-preflight','transaction-history-row','transaction-history-row-copy','transaction-history-final','transaction-history-copy-transactions','transaction-history-copy-source_attestations','transaction-history-copy-transaction_corrections','transaction-history-copy-transaction_reconciliation_decisions');
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- transaction-history-verify:end -->
+
+## Transactions-owned financial projections (#1465)
+
+The measured target retains the four financial read stores. Physical tables, indexes, triggers and
+source view now use `transaction_projection_*` / `transaction_effective_source`. Logical erasure
+store IDs remain `dashboard_projection_*`: these identify an existing purpose and archive address,
+not a physical table. Owner selectors and preservation triggers emit the final numeric timestamp
+fields and omit the redundant decimal maximum.
+
+Fence financial captures/corrections/linking/deletion, repair, all projection readers and erasure.
+Back up the database and capture every schema dependency. Apply #1462 first. Stop on unknown
+incoming foreign keys or schema objects; compare every captured object with the checkpoint and final
+baseline before generating the batch. There are no incoming foreign keys to the four projection
+stores at this checkpoint. Never switch off foreign keys. The native populated conversion executes
+these blocks with the final baseline declarations in one D1 batch:
+
+1. Execute `financial-projection-preflight`. Outstanding projection archives must finish their
+   existing restore/deletion lifecycle first; do not discard or reinterpret archived bodies. Active
+   erasure or a selected erasure chunk also blocks conversion. Preserve unrelated completed archives.
+2. For each original leaf row, decode both timestamp strings with `UtcTimestamp`, reject nonzero
+   sub-millisecond precision, and bind the original rowid/strings and exact integer milliseconds to
+   `financial-projection-leaf-guard`. Do the same for the nullable first-capture instant on every
+   state row using `financial-projection-state-guard`; absence stays NULL. Require the original
+   independently present fact-revision/first-capture/timezone group. Decode each bucket's decimal
+   maximum with `Money` under its Currency and bind success to `financial-projection-money-guard`.
+   Run every guard before removing any dependency. A discrepancy requires investigation.
+3. Drop captured views and triggers, create the four final tables using unchanged baseline
+   declarations, and copy using `financial-projection-leaf-copy`, `financial-projection-state-copy`
+   (one row per guarded original), and `financial-projection-aggregate-copy`. Keep rowids and all
+   independent facts, including dirty phases/cursors, versions, attempts and absent User context.
+   `max_minor` keeps its historical fixed four-decimal scale; normalize the historical empty string
+   for zero to canonical `0`. No Currency-specific rescaling or floating-point Money conversion.
+4. Execute `financial-projection-copy-check` and `financial-projection-swap`. Reinstall the captured
+   final views/triggers and replacement indexes. Unaffected indexes remain installed. Execute
+   `financial-projection-verify`, then publish matching code and align the baseline ledger.
+
+Copy/swap/interruption failures roll back the entire batch. Runtime readiness, snapshot and revision
+fences remain unchanged; conversion does not repair a dirty projection or fabricate a financial
+mutation. True instants become milliseconds. Bucket widths and coordinates retain the original
+floor-to-seconds then truncate-by-width convention, including pre-epoch instants. Existing behavioral
+coverage compares incremental deletion against rebuild across those boundaries.
+
+<!-- financial-projection-preflight:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'financial-projection-cutover',
+ NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ AND NOT EXISTS(SELECT 1 FROM erasure_chunk)
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN('dashboard_projection_state','dashboard_projection_leaf','dashboard_projection_bucket','dashboard_projection_digit'))
+ AND NOT EXISTS(SELECT 1 FROM dashboard_projection_bucket WHERE
+  coalesce(nullif(max_minor,''),'0')<>coalesce(nullif(ltrim(CASE WHEN instr(maximum,'.')=0 THEN maximum||'0000' ELSE replace(maximum,'.','')||substr('0000',1,4-(length(maximum)-instr(maximum,'.'))) END,'0'),''),'0'))
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-preflight:end -->
+
+<!-- financial-projection-leaf-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'financial-projection-cutover',?=1 AND EXISTS(
+ SELECT 1 FROM dashboard_projection_leaf WHERE rowid=? AND occurred_at IS ? AND created_at IS ? AND ? BETWEEN -62135596800000 AND 253402300799999 AND ? BETWEEN -62135596800000 AND 253402300799999)
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-leaf-guard:end -->
+
+<!-- financial-projection-state-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'financial-projection-cutover',?=1 AND EXISTS(
+ SELECT 1 FROM dashboard_projection_state WHERE rowid=? AND first_captured_at IS ? AND
+ ((first_captured_at IS NULL AND ? IS NULL) OR (? BETWEEN -62135596800000 AND 253402300799999)))
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-state-guard:end -->
+
+<!-- financial-projection-money-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) VALUES('financial-projection-cutover',?) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-money-guard:end -->
+
+<!-- financial-projection-leaf-copy:start -->
+
+```sql
+INSERT INTO transaction_projection_leaf(rowid,user_id,id,amount,currency,direction,category_id,counterparty,notes,occurred_at_ms,created_at_ms,revision)
+ SELECT rowid,user_id,id,amount,currency,direction,category_id,counterparty,notes,?,?,revision FROM dashboard_projection_leaf WHERE rowid=?;
+INSERT INTO sql_assertions(scope,accepted) VALUES('financial-projection-cutover',changes()=1) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-leaf-copy:end -->
+
+<!-- financial-projection-state-copy:start -->
+
+```sql
+INSERT INTO transaction_projection_state(rowid,user_id,version,readiness,cursor_id,attempted_at_ms,fact_revision,first_captured_at_ms,time_zone)
+ SELECT rowid,user_id,version,readiness,cursor_id,attempted_at_ms,fact_revision,?,time_zone FROM dashboard_projection_state WHERE rowid=?;
+INSERT INTO sql_assertions(scope,accepted) VALUES('financial-projection-cutover',changes()=1) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-state-copy:end -->
+
+<!-- financial-projection-aggregate-copy:start -->
+
+```sql
+INSERT INTO transaction_projection_bucket(rowid,user_id,size_seconds,bucket,currency,direction,category_id,count,max_minor)
+ SELECT rowid,user_id,size_seconds,bucket,currency,direction,category_id,count,coalesce(nullif(max_minor,''),'0') FROM dashboard_projection_bucket;
+INSERT INTO transaction_projection_digit(rowid,user_id,size_seconds,bucket,currency,direction,category_id,position,digit_sum) SELECT rowid,user_id,size_seconds,bucket,currency,direction,category_id,position,digit_sum FROM dashboard_projection_digit;
+```
+
+<!-- financial-projection-aggregate-copy:end -->
+
+<!-- financial-projection-copy-check:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'financial-projection-cutover',
+ (SELECT count(*) FROM dashboard_projection_leaf)=(SELECT count(*) FROM transaction_projection_leaf)
+ AND (SELECT count(*) FROM dashboard_projection_state)=(SELECT count(*) FROM transaction_projection_state)
+ AND (SELECT count(*) FROM dashboard_projection_bucket)=(SELECT count(*) FROM transaction_projection_bucket)
+ AND (SELECT count(*) FROM dashboard_projection_digit)=(SELECT count(*) FROM transaction_projection_digit)
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- financial-projection-copy-check:end -->
+
+<!-- financial-projection-swap:start -->
+
+```sql
+DROP TABLE dashboard_projection_digit;
+DROP TABLE dashboard_projection_bucket;
+DROP TABLE dashboard_projection_leaf;
+DROP TABLE dashboard_projection_state;
+```
+
+<!-- financial-projection-swap:end -->
+
+<!-- financial-projection-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'financial-projection-cutover',NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check)
+ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DELETE FROM sql_assertions WHERE scope='financial-projection-cutover';
+```
+
+<!-- financial-projection-verify:end -->
+
+## Dashboard layout document verification (#1466)
+
+No schema conversion is needed: `user_documents(user_id,kind,document_json,revision)` already is the
+accepted four-column destination. Dashboard owns its bounded `DashboardDocument` codec; the shared
+owner supplies authenticated same-User reads and optimistic writes for `kind='dashboard'`. Missing
+layouts retain their explicit initialization behavior. No revision is copied into the layout JSON.
+
+The existing public Dashboard initialization/edit test now creates a Planning document through its
+public operation first, then verifies concurrent initialization/retries and two concurrent edits
+advance the Dashboard revision without changing the Planning row, body or revision. Native
+purpose-specific erasure verifies repeated Dashboard removal preserves the same User's Planning
+row and the other User's layout, while a foreign erasure scope is refused. These checks extend the
+existing authorization, malformed-layout, missing-layout and atomic mutation coverage. There is no
+new settings table, codec, generic document endpoint or migration for this verification ticket.
+
+## Planning document gate and accepted replacement (#1467)
+
+The [supported-size measurement](../research/recurring-planning-storage-gate.md) found a schema-valid
+100-plan/100-revision history that native D1 refuses with `SQLITE_TOOBIG`. Removing the JSON revision
+does not make it fit. The original single-document conversion was halted as #1413/#1467 require.
+The User subsequently accepted the following relational replacement, with no reduced product limits
+or discarded history. It is implemented locally and all three review axes passed; it has not been deployed.
+
+## #1467 approved relational Planning cutover
+
+The User accepted the revised design from the [measured gate](../research/recurring-planning-storage-gate.md).
+The shared root stores only exclusions/suggestions; its SQL revision is authoritative. Four Planning-owned
+stores retain plans, effective-dated settings, exceptions and fulfillments. Each has a `position` integer
+to preserve original public array order, including edited exceptions and partial fulfillments.
+
+Pause periods stay bounded JSON; generated occurrences remain computed. Reads use one native snapshot.
+Writes compare-and-swap the root before applying only changed child rows; Audit shares that atomic unit.
+No unchanged historical revisions are rewritten. Static SQL batches normally use JSON arrays below 900,000 bytes; a larger individual record travels
+alone with 1024 bytes reserved below D1's 2,000,000-byte row limit. Atomic batch children have a
+4096-byte input bound and individual canonical admission has a 1 MiB body bound. Historical Money
+exceeding the platform limit must be reported, never rounded or truncated. Domain Money itself has
+no magnitude ceiling; these are platform/transport boundaries, not new financial limits.
+
+For an existing local/remote schema: stop writers, take and verify a restorable backup, decode every
+original full Planning document with `RecurringDocument` and require its JSON revision to match the row.
+Refuse unexplained duplicate plan/revision/exception/fulfillment identities and missing same-User parents.
+Install the four tables, ordered indexes and their triggers verbatim from `0001_schema.sql` before this batch. Never
+reapply the baseline over populated state. The following copy is one native atomic batch, including guards.
+It refuses active erasure or retained original Planning archives, whose old addressing must finish first.
+Keep the original root rowid and Dashboard rows. Resume only with synchronized new code after native
+foreign-key checks and decoded public workspace comparisons. Test interrupted/failing copies on the backup.
+
+<!-- recurring-planning-copy:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+VALUES('recurring_plan',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id='recurring_plan_documents')
+ AND NOT EXISTS(SELECT 1 FROM recurring_plans)
+ AND NOT EXISTS(SELECT 1 FROM recurring_plan_revisions)
+ AND NOT EXISTS(SELECT 1 FROM recurring_plan_exceptions)
+ AND NOT EXISTS(SELECT 1 FROM recurring_plan_fulfillments)
+ AND NOT EXISTS(SELECT 1 FROM user_documents WHERE kind='recurring-plan' AND
+ (json_type(document_json,'$.revision') IS NOT 'integer' OR json_extract(document_json,'$.revision')<>revision
+ OR json_type(document_json,'$.plans') IS NOT 'array' OR json_type(document_json,'$.exceptions') IS NOT 'array'
+ OR json_type(document_json,'$.fulfillments') IS NOT 'array'))
+ THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+INSERT INTO recurring_plans(user_id,id,position,pauses_json,stopped_on)
+SELECT r.user_id,json_extract(p.value,'$.id'),CAST(p.key AS INTEGER),json_extract(p.value,'$.pauses'),json_extract(p.value,'$.stoppedOn')
+FROM user_documents r,json_each(r.document_json,'$.plans') p WHERE r.kind='recurring-plan';
+INSERT INTO recurring_plan_revisions(user_id,plan_id,position,from_date,plan_json)
+SELECT r.user_id,json_extract(p.value,'$.id'),CAST(v.key AS INTEGER),json_extract(v.value,'$.from'),json_extract(v.value,'$.plan')
+FROM user_documents r,json_each(r.document_json,'$.plans') p,json_each(p.value,'$.revisions') v WHERE r.kind='recurring-plan';
+INSERT INTO recurring_plan_exceptions(user_id,plan_id,position,local_date,skipped,replacement_json)
+SELECT r.user_id,json_extract(e.value,'$.planId'),CAST(e.key AS INTEGER),json_extract(e.value,'$.date'),json_extract(e.value,'$.skipped'),json_extract(e.value,'$.replacement')
+FROM user_documents r,json_each(r.document_json,'$.exceptions') e WHERE r.kind='recurring-plan';
+INSERT INTO recurring_plan_fulfillments(user_id,id,plan_id,position,local_date,actual_date,amount,currency,settled,automatic,transaction_id)
+SELECT r.user_id,json_extract(f.value,'$.id'),json_extract(f.value,'$.planId'),CAST(f.key AS INTEGER),json_extract(f.value,'$.date'),json_extract(f.value,'$.actualDate'),json_extract(f.value,'$.money.amount'),json_extract(f.value,'$.money.currency'),json_extract(f.value,'$.settled'),json_extract(f.value,'$.automatic'),json_extract(f.value,'$.transactionId')
+FROM user_documents r,json_each(r.document_json,'$.fulfillments') f WHERE r.kind='recurring-plan';
+UPDATE user_documents SET document_json=json_object('excludedTransactionIds',json(json_extract(document_json,'$.excludedTransactionIds')),'suggestions',json(json_extract(document_json,'$.suggestions'))) WHERE kind='recurring-plan';
+```
+
+<!-- recurring-planning-copy:end -->
+
+Rollback keeps writers stopped and restores the original application only after the following one-batch
+reconstruction succeeds. It preserves root rowids, exact decimal text, array order and optional absence.
+If new history exceeds the former single-row limit, D1 refuses reconstruction and rolls the whole batch
+back, leaving new storage intact; use the verified pre-cutover backup or forward-fix instead. Never clear
+child tables after failed reconstruction. Existing erasure/retention work also blocks rollback. This is
+recovery evidence, not an alternate application read path.
+
+<!-- recurring-planning-rollback:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) VALUES('recurring_plan',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN('recurring_plan_documents','recurring_plans','recurring_plan_revisions','recurring_plan_exceptions','recurring_plan_fulfillments'))
+ AND NOT EXISTS(SELECT 1 FROM recurring_plans p WHERE NOT EXISTS(SELECT 1 FROM user_documents r WHERE r.user_id=p.user_id AND r.kind='recurring-plan'))
+ THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+UPDATE user_documents AS r SET document_json=json_set(document_json,'$.revision',revision,
+ '$.plans',json((SELECT json_group_array(json(body)) FROM (SELECT json_patch(json_object('id',p.id,'pauses',json(p.pauses_json),'revisions',json((SELECT json_group_array(json(body)) FROM (SELECT json_object('from',v.from_date,'plan',json(v.plan_json)) AS body FROM recurring_plan_revisions v WHERE v.user_id=p.user_id AND v.plan_id=p.id ORDER BY v.position)))),CASE WHEN p.stopped_on IS NULL THEN '{}' ELSE json_object('stoppedOn',p.stopped_on) END) AS body FROM recurring_plans p WHERE p.user_id=r.user_id ORDER BY p.position))),
+ '$.exceptions',json((SELECT json_group_array(json(body)) FROM (SELECT json_patch(json_object('planId',e.plan_id,'date',e.local_date,'skipped',json(CASE e.skipped WHEN 1 THEN 'true' ELSE 'false' END)),CASE WHEN e.replacement_json IS NULL THEN '{}' ELSE json_object('replacement',json(e.replacement_json)) END) AS body FROM recurring_plan_exceptions e WHERE e.user_id=r.user_id ORDER BY e.position))),
+ '$.fulfillments',json((SELECT json_group_array(json(body)) FROM (SELECT json_patch(json_patch(json_object('id',f.id,'planId',f.plan_id,'date',f.local_date,'actualDate',f.actual_date,'money',json_object('amount',f.amount,'currency',f.currency),'settled',json(CASE f.settled WHEN 1 THEN 'true' ELSE 'false' END)),CASE WHEN f.automatic IS NULL THEN '{}' ELSE json_object('automatic',json(CASE f.automatic WHEN 1 THEN 'true' ELSE 'false' END)) END),CASE WHEN f.transaction_id IS NULL THEN '{}' ELSE json_object('transactionId',f.transaction_id) END) AS body FROM recurring_plan_fulfillments f WHERE f.user_id=r.user_id ORDER BY f.position))))
+WHERE r.kind='recurring-plan';
+DELETE FROM recurring_plan_fulfillments;
+DELETE FROM recurring_plan_exceptions;
+DELETE FROM recurring_plan_revisions;
+DELETE FROM recurring_plans;
+```
+
+<!-- recurring-planning-rollback:end -->
+
+## Budget monthly plans and threshold cutover (#1468)
+
+Budget creation/update and monthly threshold keys now use integer UTC milliseconds. Public instants
+remain the same RFC3339 contract. A single `highest_reached` (0/80/100) replaces two flags in both
+the owned domain latch and native storage; a jump to 100 still produces both original crossings.
+The compact cap/plan/currency variants and their qualified keys remain unchanged. No balance,
+spending counter, implicit conversion or carry-forward has been introduced.
+
+For existing state, stop writers and take a verified backup. Snapshot the four Budget tables and
+Budget work state. Validate every original timestamp through `UtcTimestamp` and reject nonzero
+fractional digits beyond milliseconds; bind exact validated milliseconds below rather than using
+SQLite parsing to interpret historical offsets. Validate original cap Money and crossing snapshots;
+missing historical crossing JSON stays absent. Original false/true flags refuse conversion.
+Refuse retained archives for the affected logical purposes until their existing lifecycle finishes.
+
+One native batch: the guard (four original row counts), four `cutover_` tables using final definitions
+from `0001_schema.sql` (child references point to `cutover_budgets`), per-row guards/copies below,
+then the monthly-record copy. Drop all old indexes/triggers/views referencing any of the four tables
+(including triggers attached to Transactions), drop old children before Budget, rename copied parent
+then children to their final names, and reinstall the final indexes/triggers/views verbatim. These
+scratch names exist only inside the atomic batch; no intermediate application release reads them.
+Preserve every rowid and original Budget work/offer state; copied inserts must not generate new work.
+The native fixture captures original definitions and exercises the documented blocks and whole swap.
+Run `foreign_key_check` and compare decoded public caps, monthly markers, original grants/crossings,
+work clocks and row identities before resuming. Failed preparation/copy/swap must leave originals intact.
+
+<!-- budget-months-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) VALUES('budget_mutation',CASE WHEN
+ (SELECT count(*) FROM budgets)=? AND (SELECT count(*) FROM budget_month_latches)=?
+ AND (SELECT count(*) FROM budget_threshold_alerts)=? AND (SELECT count(*) FROM budget_month_plan_records)=?
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN('budgets','budget_month_latches','budget_threshold_alerts','budget_month_caps','budget_plan_months','budget_group_currencies'))
+ THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-months-guard:end -->
+
+<!-- budget-months-budget-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) VALUES('budget_mutation',CASE WHEN ?=1 AND EXISTS(SELECT 1 FROM budgets WHERE rowid=? AND created_at=? AND updated_at=?) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-months-budget-guard:end -->
+
+<!-- budget-months-budget-copy:start -->
+
+```sql
+INSERT INTO cutover_budgets(rowid,id,user_id,category_id,currency,cap,created_at_ms,updated_at_ms,group_name,starts_month)
+SELECT rowid,id,user_id,category_id,currency,cap,?,?,group_name,starts_month FROM budgets WHERE rowid=?;
+```
+
+<!-- budget-months-budget-copy:end -->
+
+<!-- budget-months-budget_month_latches-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) VALUES('budget_mutation',CASE WHEN ?=1 AND EXISTS(SELECT 1 FROM budget_month_latches WHERE rowid=? AND from_utc=?) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-months-budget_month_latches-guard:end -->
+
+<!-- budget-months-budget_month_latches-copy:start -->
+
+```sql
+INSERT INTO cutover_budget_month_latches(rowid,user_id,budget_id,from_utc_ms,time_zone,highest_reached)
+SELECT rowid,user_id,budget_id,?,time_zone,CASE WHEN reached_80=0 AND reached_100=0 THEN 0 WHEN reached_80=1 AND reached_100=0 THEN 80 WHEN reached_80=1 AND reached_100=1 THEN 100 ELSE -1 END FROM budget_month_latches WHERE rowid=?;
+```
+
+<!-- budget-months-budget_month_latches-copy:end -->
+
+<!-- budget-months-budget_threshold_alerts-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) VALUES('budget_mutation',CASE WHEN ?=1 AND EXISTS(SELECT 1 FROM budget_threshold_alerts WHERE rowid=? AND from_utc=?) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-months-budget_threshold_alerts-guard:end -->
+
+<!-- budget-months-budget_threshold_alerts-copy:start -->
+
+```sql
+INSERT INTO cutover_budget_threshold_alerts(rowid,user_id,budget_id,from_utc_ms,time_zone,threshold,state,crossing_json,delivery_group_id,consent_grant_id)
+SELECT rowid,user_id,budget_id,?,time_zone,threshold,state,crossing_json,delivery_group_id,consent_grant_id FROM budget_threshold_alerts WHERE rowid=?;
+```
+
+<!-- budget-months-budget_threshold_alerts-copy:end -->
+
+<!-- budget-months-plans-copy:start -->
+
+```sql
+INSERT INTO cutover_budget_month_plan_records(rowid,kind,user_id,month,budget_id,group_name,cap,currency) SELECT rowid,kind,user_id,month,budget_id,group_name,cap,currency FROM budget_month_plan_records;
+```
+
+<!-- budget-months-plans-copy:end -->
+
+For rollback keep writers stopped, use the same guard and row counts, create scratch tables from
+the captured original definitions, run this inverse copy, swap children/parent in the same order,
+and reinstall original indexes/triggers/views. Integer instants are encoded to canonical UTC;
+original offset spelling may normalize but the represented millisecond and immutable crossing JSON
+do not change. Restore the verified backup if either guarded reconstruction or validation refuses.
+
+<!-- budget-months-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_budgets(rowid,id,user_id,category_id,currency,cap,created_at,updated_at,group_name,starts_month) SELECT rowid,id,user_id,category_id,currency,cap,strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch'),strftime('%Y-%m-%dT%H:%M:%fZ',updated_at_ms/1000.0,'unixepoch'),group_name,starts_month FROM budgets;
+INSERT INTO cutover_budget_month_latches(rowid,user_id,budget_id,from_utc,time_zone,reached_80,reached_100) SELECT rowid,user_id,budget_id,strftime('%Y-%m-%dT%H:%M:%fZ',from_utc_ms/1000.0,'unixepoch'),time_zone,CASE WHEN highest_reached>=80 THEN 1 ELSE 0 END,CASE WHEN highest_reached=100 THEN 1 ELSE 0 END FROM budget_month_latches;
+INSERT INTO cutover_budget_threshold_alerts(rowid,user_id,budget_id,from_utc,time_zone,threshold,state,crossing_json,delivery_group_id,consent_grant_id) SELECT rowid,user_id,budget_id,strftime('%Y-%m-%dT%H:%M:%fZ',from_utc_ms/1000.0,'unixepoch'),time_zone,threshold,state,crossing_json,delivery_group_id,consent_grant_id FROM budget_threshold_alerts;
+INSERT INTO cutover_budget_month_plan_records(rowid,kind,user_id,month,budget_id,group_name,cap,currency) SELECT rowid,kind,user_id,month,budget_id,group_name,cap,currency FROM budget_month_plan_records;
+```
+
+<!-- budget-months-rollback-copy:end -->
+
+## Budget work and fair User clock (#1469)
+
+The three final stores separate one User's concurrency/first-creation facts, versioned affected
+financial instants, and grouped publication evidence. One User clock replaces the three old clock
+locations. Discovery still returns at most 16 Users; generation still attempts at most four per sweep.
+Attempts rotate before coordinator/processing checks. Work insertion/version invalidation and a new
+pending publication reset priority atomically through owner triggers. Completion clears only the
+observed financial-work version; publication and first-offer completion retain their original Consent
+and same-User proof guards. A completed first-offer opportunity survives deletion of the original
+Budget. No workflow or delivery authority is inferred from the clock.
+
+Stop writers and verify an independent backup before conversion. This is a synchronized baseline
+cutover, not a second migration or compatibility release. Reconstruct the preceding schema from the
+verbatim definitions in `apps/server/cloudflare/budgets/work-cutover.test-fixture.json`. Capture the
+old row count and bind it to the guard below. Reject invalid or colliding financial instants rather
+than normalizing them silently. Decode each old `occurred_at` with the original `UtcTimestamp` codec,
+reject nonzero sub-millisecond digits, and bind the exact integer milliseconds to each work copy.
+Every prepared work copy includes its original rowid/raw instant/version guard in the same batch.
+
+<!-- budget-work-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'budget_work_cutover',CASE WHEN
+ (SELECT count(*) FROM budget_state)=?
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN
+  ('budget_user_state','budget_reconciliation_work','budget_crossing_publications'))
+ AND NOT EXISTS(SELECT 1 FROM budget_state WHERE
+  (kind='work' AND version<1) OR
+  abs(coalesce(detected_at_ms,0))>8640000000000000 OR
+  abs(coalesce(materialized_at_ms,0))>8640000000000000 OR
+  abs(coalesce(created_at_ms,0))>8640000000000000 OR
+  abs(coalesce(offer_requested_at_ms,0))>8640000000000000 OR
+  abs(coalesce(first_last_evaluated_at_ms,0))>8640000000000000 OR
+  abs(coalesce(last_evaluated_at_ms,0))>8640000000000000)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-work-guard:end -->
+
+Create scratch `cutover_budget_user_state`, `cutover_budget_evaluation_work`, and
+`cutover_budget_publications` using their final table definitions, without final indexes/triggers.
+Copy User facts first. Only eligible pending scopes contribute to the initial minimum clock; completed
+publication/offer clocks cannot delay pending work. Absent first-creation facts stay absent. Missing
+User roots required by pending work receive new helper rowids above the old state rowid range.
+
+<!-- budget-work-roots-copy:start -->
+
+```sql
+INSERT INTO cutover_budget_user_state(rowid,user_id,revision,first_budget_id,first_created_at_ms,offer_requested_at_ms,last_evaluated_at_ms)
+SELECT r.rowid,r.user_id,coalesce(r.revision,0),r.budget_id,r.created_at_ms,r.offer_requested_at_ms,
+ coalesce((SELECT min(clock) FROM (
+  SELECT user_id,last_evaluated_at_ms AS clock FROM budget_state WHERE kind='work'
+  UNION ALL SELECT user_id,last_evaluated_at_ms FROM budget_state WHERE kind='publication' AND materialized_at_ms IS NULL
+  UNION ALL SELECT user_id,first_last_evaluated_at_ms FROM budget_state WHERE kind='user' AND budget_id IS NOT NULL AND offer_requested_at_ms IS NULL
+ ) p WHERE p.user_id=r.user_id),0)
+FROM budget_state r WHERE r.kind='user';
+INSERT INTO cutover_budget_user_state(rowid,user_id,last_evaluated_at_ms)
+SELECT (SELECT coalesce(max(rowid),0) FROM budget_state)+row_number() OVER(ORDER BY user_id),user_id,min(clock)
+FROM (
+ SELECT user_id,last_evaluated_at_ms AS clock FROM budget_state WHERE kind='work'
+ UNION ALL SELECT user_id,last_evaluated_at_ms FROM budget_state WHERE kind='publication' AND materialized_at_ms IS NULL
+) p WHERE NOT EXISTS(SELECT 1 FROM cutover_budget_user_state s WHERE s.user_id=p.user_id) GROUP BY user_id;
+INSERT INTO cutover_budget_publications(rowid,user_id,delivery_group_id,detected_at_ms,materialized_at_ms)
+SELECT rowid,user_id,record_id,detected_at_ms,materialized_at_ms FROM budget_state WHERE kind='publication';
+```
+
+<!-- budget-work-roots-copy:end -->
+
+<!-- budget-work-instant-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'budget_work_instant',CASE WHEN ?=1 AND EXISTS(
+ SELECT 1 FROM budget_state WHERE kind='work' AND rowid=? AND occurred_at=? AND version=?)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-work-instant-guard:end -->
+
+<!-- budget-work-instant-copy:start -->
+
+```sql
+INSERT INTO cutover_budget_evaluation_work(rowid,user_id,occurred_at_ms,version)
+SELECT rowid,user_id,?,version FROM budget_state WHERE kind='work' AND rowid=?;
+```
+
+<!-- budget-work-instant-copy:end -->
+
+In that same native batch, drop all old indexes/triggers that reference `budget_state`, drop the old
+table, rename the three scratch stores, and install all final indexes/triggers referencing the new
+stores (including financial mutation, revision and erasure guards). A failing guard or interrupted
+batch rolls back the whole copy/swap. Original source/group keys, versions, first-creation identity,
+Consent, Budget/alert/Insight facts and logical erasure purposes remain intact. Old affected retained
+archive bodies must be resolved before conversion; unrelated archive addresses are untouched.
+
+For rollback, stop writers and take a new backup. Refuse active erasure or affected archives again.
+Create `cutover_budget_state` from the saved old definition. Copy the following in the same batch as
+the reverse object swap. This copies the shared clock into each old eligible location; historical
+per-scope scheduling timestamps cannot be recovered after clock consolidation. Revision zero maps
+to the former absent revision. Work instants use the canonical ISO representation of the exact
+millisecond value. Helper rowids may change on rollback because separate target tables can allocate
+the same rowid; logical identities and unrelated archive addresses remain unchanged.
+
+<!-- budget-work-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_budget_state(kind,user_id,revision,budget_id,created_at_ms,offer_requested_at_ms,first_last_evaluated_at_ms,version,last_evaluated_at_ms)
+SELECT 'user',user_id,nullif(revision,0),first_budget_id,first_created_at_ms,offer_requested_at_ms,
+ CASE WHEN first_budget_id IS NOT NULL THEN last_evaluated_at_ms END,NULL,NULL FROM budget_user_state;
+INSERT INTO cutover_budget_state(kind,user_id,occurred_at,version,last_evaluated_at_ms)
+SELECT 'work',w.user_id,strftime('%Y-%m-%dT%H:%M:%fZ',w.occurred_at_ms/1000.0,'unixepoch'),w.version,s.last_evaluated_at_ms
+FROM budget_evaluation_work w JOIN budget_user_state s ON s.user_id=w.user_id;
+INSERT INTO cutover_budget_state(kind,user_id,record_id,detected_at_ms,materialized_at_ms,version,last_evaluated_at_ms)
+SELECT 'publication',p.user_id,p.delivery_group_id,p.detected_at_ms,p.materialized_at_ms,NULL,coalesce(s.last_evaluated_at_ms,0)
+FROM budget_publications p LEFT JOIN budget_user_state s ON s.user_id=p.user_id;
+```
+
+<!-- budget-work-rollback-copy:end -->
+
+Validate rollback instants with the same original codec before swapping, guard the source counts,
+and block if any instant cannot round-trip exactly through the original timestamp representation.
+Drop target indexes/triggers before dropping the three tables, rename the scratch state, and reinstall
+its saved related indexes/triggers. Use the backup or a forward fix when historical inconsistencies
+or erasure prevent a safe conversion; never erase unexplained rows to make a conversion pass.
+
+<!-- budget-work-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'budget_work_rollback',CASE WHEN
+ (SELECT count(*) FROM budget_user_state)=? AND
+ (SELECT count(*) FROM budget_evaluation_work)=? AND
+ (SELECT count(*) FROM budget_publications)=? AND
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND
+ NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN
+ ('budget_user_state','budget_reconciliation_work','budget_crossing_publications')) AND
+ NOT EXISTS(SELECT 1 FROM budget_evaluation_work w WHERE
+  NOT EXISTS(SELECT 1 FROM budget_user_state s WHERE s.user_id=w.user_id) OR
+  occurred_at_ms IS NOT CAST(round(unixepoch(strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch'),'subsec')*1000) AS INTEGER))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-work-rollback-guard:end -->
+
+### #1471 — Recurring instants on the selected coordinator
+
+The [measured gate](../research/recurring-detection-storage-gate.md) keeps the existing User
+coordinator, bounded scratch facts/proposals and both D1 cursors. There is no new Workflow history
+or expiry dependency. Phase, financial revision and page checkpoint commit together; retrying after
+an unobserved commit reloads that checkpoint. A completed revision is a no-op until facts change.
+The weekly changed-User interval, hourly idle discovery and four-User round-robin batch remain.
+
+Only the physical instants change to integer UTC milliseconds. An unstarted scan uses
+`cursor_at_ms=NULL,cursor_id=''`; a real cursor retains its Transaction identity. Reinitialization
+preserves the preceding complete evaluation time/revision. JSON financial payloads keep their owned
+codecs: the current Series, immutable first confirmation, initial reference Money and detector
+support evidence have different lifetimes and are not interchangeable. Public cursor and digest
+identity timestamps remain canonical ISO strings.
+
+For a populated conversion, stop writers and snapshot the database. Save the two old definitions and
+all their related indexes/triggers. Read and pin both source counts, then run the guard, create
+`cutover_recurring_evaluation_records` and `cutover_recurring_series` from the final definitions,
+copy, and swap both tables and related objects in **one native batch**. Preserve rowids, all JSON,
+confirmation sequence, logical erasure purposes and dispatcher state. Fresh installs use only 0001.
+The original writer emitted canonical ISO timestamps; noncanonical or submillisecond history is
+blocked for investigation instead of silently rounded. Resolve active erasure or affected retained
+archives first. Unrelated archives stay untouched.
+
+<!-- recurring-instant-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recurring_instant_cutover',CASE WHEN
+ (SELECT count(*) FROM recurring_evaluation_records)=? AND
+ (SELECT count(*) FROM recurring_series)=? AND
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND
+ NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN
+ ('recurring_facts','recurring_progress','recurring_proposals','recurring_series','recurring_confirmations')) AND
+ NOT EXISTS(SELECT 1 FROM recurring_evaluation_records WHERE
+  (occurred_at IS NOT NULL AND strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at) IS NOT occurred_at) OR
+  (cursor_at IS NOT NULL AND cursor_at<>'' AND strftime('%Y-%m-%dT%H:%M:%fZ',cursor_at) IS NOT cursor_at) OR
+  (evaluated_at IS NOT NULL AND strftime('%Y-%m-%dT%H:%M:%fZ',evaluated_at) IS NOT evaluated_at) OR
+  (first_captured_at IS NOT NULL AND strftime('%Y-%m-%dT%H:%M:%fZ',first_captured_at) IS NOT first_captured_at) OR
+  (kind='progress' AND (revision<1 OR evaluated_revision<0 OR
+   (cursor_at='')<>(cursor_id='') OR (evaluated_at IS NULL)<>(evaluated_revision=0) OR
+   (phase='complete' AND (evaluated_revision<>revision OR evaluated_at IS NULL)))) OR
+  (kind='fact' AND (json_extract(fact_json,'$.id') IS NOT id OR
+   json_extract(fact_json,'$.occurredAt') IS NOT occurred_at))) AND
+ NOT EXISTS(SELECT 1 FROM recurring_series WHERE
+  json_extract(series_json,'$.id') IS NOT id OR json_extract(series_json,'$.money.currency') IS NOT currency OR
+  (confirmed_at IS NOT NULL AND (strftime('%Y-%m-%dT%H:%M:%fZ',confirmed_at) IS NOT confirmed_at OR
+   json_extract(confirmation_json,'$.id') IS NOT confirmation_id OR
+   json_extract(confirmation_json,'$.seriesId') IS NOT id OR
+   json_extract(confirmation_json,'$.confirmedAt') IS NOT confirmed_at OR
+   json_extract(series_json,'$.confirmedAt') IS NOT confirmed_at)))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recurring-instant-guard:end -->
+
+Before preparing the batch, decode each retained `series_json` with the existing `RecurringSeries`
+JSON codec and compute its key with Core Recurring's `normalizeCounterparty` (Unicode NFKC,
+Unicode whitespace folding and lowercase). Do not replace that policy with SQLite `lower/trim`.
+For every Series, include this guard in the same batch, binding its rowid, exact observed JSON and
+computed normalized key. The global count check and stopped writers bind the entire preflight;
+missing, undecodable, changed or mismatched rows block rather than being rewritten.
+
+<!-- recurring-instant-series-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recurring_series_projection',CASE WHEN EXISTS(
+ SELECT 1 FROM recurring_series WHERE rowid=? AND series_json=? AND counterparty_key=?
+) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recurring-instant-series-guard:end -->
+
+<!-- recurring-instant-copy:start -->
+
+```sql
+INSERT INTO cutover_recurring_evaluation_records
+(rowid,user_id,kind,id,group_key,occurred_at_ms,fact_json,proposal_json,revision,phase,cursor_at_ms,cursor_id,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone)
+SELECT rowid,user_id,kind,id,group_key,CAST(round(unixepoch(occurred_at,'subsec')*1000) AS INTEGER),fact_json,proposal_json,revision,phase,
+ CAST(round(unixepoch(nullif(cursor_at,''),'subsec')*1000) AS INTEGER),cursor_id,
+ CAST(round(unixepoch(evaluated_at,'subsec')*1000) AS INTEGER),evaluated_revision,
+ CAST(round(unixepoch(first_captured_at,'subsec')*1000) AS INTEGER),time_zone FROM recurring_evaluation_records;
+INSERT INTO cutover_recurring_series
+(rowid,user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,confirmed_at_ms,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence)
+SELECT rowid,user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,
+ CAST(round(unixepoch(confirmed_at,'subsec')*1000) AS INTEGER),confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence FROM recurring_series;
+```
+
+<!-- recurring-instant-copy:end -->
+
+For rollback stop writers and take another snapshot. Pin the current counts and use the guard below;
+refuse values outside the original timestamp range or which do not round-trip exactly. Create the
+two scratch tables from the saved old definitions and copy with the reverse SQL, then replace both
+stores and restore their old related objects in the same batch. The initial timestamp sentinel
+returns to `''`. A failing guard or failure anywhere in either copy/swap rolls back the whole batch.
+
+<!-- recurring-instant-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recurring_instant_rollback',CASE WHEN
+ (SELECT count(*) FROM recurring_evaluation_records)=? AND
+ (SELECT count(*) FROM recurring_series)=? AND
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND
+ NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN
+ ('recurring_facts','recurring_progress','recurring_proposals','recurring_series','recurring_confirmations')) AND
+ NOT EXISTS(SELECT 1 FROM (
+ SELECT occurred_at_ms AS instant FROM recurring_evaluation_records UNION ALL
+ SELECT cursor_at_ms FROM recurring_evaluation_records UNION ALL
+ SELECT evaluated_at_ms FROM recurring_evaluation_records UNION ALL
+ SELECT first_captured_at_ms FROM recurring_evaluation_records UNION ALL
+ SELECT confirmed_at_ms FROM recurring_series
+ ) WHERE instant IS NOT NULL AND (instant NOT BETWEEN -62135596800000 AND 253402300799999 OR
+ instant IS NOT CAST(round(unixepoch(strftime('%Y-%m-%dT%H:%M:%fZ',instant/1000.0,'unixepoch'),'subsec')*1000) AS INTEGER)))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recurring-instant-rollback-guard:end -->
+
+<!-- recurring-instant-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_recurring_evaluation_records
+(rowid,user_id,kind,id,group_key,occurred_at,fact_json,proposal_json,revision,phase,cursor_at,cursor_id,evaluated_at,evaluated_revision,first_captured_at,time_zone)
+SELECT rowid,user_id,kind,id,group_key,strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch'),fact_json,proposal_json,revision,phase,
+ CASE WHEN kind='progress' AND cursor_at_ms IS NULL THEN '' ELSE strftime('%Y-%m-%dT%H:%M:%fZ',cursor_at_ms/1000.0,'unixepoch') END,cursor_id,
+ strftime('%Y-%m-%dT%H:%M:%fZ',evaluated_at_ms/1000.0,'unixepoch'),evaluated_revision,
+ strftime('%Y-%m-%dT%H:%M:%fZ',first_captured_at_ms/1000.0,'unixepoch'),time_zone FROM recurring_evaluation_records;
+INSERT INTO cutover_recurring_series
+(rowid,user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,confirmed_at,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence)
+SELECT rowid,user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,
+ strftime('%Y-%m-%dT%H:%M:%fZ',confirmed_at_ms/1000.0,'unixepoch'),confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence FROM recurring_series;
+```
+
+<!-- recurring-instant-rollback-copy:end -->
+
+## Insights content and message ownership (#1472)
+
+Use a single synchronized code/schema cutover under the admission fence described above. Stop
+all writers first. Install the five current owner definitions under `cutover_` names, rewriting
+only their mutual foreign-key targets to the scratch names. Execute preflight, copies, removal
+of affected views/triggers/indexes, table swap and reinstatement of current objects in **one D1
+batch**, with `PRAGMA defer_foreign_keys=ON` as its first statement. Existing Transcript and
+WhatsApp tables remain in place; their incoming Event references validate at commit. Never
+turn foreign keys off. A failure, including after the swap, must roll back the whole batch.
+
+Capture source counts immediately before the fence; bind Event count and old report-envelope
+count to the guard below. Before the batch, decode every retained weekly payload/presentation
+and recurring report with the existing Core codecs, rejecting excess properties and malformed
+Money/context/day windows. Pin each checked original JSON and its rowid in a same-batch SQL
+assertion before copying; the native SQL guard additionally verifies the independent original
+header/day/clock projections. Do not repair a mismatch from another copy. Block affected
+retained archives or active erasure work; unrelated logical archive addresses stay untouched.
+The saved preceding definitions are in `insights/content-cutover.test-fixture.json`.
+
+The digest-only `original_delivery_expires_at_ms` preserves the historical public report expiry
+when a financial report has no message. Weekly `content_expires_at_ms` remains independent of
+message dispatch lifetime. Content-only history creates no fake message. Reminder grant and
+its evidence deadline move to the original Event. Provider claims and unresolved sends stay in
+WhatsApp storage. Offer IDs on messages are frozen evidence: consent offers may expire and be
+removed while that evidence remains, so this binding deliberately has no destructive live-offer
+foreign key. Current owner operations still validate the live offer before preparing delivery.
+
+Logical erasure purposes retain their original addresses, with `insight_reports` now financial
+content and `proactive_messages` its separate message purpose. Conversion blocks their affected
+old archives rather than silently changing archive restoration semantics. Original receipts,
+User identity, exact milliseconds and Money JSON strings must survive both directions.
+
+<!-- insight-content-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'insight_content_cutover',CASE WHEN
+ (SELECT count(*) FROM insight_events)=? AND (SELECT count(*) FROM insight_reports)=? AND
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND
+ NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN ('insight_events','insight_delivery_attempts','insight_reports','proactive_messages','proactivity_offer_requests','weekly_question_intents','proactivity_message_events','reminder_delivery_receipts')) AND
+ NOT EXISTS(SELECT 1 FROM insight_events WHERE
+  strftime('%Y-%m-%dT%H:%M:%fZ',scheduled_at) IS NOT scheduled_at OR
+  (delivery_sent_at IS NOT NULL AND strftime('%Y-%m-%dT%H:%M:%fZ',delivery_sent_at) IS NOT delivery_sent_at)) AND
+ NOT EXISTS(SELECT 1 FROM insight_reports r LEFT JOIN insight_events e ON e.user_id=r.user_id AND e.id=r.delivery_id WHERE
+  (r.kind='weekly-summary' AND (e.kind IS NOT 'weekly-summary' OR r.scheduled_at_ms IS NOT CAST(round(unixepoch(e.scheduled_at,'subsec')*1000) AS INTEGER))) OR
+  (r.reminder_grant_id IS NOT NULL AND (e.kind IS NOT 'manual-entry-reminder' OR
+   (r.scheduled_at_ms IS NOT NULL AND (r.consent_grant_id IS NOT r.reminder_grant_id OR r.expires_at_ms IS NOT r.reminder_expires_at_ms)))) OR
+  (r.report_json IS NOT NULL AND (e.kind IS NOT 'new-recurring-series' OR
+   json_extract(r.report_json,'$.insightEventId') IS NOT e.id OR
+   json_extract(r.report_json,'$.serviceMarket') IS NOT e.service_market OR
+   json_extract(r.report_json,'$.locale') IS NOT e.locale OR
+   json_extract(r.report_json,'$.scheduledAt') IS NOT e.scheduled_at OR
+   r.instruction_id IS NOT e.schedule_id OR r.instruction_version IS NOT e.schedule_version OR
+   json_extract(r.report_json,'$.payload.confirmationDay.timeZone') IS NOT e.time_zone OR
+   json_extract(r.report_json,'$.payload.confirmationDay.localDate') IS NOT r.local_date OR
+   CAST(round(unixepoch(json_extract(r.report_json,'$.payload.confirmationDay.from'),'subsec')*1000) AS INTEGER) IS NOT r.day_from_ms OR
+   CAST(round(unixepoch(json_extract(r.report_json,'$.payload.confirmationDay.toExclusive'),'subsec')*1000) AS INTEGER) IS NOT r.day_to_ms OR
+   strftime('%Y-%m-%dT%H:%M:%fZ',json_extract(r.report_json,'$.expiresAt')) IS NOT json_extract(r.report_json,'$.expiresAt') OR
+   (r.scheduled_at_ms IS NOT NULL AND (r.consent_grant_id IS NOT r.grant_id OR r.scheduled_at_ms IS NOT CAST(round(unixepoch(e.scheduled_at,'subsec')*1000) AS INTEGER) OR r.expires_at_ms IS NOT CAST(round(unixepoch(json_extract(r.report_json,'$.expiresAt'),'subsec')*1000) AS INTEGER))) OR
+   EXISTS(SELECT 1 FROM json_each(r.report_json) WHERE key NOT IN ('insightEventId','serviceMarket','locale','scheduledAt','expiresAt','payload')))))
+ THEN 1 ELSE 0 END;
+```
+
+<!-- insight-content-guard:end -->
+
+<!-- insight-content-json-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'insight_content_json',CASE WHEN EXISTS(SELECT 1 FROM insight_reports
+ WHERE rowid=? AND payload_json IS ? AND presentation_json IS ? AND report_json IS ?)
+ THEN 1 ELSE 0 END
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- insight-content-json-guard:end -->
+
+<!-- insight-content-copy:start -->
+
+```sql
+INSERT INTO cutover_insight_events(rowid,id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json,lifecycle_state,delivery_receipt_id,delivery_sent_at_ms,delivery_channel,delivery_provider,delivery_provider_message_id,budget_delivery_group_id,budget_threshold,budget_crossing_json,transcript_id,transcript_kind,weekly_governor_counted,reminder_grant_id,reminder_evidence_expires_at_ms) SELECT e.rowid,e.id,e.user_id,e.kind,e.schedule_id,e.schedule_version,e.service_market,e.locale,e.time_zone,CAST(round(unixepoch(e.scheduled_at,'subsec')*1000) AS INTEGER),e.money_groups_json,e.lifecycle_state,e.delivery_receipt_id,CAST(round(unixepoch(e.delivery_sent_at,'subsec')*1000) AS INTEGER),e.delivery_channel,e.delivery_provider,e.delivery_provider_message_id,e.budget_delivery_group_id,e.budget_threshold,e.budget_crossing_json,e.transcript_id,e.transcript_kind,e.weekly_governor_counted,r.reminder_grant_id,r.reminder_expires_at_ms FROM insight_events e LEFT JOIN insight_reports r ON r.kind='proactivity-delivery' AND r.user_id=e.user_id AND r.delivery_id=e.id;
+
+INSERT INTO cutover_insight_reports(rowid,user_id,insight_event_id,kind,consent_grant_id,payload_json,presentation_json,content_expires_at_ms,local_date,day_from_ms,day_to_ms,original_delivery_expires_at_ms) SELECT rowid,user_id,delivery_id,CASE kind WHEN 'weekly-summary' THEN 'weekly-summary' ELSE 'recurring-digest' END,CASE kind WHEN 'weekly-summary' THEN consent_grant_id ELSE grant_id END,CASE kind WHEN 'weekly-summary' THEN payload_json ELSE json_extract(report_json,'$.payload') END,presentation_json,CASE WHEN kind='weekly-summary' THEN expires_at_ms END,local_date,day_from_ms,day_to_ms,CASE WHEN report_json IS NOT NULL THEN CAST(round(unixepoch(json_extract(report_json,'$.expiresAt'),'subsec')*1000) AS INTEGER) END FROM insight_reports WHERE kind='weekly-summary' OR report_json IS NOT NULL;
+
+INSERT INTO cutover_proactive_messages(rowid,kind,id,user_id,role,report_event_id,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts,reminder_governor_counted) SELECT r.rowid,r.kind,r.delivery_id,r.user_id,CASE r.kind WHEN 'weekly-summary' THEN 'weekly-summary' ELSE r.role END,CASE WHEN r.kind='weekly-summary' OR r.report_json IS NOT NULL THEN r.delivery_id END,r.consent_grant_id,r.offer_id,r.text,r.scheduled_at_ms,r.expires_at_ms,CASE r.kind WHEN 'weekly-summary' THEN e.time_zone ELSE r.time_zone END,CASE r.kind WHEN 'weekly-summary' THEN r.dispatch_created_at_ms ELSE r.created_at_ms END,r.dispatch_state,r.dispatch_created_at_ms,r.dispatch_last_attempt_at_ms,r.dispatch_restart_attempts,r.reminder_governor_counted FROM insight_reports r LEFT JOIN insight_events e ON e.user_id=r.user_id AND e.id=r.delivery_id WHERE (r.kind='weekly-summary' AND r.dispatch_state IS NOT NULL) OR (r.kind='proactivity-delivery' AND r.scheduled_at_ms IS NOT NULL);
+
+INSERT INTO cutover_insight_offer_requests(rowid,id,user_id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms,materialized_at_ms,offer_message_id,current_recurring_opportunity) SELECT rowid,delivery_id,user_id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms,materialized_at_ms,offer_delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request';
+
+INSERT INTO cutover_weekly_question_requests(rowid,id,user_id,origin,request_message_id,rejection_offer_id,created_at_ms,state,last_attempt_at_ms,restart_attempts) SELECT rowid,delivery_id,user_id,origin,request_message_id,rejection_offer_id,created_at_ms,dispatch_state,dispatch_last_attempt_at_ms,dispatch_restart_attempts FROM insight_reports WHERE kind='weekly-question';
+
+UPDATE cutover_insight_events AS e SET message_kind='proactivity-delivery',message_id=(SELECT old.report_delivery_id FROM insight_events old WHERE old.user_id=e.user_id AND old.id=e.id) WHERE EXISTS(SELECT 1 FROM insight_events old WHERE old.user_id=e.user_id AND old.id=e.id AND old.report_delivery_id IS NOT NULL);
+
+UPDATE cutover_insight_events AS e SET message_kind='weekly-summary',message_id=e.id WHERE e.kind='weekly-summary' AND EXISTS(SELECT 1 FROM cutover_proactive_messages m WHERE m.kind='weekly-summary' AND m.user_id=e.user_id AND m.id=e.id);
+INSERT INTO cutover_proactive_transcript_entries(sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms) SELECT sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms FROM proactive_transcript_entries;
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='proactive_transcript_entries'),0)) WHERE name='cutover_proactive_transcript_entries';
+```
+
+<!-- insight-content-copy:end -->
+
+Rollback installs the saved two preceding owner definitions as scratch tables, with their mutual
+references rewritten, then executes the guard and reconstruction below before the inverse swap.
+It refuses new report/message aliases that the former one-envelope model cannot represent.
+Messages still using original identities and content-only history round-trip without fabricated
+work. The same admission fence, codec pinning, archive check and atomic-batch rules apply.
+
+<!-- insight-content-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'insight_content_rollback',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND
+ NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN ('insight_events','insight_delivery_attempts','insight_reports','proactive_messages','proactivity_offer_requests','weekly_question_intents','proactivity_message_events','reminder_delivery_receipts')) AND
+ NOT EXISTS(SELECT 1 FROM proactive_messages WHERE report_event_id IS NOT NULL AND report_event_id<>id) AND
+ NOT EXISTS(SELECT 1 FROM proactive_messages m JOIN insight_reports r ON r.user_id=m.user_id AND r.insight_event_id=m.report_event_id WHERE m.consent_grant_id<>r.consent_grant_id OR (r.kind='recurring-digest' AND m.expires_at_ms<>r.original_delivery_expires_at_ms) OR (r.kind='weekly-summary' AND (m.expires_at_ms<>r.content_expires_at_ms OR m.dispatch_state IS NULL))) AND
+ NOT EXISTS(SELECT 1 FROM insight_events e JOIN proactive_messages m ON m.user_id=e.user_id AND m.kind=e.message_kind AND m.id=e.message_id WHERE e.kind='weekly-summary' AND (m.kind<>'weekly-summary' OR m.id<>e.id)) AND
+ NOT EXISTS(SELECT 1 FROM insight_events WHERE message_kind='proactivity-delivery' AND kind='weekly-summary')
+ THEN 1 ELSE 0 END;
+```
+
+<!-- insight-content-rollback-guard:end -->
+
+<!-- insight-content-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_insight_events(rowid,id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json,lifecycle_state,delivery_receipt_id,delivery_sent_at,delivery_channel,delivery_provider,delivery_provider_message_id,budget_delivery_group_id,budget_threshold,budget_crossing_json,transcript_id,transcript_kind,weekly_governor_counted) SELECT e.rowid,e.id,e.user_id,e.kind,e.schedule_id,e.schedule_version,e.service_market,e.locale,e.time_zone,strftime('%Y-%m-%dT%H:%M:%fZ',e.scheduled_at_ms/1000.0,'unixepoch'),e.money_groups_json,e.lifecycle_state,e.delivery_receipt_id,strftime('%Y-%m-%dT%H:%M:%fZ',e.delivery_sent_at_ms/1000.0,'unixepoch'),e.delivery_channel,e.delivery_provider,e.delivery_provider_message_id,e.budget_delivery_group_id,e.budget_threshold,e.budget_crossing_json,e.transcript_id,e.transcript_kind,e.weekly_governor_counted FROM insight_events e;
+
+INSERT INTO cutover_insight_reports(kind,user_id,delivery_id,role,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,payload_json,presentation_json,reminder_grant_id,reminder_expires_at_ms,instruction_id,instruction_version,grant_id,local_date,day_from_ms,day_to_ms,report_json,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts,reminder_governor_counted) SELECT CASE r.kind WHEN 'weekly-summary' THEN 'weekly-summary' ELSE 'proactivity-delivery' END,r.user_id,r.insight_event_id,CASE WHEN r.kind='recurring-digest' THEN m.role END,CASE WHEN r.kind='weekly-summary' THEN r.consent_grant_id ELSE m.consent_grant_id END,m.offer_id,m.text,CASE WHEN r.kind='weekly-summary' THEN e.scheduled_at_ms ELSE m.scheduled_at_ms END,CASE WHEN r.kind='weekly-summary' THEN r.content_expires_at_ms ELSE m.expires_at_ms END,CASE WHEN r.kind='recurring-digest' THEN m.time_zone END,CASE WHEN r.kind='recurring-digest' THEN m.created_at_ms END,CASE WHEN r.kind='weekly-summary' THEN r.payload_json END,r.presentation_json,NULL,NULL,CASE WHEN r.kind='recurring-digest' THEN e.schedule_id END,CASE WHEN r.kind='recurring-digest' THEN e.schedule_version END,CASE WHEN r.kind='recurring-digest' THEN r.consent_grant_id END,r.local_date,r.day_from_ms,r.day_to_ms,CASE WHEN r.kind='recurring-digest' THEN json_object('insightEventId',r.insight_event_id,'serviceMarket',e.service_market,'locale',e.locale,'scheduledAt',strftime('%Y-%m-%dT%H:%M:%fZ',e.scheduled_at_ms/1000.0,'unixepoch'),'expiresAt',strftime('%Y-%m-%dT%H:%M:%fZ',r.original_delivery_expires_at_ms/1000.0,'unixepoch'),'payload',json(r.payload_json)) END,m.dispatch_state,m.dispatch_created_at_ms,m.dispatch_last_attempt_at_ms,m.dispatch_restart_attempts,m.reminder_governor_counted FROM insight_reports r JOIN insight_events e ON e.user_id=r.user_id AND e.id=r.insight_event_id LEFT JOIN proactive_messages m ON m.user_id=r.user_id AND m.report_event_id=r.insight_event_id;
+
+INSERT INTO cutover_insight_reports(kind,user_id,delivery_id,role,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,reminder_grant_id,reminder_expires_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts,reminder_governor_counted) SELECT m.kind,m.user_id,m.id,m.role,m.consent_grant_id,m.offer_id,m.text,m.scheduled_at_ms,m.expires_at_ms,m.time_zone,m.created_at_ms,e.reminder_grant_id,e.reminder_evidence_expires_at_ms,m.dispatch_state,m.dispatch_created_at_ms,m.dispatch_last_attempt_at_ms,m.dispatch_restart_attempts,m.reminder_governor_counted FROM proactive_messages m LEFT JOIN insight_events e ON e.user_id=m.user_id AND e.id=m.id AND e.kind='manual-entry-reminder' WHERE m.report_event_id IS NULL;
+
+INSERT INTO cutover_insight_reports(kind,user_id,delivery_id,reminder_grant_id,reminder_expires_at_ms) SELECT 'proactivity-delivery',e.user_id,e.id,e.reminder_grant_id,e.reminder_evidence_expires_at_ms FROM insight_events e WHERE e.reminder_grant_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM proactive_messages m WHERE m.kind='proactivity-delivery' AND m.user_id=e.user_id AND m.id=e.id);
+
+INSERT INTO cutover_insight_reports(kind,user_id,delivery_id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms,materialized_at_ms,offer_delivery_id,current_recurring_opportunity) SELECT 'offer-request',user_id,id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms,materialized_at_ms,offer_message_id,current_recurring_opportunity FROM insight_offer_requests;
+
+INSERT INTO cutover_insight_reports(kind,user_id,delivery_id,origin,request_message_id,rejection_offer_id,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) SELECT 'weekly-question',user_id,id,origin,request_message_id,rejection_offer_id,created_at_ms,state,created_at_ms,last_attempt_at_ms,restart_attempts FROM weekly_question_requests;
+
+UPDATE cutover_insight_events AS e SET report_delivery_id=(SELECT message_id FROM insight_events old WHERE old.user_id=e.user_id AND old.id=e.id AND old.message_kind='proactivity-delivery') WHERE EXISTS(SELECT 1 FROM insight_events old WHERE old.user_id=e.user_id AND old.id=e.id AND old.message_kind='proactivity-delivery');
+INSERT INTO cutover_proactive_transcript_entries(sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms) SELECT sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms FROM proactive_transcript_entries;
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='proactive_transcript_entries'),0)) WHERE name='cutover_proactive_transcript_entries';
+```
+
+<!-- insight-content-rollback-copy:end -->
+
+## Reminder reply receipts on their question (#1473)
+
+A reminder-question message owns its optional `control_message_id` and exact `control_choice`
+(command text including the question ID). Both are installed atomically with the original
+Reminder governor/schedule decision after rechecking authenticated channel proof, current grant,
+and the current question. Replay still requires the original message and command. The receipt is
+immutable, survives text expiry, and has the existing independent `reminder_control_receipts`
+erasure purpose. It adds no timestamp, TTL, message, or financial event.
+
+Fence writers and pause erasure, then bind original control-receipt count and message count to
+this guard. A receipt must map to exactly one retained same-User reminder question; no question
+may have two receipts. Orphaned, malformed, conflicting or otherwise unrepresentable receipts
+stop the cutover. Preserve the source and investigate; never discard exceptions or fabricate a
+parent. Block affected retained archives because their receipt row references change from an
+Audit sequence to the owning message. Migrated receipts retain their original sequence as
+`control_audit_sequence`; their logical receipt row references and `initial:<sequence>` archive
+addresses remain unchanged. New replies leave this preservation field absent and use a distinct
+`message:<rowid>` receipt address. Unrelated archives retain their exact addresses.
+
+Create the current Audit and Message table definitions as `cutover_` scratch stores, rewriting
+mutual foreign-key targets only when present. Execute the guard, copy, removal of affected
+non-table objects, store swap and reinstatement of current definitions in one native D1 batch,
+starting with `PRAGMA defer_foreign_keys=ON`. Incoming Event links validate at commit. Save the
+preceding definitions from `insights/control-cutover.test-fixture.json` for rollback. Do not turn
+foreign keys off. Interruption must roll back the whole batch.
+
+All retained Audit records keep their original sequence and values; preserve the Audit allocator
+high-water mark even when its highest record moves or was deleted. Receipt identity, original sequence and
+User/message/exact command survive both directions. The optional source sequence is immutable
+with the receipt and is cleared only by its independent erasure purpose. It is preservation
+evidence for migrated history, never a runtime counter. Rollback restores those original
+sequences explicitly; only replies created after cutover allocate new Audit sequences above the
+retained allocator. No receipt archive may exist during either conversion.
+
+<!-- reminder-control-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'reminder_control_cutover',CASE WHEN
+ (SELECT count(*) FROM audit_entries WHERE record_type='reminder_control')=? AND
+ (SELECT count(*) FROM proactive_messages)=? AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN ('reminder_control_receipts','proactive_messages')) AND
+ NOT EXISTS(SELECT 1 FROM audit_entries a WHERE a.record_type='reminder_control' AND
+  (a.sequence<1 OR json_extract(a.id,'$[0]') IS NOT a.user_id OR json_type(a.id,'$[1]') IS NOT 'text' OR length(json_extract(a.id,'$[1]'))=0 OR
+   (SELECT count(*) FROM proactive_messages m WHERE a.record_type='reminder_control' AND a.user_id=m.user_id AND m.kind='proactivity-delivery' AND m.role='reminder-question' AND a.outcome IN ('reminder:'||m.id||':continue','reminder:'||m.id||':stop'))<>1)) AND
+ NOT EXISTS(SELECT 1 FROM proactive_messages m WHERE
+  (SELECT count(*) FROM audit_entries a WHERE a.record_type='reminder_control' AND a.user_id=m.user_id AND m.kind='proactivity-delivery' AND m.role='reminder-question' AND a.outcome IN ('reminder:'||m.id||':continue','reminder:'||m.id||':stop'))>1)
+ THEN 1 ELSE 0 END
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- reminder-control-guard:end -->
+
+<!-- reminder-control-copy:start -->
+
+```sql
+INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,CASE WHEN record_type='request_admission' THEN accepted_at_ms ELSE occurred_at_ms END,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition FROM audit_entries WHERE record_type<>'reminder_control';
+
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)) WHERE name='cutover_audit_entries';
+
+INSERT INTO cutover_proactive_messages(rowid,kind,id,user_id,role,report_event_id,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts,reminder_governor_counted,control_message_id,control_choice,control_audit_sequence)
+ SELECT m.rowid,m.kind,m.id,m.user_id,m.role,m.report_event_id,m.consent_grant_id,m.offer_id,m.text,m.scheduled_at_ms,m.expires_at_ms,m.time_zone,m.created_at_ms,m.dispatch_state,m.dispatch_created_at_ms,m.dispatch_last_attempt_at_ms,m.dispatch_restart_attempts,m.reminder_governor_counted,json_extract(a.id,'$[1]'),a.outcome,a.sequence
+ FROM proactive_messages m LEFT JOIN audit_entries a ON a.record_type='reminder_control' AND a.user_id=m.user_id AND m.kind='proactivity-delivery' AND m.role='reminder-question' AND a.outcome IN ('reminder:'||m.id||':continue','reminder:'||m.id||':stop');
+```
+
+<!-- reminder-control-copy:end -->
+
+<!-- reminder-control-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'reminder_control_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM proactive_messages m JOIN audit_entries a ON a.sequence=m.control_audit_sequence) AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN ('reminder_control_receipts','proactive_messages')) AND
+ NOT EXISTS(SELECT 1 FROM proactive_messages WHERE control_message_id IS NOT NULL AND
+  (role<>'reminder-question' OR kind<>'proactivity-delivery' OR control_choice NOT IN ('reminder:'||id||':continue','reminder:'||id||':stop')))
+ THEN 1 ELSE 0 END
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- reminder-control-rollback-guard:end -->
+
+<!-- reminder-control-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,CASE WHEN record_type='request_admission' THEN NULL ELSE occurred_at_ms END,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,CASE WHEN record_type='request_admission' THEN occurred_at_ms END FROM audit_entries;
+
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)) WHERE name='cutover_audit_entries';
+
+INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,outcome)
+ SELECT control_audit_sequence,'reminder_control',json_array(user_id,control_message_id),user_id,control_choice
+ FROM proactive_messages WHERE control_audit_sequence IS NOT NULL ORDER BY control_audit_sequence;
+
+INSERT INTO cutover_audit_entries(record_type,id,user_id,outcome)
+ SELECT 'reminder_control',json_array(user_id,control_message_id),user_id,control_choice
+ FROM proactive_messages WHERE control_message_id IS NOT NULL AND control_audit_sequence IS NULL ORDER BY user_id,control_message_id;
+
+INSERT INTO cutover_proactive_messages(rowid,kind,id,user_id,role,report_event_id,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts,reminder_governor_counted) SELECT rowid,kind,id,user_id,role,report_event_id,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts,reminder_governor_counted FROM proactive_messages;
+```
+
+<!-- reminder-control-rollback-copy:end -->
+
+## Independent weekly and reminder state (#1474)
+
+Weekly pause/reply state now lives in `weekly_proactivity_state` (11 fields), and reminder
+pause/reply state in `reminder_proactivity_state` (7 fields). Offer and question requests already
+have their final stores from #1472. Receipt markers remain on the original Event or Message;
+there is no second delivery counter. Reminder discovery now rotates attempted work even when the
+coordinator is unavailable. Discovery remains capped at 16 Users and generation at 4 per sweep.
+
+Proactive Transcript retains its original sequence, identity, exact text, occurrence and independent
+expiry. Its generated `delivery_kind` qualifies Message links, with a same-User, kind, role and ID
+foreign key. Message erasure depends on Transcript erasure as Event erasure already did. Logical
+archive purpose IDs and original governor rowids remain unchanged across extraction.
+
+Before deployment, stop writers and use the single-batch native procedure below. Save the preceding
+schema from `governor-cutover.test-fixture.json`. Refuse active erasure or affected archives; do not
+invent parents for orphan historical Transcript content. Bind the observed governor and Transcript
+counts to the forward guard. Create scratch tables from the final definitions, rewriting references
+between scratch tables. Run guard, copies, drop/recreate affected non-table objects and swap tables
+in one `D1Database.batch`, starting with `PRAGMA defer_foreign_keys=ON`. No remote change is performed
+by the local proof. Recheck foreign keys after the swap before admitting traffic.
+
+Rollback uses the preceding governor/Transcript definitions and the inverse copies in one batch.
+It refuses rowid collisions between independently created governor rows; no existing archive address
+is silently reassigned. Resolve such a post-cutover collision explicitly before rollback. Original
+migrated rows preserve their distinct rowids, and Transcript allocator high-water marks survive.
+Earlier #1472 rehearsals also rebuild/copy Transcript alongside its changed parents.
+
+<!-- insight-governor-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'insight_governor_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN ('weekly_governors','reminder_governors','proactive_transcript_entries','proactive_transcript_event_links')) AND (SELECT count(*) FROM proactivity_governors)=? AND (SELECT count(*) FROM proactive_transcript_entries)=? AND NOT EXISTS(SELECT 1 FROM proactive_transcript_entries t WHERE t.kind='message' AND NOT EXISTS(SELECT 1 FROM proactive_messages m WHERE m.user_id=t.user_id AND m.kind='proactivity-delivery' AND m.role=t.role AND m.id=t.delivery_id)) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- insight-governor-guard:end -->
+
+<!-- insight-governor-copy:start -->
+
+```sql
+INSERT INTO cutover_weekly_proactivity_state(rowid,user_id,unanswered,last_reply_at_ms,question_needed,question_delivered,question_delivered_at_ms,question_event_id,paused_at_ms,notice_session_id,notice_turn_id,notice_completed) SELECT rowid,user_id,unanswered,last_reply_at_ms,question_needed,question_delivered,question_delivered_at_ms,question_event_id,paused_at_ms,notice_session_id,notice_turn_id,notice_completed FROM proactivity_governors WHERE kind='weekly';
+INSERT INTO cutover_reminder_proactivity_state(rowid,user_id,standing_json,last_reply_at_ms,question_id,question_delivered_at_ms,notice_turn_id,notice_completed) SELECT rowid,user_id,standing_json,last_reply_at_ms,question_id,question_delivered_at_ms,notice_turn_id,notice_completed FROM proactivity_governors WHERE kind='reminder';
+INSERT INTO cutover_proactive_transcript_entries(sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms) SELECT sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms FROM proactive_transcript_entries;
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='proactive_transcript_entries'),0)) WHERE name='cutover_proactive_transcript_entries';
+
+```
+
+<!-- insight-governor-copy:end -->
+
+<!-- insight-governor-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'insight_governor_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN ('weekly_governors','reminder_governors','proactive_transcript_entries','proactive_transcript_event_links')) AND NOT EXISTS(SELECT 1 FROM weekly_proactivity_state w JOIN reminder_proactivity_state r ON r.rowid=w.rowid) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- insight-governor-rollback-guard:end -->
+
+<!-- insight-governor-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_proactivity_governors(rowid,kind,user_id,unanswered,last_reply_at_ms,question_needed,question_delivered,question_delivered_at_ms,question_event_id,paused_at_ms,notice_session_id,notice_turn_id,notice_completed) SELECT rowid,'weekly',user_id,unanswered,last_reply_at_ms,question_needed,question_delivered,question_delivered_at_ms,question_event_id,paused_at_ms,notice_session_id,notice_turn_id,notice_completed FROM weekly_proactivity_state;
+INSERT INTO cutover_proactivity_governors(rowid,kind,user_id,standing_json,last_reply_at_ms,question_id,question_delivered_at_ms,notice_turn_id,notice_completed) SELECT rowid,'reminder',user_id,standing_json,last_reply_at_ms,question_id,question_delivered_at_ms,notice_turn_id,notice_completed FROM reminder_proactivity_state;
+INSERT INTO cutover_proactive_transcript_entries(sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms) SELECT sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms FROM proactive_transcript_entries;
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='proactive_transcript_entries'),0)) WHERE name='cutover_proactive_transcript_entries';
+
+```
+
+<!-- insight-governor-rollback-copy:end -->
+
+## Recurring digest source scan engine gate (#1475)
+
+The measured gate selected the existing coordinator scanner. Keep all four scan-progress columns
+in the single baseline; no digest-generation Workflow or source_scan_id cutover is installed.
+See [the measurement and retained behavior](../research/digest-source-workflow-1475.md). Delivery
+Workflows remain independently responsible for delivery; they are not a digest source scanner.
+
+## Coherent nine-kind Audit log (#1476)
+
+OAuth rotation, Recovery decisions and reminder controls are already on their owning records.
+The remaining Audit table keeps the accepted nine accountability variants and all original actor
+combinations. Normalize only request_admission's accepted_at_ms to occurred_at_ms and remove the
+redundant admission-time column. Admission's 93-day inclusive bounded cleanup stays separate from
+ordinary strict 365-day call retention. Keep original sequences, allocator high-water marks,
+kind-qualified IDs, NULL billing owners/IDs, media association, actor references and owner proofs.
+
+Admission archives keep the original accepted_at_ms JSON key and sequence row address. Existing
+archives need no rewriting. Both archive projection and drain-time preservation read its value
+from occurred_at_ms. No new historical operation, timestamp, actor or ownership is invented.
+
+Stop writers, reject unfinished erasure, bind the observed source count, create the scratch Audit
+table from the final definition, and run guard/copy/swap plus affected index/trigger recreation in
+one native D1 batch. Start with PRAGMA defer_foreign_keys=ON and finish with foreign_key_check.
+The rollback uses the preceding definition in audit/admission-cutover.test-fixture.json and the
+inverse copy: request time returns to accepted_at_ms with occurred_at_ms NULL. Other rows and archive
+bodies remain exact. Historical OAuth/reminder rehearsals map admission clocks in their current
+side too; their preceding source definitions remain frozen.
+
+<!-- audit-clock-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'audit_clock_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM audit_entries)=? AND NOT EXISTS(SELECT 1 FROM audit_entries WHERE (record_type='request_admission' AND (accepted_at_ms IS NULL OR occurred_at_ms IS NOT NULL)) OR (record_type<>'request_admission' AND accepted_at_ms IS NOT NULL)) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- audit-clock-guard:end -->
+
+<!-- audit-clock-copy:start -->
+
+```sql
+INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,CASE WHEN record_type='request_admission' THEN accepted_at_ms ELSE occurred_at_ms END,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition FROM audit_entries;
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)) WHERE name='cutover_audit_entries';
+```
+
+<!-- audit-clock-copy:end -->
+
+<!-- audit-clock-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'audit_clock_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- audit-clock-rollback-guard:end -->
+
+<!-- audit-clock-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,CASE WHEN record_type='request_admission' THEN NULL ELSE occurred_at_ms END,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,CASE WHEN record_type='request_admission' THEN occurred_at_ms END FROM audit_entries;
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)) WHERE name='cutover_audit_entries';
+```
+
+<!-- audit-clock-rollback-copy:end -->
+
+## Memory's exact creation and revision instants (#1477)
+
+Keep the five-column owner, text, identity and row addresses. Stop writers and unfinished erasure
+before the native batch. Bind the observed source count. Only canonical UTC millisecond strings
+are convertible: malformed dates, noncanonical offsets and sub-millisecond precision require
+investigation rather than rounding. The fixed-width canonical ordering maps exactly to numeric
+milliseconds; equal creation instants still sort by identity. No creation/revision ordering rule
+is invented. Create the scratch table from the final baseline, copy, swap and recreate affected
+objects together; a failed statement rolls the entire batch back. Check foreign keys before
+resuming. Rollback uses memory/timestamps-cutover.test-fixture.json and the inverse SQL below.
+Existing erasure archives and OAuth approval revisions retain their original ISO timestamp fields;
+new projections and drain-time preservation format the integer clock back to that same value.
+
+<!-- memory-clock-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'memory_clock_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM memories)=? AND NOT EXISTS(SELECT 1 FROM memories WHERE created_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',created_at) OR updated_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',updated_at) OR CAST(substr(created_at,1,4) AS INTEGER) NOT BETWEEN 1 AND 9999 OR CAST(substr(updated_at,1,4) AS INTEGER) NOT BETWEEN 1 AND 9999) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- memory-clock-guard:end -->
+
+<!-- memory-clock-copy:start -->
+
+```sql
+INSERT INTO cutover_memories(rowid,id,user_id,text,created_at_ms,updated_at_ms) SELECT rowid,id,user_id,text,CAST(round(unixepoch(created_at,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(updated_at,'subsec')*1000) AS INTEGER) FROM memories;
+```
+
+<!-- memory-clock-copy:end -->
+
+<!-- memory-clock-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'memory_clock_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM memories WHERE created_at_ms NOT BETWEEN -62135596800000 AND 253402300799999 OR updated_at_ms NOT BETWEEN -62135596800000 AND 253402300799999) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- memory-clock-rollback-guard:end -->
+
+<!-- memory-clock-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_memories(rowid,id,user_id,text,created_at,updated_at) SELECT rowid,id,user_id,text,strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch'),strftime('%Y-%m-%dT%H:%M:%fZ',updated_at_ms/1000.0,'unixepoch') FROM memories;
+```
+
+<!-- memory-clock-rollback-copy:end -->
+
+## Hosted atomic guard fields (#1478)
+
+Remove only hosted_agent_sessions.compacted_nonce and hosted_mutation_commits.valid. The first is
+an update-success token, not conversation identity; the second was always 1. Shared same-batch
+assertions now prove the Pending Turn and exact one-row compaction update before later effects.
+The terminal prefix deletion count is asserted in that batch too. Duplicate call keys and the
+same-User parent relationship remain enforced. A failed optional compaction save returns the
+unchanged continuity; a failed mutation fence aborts all canonical mutations.
+
+Stop writers and unfinished erasure. Export the original session nonce map as reviewed JSON
+objects with id, user_id, compacted_revision and compacted_nonce before conversion, retaining it
+with the rollback artifact until verified. Bind the observed session and commit counts to the
+forward guard. Create scratch tables from the final baseline, run guard/copy/swap and affected
+object recreation in one native batch with deferred foreign keys. Check foreign_key_check.
+Do not rewrite existing archives: commit projections retain valid:1, and the session projection
+already omitted the execution nonce. Rollback uses the frozen definitions in
+agent/atomic-guards-cutover.test-fixture.json and the original nonce map bound to each inverse
+statement. If a new compaction revision has committed, stop rather than invent its old proof;
+rollback requires a reviewed reconciliation of that execution state. No token is fabricated.
+
+<!-- hosted-guard-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_guard_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM hosted_agent_sessions)=? AND (SELECT count(*) FROM hosted_mutation_commits)=? AND NOT EXISTS(SELECT 1 FROM hosted_mutation_commits m LEFT JOIN hosted_turns t ON t.id=m.turn_id AND t.user_id=m.user_id WHERE t.id IS NULL OR m.valid<>1) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- hosted-guard-guard:end -->
+
+<!-- hosted-guard-copy:start -->
+
+```sql
+INSERT INTO cutover_hosted_agent_sessions(rowid,id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status,compacted_text,compacted_through_sequence,compacted_revision,compacted_at_ms) SELECT rowid,id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status,compacted_text,compacted_through_sequence,compacted_revision,compacted_at_ms FROM hosted_agent_sessions;
+INSERT INTO cutover_hosted_mutation_commits(rowid,turn_id,tool_call_id,user_id,committed_at_ms) SELECT rowid,turn_id,tool_call_id,user_id,committed_at_ms FROM hosted_mutation_commits;
+```
+
+<!-- hosted-guard-copy:end -->
+
+<!-- hosted-guard-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_guard_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM hosted_agent_sessions s WHERE s.compacted_revision IS NOT NULL AND (SELECT count(*) FROM json_each(?) j WHERE json_extract(j.value,'$.id')=s.id AND json_extract(j.value,'$.user_id')=s.user_id AND json_extract(j.value,'$.compacted_revision')=s.compacted_revision AND json_extract(j.value,'$.compacted_nonce') IS NOT NULL)<>1) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- hosted-guard-rollback-guard:end -->
+
+<!-- hosted-guard-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_hosted_agent_sessions(rowid,id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status,compacted_text,compacted_through_sequence,compacted_revision,compacted_nonce,compacted_at_ms) SELECT s.rowid,s.id,s.user_id,s.consent_basis_json,s.started_at_ms,s.last_activity_at_ms,s.status,s.compacted_text,s.compacted_through_sequence,s.compacted_revision,(SELECT json_extract(j.value,'$.compacted_nonce') FROM json_each(?) j WHERE json_extract(j.value,'$.id')=s.id AND json_extract(j.value,'$.user_id')=s.user_id AND json_extract(j.value,'$.compacted_revision')=s.compacted_revision),s.compacted_at_ms FROM hosted_agent_sessions s;
+INSERT INTO cutover_hosted_mutation_commits(rowid,turn_id,tool_call_id,user_id,committed_at_ms,valid) SELECT rowid,turn_id,tool_call_id,user_id,committed_at_ms,1 FROM hosted_mutation_commits;
+```
+
+<!-- hosted-guard-rollback-copy:end -->
+
+The populated parent-table swap uses the same explicit whole-database foreign-key assertion and
+return to immediate checking documented for Consent history above. Run this final block in both
+forward and inverse batches; never clear deferred bookkeeping without checking the final graph.
+
+<!-- hosted-guard-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_guard_foreign_keys',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- hosted-guard-verify:end -->
+
+## Indexed Transcript session reference (#1479)
+
+Retain hosted_session_id under the accepted query-cost fallback. The native indexed comparison in
+[the research record](../research/transcript-session-ownership-1479.md) found higher session and
+prefix read costs even with an additional covering parent index. Keep the current entry kinds,
+exact sequence/IDs, typed tool evidence, terminal markers and all existing public callers.
+
+Enforce equality to the immutable parent Turn with transcript_parent_session on insert. Existing
+same-User foreign keys and append-only Transcript/immutable Turn ownership remain. Stop writers,
+bind the observed Transcript count, and run this validation plus the final baseline's named trigger
+creation in one native D1 batch. Reject inconsistent historical User/Turn/session links rather than
+reassigning entries. Existing erasure archives and row addresses remain unchanged. No table rewrite
+or allocator adjustment is needed. Rollback drops only the new trigger in its own batch; original
+entry values, ordering, allocator and old constraints remain exact. Never weaken the live guard to
+accommodate an unexplained historical mismatch.
+
+<!-- transcript-session-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'transcript_session_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM transcript_entries)=? AND NOT EXISTS(SELECT 1 FROM transcript_entries e LEFT JOIN hosted_turns t ON t.user_id=e.user_id AND t.id=e.turn_id WHERE t.id IS NULL OR t.hosted_session_id IS NOT e.hosted_session_id) AND NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- transcript-session-guard:end -->
+
+## Hosted document admission clock (#1480)
+
+Document admission is composed with Turn admission in prepareChannelAdmission using the same now
+value. Remove document_created_at_ms and derive the logical document created_at_ms from the
+immutable started_at_ms only while document_media_id is present. Keep the independent provider
+occurrence/receipt, dispatch creation/offer, upload lease and visible-delivery clocks. The original
+reference JSON is a held upload-proof snapshot, not a second staging owner; retain it. Hosted Turns
+keep Queue-to-User-coordinator ordering, alarms and sweeps; no per-Turn Workflow is introduced.
+
+Stop writers and unfinished erasure, bind the observed Turn count, then validate before conversion.
+A historical document clock differing from Turn admission is unexplained: stop and investigate.
+Create scratch hosted_turns and hosted_mutation_commits tables from the final baseline. Copy both
+before dropping the receipts table first, then the parent Turn table, to avoid ON DELETE CASCADE
+losing committed evidence. Swap and rebuild every affected index and
+trigger together with deferred foreign keys. Run the final whole-graph assertion before restoring
+immediate checking. Rollback uses agent/document-clock-cutover.test-fixture.json, recreating the
+original clock exactly from its validated source, with absent-document NULL preserved. Original
+row addresses, generated inbound identity, receipt evidence and erasure JSON fields remain exact.
+
+<!-- hosted-document-clock-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_document_clock_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM hosted_turns)=? AND NOT EXISTS(SELECT 1 FROM hosted_turns WHERE (document_media_id IS NOT NULL AND document_created_at_ms IS NOT started_at_ms) OR (document_media_id IS NULL AND document_created_at_ms IS NOT NULL)) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- hosted-document-clock-guard:end -->
+
+<!-- hosted-document-clock-copy:start -->
+
+```sql
+INSERT INTO cutover_hosted_mutation_commits(rowid,turn_id,tool_call_id,user_id,committed_at_ms) SELECT rowid,turn_id,tool_call_id,user_id,committed_at_ms FROM hosted_mutation_commits;
+INSERT INTO cutover_hosted_turns(rowid,id,user_id,hosted_session_id,started_at_ms,terminal_at_ms,status,failure_reason,proposal_receipt_digest,proposed_at_ms,proposal_text,retention_terminal_at_ms,inbound_portfolio_id,inbound_bsuid,inbound_message_id,inbound_business_phone_number_id,inbound_occurred_at_ms,inbound_received_at_ms,inbound_reply_to_message_id,inbound_sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms,document_media_id,document_staging_id,document_upload_grant_id,document_upload_expires_at_ms,document_reference_json) SELECT rowid,id,user_id,hosted_session_id,started_at_ms,terminal_at_ms,status,failure_reason,proposal_receipt_digest,proposed_at_ms,proposal_text,retention_terminal_at_ms,inbound_portfolio_id,inbound_bsuid,inbound_message_id,inbound_business_phone_number_id,inbound_occurred_at_ms,inbound_received_at_ms,inbound_reply_to_message_id,inbound_sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms,document_media_id,document_staging_id,document_upload_grant_id,document_upload_expires_at_ms,document_reference_json FROM hosted_turns;
+```
+
+<!-- hosted-document-clock-copy:end -->
+
+<!-- hosted-document-clock-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_hosted_mutation_commits(rowid,turn_id,tool_call_id,user_id,committed_at_ms) SELECT rowid,turn_id,tool_call_id,user_id,committed_at_ms FROM hosted_mutation_commits;
+INSERT INTO cutover_hosted_turns(rowid,id,user_id,hosted_session_id,started_at_ms,terminal_at_ms,status,failure_reason,proposal_receipt_digest,proposed_at_ms,proposal_text,retention_terminal_at_ms,inbound_portfolio_id,inbound_bsuid,inbound_message_id,inbound_business_phone_number_id,inbound_occurred_at_ms,inbound_received_at_ms,inbound_reply_to_message_id,inbound_sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms,document_media_id,document_staging_id,document_upload_grant_id,document_upload_expires_at_ms,document_reference_json,document_created_at_ms) SELECT rowid,id,user_id,hosted_session_id,started_at_ms,terminal_at_ms,status,failure_reason,proposal_receipt_digest,proposed_at_ms,proposal_text,retention_terminal_at_ms,inbound_portfolio_id,inbound_bsuid,inbound_message_id,inbound_business_phone_number_id,inbound_occurred_at_ms,inbound_received_at_ms,inbound_reply_to_message_id,inbound_sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms,document_media_id,document_staging_id,document_upload_grant_id,document_upload_expires_at_ms,document_reference_json,CASE WHEN document_media_id IS NOT NULL THEN started_at_ms END FROM hosted_turns;
+```
+
+<!-- hosted-document-clock-rollback-copy:end -->
+
+<!-- hosted-document-clock-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_document_clock_foreign_keys',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- hosted-document-clock-verify:end -->
+
+<!-- hosted-document-clock-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_document_clock_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- hosted-document-clock-rollback-guard:end -->
+
+## WhatsApp service-window source clock (#1481)
+
+Rename hosted_whatsapp_windows to whatsapp_service_windows and retain only user_id, portfolio_id,
+bsuid and last_verified_inbound_at_ms. Keep the original recipient-qualified primary key and
+rowids. Validate every original closes_at_ms equals the original verified clock plus 86400000;
+never rewrite mismatched history. Open is last_verified_inbound_at_ms > now-86400000; equality
+is expired. Cleanup uses the inverse <= cutoff and the source-clock index with its existing
+128-row bound. The newer-only upsert and original minimum of provider occurrence/trusted receipt
+remain. Live identity association and separate consent/Turn/send authorization still apply.
+
+Stop writers and unfinished erasure, bind observed count, guard/copy/swap/recreate affected
+objects in one native D1 batch, and check foreign keys before resuming. Rollback uses the original
+objects in whatsapp/service-window-cutover.test-fixture.json and the inverse copy, preserving the
+old deadline exactly from its validated source. The erasure purpose remains hosted_whatsapp_windows
+so existing archived row addresses and permissions retain their meaning; its physical source is the
+renamed store. Both archive projection and drain preservation keep the original closes_at_ms JSON
+key/value. Existing archives need no rewriting. No new provider-policy or User-session rule is added.
+
+<!-- whatsapp-window-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'whatsapp_window_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM hosted_whatsapp_windows)=? AND NOT EXISTS(SELECT 1 FROM hosted_whatsapp_windows WHERE closes_at_ms IS NOT last_verified_inbound_at_ms+86400000) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- whatsapp-window-guard:end -->
+
+<!-- whatsapp-window-copy:start -->
+
+```sql
+INSERT INTO cutover_whatsapp_service_windows(rowid,user_id,portfolio_id,bsuid,last_verified_inbound_at_ms) SELECT rowid,user_id,portfolio_id,bsuid,last_verified_inbound_at_ms FROM hosted_whatsapp_windows;
+```
+
+<!-- whatsapp-window-copy:end -->
+
+<!-- whatsapp-window-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'whatsapp_window_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- whatsapp-window-rollback-guard:end -->
+
+<!-- whatsapp-window-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_hosted_whatsapp_windows(rowid,user_id,portfolio_id,bsuid,last_verified_inbound_at_ms,closes_at_ms) SELECT rowid,user_id,portfolio_id,bsuid,last_verified_inbound_at_ms,last_verified_inbound_at_ms+86400000 FROM whatsapp_service_windows;
+```
+
+<!-- whatsapp-window-rollback-copy:end -->
+
+## WhatsApp delivery authorization evidence (#1482)
+
+The 27 stored fields retain all four delivery variants and generated hosted correlation.
+Only weekly-question uses grant_id; other variants use consent_grant_id. Move the weekly value
+to consent_grant_id, retaining the exact original grant and null semantics. Refuse any populated
+non-applicable grant column or any last_attempt_at_ms other than its never-written default zero;
+these are unexplained history, not permission to overwrite evidence. The active weekly_question_requests
+retry clock is a different field and remains. Existing archives retain their original field names;
+new weekly archives project grant_id from consent_grant_id and the original retry default zero.
+
+Stop writers and unfinished erasure. Bind the observed delivery count and run guard, deferred-FK
+scratch creation, copy and swap atomically. Rebuild whatsapp_event_records before the delivery
+parent, preserving callback rowids, replay uniqueness and generated correlation references. Recreate
+all affected indexes/triggers and finish with the whole-graph assertion before clearing deferral.
+Inverse uses the frozen definitions in whatsapp/delivery-cutover.test-fixture.json and reverses
+the variant mapping exactly. No send claims, outcomes, original clocks, content retention, Consent
+requirements or provider callback rules change. Platform Workflow retries cannot replay ambiguous sends.
+
+<!-- whatsapp-delivery-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'whatsapp_delivery_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM whatsapp_deliveries)=? AND NOT EXISTS(SELECT 1 FROM whatsapp_deliveries WHERE last_attempt_at_ms IS NOT 0 OR (kind='weekly-question' AND consent_grant_id IS NOT NULL) OR (kind<>'weekly-question' AND grant_id IS NOT NULL)) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- whatsapp-delivery-guard:end -->
+
+<!-- whatsapp-delivery-copy:start -->
+
+```sql
+INSERT INTO cutover_whatsapp_deliveries(rowid,kind,user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,provider_message_id,delivered_at_ms,last_received_at_ms,delivery_id,role,consent_grant_id,template_json,id,offer_id,created_at_ms,offer_json,turn_id,proposed_at_ms) SELECT rowid,kind,user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,provider_message_id,delivered_at_ms,last_received_at_ms,delivery_id,role,CASE WHEN kind='weekly-question' THEN grant_id ELSE consent_grant_id END,template_json,id,offer_id,created_at_ms,offer_json,turn_id,proposed_at_ms FROM whatsapp_deliveries;
+INSERT INTO cutover_whatsapp_event_records(rowid,kind,portfolio_id,message_id,user_id,claimed_at_ms,outcome,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms) SELECT rowid,* FROM whatsapp_event_records;
+```
+
+<!-- whatsapp-delivery-copy:end -->
+
+<!-- whatsapp-delivery-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'whatsapp_delivery_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- whatsapp-delivery-rollback-guard:end -->
+
+<!-- whatsapp-delivery-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_whatsapp_deliveries(rowid,kind,user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,provider_message_id,delivered_at_ms,last_received_at_ms,delivery_id,role,consent_grant_id,template_json,id,offer_id,created_at_ms,offer_json,turn_id,proposed_at_ms,grant_id,last_attempt_at_ms) SELECT rowid,kind,user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,provider_message_id,delivered_at_ms,last_received_at_ms,delivery_id,role,CASE WHEN kind='weekly-question' THEN NULL ELSE consent_grant_id END,template_json,id,offer_id,created_at_ms,offer_json,turn_id,proposed_at_ms,CASE WHEN kind='weekly-question' THEN consent_grant_id END,0 FROM whatsapp_deliveries;
+INSERT INTO cutover_whatsapp_event_records(rowid,kind,portfolio_id,message_id,user_id,claimed_at_ms,outcome,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms) SELECT rowid,* FROM whatsapp_event_records;
+```
+
+<!-- whatsapp-delivery-rollback-copy:end -->
+
+<!-- whatsapp-delivery-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'whatsapp_delivery_foreign_keys',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- whatsapp-delivery-verify:end -->
+
+## Parent-owned Connection attempts and code registration (#1484)
+
+Connections retain stable historical institution identity independently of deployed support.
+Attempts retain eight stored fields; derive User/institution from the immutable Connection in every
+protected query/write, prepared-session binding, erasure fence and archive projection. Keep exact
+public/internal identities, rowid ordering, original ten-minute expiry, one pending attempt per
+Connection, single-use transitions, session freshness and atomic Audit.
+
+Institution availability comes from the published deployed registration declaration in shell/connections/contract.ts.
+The list is empty because no integration meets SupportedInstitution readiness; Bancolombia remains
+a known unavailable discovery entry. Worker and coordinator composition supply the Effect registry service; tests register a fixture through those same constructors
+to exercise the existing protected handoff. No request, environment flag or database value enables a bank.
+Current historical records remain readable when an implementation is removed.
+
+Stop writers/unfinished erasure and bind both observed counts. The forward guard proves every removed
+attempt ownership/institution copy agrees with its parent before copying. The supported source gate
+is exactly its original disabled Bancolombia row (rowid 1); any enabled, additional or differently
+addressed gate is unexplained configuration history and requires review before destructive removal.
+Rebuild child attempts before parent Connections and gate under deferred foreign keys. Preserve
+prepared browser-session references and all archive field names/values. Finish with whole-graph
+verification before clearing deferral. Inverse uses frozen ownership-cutover.test-fixture.json definitions,
+restores the validated original disabled gate, and derives the removed copies from unchanged parents.
+A new post-cutover institution cannot be rolled into the old single-institution gate; refuse that inverse
+and use the retained backup rather than fabricating an old configuration.
+
+<!-- connection-owner-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'connection_owner_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM connections)=? AND (SELECT count(*) FROM connection_attempts)=? AND (SELECT count(*) FROM connection_institution_gate)=1 AND EXISTS(SELECT 1 FROM connection_institution_gate WHERE rowid=1 AND institution_id='bancolombia' AND enabled=0) AND NOT EXISTS(SELECT 1 FROM connection_attempts a LEFT JOIN connections c ON c.id=a.connection_id WHERE c.id IS NULL OR c.user_id IS NOT a.user_id OR c.institution_id IS NOT a.institution_id) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- connection-owner-guard:end -->
+
+<!-- connection-owner-copy:start -->
+
+```sql
+INSERT INTO cutover_connections(rowid,id,user_id,institution_id,state,created_at_ms,updated_at_ms) SELECT rowid,* FROM connections;
+INSERT INTO cutover_connection_attempts(rowid,id,connection_id,public_reference,status,created_at_ms,expires_at_ms,consumed_at_ms,prepared_session_id) SELECT rowid,id,connection_id,public_reference,status,created_at_ms,expires_at_ms,consumed_at_ms,prepared_session_id FROM connection_attempts;
+```
+
+<!-- connection-owner-copy:end -->
+
+<!-- connection-owner-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'connection_owner_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM connections WHERE institution_id<>'bancolombia') THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- connection-owner-rollback-guard:end -->
+
+<!-- connection-owner-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_connection_institution_gate(rowid,institution_id,enabled) VALUES(1,'bancolombia',0);
+INSERT INTO cutover_connections(rowid,id,user_id,institution_id,state,created_at_ms,updated_at_ms) SELECT rowid,* FROM connections;
+INSERT INTO cutover_connection_attempts(rowid,id,user_id,connection_id,institution_id,public_reference,status,created_at_ms,expires_at_ms,consumed_at_ms,prepared_session_id) SELECT a.rowid,a.id,c.user_id,a.connection_id,c.institution_id,a.public_reference,a.status,a.created_at_ms,a.expires_at_ms,a.consumed_at_ms,a.prepared_session_id FROM connection_attempts a JOIN connections c ON c.id=a.connection_id;
+```
+
+<!-- connection-owner-rollback-copy:end -->
+
+<!-- connection-owner-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'connection_owner_foreign_keys',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- connection-owner-verify:end -->
+
+## Stable User file namespaces (#1486)
+
+Every new User content key starts with `users/<stable User UUID>/`. The trailing slash prevents
+a shared textual ID prefix from selecting another User. Existing opaque object IDs and SHA-256
+content integrity remain independent from User authority. Object locators stay private.
+
+| Producer and native bucket                                                                   | Canonical suffix                                           | Read/delete and lifetime owner                                                         |
+| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Forwarded email / EMAIL_BUCKET                                                               | email/v1/<random UUID>                                     | Ingestion exact same-User receipt; original source expiry remains                      |
+| Temporary uploaded statements and staged WhatsApp documents/media / STATEMENT_STAGING_BUCKET | staging/statement/v1/<random 32-byte hex>                  | Ingestion staging/submission; original limits, digest and source expiry remain         |
+| Reviewed retained originals / ERASURE_BUCKET                                                 | held/<request>/<email-or-statement>/<original opaque tail> | Existing Erasure original custody and reviewed expiry, until full deletion replaces it |
+| Retained record copies / ERASURE_BUCKET                                                      | held-records/<request>/<class>/<row digest>                | Existing Erasure custody, restore and reviewed expiry, until full deletion replaces it |
+
+Provider media bytes not persisted in R2 have no independent Fidy file key; when staged, they use
+the statement path above. The independent recovery registry (`recovery/*`) stores restore-control
+records and sealed locators; it is not an ordinary content bucket to erase by User prefix. Release
+smoke and operational outage objects have separate non-content purposes and are excluded. Keep
+control-only placeholder cleanup across all three configured buckets. No direct/presigned or multipart
+upload capability is introduced here. Producer quiescence remains the separate #1487 proof gate.
+
+### Existing files: guarded offline rekey, before dropping inventory
+
+Stop every producer/consumer and retain a database backup plus an external metadata-only manifest.
+Do not infer that nonconforming objects are absent because deployment is prelaunch. Enumerate every
+configured bucket in bounded pages using `truncated`/`cursor`, not a short-page length test. Resolve
+every content key to exactly one stable User through the original owner record/inventory. An orphan,
+conflicting owner, incomplete listing or unexplained object blocks cutover and inventory removal.
+Keep the old inventory until conversion and deletion of every old key is verified; #1489/#1494 may
+not drop it on the strength of newly correct producers alone.
+
+This source-pointer conversion handles email and staged statement originals. Each manifest element
+has kind (email/statement), id, userId, oldKey, newKey, byteLength and sha256. The target is exactly
+`users/<userId>/<oldKey>`. Preserve original retained row identities, all logical timestamps, deadlines,
+content hashes, object custom/HTTP metadata, and bytes. The guard requires no unfinished Erasure,
+no remaining archived/object-custody inventory, and no unresolved writers. Existing retained copies
+are a deliberate stop: complete their ordinary reviewed retention or an independently authorized
+full-deletion disposition first. Do not expire a hold or rewrite archive body/row references to make
+this guard pass. Newly created retained copies already use the User namespace.
+
+For each manifest object, require the original key, size and SHA-256 to match the owner evidence;
+read bytes under the observed ETag, enforce the existing owner size ceiling, and copy to the target
+with `etagDoesNotMatch: '*'`. Preserve metadata and checksum. A preexisting destination is reusable
+only after verifying exact bytes, size and metadata; otherwise stop without overwriting it. Verify
+the target before changing any D1 pointer. R2 and D1 do not share a transaction.
+
+Bind the verified manifest to the guard below, then run pointer updates in that same native D1
+batch. Re-read owner pointers, identities, hashes, deadlines and foreign keys before deleting old
+objects. A failed batch leaves old pointers/objects intact; destination copies may remain and must
+be reconciled from the manifest. A failed old-key deletion leaves inventory pending. Resume no
+consumer until all source keys are removed and a complete bounded bucket enumeration proves that
+only canonical User content and reviewed non-content control objects remain. Normal expired source
+rows with missing bytes need explicit owner expiry evidence; never fabricate replacement content.
+
+Rollback stops writers again, verifies/copies original bytes and metadata back using the retained
+manifest and non-overwriting writes, then restores original D1 pointers. The inverse binds the same original manifest twice per statement and only rewrites its exact
+original same-User destinations. New rows stay untouched; reverify every original pointer before
+selecting a binary rollback. Missing or changed bytes and ambiguous external writes remain blockers. Native rehearsal
+exercises actual R2 bytes and atomic D1 pointer rollback; it is not live-provider completion evidence.
+See the [R2 Workers API reference](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)
+for conditional operations and listing continuation semantics.
+
+<!-- user-file-prefix-guard:start -->
+
+```sql
+WITH manifest AS(SELECT json_extract(value,'$.kind') AS kind,json_extract(value,'$.id') AS id,json_extract(value,'$.userId') AS user_id,json_extract(value,'$.oldKey') AS old_key,json_extract(value,'$.newKey') AS new_key,json_extract(value,'$.byteLength') AS byte_length,json_extract(value,'$.sha256') AS sha256,(json_type(value)='object' AND json_type(value,'$.kind')='text' AND json_type(value,'$.id')='text' AND length(json_extract(value,'$.id'))>0 AND json_type(value,'$.userId')='text' AND length(json_extract(value,'$.userId'))>0 AND json_type(value,'$.oldKey')='text' AND json_type(value,'$.newKey')='text' AND json_type(value,'$.byteLength')='integer' AND json_extract(value,'$.byteLength')>0 AND json_type(value,'$.sha256')='text' AND length(json_extract(value,'$.sha256'))=64 AND json_extract(value,'$.sha256') NOT GLOB '*[^0-9a-f]*') AS valid FROM json_each(?))
+INSERT INTO sql_assertions(scope,accepted) SELECT 'user_file_prefix_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM erasure_archives) AND NOT EXISTS(SELECT 1 FROM erasure_objects) AND NOT EXISTS(SELECT 1 FROM erasure_writers)
+AND (SELECT count(*) FROM manifest)=(SELECT count(*) FROM forwarded_email_receipts WHERE substr(object_key,1,length('users/'||user_id||'/'))<>'users/'||user_id||'/')+(SELECT count(*) FROM statement_staging_objects WHERE substr(object_key,1,length('users/'||user_id||'/'))<>'users/'||user_id||'/')
+AND (SELECT count(*) FROM manifest)=(SELECT count(DISTINCT kind||':'||id) FROM manifest)
+AND NOT EXISTS(SELECT 1 FROM manifest m LEFT JOIN forwarded_email_receipts e ON m.kind='email' AND e.id=m.id LEFT JOIN statement_staging_objects s ON m.kind='statement' AND s.id=m.id WHERE m.valid IS NOT 1 OR m.kind NOT IN('email','statement') OR (m.kind='email' AND e.id IS NULL) OR (m.kind='statement' AND s.id IS NULL) OR coalesce(e.user_id,s.user_id) IS NOT m.user_id OR coalesce(e.object_key,s.object_key) IS NOT m.old_key OR coalesce(e.byte_length,s.byte_length) IS NOT m.byte_length OR (m.kind='email' AND e.delivery_digest IS NOT m.sha256) OR (m.kind='statement' AND s.sha256 IS NOT m.sha256) OR m.new_key IS NOT 'users/'||m.user_id||'/'||m.old_key OR length(m.new_key)>1024 OR (m.kind='email' AND m.old_key NOT LIKE 'email/v1/%') OR (m.kind='statement' AND m.old_key NOT LIKE 'staging/statement/v1/%'))
+THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- user-file-prefix-guard:end -->
+
+<!-- user-file-prefix-copy:start -->
+
+```sql
+UPDATE forwarded_email_receipts SET object_key='users/'||user_id||'/'||object_key WHERE substr(object_key,1,length('users/'||user_id||'/'))<>'users/'||user_id||'/';
+UPDATE statement_staging_objects SET object_key='users/'||user_id||'/'||object_key WHERE substr(object_key,1,length('users/'||user_id||'/'))<>'users/'||user_id||'/';
+```
+
+<!-- user-file-prefix-copy:end -->
+
+<!-- user-file-prefix-rollback-copy:start -->
+
+```sql
+UPDATE forwarded_email_receipts SET object_key=(SELECT json_extract(value,'$.oldKey') FROM json_each(?) WHERE json_extract(value,'$.kind')='email' AND json_extract(value,'$.id')=forwarded_email_receipts.id AND json_extract(value,'$.userId')=forwarded_email_receipts.user_id AND json_extract(value,'$.newKey')=forwarded_email_receipts.object_key) WHERE EXISTS(SELECT 1 FROM json_each(?) WHERE json_extract(value,'$.kind')='email' AND json_extract(value,'$.id')=forwarded_email_receipts.id AND json_extract(value,'$.userId')=forwarded_email_receipts.user_id AND json_extract(value,'$.newKey')=forwarded_email_receipts.object_key);
+UPDATE statement_staging_objects SET object_key=(SELECT json_extract(value,'$.oldKey') FROM json_each(?) WHERE json_extract(value,'$.kind')='statement' AND json_extract(value,'$.id')=statement_staging_objects.id AND json_extract(value,'$.userId')=statement_staging_objects.user_id AND json_extract(value,'$.newKey')=statement_staging_objects.object_key) WHERE EXISTS(SELECT 1 FROM json_each(?) WHERE json_extract(value,'$.kind')='statement' AND json_extract(value,'$.id')=statement_staging_objects.id AND json_extract(value,'$.userId')=statement_staging_objects.user_id AND json_extract(value,'$.newKey')=statement_staging_objects.object_key);
+```
+
+<!-- user-file-prefix-rollback-copy:end -->
+
+## Bounded owner deletion without a selection table (#1488)
+
+Stop cleanup consumers while switching the schema and every Erasure owner together. Each owner
+selects at most 64 opaque identifiers through its same-User candidate query. This read fixes the
+batch selection; it grants no deletion authority. Encode those IDs as one bound JSON array and
+reuse that exact array in every related mutation, including child unlinking before parent deletion.
+Do not reselect after earlier statements delete or clear candidates. Each mutation retains its
+owner/variant predicate. The native batch admits an exact request/User/store permit only while the
+request is Erasing, that store's archive step is complete, and no archive step remains incomplete.
+A changed-row assertion aborts the entire batch if admission fails. Existing SQL fences still apply.
+The batch marks delete_done only when the owner's authoritative remaining-row query is empty,
+then removes the permit. A concurrent deletion may consume selected rows; it cannot cause this
+batch to silently substitute a different set. Retry selects another bounded page.
+
+This removes only the transient selection helper. Original-file inventory, upload-writer tracking,
+retention decisions and restore protection remain until their separate accepted proof gates pass.
+One JSON parameter per owner statement preserves the original 64-row bound and avoids interpolating
+identifiers or exceeding D1 parameter limits. No scheduler/Workflow payload acquires deletion authority.
+
+The original helper should be empty between committed native batches. Any persisted helper row or
+permit is unexplained work and blocks cutover; reconcile it under its original request before retrying.
+Run this guard and DROP in one native D1 batch while consumers are stopped. Retain a database backup.
+A failure must roll back both schema and data; verify the full foreign-key graph and original
+User/request/step/owner rows before resuming. Do not bypass these guards to force the removal.
+The inverse recreates only the original empty transient table; it does not synthesize selected IDs.
+A binary rollback must stop consumers and switch every owner contract back together.
+Historical migration rehearsals explicitly reconstruct their pre-#1488 helper, rather than relying
+on the final baseline to preserve removed infrastructure.
+
+<!-- erasure-selection-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'erasure_selection_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_chunk) AND NOT EXISTS(SELECT 1 FROM erasure_permits) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- erasure-selection-guard:end -->
+
+<!-- erasure-selection-drop:start -->
+
+```sql
+DROP TABLE erasure_chunk;
+```
+
+<!-- erasure-selection-drop:end -->
+
+<!-- erasure-selection-rollback:start -->
+
+```sql
+CREATE TABLE erasure_chunk (
+  request_id TEXT NOT NULL REFERENCES erasure_requests(id),
+  row_ref TEXT NOT NULL,
+  PRIMARY KEY(request_id,row_ref)
+) STRICT;
+```
+
+<!-- erasure-selection-rollback:end -->
+
+## Release verification through native execution (#1493)
+
+The reserved proof-authenticated HTTP gate checks exact Public/Core upload receipts, Git revision,
+contract digest, required secrets, Category storage, protected-read dependencies, private R2 and
+coordinator connectivity. It now proves native D1 write and atomic rollback capability before
+publishing synthetic work: one batch creates a private transient verification table, writes a valid
+value, then deliberately violates a uniquely named CHECK. Only that exact expected failure qualifies;
+a refused write, quota, unrelated failure or unexpectedly successful batch does not. A subsequent
+schema query must confirm complete rollback. Nothing is committed, no fake User is created, and
+this object is not part of the baseline or an operational ledger.
+
+The HTTP response manifest remains version 1, including `asyncWorkVersion: 1`, so the required
+stable-Public/candidate-Core readiness exchange retains its deployed wire contract. The internal
+Queue envelope version is independent of that HTTP contract.
+
+Each release owns a private Queue, a distinct hosted Workflow logical identity, and a private Queue-only executor named by its validated Git
+revision. The executor is deployed normally before zero-traffic Core is uploaded; it hosts the V2
+Workflow and receives only D1, native execution, and release metadata bindings. Core references that
+foreign Workflow. Its Queue consumer targets the executor, never the stable Core Worker. Deferred
+retirement preserves previous release resources through the existing promotion gates; no candidate
+message depends on routing to a zero-percent Core Queue consumer. There are no public routes,
+provider grants or User authority on the executor. Its immutable revision and digest come from its
+actual runtime environment; the Core version is a correlation captured by the already verified Core
+publisher, not an assertion that the executor itself is the Core Worker.
+
+The dedicated Queue carries protocol-v2 immutable release metadata and a five-minute expiry, with
+no User/provider/model authority. Queue acceptance returns pending. At most four messages are handed
+off concurrently; duplicate handoffs reuse the same native execution ID bound to Core version and
+random probe identity. The versioned native Workflow rechecks its actual environment against the
+requested revision/digest, verifies D1 write/rollback in a bounded named step, and returns only probe/release/
+expiry metadata. Native engine status is the completion source. A complete execution with wrong
+probe, revision, digest, Core version, expiry or malformed output fails verification. Missing or
+unreadable execution remains pending until the independent CI poll budget fails; it is never health.
+The existing candidate/intermediate/promoted identity and bounded timeout checks remain. Deployment
+failure email runs in GitHub Actions using its own provider credential, independently of Worker/D1.
+No new provider notification is sent by local verification.
+
+The User-approved policy is one CI verification at a time with bounded retries and timeouts.
+Deployment, inspection, rollback and recovery already share the `production-deployment` Actions
+concurrency group with `cancel-in-progress: false`; candidate/intermediate/promoted checks execute
+sequentially within a run. #1426 records this replacement of the persisted global-eight semaphore.
+The old eight-active-row admission and pending/queued status transitions are intentionally retired
+with the ledger; they are not preserved through KV/DO state. Before expensive D1/R2/coordinator
+checks or Queue publication, Core requires a native RateLimit decision using namespace 1493 and one
+constant key (never a caller-controlled probe ID). Rejected or unavailable decisions fail closed.
+The platform setting is eight submissions per minute per Cloudflare location, approximately enforced:
+it is not a strict worldwide eight-active-probe semaphore. This locality/burst difference follows
+the platform contract and must not be presented as preservation of the old global cap. See
+[Cloudflare Rate Limiting locality and accuracy](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/#locality).
+This limit protects deployment verification, not free/paid User operations.
+CI serializes releases and bounds probe submission/retries/polls, while the platform owns Workflow admission/concurrency. Repeated POSTs may
+republish the same metadata-only Queue work after an ambiguous acknowledgment; deterministic native
+execution IDs prevent repeating completed verification steps. This differs from the old DB claim,
+which could strand a queued row after a lost send. The authenticated gate is not a public User API.
+Native instance metadata has one-day success/error retention; the five-minute proof expiry still
+prevents stale completion from satisfying a new check. No application cleanup job is needed.
+
+Stop active release runners and old smoke consumers before schema/code cutover, retain a database
+backup, and require every old probe to have expired. New verification uses the V2 Workflow class;
+old execution histories are not reinterpreted. Apply the guarded DROP in one native batch. A failed
+batch must preserve the original rows and unrelated feature data. To roll the binary back, stop all
+new release runners/consumers, recreate the exact original table/index and restore its original
+metadata from the verified backup, including rowids and exact clocks. Never synthesize a passed probe.
+Run fresh revision-specific verification after either direction. These local native rehearsals prove
+D1 and Workflow behavior; account permissions, remote routing and notification delivery remain actual
+deployment evidence, not claims inferred from a local test.
+
+<!-- release-smoke-ledger-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'release_smoke_ledger_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM release_smoke_probes WHERE expires_at_ms>?) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- release-smoke-ledger-guard:end -->
+
+<!-- release-smoke-ledger-drop:start -->
+
+```sql
+DROP TABLE release_smoke_probes;
+```
+
+<!-- release-smoke-ledger-drop:end -->
+
+<!-- release-smoke-ledger-rollback:start -->
+
+```sql
+CREATE TABLE release_smoke_probes (
+  probe_id TEXT PRIMARY KEY NOT NULL CHECK (length(probe_id) = 32),
+  git_revision TEXT NOT NULL CHECK (length(git_revision) = 40),
+  expires_at_ms INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'queued', 'passed'))
+) STRICT;
+CREATE INDEX release_smoke_expiry ON release_smoke_probes(expires_at_ms);
+```
+
+<!-- release-smoke-ledger-rollback:end -->
+
+<!-- release-smoke-ledger-rollback-copy:start -->
+
+```sql
+INSERT INTO release_smoke_probes(rowid,probe_id,git_revision,expires_at_ms,status) SELECT json_extract(value,'$.rowid'),json_extract(value,'$.probe_id'),json_extract(value,'$.git_revision'),json_extract(value,'$.expires_at_ms'),json_extract(value,'$.status') FROM json_each(?);
+```
+
+<!-- release-smoke-ledger-rollback-copy:end -->
+
+## WhatsApp recipient cutover (#1483)
+
+Stop old routing writers before this synchronized cutover. Back up the original schema, populated
+rows and archive manifest; record the independently inspected complete-route count. Use one native
+D1 batch for the guard, target table creation, copy, old trigger removal, four column drops and
+new target triggers. Obtain the exact `whatsapp_recipients` table and its four triggers from
+`0001_schema.sql`; the original five `insight_whatsapp_routes_field_*` triggers and User definition
+are retained in `whatsapp/recipient-cutover.test-fixture.json` for inverse rehearsal. This is a
+runbook, not an additional migration file.
+
+Do not rebuild or drop `users`: its foreign keys include cascading feature records. Native column
+drops retain User rowids, references and unrelated data. Drop the old route triggers first, then
+`route_verified_at_ms` (which owns the group CHECK) before the other three route columns.
+
+<!-- whatsapp-recipient-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'recipient_route_count',count(*)=? FROM users WHERE route_portfolio_id IS NOT NULL;
+INSERT INTO sql_assertions(scope,accepted) SELECT 'recipient_route_complete',NOT EXISTS(SELECT 1 FROM users WHERE ((route_portfolio_id IS NOT NULL)+(route_bsuid IS NOT NULL)+(route_phone_number_id IS NOT NULL)+(route_verified_at_ms IS NOT NULL)) NOT IN(0,4));
+INSERT INTO sql_assertions(scope,accepted) SELECT 'recipient_route_association',NOT EXISTS(SELECT 1 FROM users WHERE route_portfolio_id IS NOT NULL AND (route_portfolio_id IS NOT whatsapp_portfolio_id OR route_bsuid IS NOT whatsapp_bsuid OR whatsapp_verified_at_ms IS NULL));
+DELETE FROM sql_assertions WHERE scope IN('recipient_route_count','recipient_route_complete','recipient_route_association');
+```
+
+<!-- whatsapp-recipient-guard:end -->
+
+<!-- whatsapp-recipient-copy:start -->
+
+```sql
+INSERT INTO whatsapp_recipients(rowid,user_id,portfolio_id,bsuid,business_phone_number_id,verified_at_ms) SELECT rowid,id,route_portfolio_id,route_bsuid,route_phone_number_id,route_verified_at_ms FROM users WHERE route_portfolio_id IS NOT NULL;
+```
+
+<!-- whatsapp-recipient-copy:end -->
+
+<!-- whatsapp-recipient-drop:start -->
+
+```sql
+ALTER TABLE users DROP COLUMN route_verified_at_ms;
+ALTER TABLE users DROP COLUMN route_phone_number_id;
+ALTER TABLE users DROP COLUMN route_bsuid;
+ALTER TABLE users DROP COLUMN route_portfolio_id;
+```
+
+<!-- whatsapp-recipient-drop:end -->
+
+For inverse restoration, stop new route writers and use one native batch. Guard the same inspected
+route count and exact User association/rowid below, drop the four recipient triggers, add the
+original nullable columns, copy routes into their original Users, drop `whatsapp_recipients`, then
+reinstall the original five field triggers. Existing archives are untouched in both directions.
+Absent routes remain absent. Do not rebind a mismatch or invent receipt times.
+
+<!-- whatsapp-recipient-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'recipient_inverse_count',count(*)=? FROM whatsapp_recipients;
+INSERT INTO sql_assertions(scope,accepted) SELECT 'recipient_inverse_association',NOT EXISTS(SELECT 1 FROM whatsapp_recipients r LEFT JOIN users u ON u.id=r.user_id WHERE u.id IS NULL OR r.rowid IS NOT u.rowid OR r.portfolio_id IS NOT u.whatsapp_portfolio_id OR r.bsuid IS NOT u.whatsapp_bsuid OR u.whatsapp_verified_at_ms IS NULL);
+DELETE FROM sql_assertions WHERE scope IN('recipient_inverse_count','recipient_inverse_association');
+```
+
+<!-- whatsapp-recipient-rollback-guard:end -->
+
+<!-- whatsapp-recipient-rollback-columns:start -->
+
+```sql
+ALTER TABLE users ADD COLUMN route_portfolio_id TEXT;
+ALTER TABLE users ADD COLUMN route_bsuid TEXT;
+ALTER TABLE users ADD COLUMN route_phone_number_id TEXT;
+ALTER TABLE users ADD COLUMN route_verified_at_ms INTEGER CHECK((route_portfolio_id IS NULL AND route_bsuid IS NULL AND route_phone_number_id IS NULL AND route_verified_at_ms IS NULL) OR (route_portfolio_id IS NOT NULL AND route_bsuid IS NOT NULL AND route_phone_number_id IS NOT NULL AND route_verified_at_ms IS NOT NULL));
+```
+
+<!-- whatsapp-recipient-rollback-columns:end -->
+
+<!-- whatsapp-recipient-rollback-copy:start -->
+
+```sql
+UPDATE users SET (route_portfolio_id,route_bsuid,route_phone_number_id,route_verified_at_ms)=(SELECT portfolio_id,bsuid,business_phone_number_id,verified_at_ms FROM whatsapp_recipients r WHERE r.user_id=users.id) WHERE EXISTS(SELECT 1 FROM whatsapp_recipients r WHERE r.user_id=users.id);
+```
+
+<!-- whatsapp-recipient-rollback-copy:end -->
+
+Native rehearsal covers populated/absent routes, historical association/count refusal, interrupted
+DDL rollback, original route/archive row references, foreign keys and preservation of unrelated
+cascading documents. Channel behavior covers older/equal-time observations, foreign-User refusal,
+failed inbound rollback, independent window cleanup and purpose-specific erasure. Local evidence
+does not claim a remote cutover has run.
+
+## Final Identity integration (#1485)
+
+The final User record contains stable identity, ServiceMarket/locale/time-zone preferences, original
+creation and trial instants, and the verified WhatsApp caller association. Current recipient routing
+belongs to `whatsapp_recipients`; it cannot establish authentication. Identity reads its own columns
+directly and publishes only its existing caller association projection.
+
+Subscription standing, forwarding addresses, backfill entitlement, verified email, backup recovery,
+recipient routing and Audit retention controls use their completed feature-owned destinations. Current
+User responses compose those owners' published projections; onboarding still commits new Identity,
+original trial, Consent, recovery and the originating proof in one native atomic unit. Existing
+trial/association immutability, uniqueness and same-User guards remain intact.
+
+No additional extraction or User-table rebuild is required: the preceding populated owner cutovers
+preserve the original User IDs/rowids, preferences, creation and trial. #1483 finishes the last four
+routing columns using native column drops and exact inverse restoration. Historical fixture schemas
+remain original evidence rather than being rewritten into the target shape.
+
+Verification uses the existing integrated onboarding, Google/Microsoft/WhatsApp/browser login,
+verified email, recovery, PAT, forwarding, billing and current-User seams, plus their populated owner
+cutovers. No field-count or table-inventory tests are introduced. This is local integration evidence;
+remote data/schema reconciliation and deployment verification remain final release gates.
+
+## Confirmed upload drain (#1487)
+
+On 2026-10-23 the User approved retaining unresolved-upload tracking instead of promising a fixed
+upload-completion deadline. The authoritative design and affected tickets are updated in place:
+[#1425](https://github.com/B4rz99/fidy-ai/issues/1425) now targets seven tables, including
+`erasure_writers`. No `writes_quiescent_after_ms` is introduced. Retry scheduling is independent of
+whether a write is safe to forget.
+
+Every personal-content producer is currently server-mediated: statement staging and forwarded
+email commit the exact writer in the same native batch as their owner reservation. Each attempt
+gets a fresh identity. Both enclose placeholder PUT, conditional payload publication and owner
+publication/cleanup in `trackOriginalWrite`. Successful completion releases only that attempt and
+User. Failure, interruption or an ambiguous native result leaves the writer unresolved. There is no
+presigned/direct upload path or operator force-release shortcut. Any future producer must join this
+protocol before enablement. Held-record archives still exist under #1489's removal gate; they are
+part of erasure after drain, not an independent admitted personal-upload path.
+
+Draining advances only when every same-User writer has settled and every participating owner
+agrees its durable work is drained. An old admission instant, expired owner credential, local timeout,
+cancellation or negative R2 read cannot establish settlement. The existing native erasure journey
+holds an upload admitted a day earlier, checks Draining, then allows its real R2 PUT and owner
+publication to finish. A later continuation can seal and complete cleanup while preserving the other
+User. Unknown outcomes may keep deletion pending indefinitely, including after restoration; do not
+manufacture completion to clear a backlog.
+
+The writer ledger retains id, user_id, bucket, object_key and started_at_ms. The unused
+`expires_at_ms` is removed from the fresh-install baseline and both producers. For a populated
+database, stop old writers and take a verified backup, then run native
+`ALTER TABLE erasure_writers DROP COLUMN expires_at_ms;` in the synchronized cutover. This preserves
+all unresolved attempt identities, User ownership, exact locations and original admission instants.
+Do not delete writer rows. If rollback is required, keep writers stopped, restore the original schema
+and expiry values from the verified backup, and overlay current unresolved rows by exact id/User/key
+rather than discarding attempts admitted since the backup. An expiry value must never authorize
+completion in either direction. The disposable native D1 check preserved the original pending attempts, locations, admission instants
+and other User through this column drop. Its inverse restored original expiry values and preserved an
+additional unresolved attempt admitted after conversion. The legacy-only expiry on that new attempt
+was its admission instant, without any settlement authority. This is local migration/rollback evidence,
+not a live database operation.
+
+#1489 still must replace per-file inventory with bounded User-prefix deletion and remove selective
+retention; #1490 must rebuild/fence restored requests before cleanup. Retain `erasure_objects` and
+original-byte protections until those synchronized changes pass their own native checks. Retaining
+writer tracking resolves the former fixed-deadline design blocker, not the remaining implementations.
+
+Sources: [Workers duration limits](https://developers.cloudflare.com/workers/platform/limits/),
+[R2 consistency](https://developers.cloudflare.com/r2/reference/consistency/), and
+[atomic conditional PUT](https://developers.cloudflare.com/r2/api/s3/extensions/).
+
+## Full-deletion preparation (#1489)
+
+Owner-authorized private-object cleanup now uses native R2 DELETE directly. The former unconditional
+nonce PUT was another outstanding write that could recreate a control object after deletion. A
+successful DELETE invalidates the placeholder ETag: an earlier conditional payload either committed
+before deletion and is removed, or its old precondition fails afterward. Unknown original uploads
+remain tracked; neither DELETE nor an empty read proves that an earlier placeholder PUT has settled.
+
+Observed-version control cleanup retains its conditional ETag fence so an expired listing cannot
+delete a replacement. These are different authorities: an owner's exact disposable key versus a
+specific control version observed by a bounded scan. No public caller supplies either authority.
+
+The existing native original-byte deletion journey now also runs when R2 writes are unavailable but
+deletes remain available, while preserving other-User and wrong-request refusal checks. Existing
+interrupted/ambiguous staging, conditional publication, retained-copy and restart/restore coverage
+continues to check the surrounding behavior. This is a preparation slice on the named integration
+branch, not completion of #1489: selective retention, original-file inventory and minimal restore
+markers still require their synchronized owner/schema changes. No production schema or object is
+changed by this local work.
+
+### Bounded personal-prefix cleanup
+
+A full-Delete request now scans the canonical User prefix in the email, statement and private erasure buckets,
+removing at most four objects per continuation before returning Continue. Missing bindings and
+native failures refuse completion. The request must still match the exact User, be Erasing or
+ExternalPending with its marker/capture guards, and have no unresolved User writer. Selective
+retention requests keep their original path until #1489's final policy conversion; broad prefix
+cleanup does not run under a mixed disposition.
+
+The existing native original-byte erasure case includes five unindexed temporary objects plus its
+indexed original. The first continuation leaves two objects, later continuations remove them,
+and other-User files remain intact, including while PUT is unavailable. A separate native erasure
+bucket supplies old User-prefixed retained bytes: full deletion removes those bytes while preserving
+the other User's retained bytes and an independent recovery marker outside the User prefix. The original locator path
+still handles its bounded inventory checkpoint and known historical noncanonical locators; no
+inventory row is dropped by this preparation. Its final removal, database retained-content purge
+and minimal restore-marker conversion remain open #1489/#1490 work. No empty prefix is treated
+as proof that an earlier unresolved upload has settled.
+
+### New requests require full deletion
+
+The existing private review boundary now accepts only Delete for every personal-data class. A
+selective Retain decision is refused before writing independent case metadata or mutating the
+request. Same-User binding, fresh operator admission, exact request replay, control-metadata
+retention and external cleanup evidence retain their existing checks pending the final admission
+and minimal-marker conversion.
+
+The existing native admission test supplies a previously valid, bounded memory hold and now expects
+refusal, then verifies an unchanged full-Delete admission/replay. The older-database restore journey
+now uses full deletion instead of manufacturing a memory hold and waiting for its expiry. It keeps
+native JWT/Access refusals, generation and missing-member fencing, repeated restoration, revoked
+credentials, other-User preservation and uncertain external-provider evidence. No test cases or
+new seams are added. Historical selective-retention decoders and archive tables remain behind the
+synchronized conversion gate; this local policy change does not claim their removal or completion
+of #1489/#1490.
+
+### Full-deletion archive retirement (#1489 integration slice)
+
+The integration branch removes the personal-record and original-file archives: all owner projections
+now publish bounded deletion only; `erasure_archives`, `erasure_objects`, 127 copy-on-change triggers,
+R2 hold/copy/purge code, locator checkpoints, archive progress and obsolete content cursors are gone.
+The remaining seven Erasure tables retain confirmed-upload drain, exact per-store SQL permits,
+independent request markers, restore membership and truthful external outcomes. Prefix deletion covers
+Email, Statement and Erasure buckets in pages of at most four objects per continuation. It also wipes
+historical held content under that User prefix without creating a new copy.
+
+This is a local integration slice, not completion or deployment of #1489/#1490. Fresh authenticated
+self-service admission, removal of the operator decision envelope, minimal independent marker format,
+metadata lifecycle and final three-column step schema still need the synchronized cutover. Do not
+ship this slice independently or mark the parent complete. Existing native journeys continue to
+exercise the installed review boundary until that admission conversion is implemented.
+
+Before retiring historical file inventory, complete and verify the #1486 canonical-key conversion
+for every configured bucket, including incomplete uploads. Every same-User unresolved writer remains
+tracked. Known noncanonical files must be moved/cleaned with their existing owner scope before dropping
+inventory; an empty prefix is not evidence that an unresolved upload has settled. Retained artifacts
+outside canonical prefixes or unexplained locators block cutover; never infer their absence from the
+new schema. The final #1494 release check must verify these prerequisites against the actual database
+and buckets. No live operations were performed for this slice.
+
+For populated historical source databases, this bounded retirement refuses active deletion requests
+and any retained database rows or inventory. Finish/reconcile those cases under the approved full-delete
+scope first; do not bypass the guard or discard unexplained content. Keep a database snapshot for the
+inverse while changes remain local. The native rehearsal runs the statements below in one atomic batch
+and injects failure to prove owner rows, unresolved attempts and the original DDL survive rollback.
+These statements retire the archive layer only; the final metadata-table rebuild belongs to #1490/#1494.
+
+<!-- full-delete-archive-retirement:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'full_delete_archive_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM erasure_archives) AND NOT EXISTS(SELECT 1 FROM erasure_objects) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DROP TRIGGER budget_alert_occurrences_field_preserve_delete;
+DROP TRIGGER budget_alert_occurrences_field_preserve_update;
+DROP TRIGGER email_forwarding_addresses_field_preserve_delete;
+DROP TRIGGER erasure_preserve_audit_entries_billing_transition;
+DROP TRIGGER erasure_preserve_audit_entries_identity_read;
+DROP TRIGGER erasure_preserve_audit_entries_insight_call;
+DROP TRIGGER erasure_preserve_audit_entries_media_admission;
+DROP TRIGGER erasure_preserve_audit_entries_publication;
+DROP TRIGGER erasure_preserve_audit_entries_request_admission;
+DROP TRIGGER erasure_preserve_audit_entries_security_mutation;
+DROP TRIGGER erasure_preserve_audit_entries_session_call;
+DROP TRIGGER erasure_preserve_audit_retention_permits_delete;
+DROP TRIGGER erasure_preserve_billing_attempts_delete;
+DROP TRIGGER erasure_preserve_billing_event_candidates_delete;
+DROP TRIGGER erasure_preserve_billing_event_candidates_update;
+DROP TRIGGER erasure_preserve_billing_price_notices_delete;
+DROP TRIGGER erasure_preserve_billing_provider_transactions_delete;
+DROP TRIGGER erasure_preserve_budget_crossing_publications_delete;
+DROP TRIGGER erasure_preserve_budget_group_currencies_delete;
+DROP TRIGGER erasure_preserve_budget_month_caps_delete;
+DROP TRIGGER erasure_preserve_budget_month_latches_delete;
+DROP TRIGGER erasure_preserve_budget_plan_months_delete;
+DROP TRIGGER erasure_preserve_budget_reconciliation_work_delete;
+DROP TRIGGER erasure_preserve_budget_threshold_alerts_delete;
+DROP TRIGGER erasure_preserve_budget_user_versions_delete;
+DROP TRIGGER erasure_preserve_budgets_delete;
+DROP TRIGGER erasure_preserve_canonical_request_buckets_delete;
+DROP TRIGGER erasure_preserve_canonical_request_leases_delete;
+DROP TRIGGER erasure_preserve_canonical_request_replays_delete;
+DROP TRIGGER erasure_preserve_card_enrollments_delete;
+DROP TRIGGER erasure_preserve_commercial_allowance_consumptions_delete;
+DROP TRIGGER erasure_preserve_connection_attempts_delete;
+DROP TRIGGER erasure_preserve_connections_delete;
+DROP TRIGGER erasure_preserve_consent_history_delete;
+DROP TRIGGER erasure_preserve_dashboard_documents_delete;
+DROP TRIGGER erasure_preserve_transaction_projection_bucket_delete;
+DROP TRIGGER erasure_preserve_transaction_projection_digit_delete;
+DROP TRIGGER erasure_preserve_transaction_projection_leaf_delete;
+DROP TRIGGER erasure_preserve_transaction_projection_state_delete;
+DROP TRIGGER erasure_preserve_forwarded_email_receipts_delete;
+DROP TRIGGER erasure_preserve_hosted_agent_sessions_delete;
+DROP TRIGGER erasure_preserve_hosted_compaction_attempts_delete;
+DROP TRIGGER erasure_preserve_hosted_confirmations_delete;
+DROP TRIGGER erasure_preserve_hosted_mutation_commits_delete;
+DROP TRIGGER erasure_preserve_hosted_turns_delete;
+DROP TRIGGER erasure_preserve_hosted_voice_refusals_delete;
+DROP TRIGGER erasure_preserve_hosted_whatsapp_delivery_delete;
+DROP TRIGGER erasure_preserve_hosted_whatsapp_delivery_events_delete;
+DROP TRIGGER erasure_preserve_whatsapp_service_windows_delete;
+DROP TRIGGER erasure_preserve_insight_events_delete;
+DROP TRIGGER erasure_preserve_proactive_messages_delete;
+DROP TRIGGER erasure_preserve_insight_whatsapp_claims_delete;
+DROP TRIGGER erasure_preserve_keyword_rules_delete;
+DROP TRIGGER erasure_preserve_media_submissions_delete;
+DROP TRIGGER erasure_preserve_memories_delete;
+DROP TRIGGER erasure_preserve_pending_consent_exchanges_delete;
+DROP TRIGGER erasure_preserve_proactive_transcript_entries_delete;
+DROP TRIGGER erasure_preserve_proactive_transcript_event_links_delete;
+DROP TRIGGER erasure_preserve_proactive_transcript_event_links_delete_clear;
+DROP TRIGGER erasure_preserve_proactivity_consent_offers_delete;
+DROP TRIGGER erasure_preserve_proactivity_message_events_delete;
+DROP TRIGGER erasure_preserve_proactivity_message_events_delete_clear;
+DROP TRIGGER erasure_preserve_proactivity_offer_requests_delete;
+DROP TRIGGER erasure_preserve_proactivity_whatsapp_claims_delete;
+DROP TRIGGER erasure_preserve_recurring_digest_consumption_clear_shared;
+DROP TRIGGER erasure_preserve_recurring_digest_consumption_delete_shared;
+DROP TRIGGER erasure_preserve_recurring_digest_days_delete;
+DROP TRIGGER erasure_preserve_recurring_digest_instructions_delete;
+DROP TRIGGER erasure_preserve_recurring_digest_staging_clear_shared;
+DROP TRIGGER erasure_preserve_recurring_digest_staging_delete_shared;
+DROP TRIGGER erasure_preserve_recurring_dispatch_delete;
+DROP TRIGGER erasure_preserve_recurring_facts_delete_typed;
+DROP TRIGGER erasure_preserve_recurring_plan_documents_delete;
+DROP TRIGGER erasure_preserve_recurring_progress_delete;
+DROP TRIGGER erasure_preserve_recurring_proposals_delete_typed;
+DROP TRIGGER erasure_preserve_recurring_series_delete;
+DROP TRIGGER erasure_preserve_refund_attempts_delete;
+DROP TRIGGER erasure_preserve_reminder_governors_delete;
+DROP TRIGGER erasure_preserve_resource_admission_events_delete;
+DROP TRIGGER erasure_preserve_schedule_executions_delete;
+DROP TRIGGER erasure_preserve_schedule_revisions_delete;
+DROP TRIGGER erasure_preserve_schedules_delete;
+DROP TRIGGER erasure_preserve_source_attestations_delete;
+DROP TRIGGER erasure_preserve_statement_materialization_parts_delete;
+DROP TRIGGER erasure_preserve_statement_needs_review_delete;
+DROP TRIGGER erasure_preserve_statement_record_outcomes_delete;
+DROP TRIGGER erasure_preserve_statement_staging_objects_delete;
+DROP TRIGGER erasure_preserve_statement_submissions_delete;
+DROP TRIGGER erasure_preserve_subscription_cancellations_delete;
+DROP TRIGGER erasure_preserve_subscriptions_delete;
+DROP TRIGGER erasure_preserve_subscriptions_delete_clear;
+DROP TRIGGER erasure_preserve_transaction_corrections_delete;
+DROP TRIGGER erasure_preserve_transaction_reconciliation_decisions_delete;
+DROP TRIGGER erasure_preserve_transaction_reconciliation_members_delete;
+DROP TRIGGER erasure_preserve_transaction_reconciliation_members_update;
+DROP TRIGGER erasure_preserve_transactions_delete;
+DROP TRIGGER erasure_preserve_transcript_entries_delete;
+DROP TRIGGER erasure_preserve_weekly_consent_offers_delete;
+DROP TRIGGER erasure_preserve_weekly_governor_questions_delete;
+DROP TRIGGER erasure_preserve_weekly_governors_delete;
+DROP TRIGGER erasure_preserve_weekly_question_intents_delete;
+DROP TRIGGER hosted_whatsapp_inbound_field_preserve_delete;
+DROP TRIGGER hosted_whatsapp_inbound_field_preserve_update;
+DROP TRIGGER insight_delivery_attempts_field_preserve_delete;
+DROP TRIGGER insight_delivery_attempts_field_preserve_update;
+DROP TRIGGER whatsapp_recipients_preserve_delete;
+DROP TRIGGER recurring_opportunity_preserve_delete;
+DROP TRIGGER recurring_opportunity_preserve_update;
+DROP TRIGGER reminder_delivery_receipts_marker_preserve_delete;
+DROP TRIGGER reminder_delivery_receipts_marker_preserve_update;
+DROP TRIGGER statement_whatsapp_documents_field_preserve_delete;
+DROP TRIGGER statement_whatsapp_documents_field_preserve_update;
+DROP TRIGGER weekly_governor_deliveries_marker_preserve_delete;
+DROP TRIGGER weekly_governor_deliveries_marker_preserve_update;
+DROP TRIGGER erasure_preserve_subscription_identities_delete;
+DROP TRIGGER erasure_preserve_payment_sources_delete;
+DROP TRIGGER erasure_preserve_statement_materializations_delete;
+DROP TRIGGER erasure_preserve_ingestion_review_item_workspace_update;
+DROP TRIGGER erasure_preserve_ingestion_review_item_workspace_delete;
+DROP TRIGGER erasure_preserve_ingestion_review_item_source_delete;
+DROP TRIGGER statement_backfill_entitlements_field_preserve_delete;
+DROP TRIGGER erasure_preserve_recurring_plans_delete;
+DROP TRIGGER erasure_preserve_recurring_plan_revisions_delete;
+DROP TRIGGER erasure_preserve_recurring_plan_exceptions_delete;
+DROP TRIGGER erasure_preserve_recurring_plan_fulfillments_delete;
+DROP TRIGGER reminder_control_preserve_delete;
+DROP TRIGGER reminder_control_preserve_update;
+DROP TABLE erasure_archives;
+DROP TABLE erasure_objects;
+ALTER TABLE erasure_requests DROP COLUMN restore_cursor;
+ALTER TABLE erasure_requests DROP COLUMN restore_objects_done;
+ALTER TABLE erasure_requests DROP COLUMN restore_records_cursor;
+ALTER TABLE erasure_requests DROP COLUMN restore_records_done;
+ALTER TABLE erasure_requests DROP COLUMN archive_generation;
+ALTER TABLE erasure_requests DROP COLUMN objects_captured;
+ALTER TABLE erasure_requests DROP COLUMN purge_pending;
+ALTER TABLE erasure_requests DROP COLUMN purge_records_cursor;
+ALTER TABLE erasure_steps DROP COLUMN archive_done;
+```
+
+<!-- full-delete-archive-retirement:end -->
+
+Historical migration rehearsals explicitly reconstruct the original archive/inventory tables when
+testing an earlier cutover. Ordinary erasure integration uses the actual new baseline. Archive-only
+cases are removed; populated-history, failure, rollback, deletion-authorization and isolation checks
+remain. No schema-inventory/removal-only test cases were added.
+
+Restoration cannot infer upload settlement from an empty restored writer ledger: a backup may predate
+later admitted writes. An unsealed restored request stays in Draining and normal activity remains
+fenced even after all visible owner work ends. An independent same-User sealed marker proves that
+all pre-deletion uploads had already settled; only that verified branch may remove stale restored
+writer rows for its exact request/User/generation before repeating deletion. It does not clear any
+other User's attempts. The existing native restore journey covers both branches, including a restored
+missing writer history, stale settled rows, real prefix bytes and repeated restore protection.
+
+### Independent marker publication (#1489 integration)
+
+Initial recovery-marker publication now uses the existing independent generation object as a
+publication barrier. It conditionally changes the current generation to `publishing:<opaque UUID>`
+before issuing the initial case-object PUT. This value is deliberately not a published generation:
+ordinary guarded D1 access, restore scanning and restore release refuse it. Only a positively
+completed marker publication can conditionally replace that exact barrier with the new published
+generation, which the native request transition then commits atomically with its generation check.
+Concurrent publishers cannot acquire the same generation version.
+
+A rejected or interrupted PUT has an unknown outcome and leaves the barrier in place. A subsequent
+empty scan, elapsed time, a successful late PUT, or an operator initialization cannot clear it.
+There is no automatic retry that republishes the marker, no timeout release and no additional table
+or file locator. The conservative consequence is that guarded application access remains unavailable
+while this independent publication is unresolved; do not manually overwrite the generation to make
+an ambiguous publication appear settled. Positive reconciliation and the final minimal-marker
+admission/restore integration remain release work under #1489/#1490/#1494.
+
+The public admission regression uses native D1/R2 with a boundary fault that reports a failed PUT
+before its eventual publication. It proves that the failed admission does not advance the request,
+that guarded access and restore refuse the pending publication, and that late object appearance
+does not lift the fence. Existing successful-admission and native restore journeys remain green.
+R2's [consistency guarantees](https://developers.cloudflare.com/r2/reference/consistency/) and
+[conditional Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)
+are the provider constraints; a negative read says nothing about a PUT still in flight.
+
+### Deletion progress classification (#1489 integration)
+
+`erasure_steps` now has its final three stored columns: request identity, store identity and
+`delete_done`. Class membership is owned by each store's code declaration and is no longer copied
+into every request's progress rows. Admission and restore populate only store identities; exact
+inventory checks still reject missing, extra or foreign-request steps. The receipt derives completed
+classes from those declared stores and their actual completion, and a class remains pending until
+all its participating stores finish. Store dependency order and deletion permits are unchanged.
+
+This bounded local retirement was rehearsed against the previous populated native D1 baseline.
+An active request refuses the batch; a failure after the DDL rolls back both schema and data.
+Successful retirement preserves exact request/store completion, both Users' owner rows, original
+instants, unresolved writer attempts and foreign keys. It is not the final request-metadata rebuild
+or a deployment claim. Apply this retirement only after the preceding archive-retirement cutover:
+
+<!-- erasure-step-classification:start -->
+
+```sql
+SELECT json(CASE WHEN NOT EXISTS(
+  SELECT 1 FROM erasure_requests WHERE state<>'Complete'
+) THEN 'true' ELSE '' END) AS accepted;
+ALTER TABLE erasure_steps DROP COLUMN data_class;
+```
+
+<!-- erasure-step-classification:end -->
+
+### Direct account deletion and minimal metadata (#1489 / #1490 integration)
+
+The local account-deletion entry point now forwards a fresh browser proof to the exact User's
+existing coordinator. Native admission rechecks the session identity, credential digest, revocation,
+freshness and expiry in the same batch that creates the Draining request, store steps and five
+processor statuses. User-supplied subjects, case references and alternate scopes are refused.
+Replays retain the original request identity and instant. Independent publication must complete and
+the native checkpoint/fresh proof must commit before the caller receives acceptance. A rejected or
+ambiguous independent PUT keeps its publication barrier; no elapsed-time or negative-read release.
+An admitted request with an uncertain response remains fenced and pending.
+
+The old operator Review/ReviewRetention actions, preparation CLI and selective-retention test cases
+are removed. Continuation, metadata receipts, manual processor evidence and restore controls retain
+their authenticated boundaries. Normal feature retention, rights-request handling and support
+recovery remain separate owners. Manual evidence still records the actual operator, original
+instant and exact processor/request linkage. Applicable processors are Cloudflare, Kapso, Meta,
+Resend and Wompi; the old SupportInbox, CaseRegister and CaseEvidence erasure-case machinery is no
+longer created for a new account deletion. Acceptance never substitutes for verified deletion.
+
+Requests now have the final 12 stored columns; steps have three. Independent recovery records contain
+only request reference, stable User identity, original request instant and confirmed-drain status.
+Readers bound these records to 512 bytes and reject hidden extra fields. They retain neither User
+content nor file locators, case/scope/authority references, old review decisions or retention envelopes.
+An unsealed restored request still cannot infer upload settlement from missing writer history. The
+verified independent sealed branch alone may reconcile its exact User's stale restored attempts.
+All expected restore members must finish local cleanup before ordinary access can resume.
+
+The fixed supported backup horizon is **30 days** from the latest completed local erase, covering
+both D1 Workers plans; [Cloudflare documents 30 days for Paid and seven for Free](https://developers.cloudflare.com/d1/reference/time-travel/).
+Cloudflare verification cannot predate that horizon. Minimal metadata is purged in bounded pages
+only after external completion and the horizon, and only when the independent published generation
+matches the native database. Unknown provider outcomes stay pending. This policy covers D1 Time
+Travel only: enabling longer-lived exports/backups first requires extending restore protection.
+
+Before release, decode and reconcile every existing independent marker to the minimal schema under
+a controlled recovery fence, preserving its exact request/User/original instant and actual sealed
+proof. Never infer sealed=true from an empty ledger, request label or elapsed time. Refuse malformed,
+missing, extra or unexplained markers. In-flight publication remains unavailable until its entire
+outcome is positively known; an object listing alone cannot settle it. Do not overwrite the global
+generation to force progress. Old operator-case artifacts and retained content require explicit
+verified retirement before the old custody records can be removed; the new code does not manufacture
+non-applicability for them. Final deployment/convergence remains gated by #1494.
+
+A populated native D1 rehearsal of the request/custody metadata rebuild preserves exact request and
+store completion, row identities, processor evidence/linkage, both Users' unrelated owner records,
+unresolved writer attempts and instants. An active request or any obsolete custody owner refuses
+the whole batch. Injected failure after the rebuild rolls back all schema/data changes. The following
+SQL is that tested bounded metadata retirement, after the preceding archive/step cutovers and the
+independent-marker/artifact reconciliation above; it is not an instruction to replay 0001 over data.
+
+<!-- erasure-minimal-metadata:start -->
+
+```sql
+PRAGMA defer_foreign_keys=ON;
+
+SELECT json(CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete' OR last_erased_at_ms IS NULL OR marker_written<>1 OR coordinator_cleared<>1)
+ AND NOT EXISTS(SELECT 1 FROM erasure_custody_records WHERE custodian NOT IN('Cloudflare','Kapso','Meta','Resend','Wompi') OR state='Retained' OR (record_type='event' AND (json_valid(evidence_json)<>1 OR json_extract(evidence_json,'$.outcome.status')='Retained')))
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE EXISTS(SELECT 1 FROM erasure_writers WHERE user_id=q.user_id)
+ OR NOT EXISTS(SELECT 1 FROM erasure_steps WHERE request_id=q.id)
+ OR EXISTS(SELECT 1 FROM erasure_steps WHERE request_id=q.id AND delete_done<>1)
+ OR (SELECT count(*) FROM erasure_custody_records WHERE record_type='current' AND request_id=q.id AND state IN('Verified','NotApplicable'))<>5)
+ THEN 'true' ELSE '' END) AS accepted;
+
+CREATE TABLE cutover_erasure_requests (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL UNIQUE,
+  requested_at_ms INTEGER NOT NULL,
+  restoring INTEGER NOT NULL DEFAULT 0 CHECK(restoring IN(0,1)),
+  restore_generation TEXT,
+  state TEXT NOT NULL CHECK(state IN ('Draining','Sealing','Erasing','ExternalPending','Complete')),
+  last_erased_at_ms INTEGER,
+  last_continued_at_ms INTEGER NOT NULL DEFAULT 0,
+  next_continuation_at_ms INTEGER NOT NULL DEFAULT 0,
+  connection_blocked INTEGER NOT NULL DEFAULT 0 CHECK(connection_blocked IN(0,1)),
+  coordinator_cleared INTEGER NOT NULL DEFAULT 0 CHECK(coordinator_cleared IN (0,1)),
+  marker_written INTEGER NOT NULL DEFAULT 0 CHECK(marker_written IN (0,1))
+) STRICT;
+
+INSERT INTO cutover_erasure_requests(rowid,id,user_id,requested_at_ms,restoring,restore_generation,state,last_erased_at_ms,last_continued_at_ms,next_continuation_at_ms,connection_blocked,coordinator_cleared,marker_written) SELECT rowid,id,user_id,requested_at_ms,restoring,restore_generation,state,last_erased_at_ms,last_continued_at_ms,next_continuation_at_ms,connection_blocked,coordinator_cleared,marker_written FROM erasure_requests;
+
+DROP TABLE erasure_requests;
+
+CREATE TABLE erasure_requests (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL UNIQUE,
+  requested_at_ms INTEGER NOT NULL,
+  restoring INTEGER NOT NULL DEFAULT 0 CHECK(restoring IN(0,1)),
+  restore_generation TEXT,
+  state TEXT NOT NULL CHECK(state IN ('Draining','Sealing','Erasing','ExternalPending','Complete')),
+  last_erased_at_ms INTEGER,
+  last_continued_at_ms INTEGER NOT NULL DEFAULT 0,
+  next_continuation_at_ms INTEGER NOT NULL DEFAULT 0,
+  connection_blocked INTEGER NOT NULL DEFAULT 0 CHECK(connection_blocked IN(0,1)),
+  coordinator_cleared INTEGER NOT NULL DEFAULT 0 CHECK(coordinator_cleared IN (0,1)),
+  marker_written INTEGER NOT NULL DEFAULT 0 CHECK(marker_written IN (0,1))
+) STRICT;
+
+INSERT INTO erasure_requests(rowid,id,user_id,requested_at_ms,restoring,restore_generation,state,last_erased_at_ms,last_continued_at_ms,next_continuation_at_ms,connection_blocked,coordinator_cleared,marker_written) SELECT rowid,id,user_id,requested_at_ms,restoring,restore_generation,state,last_erased_at_ms,last_continued_at_ms,next_continuation_at_ms,connection_blocked,coordinator_cleared,marker_written FROM cutover_erasure_requests;
+
+DROP TABLE cutover_erasure_requests;
+
+CREATE TABLE cutover_erasure_custody_records (
+ record_type TEXT NOT NULL CHECK(record_type IN ('current','event')),
+ request_id TEXT NOT NULL REFERENCES erasure_requests(id),
+ custodian TEXT NOT NULL,
+ id TEXT,
+ state TEXT,
+ evidence_json TEXT CHECK(evidence_json IS NULL OR length(evidence_json)<=4096),
+ recorded_at_ms INTEGER,
+ operator_ref TEXT,
+ current_event_id TEXT,
+ event_identity TEXT GENERATED ALWAYS AS(CASE WHEN record_type='event' THEN id END) VIRTUAL UNIQUE,
+ UNIQUE(request_id,custodian,event_identity),
+ FOREIGN KEY(request_id,custodian,current_event_id) REFERENCES erasure_custody_records(request_id,custodian,event_identity),
+ CHECK((record_type='current' AND id IS NULL AND state IS NOT NULL AND state IN ('Pending','Accepted','Verified','NotApplicable','Unresolved') AND custodian IN ('Cloudflare','Kapso','Meta','Resend','Wompi') AND evidence_json IS NULL AND recorded_at_ms IS NULL AND operator_ref IS NULL)
+ OR(record_type='event' AND id IS NOT NULL AND state IS NULL AND evidence_json IS NOT NULL AND recorded_at_ms IS NOT NULL AND operator_ref IS NOT NULL AND current_event_id IS NULL))
+) STRICT;
+
+INSERT INTO cutover_erasure_custody_records(rowid,record_type,request_id,custodian,id,state,evidence_json,recorded_at_ms,operator_ref,current_event_id) SELECT rowid,record_type,request_id,custodian,id,state,evidence_json,recorded_at_ms,operator_ref,current_event_id FROM erasure_custody_records;
+
+DROP TABLE erasure_custody_records;
+
+CREATE TABLE erasure_custody_records (
+ record_type TEXT NOT NULL CHECK(record_type IN ('current','event')),
+ request_id TEXT NOT NULL REFERENCES erasure_requests(id),
+ custodian TEXT NOT NULL,
+ id TEXT,
+ state TEXT,
+ evidence_json TEXT CHECK(evidence_json IS NULL OR length(evidence_json)<=4096),
+ recorded_at_ms INTEGER,
+ operator_ref TEXT,
+ current_event_id TEXT,
+ event_identity TEXT GENERATED ALWAYS AS(CASE WHEN record_type='event' THEN id END) VIRTUAL UNIQUE,
+ UNIQUE(request_id,custodian,event_identity),
+ FOREIGN KEY(request_id,custodian,current_event_id) REFERENCES erasure_custody_records(request_id,custodian,event_identity),
+ CHECK((record_type='current' AND id IS NULL AND state IS NOT NULL AND state IN ('Pending','Accepted','Verified','NotApplicable','Unresolved') AND custodian IN ('Cloudflare','Kapso','Meta','Resend','Wompi') AND evidence_json IS NULL AND recorded_at_ms IS NULL AND operator_ref IS NULL)
+ OR(record_type='event' AND id IS NOT NULL AND state IS NULL AND evidence_json IS NOT NULL AND recorded_at_ms IS NOT NULL AND operator_ref IS NOT NULL AND current_event_id IS NULL))
+) STRICT;
+
+INSERT INTO erasure_custody_records(rowid,record_type,request_id,custodian,id,state,evidence_json,recorded_at_ms,operator_ref,current_event_id) SELECT rowid,record_type,request_id,custodian,id,state,evidence_json,recorded_at_ms,operator_ref,current_event_id FROM cutover_erasure_custody_records;
+
+DROP TABLE cutover_erasure_custody_records;
+
+CREATE UNIQUE INDEX custody_current_identity ON erasure_custody_records(request_id,custodian) WHERE record_type='current';
+
+CREATE TRIGGER custody_record_identity_immutable BEFORE UPDATE ON erasure_custody_records WHEN NEW.record_type IS NOT OLD.record_type OR NEW.request_id IS NOT OLD.request_id OR NEW.custodian IS NOT OLD.custodian OR NEW.id IS NOT OLD.id BEGIN SELECT RAISE(ABORT,'custody_record_identity_immutable'); END;
+
+SELECT json(CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 'true' ELSE '' END) AS accepted;
+```
+
+<!-- erasure-minimal-metadata:end -->
+
+The public browser/native coordinator regression first failed because acceptance still returned
+AwaitingReview/operator-review; it now starts Draining directly. Existing native restore and delayed
+upload journeys pass with the minimal records. The broader focused run passes 322 tests across 33
+files with one existing skip, including original-byte staging, forwarding, account security,
+resource admission and historical populated owner migrations. Historical rehearsals explicitly
+restore the old decision field only where their original archived triggers require it; ordinary
+runtime uses the final baseline. No schema-inventory or removal-only tests were added.
+
+A supported backup can still contain terminal metadata after its independent marker has legitimately
+expired: the User content was already absent before that backup. Restore release accepts this exact
+case only with Complete state, a known erase instant older than the 30-day horizon, sealed/coordinator
+proof and no unresolved writer. Complete is the durable result of verified local and five-processor
+completion; expired child records can already be partially purged and are not required again. A recent
+or missing erase instant still requires independent membership and refuses release. The existing
+native restore journey reproduced the permanent wait on such expired metadata, then verifies both
+negative cases and successful release from an actual partial-cleanup backup while preserving the
+other User and all active-case fences. The cleanup fixture includes 70 evidence events, so the first
+bounded page removes the marker and current rows while 11 events and the completed request remain.
+
+### Final rebased integration evidence (#1494)
+
+The integration branch includes trunk `7d400b1dc`. The unchanged fresh-install baseline blob is
+`38d34f2b59f7f12c5008b22fa2b5173c2bc58db3`. Local verification after that rebase passed:
+
+- 1,253 unit tests with the existing coverage requirements.
+- 2,339 native Cloudflare tests; 29 existing skips, across 211 passing files and six skipped files.
+- 193 built-browser tests with three existing skips, plus the separate native CLI login journey.
+- Production build verification, including all 46 public-site browser checks.
+- Static verification and ordinary lint; no timeout, coverage or production authorization gate was weakened.
+
+The browser run used two local workers and the native suite one worker to avoid workstation resource
+contention. The browser Core binds a native isolated R2 recovery registry and runs the production
+Erasure guard; the deletion journey verifies acceptance as pending, never as completed erasure.
+
+Read-only inspection of the existing development D1 catalog found 105 application tables plus its
+Alchemy migration ledger. It contains retained development records. Compared with the local target,
+18 application tables are introduced and 12 retired; 39 surviving table definitions differ. This is
+a transition input, not an instruction to drop the ledger or rerun the baseline. Schema and aggregate
+row counts were read through the authenticated dashboard after Wrangler returned authentication
+error 10000. No live D1/R2 mutation or deployment was performed during this inspection.
+
+The remaining release work is the fenced, populated owner transition and independent file/recovery
+reconciliation described above, verified schema equivalence and foreign keys, then the synchronized
+runtime rollout. The local test results do not replace that evidence. Keep the three Operational
+Health stores and their callers until #1491/#1492 verify live signal coverage, actual notification
+delivery, private dashboard behavior and missing/stale execution. Do not close #1494 on local results.

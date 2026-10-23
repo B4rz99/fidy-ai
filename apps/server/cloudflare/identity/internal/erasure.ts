@@ -113,10 +113,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "whatsapp_identities",
     ],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM users r WHERE r.id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM users r WHERE r.id=?",
       params: [userId],
@@ -124,8 +121,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     remaining: (userId) => ({ sql: "SELECT 1 FROM users r WHERE r.id=?", params: [userId] }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM users AS r WHERE r.id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM users AS r WHERE r.id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -134,10 +131,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "identity",
     dependencies: ["pending_consent_exchanges"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
@@ -148,8 +142,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE users AS r SET whatsapp_portfolio_id=NULL,whatsapp_bsuid=NULL,whatsapp_verified_at_ms=NULL WHERE r.id=? AND r.whatsapp_portfolio_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE users AS r SET whatsapp_portfolio_id=NULL,whatsapp_bsuid=NULL,whatsapp_verified_at_ms=NULL WHERE r.id=? AND r.whatsapp_portfolio_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },

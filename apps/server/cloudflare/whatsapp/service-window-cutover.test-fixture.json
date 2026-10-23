@@ -1,0 +1,19 @@
+{
+  "originalDefinitions": [
+    "CREATE TABLE hosted_whatsapp_windows (\n user_id TEXT NOT NULL, portfolio_id TEXT NOT NULL, bsuid TEXT NOT NULL,\n last_verified_inbound_at_ms INTEGER NOT NULL, closes_at_ms INTEGER NOT NULL,\n PRIMARY KEY (user_id, portfolio_id, bsuid),\n CHECK (closes_at_ms = last_verified_inbound_at_ms + 86400000)\n) STRICT;",
+    "CREATE INDEX hosted_whatsapp_windows_expiry ON hosted_whatsapp_windows(closes_at_ms);",
+    "CREATE TRIGGER erasure_fence_hosted_whatsapp_windows_delete BEFORE DELETE ON hosted_whatsapp_windows\nWHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_windows'))\nBEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;",
+    "CREATE TRIGGER erasure_fence_hosted_whatsapp_windows_insert BEFORE INSERT ON hosted_whatsapp_windows\nWHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_windows'))\nBEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;",
+    "CREATE TRIGGER erasure_fence_hosted_whatsapp_windows_update BEFORE UPDATE ON hosted_whatsapp_windows\nWHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_windows'))\nBEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;",
+    "CREATE TRIGGER erasure_preserve_hosted_whatsapp_windows_delete BEFORE DELETE ON hosted_whatsapp_windows\nWHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)\n  AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'\n  AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000)\nBEGIN\n  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)\n  SELECT q.id,'hosted_whatsapp_windows','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.\"user_id\",'portfolio_id',OLD.\"portfolio_id\",'bsuid',OLD.\"bsuid\",'last_verified_inbound_at_ms',OLD.\"last_verified_inbound_at_ms\",'closes_at_ms',OLD.\"closes_at_ms\")\n  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)\n    AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'\n    AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;\nEND;",
+    "CREATE TABLE erasure_chunk (\n  request_id TEXT NOT NULL REFERENCES erasure_requests(id),\n  row_ref TEXT NOT NULL,\n  PRIMARY KEY(request_id,row_ref)\n) STRICT;"
+  ],
+  "introducedNames": [
+    "whatsapp_service_windows",
+    "whatsapp_service_windows_expiry",
+    "erasure_fence_whatsapp_service_windows_delete",
+    "erasure_fence_whatsapp_service_windows_insert",
+    "erasure_fence_whatsapp_service_windows_update",
+    "erasure_preserve_whatsapp_service_windows_delete"
+  ]
+}

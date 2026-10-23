@@ -38,7 +38,7 @@ export const readDashboardTransactions = <A>({
       db.batch([
         snapshot.statement,
         db
-          .prepare("SELECT version, readiness FROM dashboard_projection_state WHERE user_id = ?")
+          .prepare("SELECT version, readiness FROM transaction_projection_state WHERE user_id = ?")
           .bind(userId),
         ...dashboardTransactionQueries({ db, userId, lists }),
       ])

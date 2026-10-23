@@ -28,7 +28,7 @@ export const sweepCanonicalAdmission = ({
           .bind(current - canonicalRetryLifetimeMs),
         db
           .prepare(
-            `DELETE FROM audit_entries WHERE record_type='request_admission' AND id IN (SELECT id FROM audit_entries WHERE record_type='request_admission' AND accepted_at_ms <= ? ORDER BY accepted_at_ms LIMIT ${retentionBatchSize})`
+            `DELETE FROM audit_entries WHERE record_type='request_admission' AND id IN (SELECT id FROM audit_entries WHERE record_type='request_admission' AND occurred_at_ms <= ? ORDER BY occurred_at_ms LIMIT ${retentionBatchSize})`
           )
           .bind(current - acceptanceLifetimeMs),
         db

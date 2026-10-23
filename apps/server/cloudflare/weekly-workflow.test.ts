@@ -95,12 +95,15 @@ const workflowBinding: Workflow<ProactivityDeliveryWork> = {
 const snapshot = (db: D1Database): Effect.Effect<ReadonlyArray<ReadonlyArray<unknown>>> =>
   Effect.forEach(
     [
-      "(SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL)",
+      "proactive_messages",
+      "insight_offer_requests",
+      "weekly_question_requests",
       "insight_reports",
       "whatsapp_deliveries",
       "consent_offers",
       "consent_history",
-      "proactivity_governors",
+      "weekly_proactivity_state",
+      "reminder_proactivity_state",
       "proactive_transcript_entries",
       "insight_events",
     ],
@@ -116,7 +119,7 @@ const seedQuestion = (
     yield* promise(() =>
       input.db
         .prepare(
-          "INSERT INTO insight_reports(kind,delivery_id,user_id,origin,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('weekly-question',?,?,'requested',?,'ready',?3,0,0)"
+          "INSERT INTO weekly_question_requests(id,user_id,origin,created_at_ms,state,last_attempt_at_ms,restart_attempts) VALUES (?,?,'requested',?,'ready',0,0)"
         )
         .bind(questionId, userId, input.created)
         .run()
@@ -525,9 +528,7 @@ it("cumulative Workflow restarts terminalize ready work and stop future Maintena
       expect(
         yield* promise(() =>
           db
-            .prepare(
-              "SELECT state FROM (SELECT rowid,delivery_id AS id,user_id,origin,request_message_id,rejection_offer_id,dispatch_state AS state,created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE kind='weekly-question') WHERE id=?"
-            )
+            .prepare("SELECT state FROM weekly_question_requests WHERE id=?")
             .bind(questionId)
             .first("state")
         )
@@ -574,9 +575,7 @@ it("withdrawn expired question purposes terminate without content reads or furth
       expect(
         yield* promise(() =>
           db
-            .prepare(
-              "SELECT state FROM (SELECT rowid,delivery_id AS id,user_id,origin,request_message_id,rejection_offer_id,dispatch_state AS state,created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE kind='weekly-question') WHERE id=?"
-            )
+            .prepare("SELECT state FROM weekly_question_requests WHERE id=?")
             .bind(questionId)
             .first("state")
         )
@@ -667,7 +666,7 @@ it("four unavailable due Users do not starve a healthy fifth User's generation",
       yield* promise(() =>
         db
           .prepare(
-            "INSERT INTO transactions(id,user_id,amount,currency,category_id,direction,occurred_at,created_at,counterparty) SELECT '20000000-0000-4000-8000-000000000005',?,amount,currency,category_id,direction,occurred_at,created_at,counterparty FROM transactions WHERE user_id=? LIMIT 1"
+            "INSERT INTO transactions(id,user_id,amount,currency,category_id,direction,occurred_at_ms,created_at_ms,counterparty) SELECT '20000000-0000-4000-8000-000000000005',?,amount,currency,category_id,direction,occurred_at_ms,created_at_ms,counterparty FROM transactions WHERE user_id=? LIMIT 1"
           )
           .bind(healthy, userId)
           .run()

@@ -33,7 +33,7 @@ const messageWrites = (
   return [
     input.db
       .prepare(
-        "INSERT INTO insight_reports(kind,delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('proactivity-delivery',?,?,'budget-threshold',?,?,?,?,?,? ,CASE WHEN ?6<=?8 THEN 'expired' ELSE 'ready' END,?8,0,0)"
+        "INSERT INTO proactive_messages(kind,id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('proactivity-delivery',?,?,'budget-threshold',?,?,?,?,?,? ,CASE WHEN ?6<=?8 THEN 'expired' ELSE 'ready' END,?8,0,0)"
       )
       .bind(
         group.id,
@@ -47,7 +47,7 @@ const messageWrites = (
       ),
     input.db
       .prepare(
-        "UPDATE insight_events SET report_delivery_id=?2 WHERE user_id=?1 AND budget_delivery_group_id=?2 AND report_delivery_id IS NULL"
+        "UPDATE insight_events SET message_kind='proactivity-delivery',message_id=?2 WHERE user_id=?1 AND budget_delivery_group_id=?2 AND message_id IS NULL"
       )
       .bind(input.userId, group.id),
   ];
@@ -73,7 +73,7 @@ const commitGroup = (
           subject: { _tag: "User", userId: input.userId },
           requirement: "active",
           statement: {
-            sql: "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json,budget_delivery_group_id,budget_threshold,budget_crossing_json) SELECT ?,?,'budget-threshold',?,1,?,?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM (SELECT rowid,user_id,budget_delivery_group_id AS delivery_group_id,budget_threshold AS threshold,id AS insight_event_id,budget_crossing_json AS crossing_json FROM insight_events WHERE budget_delivery_group_id IS NOT NULL) WHERE user_id=? AND delivery_group_id=? AND threshold=?)",
+            sql: "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json,budget_delivery_group_id,budget_threshold,budget_crossing_json) SELECT ?,?,'budget-threshold',?,1,?,?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM (SELECT rowid,user_id,budget_delivery_group_id AS delivery_group_id,budget_threshold AS threshold,id AS insight_event_id,budget_crossing_json AS crossing_json FROM insight_events WHERE budget_delivery_group_id IS NOT NULL) WHERE user_id=? AND delivery_group_id=? AND threshold=?)",
             params: [
               id,
               input.userId,
@@ -81,7 +81,7 @@ const commitGroup = (
               crossing.serviceMarket,
               crossing.locale,
               crossing.period.timeZone,
-              DateTime.formatIso(crossing.detectedAt),
+              crossing.detectedAt.epochMilliseconds,
               encodedMoney,
               group.id,
               crossing.threshold,

@@ -1,5 +1,5 @@
 import { type TransactionCaller, callerAuthority } from "../../canonical-work/operations";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   Memory,
   MemoryId,
@@ -8,7 +8,7 @@ import {
 } from "../../../src/core/memory/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
-const memoryRowColumns = "id,text,created_at,updated_at";
+const memoryRowColumns = "id,text,created_at_ms,updated_at_ms";
 
 /**
  * Every current Memory of one explicit User in stable ascending creation and identity order —
@@ -23,7 +23,7 @@ export const memoryRowsQuery = ({
 }: Readonly<{ userId: string; authority: OwnedStatement }>): OwnedStatement => ({
   sql: `SELECT ${memoryRowColumns} FROM memories
     WHERE user_id = ? AND EXISTS (SELECT 1 FROM (${authority.sql}) AS memory_authority WHERE memory_authority.userId = memories.user_id)
-    ORDER BY created_at, id`,
+    ORDER BY created_at_ms, id`,
   params: [userId, ...authority.params],
 });
 
@@ -43,8 +43,8 @@ export const memoryRowQuery = ({
 const MemoryRow = Schema.Struct({
   id: MemoryId,
   text: MemoryText,
-  created_at: Schema.String,
-  updated_at: Schema.String,
+  created_at_ms: Schema.DateTimeUtcFromMillis,
+  updated_at_ms: Schema.DateTimeUtcFromMillis,
 });
 
 /** Rebuild untrusted D1 rows into canonical current Memories, or reject the whole projection. */
@@ -53,11 +53,11 @@ export const memoriesFromRows = (rows: unknown): Option.Option<ReadonlyArray<Mem
   return Option.flatMap(decoded, (values) => {
     const memories: Array<Memory> = [];
     for (const row of values) {
-      const memory = Schema.decodeOption(Memory)({
+      const memory = Schema.decodeOption(Schema.toType(Memory))({
         id: row.id,
         text: row.text,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
+        createdAt: row.created_at_ms,
+        updatedAt: row.updated_at_ms,
       });
       if (Option.isNone(memory)) return Option.none<ReadonlyArray<Memory>>();
       memories.push(memory.value);
@@ -79,13 +79,13 @@ export const insertMemory = ({
 }>): D1PreparedStatement => {
   const authority = callerAuthority({ subject, current });
   return db
-    .prepare(`INSERT INTO memories (id, user_id, text, created_at, updated_at)
+    .prepare(`INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms)
       SELECT ?, user_id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
     .bind(
       candidate.id,
       candidate.text,
-      DateTime.formatIso(candidate.createdAt),
-      DateTime.formatIso(candidate.updatedAt),
+      candidate.createdAt.epochMilliseconds,
+      candidate.updatedAt.epochMilliseconds,
       ...authority.bindings
     );
 };
@@ -103,11 +103,11 @@ export const replaceMemory = ({
 }>): D1PreparedStatement => {
   const authority = callerAuthority({ subject, current });
   return db
-    .prepare(`UPDATE memories SET text = ?, updated_at = ? WHERE user_id = ? AND id = ?
+    .prepare(`UPDATE memories SET text = ?, updated_at_ms = ? WHERE user_id = ? AND id = ?
       AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
     .bind(
       candidate.text,
-      DateTime.formatIso(candidate.updatedAt),
+      candidate.updatedAt.epochMilliseconds,
       subject.userId,
       candidate.id,
       ...authority.bindings

@@ -437,11 +437,58 @@ it("requires batch child capabilities before charging and charges an authorized 
         yield* io(() =>
           fixture.db
             .prepare(
-              "SELECT user_id AS userId,pat_id AS patId,operation FROM (SELECT id,user_id,pat_id,operation,accepted_at_ms FROM audit_entries WHERE record_type='request_admission') AS canonical_request_acceptances"
+              "SELECT user_id AS userId,pat_id AS patId,operation,occurred_at_ms AS occurredAt FROM (SELECT id,user_id,pat_id,operation,occurred_at_ms FROM audit_entries WHERE record_type='request_admission') AS canonical_request_acceptances"
             )
             .first()
         )
-      ).toEqual({ userId, patId, operation: "operations.executeAtomicBatch" });
+      ).toEqual({
+        userId,
+        patId,
+        operation: "operations.executeAtomicBatch",
+        occurredAt: fixture.current,
+      });
+      yield* io(() =>
+        fixture.db
+          .prepare(
+            "INSERT INTO audit_entries(record_type,id,user_id,operation,outcome,occurred_at_ms) VALUES('publication','retained-publication',?,'ingestion.submitForExtraction','success',?)"
+          )
+          .bind(userId, fixture.current)
+          .run()
+      );
+      const admissionLifetime = 93 * 86400000;
+      yield* sweepCanonicalAdmission({
+        db: fixture.db,
+        current: fixture.current + admissionLifetime - 1,
+      });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare(
+              "SELECT count(*) AS n FROM audit_entries WHERE record_type='request_admission'"
+            )
+            .first()
+        )
+      ).toEqual({ n: 1 });
+      yield* sweepCanonicalAdmission({
+        db: fixture.db,
+        current: fixture.current + admissionLifetime,
+      });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare(
+              "SELECT count(*) AS n FROM audit_entries WHERE record_type='request_admission'"
+            )
+            .first()
+        )
+      ).toEqual({ n: 0 });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT id,occurred_at_ms FROM audit_entries WHERE record_type='publication'")
+            .first()
+        )
+      ).toEqual({ id: "retained-publication", occurred_at_ms: fixture.current });
     })
   ));
 

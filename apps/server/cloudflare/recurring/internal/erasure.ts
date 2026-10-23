@@ -20,8 +20,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE recurring_series AS r SET confirmation_id=NULL,confirmed_at_ms=NULL,confirmation_context_json=NULL,confirmation_json=NULL,digest_excluded=NULL,confirmation_sequence=NULL WHERE r.confirmation_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE recurring_series AS r SET confirmation_id=NULL,confirmed_at_ms=NULL,confirmation_context_json=NULL,confirmation_json=NULL,digest_excluded=NULL,confirmation_sequence=NULL WHERE r.confirmation_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -44,8 +44,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM recurring_dispatch AS r WHERE r.last_user=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM recurring_dispatch AS r WHERE r.last_user=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -68,8 +68,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM recurring_evaluation_records AS r WHERE r.kind='fact' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM recurring_evaluation_records AS r WHERE r.kind='fact' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -92,8 +92,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM recurring_evaluation_records AS r WHERE r.kind='progress' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM recurring_evaluation_records AS r WHERE r.kind='progress' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -116,8 +116,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM recurring_evaluation_records AS r WHERE r.kind='proposal' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM recurring_evaluation_records AS r WHERE r.kind='proposal' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -140,8 +140,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM recurring_series AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM recurring_series AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },

@@ -590,13 +590,6 @@ CREATE TABLE erasure_archives (
 ) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE erasure_chunk (
-  request_id TEXT NOT NULL REFERENCES erasure_requests(id),
-  row_ref TEXT NOT NULL,
-  PRIMARY KEY(request_id,row_ref)
-) STRICT;
---> statement-breakpoint
-
 CREATE TABLE erasure_control (
  kind TEXT PRIMARY KEY NOT NULL CHECK(kind IN ('published','restore','email','statement','erasure')),
  generation TEXT,

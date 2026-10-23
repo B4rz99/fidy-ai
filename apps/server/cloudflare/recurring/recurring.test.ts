@@ -1112,7 +1112,6 @@ it.effect("restores fair discovery after erasure removes the dispatch cursor", (
         db
           .prepare("INSERT INTO erasure_permits VALUES ('cursor-erasure',?,'recurring_dispatch')")
           .bind(userId),
-        db.prepare("INSERT INTO erasure_chunk VALUES ('cursor-erasure','1')"),
       ])
     );
     const cursor = projections.find((projection) => projection.id === "recurring_dispatch");
@@ -1121,7 +1120,7 @@ it.effect("restores fair discovery after erasure removes the dispatch cursor", (
     yield* fromPromise(() =>
       db.batch(
         cursor
-          .remove({ userId, reference: "cursor-erasure" })
+          .remove({ userId, reference: "cursor-erasure", rowRefsJson: '["1"]' })
           .map(({ sql, params }) => db.prepare(sql).bind(...params))
       )
     );

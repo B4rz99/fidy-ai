@@ -20,8 +20,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budget_publications AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM budget_publications AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -44,8 +44,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budget_month_plan_records AS r WHERE r.kind='currency' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM budget_month_plan_records AS r WHERE r.kind='currency' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -68,8 +68,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budget_month_plan_records AS r WHERE r.kind='cap' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM budget_month_plan_records AS r WHERE r.kind='cap' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -92,8 +92,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budget_month_latches AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM budget_month_latches AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -116,8 +116,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budget_month_plan_records AS r WHERE r.kind='plan' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM budget_month_plan_records AS r WHERE r.kind='plan' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -140,8 +140,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budget_evaluation_work AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM budget_evaluation_work AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -164,8 +164,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budget_threshold_alerts AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM budget_threshold_alerts AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -188,8 +188,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budget_user_state AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM budget_user_state AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -209,8 +209,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     remaining: (userId) => ({ sql: "SELECT 1 FROM budgets r WHERE r.user_id=?", params: [userId] }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budgets AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM budgets AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },

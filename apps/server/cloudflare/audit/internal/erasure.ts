@@ -42,8 +42,8 @@ const entryProjection = ({
     }),
     remove: (subject) => [
       {
-        sql: `DELETE FROM audit_entries AS r WHERE ${scope} AND CAST(r.sequence AS TEXT) IN (SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
-        params: [subject.userId, subject.reference],
+        sql: `DELETE FROM audit_entries AS r WHERE ${scope} AND CAST(r.sequence AS TEXT) IN (SELECT value AS row_ref FROM json_each(?))`,
+        params: [subject.userId, subject.rowRefsJson],
       },
     ],
   };
@@ -132,8 +132,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM audit_retention_permits AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM audit_retention_permits AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },

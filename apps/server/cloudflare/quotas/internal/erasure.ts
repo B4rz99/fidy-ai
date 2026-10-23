@@ -20,8 +20,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM commercial_allowance_consumptions AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM commercial_allowance_consumptions AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },

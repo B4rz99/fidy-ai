@@ -20,8 +20,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM provider_authentication_attempts AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM provider_authentication_attempts AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -44,8 +44,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM provider_credentials AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM provider_credentials AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -68,8 +68,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM whatsapp_provider_handoffs AS r WHERE EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=r.pairing_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM whatsapp_provider_handoffs AS r WHERE EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=r.pairing_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },

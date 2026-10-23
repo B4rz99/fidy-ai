@@ -117,3 +117,13 @@ export const makeSchemaCutover = (tables: ReadonlyArray<string>): SchemaCutover 
     ],
   };
 };
+
+/** Original transient selection table, explicitly restored only by pre-#1488 migration rehearsals. */
+export const installHistoricalErasureChunk = (db: D1Database): Promise<D1Result> =>
+  db
+    .prepare(`CREATE TABLE erasure_chunk (
+  request_id TEXT NOT NULL REFERENCES erasure_requests(id),
+  row_ref TEXT NOT NULL,
+  PRIMARY KEY(request_id,row_ref)
+) STRICT;`)
+    .run();

@@ -284,8 +284,8 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: `${removal} WHERE ${predicate} AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
-        params: [scope.userId, scope.reference],
+        sql: `${removal} WHERE ${predicate} AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))`,
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   };
@@ -315,8 +315,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: `UPDATE proactive_messages AS r SET control_message_id=NULL,control_choice=NULL,control_audit_sequence=NULL WHERE r.control_message_id IS NOT NULL AND r.user_id=? AND (${controlReceiptRef}) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
-        params: [scope.userId, scope.reference],
+        sql: `UPDATE proactive_messages AS r SET control_message_id=NULL,control_choice=NULL,control_audit_sequence=NULL WHERE r.control_message_id IS NOT NULL AND r.user_id=? AND (${controlReceiptRef}) IN(SELECT value AS row_ref FROM json_each(?))`,
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -340,8 +340,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE insight_events AS r SET budget_delivery_group_id=NULL,budget_threshold=NULL,budget_crossing_json=NULL WHERE r.budget_delivery_group_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE insight_events AS r SET budget_delivery_group_id=NULL,budget_threshold=NULL,budget_crossing_json=NULL WHERE r.budget_delivery_group_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -364,8 +364,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE insight_events AS r SET delivery_receipt_id=NULL,delivery_sent_at_ms=NULL,delivery_channel=NULL,delivery_provider=NULL,delivery_provider_message_id=NULL WHERE r.delivery_receipt_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE insight_events AS r SET delivery_receipt_id=NULL,delivery_sent_at_ms=NULL,delivery_channel=NULL,delivery_provider=NULL,delivery_provider_message_id=NULL WHERE r.delivery_receipt_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -389,8 +389,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE insight_events AS r SET message_kind=NULL,message_id=NULL WHERE r.user_id=? AND message_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE insight_events AS r SET message_kind=NULL,message_id=NULL WHERE r.user_id=? AND message_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -414,12 +414,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM recurring_digest_items AS r WHERE r.disposition IS NOT NULL AND r.confirmed_at_ms IS NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM recurring_digest_items AS r WHERE r.disposition IS NOT NULL AND r.confirmed_at_ms IS NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
       {
-        sql: "UPDATE recurring_digest_items AS r SET disposition=NULL WHERE r.disposition IS NOT NULL AND r.confirmed_at_ms IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE recurring_digest_items AS r SET disposition=NULL WHERE r.disposition IS NOT NULL AND r.confirmed_at_ms IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -443,8 +443,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE insight_offer_requests AS r SET current_recurring_opportunity=NULL WHERE r.user_id=? AND r.current_recurring_opportunity=1 AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE insight_offer_requests AS r SET current_recurring_opportunity=NULL WHERE r.user_id=? AND r.current_recurring_opportunity=1 AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -468,12 +468,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM recurring_digest_items AS r WHERE r.confirmed_at_ms IS NOT NULL AND r.disposition IS NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM recurring_digest_items AS r WHERE r.confirmed_at_ms IS NOT NULL AND r.disposition IS NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
       {
-        sql: "UPDATE recurring_digest_items AS r SET confirmed_at_ms=NULL,context_json=NULL,item_json=NULL,eligible=NULL WHERE r.confirmed_at_ms IS NOT NULL AND r.disposition IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE recurring_digest_items AS r SET confirmed_at_ms=NULL,context_json=NULL,item_json=NULL,eligible=NULL WHERE r.confirmed_at_ms IS NOT NULL AND r.disposition IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },

@@ -17,7 +17,8 @@
     "CREATE TRIGGER statement_review_capacity_insert AFTER INSERT ON statement_needs_review\nWHEN NEW.status = 'pending'\nBEGIN UPDATE statement_review_capacity SET pending_count = pending_count + 1 WHERE id = 1; END;",
     "CREATE TRIGGER statement_review_capacity_settlement AFTER UPDATE OF status ON statement_needs_review\nWHEN OLD.status = 'pending' AND NEW.status != 'pending'\nBEGIN UPDATE statement_review_capacity SET pending_count = pending_count - 1 WHERE id = 1; END;",
     "CREATE TRIGGER statement_review_pending_cap BEFORE INSERT ON statement_needs_review\nWHEN NEW.status = 'pending' AND\n  COALESCE((SELECT pending_count FROM statement_review_capacity WHERE id = 1), 5000) >= 5000\nBEGIN SELECT RAISE(ABORT, 'statement_review_capacity'); END;",
-    "CREATE TRIGGER statement_review_settlement_only BEFORE UPDATE ON statement_needs_review\nWHEN NOT (((OLD.status = 'pending' AND NEW.status IN ('expired', 'resolved')\n  AND NEW.original_evidence IS NULL AND NEW.known_money IS NULL) OR\n  (NEW.status=OLD.status AND NEW.original_evidence IS OLD.original_evidence AND NEW.known_money IS OLD.known_money\n    AND NEW.review_suggestions_json IS NULL))\n  AND NEW.id = OLD.id AND NEW.user_id = OLD.user_id\n  AND NEW.submission_id = OLD.submission_id AND NEW.record_number = OLD.record_number\n  AND NEW.reason = OLD.reason AND NEW.issues = OLD.issues\n  AND NEW.evidence_expires_at_ms = OLD.evidence_expires_at_ms\n  AND NEW.created_at_ms = OLD.created_at_ms AND NEW.service_market = OLD.service_market\n  AND NEW.locale = OLD.locale AND NEW.time_zone = OLD.time_zone\n  AND NEW.source_format = OLD.source_format AND NEW.parser_revision = OLD.parser_revision\n  AND NEW.extractor_revision = OLD.extractor_revision\n  AND (NEW.status = OLD.status OR NEW.status = 'expired' OR EXISTS (SELECT 1 FROM ingestion_review_state\n    WHERE id = OLD.id AND user_id = OLD.user_id AND status = 'created')))\nBEGIN SELECT RAISE(ABORT, 'review_immutable'); END;"
+    "CREATE TRIGGER statement_review_settlement_only BEFORE UPDATE ON statement_needs_review\nWHEN NOT (((OLD.status = 'pending' AND NEW.status IN ('expired', 'resolved')\n  AND NEW.original_evidence IS NULL AND NEW.known_money IS NULL) OR\n  (NEW.status=OLD.status AND NEW.original_evidence IS OLD.original_evidence AND NEW.known_money IS OLD.known_money\n    AND NEW.review_suggestions_json IS NULL))\n  AND NEW.id = OLD.id AND NEW.user_id = OLD.user_id\n  AND NEW.submission_id = OLD.submission_id AND NEW.record_number = OLD.record_number\n  AND NEW.reason = OLD.reason AND NEW.issues = OLD.issues\n  AND NEW.evidence_expires_at_ms = OLD.evidence_expires_at_ms\n  AND NEW.created_at_ms = OLD.created_at_ms AND NEW.service_market = OLD.service_market\n  AND NEW.locale = OLD.locale AND NEW.time_zone = OLD.time_zone\n  AND NEW.source_format = OLD.source_format AND NEW.parser_revision = OLD.parser_revision\n  AND NEW.extractor_revision = OLD.extractor_revision\n  AND (NEW.status = OLD.status OR NEW.status = 'expired' OR EXISTS (SELECT 1 FROM ingestion_review_state\n    WHERE id = OLD.id AND user_id = OLD.user_id AND status = 'created')))\nBEGIN SELECT RAISE(ABORT, 'review_immutable'); END;",
+    "CREATE TABLE erasure_chunk (\n  request_id TEXT NOT NULL REFERENCES erasure_requests(id),\n  row_ref TEXT NOT NULL,\n  PRIMARY KEY(request_id,row_ref)\n) STRICT;"
   ],
   "introducedNames": [
     "ingestion_review_items",
@@ -35,6 +36,7 @@
     "ingestion_review_item_initial",
     "ingestion_review_legacy_statement_insert",
     "ingestion_review_legacy_statement_update",
-    "ingestion_review_source_identity"
+    "ingestion_review_source_identity",
+    "source_attestation_review_owner"
   ]
 }

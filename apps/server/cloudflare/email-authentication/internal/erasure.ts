@@ -26,8 +26,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE browser_login_pairings AS r SET email_work_id=NULL,email_user_id=NULL,email_address=NULL,email_credential_verified_at_ms=NULL,email_state=NULL,email_public_code=NULL,email_proof_digest=NULL,email_proof_expires_at_ms=NULL,email_expires_at_ms=NULL,email_generation=NULL,email_wrong_attempts=NULL,email_last_requested_at_ms=NULL,email_dispatch_attempted_at_ms=NULL WHERE email_work_id IS NOT NULL AND r.email_user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE browser_login_pairings AS r SET email_work_id=NULL,email_user_id=NULL,email_address=NULL,email_credential_verified_at_ms=NULL,email_state=NULL,email_public_code=NULL,email_proof_digest=NULL,email_proof_expires_at_ms=NULL,email_expires_at_ms=NULL,email_generation=NULL,email_wrong_attempts=NULL,email_last_requested_at_ms=NULL,email_dispatch_attempted_at_ms=NULL WHERE email_work_id IS NOT NULL AND r.email_user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -56,8 +56,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM email_replacements AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM email_replacements AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -80,8 +80,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM verified_email_credentials AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM verified_email_credentials AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },

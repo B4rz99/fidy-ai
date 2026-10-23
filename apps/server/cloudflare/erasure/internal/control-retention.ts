@@ -35,7 +35,6 @@ const deleteControls = (
       "erasure_steps",
       "erasure_archives",
       "erasure_permits",
-      "erasure_chunk",
       "erasure_custody_records",
       "erasure_objects",
       "erasure_restore_members",

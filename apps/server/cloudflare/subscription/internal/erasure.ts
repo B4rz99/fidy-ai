@@ -20,8 +20,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE billing_provider_transactions AS r SET event_row_ref=NULL,event_received_at_ms=NULL,event_signed_at=NULL,event_signed_status=NULL,event_lookup_attempts=NULL,event_last_checked_at_ms=NULL,event_resolved_at_ms=NULL WHERE r.event_received_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempt_context a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?) AND COALESCE(r.event_row_ref,'callback:'||r.transaction_id) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE billing_provider_transactions AS r SET event_row_ref=NULL,event_received_at_ms=NULL,event_signed_at=NULL,event_signed_status=NULL,event_lookup_attempts=NULL,event_last_checked_at_ms=NULL,event_resolved_at_ms=NULL WHERE r.event_received_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempt_context a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?) AND COALESCE(r.event_row_ref,'callback:'||r.transaction_id) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -45,8 +45,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM billing_price_notices AS r WHERE r.subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM billing_price_notices AS r WHERE r.subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -70,8 +70,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE billing_attempts SET checkout_transaction_id=NULL WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND checkout_transaction_id IS NOT NULL AND CAST(rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE billing_attempts SET checkout_transaction_id=NULL WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND checkout_transaction_id IS NOT NULL AND CAST(rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -94,12 +94,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM billing_provider_transactions AS r WHERE r.event_received_at_ms IS NULL AND EXISTS(SELECT 1 FROM billing_attempt_context p WHERE p.id=r.attempt_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM billing_provider_transactions AS r WHERE r.event_received_at_ms IS NULL AND EXISTS(SELECT 1 FROM billing_attempt_context p WHERE p.id=r.attempt_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
       {
-        sql: "UPDATE billing_provider_transactions AS r SET attempt_id=NULL,lookup_attempts=0,last_checked_at_ms=NULL,status=NULL,first_observed_at_ms=NULL,negative_observed_at_ms=NULL,finalized_at_ms=NULL WHERE r.event_received_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM billing_attempt_context p WHERE p.id=r.attempt_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE billing_provider_transactions AS r SET attempt_id=NULL,lookup_attempts=0,last_checked_at_ms=NULL,status=NULL,first_observed_at_ms=NULL,negative_observed_at_ms=NULL,finalized_at_ms=NULL WHERE r.event_received_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM billing_attempt_context p WHERE p.id=r.attempt_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -129,8 +129,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM payment_enrollments AS r WHERE r.subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM payment_enrollments AS r WHERE r.subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -153,12 +153,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE payment_enrollments SET payment_source_id=NULL WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND payment_source_id IN(SELECT id FROM payment_sources WHERE archive_row_ref IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?))",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE payment_enrollments SET payment_source_id=NULL WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND payment_source_id IN(SELECT id FROM payment_sources WHERE archive_row_ref IN(SELECT value AS row_ref FROM json_each(?)))",
+        params: [scope.userId, scope.rowRefsJson],
       },
       {
-        sql: "DELETE FROM payment_sources WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND archive_row_ref IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM payment_sources WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND archive_row_ref IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -187,8 +187,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM refund_attempts AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM refund_attempts AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -212,8 +212,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM subscription_cancellations AS r WHERE r.subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM subscription_cancellations AS r WHERE r.subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -242,8 +242,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM subscriptions AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM subscriptions AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -267,8 +267,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE subscriptions AS r SET current_paid_attempt_id=NULL WHERE r.user_id=? AND current_paid_attempt_id IS NOT NULL AND CAST((SELECT rowid FROM users WHERE id=r.user_id) AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE subscriptions AS r SET current_paid_attempt_id=NULL WHERE r.user_id=? AND current_paid_attempt_id IS NOT NULL AND CAST((SELECT rowid FROM users WHERE id=r.user_id) AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -304,8 +304,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM billing_attempts WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND id IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM billing_attempts WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND id IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },

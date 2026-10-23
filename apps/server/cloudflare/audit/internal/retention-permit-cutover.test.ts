@@ -1,3 +1,4 @@
+import { installHistoricalErasureChunk } from "../../schema-cutover.test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { Data, Effect } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "../../d1-test-fixture";
@@ -46,6 +47,7 @@ it.each(["complete", "interrupted", "retained_permit", "unfinished_chunk"] as co
       Effect.gen(function* () {
         const db = yield* native(() => databases.acquire());
         yield* native(() => installTestSchema({ db }));
+        yield* native(() => installHistoricalErasureChunk(db));
         const baseline = yield* native(() =>
           Bun.file(new URL("../../migrations/0001_schema.sql", import.meta.url)).text()
         );

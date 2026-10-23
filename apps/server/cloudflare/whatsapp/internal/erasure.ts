@@ -60,8 +60,8 @@ const recordProjection = ({
     }),
     remove: (scope) => [
       {
-        sql: `DELETE FROM ${table} AS r WHERE ${owned} AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
-        params: [scope.userId, scope.reference],
+        sql: `DELETE FROM ${table} AS r WHERE ${owned} AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))`,
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   };
@@ -124,8 +124,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE hosted_turns SET inbound_portfolio_id=NULL,inbound_bsuid=NULL,inbound_message_id=NULL,inbound_business_phone_number_id=NULL,inbound_occurred_at_ms=NULL,inbound_received_at_ms=NULL,inbound_reply_to_message_id=NULL,inbound_sandbox_phone=NULL,dispatch_offered_at_ms=NULL,dispatch_created_at_ms=NULL WHERE user_id=? AND CAST(rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE hosted_turns SET inbound_portfolio_id=NULL,inbound_bsuid=NULL,inbound_message_id=NULL,inbound_business_phone_number_id=NULL,inbound_occurred_at_ms=NULL,inbound_received_at_ms=NULL,inbound_reply_to_message_id=NULL,inbound_sandbox_phone=NULL,dispatch_offered_at_ms=NULL,dispatch_created_at_ms=NULL WHERE user_id=? AND CAST(rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -148,8 +148,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM whatsapp_service_windows AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM whatsapp_service_windows AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -195,8 +195,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE users AS r SET route_portfolio_id=NULL,route_bsuid=NULL,route_phone_number_id=NULL,route_verified_at_ms=NULL WHERE r.id=? AND r.route_portfolio_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "UPDATE users AS r SET route_portfolio_id=NULL,route_bsuid=NULL,route_phone_number_id=NULL,route_verified_at_ms=NULL WHERE r.id=? AND r.route_portfolio_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },

@@ -10,6 +10,7 @@ export type AssertionScope =
   | "budget_mutation"
   | "category_mutation"
   | "dashboard"
+  | "erasure_owner_batch"
   | "erasure_writer"
   | "forwarded_email"
   | "ingestion_review"

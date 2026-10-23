@@ -1,5 +1,6 @@
 import {
   documentedSqlBlock,
+  installHistoricalErasureChunk,
   schemaDefinition,
   schemaObjectName,
   schemaStatements,
@@ -185,6 +186,7 @@ it.each(cases)(
       Effect.gen(function* () {
         const db = yield* native(() => databases.acquire());
         yield* native(() => installTestSchema({ db }));
+        yield* native(() => installHistoricalErasureChunk(db));
         const baseline = schemaStatements(
           yield* native(() =>
             Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()

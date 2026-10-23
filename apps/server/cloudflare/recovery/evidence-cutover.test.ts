@@ -3,6 +3,7 @@ import { Cause, Data, Effect, Option, Schema } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   documentedSqlBlock,
+  installHistoricalErasureChunk,
   schemaDefinition,
   schemaObjectName,
   schemaStatements,
@@ -348,12 +349,6 @@ const eventMetadataErasure = (
     );
     yield* native(() =>
       db
-        .prepare("INSERT INTO erasure_chunk(request_id,row_ref) VALUES(?,'20')")
-        .bind(requestId)
-        .run()
-    );
-    yield* native(() =>
-      db
         .prepare(
           "CREATE TRIGGER interrupt_recovery_metadata AFTER UPDATE ON support_recovery_cases BEGIN SELECT RAISE(ABORT,'interrupted metadata removal');END"
         )
@@ -515,6 +510,7 @@ it.each(cases)("preserves recovery evidence or refuses $description atomically",
     Effect.gen(function* () {
       const db = yield* native(() => databases.acquire());
       yield* native(() => installTestSchema({ db }));
+      yield* native(() => installHistoricalErasureChunk(db));
       const baseline = schemaStatements(
         yield* native(() =>
           Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()

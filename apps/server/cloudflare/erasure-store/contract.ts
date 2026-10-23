@@ -45,7 +45,9 @@ export type ErasureProjection = Readonly<{
         _tag: "Durable";
         select: (input: Readonly<{ userId: string; current: number }>) => OwnedStatement;
       }>;
-  remove: (scope: ErasureScope) => ReadonlyArray<OwnedStatement>;
+  remove: (
+    selection: ErasureScope & Readonly<{ rowRefsJson: string }>
+  ) => ReadonlyArray<OwnedStatement>;
   remaining: (userId: string) => OwnedStatement;
 }>;
 

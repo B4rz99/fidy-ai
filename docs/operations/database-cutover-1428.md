@@ -4721,3 +4721,60 @@ UPDATE statement_staging_objects SET object_key=(SELECT json_extract(value,'$.ol
 ```
 
 <!-- user-file-prefix-rollback-copy:end -->
+
+## Bounded owner deletion without a selection table (#1488)
+
+Stop cleanup consumers while switching the schema and every Erasure owner together. Each owner
+selects at most 64 opaque identifiers through its same-User candidate query. This read fixes the
+batch selection; it grants no deletion authority. Encode those IDs as one bound JSON array and
+reuse that exact array in every related mutation, including child unlinking before parent deletion.
+Do not reselect after earlier statements delete or clear candidates. Each mutation retains its
+owner/variant predicate. The native batch admits an exact request/User/store permit only while the
+request is Erasing, that store's archive step is complete, and no archive step remains incomplete.
+A changed-row assertion aborts the entire batch if admission fails. Existing SQL fences still apply.
+The batch marks delete_done only when the owner's authoritative remaining-row query is empty,
+then removes the permit. A concurrent deletion may consume selected rows; it cannot cause this
+batch to silently substitute a different set. Retry selects another bounded page.
+
+This removes only the transient selection helper. Original-file inventory, upload-writer tracking,
+retention decisions and restore protection remain until their separate accepted proof gates pass.
+One JSON parameter per owner statement preserves the original 64-row bound and avoids interpolating
+identifiers or exceeding D1 parameter limits. No scheduler/Workflow payload acquires deletion authority.
+
+The original helper should be empty between committed native batches. Any persisted helper row or
+permit is unexplained work and blocks cutover; reconcile it under its original request before retrying.
+Run this guard and DROP in one native D1 batch while consumers are stopped. Retain a database backup.
+A failure must roll back both schema and data; verify the full foreign-key graph and original
+User/request/step/owner rows before resuming. Do not bypass these guards to force the removal.
+The inverse recreates only the original empty transient table; it does not synthesize selected IDs.
+A binary rollback must stop consumers and switch every owner contract back together.
+Historical migration rehearsals explicitly reconstruct their pre-#1488 helper, rather than relying
+on the final baseline to preserve removed infrastructure.
+
+<!-- erasure-selection-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'erasure_selection_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_chunk) AND NOT EXISTS(SELECT 1 FROM erasure_permits) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- erasure-selection-guard:end -->
+
+<!-- erasure-selection-drop:start -->
+
+```sql
+DROP TABLE erasure_chunk;
+```
+
+<!-- erasure-selection-drop:end -->
+
+<!-- erasure-selection-rollback:start -->
+
+```sql
+CREATE TABLE erasure_chunk (
+  request_id TEXT NOT NULL REFERENCES erasure_requests(id),
+  row_ref TEXT NOT NULL,
+  PRIMARY KEY(request_id,row_ref)
+) STRICT;
+```
+
+<!-- erasure-selection-rollback:end -->

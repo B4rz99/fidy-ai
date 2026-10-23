@@ -26,8 +26,8 @@ const counterProjection = (
     remove: (scope) => [
       {
         sql: `DELETE FROM resource_admission_counters WHERE ${where}
-        AND CAST(rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
-        params: [...params(scope.userId), scope.reference],
+        AND CAST(rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))`,
+        params: [...params(scope.userId), scope.rowRefsJson],
       },
     ],
   };
@@ -57,8 +57,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM resource_admission_counters AS r WHERE r.policy_key='hosted.compaction.user.v1' AND r.window_kind='calendar' AND r.scope_key=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM resource_admission_counters AS r WHERE r.policy_key='hosted.compaction.user.v1' AND r.window_kind='calendar' AND r.scope_key=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -84,8 +84,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: `DELETE FROM resource_admission_events AS r WHERE ${reviewOwnerSql} AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
-        params: [...reviewOwnerParams(scope.userId), scope.reference],
+        sql: `DELETE FROM resource_admission_events AS r WHERE ${reviewOwnerSql} AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))`,
+        params: [...reviewOwnerParams(scope.userId), scope.rowRefsJson],
       },
     ],
   },
@@ -108,8 +108,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM resource_admission_events AS r WHERE r.policy_key<>'pat.review.session.v1' AND r.scope_key=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM resource_admission_events AS r WHERE r.policy_key<>'pat.review.session.v1' AND r.scope_key=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },

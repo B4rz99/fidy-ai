@@ -56,8 +56,8 @@ const historyProjection = ({
     }),
     remove: (subject) => [
       {
-        sql: `DELETE FROM consent_history AS r WHERE ${scope} AND CAST(r.sequence AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
-        params: [subject.userId, subject.reference],
+        sql: `DELETE FROM consent_history AS r WHERE ${scope} AND CAST(r.sequence AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))`,
+        params: [subject.userId, subject.rowRefsJson],
       },
     ],
   };
@@ -243,8 +243,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM pending_consent_exchanges AS r WHERE EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) w WHERE w.user_id=? AND w.portfolio_id=r.portfolio_id AND w.bsuid=r.bsuid) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM pending_consent_exchanges AS r WHERE EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) w WHERE w.user_id=? AND w.portfolio_id=r.portfolio_id AND w.bsuid=r.bsuid) AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -267,8 +267,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM consent_offers AS r WHERE kind<>'weekly-summary' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM consent_offers AS r WHERE kind<>'weekly-summary' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },
@@ -296,8 +296,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM consent_offers AS r WHERE kind='weekly-summary' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
+        sql: "DELETE FROM consent_offers AS r WHERE kind='weekly-summary' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
       },
     ],
   },

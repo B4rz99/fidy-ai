@@ -174,6 +174,39 @@ an account-supported five-minute window before retiring scheduled presence. Clou
 sample-notification action was submitted once to the configured operator. Submission and an enabled
 monitor are not evidence of actual threshold firing, mailbox receipt, resolution or absence handling.
 
+Additional saved, enabled monitors use that same operator recipient and report one-minute checks:
+
+| Monitor                                            | Saved identifier                   | Query / detection                                                                                                                                                                       | Repeat |
+| -------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Fidy production: Critical operational health       | `ad301e0eac8b4f99b375b07b909ace5a` | Core Workers Logs message `LIKE '%fidy.operational component=% severity=critical%'`; count >=1, average1m                                                                               | 30m    |
+| Fidy production: Operational health warnings       | `0735ba4d6f53402c976a3ad4ae6c16c1` | Core message `LIKE '%fidy.operational component=% severity=warning%'`, excluding `LIKE '% operation=coreRejectionBursts state=attention %'` already covered above; count >=1, average1m | 4h     |
+| Fidy production: Missing Queue canary execution    | `80833aeb00654828b52123b940170f1e` | Native `events.queuesMessages` successful `DeleteMessage` observations for the canary Queue; count ==0, average10m                                                                      | 30m    |
+| Fidy production: Missing completed Workflow canary | `db498d28ab1447b0acdd80ea6ce6ead8` | Native `events.workflows`, exact canary name and `eventType='WORKFLOW_SUCCESS'`; count ==0, average10m                                                                                  | 30m    |
+
+The canary queries have no grouping, so absence can produce numeric zero. Their ten-minute
+averaging setting and one-minute execution interval are independent; the average is zero only
+when the contributing nonnegative counts are all zero. Saved settings are not proof of the
+platform's initial-window, stale-data, sampling or evaluation semantics. Queue concurrency does
+not prove completion and is not used for this detection. Queue acknowledgment does not prove
+Workflow completion; the second query checks actual native Workflow success separately.
+
+The deployed canary Queue is `a0a2a566d54f4566905c769738b61078`; the Workflow is
+`fidycloudflare-core-production-hdv5cspnk7fai6vg-operati-a29777df`. Read-only Wrangler listing
+identified these resources. The Workflow success preview showed about one completion every five
+minutes, consistent with its deployed instance listing. The Queue acknowledgment preview showed
+a stable ten-minute average around 0.2, consistent with one success every five minutes, after removing `consumerType='worker'`: that filter incorrectly
+produced zero in this account's SQL dataset. Wrangler reports exactly one producer and one consumer,
+both the deployed Core Worker. The saved query therefore filters exact Queue identity,
+`actionType='DeleteMessage'` and `outcome='success'` without the consumer-type restriction. Neither
+preview establishes actual alert firing, notification receipt, controlled absence or recovery. Do not treat a missing Queue row as proof
+of zero backlog, or a successful Queue acknowledgment as successful business delivery.
+
+The policy monitors currently combine owners by severity, whereas the old Fidy alert state
+has independent kind/owner cooldowns and acknowledgment. A new failing owner can therefore share
+an already-firing platform monitor and wait for its repeat; these definitions do not prove equivalent
+per-owner notification timing. Verify or resolve that difference, owner-specific stale/missing
+observations, platform initial-window behavior and independent outage delivery before retirement.
+
 The full #1491 coverage gate remains open. Required next evidence includes policy-severity queries,
 native Queue and completed Workflow observations, missing/stale inspections, actual firing and
 resolution, delivery results, account-supported execution cadence, privacy and independent outage

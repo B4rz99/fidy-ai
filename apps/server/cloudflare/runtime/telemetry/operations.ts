@@ -49,10 +49,24 @@ export const makeWorkerTelemetry = (
 /** Cloudflare-native metadata-only structured logging for production Worker entrypoints. */
 export const cloudflareWorkerTelemetry = makeWorkerTelemetry({
   exportWork: (record) => {
-    Effect.runSync(Effect.log(record));
+    Effect.runSync(
+      Effect.log({
+        ...record,
+        message: `fidy.work operation=${record.operation} outcome=${record.outcome} statusClass=${record.statusClass ?? "none"}`,
+      })
+    );
   },
   exportEvent: (event) => {
-    Effect.runSync(Effect.log(event));
+    Effect.runSync(
+      Effect.log(
+        event.event === "failure"
+          ? {
+              ...event,
+              message: `fidy.failure component=${event.component} operation=${event.operation} error=${event.error} classification=${event.classification}`,
+            }
+          : event
+      )
+    );
   },
 });
 

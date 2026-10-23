@@ -201,6 +201,15 @@ both the deployed Core Worker. The saved query therefore filters exact Queue ide
 preview establishes actual alert firing, notification receipt, controlled absence or recovery. Do not treat a missing Queue row as proof
 of zero backlog, or a successful Queue acknowledgment as successful business delivery.
 
+Completed Work and caught-failure exports also supply fixed platform-query messages, on the
+same records as before. `fidy.work` contains only the closed operation, outcome and HTTP status
+class (or `none`); `fidy.failure` contains only component, operation, safe error code and failure
+classification. Span events and the portable telemetry contracts are unchanged. Native tests
+exercise the production console exporter, preserve the original rejected Promise/success result
+when logging throws, and check the full captured output for private failure/prompt/credential
+sentinels. These exports still require deployment and actual platform ingestion/query evidence;
+they do not establish native runtime-limit coverage when execution cannot emit a record.
+
 The policy monitors currently combine owners by severity, whereas the old Fidy alert state
 has independent kind/owner cooldowns and acknowledgment. A new failing owner can therefore share
 an already-firing platform monitor and wait for its repeat; these definitions do not prove equivalent

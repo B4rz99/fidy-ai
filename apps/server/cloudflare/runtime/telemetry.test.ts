@@ -4,13 +4,14 @@ import {
   type SpanDescriptor,
   TelemetryAttempt,
   TelemetryCount,
-  type TelemetryWorkRecord,
+  TelemetryWorkRecord,
 } from "../../src/shell/observability/contract";
 import { Clock, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { WorkerTelemetryEvent } from "./telemetry/contract";
 import { TestClock } from "effect/testing";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
 import {
+  cloudflareWorkerTelemetry,
   makeWorkerTelemetry,
   observeModelRun,
   observeProviderFetch,
@@ -24,22 +25,28 @@ import {
 
 it.effect("reports a durable attempt without replacing its rejection or exporting its cause", () =>
   Effect.gen(function* () {
-    const records: TelemetryWorkRecord[] = [];
+    const captured: unknown[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation((...values: ReadonlyArray<unknown>) => {
+      captured.push(...values);
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(() => log.mockRestore()));
     const failure = new Error("private-financial-payload");
     const result = observeWorkerPromise(() => Promise.reject(failure), {
       environment: { RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567" },
-      telemetry: makeWorkerTelemetry((record) => {
-        records.push(record);
-      }),
+      telemetry: cloudflareWorkerTelemetry,
       operation: "workflow.billingCollection",
     });
     yield* Effect.tryPromise(() => expect(result).rejects.toBe(failure));
+    const records = captured.filter(Schema.is(TelemetryWorkRecord));
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({
       operation: "workflow.billingCollection",
       outcome: "failed",
+      message: "fidy.work operation=workflow.billingCollection outcome=failed statusClass=none",
     });
-    expect(Object.values(records[0] ?? {}).join(" ")).not.toContain(failure.message);
+    expect(
+      yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(captured)
+    ).not.toContain(failure.message);
   })
 );
 
@@ -187,11 +194,13 @@ it.effect("reports provider transport failure without exporting its destination 
 
 it.effect("does not change successful durable Work when the exporter throws", () =>
   Effect.gen(function* () {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {
+      throw new Error("export unavailable");
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(() => log.mockRestore()));
     const result = observeWorkerPromise(() => Promise.resolve("unchanged"), {
       environment: { RELEASE_GIT_SHA: "bad-release" },
-      telemetry: makeWorkerTelemetry(() => {
-        throw new Error("export unavailable");
-      }),
+      telemetry: cloudflareWorkerTelemetry,
       operation: "workflow.billingCollection",
     });
     expect(yield* Effect.tryPromise(() => result)).toBe("unchanged");
@@ -244,11 +253,12 @@ it.effect("connects root, child and Work exports using server-generated metadata
 
 it.effect("retains bounded breadcrumbs and model usage while excluding raw failure content", () =>
   Effect.gen(function* () {
-    const events: WorkerTelemetryEvent[] = [];
-    const telemetry = makeWorkerTelemetry({
-      exportWork: () => undefined,
-      exportEvent: (event) => events.push(event),
+    const captured: unknown[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation((...values: ReadonlyArray<unknown>) => {
+      captured.push(...values);
     });
+    yield* Effect.addFinalizer(() => Effect.sync(() => log.mockRestore()));
+    const telemetry = cloudflareWorkerTelemetry;
     yield* telemetry.rootSpan(
       {
         component: "agent",
@@ -295,6 +305,7 @@ it.effect("retains bounded breadcrumbs and model usage while excluding raw failu
         });
       })
     );
+    const events = captured.filter(Schema.is(WorkerTelemetryEvent));
     const span = events.find((event) => event.event === "span");
     if (span?.event !== "span") throw new Error("missing model span");
     expect(span.breadcrumbs).toHaveLength(16);
@@ -306,11 +317,17 @@ it.effect("retains bounded breadcrumbs and model usage while excluding raw failu
     });
     expect(span.error).toBe("model_response_rejected");
     expect(events).toContainEqual(
-      expect.objectContaining({ event: "failure", traceId: span.traceId, spanId: span.spanId })
+      expect.objectContaining({
+        event: "failure",
+        traceId: span.traceId,
+        spanId: span.spanId,
+        message:
+          "fidy.failure component=agent operation=model.workersAi error=model_response_rejected classification=ExhaustedOperationalFailure",
+      })
     );
-    expect(
-      yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(WorkerTelemetryEvent)))(events)
-    ).not.toMatch(/prompt-canary|token-canary|secret.invalid/u);
+    expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(captured)).not.toMatch(
+      /prompt-canary|token-canary|secret.invalid/u
+    );
   })
 );
 

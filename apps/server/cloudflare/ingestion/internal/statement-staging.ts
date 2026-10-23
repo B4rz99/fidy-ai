@@ -1,4 +1,8 @@
-import { erasePrivateObject, writePrivateObject } from "../../private-objects/operations";
+import {
+  erasePrivateObject,
+  userPrivateObjectPrefix,
+  writePrivateObject,
+} from "../../private-objects/operations";
 import {
   originalWriteActive,
   prepareOriginalWrite,
@@ -264,11 +268,11 @@ const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effe
  * admission grant. It is never derived from User input, a digest, or a locator. */
 export const newIngestionId = (): string => newId();
 
-const randomObjectKey = (): string => {
+const randomObjectKey = (userId: UserId): string => {
   const entropy = Effect.runSync(
     workerCrypto.randomBytes(statementStagingObjectEntropyBytes).pipe(Effect.orDie)
   );
-  return `${statementStagingObjectPrefix}${Hex.encode(entropy)}`;
+  return `${userPrivateObjectPrefix(userId)}${statementStagingObjectPrefix}${Hex.encode(entropy)}`;
 };
 
 const digestUnavailable = (
@@ -551,7 +555,7 @@ const stageStatementBytes = (
       return yield* unavailable();
     }
     const stagingId = newId();
-    const objectKey = randomObjectKey();
+    const objectKey = randomObjectKey(UserId.make(input.userId));
     const sha256 = Hex.encode(new Uint8Array(digest));
     const pending = yield* insertPendingStagingRow(config, {
       byteLength: bytes.byteLength,

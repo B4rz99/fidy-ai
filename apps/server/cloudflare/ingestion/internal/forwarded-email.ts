@@ -1,4 +1,9 @@
-import { erasePrivateObject, writePrivateObject } from "../../private-objects/operations";
+import { PrivateObjectKey } from "../../private-objects/contract";
+import {
+  erasePrivateObject,
+  userPrivateObjectPrefix,
+  writePrivateObject,
+} from "../../private-objects/operations";
 import {
   originalWriteActive,
   prepareOriginalWrite,
@@ -93,7 +98,7 @@ const PendingJob = Schema.Struct({ receipt_id: uuid, user_id: UserId });
 const ExpiredReceipt = Schema.Struct({
   id: uuid,
   user_id: UserId,
-  object_key: Schema.String.check(Schema.isPattern(/^email\/v1\/[a-f0-9-]{36}$/u)),
+  object_key: PrivateObjectKey,
   state: Schema.Literals(["storing", "queued"]),
 });
 
@@ -311,7 +316,7 @@ export const receiveForwardedEmail = Effect.fn(function* (
   }
   const cryptoService = yield* Crypto.Crypto;
   const id = yield* cryptoService.randomUUIDv4();
-  const objectKey = `email/v1/${yield* cryptoService.randomUUIDv4()}`;
+  const objectKey = `${userPrivateObjectPrefix(approved.user_id)}email/v1/${yield* cryptoService.randomUUIDv4()}`;
   const reservation = yield* Effect.exit(
     io(() =>
       environment.DB.batch([

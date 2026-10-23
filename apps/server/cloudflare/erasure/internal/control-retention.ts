@@ -1,3 +1,5 @@
+import { UserId } from "../../../src/core/identity/contract";
+import { userPrivateObjectPrefix } from "../../private-objects/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../../erasure-store/contract";
 import type { ErasureRecoveryConfiguration } from "../contract";
@@ -14,7 +16,10 @@ const deleteControls = (
   Effect.gen(function* () {
     const { db, bucket, scope } = input;
     if (Option.isNone(bucket)) return yield* new ErasureUnavailable();
-    for (const prefix of [`held/${scope.reference}/`, `held-records/${scope.reference}/`]) {
+    for (const prefix of [
+      `${userPrivateObjectPrefix(UserId.make(scope.userId))}held/${scope.reference}/`,
+      `${userPrivateObjectPrefix(UserId.make(scope.userId))}held-records/${scope.reference}/`,
+    ]) {
       const retained = yield* io(() => bucket.value.list({ prefix, limit: 1 }));
       if (retained.objects.length > 0) return yield* new ErasureUnavailable();
     }

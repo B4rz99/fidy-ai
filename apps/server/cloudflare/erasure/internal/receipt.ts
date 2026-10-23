@@ -1,3 +1,5 @@
+import { UserId } from "../../../src/core/identity/contract";
+import { userPrivateObjectPrefix } from "../../private-objects/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 import {
   ErasureClass,
@@ -152,7 +154,10 @@ const includePrivateCopies = (
     const bucket = input.bucket;
     if (Option.isNone(bucket)) return yield* new ErasureUnavailable();
     const originals = yield* io(() =>
-      bucket.value.list({ prefix: `held/${input.scope.reference}/`, limit: 1 })
+      bucket.value.list({
+        prefix: `${userPrivateObjectPrefix(UserId.make(input.scope.userId))}held/${input.scope.reference}/`,
+        limit: 1,
+      })
     );
     return yield* Effect.forEach(input.classes, (item) =>
       privateCopiesForClass({
@@ -179,7 +184,7 @@ const privateCopiesForClass = (
     if (input.decision.dispositions[item.dataClass].action !== "Retain") return item;
     const records = yield* io(() =>
       input.bucket.list({
-        prefix: `held-records/${input.scope.reference}/${item.dataClass}/`,
+        prefix: `${userPrivateObjectPrefix(UserId.make(input.scope.userId))}held-records/${input.scope.reference}/${item.dataClass}/`,
         limit: 1,
       })
     );

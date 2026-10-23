@@ -408,8 +408,9 @@ const verifyRestore = Effect.gen(function* () {
   yield* advanceToExternal({ db: () => native.db, send });
   expect((yield* send({ action: "Receipt", userId, reference })).status).toBe(200);
   expect(
-    (yield* Effect.tryPromise(() => native.registry.list({ prefix: `held-records/${reference}/` })))
-      .objects.length
+    (yield* Effect.tryPromise(() =>
+      native.registry.list({ prefix: `users/${userId}/held-records/${reference}/` })
+    )).objects.length
   ).toBe(1);
   yield* verifyProcessorEvidence(send, baseDecision);
   native = yield* Effect.tryPromise(() => platform.restoreSnapshot());
@@ -466,16 +467,18 @@ const verifyRestore = Effect.gen(function* () {
     next: "retention-review",
   });
   expect(
-    (yield* Effect.tryPromise(() => native.registry.list({ prefix: `held-records/${reference}/` })))
-      .objects.length
+    (yield* Effect.tryPromise(() =>
+      native.registry.list({ prefix: `users/${userId}/held-records/${reference}/` })
+    )).objects.length
   ).toBe(2);
   yield* expireNativeHold(platform.advanceClock, heldUntil);
   for (let count = 0; count < 5; count++) {
     expect((yield* send({ action: "Continue", userId, reference })).status).toBe(202);
   }
   expect(
-    (yield* Effect.tryPromise(() => native.registry.list({ prefix: `held-records/${reference}/` })))
-      .objects
+    (yield* Effect.tryPromise(() =>
+      native.registry.list({ prefix: `users/${userId}/held-records/${reference}/` })
+    )).objects
   ).toHaveLength(0);
   expect(
     yield* Effect.tryPromise(() =>

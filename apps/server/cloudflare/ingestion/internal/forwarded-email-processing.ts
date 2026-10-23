@@ -1,3 +1,4 @@
+import { PrivateObjectKey } from "../../private-objects/contract";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import type { NotificationEmailOutcome } from "../../../src/shell/ingestion/contract";
 import { prepareQueuedConsentAction } from "../../consent/operations";
@@ -13,7 +14,7 @@ import { emailCrypto } from "./forwarded-email";
 const maximumTimeZoneCharacters = 128;
 const Receipt = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
-  object_key: Schema.String.check(Schema.isPattern(/^email\/v1\/[a-f0-9-]{36}$/u)),
+  object_key: PrivateObjectKey,
   delivery_digest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
   byte_length: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_048_576 })),
   received_at_ms: Schema.Int,

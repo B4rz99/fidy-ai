@@ -1530,8 +1530,8 @@ CREATE TABLE statement_review_capacity (
 CREATE TABLE statement_staging_objects (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),
-  -- Opaque R2 locator. Stored only here; it is never returned to a caller or derived from identity,
-  -- filename, digest, or size, so possessing a staging reference proves nothing without ownership.
+  -- Private R2 locator under the stable User prefix with an independently random opaque tail.
+  -- Never returned to callers; possession of a staging reference grants no ownership or authority.
   object_key TEXT NOT NULL UNIQUE,
   -- 5242880 mirrors maximumStatementBytes in src/core/ingestion/model.ts.
   byte_length INTEGER NOT NULL CHECK (byte_length >= 1 AND byte_length <= 5242880),

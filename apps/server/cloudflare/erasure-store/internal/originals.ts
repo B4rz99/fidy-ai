@@ -3,26 +3,13 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureDecision } from "../../../src/core/erasure/contract";
 import {
   type ErasureOriginalConfiguration,
+  ErasureOriginalLocator,
   type ErasureScope,
   ErasureUnavailable,
 } from "../contract";
 
 const maximumObjects = 4;
 const maximumCaptureObjects = 16;
-const Original = Schema.Union([
-  Schema.Struct({
-    bucket: Schema.Literal("email"),
-    key: Schema.String.check(
-      Schema.isPattern(
-        /^email\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
-      )
-    ),
-  }),
-  Schema.Struct({
-    bucket: Schema.Literal("statement"),
-    key: Schema.String.check(Schema.isPattern(/^staging\/statement\/v1\/[0-9a-f]{64}$/u)),
-  }),
-]);
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
 
@@ -61,7 +48,7 @@ const discardOne = (
   input: Readonly<{
     configuration: ErasureOriginalConfiguration;
     scope: ErasureScope;
-    object: typeof Original.Type;
+    object: typeof ErasureOriginalLocator.Type;
   }>
 ): Effect.Effect<void, ErasureUnavailable> =>
   Effect.gen(function* () {
@@ -127,7 +114,9 @@ export const discard = (
       );
       if (uncopied !== 0) return yield* new ErasureUnavailable();
     }
-    const objects = yield* Schema.decodeUnknownEffect(Schema.Array(Original))(records.results);
+    const objects = yield* Schema.decodeUnknownEffect(Schema.Array(ErasureOriginalLocator))(
+      records.results
+    );
     yield* Effect.forEach(objects, (object) => discardOne({ ...input, object }), { discard: true });
     return "Continue";
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));

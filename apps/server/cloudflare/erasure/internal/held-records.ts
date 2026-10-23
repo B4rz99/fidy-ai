@@ -4,7 +4,11 @@ import { ErasureClass, ErasureDecision } from "../../../src/core/erasure/contrac
 import { UserId } from "../../../src/core/identity/contract";
 import { type ErasureScope, ErasureUnavailable } from "../../erasure-store/contract";
 import { digestBytes } from "../../secret-material/operations";
-import { erasePrivateObject, writePrivateObject } from "../../private-objects/operations";
+import {
+  erasePrivateObject,
+  userPrivateObjectPrefix,
+  writePrivateObject,
+} from "../../private-objects/operations";
 import type { ErasureRecoveryConfiguration } from "../contract";
 
 const maximumRecords = 4;
@@ -36,7 +40,7 @@ const copyRecord = (
     const name = Hex.encode(
       yield* digestBytes(new TextEncoder().encode(`${input.record.storeId}:${input.record.rowRef}`))
     );
-    const key = `held-records/${input.scope.reference}/${input.record.dataClass}/${name}`;
+    const key = `${userPrivateObjectPrefix(UserId.make(input.scope.userId))}held-records/${input.scope.reference}/${input.record.dataClass}/${name}`;
     const copy = yield* Schema.decodeEffect(RecordCopy)({
       ...input.record,
       userId: UserId.make(input.scope.userId),
@@ -161,7 +165,7 @@ export const purgeHeldRecords = (input: ArchiveInput): Effect.Effect<boolean, Er
     if (cursor === null) return yield* new ErasureUnavailable();
     const page = yield* io(() =>
       bucket.value.list({
-        prefix: `held-records/${input.scope.reference}/`,
+        prefix: `${userPrivateObjectPrefix(UserId.make(input.scope.userId))}held-records/${input.scope.reference}/`,
         limit: maximumRecords,
         include: ["customMetadata"],
         ...(cursor === "" ? {} : { cursor }),
@@ -231,7 +235,7 @@ export const importHeldRecords = (
     if (row.restoring === 0 || row.done === 1) return true;
     const page = yield* io(() =>
       bucket.value.list({
-        prefix: `held-records/${input.scope.reference}/`,
+        prefix: `${userPrivateObjectPrefix(UserId.make(input.scope.userId))}held-records/${input.scope.reference}/`,
         limit: maximumRecords,
         ...(row.cursor === "" ? {} : { cursor: row.cursor }),
       })

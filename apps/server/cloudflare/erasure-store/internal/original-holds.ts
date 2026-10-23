@@ -1,8 +1,13 @@
+import { UserId } from "../../../src/core/identity/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { maximumStatementBytes } from "../../../src/core/ingestion/contract";
 import { digestBytes } from "../../secret-material/operations";
-import { erasePrivateObject, writePrivateObject } from "../../private-objects/operations";
+import {
+  erasePrivateObject,
+  userPrivateObjectPrefix,
+  writePrivateObject,
+} from "../../private-objects/operations";
 import {
   type ErasureOriginalConfiguration,
   type ErasureScope,
@@ -87,7 +92,7 @@ const copyOriginal = (
     if (Option.isNone(target)) return yield* new ErasureUnavailable();
     const tail = input.object.key.split("/").at(-1);
     if (tail === undefined) return yield* new ErasureUnavailable();
-    const key = `held/${input.scope.reference}/${input.object.bucket}/${tail}`;
+    const key = `${userPrivateObjectPrefix(UserId.make(input.scope.userId))}held/${input.scope.reference}/${input.object.bucket}/${tail}`;
     const previous = yield* io(() => target.value.head(key));
     if (previous === null || !reusableCopy({ object: previous, untilMs: input.untilMs })) {
       const bytes = yield* originalBytes(input);
@@ -156,7 +161,7 @@ export const purgeHeldOriginals = (input: HoldInput): Effect.Effect<boolean, Era
     )(raw);
     const bucket = input.configuration.retained;
     if (Option.isNone(bucket)) return yield* new ErasureUnavailable();
-    const prefix = `held/${input.scope.reference}/`;
+    const prefix = `${userPrivateObjectPrefix(UserId.make(input.scope.userId))}held/${input.scope.reference}/`;
     const objects = yield* io(() => bucket.value.list({ prefix, limit: maximumPurgeObjects }));
     if (objects.objects.length === 0) {
       yield* io(() =>

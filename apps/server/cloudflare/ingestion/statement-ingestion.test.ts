@@ -950,9 +950,7 @@ const rowsJson = (result: D1Result<unknown>): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(result.results);
 
 const stagedObjectKeys = (runtime: Runtime): Promise<ReadonlyArray<string>> =>
-  runtime.bucket
-    .list({ prefix: "staging/statement/v1/" })
-    .then((result) => result.objects.map(({ key }) => key));
+  runtime.bucket.list({ prefix: "users/" }).then((result) => result.objects.map(({ key }) => key));
 
 const seedSubmission = (
   runtime: Runtime,
@@ -1083,7 +1081,7 @@ it(
         expect(staged.sourceFormat).toBe("csv");
         expect(staged.byteLength).toBe(statementBytes().byteLength);
         const [objectKey] = yield* fromTestPromise(() => stagedObjectKeys(runtime));
-        expect(objectKey?.startsWith("staging/statement/v1/")).toBe(true);
+        expect(objectKey?.startsWith(`users/${userA}/staging/statement/v1/`)).toBe(true);
         expect(Object.values(staged)).not.toContain(objectKey);
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
 

@@ -1,3 +1,4 @@
+import type { UserId } from "../../src/core/identity/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { newId } from "../secret-material/operations";
 import {
@@ -5,6 +6,9 @@ import {
   PrivateObjectUnavailable,
   type PrivateObjectWrite,
 } from "./contract";
+
+/** Delimited stable-User namespace, shared across every private content bucket. */
+export const userPrivateObjectPrefix = (userId: UserId): string => `users/${userId}/`;
 
 const maximumEtagLength = 128;
 const controlLifetimeMs = 600000;

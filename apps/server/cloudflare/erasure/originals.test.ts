@@ -9,8 +9,8 @@ afterAll(() => storage.dispose());
 const userId = "12740000-0000-4000-8000-000000000001";
 const foreignUser = "12740000-0000-4000-8000-000000000099";
 const reference = "12740000-0000-4000-8000-000000000002";
-const targetKey = `staging/statement/v1/${"a".repeat(64)}`;
-const foreignKey = `staging/statement/v1/${"b".repeat(64)}`;
+const targetKey = `users/${userId}/staging/statement/v1/${"a".repeat(64)}`;
+const foreignKey = `users/${foreignUser}/staging/statement/v1/${"b".repeat(64)}`;
 
 it("resumes original-byte erasure after capture and refuses a mismatched User without touching their bytes", () =>
   Effect.runPromise(
@@ -56,6 +56,8 @@ it("resumes original-byte erasure after capture and refuses a mismatched User wi
           retained: Option.some(bucket),
         });
       expect(yield* make().capture({ userId, reference })).toBe(true);
+      expect(yield* make().checkpoint({ userId, reference })).toBe(false);
+      expect(yield* make().checkpoint({ userId, reference })).toBe(true);
       yield* Effect.tryPromise(() =>
         db
           .prepare("UPDATE erasure_requests SET state='Erasing',marker_written=1 WHERE id=?")
@@ -133,7 +135,7 @@ it("keeps a reviewed original outside ordinary storage, retries a failed native 
           .run()
       );
       expect((yield* Effect.result(make().archive({ userId, reference })))._tag).toBe("Failure");
-      const heldKey = `held/${reference}/statement/${"a".repeat(64)}`;
+      const heldKey = `users/${userId}/held/${reference}/statement/${"a".repeat(64)}`;
       expect(
         yield* Effect.tryPromise(() => bucket.get(heldKey).then((object) => object?.text()))
       ).toBe("Held");

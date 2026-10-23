@@ -54,12 +54,16 @@ export const ErasureOriginalLocator = Schema.Union([
     bucket: Schema.Literal("email"),
     key: Schema.String.check(
       Schema.isPattern(
-        /^email\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
+        /^(?:users\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/)?email\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
       )
     ),
   }),
   Schema.Struct({
     bucket: Schema.Literal("statement"),
-    key: Schema.String.check(Schema.isPattern(/^staging\/statement\/v1\/[0-9a-f]{64}$/u)),
+    key: Schema.String.check(
+      Schema.isPattern(
+        /^(?:users\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/)?staging\/statement\/v1\/[0-9a-f]{64}$/u
+      )
+    ),
   }),
 ]);

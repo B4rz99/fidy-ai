@@ -4629,3 +4629,95 @@ PRAGMA defer_foreign_keys=OFF;
 ```
 
 <!-- connection-owner-verify:end -->
+
+## Stable User file namespaces (#1486)
+
+Every new User content key starts with `users/<stable User UUID>/`. The trailing slash prevents
+a shared textual ID prefix from selecting another User. Existing opaque object IDs and SHA-256
+content integrity remain independent from User authority. Object locators stay private.
+
+| Producer and native bucket                                                                   | Canonical suffix                                           | Read/delete and lifetime owner                                                         |
+| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Forwarded email / EMAIL_BUCKET                                                               | email/v1/<random UUID>                                     | Ingestion exact same-User receipt; original source expiry remains                      |
+| Temporary uploaded statements and staged WhatsApp documents/media / STATEMENT_STAGING_BUCKET | staging/statement/v1/<random 32-byte hex>                  | Ingestion staging/submission; original limits, digest and source expiry remain         |
+| Reviewed retained originals / ERASURE_BUCKET                                                 | held/<request>/<email-or-statement>/<original opaque tail> | Existing Erasure original custody and reviewed expiry, until full deletion replaces it |
+| Retained record copies / ERASURE_BUCKET                                                      | held-records/<request>/<class>/<row digest>                | Existing Erasure custody, restore and reviewed expiry, until full deletion replaces it |
+
+Provider media bytes not persisted in R2 have no independent Fidy file key; when staged, they use
+the statement path above. The independent recovery registry (`recovery/*`) stores restore-control
+records and sealed locators; it is not an ordinary content bucket to erase by User prefix. Release
+smoke and operational outage objects have separate non-content purposes and are excluded. Keep
+control-only placeholder cleanup across all three configured buckets. No direct/presigned or multipart
+upload capability is introduced here. Producer quiescence remains the separate #1487 proof gate.
+
+### Existing files: guarded offline rekey, before dropping inventory
+
+Stop every producer/consumer and retain a database backup plus an external metadata-only manifest.
+Do not infer that nonconforming objects are absent because deployment is prelaunch. Enumerate every
+configured bucket in bounded pages using `truncated`/`cursor`, not a short-page length test. Resolve
+every content key to exactly one stable User through the original owner record/inventory. An orphan,
+conflicting owner, incomplete listing or unexplained object blocks cutover and inventory removal.
+Keep the old inventory until conversion and deletion of every old key is verified; #1489/#1494 may
+not drop it on the strength of newly correct producers alone.
+
+This source-pointer conversion handles email and staged statement originals. Each manifest element
+has kind (email/statement), id, userId, oldKey, newKey, byteLength and sha256. The target is exactly
+`users/<userId>/<oldKey>`. Preserve original retained row identities, all logical timestamps, deadlines,
+content hashes, object custom/HTTP metadata, and bytes. The guard requires no unfinished Erasure,
+no remaining archived/object-custody inventory, and no unresolved writers. Existing retained copies
+are a deliberate stop: complete their ordinary reviewed retention or an independently authorized
+full-deletion disposition first. Do not expire a hold or rewrite archive body/row references to make
+this guard pass. Newly created retained copies already use the User namespace.
+
+For each manifest object, require the original key, size and SHA-256 to match the owner evidence;
+read bytes under the observed ETag, enforce the existing owner size ceiling, and copy to the target
+with `etagDoesNotMatch: '*'`. Preserve metadata and checksum. A preexisting destination is reusable
+only after verifying exact bytes, size and metadata; otherwise stop without overwriting it. Verify
+the target before changing any D1 pointer. R2 and D1 do not share a transaction.
+
+Bind the verified manifest to the guard below, then run pointer updates in that same native D1
+batch. Re-read owner pointers, identities, hashes, deadlines and foreign keys before deleting old
+objects. A failed batch leaves old pointers/objects intact; destination copies may remain and must
+be reconciled from the manifest. A failed old-key deletion leaves inventory pending. Resume no
+consumer until all source keys are removed and a complete bounded bucket enumeration proves that
+only canonical User content and reviewed non-content control objects remain. Normal expired source
+rows with missing bytes need explicit owner expiry evidence; never fabricate replacement content.
+
+Rollback stops writers again, verifies/copies original bytes and metadata back using the retained
+manifest and non-overwriting writes, then restores original D1 pointers. The inverse binds the same original manifest twice per statement and only rewrites its exact
+original same-User destinations. New rows stay untouched; reverify every original pointer before
+selecting a binary rollback. Missing or changed bytes and ambiguous external writes remain blockers. Native rehearsal
+exercises actual R2 bytes and atomic D1 pointer rollback; it is not live-provider completion evidence.
+See the [R2 Workers API reference](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)
+for conditional operations and listing continuation semantics.
+
+<!-- user-file-prefix-guard:start -->
+
+```sql
+WITH manifest AS(SELECT json_extract(value,'$.kind') AS kind,json_extract(value,'$.id') AS id,json_extract(value,'$.userId') AS user_id,json_extract(value,'$.oldKey') AS old_key,json_extract(value,'$.newKey') AS new_key,json_extract(value,'$.byteLength') AS byte_length,json_extract(value,'$.sha256') AS sha256,(json_type(value)='object' AND json_type(value,'$.kind')='text' AND json_type(value,'$.id')='text' AND length(json_extract(value,'$.id'))>0 AND json_type(value,'$.userId')='text' AND length(json_extract(value,'$.userId'))>0 AND json_type(value,'$.oldKey')='text' AND json_type(value,'$.newKey')='text' AND json_type(value,'$.byteLength')='integer' AND json_extract(value,'$.byteLength')>0 AND json_type(value,'$.sha256')='text' AND length(json_extract(value,'$.sha256'))=64 AND json_extract(value,'$.sha256') NOT GLOB '*[^0-9a-f]*') AS valid FROM json_each(?))
+INSERT INTO sql_assertions(scope,accepted) SELECT 'user_file_prefix_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM erasure_archives) AND NOT EXISTS(SELECT 1 FROM erasure_objects) AND NOT EXISTS(SELECT 1 FROM erasure_writers)
+AND (SELECT count(*) FROM manifest)=(SELECT count(*) FROM forwarded_email_receipts WHERE substr(object_key,1,length('users/'||user_id||'/'))<>'users/'||user_id||'/')+(SELECT count(*) FROM statement_staging_objects WHERE substr(object_key,1,length('users/'||user_id||'/'))<>'users/'||user_id||'/')
+AND (SELECT count(*) FROM manifest)=(SELECT count(DISTINCT kind||':'||id) FROM manifest)
+AND NOT EXISTS(SELECT 1 FROM manifest m LEFT JOIN forwarded_email_receipts e ON m.kind='email' AND e.id=m.id LEFT JOIN statement_staging_objects s ON m.kind='statement' AND s.id=m.id WHERE m.valid IS NOT 1 OR m.kind NOT IN('email','statement') OR (m.kind='email' AND e.id IS NULL) OR (m.kind='statement' AND s.id IS NULL) OR coalesce(e.user_id,s.user_id) IS NOT m.user_id OR coalesce(e.object_key,s.object_key) IS NOT m.old_key OR coalesce(e.byte_length,s.byte_length) IS NOT m.byte_length OR (m.kind='email' AND e.delivery_digest IS NOT m.sha256) OR (m.kind='statement' AND s.sha256 IS NOT m.sha256) OR m.new_key IS NOT 'users/'||m.user_id||'/'||m.old_key OR length(m.new_key)>1024 OR (m.kind='email' AND m.old_key NOT LIKE 'email/v1/%') OR (m.kind='statement' AND m.old_key NOT LIKE 'staging/statement/v1/%'))
+THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- user-file-prefix-guard:end -->
+
+<!-- user-file-prefix-copy:start -->
+
+```sql
+UPDATE forwarded_email_receipts SET object_key='users/'||user_id||'/'||object_key WHERE substr(object_key,1,length('users/'||user_id||'/'))<>'users/'||user_id||'/';
+UPDATE statement_staging_objects SET object_key='users/'||user_id||'/'||object_key WHERE substr(object_key,1,length('users/'||user_id||'/'))<>'users/'||user_id||'/';
+```
+
+<!-- user-file-prefix-copy:end -->
+
+<!-- user-file-prefix-rollback-copy:start -->
+
+```sql
+UPDATE forwarded_email_receipts SET object_key=(SELECT json_extract(value,'$.oldKey') FROM json_each(?) WHERE json_extract(value,'$.kind')='email' AND json_extract(value,'$.id')=forwarded_email_receipts.id AND json_extract(value,'$.userId')=forwarded_email_receipts.user_id AND json_extract(value,'$.newKey')=forwarded_email_receipts.object_key) WHERE EXISTS(SELECT 1 FROM json_each(?) WHERE json_extract(value,'$.kind')='email' AND json_extract(value,'$.id')=forwarded_email_receipts.id AND json_extract(value,'$.userId')=forwarded_email_receipts.user_id AND json_extract(value,'$.newKey')=forwarded_email_receipts.object_key);
+UPDATE statement_staging_objects SET object_key=(SELECT json_extract(value,'$.oldKey') FROM json_each(?) WHERE json_extract(value,'$.kind')='statement' AND json_extract(value,'$.id')=statement_staging_objects.id AND json_extract(value,'$.userId')=statement_staging_objects.user_id AND json_extract(value,'$.newKey')=statement_staging_objects.object_key) WHERE EXISTS(SELECT 1 FROM json_each(?) WHERE json_extract(value,'$.kind')='statement' AND json_extract(value,'$.id')=statement_staging_objects.id AND json_extract(value,'$.userId')=statement_staging_objects.user_id AND json_extract(value,'$.newKey')=statement_staging_objects.object_key);
+```
+
+<!-- user-file-prefix-rollback-copy:end -->

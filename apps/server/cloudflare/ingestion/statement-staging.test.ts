@@ -796,7 +796,7 @@ describe("Cloudflare statement byte staging", () => {
           yield* fromTestPromise(() => stagingRow(runtime.database, staged.stagingId))
         );
         expect(row.status).toBe("available");
-        expect(row.object_key.startsWith("staging/statement/v1/")).toBe(true);
+        expect(row.object_key.startsWith(`users/${userA}/staging/statement/v1/`)).toBe(true);
         expect(row.object_key.includes(staged.stagingId)).toBe(false);
         expect(
           requireValue(yield* fromTestPromise(() => read(runtime, userA, staged.stagingId)))
@@ -833,7 +833,7 @@ describe("Cloudflare statement byte staging", () => {
           yield* fromTestPromise(() => count(runtime.database, "statement_staging_objects"))
         ).toBe(0);
         const objects = yield* fromTestPromise(() =>
-          runtime.bucket.list({ prefix: "staging/statement/v1/" })
+          runtime.bucket.list({ prefix: `users/${userA}/` })
         );
         expect(objects.objects).toHaveLength(0);
       })
@@ -846,6 +846,35 @@ describe("Cloudflare statement byte staging", () => {
         const staged = requireValue(
           yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
         );
+
+        const other = requireValue(
+          yield* fromTestPromise(() => stage(runtime, userB, statementBytes))
+        );
+        requireValue(yield* fromTestPromise(() => stage(runtime, userA, statementBytes)));
+        const ownObjects = yield* fromTestPromise(() =>
+          runtime.bucket.list({ prefix: `users/${userA}/`, limit: 1 })
+        );
+        const otherObjects = yield* fromTestPromise(() =>
+          runtime.bucket.list({ prefix: `users/${userB}/`, limit: 1 })
+        );
+        expect(ownObjects.truncated).toBe(true);
+        const nextOwnObjects = yield* fromTestPromise(() =>
+          runtime.bucket.list({
+            prefix: `users/${userA}/`,
+            limit: 1,
+            ...(ownObjects.truncated ? { cursor: ownObjects.cursor } : {}),
+          })
+        );
+        expect(nextOwnObjects.objects).toHaveLength(1);
+        expect(nextOwnObjects.truncated).toBe(false);
+        expect(nextOwnObjects.objects[0]?.key).not.toBe(ownObjects.objects[0]?.key);
+        expect(nextOwnObjects.objects[0]?.key.startsWith(`users/${userA}/`)).toBe(true);
+        expect(ownObjects.objects).toHaveLength(1);
+        expect(otherObjects.objects).toHaveLength(1);
+        expect(ownObjects.objects[0]?.key).not.toBe(otherObjects.objects[0]?.key);
+        expect(
+          requireValue(yield* fromTestPromise(() => read(runtime, userB, other.stagingId)))
+        ).toEqual(statementBytes);
 
         expect(reasonOf(yield* fromTestPromise(() => read(runtime, userB, staged.stagingId)))).toBe(
           "not-found"
@@ -883,7 +912,7 @@ describe("Cloudflare statement byte staging", () => {
           0
         );
         const objects = yield* fromTestPromise(() =>
-          runtime.bucket.list({ prefix: "staging/statement/v1/" })
+          runtime.bucket.list({ prefix: `users/${userA}/` })
         );
         expect(objects.objects).toHaveLength(1);
         const row = required(yield* fromTestPromise(() => onlyStagingRow(runtime.database)));
@@ -906,8 +935,7 @@ describe("Cloudflare statement byte staging", () => {
           yield* fromTestPromise(() => count(runtime.database, "statement_staging_objects"))
         ).toBe(0);
         expect(
-          (yield* fromTestPromise(() => runtime.bucket.list({ prefix: "staging/statement/v1/" })))
-            .objects
+          (yield* fromTestPromise(() => runtime.bucket.list({ prefix: `users/${userA}/` }))).objects
         ).toHaveLength(0);
       })
     ));

@@ -1,3 +1,4 @@
+import { registeredConnectionInstitutionIds } from "../../src/shell/connections/contract";
 import { type TransactionSubject } from "../canonical-work/contract";
 import { newId } from "../secret-material/operations";
 import { UnknownJsonString } from "../../src/shell/schema-codecs/contract";
@@ -1283,7 +1284,10 @@ it.each(["sandbox", "production"] as const)(
           CLOUDFLARE_ACCESS_ISSUER: "https://fixture-unused.example",
           CLOUDFLARE_ACCESS_AUDIENCE: "fixture-unused",
         };
-        const core = makeCoreHttp(cloudflareWorkerTelemetry);
+        const core = makeCoreHttp({
+          telemetry: cloudflareWorkerTelemetry,
+          institutions: registeredConnectionInstitutionIds,
+        });
         const ingress = makePublicWorker(cloudflareWorkerTelemetry);
         const response = yield* fromTestPromise(() =>
           ingress.fetch(
@@ -1323,7 +1327,10 @@ const enrollmentWorkers = (
   publicFetch: (request: Request) => Promise<Response>;
   coreFetch: (request: Request) => Promise<Response>;
 }> => {
-  const core = makeCoreHttp(cloudflareWorkerTelemetry);
+  const core = makeCoreHttp({
+    telemetry: cloudflareWorkerTelemetry,
+    institutions: registeredConnectionInstitutionIds,
+  });
   const ingress = makePublicWorker(cloudflareWorkerTelemetry);
   const coreEnvironment = {
     ...environment,

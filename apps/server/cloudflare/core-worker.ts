@@ -1,3 +1,4 @@
+import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
 import { resumeErasureCases, sweepErasureControlObjects } from "./erasure/operations";
 import { withErasureRecovery } from "./erasure/runtime";
 import type { ProviderEnvironment } from "./provider-authentication/contract";
@@ -13,7 +14,6 @@ import type {
 } from "./email-authentication/contract";
 import type { BillingCollectionEnvironment } from "./subscription/contract";
 import type { SmokeEnvironment } from "./runtime/release-smoke/contract";
-import type { TelemetryService } from "../src/shell/observability/contract";
 import { Effect, Option, Schema } from "effect";
 import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/telemetry/operations";
@@ -321,8 +321,11 @@ export class UserTransactionCoordinator {
   }
 }
 
-export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
-  fetch: makeCoreHttp(telemetry),
+export const makeCoreWorker = ({
+  telemetry,
+  institutions,
+}: Parameters<typeof makeCoreHttp>[0]): CoreWorker => ({
+  fetch: makeCoreHttp({ telemetry, institutions }),
   queue: (batch, environment) => makeCoreQueue(telemetry)(batch, withErasureRecovery(environment)),
   scheduled: (controller, environment) =>
     Effect.gen(function* () {
@@ -351,4 +354,7 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
     ),
 });
 
-export default makeCoreWorker(cloudflareWorkerTelemetry);
+export default makeCoreWorker({
+  telemetry: cloudflareWorkerTelemetry,
+  institutions: registeredConnectionInstitutionIds,
+});

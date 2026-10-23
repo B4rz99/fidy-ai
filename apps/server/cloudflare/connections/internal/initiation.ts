@@ -1,3 +1,5 @@
+import { registeredInstitutionPredicate } from "./institution-registration";
+import type { InstitutionId } from "../../../src/core/connections/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { ConnectInstitutionResult, Connection } from "../../../src/core/connections/contract";
 import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
@@ -40,7 +42,7 @@ export const readInitiationResult = ({
       const attempt = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT public_reference, expires_at_ms FROM connection_attempts WHERE user_id = ? AND connection_id = ? AND status = 'pending'"
+            "SELECT public_reference, expires_at_ms FROM connection_attempts WHERE EXISTS(SELECT 1 FROM connections c WHERE c.id=connection_attempts.connection_id AND c.user_id=?) AND connection_id = ? AND status = 'pending'"
           )
           .bind(userId, connection.id)
           .first()
@@ -62,21 +64,32 @@ export const readInitiationResult = ({
     });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
-export const initiationStatements = (
-  work: CanonicalPreparationWork
-): ReadonlyArray<D1PreparedStatement> => {
+const preparePATUse = ({
+  db,
+  subject,
+  current,
+}: CanonicalPreparationWork): ReadonlyArray<D1PreparedStatement> =>
+  isPATCaller(subject)
+    ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+        db.prepare(sql).bind(...params)
+      )
+    : [];
+
+export const initiationStatements = ({
+  work,
+  institutions,
+}: Readonly<{
+  work: CanonicalPreparationWork;
+  institutions: ReadonlyArray<InstitutionId>;
+}>): ReadonlyArray<D1PreparedStatement> => {
   const { db, subject, current } = work;
   const authority = callerAuthority(work);
-  const live = `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) AND EXISTS (SELECT 1 FROM connection_institution_gate WHERE institution_id = 'bancolombia' AND enabled = 1)`;
+  const live = `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) AND ${registeredInstitutionPredicate({ column: "'bancolombia'", institutions })}`;
   return [
-    ...(isPATCaller(subject)
-      ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
-          db.prepare(sql).bind(...params)
-        )
-      : []),
+    ...preparePATUse(work),
     db
       .prepare(
-        `UPDATE connection_attempts SET status = 'invalidated' WHERE user_id = ? AND institution_id = 'bancolombia' AND status = 'pending' AND (expires_at_ms <= ? OR EXISTS (SELECT 1 FROM connections c WHERE c.user_id = connection_attempts.user_id AND c.id = connection_attempts.connection_id AND c.state IN ('Action required','Ended'))) AND ${live}`
+        `UPDATE connection_attempts SET status = 'invalidated' WHERE EXISTS(SELECT 1 FROM connections c WHERE c.id=connection_attempts.connection_id AND c.user_id=? AND c.institution_id='bancolombia') AND status = 'pending' AND (expires_at_ms <= ? OR EXISTS (SELECT 1 FROM connections c WHERE c.id = connection_attempts.connection_id AND c.state IN ('Action required','Ended'))) AND ${live}`
       )
       .bind(subject.userId, current, ...authority.bindings),
     db
@@ -88,26 +101,25 @@ export const initiationStatements = (
       .bind(transactionId(), subject.userId, current, current, ...authority.bindings),
     db
       .prepare(
-        `DELETE FROM connection_attempts WHERE user_id = ? AND expires_at_ms <= ? AND status != 'pending' AND ${live}`
+        `DELETE FROM connection_attempts WHERE EXISTS(SELECT 1 FROM connections c WHERE c.id=connection_attempts.connection_id AND c.user_id=?) AND expires_at_ms <= ? AND status != 'pending' AND ${live}`
       )
       .bind(subject.userId, current - retentionMilliseconds, ...authority.bindings),
     db
-      .prepare(`INSERT INTO connection_attempts (id,user_id,connection_id,institution_id,public_reference,status,created_at_ms,expires_at_ms)
-      SELECT ?,user_id,id,institution_id,?,'pending',?,? FROM connections
+      .prepare(`INSERT INTO connection_attempts (id,connection_id,public_reference,status,created_at_ms,expires_at_ms)
+      SELECT ?,id,?,'pending',?,? FROM connections
       WHERE user_id = ? AND institution_id = 'bancolombia' AND state = 'Connecting' AND ${live}
-      AND NOT EXISTS (SELECT 1 FROM connection_attempts WHERE user_id = ? AND connection_id = connections.id AND status = 'pending')`)
+      AND NOT EXISTS (SELECT 1 FROM connection_attempts WHERE connection_id = connections.id AND status = 'pending')`)
       .bind(
         transactionId(),
         transactionId(),
         current,
         current + attemptLifetimeMilliseconds,
         subject.userId,
-        ...authority.bindings,
-        subject.userId
+        ...authority.bindings
       ),
     db
       .prepare(`UPDATE connections SET state = state WHERE user_id = ? AND institution_id = 'bancolombia' AND ${live}
-      AND (state = 'Active' OR (state = 'Connecting' AND EXISTS (SELECT 1 FROM connection_attempts a WHERE a.user_id = connections.user_id AND a.connection_id = connections.id AND a.status = 'pending' AND a.expires_at_ms > ?)))`)
+      AND (state = 'Active' OR (state = 'Connecting' AND EXISTS (SELECT 1 FROM connection_attempts a WHERE a.connection_id = connections.id AND a.status = 'pending' AND a.expires_at_ms > ?)))`)
       .bind(subject.userId, ...authority.bindings, current),
     prepareAuthorizedAuditCall({
       db,

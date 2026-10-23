@@ -1,6 +1,10 @@
+import { registeredInstitutionPredicate } from "./institution-registration";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { ConnectionContinuationReview } from "../../../src/shell/connections/contract";
+import {
+  ConnectionContinuationReview,
+  ConnectionInstitutions,
+} from "../../../src/shell/connections/contract";
 import { Connection } from "../../../src/core/connections/contract";
 import {
   prepareAuditQueryCall,
@@ -34,13 +38,15 @@ const databaseFailure = (cause: unknown): Response =>
       ? missingStatus
       : unavailableStatus
   );
-const query = `SELECT c.id, c.institution_id AS institutionId, c.state, a.expires_at_ms AS expiresAtMilliseconds,
+const query = (
+  registered: string
+): string => `SELECT c.id, c.institution_id AS institutionId, c.state, a.expires_at_ms AS expiresAtMilliseconds,
   CASE WHEN a.status = 'pending' THEN 'ready' ELSE 'prepared' END AS phase
-  FROM connection_attempts a JOIN connections c ON c.user_id = a.user_id AND c.id = a.connection_id
-  WHERE a.public_reference = ? AND a.user_id = ? AND a.expires_at_ms > ? AND c.state = 'Connecting'
+  FROM connection_attempts a JOIN connections c ON c.id = a.connection_id
+  WHERE a.public_reference = ? AND c.user_id = ? AND a.expires_at_ms > ? AND c.state = 'Connecting'
     AND (a.status = 'pending' OR (a.status = 'consumed' AND a.prepared_session_id IS NOT NULL))
-    AND NOT EXISTS (SELECT 1 FROM connection_attempts newer WHERE newer.user_id = a.user_id AND newer.connection_id = a.connection_id AND newer.rowid > a.rowid)
-    AND EXISTS (SELECT 1 FROM connection_institution_gate WHERE institution_id = a.institution_id AND enabled = 1)`;
+    AND NOT EXISTS (SELECT 1 FROM connection_attempts newer WHERE newer.connection_id = a.connection_id AND newer.rowid > a.rowid)
+    AND ${registered}`;
 const present = (candidate: unknown): Effect.Effect<Response, Schema.SchemaError> =>
   Effect.gen(function* () {
     const rows = yield* Schema.decodeUnknownEffect(Schema.Array(ContinuationRow))(candidate);
@@ -58,8 +64,8 @@ const present = (candidate: unknown): Effect.Effect<Response, Schema.SchemaError
     });
     return Response.json(body, { headers: transactionNoStore });
   });
-const guardedQuery = (authority: TransactionAuthority): string =>
-  `${query} AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`;
+const guardedQuery = (authority: TransactionAuthority, registered: string): string =>
+  `${query(registered)} AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`;
 /** Review and its metadata-only Audit use the same authoritative snapshot. */
 export const reviewContinuation = (
   input: Readonly<{
@@ -71,7 +77,9 @@ export const reviewContinuation = (
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const authority = callerAuthority(input);
-    const sql = guardedQuery(authority);
+    const institutions = yield* ConnectionInstitutions;
+    const registered = registeredInstitutionPredicate({ column: "c.institution_id", institutions });
+    const sql = guardedQuery(authority, registered);
     const bindings = [input.attempt, input.subject.userId, input.current, ...authority.bindings];
     const result = yield* Effect.tryPromise({
       try: () =>
@@ -127,15 +135,16 @@ export const beginContinuation = (
       return continuationFailure(unavailableStatus);
     }
     const { admission, db } = input;
+    const institutions = yield* ConnectionInstitutions;
+    const registered = registeredInstitutionPredicate({ column: "c.institution_id", institutions });
     const authority = freshAuthority(admission, current);
     const result = yield* Effect.tryPromise({
       try: () =>
         db.batch([
           db
             .prepare(`UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ?, prepared_session_id = ?
-      WHERE public_reference = ? AND user_id = ? AND status = 'pending' AND expires_at_ms > ?
-      AND EXISTS (SELECT 1 FROM connections c WHERE c.id = connection_attempts.connection_id AND c.user_id = connection_attempts.user_id AND c.state = 'Connecting')
-      AND EXISTS (SELECT 1 FROM connection_institution_gate WHERE institution_id = connection_attempts.institution_id AND enabled = 1)
+      WHERE public_reference = ? AND EXISTS(SELECT 1 FROM connections c WHERE c.id=connection_attempts.connection_id AND c.user_id=?) AND status = 'pending' AND expires_at_ms > ?
+      AND EXISTS (SELECT 1 FROM connections c WHERE c.id = connection_attempts.connection_id AND c.state = 'Connecting' AND ${registered})
       AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
             .bind(
               current,
@@ -156,7 +165,7 @@ export const beginContinuation = (
           }),
           prepareChangedRowAssertion({ db, scope: "connection_browser" }),
           db
-            .prepare(guardedQuery(authority))
+            .prepare(guardedQuery(authority, registered))
             .bind(admission.attempt, admission.userId, current, ...authority.bindings),
         ]),
       catch: databaseFailure,

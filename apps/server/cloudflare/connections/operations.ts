@@ -1,3 +1,5 @@
+import { ConnectionInstitutions } from "../../src/shell/connections/contract";
+import { registeredInstitutionPredicate } from "./internal/institution-registration";
 import { ConnectionBrowserAdmission, ConnectionRetentionUnavailable } from "./contract";
 import { beginContinuation } from "./internal/browser";
 import { initiationStatements, readInitiationResult } from "./internal/initiation";
@@ -38,7 +40,6 @@ import type { ConnectionQueryOperation } from "./contract";
 const HTTP_NOT_FOUND = 404;
 const HTTP_BAD_REQUEST = 400;
 const operation = "connections.connectInstitution";
-const Gate = Schema.Struct({ enabled: Schema.Literals([0, 1]) });
 
 /** Decide and audit an initiation refusal under the caller's live authority. */
 export const connectionInputRefusal = ({
@@ -94,6 +95,7 @@ export const prepareConnectInstitution = (
   work: CanonicalPreparationWork
 ): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
+    const institutions = yield* ConnectionInstitutions;
     const input = Schema.decodeUnknownOption(Schema.Struct({ payload: ConnectInstitutionInput }))(
       work.input
     );
@@ -109,18 +111,7 @@ export const prepareConnectInstitution = (
         refusal: connectionInputRefusal({ work, code: "not_found" }),
       } as const;
     }
-    const authority = callerAuthority(work);
-    const raw = yield* Effect.tryPromise(() =>
-      work.db
-        .prepare(
-          `SELECT enabled FROM connection_institution_gate WHERE institution_id = 'bancolombia' AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`
-        )
-        .bind(...authority.bindings)
-        .first()
-    );
-    if (raw === null) return { _tag: "CredentialRefused" } as const;
-    const gate = yield* Schema.decodeUnknownEffect(Gate)(raw);
-    if (gate.enabled === 0) {
+    if (!institutions.includes(input.value.payload.institutionId)) {
       return {
         _tag: "Refused",
         refusal: connectionInputRefusal({ work, code: "validation_failed" }),
@@ -132,7 +123,7 @@ export const prepareConnectInstitution = (
         requiredScope: callerScope(work.subject),
         oauthReview: Option.none(),
 
-        statements: initiationStatements(work),
+        statements: initiationStatements({ work, institutions }),
         commitGuards: Option.none(),
         guardRefusal: () =>
           Effect.succeed(connectionInputRefusal({ work, code: "validation_failed" })),
@@ -179,18 +170,12 @@ export const browseConnections = ({
         `SELECT id, institution_id AS institutionId, state FROM connections WHERE user_id = ? ${selection} AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) ORDER BY institution_id, id`
       )
       .bind(...bindings);
-    const gate = db
-      .prepare(
-        `SELECT enabled FROM connection_institution_gate WHERE institution_id = 'bancolombia' AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`
-      )
-      .bind(...authority.bindings);
     const audit = queryAudit({ db, authority, current, userId: subject.userId, operation, id });
     const results = yield* Effect.tryPromise(() =>
       commitPATUnit({
         db,
         statements: [
           read,
-          gate,
           ...(isPATCaller(subject)
             ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
                 db.prepare(sql).bind(...params)
@@ -232,14 +217,13 @@ const presentConnections = ({
       );
       return Response.json({ data, next: [] }, { headers: transactionNoStore });
     }
-    const gateRows = yield* Schema.decodeUnknownEffect(
-      Schema.Array(Schema.Struct({ enabled: Schema.Literals([0, 1]) }))
-    )(results[1]?.results);
     const first = Option.fromUndefinedOr(connections[0]);
     const summary: InstitutionSummary = {
       id: InstitutionId.make("bancolombia"),
       displayName: "Bancolombia",
-      availability: gateRows[0]?.enabled === 1 ? "available" : "unavailable",
+      availability: (yield* ConnectionInstitutions).includes(InstitutionId.make("bancolombia"))
+        ? "available"
+        : "unavailable",
       connection: Option.map(first, ({ id, state }) => ({ id: ConnectionId.make(id), state })),
     };
     const data = yield* Schema.encodeEffect(Schema.toCodecJson(Schema.Array(InstitutionSummary)))([
@@ -300,12 +284,15 @@ export const executeConnectionBrowserAdmission = (
 export const requiresErasureSuppression = (
   input: Readonly<{ db: D1Database; userId: string }>
 ): Effect.Effect<boolean, ConnectionRetentionUnavailable> =>
-  Effect.tryPromise({
-    try: () =>
-      input.db
-        .prepare(`SELECT EXISTS(SELECT 1 FROM connections c
-    JOIN connection_institution_gate g ON g.institution_id=c.institution_id WHERE c.user_id=? AND g.enabled=1) AS pending`)
-        .bind(input.userId)
-        .first<number>("pending"),
-    catch: () => new ConnectionRetentionUnavailable(),
-  }).pipe(Effect.map((pending) => pending !== 0));
+  Effect.gen(function* () {
+    const institutions = yield* ConnectionInstitutions;
+    return yield* Effect.tryPromise({
+      try: () =>
+        input.db
+          .prepare(`SELECT EXISTS(SELECT 1 FROM connections c
+    WHERE c.user_id=? AND ${registeredInstitutionPredicate({ column: "c.institution_id", institutions })}) AS pending`)
+          .bind(input.userId)
+          .first<number>("pending"),
+      catch: () => new ConnectionRetentionUnavailable(),
+    }).pipe(Effect.map((pending) => pending !== 0));
+  });

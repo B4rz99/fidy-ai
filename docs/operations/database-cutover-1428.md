@@ -4560,3 +4560,72 @@ PRAGMA defer_foreign_keys=OFF;
 ```
 
 <!-- whatsapp-delivery-verify:end -->
+
+## Parent-owned Connection attempts and code registration (#1484)
+
+Connections retain stable historical institution identity independently of deployed support.
+Attempts retain eight stored fields; derive User/institution from the immutable Connection in every
+protected query/write, prepared-session binding, erasure fence and archive projection. Keep exact
+public/internal identities, rowid ordering, original ten-minute expiry, one pending attempt per
+Connection, single-use transitions, session freshness and atomic Audit.
+
+Institution availability comes from the published deployed registration declaration in shell/connections/contract.ts.
+The list is empty because no integration meets SupportedInstitution readiness; Bancolombia remains
+a known unavailable discovery entry. Worker and coordinator composition supply the Effect registry service; tests register a fixture through those same constructors
+to exercise the existing protected handoff. No request, environment flag or database value enables a bank.
+Current historical records remain readable when an implementation is removed.
+
+Stop writers/unfinished erasure and bind both observed counts. The forward guard proves every removed
+attempt ownership/institution copy agrees with its parent before copying. The supported source gate
+is exactly its original disabled Bancolombia row (rowid 1); any enabled, additional or differently
+addressed gate is unexplained configuration history and requires review before destructive removal.
+Rebuild child attempts before parent Connections and gate under deferred foreign keys. Preserve
+prepared browser-session references and all archive field names/values. Finish with whole-graph
+verification before clearing deferral. Inverse uses frozen ownership-cutover.test-fixture.json definitions,
+restores the validated original disabled gate, and derives the removed copies from unchanged parents.
+A new post-cutover institution cannot be rolled into the old single-institution gate; refuse that inverse
+and use the retained backup rather than fabricating an old configuration.
+
+<!-- connection-owner-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'connection_owner_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM connections)=? AND (SELECT count(*) FROM connection_attempts)=? AND (SELECT count(*) FROM connection_institution_gate)=1 AND EXISTS(SELECT 1 FROM connection_institution_gate WHERE rowid=1 AND institution_id='bancolombia' AND enabled=0) AND NOT EXISTS(SELECT 1 FROM connection_attempts a LEFT JOIN connections c ON c.id=a.connection_id WHERE c.id IS NULL OR c.user_id IS NOT a.user_id OR c.institution_id IS NOT a.institution_id) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- connection-owner-guard:end -->
+
+<!-- connection-owner-copy:start -->
+
+```sql
+INSERT INTO cutover_connections(rowid,id,user_id,institution_id,state,created_at_ms,updated_at_ms) SELECT rowid,* FROM connections;
+INSERT INTO cutover_connection_attempts(rowid,id,connection_id,public_reference,status,created_at_ms,expires_at_ms,consumed_at_ms,prepared_session_id) SELECT rowid,id,connection_id,public_reference,status,created_at_ms,expires_at_ms,consumed_at_ms,prepared_session_id FROM connection_attempts;
+```
+
+<!-- connection-owner-copy:end -->
+
+<!-- connection-owner-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'connection_owner_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM connections WHERE institution_id<>'bancolombia') THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- connection-owner-rollback-guard:end -->
+
+<!-- connection-owner-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_connection_institution_gate(rowid,institution_id,enabled) VALUES(1,'bancolombia',0);
+INSERT INTO cutover_connections(rowid,id,user_id,institution_id,state,created_at_ms,updated_at_ms) SELECT rowid,* FROM connections;
+INSERT INTO cutover_connection_attempts(rowid,id,user_id,connection_id,institution_id,public_reference,status,created_at_ms,expires_at_ms,consumed_at_ms,prepared_session_id) SELECT a.rowid,a.id,c.user_id,a.connection_id,c.institution_id,a.public_reference,a.status,a.created_at_ms,a.expires_at_ms,a.consumed_at_ms,a.prepared_session_id FROM connection_attempts a JOIN connections c ON c.id=a.connection_id;
+```
+
+<!-- connection-owner-rollback-copy:end -->
+
+<!-- connection-owner-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'connection_owner_foreign_keys',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- connection-owner-verify:end -->

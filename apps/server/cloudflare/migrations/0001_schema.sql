@@ -382,9 +382,7 @@ CREATE TABLE commercial_allowance_consumptions (
 
 CREATE TABLE connection_attempts (
   id TEXT PRIMARY KEY NOT NULL,
-  user_id TEXT NOT NULL,
   connection_id TEXT NOT NULL,
-  institution_id TEXT NOT NULL,
   public_reference TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL CHECK (status IN ('pending', 'consumed', 'invalidated')),
   created_at_ms INTEGER NOT NULL,
@@ -393,25 +391,18 @@ CREATE TABLE connection_attempts (
   CHECK (expires_at_ms = created_at_ms + 600000),
   CHECK ((status = 'consumed' AND consumed_at_ms IS NOT NULL AND consumed_at_ms >= created_at_ms AND consumed_at_ms < expires_at_ms)
     OR (status != 'consumed' AND consumed_at_ms IS NULL)),
-  FOREIGN KEY (user_id, connection_id, institution_id) REFERENCES connections(user_id, id, institution_id)
-) STRICT;
---> statement-breakpoint
-
-CREATE TABLE connection_institution_gate (
-  institution_id TEXT PRIMARY KEY NOT NULL CHECK (institution_id = 'bancolombia'),
-  enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1))
+  FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) STRICT;
 --> statement-breakpoint
 
 CREATE TABLE connections (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),
-  institution_id TEXT NOT NULL REFERENCES connection_institution_gate(institution_id),
+  institution_id TEXT NOT NULL,
   state TEXT NOT NULL CHECK (state IN ('Connecting', 'Active', 'Action required', 'Ended')),
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL,
-  UNIQUE (user_id, institution_id),
-  UNIQUE (user_id, id, institution_id)
+  UNIQUE (user_id, institution_id)
 ) STRICT;
 --> statement-breakpoint
 
@@ -1958,13 +1949,13 @@ CREATE INDEX commercial_allowance_consumption_expiry ON commercial_allowance_con
 CREATE INDEX commercial_allowance_period ON commercial_allowance_consumptions(user_id, allowance, period_start_ms, units);
 --> statement-breakpoint
 
-CREATE INDEX connection_attempt_expiry ON connection_attempts(user_id, expires_at_ms);
+CREATE INDEX connection_attempt_expiry ON connection_attempts(connection_id, expires_at_ms);
 --> statement-breakpoint
 
 CREATE INDEX connection_attempt_retention ON connection_attempts(expires_at_ms, id);
 --> statement-breakpoint
 
-CREATE UNIQUE INDEX connection_one_pending_attempt ON connection_attempts(user_id, connection_id) WHERE status = 'pending';
+CREATE UNIQUE INDEX connection_one_pending_attempt ON connection_attempts(connection_id) WHERE status = 'pending';
 --> statement-breakpoint
 
 CREATE INDEX consent_history_active_withdrawal ON consent_history(user_id,id) WHERE record_type='processing_withdrawal';
@@ -2777,9 +2768,6 @@ INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-400
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000016','Otros',15);
 --> statement-breakpoint
 
-INSERT INTO "connection_institution_gate"("institution_id","enabled") VALUES('bancolombia',0);
---> statement-breakpoint
-
 INSERT INTO "erasure_control"("kind","generation","cursor","scanned") VALUES('published','initial',NULL,NULL);
 --> statement-breakpoint
 
@@ -3263,8 +3251,8 @@ BEGIN SELECT RAISE(ABORT, 'commercial_quota_exhausted'); END;
 
 CREATE TRIGGER connection_attempt_transition BEFORE UPDATE ON connection_attempts
 WHEN OLD.status != 'pending' OR NEW.status = 'pending'
-  OR NEW.id != OLD.id OR NEW.user_id != OLD.user_id OR NEW.connection_id != OLD.connection_id
-  OR NEW.institution_id != OLD.institution_id OR NEW.public_reference != OLD.public_reference
+  OR NEW.id != OLD.id OR NEW.connection_id != OLD.connection_id
+  OR NEW.public_reference != OLD.public_reference
   OR NEW.created_at_ms != OLD.created_at_ms OR NEW.expires_at_ms != OLD.expires_at_ms
 BEGIN SELECT RAISE(ABORT, 'connection_attempt_transition'); END;
 --> statement-breakpoint
@@ -3275,12 +3263,12 @@ BEGIN SELECT RAISE(ABORT, 'connection_identity_immutable'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER connection_preparation_binding BEFORE UPDATE ON connection_attempts
-WHEN NEW.prepared_session_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM web_sessions s WHERE s.id=NEW.prepared_session_id AND s.user_id=NEW.user_id AND NEW.status='consumed')
+WHEN NEW.prepared_session_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM web_sessions s WHERE s.id=NEW.prepared_session_id AND s.user_id=(SELECT user_id FROM connections WHERE id=NEW.connection_id) AND NEW.status='consumed')
 BEGIN SELECT RAISE(ABORT,'connection_execution_binding'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER connection_preparation_immutable BEFORE UPDATE ON connection_attempts
-WHEN OLD.prepared_session_id IS NOT NULL AND (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.prepared_session_id IS NOT OLD.prepared_session_id OR NEW.consumed_at_ms IS NOT OLD.consumed_at_ms)
+WHEN OLD.prepared_session_id IS NOT NULL AND (NEW.id IS NOT OLD.id OR NEW.prepared_session_id IS NOT OLD.prepared_session_id OR NEW.consumed_at_ms IS NOT OLD.consumed_at_ms)
 BEGIN SELECT RAISE(ABORT,'connection_execution_immutable'); END;
 --> statement-breakpoint
 
@@ -3991,17 +3979,17 @@ BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_connection_attempts_delete BEFORE DELETE ON connection_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='connection_attempts'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((SELECT user_id FROM connections WHERE id=OLD.connection_id)=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='connection_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_connection_attempts_insert BEFORE INSERT ON connection_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='connection_attempts'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((SELECT user_id FROM connections WHERE id=NEW.connection_id)=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='connection_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_connection_attempts_update BEFORE UPDATE ON connection_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='connection_attempts'))
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (((SELECT user_id FROM connections WHERE id=NEW.connection_id)=q.user_id) OR ((SELECT user_id FROM connections WHERE id=OLD.connection_id)=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='connection_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -5621,13 +5609,13 @@ END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_connection_attempts_delete BEFORE DELETE ON connection_attempts
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND ((SELECT user_id FROM connections WHERE id=OLD.connection_id)=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'connection_attempts','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'connection_id',OLD."connection_id",'institution_id',OLD."institution_id",'public_reference',OLD."public_reference",'status',OLD."status",'created_at_ms',OLD."created_at_ms",'expires_at_ms',OLD."expires_at_ms",'consumed_at_ms',OLD."consumed_at_ms",'prepared_session_id',OLD.prepared_session_id,'prepared_at_ms',CASE WHEN OLD.prepared_session_id IS NOT NULL THEN OLD.consumed_at_ms END)
-  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+  SELECT q.id,'connection_attempts','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',(SELECT user_id FROM connections WHERE id=OLD.connection_id),'connection_id',OLD."connection_id",'institution_id',(SELECT institution_id FROM connections WHERE id=OLD.connection_id),'public_reference',OLD."public_reference",'status',OLD."status",'created_at_ms',OLD."created_at_ms",'expires_at_ms',OLD."expires_at_ms",'consumed_at_ms',OLD."consumed_at_ms",'prepared_session_id',OLD.prepared_session_id,'prepared_at_ms',CASE WHEN OLD.prepared_session_id IS NOT NULL THEN OLD.consumed_at_ms END)
+  FROM erasure_requests q WHERE q.state='Draining' AND ((SELECT user_id FROM connections WHERE id=OLD.connection_id)=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;

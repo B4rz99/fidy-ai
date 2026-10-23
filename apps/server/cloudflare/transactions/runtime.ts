@@ -1,3 +1,7 @@
+import {
+  ConnectionInstitutions,
+  registeredConnectionInstitutionIds,
+} from "../../src/shell/connections/contract";
 import { withErasureRecovery } from "../erasure/runtime";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import {
@@ -646,14 +650,17 @@ export class UserTransactionCoordinator {
   private readonly env: CoordinatorEnvironment;
   private readonly erasureEnvironment: CoordinatorEnvironment;
   private readonly mcp: McpResidency;
+  private readonly institutions: typeof registeredConnectionInstitutionIds;
   constructor(
     state: Readonly<{
       id: Readonly<{ name: string }>;
       storage: Pick<DurableObjectStorage, "setAlarm" | "deleteAlarm" | "getAlarm">;
     }>,
-    env: CoordinatorEnvironment
+    env: CoordinatorEnvironment,
+    institutions = registeredConnectionInstitutionIds
   ) {
     this.state = state;
+    this.institutions = institutions;
     this.erasureEnvironment = env;
     this.env = withErasureRecovery(env);
     this.mcp = makeMcpResidency({
@@ -806,7 +813,9 @@ export class UserTransactionCoordinator {
           }
           return yield* executeCanonicalAdmission(admission.value, environment, Option.none());
         })
-      ).pipe((work) => observeCoordinatorRequest(work, request, environment))
+      ).pipe(Effect.provideService(ConnectionInstitutions, this.institutions), (work) =>
+        observeCoordinatorRequest(work, request, environment)
+      )
     );
   }
 

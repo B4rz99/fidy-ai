@@ -1,3 +1,7 @@
+import {
+  ConnectionInstitutions,
+  type registeredConnectionInstitutionIds,
+} from "../../src/shell/connections/contract";
 import { withErasureRecovery } from "../erasure/runtime";
 import type { CoreRejectionBoundary } from "../runtime/operational-health/contract";
 import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
@@ -20,7 +24,12 @@ const rejectionBoundary = (request: Request): CoreRejectionBoundary => {
     : "http";
 };
 
-export const makeCoreHttp = (telemetry: TelemetryService): CoreHttpHandler => {
+type CoreComposition = Readonly<{
+  telemetry: TelemetryService;
+  institutions: typeof registeredConnectionInstitutionIds;
+}>;
+
+export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
   const observeRejections = makeCoreRejectionObserver();
   return (request, environment, context) =>
     Effect.gen(function* () {
@@ -57,6 +66,7 @@ export const makeCoreHttp = (telemetry: TelemetryService): CoreHttpHandler => {
       });
       return response;
     }).pipe(
+      Effect.provideService(ConnectionInstitutions, institutions),
       Effect.scoped,
       (work) =>
         Effect.flatMap(Clock.currentTimeMillis, (receivedAtUnixMilliseconds) =>

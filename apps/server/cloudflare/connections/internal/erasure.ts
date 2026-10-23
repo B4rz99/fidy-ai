@@ -7,20 +7,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'connection_id',r.\"connection_id\",'institution_id',r.\"institution_id\",'public_reference',r.\"public_reference\",'status',r.\"status\",'created_at_ms',r.\"created_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'consumed_at_ms',r.\"consumed_at_ms\",'prepared_session_id',r.prepared_session_id,'prepared_at_ms',CASE WHEN r.prepared_session_id IS NOT NULL THEN r.consumed_at_ms END) AS body FROM connection_attempts r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',(SELECT user_id FROM connections WHERE id=r.connection_id),'connection_id',r.\"connection_id\",'institution_id',(SELECT institution_id FROM connections WHERE id=r.connection_id),'public_reference',r.\"public_reference\",'status',r.\"status\",'created_at_ms',r.\"created_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'consumed_at_ms',r.\"consumed_at_ms\",'prepared_session_id',r.prepared_session_id,'prepared_at_ms',CASE WHEN r.prepared_session_id IS NOT NULL THEN r.consumed_at_ms END) AS body FROM connection_attempts r WHERE EXISTS(SELECT 1 FROM connections c WHERE c.id=r.connection_id AND c.user_id=?)",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM connection_attempts r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM connection_attempts r WHERE EXISTS(SELECT 1 FROM connections c WHERE c.id=r.connection_id AND c.user_id=?)",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM connection_attempts r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM connection_attempts r WHERE EXISTS(SELECT 1 FROM connections c WHERE c.id=r.connection_id AND c.user_id=?)",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM connection_attempts AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM connection_attempts AS r WHERE EXISTS(SELECT 1 FROM connections c WHERE c.id=r.connection_id AND c.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

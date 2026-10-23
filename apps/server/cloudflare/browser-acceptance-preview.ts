@@ -1,3 +1,4 @@
+import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
 import { captureWhatsApp, whatsappOperator } from "./browser-acceptance-whatsapp";
 import {
   AcceptanceClockAdvance,
@@ -475,7 +476,7 @@ const operator = Bun.serve({
 process.stdout.write(`Browser approval fixture listening at ${operator.url}\n`);
 
 const telemetry = makeWorkerTelemetry(() => undefined);
-const core = makeCoreWorker(telemetry);
+const core = makeCoreWorker({ telemetry, institutions: registeredConnectionInstitutionIds });
 const worker = makePublicWorker(telemetry);
 const coordinators = new Map<string, Pick<Fetcher, "fetch">>();
 const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {

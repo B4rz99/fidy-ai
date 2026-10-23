@@ -1,5 +1,6 @@
 import { UtcTimestamp } from "~/core/_shared/time";
-import { Schema } from "effect";
+import { Context, Schema } from "effect";
+import type { InstitutionId } from "~/core/connections/contract";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api";
 import {
   ConnectInstitutionInput,
@@ -118,4 +119,13 @@ export const ConnectionBrowserApi = HttpApi.make("ConnectionBrowserApi").add(
         error: browserFailures,
       })
     )
+);
+
+/** Only implementations satisfying SupportedInstitution may be registered. None currently qualify. */
+export const registeredConnectionInstitutionIds: ReadonlyArray<InstitutionId> = [];
+
+/** Code-composed supported integration registration; transport data cannot supply this service. */
+export const ConnectionInstitutions = Context.Reference<ReadonlyArray<InstitutionId>>(
+  "@fidy/server/connections/Institutions",
+  { defaultValue: () => registeredConnectionInstitutionIds }
 );

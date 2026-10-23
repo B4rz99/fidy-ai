@@ -18,7 +18,11 @@ const entryProjection = ({
       : "r.user_id=?";
   const scope = owner + " AND r.record_type='" + recordType + "'";
   const body =
-    "json_object(" + archiveFields.map((field) => `'${field}',r."${field}"`).join(",") + ")";
+    "json_object(" +
+    archiveFields
+      .map((field) => `'${field}',r."${field === "accepted_at_ms" ? "occurred_at_ms" : field}"`)
+      .join(",") +
+    ")";
   return {
     id,
     dataClass,

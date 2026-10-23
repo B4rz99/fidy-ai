@@ -1662,7 +1662,7 @@ SELECT 'oauth_lineage_cutover',CASE WHEN NOT EXISTS(
 INSERT INTO oauth_credentials_1446(rowid,kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,consumed_at_ms,scopes_json,replacement_refresh_id,refresh_event_id,refresh_event_row_ref)
 SELECT c.rowid,c.kind,c.id,c.connection_id,c.user_id,c.digest,c.issued_at_ms,c.expires_at_ms,c.consumed_at_ms,c.scopes_json,e.issued_refresh_id,e.id,CAST(e.sequence AS TEXT)
 FROM oauth_credentials c LEFT JOIN audit_entries e ON e.record_type='oauth_refresh' AND c.kind='refresh' AND e.consumed_refresh_id=c.id;
-INSERT INTO audit_entries_1446(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries WHERE record_type<>'oauth_refresh';
+INSERT INTO audit_entries_1446(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,CASE WHEN record_type='request_admission' THEN accepted_at_ms ELSE occurred_at_ms END,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition FROM audit_entries WHERE record_type<>'oauth_refresh';
 UPDATE sqlite_sequence SET seq=(SELECT seq FROM sqlite_sequence WHERE name='audit_entries') WHERE name='audit_entries_1446';
 INSERT INTO sqlite_sequence(name,seq) SELECT 'audit_entries_1446',seq FROM sqlite_sequence WHERE name='audit_entries'
  AND NOT EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='audit_entries_1446');
@@ -1674,7 +1674,7 @@ SELECT 'oauth_lineage_cutover',CASE WHEN
  AND NOT EXISTS(SELECT sequence,id,user_id,refresh_connection_id,consumed_refresh_id,issued_refresh_id,occurred_at_ms FROM audit_entries WHERE record_type='oauth_refresh'
  EXCEPT SELECT CAST(refresh_event_row_ref AS INTEGER),refresh_event_id,user_id,connection_id,id,replacement_refresh_id,consumed_at_ms FROM oauth_credentials_1446 WHERE replacement_refresh_id IS NOT NULL)
  AND (SELECT count(*) FROM audit_entries WHERE record_type<>'oauth_refresh')=(SELECT count(*) FROM audit_entries_1446)
- AND NOT EXISTS(SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries WHERE record_type<>'oauth_refresh' EXCEPT SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries_1446)
+ AND NOT EXISTS(SELECT sequence,record_type,id,user_id,session_id,operation,outcome,CASE WHEN record_type='request_admission' THEN accepted_at_ms ELSE occurred_at_ms END,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition FROM audit_entries WHERE record_type<>'oauth_refresh' EXCEPT SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition FROM audit_entries_1446)
  THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
 ```
 
@@ -4079,7 +4079,7 @@ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
 <!-- reminder-control-copy:start -->
 
 ```sql
-INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries WHERE record_type<>'reminder_control';
+INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,CASE WHEN record_type='request_admission' THEN accepted_at_ms ELSE occurred_at_ms END,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition FROM audit_entries WHERE record_type<>'reminder_control';
 
 UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)) WHERE name='cutover_audit_entries';
 
@@ -4106,7 +4106,7 @@ ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
 <!-- reminder-control-rollback-copy:start -->
 
 ```sql
-INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries;
+INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,CASE WHEN record_type='request_admission' THEN NULL ELSE occurred_at_ms END,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,CASE WHEN record_type='request_admission' THEN occurred_at_ms END FROM audit_entries;
 
 UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)) WHERE name='cutover_audit_entries';
 
@@ -4196,3 +4196,58 @@ The measured gate selected the existing coordinator scanner. Keep all four scan-
 in the single baseline; no digest-generation Workflow or source_scan_id cutover is installed.
 See [the measurement and retained behavior](../research/digest-source-workflow-1475.md). Delivery
 Workflows remain independently responsible for delivery; they are not a digest source scanner.
+
+## Coherent nine-kind Audit log (#1476)
+
+OAuth rotation, Recovery decisions and reminder controls are already on their owning records.
+The remaining Audit table keeps the accepted nine accountability variants and all original actor
+combinations. Normalize only request_admission's accepted_at_ms to occurred_at_ms and remove the
+redundant admission-time column. Admission's 93-day inclusive bounded cleanup stays separate from
+ordinary strict 365-day call retention. Keep original sequences, allocator high-water marks,
+kind-qualified IDs, NULL billing owners/IDs, media association, actor references and owner proofs.
+
+Admission archives keep the original accepted_at_ms JSON key and sequence row address. Existing
+archives need no rewriting. Both archive projection and drain-time preservation read its value
+from occurred_at_ms. No new historical operation, timestamp, actor or ownership is invented.
+
+Stop writers, reject unfinished erasure, bind the observed source count, create the scratch Audit
+table from the final definition, and run guard/copy/swap plus affected index/trigger recreation in
+one native D1 batch. Start with PRAGMA defer_foreign_keys=ON and finish with foreign_key_check.
+The rollback uses the preceding definition in audit/admission-cutover.test-fixture.json and the
+inverse copy: request time returns to accepted_at_ms with occurred_at_ms NULL. Other rows and archive
+bodies remain exact. Historical OAuth/reminder rehearsals map admission clocks in their current
+side too; their preceding source definitions remain frozen.
+
+<!-- audit-clock-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'audit_clock_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM audit_entries)=? AND NOT EXISTS(SELECT 1 FROM audit_entries WHERE (record_type='request_admission' AND (accepted_at_ms IS NULL OR occurred_at_ms IS NOT NULL)) OR (record_type<>'request_admission' AND accepted_at_ms IS NOT NULL)) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- audit-clock-guard:end -->
+
+<!-- audit-clock-copy:start -->
+
+```sql
+INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,CASE WHEN record_type='request_admission' THEN accepted_at_ms ELSE occurred_at_ms END,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition FROM audit_entries;
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)) WHERE name='cutover_audit_entries';
+```
+
+<!-- audit-clock-copy:end -->
+
+<!-- audit-clock-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'audit_clock_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- audit-clock-rollback-guard:end -->
+
+<!-- audit-clock-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,CASE WHEN record_type='request_admission' THEN NULL ELSE occurred_at_ms END,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,CASE WHEN record_type='request_admission' THEN occurred_at_ms END FROM audit_entries;
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)) WHERE name='cutover_audit_entries';
+```
+
+<!-- audit-clock-rollback-copy:end -->

@@ -444,7 +444,7 @@ const seedExpiredAdmission = ({
       .bind(userId, `live-${userId}`, current, current),
     db
       .prepare(
-        "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,accepted_at_ms) VALUES ('request_admission',?,?,?,?,?)"
+        "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,occurred_at_ms) VALUES ('request_admission',?,?,?,?,?)"
       )
       .bind(
         `expired-${userId}`,
@@ -455,7 +455,7 @@ const seedExpiredAdmission = ({
       ),
     db
       .prepare(
-        "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,accepted_at_ms) VALUES ('request_admission',?,?,?,?,?)"
+        "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,occurred_at_ms) VALUES ('request_admission',?,?,?,?,?)"
       )
       .bind(`live-${userId}`, userId, patId, "categories.listCategories", current),
   ]);
@@ -502,7 +502,7 @@ it("Core maintenance removes expired replay bodies and admission state for inact
         (yield* awaitPromise(
           db
             .prepare(
-              "SELECT id FROM (SELECT id,user_id,pat_id,operation,accepted_at_ms FROM audit_entries WHERE record_type='request_admission') AS canonical_request_acceptances ORDER BY user_id"
+              "SELECT id FROM (SELECT id,user_id,pat_id,operation,occurred_at_ms FROM audit_entries WHERE record_type='request_admission') AS canonical_request_acceptances ORDER BY user_id"
             )
             .all()
         )).results

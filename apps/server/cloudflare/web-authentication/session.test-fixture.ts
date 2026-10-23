@@ -193,7 +193,7 @@ export const seedSession = ({
           )
           .bind(sessionUser),
         db.prepare(
-          "CREATE TABLE IF NOT EXISTS audit_entries (sequence INTEGER PRIMARY KEY AUTOINCREMENT,record_type TEXT NOT NULL,id TEXT,user_id TEXT,session_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER,pat_id TEXT,oauth_connection_id TEXT,oauth_credential_id TEXT,hosted_turn_id TEXT,attempt_id TEXT,transition TEXT,accepted_at_ms INTEGER,UNIQUE(record_type,id),UNIQUE(attempt_id,transition))"
+          "CREATE TABLE IF NOT EXISTS audit_entries (sequence INTEGER PRIMARY KEY AUTOINCREMENT,record_type TEXT NOT NULL,id TEXT,user_id TEXT,session_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER,pat_id TEXT,oauth_connection_id TEXT,oauth_credential_id TEXT,hosted_turn_id TEXT,attempt_id TEXT,transition TEXT,UNIQUE(record_type,id),UNIQUE(attempt_id,transition))"
         ),
       ])
     );

@@ -53,3 +53,17 @@ Approval commits that case with credential consumption and pairing approval; Aud
 sequence ordering, retention and erasure permissions. Historical event IDs/archive references remain
 bounded Case metadata under the original credential-erasure purpose. See the
 [validated cutover](../../../../docs/operations/database-cutover-1428.md#recovery-case-evidence-1442).
+
+## Final accountability log (#1476)
+
+The nine retained kinds share occurred_at_ms; request admission now stores its exact acceptance
+instant there instead of a second time column. Admission cleanup still uses its separate 93-day
+inclusive boundary and partial expiry index. Ordinary call cleanup still covers only its four
+approved kinds with a strict 365-day boundary. Credential-filtered queries, actor combinations,
+billing transitions, media association and native mutation proofs remain unchanged.
+
+Admission archives preserve their original accepted_at_ms key and sequence address through an
+explicit projection. The populated native clock conversion/rollback covers all nine variants,
+allocator high-water marks and archive preservation; it rejects count mismatch and interrupted
+conversion atomically. Historical OAuth and reminder extraction rehearsals also preserve admission
+time when targeting the final schema.

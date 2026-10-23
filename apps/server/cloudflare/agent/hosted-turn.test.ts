@@ -38,6 +38,7 @@ import {
 } from "../whatsapp/contract";
 import {
   findWhatsAppReplay,
+  isWhatsAppWindowOpen,
   readWhatsAppPendingWork,
   reconcileWhatsAppStatus,
   recordWhatsAppSend,
@@ -1718,10 +1719,10 @@ it("refuses a free-form reply when the verified inbound event is outside its 24-
           Array.from({ length: 8 }, (_, index) => {
             const last = now() - 172_800_000;
             return db
-              .prepare(`INSERT INTO hosted_whatsapp_windows
-          (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms, closes_at_ms)
-          VALUES (?, ?, ?, ?, ?)`)
-              .bind(users[1], "portfolio-1", `CO.test-${index}`, last, last + 86_400_000);
+              .prepare(`INSERT INTO whatsapp_service_windows
+          (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms)
+          VALUES (?, ?, ?, ?)`)
+              .bind(users[1], "portfolio-1", `CO.test-${index}`, last);
           })
         )
       );
@@ -1965,9 +1966,9 @@ it("does not send when a window closes while a prepared reply waits for recovery
                 if (staged === null) return;
                 const last = now() - 86_400_001;
                 return db
-                  .prepare(`UPDATE hosted_whatsapp_windows
-                    SET last_verified_inbound_at_ms = ?, closes_at_ms = ? WHERE user_id = ?`)
-                  .bind(last, last + 86_400_000, users[0])
+                  .prepare(`UPDATE whatsapp_service_windows
+                    SET last_verified_inbound_at_ms = ? WHERE user_id = ?`)
+                  .bind(last, users[0])
                   .run();
               })
               .then(() => undefined),
@@ -2091,5 +2092,92 @@ it("fails an ambiguous WhatsApp send as DeliveryUnconfirmed without replaying a 
       expect(
         (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
       ).toHaveLength(2);
+    })
+  ));
+
+it("shares the verified recipient window across Turns, advances only on newer activity, and expires at equality", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const first = yield* Effect.tryPromise(() =>
+        queuedWhatsAppTurn({ db, index: 0, text: "First verified message" })
+      );
+      const userId = UserId.make(users[0]);
+      const clock = yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT last_verified_inbound_at_ms FROM whatsapp_service_windows WHERE user_id=?"
+          )
+          .bind(userId)
+          .first<number>("last_verified_inbound_at_ms")
+      );
+      if (clock === null) return yield* Effect.die("Missing verified window");
+      const open = (current: number): ReturnType<typeof isWhatsAppWindowOpen> =>
+        isWhatsAppWindowOpen({ db, userId, turnId: first, now: current });
+      expect(yield* open(clock + 86_399_999)).toBe(true);
+      expect(yield* open(clock + 86_400_000)).toBe(false);
+      expect(yield* open(clock + 86_400_001)).toBe(false);
+      const subject = WhatsAppHostedSubject.make({
+        userId,
+        portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+        bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741910"),
+      });
+      const recover = Effect.fn(function* (current: number) {
+        const snapshot = Option.getOrThrow(
+          yield* readHostedSnapshot({ db, subject, now: current })
+        );
+        expect(
+          yield* recoverHostedTurn({
+            db,
+            userId,
+            turn: Option.getOrThrow(snapshot.pending),
+            now: current,
+          })
+        ).toBe(true);
+      });
+      const admit = Effect.fn(function* (occurred: number, received: number, message: string) {
+        const snapshot = Option.getOrThrow(
+          yield* readHostedSnapshot({ db, subject, now: received })
+        );
+        const id = TranscriptTurnId.make(newId());
+        expect(
+          yield* admitHostedTurn({
+            db,
+            channel: {
+              _tag: "WhatsApp",
+              subject,
+              inbound: WhatsAppInboundEvidence.make({
+                messageId: WhatsAppProviderMessageId.make(message),
+                replyToMessageId: Option.none(),
+                sandboxPhone: Option.none(),
+                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+                occurredAtMs: occurred,
+                receivedAtMs: received,
+              }),
+            },
+            selection: selectHostedSession({ snapshot, userId, now: received }),
+            text: TranscriptText.make("Verified continuation"),
+            now: received,
+            id,
+          })
+        ).toEqual(Option.some(id));
+      });
+      yield* recover(clock + 135_001);
+      yield* admit(clock + 2000, clock + 140_000, "wamid.window.newer");
+      yield* recover(clock + 275_001);
+      yield* admit(clock + 1999, clock + 280_000, "wamid.window.older");
+      expect(yield* open(clock + 86_401_999)).toBe(true);
+      expect(yield* open(clock + 86_402_000)).toBe(false);
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE users SET whatsapp_bsuid='CO.changed' WHERE id=?").bind(userId).run()
+      );
+      expect(yield* open(clock + 280_000)).toBe(false);
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE users SET whatsapp_bsuid=? WHERE id=?").bind(subject.bsuid, userId).run()
+      );
+      yield* sweepExpiredWhatsAppWindows({ db, now: clock + 86_401_999 });
+      expect(yield* open(clock + 86_401_999)).toBe(true);
+      yield* sweepExpiredWhatsAppWindows({ db, now: clock + 86_402_000 });
+      expect(yield* open(clock + 86_401_999)).toBe(false);
     })
   ));

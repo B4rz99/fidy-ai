@@ -779,11 +779,10 @@ CREATE TABLE "hosted_turns" (
 ) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE hosted_whatsapp_windows (
+CREATE TABLE whatsapp_service_windows (
  user_id TEXT NOT NULL, portfolio_id TEXT NOT NULL, bsuid TEXT NOT NULL,
- last_verified_inbound_at_ms INTEGER NOT NULL, closes_at_ms INTEGER NOT NULL,
- PRIMARY KEY (user_id, portfolio_id, bsuid),
- CHECK (closes_at_ms = last_verified_inbound_at_ms + 86400000)
+ last_verified_inbound_at_ms INTEGER NOT NULL,
+ PRIMARY KEY (user_id, portfolio_id, bsuid)
 ) STRICT;
 --> statement-breakpoint
 
@@ -2171,7 +2170,7 @@ CREATE INDEX hosted_whatsapp_delivery_retention_user ON whatsapp_deliveries(user
 CREATE INDEX hosted_whatsapp_outbox_offer ON hosted_turns(dispatch_offered_at_ms,dispatch_created_at_ms) WHERE dispatch_created_at_ms IS NOT NULL;
 --> statement-breakpoint
 
-CREATE INDEX hosted_whatsapp_windows_expiry ON hosted_whatsapp_windows(closes_at_ms);
+CREATE INDEX whatsapp_service_windows_expiry ON whatsapp_service_windows(last_verified_inbound_at_ms);
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX insight_correlation_identity ON whatsapp_deliveries(correlation_token) WHERE kind='insight';
@@ -4287,17 +4286,17 @@ WHEN NEW.kind='hosted' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.stat
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_hosted_whatsapp_windows_delete BEFORE DELETE ON hosted_whatsapp_windows
+CREATE TRIGGER erasure_fence_whatsapp_service_windows_delete BEFORE DELETE ON whatsapp_service_windows
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_windows'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_hosted_whatsapp_windows_insert BEFORE INSERT ON hosted_whatsapp_windows
+CREATE TRIGGER erasure_fence_whatsapp_service_windows_insert BEFORE INSERT ON whatsapp_service_windows
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_windows'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_hosted_whatsapp_windows_update BEFORE UPDATE ON hosted_whatsapp_windows
+CREATE TRIGGER erasure_fence_whatsapp_service_windows_update BEFORE UPDATE ON whatsapp_service_windows
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_windows'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
@@ -5835,13 +5834,13 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_hosted_whatsapp_windows_delete BEFORE DELETE ON hosted_whatsapp_windows
+CREATE TRIGGER erasure_preserve_whatsapp_service_windows_delete BEFORE DELETE ON whatsapp_service_windows
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'hosted_whatsapp_windows','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'portfolio_id',OLD."portfolio_id",'bsuid',OLD."bsuid",'last_verified_inbound_at_ms',OLD."last_verified_inbound_at_ms",'closes_at_ms',OLD."closes_at_ms")
+  SELECT q.id,'hosted_whatsapp_windows','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'portfolio_id',OLD."portfolio_id",'bsuid',OLD."bsuid",'last_verified_inbound_at_ms',OLD."last_verified_inbound_at_ms",'closes_at_ms',OLD.last_verified_inbound_at_ms+86400000)
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;

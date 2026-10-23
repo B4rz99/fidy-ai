@@ -4449,3 +4449,53 @@ INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_document_clock_rollbac
 ```
 
 <!-- hosted-document-clock-rollback-guard:end -->
+
+## WhatsApp service-window source clock (#1481)
+
+Rename hosted_whatsapp_windows to whatsapp_service_windows and retain only user_id, portfolio_id,
+bsuid and last_verified_inbound_at_ms. Keep the original recipient-qualified primary key and
+rowids. Validate every original closes_at_ms equals the original verified clock plus 86400000;
+never rewrite mismatched history. Open is last_verified_inbound_at_ms > now-86400000; equality
+is expired. Cleanup uses the inverse <= cutoff and the source-clock index with its existing
+128-row bound. The newer-only upsert and original minimum of provider occurrence/trusted receipt
+remain. Live identity association and separate consent/Turn/send authorization still apply.
+
+Stop writers and unfinished erasure, bind observed count, guard/copy/swap/recreate affected
+objects in one native D1 batch, and check foreign keys before resuming. Rollback uses the original
+objects in whatsapp/service-window-cutover.test-fixture.json and the inverse copy, preserving the
+old deadline exactly from its validated source. The erasure purpose remains hosted_whatsapp_windows
+so existing archived row addresses and permissions retain their meaning; its physical source is the
+renamed store. Both archive projection and drain preservation keep the original closes_at_ms JSON
+key/value. Existing archives need no rewriting. No new provider-policy or User-session rule is added.
+
+<!-- whatsapp-window-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'whatsapp_window_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM hosted_whatsapp_windows)=? AND NOT EXISTS(SELECT 1 FROM hosted_whatsapp_windows WHERE closes_at_ms IS NOT last_verified_inbound_at_ms+86400000) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- whatsapp-window-guard:end -->
+
+<!-- whatsapp-window-copy:start -->
+
+```sql
+INSERT INTO cutover_whatsapp_service_windows(rowid,user_id,portfolio_id,bsuid,last_verified_inbound_at_ms) SELECT rowid,user_id,portfolio_id,bsuid,last_verified_inbound_at_ms FROM hosted_whatsapp_windows;
+```
+
+<!-- whatsapp-window-copy:end -->
+
+<!-- whatsapp-window-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'whatsapp_window_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- whatsapp-window-rollback-guard:end -->
+
+<!-- whatsapp-window-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_hosted_whatsapp_windows(rowid,user_id,portfolio_id,bsuid,last_verified_inbound_at_ms,closes_at_ms) SELECT rowid,user_id,portfolio_id,bsuid,last_verified_inbound_at_ms,last_verified_inbound_at_ms+86400000 FROM whatsapp_service_windows;
+```
+
+<!-- whatsapp-window-rollback-copy:end -->

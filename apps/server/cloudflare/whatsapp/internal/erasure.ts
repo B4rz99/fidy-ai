@@ -124,20 +124,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'last_verified_inbound_at_ms',r.\"last_verified_inbound_at_ms\",'closes_at_ms',r.\"closes_at_ms\") AS body FROM hosted_whatsapp_windows r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'last_verified_inbound_at_ms',r.\"last_verified_inbound_at_ms\",'closes_at_ms',r.last_verified_inbound_at_ms+86400000) AS body FROM whatsapp_service_windows r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_whatsapp_windows r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM whatsapp_service_windows r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM hosted_whatsapp_windows r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM whatsapp_service_windows r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM hosted_whatsapp_windows AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM whatsapp_service_windows AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

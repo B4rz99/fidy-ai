@@ -267,3 +267,6 @@ export type WhatsAppOperationalSignal =
 
 /** Channel work is unavailable without exposing storage statements, rows, provider payloads or causes. */
 export class WhatsAppUnavailable extends Data.TaggedError("WhatsAppUnavailable")<{}> {}
+
+/** Existing free-form reply window from original verified inbound activity, in milliseconds. */
+export const whatsAppServiceWindowMilliseconds = 86_400_000;

@@ -83,7 +83,7 @@ const setup = (
               "web_sessions",
               "whatsapp_event_records",
               "pending_consent_exchanges",
-              "hosted_whatsapp_windows",
+              "whatsapp_service_windows",
             ],
           })
         );

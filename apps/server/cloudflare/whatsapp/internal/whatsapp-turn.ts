@@ -21,7 +21,11 @@ import {
   hostedChannelUserEntryQuery,
 } from "../../agent/operations";
 import { prepareWhatsAppIdentity } from "../../identity/operations";
-import { type WhatsAppPendingWork, type WhatsAppTurnAdmission } from "../contract";
+import {
+  type WhatsAppPendingWork,
+  type WhatsAppTurnAdmission,
+  whatsAppServiceWindowMilliseconds,
+} from "../contract";
 
 /** Well inside the 30-day Turn evidence retention, even after delayed delivery. */
 export const hostedInboundReplayWindowMs = 604_800_000;
@@ -73,12 +77,12 @@ export const isWhatsAppWindowOpen = ({
         userId,
         statement: {
           sql: `SELECT 1 AS open FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
-      JOIN hosted_whatsapp_windows AS w ON w.user_id = i.user_id
+      JOIN whatsapp_service_windows AS w ON w.user_id = i.user_id
         AND w.portfolio_id = i.portfolio_id AND w.bsuid = i.bsuid
       JOIN identity_associations AS identity ON identity.userId = i.user_id
         AND identity.businessPortfolioId = i.portfolio_id AND identity.businessScopedUserId = i.bsuid
-      WHERE i.turn_id = ? AND i.user_id = ? AND w.closes_at_ms > ?`,
-          params: [turnId, userId, now],
+      WHERE i.turn_id = ? AND i.user_id = ? AND w.last_verified_inbound_at_ms > ?`,
+          params: [turnId, userId, now - whatsAppServiceWindowMilliseconds],
         },
       }).first()
     );
@@ -92,10 +96,10 @@ export const sweepExpiredWhatsAppWindows = ({
 }: Readonly<{ db: D1Database; now: number }>): Effect.Effect<void, Cause.UnknownError> =>
   Effect.tryPromise(() =>
     db
-      .prepare(`DELETE FROM hosted_whatsapp_windows WHERE rowid IN (
-    SELECT rowid FROM hosted_whatsapp_windows WHERE closes_at_ms <= ?
-    ORDER BY closes_at_ms LIMIT 128)`)
-      .bind(now)
+      .prepare(`DELETE FROM whatsapp_service_windows WHERE rowid IN (
+    SELECT rowid FROM whatsapp_service_windows WHERE last_verified_inbound_at_ms <= ?
+    ORDER BY last_verified_inbound_at_ms LIMIT 128)`)
+      .bind(now - whatsAppServiceWindowMilliseconds)
       .run()
   ).pipe(Effect.asVoid);
 

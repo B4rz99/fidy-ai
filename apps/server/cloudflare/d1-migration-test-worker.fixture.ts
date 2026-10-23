@@ -33,7 +33,7 @@ type Snapshot = {
   readonly appliedMigrationNames: ReadonlyArray<string>;
   readonly transcriptHasIteration: boolean;
   readonly whatsAppEventRecordsExists: boolean;
-  readonly hostedWhatsAppWindowsExists: boolean;
+  readonly whatsAppServiceWindowsExists: boolean;
   readonly foreignKeyViolationCount: number;
   readonly preservedEvidence: Option.Option<TranscriptEvidence>;
 };
@@ -43,15 +43,14 @@ type ConstraintChecks = {
   readonly transcriptAppendOnlyEnforced: boolean;
   readonly hostedVoiceRefusalIdentityEnforced: boolean;
   readonly hostedVoiceRefusalOutcomeCheckEnforced: boolean;
-  readonly hostedWhatsAppWindowPrimaryKeyEnforced: boolean;
-  readonly hostedWhatsAppWindowBoundsCheckEnforced: boolean;
+  readonly whatsAppServiceWindowPrimaryKeyEnforced: boolean;
 };
 
 type MigrationState = {
   readonly appliedMigrationNames: ReadonlyArray<string>;
   readonly transcriptHasIteration: boolean;
   readonly whatsAppEventRecordsExists: boolean;
-  readonly hostedWhatsAppWindowsExists: boolean;
+  readonly whatsAppServiceWindowsExists: boolean;
   readonly foreignKeyViolationCount: number;
   readonly transcriptEvidence:
     | { readonly _tag: "Empty" }
@@ -62,7 +61,6 @@ const legacyUser = "10000000-0000-4000-8000-000000000732";
 const legacySession = "10000000-0000-4000-8000-000000000733";
 const legacyTurn = "10000000-0000-4000-8000-000000000731";
 const legacyTranscript = "10000000-0000-4000-8000-000000000735";
-const whatsappWindowDurationMilliseconds = 86_400_000;
 
 class D1MigrationTestFailure extends Data.TaggedError("D1MigrationTestFailure")<{
   readonly cause: unknown;
@@ -162,7 +160,7 @@ const readSnapshot = Effect.fn(function* (db: D1Database) {
     appliedMigrationNames: migrations.map((migration) => migration.name),
     transcriptHasIteration: columns.some((column) => column.name === "iteration"),
     whatsAppEventRecordsExists: tables.some((table) => table.name === "whatsapp_event_records"),
-    hostedWhatsAppWindowsExists: tables.some((table) => table.name === "hosted_whatsapp_windows"),
+    whatsAppServiceWindowsExists: tables.some((table) => table.name === "whatsapp_service_windows"),
     foreignKeyViolationCount: foreignKeys.length,
     preservedEvidence: evidence,
   } satisfies Snapshot;
@@ -243,36 +241,25 @@ const checkWhatsAppWindowConstraints = Effect.fn(function* (db: D1Database) {
   const timestamp = yield* Clock.currentTimeMillis;
   const portfolioId = `migration-${timestamp}-portfolio`;
   const bsuid = `migration-${timestamp}-bsuid`;
-  const closesAt = timestamp + whatsappWindowDurationMilliseconds;
-  const insertWindow = (portfolio: string, subject: string, closes: number): D1PreparedStatement =>
+  const insertWindow = (portfolio: string, subject: string): D1PreparedStatement =>
     db
       .prepare(
-        `INSERT INTO hosted_whatsapp_windows
-         (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms, closes_at_ms)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO whatsapp_service_windows
+         (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms)
+         VALUES (?, ?, ?, ?)`
       )
-      .bind(legacyUser, portfolio, subject, timestamp, closes);
-  const insert = yield* statementAttempt(insertWindow(portfolioId, bsuid, closesAt));
-  const duplicate = yield* statementAttempt(insertWindow(portfolioId, bsuid, closesAt));
-  const differentPortfolio = yield* statementAttempt(
-    insertWindow(`${portfolioId}-other`, bsuid, closesAt)
-  );
-  const differentBsuid = yield* statementAttempt(
-    insertWindow(portfolioId, `${bsuid}-other`, closesAt)
-  );
-  const invalidBounds = yield* statementAttempt(
-    insertWindow(portfolioId, `${bsuid}-invalid`, closesAt + 1)
-  );
+      .bind(legacyUser, portfolio, subject, timestamp);
+  const insert = yield* statementAttempt(insertWindow(portfolioId, bsuid));
+  const duplicate = yield* statementAttempt(insertWindow(portfolioId, bsuid));
+  const differentPortfolio = yield* statementAttempt(insertWindow(`${portfolioId}-other`, bsuid));
+  const differentBsuid = yield* statementAttempt(insertWindow(portfolioId, `${bsuid}-other`));
 
   return {
-    hostedWhatsAppWindowPrimaryKeyEnforced:
+    whatsAppServiceWindowPrimaryKeyEnforced:
       insert._tag === "Succeeded" &&
       duplicate._tag === "Failed" &&
       differentPortfolio._tag === "Succeeded" &&
       differentBsuid._tag === "Succeeded",
-    hostedWhatsAppWindowBoundsCheckEnforced:
-      invalidBounds._tag === "Failed" &&
-      invalidBounds.message.toLowerCase().includes("check constraint failed"),
   };
 });
 
@@ -294,15 +281,14 @@ const readMigrationState = Effect.fn(function* (db: D1Database) {
         transcriptAppendOnlyEnforced: false,
         hostedVoiceRefusalIdentityEnforced: false,
         hostedVoiceRefusalOutcomeCheckEnforced: false,
-        hostedWhatsAppWindowPrimaryKeyEnforced: false,
-        hostedWhatsAppWindowBoundsCheckEnforced: false,
+        whatsAppServiceWindowPrimaryKeyEnforced: false,
       };
 
   return {
     appliedMigrationNames: snapshot.appliedMigrationNames,
     transcriptHasIteration: snapshot.transcriptHasIteration,
     whatsAppEventRecordsExists: snapshot.whatsAppEventRecordsExists,
-    hostedWhatsAppWindowsExists: snapshot.hostedWhatsAppWindowsExists,
+    whatsAppServiceWindowsExists: snapshot.whatsAppServiceWindowsExists,
     foreignKeyViolationCount: snapshot.foreignKeyViolationCount,
     transcriptEvidence: Option.match(snapshot.preservedEvidence, {
       onNone: () => ({ _tag: "Empty" as const }),

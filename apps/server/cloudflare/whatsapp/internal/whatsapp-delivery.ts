@@ -16,6 +16,7 @@ import {
   type WhatsAppStatusAdmission,
   type WhatsAppStatusReconciliation,
   type WhatsAppUnavailable,
+  whatsAppServiceWindowMilliseconds,
 } from "../contract";
 
 const Proposal = Schema.Struct({
@@ -99,13 +100,22 @@ export const startWhatsAppSend = ({
         AND EXISTS (SELECT 1 FROM (${turns.sql}) AS t
           WHERE t.id = hosted_whatsapp_delivery.turn_id AND t.user_id = ? AND t.status = 'pending')
         AND EXISTS (SELECT 1 FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
-          JOIN hosted_whatsapp_windows AS w ON w.user_id = i.user_id
+          JOIN whatsapp_service_windows AS w ON w.user_id = i.user_id
             AND w.portfolio_id = i.portfolio_id AND w.bsuid = i.bsuid
           JOIN identity_associations AS identity ON identity.userId = i.user_id
             AND identity.businessPortfolioId = i.portfolio_id AND identity.businessScopedUserId = i.bsuid
           WHERE i.turn_id = hosted_whatsapp_delivery.turn_id AND i.user_id = ?
-            AND w.closes_at_ms > ?)`,
-          params: [now, turnId, userId, token, ...turns.params, userId, userId, now],
+            AND w.last_verified_inbound_at_ms > ?)`,
+          params: [
+            now,
+            turnId,
+            userId,
+            token,
+            ...turns.params,
+            userId,
+            userId,
+            now - whatsAppServiceWindowMilliseconds,
+          ],
         },
       }).run()
     );

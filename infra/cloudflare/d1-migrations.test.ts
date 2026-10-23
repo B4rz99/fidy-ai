@@ -109,7 +109,7 @@ test(
         appliedMigrationNames: [...names].sort(),
         transcriptHasIteration: true,
         whatsAppEventRecordsExists: true,
-        hostedWhatsAppWindowsExists: true,
+        whatsAppServiceWindowsExists: true,
         foreignKeyViolationCount: 0,
         transcriptEvidence: { _tag: "Empty" },
       });
@@ -133,7 +133,7 @@ test(
       expect(yield* readState(beforeUrl)).toMatchObject({
         appliedMigrationNames: [...names].sort(),
         whatsAppEventRecordsExists: true,
-        hostedWhatsAppWindowsExists: true,
+        whatsAppServiceWindowsExists: true,
         transcriptEvidence: { _tag: "Empty" },
       });
 
@@ -149,14 +149,13 @@ test(
         appliedMigrationNames: [...names].sort(),
         transcriptHasIteration: true,
         whatsAppEventRecordsExists: true,
-        hostedWhatsAppWindowsExists: true,
+        whatsAppServiceWindowsExists: true,
         foreignKeyViolationCount: 0,
         pendingTurnUniquenessEnforced: true,
         transcriptAppendOnlyEnforced: true,
         hostedVoiceRefusalIdentityEnforced: true,
         hostedVoiceRefusalOutcomeCheckEnforced: true,
-        hostedWhatsAppWindowPrimaryKeyEnforced: true,
-        hostedWhatsAppWindowBoundsCheckEnforced: true,
+        whatsAppServiceWindowPrimaryKeyEnforced: true,
         transcriptEvidence: {
           _tag: "Preserved",
           value: {

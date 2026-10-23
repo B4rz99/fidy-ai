@@ -1,12 +1,10 @@
-import { offerBillingWorkflow } from "./workflow-execution";
-import { captureWorkTrace, sanitizeWorkTrace } from "../../runtime/telemetry/operations";
+import { captureWorkTrace } from "../../runtime/telemetry/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { UnknownJsonString } from "../../../src/shell/schema-codecs/contract";
 import { UserId } from "../../../src/core/identity/contract";
 import {
   BillingCollectionFailure,
-  type BillingObservationWorkflow,
   type BillingRuntime,
   type SubscriptionCancellationDispatchInput,
   type SubscriptionCancellationWork,
@@ -73,33 +71,6 @@ export const dispatchCancellations = (
       );
     }
   });
-export const receiveCancellation = (
-  input: Readonly<{
-    db: D1Database;
-    workflow: BillingObservationWorkflow;
-    work: typeof SubscriptionCancellationWork.Type;
-  }>
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const row = yield* wait(() =>
-      input.db
-        .prepare(
-          "SELECT last_offered_at_ms FROM subscription_cancellation_context WHERE user_id=? AND source_cancellation='void-pending' AND verification_count<8"
-        )
-        .bind(input.work.userId)
-        .first()
-    );
-    if (row === null) return;
-    const params = yield* sanitizeWorkTrace(input.work);
-    const offered = yield* offerBillingWorkflow({
-      workflow: input.workflow,
-      id: `source-cancel-v2-${input.work.userId}`,
-      params: { ...params, version: 2 },
-      reserve: Effect.succeed(true),
-    });
-    if (!offered) return yield* new BillingCollectionFailure({ cause: Option.none() });
-  });
-
 type SourceCancellationInput = Readonly<{
   environment: BillingRuntime;
   work: Pick<typeof SubscriptionCancellationWork.Type, "userId">;

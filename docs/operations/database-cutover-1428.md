@@ -4865,3 +4865,26 @@ DDL rollback, original route/archive row references, foreign keys and preservati
 cascading documents. Channel behavior covers older/equal-time observations, foreign-User refusal,
 failed inbound rollback, independent window cleanup and purpose-specific erasure. Local evidence
 does not claim a remote cutover has run.
+
+## Final Identity integration (#1485)
+
+The final User record contains stable identity, ServiceMarket/locale/time-zone preferences, original
+creation and trial instants, and the verified WhatsApp caller association. Current recipient routing
+belongs to `whatsapp_recipients`; it cannot establish authentication. Identity reads its own columns
+directly and publishes only its existing caller association projection.
+
+Subscription standing, forwarding addresses, backfill entitlement, verified email, backup recovery,
+recipient routing and Audit retention controls use their completed feature-owned destinations. Current
+User responses compose those owners' published projections; onboarding still commits new Identity,
+original trial, Consent, recovery and the originating proof in one native atomic unit. Existing
+trial/association immutability, uniqueness and same-User guards remain intact.
+
+No additional extraction or User-table rebuild is required: the preceding populated owner cutovers
+preserve the original User IDs/rowids, preferences, creation and trial. #1483 finishes the last four
+routing columns using native column drops and exact inverse restoration. Historical fixture schemas
+remain original evidence rather than being rewritten into the target shape.
+
+Verification uses the existing integrated onboarding, Google/Microsoft/WhatsApp/browser login,
+verified email, recovery, PAT, forwarding, billing and current-User seams, plus their populated owner
+cutovers. No field-count or table-inventory tests are introduced. This is local integration evidence;
+remote data/schema reconciliation and deployment verification remain final release gates.

@@ -1707,8 +1707,18 @@ CREATE TABLE users (
   service_market TEXT NOT NULL CHECK (service_market = 'CO'),
   locale TEXT NOT NULL CHECK (locale = 'es-CO'),
   time_zone TEXT NOT NULL CHECK (length(time_zone) BETWEEN 1 AND 128),
-  created_at_ms INTEGER NOT NULL
-, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER CHECK ((trial_started_at_ms IS NULL AND trial_ends_at_ms IS NULL) OR (trial_started_at_ms IS NOT NULL AND trial_ends_at_ms IS NOT NULL AND trial_ends_at_ms=trial_started_at_ms+604800000)), whatsapp_portfolio_id TEXT, whatsapp_bsuid TEXT, whatsapp_verified_at_ms INTEGER CHECK((whatsapp_portfolio_id IS NULL AND whatsapp_bsuid IS NULL AND whatsapp_verified_at_ms IS NULL) OR (whatsapp_portfolio_id IS NOT NULL AND whatsapp_bsuid IS NOT NULL AND whatsapp_verified_at_ms IS NOT NULL))) STRICT;
+  created_at_ms INTEGER NOT NULL,
+  trial_started_at_ms INTEGER,
+  trial_ends_at_ms INTEGER,
+  whatsapp_portfolio_id TEXT,
+  whatsapp_bsuid TEXT,
+  whatsapp_verified_at_ms INTEGER,
+  CHECK ((trial_started_at_ms IS NULL AND trial_ends_at_ms IS NULL)
+    OR (trial_started_at_ms IS NOT NULL AND trial_ends_at_ms IS NOT NULL
+      AND trial_ends_at_ms=trial_started_at_ms+604800000)),
+  CHECK ((whatsapp_portfolio_id IS NULL AND whatsapp_bsuid IS NULL AND whatsapp_verified_at_ms IS NULL)
+    OR (whatsapp_portfolio_id IS NOT NULL AND whatsapp_bsuid IS NOT NULL AND whatsapp_verified_at_ms IS NOT NULL))
+) STRICT;
 --> statement-breakpoint
 
 CREATE TABLE whatsapp_recipients (

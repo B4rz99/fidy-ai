@@ -19,7 +19,7 @@ export const resolveCaller = ({
     try: () =>
       db
         .prepare(
-          "SELECT user_id FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) WHERE portfolio_id = ? AND bsuid = ?"
+          "SELECT id AS user_id FROM users WHERE whatsapp_portfolio_id = ? AND whatsapp_bsuid = ?"
         )
         .bind(portfolioId, bsuid)
         .first(),
@@ -50,8 +50,8 @@ export const associationProjection = ({
   statement,
 }: Readonly<{ userId: UserId; statement: IdentityStatement }>): IdentityStatement => ({
   sql: `WITH identity_associations AS (
-    SELECT user_id AS userId, portfolio_id AS businessPortfolioId, bsuid AS businessScopedUserId
-    FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) WHERE user_id = ?
+    SELECT id AS userId, whatsapp_portfolio_id AS businessPortfolioId, whatsapp_bsuid AS businessScopedUserId
+    FROM users WHERE id = ? AND whatsapp_portfolio_id IS NOT NULL
   ) ${statement.sql}`,
   params: [userId, ...statement.params],
 });

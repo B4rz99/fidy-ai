@@ -75,16 +75,20 @@ test("hydrates demos and preserves appearance without browser errors", async ({ 
   await page.reload();
   await expect(page.getByRole("button", { name: "Activar tema claro" })).toBeVisible();
   await page.locator("#funciones").scrollIntoViewIfNeeded();
+  await page.locator('astro-island[component-export="FeatureTabs"]:not([ssr])').waitFor();
   await page.getByRole("tab", { name: "Presupuestos" }).click();
   await expect(page.getByRole("tab", { name: "Presupuestos" })).toHaveAttribute(
     "aria-selected",
     "true"
   );
   await page.locator("#precios").scrollIntoViewIfNeeded();
+  await page.locator('astro-island[component-export="Pricing"]:not([ssr])').waitFor();
   await page.getByRole("button", { name: "Anual", exact: true }).click();
   await expect(page.getByText("$289.900", { exact: false }).first()).toBeVisible();
   await page.goto("/funciones/transacciones");
   await expect(page.locator(".fidy-landing")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "Probar una corrección" }).scrollIntoViewIfNeeded();
+  await page.locator('astro-island[component-export="CorrectionDemo"]:not([ssr])').waitFor();
   await page.getByRole("button", { name: "Probar una corrección" }).click();
   await expect(page.locator("[data-correction-amount]")).toHaveText("$26.000 COP");
   await page.getByRole("button", { name: "Activar tema claro" }).click();
@@ -240,6 +244,7 @@ for (const width of Object.values(responsiveWidths)) {
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await page.goto("/");
     await page.locator("#precios").scrollIntoViewIfNeeded();
+    await page.locator('astro-island[component-export="Pricing"]:not([ssr])').waitFor();
     await page.getByRole("button", { name: "Anual", exact: true }).click();
     const alignment = (): Promise<number> =>
       page.locator(".price-options").evaluate((options) => {

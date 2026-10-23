@@ -26,7 +26,8 @@ by `getTestName` in the installed `vitest/dist/task-utils.js`. Stryker 10 otherw
 space-separated filters and reports nested-suite mutants as surviving after executing zero
 tests. Both coverage identities and test-selection identities must use the same separator.
 The runner regression mutates a small module across multiple test files and nested suites,
-including a mutation made during module initialization, and requires every mutant to be killed.
+including a mutation made during module initialization. It requires asserted behavior mutants
+to be killed and deliberately unasserted control mutants to survive, preventing inflated scores.
 
 The patch also retains Vitest file-level failures when module initialization prevents tests from
 being registered. Such a failure rejects the baseline run or kills the active mutant; it must

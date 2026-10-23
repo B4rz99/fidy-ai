@@ -9,6 +9,7 @@ import Ajv from "ajv";
 import { schema } from "mutation-testing-report-schema";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
+const unobservedSourceLine = 5;
 /** @type {import("ajv").ValidateFunction<import("mutation-testing-report-schema/api").MutationTestResult>} */
 const validateReport = new Ajv({ formats: { uri: true } }).compile(schema);
 
@@ -26,19 +27,21 @@ const writeFixture = (fixture) => {
 import { requireEnabled } from "./validation.js";
 export const policy = requireEnabled(true);
 export const next = (value) => value > 0 ? value + 1 : 0;
+export const unobserved = (value) => value + 1;
 `
   );
   writeFileSync(
     join(fixture, "subject.test.js"),
     `
 import { describe, expect, it } from "vitest";
-import { next, policy } from "./subject.js";
+import { next, policy, unobserved } from "./subject.js";
 describe("outer suite", () => {
   describe("inner suite", () => {
     it.each([[-2, 0], [0, 0], [2, 3]])("advances %s to %s", (value, expected) => {
       expect(next(value)).toBe(expected);
     });
     it("uses the enabled policy", () => expect(policy.enabled).toBe(true));
+    it("executes a deliberately unasserted calculation", () => { unobserved(1); });
   });
 });
 `
@@ -61,7 +64,7 @@ describe("outer suite", () => {
       concurrency: 1,
       coverageAnalysis: "perTest",
       mutator: { excludedMutations: ["StringLiteral", "ObjectLiteral"] },
-      thresholds: { break: 100 },
+      thresholds: { break: 0 },
       reporters: ["json"],
     })
   );
@@ -87,11 +90,16 @@ await test("mutation selection executes nested suites and detects module initial
     );
     assert.ok(mutants.length > 0);
     assert.ok(mutants.some((mutant) => mutant.static));
+    assert.ok(mutants.some((mutant) => mutant.location.start.line === unobservedSourceLine));
     assert.ok(
       mutants.some((mutant) => mutant.static && mutant.statusReason?.includes("Policy unavailable"))
     );
     for (const mutant of mutants) {
-      assert.equal(mutant.status, "Killed", JSON.stringify(mutant));
+      assert.equal(
+        mutant.status,
+        mutant.location.start.line === unobservedSourceLine ? "Survived" : "Killed",
+        JSON.stringify(mutant)
+      );
       if (!mutant.static) assert.ok(mutant.testsCompleted > 0, JSON.stringify(mutant));
     }
   } finally {

@@ -54,13 +54,13 @@ describe("Production release workflow policy", () => {
     expect(retire).toBeLessThan(drift);
     const retirementStep = workflow.slice(workflow.lastIndexOf("- name:", retire), drift);
     expect(retirementStep).toContain(
-      "if: ${{ success() && steps.post_smoke.outcome == 'success' }}"
+      "if: ${{ !inputs.isolate_schema_cutover && (success() && steps.post_smoke.outcome == 'success') }}"
     );
     expect(workflow).not.toContain("alchemy deploy --stage production --yes --no-input");
   });
   it("keeps ordinary admission behind isolated proof and the existing release gates", () => {
     const steps = [
-      "run: bun production-release.ts isolate",
+      "bun production-release.ts isolate\n",
       "run: bun verify-production-smoke.ts promoted",
       "- name: Capture the proven isolated baseline for ordinary release gates",
       "- name: Upload ordinary candidates after isolated recovery proof",

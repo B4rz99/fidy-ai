@@ -5550,3 +5550,46 @@ reconciliation described above, verified schema equivalence and foreign keys, th
 runtime rollout. The local test results do not replace that evidence. Keep the three Operational
 Health stores and their callers until #1491/#1492 verify live signal coverage, actual notification
 delivery, private dashboard behavior and missing/stale execution. Do not close #1494 on local results.
+
+## Controlled maintenance release for the populated final schema (#1494)
+
+PR #1526 merged at `e044c4c1e7c0dc8902bf09baedff95f22d3a0cdf`. All PR checks passed.
+Its automatic Production run `40034726874` was cancelled during checkout, before any Cloudflare
+plan, upload, or mutation. The populated database has not yet been transitioned. Ordinary smoke
+proves its own contract; it does not establish compatibility of every feature table with changed code.
+
+Hold ordinary releases with repository variable `SCHEMA_CUTOVER_PENDING=true` before merging the
+maintenance workflow. While this guard itself is being merged, keep the Production workflow
+manually disabled; re-enable it only after the guarded workflow is on trunk and the hold is verified.
+The hold blocks both push and ordinary manual releases. Only an explicit
+`isolate_schema_cutover` dispatch on protected trunk can run while held; it requires the freshly
+inspected serving public/Core version IDs and rejects combination with incident recovery. Recover
+any observed abandoned zero-traffic candidates through the existing guarded recovery workflow
+before capturing a stable pair. Reinspect rather than guess their identities.
+
+The maintenance invocation uses the existing release controller to prove and install public
+isolation before replacing private Core. Both uploaded versions must carry `RECOVERY_ISOLATION=isolated`;
+public admission must return 503, Core must remain unrouted, and captured traffic and trunk must
+still match. The existing deleted-Queue recovery retains its historical incident-version checks;
+the schema invocation compares the explicitly inspected pair instead. A changed expected version
+is refused before traffic writes. The seven-day `fidy-schema-isolation` artifact records the exact
+installed identities. Maintenance success proves isolation only: it does not claim database
+convergence, synthetic work, or an ordinary Production release. Failure leaves the observed
+isolation state for inspection, without automatically reopening an incompatible old pair.
+
+Keep the native database write fence while confirming all schema-dependent Worker, Email, and
+Workflow executors are the matching revision and settling earlier external work. Take a fresh
+fenced backup, regenerate the actual-source-bound transition, and repeat native rollback,
+foreign-key, domain-codec, full data and public-workspace comparisons. Apply the populated
+transition as one native batch; do not replay `0001_schema.sql` or reset migration bookkeeping.
+The independent R2 registry and its generation must remain unchanged. Any uncertain mutation
+requires inspecting its checkpoint and exact state before further action.
+
+After verifying the target data/schema and exact new isolated runtime, atomically remove the
+native write fence and restore the database generation only to the independently verified registry
+generation. Public admission remains isolated. Clear the repository hold only at this checkpoint,
+then dispatch the ordinary Production workflow. Its unchanged candidate/intermediate synthetic
+probes, promotion, normal-traffic checks and guarded rollback now use a schema-compatible isolated
+stable pair. A failed release therefore returns to compatible isolation. Keep #1494 open until
+this live release completes; keep #1491/#1492 and all three Operational tables until replacement
+alert delivery/resolution and dashboard coverage are proven.

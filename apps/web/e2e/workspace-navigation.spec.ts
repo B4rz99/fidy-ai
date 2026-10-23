@@ -2,6 +2,7 @@ import type { Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { apiOrigin } from "./http-fixtures";
 import {
+  navigateThroughConsent,
   signInNavigationPerformanceThroughCore,
   signInNavigationThroughCore,
 } from "./real-core-fixture";
@@ -62,7 +63,7 @@ for (const workspace of workspaces) {
         for (let sample = 0; sample < count; sample++) {
           if (sample > 0) yield* Effect.tryPromise(() => openWorkspace(page, "Por revisar"));
           yield* Effect.tryPromise(() => page.evaluate(observeSwitch, workspace.ready));
-          yield* Effect.tryPromise(() => openWorkspace(page, workspace.name));
+          yield* Effect.tryPromise(() => revisitWorkspace(page, workspace.name));
           yield* Effect.tryPromise(() =>
             expect(page.getByRole("button", { name: workspace.ready, exact: true })).toBeVisible({
               timeout: workspace.name === "Transacciones" ? freshConsentTimeoutMilliseconds : 100,
@@ -113,6 +114,11 @@ const recordSamples = (
 
 const openWorkspace = (page: Page, name: string): Promise<void> =>
   page.getByRole("link", { name: new RegExp(`^${name}(?: \\d+ pendientes)?$`, "u") }).click();
+
+const revisitWorkspace = (page: Page, name: string): Promise<void> =>
+  name === "Transacciones"
+    ? navigateThroughConsent({ page, navigate: () => openWorkspace(page, name) })
+    : openWorkspace(page, name);
 
 const observeSwitch = (ready: string): void => {
   delete document.body.dataset.workspaceSwitchMilliseconds;

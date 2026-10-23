@@ -290,15 +290,23 @@ const promoteRelease = Effect.fn(function* (
   return { publicDeploymentId: publicPromoted.id, coreDeploymentId: corePromoted.id };
 });
 
+/** Requires the inspected serving pair. A failed transition may leave traffic changed; inspect it before recovery. */
 const isolateRelease = Effect.fn(function* (
   port: ReleasePort,
   snapshot: ReleaseSnapshot,
   input: {
     candidate: { publicVersionId: string; coreVersionId: string };
+    expected: { publicVersionId: string; coreVersionId: string };
     proveIsolation: (publicVersionId: string) => Effect.Effect<void, Error>;
   }
 ) {
-  const { candidate, proveIsolation } = input;
+  const { candidate, expected, proveIsolation } = input;
+  if (
+    snapshot.public.stableVersionId !== expected.publicVersionId ||
+    snapshot.core.stableVersionId !== expected.coreVersionId
+  ) {
+    return yield* Effect.fail(Error("Isolation baseline changed; traffic unchanged"));
+  }
   const publicVersionId = yield* Schema.decodeEffect(VersionId)(candidate.publicVersionId);
   const coreVersionId = yield* Schema.decodeEffect(VersionId)(candidate.coreVersionId);
   if (

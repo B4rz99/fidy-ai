@@ -174,6 +174,7 @@ describe("deleted-resource isolation", () => {
       const snapshot = yield* captured(fixture.port);
       const result = yield* releaseController.isolateRelease(fixture.port, snapshot, {
         candidate: candidates,
+        expected: { publicVersionId: versions.publicStable, coreVersionId: versions.coreStable },
         proveIsolation: isolationOrdering(fixture),
       });
       expect(fixture.changes).toEqual([`${publicName}:100`, `${coreName}:100`]);
@@ -188,6 +189,7 @@ describe("deleted-resource isolation", () => {
       const exit = yield* releaseController
         .isolateRelease(fixture.port, snapshot, {
           candidate: candidates,
+          expected: { publicVersionId: versions.publicStable, coreVersionId: versions.coreStable },
           proveIsolation: () => Effect.fail(Error("Admission is not isolated")),
         })
         .pipe(Effect.exit);
@@ -199,20 +201,27 @@ describe("deleted-resource isolation", () => {
     })
   );
 
-  it.effect("refuses a superseded revision before isolation writes", () =>
-    Effect.gen(function* () {
-      const fixture = harness();
-      const snapshot = yield* captured(fixture.port);
-      fixture.supersede();
-      const exit = yield* releaseController
-        .isolateRelease(fixture.port, snapshot, {
-          candidate: candidates,
-          proveIsolation: () => Effect.void,
-        })
-        .pipe(Effect.exit);
-      expect(Exit.isFailure(exit)).toBe(true);
-      expect(fixture.changes).toEqual([]);
-    })
+  it.effect.each(["revision", "public", "core"] as const)(
+    "refuses changed %s authority before isolation writes",
+    (changed) =>
+      Effect.gen(function* () {
+        const fixture = harness();
+        const snapshot = yield* captured(fixture.port);
+        if (changed === "revision") fixture.supersede();
+        const exit = yield* releaseController
+          .isolateRelease(fixture.port, snapshot, {
+            candidate: candidates,
+            expected: {
+              publicVersionId:
+                changed === "public" ? versions.publicCandidate : versions.publicStable,
+              coreVersionId: changed === "core" ? versions.coreCandidate : versions.coreStable,
+            },
+            proveIsolation: () => Effect.void,
+          })
+          .pipe(Effect.exit);
+        expect(Exit.isFailure(exit)).toBe(true);
+        expect(fixture.changes).toEqual([]);
+      })
   );
 });
 const staged = (port: ReleasePort): Effect.Effect<StagedRelease, Error> =>

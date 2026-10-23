@@ -4,7 +4,18 @@ import { RecoveryRequest, recoverStaged } from "./staged-recovery";
 import { ReleaseHttpLive } from "./release-http";
 /// <reference types="bun-types" />
 
-import { Cause, Context, Data, Effect, Layer, Option, Schedule, Schema, Stream } from "effect";
+import {
+  Cause,
+  Context,
+  Data,
+  Effect,
+  Config as EffectConfig,
+  Layer,
+  Option,
+  Schedule,
+  Schema,
+  Stream,
+} from "effect";
 import {
   FetchHttpClient,
   HttpBody,
@@ -101,6 +112,7 @@ const Commands = Schema.Literals([
   "report",
   "inspect",
   "isolate",
+  "isolate-schema",
 ]);
 const SmokeAttestation = Schema.Struct({
   revision: SmokeIdentity.fields.gitRevision,
@@ -1035,22 +1047,20 @@ const stage = Effect.fn(function* (port: ReleasePort, env: Config, client: HttpC
   yield* writeFile(env.file, encodeJson(result));
 });
 
-const isolate = Effect.fn(function* (
-  port: ReleasePort,
-  env: Config,
-  client: HttpClient.HttpClient
-) {
+const isolate = Effect.fn(function* ({
+  port,
+  env,
+  client,
+  expected,
+}: Readonly<{
+  port: ReleasePort;
+  env: Config;
+  client: HttpClient.HttpClient;
+  expected: Readonly<{ publicVersionId: string; coreVersionId: string }>;
+}>) {
   const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
     yield* readFile(env.file)
   );
-  if (
-    snapshot.public.stableVersionId !== "047a8004-15bd-4959-b064-0f020a529089" ||
-    snapshot.core.stableVersionId !== "fa578c5f-2e94-4507-ba70-1fe4fe4dd150"
-  ) {
-    return yield* new ReleaseFailure({
-      message: "Isolation refused: inspected incident baseline changed",
-    });
-  }
   const workers = yield* workersFromState();
   if (
     workers.public.workerName !== snapshot.public.name ||
@@ -1080,6 +1090,7 @@ const isolate = Effect.fn(function* (
   yield* proveRecoveryCorePrivate(env, client, snapshot.core.name);
   const result = yield* releaseController.isolateRelease(port, snapshot, {
     candidate,
+    expected,
     proveIsolation: (version) =>
       proveRecoveryIsolation(client, env.smokeProof, version).pipe(
         Effect.andThen(proveRecoveryCorePrivate(env, client, snapshot.core.name))
@@ -1579,8 +1590,24 @@ if (import.meta.main) {
       yield* verifyRetentionMigration(port, environment, client);
     } else if (command === "recover-staged") {
       yield* recoverAbandoned(port, environment, client);
-    } else if (command === "isolate") {
-      yield* isolate(port, environment, client);
+    } else if (command === "isolate" || command === "isolate-schema") {
+      const expected =
+        command === "isolate"
+          ? {
+              publicVersionId: "047a8004-15bd-4959-b064-0f020a529089",
+              coreVersionId: "fa578c5f-2e94-4507-ba70-1fe4fe4dd150",
+            }
+          : {
+              publicVersionId: yield* EffectConfig.schema(
+                VersionId,
+                "SCHEMA_CUTOVER_PUBLIC_VERSION_ID"
+              ),
+              coreVersionId: yield* EffectConfig.schema(
+                VersionId,
+                "SCHEMA_CUTOVER_CORE_VERSION_ID"
+              ),
+            };
+      yield* isolate({ port, env: environment, client, expected });
     } else {
       yield* runRouting({ command, port, env: environment, client });
     }

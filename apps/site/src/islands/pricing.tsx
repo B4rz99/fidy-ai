@@ -50,6 +50,7 @@ export const Pricing = (): React.JSX.Element => {
                   {option.label}
                 </button>
               ))}
+              <span className="price-pill" aria-hidden="true" />
             </fieldset>
             <PriceValue price={price} />
             <LaunchButton dark={false} arrow />

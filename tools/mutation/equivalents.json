@@ -17,7 +17,7 @@
           "mutatorName": "CallExpression",
           "replacement": ";",
           "original": "throw new Error(\"Reminder calendar could not locate an anchored occurrence\");",
-          "reason": "Every-three-days uses a daily Cron. One of the first three candidate local dates matches the anchor modulo three, so changing the seven-attempt bound or counter direction cannot change the selected occurrence; the exhaustion throw is unreachable for validated instructions."
+          "reason": "Daily Cron advances through local calendar dates, including a skipped or repeated date at an offset transition. The three-day anchor residue is reached before seven candidates. Changing the bound equality or counter direction therefore preserves the first matching occurrence; the exhaustion statement is unreachable for valid instructions."
         },
         {
           "location": {
@@ -33,7 +33,7 @@
           "mutatorName": "EqualityOperator",
           "replacement": "attempt <= maximumCalendarCandidates",
           "original": "attempt < maximumCalendarCandidates",
-          "reason": "Every-three-days uses a daily Cron. One of the first three candidate local dates matches the anchor modulo three, so changing the seven-attempt bound or counter direction cannot change the selected occurrence; the exhaustion throw is unreachable for validated instructions."
+          "reason": "Daily Cron advances through local calendar dates, including a skipped or repeated date at an offset transition. The three-day anchor residue is reached before seven candidates. Changing the bound equality or counter direction therefore preserves the first matching occurrence; the exhaustion statement is unreachable for valid instructions."
         },
         {
           "location": {
@@ -49,7 +49,7 @@
           "mutatorName": "AssignmentOperator",
           "replacement": "attempt -= 1",
           "original": "attempt += 1",
-          "reason": "Every-three-days uses a daily Cron. One of the first three candidate local dates matches the anchor modulo three, so changing the seven-attempt bound or counter direction cannot change the selected occurrence; the exhaustion throw is unreachable for validated instructions."
+          "reason": "Daily Cron advances through local calendar dates, including a skipped or repeated date at an offset transition. The three-day anchor residue is reached before seven candidates. Changing the bound equality or counter direction therefore preserves the first matching occurrence; the exhaustion statement is unreachable for valid instructions."
         },
         {
           "location": {

@@ -121,3 +121,13 @@ it("keeps daily reminders on weekends while weekdays skip them", () => {
     DateTime.formatIso(nextReminderOccurrence({ ...input, cadence: { kind: "weekdays" } }))
   ).toBe("2026-10-26T23:00:00.000Z");
 });
+
+it("keeps the calendar anchor when a time-zone transition skips an entire local date", () => {
+  const next = nextReminderOccurrence({
+    after: DateTime.makeUnsafe("2011-12-29T00:00:00Z"),
+    timing: { hour: 9, minute: 0 },
+    cadence: { kind: "every-three-days", anchorDate: "2011-12-27" },
+    timeZone: IanaTimeZone.make("Pacific/Apia"),
+  });
+  expect(DateTime.formatIso(next)).toBe("2012-01-01T19:00:00.000Z");
+});

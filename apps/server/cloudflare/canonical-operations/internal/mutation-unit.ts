@@ -521,101 +521,87 @@ const singleResponse = ({
   }
 };
 
-type SingleWork = Readonly<{
+type MutationWork = Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   current: number;
-  preparation: CanonicalMutationPreparation;
-  present: (value: CommittedMutationValue) => Effect.Effect<Response>;
-  retryStatement: Option.Option<() => Effect.Effect<CanonicalMutationPreparation>>;
   hostedFence: Option.Option<HostedCommitFence>;
   oauthConfirmation: Option.Option<OAuthConfirmationWork>;
 }>;
 
-/** Commit a prepared single mutation, retrying only a proven same-material statement race. */
-const executePreparedSingle = ({
-  db,
-  subject,
-  current,
-  preparation,
-  present,
-  retryStatement,
-  hostedFence,
-  oauthConfirmation,
-}: SingleWork &
-  Readonly<{
-    preparation: Extract<CanonicalMutationPreparation, { _tag: "Prepared" }>;
-  }>): Effect.Effect<Response> =>
-  executeCanonicalMutationUnit({
-    db,
-    subject,
-    current,
-    mutations: [preparation.mutation],
-    hostedFence,
-    oauthConfirmation,
-  }).pipe(
-    Effect.flatMap((execution) => {
-      const outcome = preparation.mutation.outcome;
-      if (
-        execution._tag !== "Aborted" ||
-        outcome._tag !== "StatementSubmission" ||
-        Option.isNone(retryStatement)
-      ) {
-        return singleResponse({ db, subject, execution, present });
+type MutationAttempt =
+  | Readonly<{ _tag: "Response"; response: Response }>
+  | Readonly<{
+      _tag: "Prepared";
+      mutations: ReadonlyArray<PreparedCanonicalMutation>;
+      respond: (execution: CanonicalMutationUnitExecution) => Effect.Effect<Response>;
+    }>;
+
+/** Reprepare the entire attempt once only after a proven same-material publication race.
+ * Each attempt retains its own response projection; preparation remains interruptible.
+ */
+export const executeMutationProgression = <R>(
+  work: MutationWork & Readonly<{ prepare: Effect.Effect<MutationAttempt, never, R> }>
+): Effect.Effect<Response, never, R> =>
+  Effect.gen(function* () {
+    for (let attemptIndex = 0; attemptIndex < 2; attemptIndex += 1) {
+      const attempt = yield* work.prepare;
+      if (attempt._tag === "Response") return attempt.response;
+      const execution = yield* executeCanonicalMutationUnit({
+        ...work,
+        mutations: attempt.mutations,
+      });
+      if (attemptIndex === 0 && execution._tag === "Aborted") {
+        const statement = attempt.mutations.find(
+          (mutation) => mutation.outcome._tag === "StatementSubmission"
+        );
+        if (
+          statement?.outcome._tag === "StatementSubmission" &&
+          (yield* statement.outcome.publication.lostReplay)
+        ) {
+          continue;
+        }
       }
-      return outcome.publication.lostReplay.pipe(
-        Effect.flatMap((sameMaterial) =>
-          sameMaterial
-            ? retryStatement.value().pipe(
-                Effect.flatMap((next) =>
-                  executeSingleCanonicalMutation({
-                    db,
-                    subject,
-                    current,
-                    preparation: next,
-                    present,
-                    retryStatement: Option.none(),
-                    hostedFence,
-                    oauthConfirmation,
-                  })
-                )
-              )
-            : Effect.succeed(transactionUnavailable())
-        )
-      );
-    })
-  );
+      return yield* attempt.respond(execution);
+    }
+    return transactionUnavailable();
+  });
+
+type SingleWork<R> = MutationWork &
+  Readonly<{
+    preparation: Effect.Effect<CanonicalMutationPreparation, never, R>;
+    present: (value: CommittedMutationValue) => Effect.Effect<Response>;
+  }>;
 
 /** Execute an owner-prepared mutation in its caller-owned unit, retaining individual validation, live authority, refusal Audit and commit classification. */
-export const executeSingleCanonicalMutation = ({
-  db,
-  subject,
-  current,
-  preparation,
-  present,
-  retryStatement,
-  hostedFence,
-  oauthConfirmation,
-}: SingleWork): Effect.Effect<Response> => {
-  switch (preparation._tag) {
-    case "Refused":
-      return preparation.refusal.record().pipe(Effect.flatMap(preparation.refusal.respond));
-    case "CredentialRefused":
-      return refusedCredentialResponse({ db, subject });
-    case "Unavailable":
-      return Effect.succeed(transactionUnavailable());
-    case "Failed":
-      return failedPreparationResponse({ db, subject, current });
-    case "Prepared":
-      return executePreparedSingle({
-        db,
-        subject,
-        current,
-        preparation,
-        present,
-        retryStatement,
-        hostedFence,
-        oauthConfirmation,
-      });
-  }
-};
+export const executeSingleCanonicalMutation = <R>(
+  work: SingleWork<R>
+): Effect.Effect<Response, never, R> =>
+  executeMutationProgression({
+    ...work,
+    prepare: Effect.gen(function* () {
+      const preparation = yield* work.preparation;
+      switch (preparation._tag) {
+        case "Refused":
+          return {
+            _tag: "Response",
+            response: yield* preparation.refusal
+              .record()
+              .pipe(Effect.flatMap(preparation.refusal.respond)),
+          } as const;
+        case "CredentialRefused":
+          return { _tag: "Response", response: yield* refusedCredentialResponse(work) } as const;
+        case "Unavailable":
+          return { _tag: "Response", response: transactionUnavailable() } as const;
+        case "Failed":
+          return { _tag: "Response", response: yield* failedPreparationResponse(work) } as const;
+        case "Prepared":
+          return {
+            _tag: "Prepared",
+            mutations: [preparation.mutation],
+            respond: (execution: CanonicalMutationUnitExecution) =>
+              singleResponse({ ...work, execution }),
+          } as const;
+      }
+    }),
+  });

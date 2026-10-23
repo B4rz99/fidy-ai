@@ -312,6 +312,26 @@ it("requires every source page, recovers after revision changes, and links the e
       yield* Effect.tryPromise(() =>
         db
           .prepare(
+            "CREATE TRIGGER interrupt_digest_publication BEFORE INSERT ON insight_reports WHEN NEW.kind='recurring-digest' BEGIN SELECT RAISE(ABORT,'interrupted_digest_publication'); END"
+          )
+          .run()
+      );
+      expect(
+        (yield* Effect.exit(advanceRecurringDigest({ ...context, now: closedNow })))._tag
+      ).toBe("Failure");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT (SELECT count(*) FROM insight_reports WHERE kind='recurring-digest') AS reports,(SELECT count(*) FROM insight_events WHERE kind='new-recurring-series') AS events,(SELECT count(*) FROM proactive_messages WHERE role='new-recurring-series') AS messages,(SELECT count(*) FROM schedule_history WHERE record_type='digest-day') AS days"
+            )
+            .first()
+        )
+      ).toEqual({ reports: 0, events: 0, messages: 0, days: 0 });
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER interrupt_digest_publication").run());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
             "UPDATE transactions SET amount='54321.01' WHERE id='29000000-0000-4000-8000-000000000007'"
           )
           .run()

@@ -4189,3 +4189,10 @@ UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence
 ```
 
 <!-- insight-governor-rollback-copy:end -->
+
+## Recurring digest source scan engine gate (#1475)
+
+The measured gate selected the existing coordinator scanner. Keep all four scan-progress columns
+in the single baseline; no digest-generation Workflow or source_scan_id cutover is installed.
+See [the measurement and retained behavior](../research/digest-source-workflow-1475.md). Delivery
+Workflows remain independently responsible for delivery; they are not a digest source scanner.

@@ -9,9 +9,12 @@ This checklist resolves cross-feature implementation obligations; it does not re
 The feature-design pass is complete. Earlier instructions to wait for the whole design, and headings
 calling the final workflow shapes proposed, describe earlier review stages. The concluding approval
 establishes the design basis for tickets #1428–#1494. The current implementation request covers
-#1464–#1494, followed by a PR and merge after the whole batch passes its remaining gates. Design approval
-does not establish migration equivalence, benchmark results, upload safety, platform coverage, or
-deployment success.
+#1464–#1494. The accepted release sequence is to finish local integration checks and reviews, open
+and merge the coherent implementation with all three Operational Health stores retained, then verify
+platform alerts and dashboards against the deployed runtime. Only proven replacement coverage permits
+the follow-up removal under #1491/#1492. Those issues and #1494's live rollout evidence stay open until
+their respective checks complete. Design approval does not establish migration equivalence, benchmark
+results, upload safety, platform coverage, or deployment success.
 
 The reconciled inventory contains **108 distinct named target tables**, including the approved
 WhatsApp recipient table, four conditional Transaction projections, the four relational Planning
@@ -5519,3 +5522,31 @@ native restore journey reproduced the permanent wait on such expired metadata, t
 negative cases and successful release from an actual partial-cleanup backup while preserving the
 other User and all active-case fences. The cleanup fixture includes 70 evidence events, so the first
 bounded page removes the marker and current rows while 11 events and the completed request remain.
+
+### Final rebased integration evidence (#1494)
+
+The integration branch includes trunk `7d400b1dc`. The unchanged fresh-install baseline blob is
+`38d34f2b59f7f12c5008b22fa2b5173c2bc58db3`. Local verification after that rebase passed:
+
+- 1,253 unit tests with the existing coverage requirements.
+- 2,339 native Cloudflare tests; 29 existing skips, across 211 passing files and six skipped files.
+- 193 built-browser tests with three existing skips, plus the separate native CLI login journey.
+- Production build verification, including all 46 public-site browser checks.
+- Static verification and ordinary lint; no timeout, coverage or production authorization gate was weakened.
+
+The browser run used two local workers and the native suite one worker to avoid workstation resource
+contention. The browser Core binds a native isolated R2 recovery registry and runs the production
+Erasure guard; the deletion journey verifies acceptance as pending, never as completed erasure.
+
+Read-only inspection of the existing development D1 catalog found 105 application tables plus its
+Alchemy migration ledger. It contains retained development records. Compared with the local target,
+18 application tables are introduced and 12 retired; 39 surviving table definitions differ. This is
+a transition input, not an instruction to drop the ledger or rerun the baseline. Schema and aggregate
+row counts were read through the authenticated dashboard after Wrangler returned authentication
+error 10000. No live D1/R2 mutation or deployment was performed during this inspection.
+
+The remaining release work is the fenced, populated owner transition and independent file/recovery
+reconciliation described above, verified schema equivalence and foreign keys, then the synchronized
+runtime rollout. The local test results do not replace that evidence. Keep the three Operational
+Health stores and their callers until #1491/#1492 verify live signal coverage, actual notification
+delivery, private dashboard behavior and missing/stale execution. Do not close #1494 on local results.

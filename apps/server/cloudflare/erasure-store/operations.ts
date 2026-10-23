@@ -67,15 +67,3 @@ export const originalWriteActive = (
       catch: () => new ErasureUnavailable(),
     })
   ).pipe(Effect.map((active) => active === 1));
-
-export const originalWritesSettled = (
-  input: Readonly<{ db: D1Database; userId: string }>
-): Effect.Effect<boolean, ErasureUnavailable> =>
-  Effect.tryPromise({
-    try: () =>
-      input.db
-        .prepare("SELECT count(*) AS pending FROM erasure_writers WHERE user_id=?")
-        .bind(input.userId)
-        .first<number>("pending"),
-    catch: () => new ErasureUnavailable(),
-  }).pipe(Effect.map((pending) => pending === 0));

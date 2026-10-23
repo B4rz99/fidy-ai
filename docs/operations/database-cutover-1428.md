@@ -4993,3 +4993,31 @@ Verification uses the existing integrated onboarding, Google/Microsoft/WhatsApp/
 verified email, recovery, PAT, forwarding, billing and current-User seams, plus their populated owner
 cutovers. No field-count or table-inventory tests are introduced. This is local integration evidence;
 remote data/schema reconciliation and deployment verification remain final release gates.
+
+## Upload completion gate (#1487)
+
+The strict completion-bound prerequisite is unresolved. Workers HTTP duration is not a hard
+wall-clock bound while a client remains connected; credential expiry, a local timeout and an R2
+negative read do not establish that an already-started write cannot later commit. R2 documents
+that conditional PUT preconditions are checked atomically at commit, but this is distinct from a
+maximum upload lifetime. No invented writes_quiescent_after_ms deadline is installed.
+
+The existing native erasure journey reproduced a concrete unsafe transition: an admitted writer
+whose lease clock had expired still held unfinished work, yet continuation advanced from Draining
+to Sealing. Drain now requires all same-User writer records to settle, regardless of lease expiry.
+Successful tracked publication releases its writer; unknown, failed or interrupted outcomes remain
+unresolved and require reconciliation. This can keep deletion pending; elapsed time is not evidence
+for forcing completion. The native journey checks that pending state, delayed R2 publication and
+subsequent complete deletion, original User isolation and restoration-safe progress.
+
+Keep erasure_writers, erasure_objects and the existing original-byte capture/restore protections.
+#1487 is a partial safety correction, not completion of its deadline/removal target; #1489/#1490
+remain blocked. No archive or inventory deletion is authorized by these local checks. Existing
+private-object conditional writes additionally prevent stale payload replacement after ETag
+invalidation, but late placeholder/control writes and all producer paths still require an explicit
+target-design resolution before claiming quiescence without the writer ledger.
+
+Sources: [Workers duration limits](https://developers.cloudflare.com/workers/platform/limits/),
+[R2 consistency](https://developers.cloudflare.com/r2/reference/consistency/),
+[atomic conditional PUT](https://developers.cloudflare.com/r2/api/s3/api/), and
+[unknown write outcomes](https://developers.cloudflare.com/r2/api/s3/extensions/).

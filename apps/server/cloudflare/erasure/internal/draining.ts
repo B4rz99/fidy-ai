@@ -33,8 +33,8 @@ export const seal = (
     const current = yield* Clock.currentTimeMillis;
     const initial: OwnedStatement = {
       sql: `UPDATE erasure_requests SET state='Sealing' WHERE id=? AND user_id=? AND state='Draining'
-      AND NOT EXISTS(SELECT 1 FROM erasure_writers WHERE user_id=? AND expires_at_ms>?)`,
-      params: [input.scope.reference, input.scope.userId, input.scope.userId, current],
+      AND NOT EXISTS(SELECT 1 FROM erasure_writers WHERE user_id=?)`,
+      params: [input.scope.reference, input.scope.userId, input.scope.userId],
     };
     const statement = input.stores.reduce(
       (selected, store) =>

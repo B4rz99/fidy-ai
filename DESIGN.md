@@ -198,7 +198,14 @@ The source is the approved `fidy-tokens-v1.1.json` (Library
 - The slogan “Tu vida, más tranquila” is lime in both themes with no backing band.
   This supersedes the JSON's graphite highlight. Its light peach contrast is about
   1.59:1 and is an explicitly accepted exception, not an accessibility compliance claim.
-  Keep the accessibility test reporting this exception; do not disable contrast checks.
+  The user explicitly approved a narrowly scoped test exception in #1524. Axe still
+  scans the entire document in both themes. Only the homepage light `h1 > em`,
+  its exact slogan markup, and the `#88CC20` / `#FAE3D9` pair may be accepted.
+  The report retains the raw failing node as an attachment and annotation. A guard
+  test rejects other rules, pages, themes, elements, text and color pairs, including
+  another failing node in the same violation. This is an accepted design debt,
+  not a contrast fix or a claim of WCAG AA compliance. Do not lower thresholds,
+  exclude the element from axe, or disable contrast checks globally.
 - Control borders (`#76716B` / `#858585`) differ from decorative dividers
   (`#DED6CE` / `#606060`). Outline buttons consume the control tokens.
 - Primary and outline buttons use explicit interaction and disabled colors. Focus uses

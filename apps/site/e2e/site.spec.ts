@@ -1,5 +1,6 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { isAcceptedSloganContrast, unexpectedViolations } from "./accepted-contrast";
 
 const ok = 200;
 const notFound = 404;
@@ -111,22 +112,89 @@ const settleEntranceMotion = async (): Promise<void> => {
   );
 };
 
-for (const path of publicPaths) {
-  test(`keeps rendered public content accessible and CSP compatible: ${path}`, async ({ page }) => {
-    const errors: string[] = [];
-    page.on("console", (message) => {
-      if (message.type() === "error") errors.push(message.text());
+for (const theme of ["light", "dark"] as const) {
+  for (const path of publicPaths) {
+    test(`audits rendered public content and CSP with documented design exceptions: ${path} ${theme}`, async ({
+      page,
+    }) => {
+      const errors: string[] = [];
+      page.on("console", (message) => {
+        if (message.type() === "error") errors.push(message.text());
+      });
+      await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
+      await page.goto(path);
+      await page.evaluate(settleEntranceMotion);
+      const results = await new AxeBuilder({ page }).analyze();
+      const violations = unexpectedViolations(results.violations, path, theme);
+      const accepted = results.violations.flatMap((violation) =>
+        violation.nodes.filter((node) =>
+          isAcceptedSloganContrast({ path, theme }, violation.id, node)
+        )
+      );
+      if (accepted.length > 0) {
+        test.info().annotations.push({
+          type: "accepted-design-exception",
+          description:
+            "#1524: light slogan #88CC20 on #FAE3D9 is 1.59:1 and does not meet WCAG AA (3:1).",
+        });
+        await test.info().attach("accepted-slogan-contrast.json", {
+          body: JSON.stringify(accepted, null, 2),
+          contentType: "application/json",
+        });
+      }
+      expect(
+        violations.filter(({ impact }) => impact === "serious" || impact === "critical")
+      ).toEqual([]);
+      expect(errors).toEqual([]);
     });
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.goto(path);
-    await page.evaluate(settleEntranceMotion);
-    const results = await new AxeBuilder({ page }).analyze();
-    expect(
-      results.violations.filter(({ impact }) => impact === "serious" || impact === "critical")
-    ).toEqual([]);
-    expect(errors).toEqual([]);
-  });
+  }
 }
+
+test("limits the approved contrast exception to the exact light slogan and color pair", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  await page.goto("/");
+  const results = await new AxeBuilder({ page }).analyze();
+  const violation = results.violations.find(({ id }) => id === "color-contrast");
+  expect(violation).toBeDefined();
+  if (!violation) throw new Error("Expected the explicitly documented slogan contrast violation");
+  const node = violation.nodes[0];
+  expect(isAcceptedSloganContrast({ path: "/", theme: "light" }, violation.id, node)).toBe(true);
+  expect(isAcceptedSloganContrast({ path: "/", theme: "dark" }, violation.id, node)).toBe(false);
+  expect(
+    isAcceptedSloganContrast({ path: "/funciones/agentes", theme: "light" }, violation.id, node)
+  ).toBe(false);
+  expect(isAcceptedSloganContrast({ path: "/", theme: "light" }, "another-rule", node)).toBe(false);
+  const otherElement = { ...node, target: [".other-heading"] };
+  const changedText = { ...node, html: "<em>Different slogan</em>" };
+  const changedForeground = {
+    ...node,
+    any: [
+      {
+        ...node.any[0],
+        data: { fgColor: "#97ca47", bgColor: "#fae3d9", expectedContrastRatio: "3:1" },
+      },
+    ],
+  };
+  const changedBackground = {
+    ...node,
+    any: [
+      {
+        ...node.any[0],
+        data: { fgColor: "#88cc20", bgColor: "#fffaf6", expectedContrastRatio: "3:1" },
+      },
+    ],
+  };
+  for (const changed of [otherElement, changedText, changedForeground, changedBackground]) {
+    expect(unexpectedViolations([{ ...violation, nodes: [changed] }], "/", "light")).toHaveLength(
+      1
+    );
+  }
+  expect(
+    unexpectedViolations([{ ...violation, nodes: [node, otherElement] }], "/", "light")[0].nodes
+  ).toEqual([otherElement]);
+});
 
 test("publishes canonical discovery files and keeps draft terms out of the sitemap", async ({
   page,

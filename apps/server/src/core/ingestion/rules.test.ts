@@ -15,7 +15,9 @@ import {
   emailAllowancePeriod,
   forwardedEmailAllowanceRemaining,
   interpretStatementRows,
+  mechanicalMappingFor,
   redactEmailCandidate,
+  unmappedStatementRow,
 } from "./operations";
 
 const TestExtraction = Schema.Struct({
@@ -121,6 +123,30 @@ it("activates deferred email from a locked allowance snapshot", () => {
       nextResumeAt,
     })
   ).toEqual({ _tag: "Activate", consumesFreeAllowance: false });
+});
+
+it("changes deferred email eligibility at the exact reset instant", () => {
+  const now = DateTime.makeUnsafe("2026-09-01T05:00:00Z");
+  const nextResumeAt = DateTime.makeUnsafe("2026-10-01T05:00:00Z");
+  for (const consumed of [0, 30]) {
+    const input = { access: "free" as const, consumed, now, nextResumeAt };
+    const future = DateTime.add(now, { milliseconds: 1 });
+    expect(decideDeferredForwardedEmailActivation({ ...input, resumeAt: future })).toEqual({
+      _tag: "RemainDeferred",
+      resumeAt: future,
+    });
+    expect(decideDeferredForwardedEmailActivation({ ...input, resumeAt: now })).toEqual(
+      consumed === 0
+        ? { _tag: "Activate", consumesFreeAllowance: true }
+        : { _tag: "RemainDeferred", resumeAt: nextResumeAt }
+    );
+  }
+  expect(
+    decideForwardedEmailAdmission({ access: "free", consumed: 0, deferred: 0, outstanding: 0 })
+  ).toEqual({
+    status: "queued",
+    remaining: Option.some(29),
+  });
 });
 
 it("applies the Free forwarded-email allowance to a Bogota calendar month", () => {
@@ -324,6 +350,93 @@ it.effect("accounts for every row through the canonical Transaction and Money ga
       reason: "missing-required-fact",
       issues: [{ path: "", message: "The row is missing a valid date." }],
     });
+  })
+);
+
+it.effect("omits unsafe spreadsheet suggestions even when cached values look valid", () =>
+  Effect.gen(function* () {
+    const mapping = StatementColumnMapping.make({
+      ...copDebitMapping(),
+      currencyColumn: Option.some(2),
+      currencyLiteral: Option.none(),
+      counterpartyColumn: Option.some(3),
+      directionColumn: Option.none(),
+      inflowMarkers: [],
+      outflowMarkers: [],
+    });
+    const result = yield* interpretCanonicalRows({
+      rows: [
+        {
+          recordNumber: 1,
+          fields: ["2026-02-05", "100", "USD", "Cached merchant"],
+          evidence: {
+            sourceFormat: "xlsx",
+            sheetName: "Statement",
+            sheetIndex: 0,
+            rowNumber: 2,
+            hidden: false,
+            cells: [
+              xlsxCell("A2", "2026-02-05", Option.none()),
+              xlsxCell("B2", "100", Option.none()),
+              xlsxCell("C2", "USD", Option.some("CURRENCY()")),
+              xlsxCell("D2", "Cached merchant", Option.some("MERCHANT()")),
+            ],
+          },
+        },
+      ],
+      mapping: { ...mapping, dateFormat: "yyyy-MM-dd" },
+      timeZone: "America/Bogota",
+    });
+    const row = result.outcomes[0];
+    if (row?.outcome !== "needs-review") throw new Error("Expected review outcome");
+    expect(row.suggestions).toEqual(
+      Option.some({
+        amount: "100",
+        currency: Option.none(),
+        direction: Option.some("inflow"),
+        counterparty: "",
+        occurredAt: "2026-02-05T05:00:00.000Z",
+        categoryId: Option.none(),
+        userProvidedFields: [],
+      })
+    );
+  })
+);
+
+it.effect("bounds review text and keeps missing amounts and unknown Currency unresolved", () =>
+  Effect.gen(function* () {
+    const mapping = StatementColumnMapping.make({
+      ...copDebitMapping(),
+      currencyColumn: Option.some(2),
+      currencyLiteral: Option.none(),
+      counterpartyColumn: Option.some(3),
+      directionColumn: Option.none(),
+      inflowMarkers: [],
+      outflowMarkers: [],
+    });
+    const result = yield* interpretCanonicalRows({
+      rows: [
+        csvRow(1, ["invalid", "100", "???", "x".repeat(121)]),
+        csvRow(2, ["invalid", "1".repeat(121), "???"]),
+        csvRow(3, ["invalid"]),
+      ],
+      mapping,
+      timeZone: "America/Bogota",
+    });
+    for (const [index, row] of result.outcomes.entries()) {
+      if (row.outcome !== "needs-review") throw new Error("Expected review outcome");
+      expect(row.suggestions).toEqual(
+        Option.some({
+          amount: index === 0 ? "100" : "",
+          currency: Option.none(),
+          direction: index === 2 ? Option.none() : Option.some("inflow"),
+          counterparty: "",
+          occurredAt: "",
+          categoryId: Option.none(),
+          userProvidedFields: [],
+        })
+      );
+    }
   })
 );
 
@@ -704,4 +817,89 @@ it.effect("routes formula-backed financial cells to review without using cached 
       reason: "malformed-source-row",
     });
   })
+);
+
+it("mechanically maps only the exact normalized four-column statement declaration", () => {
+  const selected = mechanicalMappingFor([" FECHA ", "Valor", "moneda", "Contraparte"]);
+  expect(Schema.encodeSync(StatementColumnMapping)(Option.getOrThrow(selected))).toEqual({
+    dateColumn: 0,
+    amountColumn: 1,
+    currencyColumn: 2,
+    counterpartyColumn: 3,
+    inflowMarkers: [],
+    outflowMarkers: [],
+    positiveDirection: "inflow",
+    dateFormat: "yyyy-MM-dd",
+    decimalSeparator: ".",
+  });
+  for (const headers of [
+    [],
+    ["fecha", "valor", "moneda"],
+    ["fecha", "valor", "moneda", "contraparte", "extra"],
+    ["fecha", "unknown", "moneda", "contraparte"],
+    ["valor", "fecha", "moneda", "contraparte"],
+  ]) {
+    expect(mechanicalMappingFor(headers)).toEqual(Option.none());
+  }
+  const row = csvRow(7, ["unmapped", "100"]);
+  expect(unmappedStatementRow(row)).toEqual({
+    outcome: "needs-review",
+    recordNumber: 7,
+    evidence: row.evidence,
+    reason: "mapping-unavailable",
+    knownMoney: Option.none(),
+    suggestions: Option.none(),
+    issues: [{ path: "", message: "Statement mapping is unavailable." }],
+  });
+});
+
+it("rejects conflicting Currency sources and direction markers without a mapped direction column", () => {
+  const decode = Schema.decodeUnknownResult(StatementColumnMapping);
+  const value = {
+    dateColumn: 0,
+    amountColumn: 1,
+    currencyLiteral: "COP",
+    inflowMarkers: [],
+    outflowMarkers: [],
+    positiveDirection: "inflow",
+    dateFormat: "yyyy-MM-dd",
+    decimalSeparator: ".",
+  };
+  expect(Result.isSuccess(decode(value))).toBe(true);
+  const { currencyLiteral: _, ...withoutCurrency } = value;
+  expect(Result.isFailure(decode(withoutCurrency))).toBe(true);
+  expect(Result.isFailure(decode({ ...value, currencyColumn: 2 }))).toBe(true);
+  expect(Result.isFailure(decode({ ...value, inflowMarkers: ["CREDIT"] }))).toBe(true);
+  expect(Result.isFailure(decode({ ...value, outflowMarkers: ["DEBIT"] }))).toBe(true);
+  expect(
+    Result.isSuccess(
+      decode({ ...value, directionColumn: 3, inflowMarkers: ["CREDIT"], outflowMarkers: ["DEBIT"] })
+    )
+  ).toBe(true);
+});
+
+it.effect(
+  "retains independently safe review suggestions when a statement row has no valid date",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* interpretCanonicalRows({
+        rows: [csvRow(1, ["invalid", "100", " Mercado ", "DEBIT"])],
+        mapping: copDebitMapping(),
+        timeZone: "America/Bogota",
+      });
+      const row = result.outcomes[0];
+      expect(row?.outcome).toBe("needs-review");
+      if (row?.outcome !== "needs-review") throw new Error("Expected review outcome");
+      expect(row.suggestions).toEqual(
+        Option.some({
+          amount: "100",
+          currency: Option.some("COP"),
+          direction: Option.some("outflow"),
+          counterparty: "Mercado",
+          occurredAt: "",
+          categoryId: Option.none(),
+          userProvidedFields: [],
+        })
+      );
+    })
 );

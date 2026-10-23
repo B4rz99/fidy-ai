@@ -1,6 +1,13 @@
 import { expect, it } from "@effect/vitest";
 import { BigDecimal, Equal, Result, Schema, SchemaIssue } from "effect";
-import { DeliveryEvidenceInput, InsightEvent } from "./contract";
+import {
+  DeliveryEvidenceInput,
+  InsightDeliveryDecision,
+  InsightEvent,
+  InsightGenerationInput,
+  ReminderCadence,
+  ReminderStanding,
+} from "./contract";
 
 type InsightOccurrenceInput = typeof InsightEvent.Encoded;
 type MoneyGroupInput = InsightOccurrenceInput["moneyGroups"][number];
@@ -103,6 +110,60 @@ it("rejects inflow or outflow Money whose Currency disagrees with its group", ()
         ? SchemaIssue.makeFormatterStandardSchemaV1()(result.failure.issue).issues[0]?.path
         : undefined
     ).toEqual(["moneyGroups", 0, index === 0 ? "inflow" : "outflow", "currency"]);
+  }
+});
+
+it("accepts generation facts before the operation assigns identity and lifecycle", () => {
+  const { id: _, lifecycleState: __, ...input } = occurrence();
+  const decoded = Schema.decodeSync(InsightGenerationInput)(input);
+  expect(Schema.encodeSync(InsightGenerationInput)(decoded)).toEqual({
+    ...input,
+    scheduledAt: "2026-08-09T23:00:00.000Z",
+  });
+});
+
+it("roundtrips persisted reminder standing without mixing attention states", () => {
+  for (const value of [
+    { _tag: "Attentive", unanswered: 0 },
+    { _tag: "Attentive", unanswered: 2 },
+    { _tag: "QuestionPending", unanswered: 3 },
+    { _tag: "QuestionDelivered", unanswered: 3 },
+    { _tag: "QuestionDelivered", unanswered: 4 },
+    { _tag: "Paused", unanswered: 5, pausedAt: "2026-08-09T23:00:00.000Z" },
+  ]) {
+    expect(
+      Schema.encodeSync(ReminderStanding)(Schema.decodeUnknownSync(ReminderStanding)(value))
+    ).toEqual(value);
+  }
+  expect(
+    Schema.decodeUnknownOption(ReminderStanding)({ _tag: "Attentive", unanswered: 3 })._tag
+  ).toBe("None");
+  expect(
+    Schema.decodeUnknownOption(ReminderStanding)({ _tag: "QuestionDelivered", unanswered: 5 })._tag
+  ).toBe("None");
+});
+
+it("roundtrips reminder instructions and temporal delivery decisions", () => {
+  for (const value of [
+    { kind: "daily" },
+    { kind: "weekdays" },
+    { kind: "every-three-days", anchorDate: "2026-08-09" },
+    { kind: "weekly", weekday: 6 },
+  ]) {
+    expect(
+      Schema.encodeSync(ReminderCadence)(Schema.decodeUnknownSync(ReminderCadence)(value))
+    ).toEqual(value);
+  }
+  for (const value of [
+    { _tag: "Ready" },
+    { _tag: "Expired" },
+    { _tag: "Deferred", nextEligibleAt: "2026-08-10T14:00:00.000Z" },
+  ]) {
+    expect(
+      Schema.encodeSync(InsightDeliveryDecision)(
+        Schema.decodeUnknownSync(InsightDeliveryDecision)(value)
+      )
+    ).toEqual(value);
   }
 });
 

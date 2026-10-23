@@ -15,6 +15,7 @@ import {
   PolicyRevision,
   PolicyUrl,
   Sha256Digest,
+  WebOnboardingConsentGrantId,
 } from "./contract";
 
 type DisclosureInput = typeof DisclosureSnapshot.Encoded;
@@ -247,4 +248,13 @@ it("rejects duplicate legal-purpose facts and malformed digests", () => {
       Schema.decodeResult(DisclosureSnapshot)(makeDisclosure({ contentSha256: "not-a-hash" }))
     )
   ).toBe(true);
+});
+
+it("bounds native web onboarding grant references independently of the legal grant they identify", () => {
+  const decode = Schema.decodeUnknownResult(WebOnboardingConsentGrantId);
+  const value = `${"Az09_-".repeat(7)}A`;
+  expect(Result.isSuccess(decode(value))).toBe(true);
+  for (const invalid of [value.slice(1), `${value}A`, `!${value}`, `${value}!`, "!".repeat(43)]) {
+    expect(Result.isFailure(decode(invalid))).toBe(true);
+  }
 });

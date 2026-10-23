@@ -51,3 +51,27 @@ it("requires complete WhatsApp Business Scoped User ID grammars", () => {
     "CO.ENT.ab-1",
   ]);
 });
+
+it("enforces E.164 digit bounds and accepts every country-code edge digit", () => {
+  const decode = Schema.decodeUnknownResult(E164PhoneNumber);
+  for (const value of ["+10000000", "+99999999", "+123456789012345"]) {
+    expect(Result.isSuccess(decode(value))).toBe(true);
+  }
+  for (const value of ["+1234567", "+1234567890123456", "+a2345678", "+1234567a", "+12345678\n"]) {
+    expect(Result.isFailure(decode(value))).toBe(true);
+  }
+});
+
+it("bounds scoped WhatsApp identifiers while retaining case-insensitive alphanumeric identity", () => {
+  for (const prefix of ["CO.", "CO.ENT."]) {
+    const schema =
+      prefix === "CO." ? WhatsAppBusinessScopedUserId : WhatsAppParentBusinessScopedUserId;
+    const decode = Schema.decodeUnknownResult(schema);
+    for (const suffix of ["a", "Z", "0", "9", "a".repeat(128)]) {
+      expect(Result.isSuccess(decode(prefix.toLowerCase() + suffix))).toBe(true);
+    }
+    for (const suffix of ["", "a".repeat(129), "a_b", "a.b", "á"]) {
+      expect(Result.isFailure(decode(prefix + suffix))).toBe(true);
+    }
+  }
+});

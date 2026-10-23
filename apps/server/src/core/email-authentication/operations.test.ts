@@ -12,6 +12,30 @@ import {
 
 const acceptedAt = DateTime.makeUnsafe("2026-08-23T12:00:00Z");
 
+it("independently refuses premature resends and processing at the workflow expiry", () => {
+  const workflow = {
+    credentialRevisionMatches: true,
+    deliveryGeneration: 1,
+    resendAvailableAt: acceptedAt,
+    expiresAt: DateTime.add(acceptedAt, { minutes: 10 }),
+  };
+  const input = {
+    existing: Option.some(workflow),
+    requestedAt: acceptedAt,
+    processedAt: acceptedAt,
+  };
+  expect(decideBrowserPairingEmailRequest(input)).toBe("Continue");
+  expect(
+    decideBrowserPairingEmailRequest({
+      ...input,
+      requestedAt: DateTime.subtract(acceptedAt, { milliseconds: 1 }),
+    })
+  ).toBe("Reject");
+  expect(decideBrowserPairingEmailRequest({ ...input, processedAt: workflow.expiresAt })).toBe(
+    "Reject"
+  );
+});
+
 it("accepts a live matching workflow revision and rejects a stale revision", () => {
   const workflow = {
     credentialRevisionMatches: true,

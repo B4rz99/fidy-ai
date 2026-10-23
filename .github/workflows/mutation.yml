@@ -21,6 +21,8 @@ jobs:
       - uses: ./.github/actions/bun-install
       - name: Install mutation runner
         working-directory: tools/mutation
-        run: bash scripts/install-workspace.sh
+        run: bun install --frozen-lockfile
+      - name: Mutation runner regression
+        run: node --test tools/mutation/runner.test.mjs
       - name: Mutation score
         run: bun run test:mutation

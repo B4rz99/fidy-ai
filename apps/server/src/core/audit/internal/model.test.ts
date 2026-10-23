@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { AuditCaller } from "~/core/audit/contract";
+import { AuditCaller, AuditLogEntry } from "~/core/audit/contract";
 
 it("attributes a held canonical call to its exact Turn without fabricating a WebSession", () => {
   const decodeCaller = Schema.decodeUnknownResult(AuditCaller, { onExcessProperty: "error" });
@@ -57,4 +57,21 @@ it("attributes evidence to exactly one PAT, WebSession, or Hosted Agent Session 
       })
     )
   ).toBe(true);
+});
+
+it("preserves accountable canonical-call metadata without publishing request bodies", () => {
+  const id = "10000000-0000-4000-8000-000000000001";
+  const value = {
+    id,
+    subjectUserId: id,
+    caller: { _tag: "PAT", patId: id },
+    operation: "transactions.list",
+    outcome: "succeeded",
+    occurredAt: "2026-10-22T12:00:00.000Z",
+  };
+  const decoded = Schema.decodeUnknownSync(AuditLogEntry)({
+    ...value,
+    requestBody: "private financial text",
+  });
+  expect(Schema.encodeSync(AuditLogEntry)(decoded)).toEqual(value);
 });

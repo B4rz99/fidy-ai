@@ -22,7 +22,9 @@ it("rejects mailbox forms outside the bounded launch grammar", () => {
     `a@${"x".repeat(64)}.com`,
     `${"a".repeat(251)}@x.co`,
   ];
-  for (const candidate of rejected) expect(Result.isFailure(decodeEmail(candidate))).toBe(true);
+  for (const candidate of rejected) {
+    expect(Result.isFailure(decodeEmail(candidate))).toBe(true);
+  }
 });
 
 it("accepts only six unambiguous uppercase groups at the browser proof boundary", () => {
@@ -40,4 +42,51 @@ it("accepts only six unambiguous uppercase groups at the browser proof boundary"
   ]) {
     expect(Result.isFailure(decodeCode(input))).toBe(true);
   }
+});
+
+it("preserves allowed local-part punctuation and accepts one-character and maximum-length domain labels", () => {
+  for (const address of [
+    "a@b.c",
+    "0@1.9",
+    "z@z.z",
+    "a.b.c@a-b.c-d",
+    "a!#$%&'*+/=?^_`{|}~-z@example.com",
+    `a@${"x".repeat(63)}.com`,
+    `a@b.${"x".repeat(63)}`,
+    `${"a".repeat(249)}@x.co`,
+  ]) {
+    expect(decodeEmail(address)).toEqual(Result.succeed(EmailAddress.make(address)));
+  }
+  for (const address of [
+    "",
+    "@b.c",
+    "a@",
+    "a@b",
+    "a@b.",
+    "a@.b",
+    "a@-b.c",
+    "a@b-.c",
+    "a@b.-c",
+    "a@b.c-",
+    "a@b..c",
+    "a@b_c.d",
+    "a@b.c_d",
+    "a@b/c.d",
+    "a@b.c/d",
+    "a@b@c.d",
+    "a b@c.d",
+    "a:b@c.d",
+    "a,b@c.d",
+    "a\\b@c.d",
+    "a@b.c\nx",
+    `a@b.${"x".repeat(64)}`,
+    `${"a".repeat(250)}@x.co`,
+  ]) {
+    expect(Result.isFailure(decodeEmail(address)), address).toBe(true);
+  }
+});
+
+it("encodes a canonical mailbox without losing the normalization established at decode", () => {
+  const decoded = Schema.decodeSync(EmailAddress)(" Person.Name+Fidy@Example.COM ");
+  expect(Schema.encodeSync(EmailAddress)(decoded)).toBe("person.name+fidy@example.com");
 });

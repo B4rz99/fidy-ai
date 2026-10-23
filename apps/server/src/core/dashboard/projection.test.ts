@@ -47,3 +47,26 @@ it("selects one complete local month for a monthly chart bucket", () => {
     },
   ]);
 });
+
+it("uses one complete local month for Budget bars without a configurable period", () => {
+  const widget = Schema.decodeSync(Widget)({
+    id: "30000000-0000-4000-8000-000000000001",
+    type: "budget-bar",
+    categoryId: "10000000-0000-4000-8000-000000000001",
+    currency: "COP",
+  });
+  if (widget.type !== "budget-bar") throw new Error("Expected Budget bar");
+  expect(
+    dashboardProjectionRanges(
+      widget,
+      DateTime.makeUnsafe("2026-03-10T12:00:00Z"),
+      IanaTimeZone.make("America/Bogota")
+    )
+  ).toEqual([
+    {
+      key: "",
+      from: Date.parse("2026-03-01T05:00:00Z"),
+      toExclusive: Date.parse("2026-04-01T05:00:00Z"),
+    },
+  ]);
+});

@@ -81,3 +81,123 @@ it("never admits a new Turn over pending work or another User's session", () => 
     reason: "InvalidState",
   });
 });
+
+it("refuses invalid clocks and inconsistent retained session activity before granting admission", () => {
+  for (const nowMs of [
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.MAX_SAFE_INTEGER + 1,
+  ]) {
+    expect(decideHostedAdmission({ ...admission(), nowMs })).toEqual({
+      _tag: "Refused",
+      reason: "InvalidState",
+    });
+  }
+  expect(
+    decideHostedAdmission({
+      ...admission(),
+      state: { session: Option.none(), pendingStartedAtMs: Option.some(1_000_025) },
+    })
+  ).toEqual({ _tag: "Refused", reason: "InvalidState" });
+  for (const timestamp of [999_999, 1_000_031]) {
+    for (const state of [
+      {
+        session: Option.some({ ...session, lastActivityAtMs: Option.some(timestamp) }),
+        pendingStartedAtMs: Option.none(),
+      },
+      { session: Option.some(session), pendingStartedAtMs: Option.some(timestamp) },
+    ]) {
+      expect(decideHostedAdmission({ ...admission(), state })).toEqual({
+        _tag: "Refused",
+        reason: "InvalidState",
+      });
+    }
+  }
+  expect(
+    decideHostedAdmission({
+      ...admission(),
+      state: {
+        session: Option.some({ ...session, startedAtMs: 1_000_031 }),
+        pendingStartedAtMs: Option.none(),
+      },
+    })
+  ).toEqual({ _tag: "Refused", reason: "InvalidState" });
+});
+
+it("uses session opening until terminal activity exists and accepts activity exactly at the clock bounds", () => {
+  const fresh = { ...session, lastActivityAtMs: Option.none() };
+  const request = {
+    ...admission(),
+    state: { session: Option.some(fresh), pendingStartedAtMs: Option.none() },
+  };
+  expect(decideHostedAdmission({ ...request, nowMs: 1_899_999 })).toEqual({
+    _tag: "ContinueSession",
+    sessionId: session.id,
+  });
+  expect(decideHostedAdmission({ ...request, nowMs: 1_900_000 })).toEqual({
+    _tag: "BeginSession",
+    consentBasis: consent,
+  });
+  expect(
+    decideHostedAdmission({
+      ...admission(),
+      state: { session: Option.none(), pendingStartedAtMs: Option.none() },
+    })
+  ).toEqual({ _tag: "BeginSession", consentBasis: consent });
+  for (const timestamp of [session.startedAtMs, admission().nowMs]) {
+    expect(
+      decideHostedAdmission({
+        ...admission(),
+        state: {
+          session: Option.some({ ...session, lastActivityAtMs: Option.some(timestamp) }),
+          pendingStartedAtMs: Option.none(),
+        },
+      })
+    ).toEqual({ _tag: "ContinueSession", sessionId: session.id });
+    expect(
+      decideHostedAdmission({
+        ...admission(),
+        state: { session: Option.some(session), pendingStartedAtMs: Option.some(timestamp) },
+      })
+    ).toEqual({ _tag: "RecoverPending" });
+  }
+});
+
+it("validates an initial clock even without a retained session and permits the zero epoch", () => {
+  const state = {
+    session: Option.none<typeof session>(),
+    pendingStartedAtMs: Option.none<number>(),
+  };
+  expect(decideHostedAdmission({ ...admission(), state, nowMs: -1 })).toEqual({
+    _tag: "Refused",
+    reason: "InvalidState",
+  });
+  expect(decideHostedAdmission({ ...admission(), state, nowMs: 0 })).toEqual({
+    _tag: "BeginSession",
+    consentBasis: consent,
+  });
+  expect(
+    decideHostedAdmission({
+      ...admission(),
+      nowMs: session.startedAtMs,
+      state: {
+        session: Option.some({ ...session, lastActivityAtMs: Option.none() }),
+        pendingStartedAtMs: Option.none(),
+      },
+    })
+  ).toEqual({ _tag: "ContinueSession", sessionId: session.id });
+});
+
+it("begins a new session after an explicitly ended one even when its activity is recent", () => {
+  expect(
+    decideHostedAdmission({
+      ...admission(),
+      state: {
+        session: Option.some({ ...session, status: "idle-ended" }),
+        pendingStartedAtMs: Option.none(),
+      },
+    })
+  ).toEqual({ _tag: "BeginSession", consentBasis: consent });
+});

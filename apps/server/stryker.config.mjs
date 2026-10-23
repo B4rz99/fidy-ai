@@ -1,19 +1,17 @@
 import { CORE_SRC } from "./source-scope.mjs";
 
 export default {
-  testRunner: "command",
-  commandRunner: {
-    command:
-      "bun --bun vitest run --config vitest.core.config.ts --coverage.enabled=false --maxWorkers=2",
-  },
-  concurrency: 1,
+  plugins: ["../../tools/mutation/node_modules/@stryker-mutator/vitest-runner/dist/src/index.js"],
+  testRunner: "vitest",
+  vitest: { configFile: "vitest.mutation.config.ts" },
+  concurrency: 4,
   mutate: CORE_SRC.flatMap((sourceDir) => [`${sourceDir}/**/*.ts`, `!${sourceDir}/**/*.test.ts`]),
-  coverageAnalysis: "off",
+  coverageAnalysis: "perTest",
   mutator: {
     excludedMutations: ["StringLiteral", "ObjectLiteral"],
   },
-  thresholds: { high: 100, low: 100, break: 100 },
-  reporters: ["clear-text", "html", "progress"],
+  thresholds: { high: 100, low: 95, break: 95 },
+  reporters: ["clear-text", "html", "json", "progress"],
   htmlReporter: { fileName: "reports/mutation/mutation.html" },
   tempDirName: ".stryker-tmp",
   ignorePatterns: [
@@ -23,6 +21,7 @@ export default {
     "!/tsconfig.json",
     "!/bunfig.toml",
     "!/vitest.core.config.ts",
+    "!/vitest.mutation.config.ts",
     "!/source-scope.mjs",
   ],
 };

@@ -11,7 +11,7 @@ import {
   KeywordRuleLimitReached,
   KeywordRuleNotFound,
 } from "./contract";
-import { categorizeCapture, validateKeywordRuleChange } from "./operations";
+import { categorizeCapture, listLaunchCategories, validateKeywordRuleChange } from "./operations";
 
 const domicilios = CategoryId.make("10000000-0000-4000-8000-000000000002");
 const mercado = CategoryId.make("10000000-0000-4000-8000-000000000003");
@@ -136,3 +136,52 @@ it.effect("allows the hundredth keyword instruction and refuses the hundred-and-
     );
   })
 );
+
+it("keeps existing keyword rules editable and removable when creation capacity is exhausted", () => {
+  const rules = [
+    rule(first, "original"),
+    ...Array.from({ length: 99 }, (_, index) =>
+      rule(
+        KeywordRuleId.make(`30000000-0000-4000-8000-${String(index).padStart(12, "0")}`),
+        `rule-${index}`
+      )
+    ),
+  ];
+  expect(
+    Effect.runSync(
+      validateKeywordRuleChange({
+        rules,
+        change: {
+          operation: "categories.updateKeywordRule",
+          ruleId: first,
+          keyword: CategoryKeyword.make("renamed"),
+        },
+      })
+    )
+  ).toEqual(Option.none());
+  expect(
+    Effect.runSync(
+      validateKeywordRuleChange({
+        rules,
+        change: { operation: "categories.deleteKeywordRule", ruleId: first },
+      })
+    )
+  ).toEqual(Option.none());
+  deepStrictEqual(
+    Effect.runSyncExit(
+      validateKeywordRuleChange({
+        rules,
+        change: {
+          operation: "categories.updateKeywordRule",
+          ruleId: second,
+          keyword: CategoryKeyword.make("new"),
+        },
+      })
+    ),
+    Exit.succeed(Option.some(new KeywordRuleNotFound({ keywordRuleId: second })))
+  );
+});
+
+it("publishes the stable Spanish Category identity used by capture and keyword instructions", () => {
+  expect(listLaunchCategories()).toContainEqual({ id: mercado, label: "Mercado" });
+});

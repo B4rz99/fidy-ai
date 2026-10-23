@@ -4,6 +4,8 @@ import { Result, Schema } from "effect";
 import {
   CreateTransactionInput,
   Direction,
+  InstrumentLabel,
+  NotificationFormatId,
   RestoredTransactionPair,
   Transaction,
   TransactionExtraction,
@@ -177,4 +179,86 @@ it("accepts both manual and statement-line provenance variants", () => {
       })
     )
   ).toBe(true);
+});
+
+it("accepts only complete keyset positions with two millisecond UTC instants and one UUID-shaped identity", () => {
+  const decode = Schema.decodeUnknownResult(TransactionQueryValues.fields.cursor);
+  const position =
+    "2026-10-22T12:34:56.789Z|2026-10-21T01:02:03.456Z|10000000-0000-4000-8000-000000000001";
+  expect(Result.isSuccess(decode(position))).toBe(true);
+  for (const value of [
+    `x${position}`,
+    `${position}x`,
+    position.slice(0, -1),
+    position.replace("10000000-0000-4000-8000-000000000001", "z".repeat(36)),
+    position.replace(".789Z", "Z"),
+    position.replace(".456Z", "Z"),
+    position.replaceAll("|", ","),
+  ]) {
+    expect(Result.isFailure(decode(value))).toBe(true);
+  }
+});
+
+it("normalizes instrument labels on decode and preserves the normalized spelling on encode", () => {
+  const label = Schema.decodeSync(InstrumentLabel)("  Tarjeta   DÉBITO  ");
+  expect(label).toBe("tarjeta débito");
+  expect(Schema.encodeSync(InstrumentLabel)(label)).toBe("tarjeta débito");
+  const decode = Schema.decodeUnknownResult(NotificationFormatId);
+  for (const value of ["a", "bank12", "bank-alert-09"]) {
+    expect(Result.isSuccess(decode(value))).toBe(true);
+  }
+  for (const value of [
+    "",
+    "-bank",
+    "bank-",
+    "bank--alert",
+    "Bank",
+    "bank_alert",
+    "x.bank",
+    "bank!",
+    "a".repeat(65),
+  ]) {
+    expect(Result.isFailure(decode(value))).toBe(true);
+  }
+});
+
+it("preserves notification-email attestation integrity and the fields explicitly supplied by a User", () => {
+  const common = {
+    id: "10000000-0000-4000-8000-000000000001",
+    transactionId: "10000000-0000-4000-8000-000000000002",
+    serviceMarket: "CO",
+    locale: "es-CO",
+    timeZone: "America/Bogota",
+    interpretationRevision: "test-v1",
+    createdAt: "2026-10-22T12:00:00.000Z",
+  };
+  const notification = {
+    ...common,
+    kind: "notification-email",
+    receivedEmailId: "10000000-0000-4000-8000-000000000003",
+    messageEvidence: { channel: "email", provider: "mail", providerMessageId: "message-1" },
+    messageContentSha256: "a".repeat(64),
+    sourceFormat: "notification-email",
+    extractorRevision: "test-v1",
+  };
+  const manual = { ...common, kind: "manual", userProvidedFields: ["money", "counterparty"] };
+  expect(
+    Schema.encodeSync(SourceAttestation)(Schema.decodeUnknownSync(SourceAttestation)(manual))
+  ).toEqual(manual);
+  expect(
+    Schema.encodeSync(SourceAttestation)(Schema.decodeUnknownSync(SourceAttestation)(notification))
+  ).toEqual(notification);
+  for (const messageContentSha256 of [
+    "a".repeat(63),
+    "a".repeat(65),
+    `x${"a".repeat(64)}`,
+    `${"a".repeat(64)}x`,
+    "z".repeat(64),
+  ]) {
+    expect(
+      Result.isFailure(
+        Schema.decodeUnknownResult(SourceAttestation)({ ...notification, messageContentSha256 })
+      )
+    ).toBe(true);
+  }
 });

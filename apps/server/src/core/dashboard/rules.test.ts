@@ -1,12 +1,16 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Option, Result, Schema } from "effect";
+import assert from "node:assert/strict";
+import { Effect, Exit, Option, Result, Schema } from "effect";
 import {
   DashboardDocument,
   DashboardEdit,
   LayoutRegionSelector,
   RegionNotFound,
   RootRegionResize,
+  SelfPlacement,
   type Widget,
+  WidgetId,
+  WidgetNotFound,
 } from "./contract";
 
 import { applyDashboardEdit, collectLayoutWidgets } from "./operations";
@@ -1229,5 +1233,49 @@ it("replaces the complete widget configuration while retaining its identity and 
       type: "budget-bar",
       currency: "COP",
     });
+  }
+});
+
+it("resizes a nested leaf without replacing the other parent region", () => {
+  const source = makeNestedDocument();
+  const edit = Schema.decodeSync(DashboardEdit)({
+    op: "resize-region",
+    widgetIds: ["f1d1a000-0000-4000-8000-000000000462"],
+    size: { kind: "weight", weight: 1.5 },
+  });
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+  expect(updated.layout).toMatchObject({
+    kind: "split",
+    axis: "row",
+    children: [
+      { weight: 1, node: { kind: "leaf", widget: { id: "f1d1a000-0000-4000-8000-000000000461" } } },
+      {
+        weight: 1,
+        node: {
+          kind: "split",
+          axis: "column",
+          children: [
+            { weight: 1.5, node: { widget: { id: "f1d1a000-0000-4000-8000-000000000462" } } },
+            { weight: 0.5, node: { widget: { id: "f1d1a000-0000-4000-8000-000000000463" } } },
+          ],
+        },
+      },
+    ],
+  });
+});
+
+it("rejects self-swaps and identifies which missing Widget prevents a swap", () => {
+  const existing = WidgetId.make("f1d1a000-0000-4000-8000-000000000401");
+  const missing = WidgetId.make("f1d1a000-0000-4000-8000-000000000499");
+  for (const [widgetId, withWidgetId, failure] of [
+    [existing, existing, new SelfPlacement({ widgetId: existing })],
+    [missing, existing, new WidgetNotFound({ widgetId: missing, role: "edit-target" })],
+    [existing, missing, new WidgetNotFound({ widgetId: missing, role: "placement-target" })],
+  ] as const) {
+    const edit = Schema.decodeSync(DashboardEdit)({ op: "swap-widgets", widgetId, withWidgetId });
+    assert.deepStrictEqual(
+      Effect.runSyncExit(applyDashboardEdit({ document, edit })),
+      Exit.fail(failure)
+    );
   }
 });

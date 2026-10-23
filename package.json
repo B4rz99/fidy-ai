@@ -10,7 +10,7 @@
   "scripts": {
     "lint:ui": "oxlint --deny-warnings --config .oxlintrc.ui.json apps/web/src",
     "lint": "oxlint --deny-warnings --config .oxlintrc.json .",
-    "lint:type-aware": "bun install --cwd tools/astro --frozen-lockfile && oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 .",
+    "lint:type-aware": "bun install --cwd tools/astro --frozen-lockfile && bun install --cwd tools/mutation --frozen-lockfile && oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 .",
     "lint:rules": "node scripts/oxlint/lint-rules.test.js && bun run --cwd apps/server check:lint-guards",
     "lint:suppressions": "bun scripts/check-lint-suppressions.ts",
     "lint:deps": "bun run --parallel --filter @fidy/cli --filter @fidy/server --filter @fidy/web lint:deps",

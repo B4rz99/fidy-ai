@@ -5,6 +5,8 @@ import {
   AppliedBudgetMonth,
   Budget,
   BudgetCrossing,
+  BudgetGroupName,
+  BudgetMonth,
   BudgetMonthLatch,
   BudgetProgress,
   type BudgetProgressFact,
@@ -296,5 +298,82 @@ it("rejects mixed-Currency progress before comparing or subtracting its amounts"
     },
   ]) {
     expect(Result.isFailure(decode(progress))).toBe(true);
+  }
+});
+
+it("requires the full selected group and month when changing a Budget Group Currency", () => {
+  const decode = Schema.decodeUnknownResult(UpdateBudgetInput);
+  const base = { categoryId: budgetInput.categoryId, cap: budgetInput.cap };
+  const grouped = {
+    ...base,
+    groupName: "Casa",
+    month: "2026-10",
+    groupCurrency: "COP",
+    groupCategoryIds: [budgetInput.categoryId],
+  };
+  expect(Result.isSuccess(decode(base))).toBe(true);
+  expect(Result.isSuccess(decode(grouped))).toBe(true);
+  for (const key of ["groupName", "month", "groupCategoryIds"] as const) {
+    const { [key]: _, ...incomplete } = grouped;
+    expect(Result.isFailure(decode(incomplete))).toBe(true);
+  }
+  expect(
+    Result.isFailure(
+      decode({ ...grouped, groupCategoryIds: ["10000000-0000-4000-8000-000000000002"] })
+    )
+  ).toBe(true);
+  expect(Result.isFailure(decode({ ...base, groupCategoryIds: [budgetInput.categoryId] }))).toBe(
+    true
+  );
+  expect(
+    Result.isSuccess(
+      decode({ ...base, groupName: "Casa", groupCategoryIds: [budgetInput.categoryId] })
+    )
+  ).toBe(true);
+});
+
+it("bounds monthly plan labels and requires visible text in a Budget Group name", () => {
+  const decodeMonth = Schema.decodeUnknownResult(BudgetMonth);
+  for (const value of ["2000-01", "9999-12", "2026-09", "2026-10"]) {
+    expect(Result.isSuccess(decodeMonth(value))).toBe(true);
+  }
+  for (const value of [
+    "1999-12",
+    "2026-00",
+    "2026-13",
+    "2026-1",
+    "x2026-01",
+    "2026-01x",
+    "202a-01",
+    "2026/01",
+  ]) {
+    expect(Result.isFailure(decodeMonth(value))).toBe(true);
+  }
+  const decodeName = Schema.decodeUnknownResult(BudgetGroupName);
+  for (const value of ["Casa", "Mi casa", "a".repeat(64)]) {
+    expect(Result.isSuccess(decodeName(value))).toBe(true);
+  }
+  for (const value of ["", " ", "\n\t", "a".repeat(65)]) {
+    expect(Result.isFailure(decodeName(value))).toBe(true);
+  }
+});
+
+it("preserves the exact remaining or overage Money in all valid Budget progress variants", () => {
+  const codec = Schema.toCodecJson(BudgetProgress);
+  const cap = { amount: "100", currency: "COP" };
+  for (const value of [
+    {
+      cap,
+      spent: { amount: "25", currency: "COP" },
+      status: { type: "under", remaining: { amount: "75", currency: "COP" } },
+    },
+    { cap, spent: cap, status: { type: "reached" } },
+    {
+      cap,
+      spent: { amount: "125", currency: "COP" },
+      status: { type: "over", overBy: { amount: "25", currency: "COP" } },
+    },
+  ]) {
+    expect(Schema.encodeSync(codec)(Schema.decodeUnknownSync(codec)(value))).toEqual(value);
   }
 });

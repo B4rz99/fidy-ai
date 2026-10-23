@@ -1,7 +1,7 @@
-import { type ProjectedRange, Widget } from "./contract";
+import { type DashboardBucket, type ProjectedRange, Widget } from "./contract";
 import { expect, it } from "@effect/vitest";
 import { BigDecimal, Option, Schema } from "effect";
-import { Money } from "~/core/_shared/money";
+import { Money, type ReadonlyMoneyGroup } from "~/core/_shared/money";
 import { Category, CategoryId } from "~/core/categories/contract";
 
 import {
@@ -101,4 +101,85 @@ it("finalizes exact sum, maximum, and weighted average from projected contributi
   });
   if (budget.type !== "budget-bar") throw new Error("Expected budget");
   expect(BigDecimal.format(projectAggregateBudgetSpent(budget, ranges).amount)).toBe("14");
+});
+
+it("projects day and month chart buckets and omits empty ranges", () => {
+  for (const groupBy of ["day", "month"] as const) {
+    const widget = Schema.decodeSync(Widget)({
+      id: widgetId,
+      type: "spending-chart",
+      groupBy,
+      period: "this-month",
+      categories: [categoryId],
+    });
+    if (widget.type !== "spending-chart") throw new Error("Expected chart");
+    const key = groupBy === "day" ? "2026-07-01" : "2026-07";
+    const buckets = Option.getOrThrow(
+      projectAggregateChart({
+        widget,
+        ranges: [
+          { ...ranges[0], key, contributions: ranges[0]?.contributions ?? [] },
+          { key: "unused", contributions: [] },
+        ],
+        lookupCategory: () => Option.none(),
+      })
+    );
+    expect(
+      buckets.map(
+        (
+          bucket: Readonly<{ key: DashboardBucket; moneyGroups: ReadonlyArray<ReadonlyMoneyGroup> }>
+        ) => ({
+          key: bucket.key,
+          groups: bucket.moneyGroups.map((group) => [
+            group.currency,
+            BigDecimal.format(group.outflow.amount),
+          ]),
+        })
+      )
+    ).toEqual([
+      {
+        key: groupBy === "day" ? { kind: "day", date: key } : { kind: "month", month: key },
+        groups: [
+          ["COP", "14"],
+          ["USD", "3"],
+        ],
+      },
+    ]);
+  }
+});
+
+it("orders unfiltered category buckets by stable identity regardless of projection insertion order", () => {
+  const widget = Schema.decodeSync(Widget)({
+    id: widgetId,
+    type: "spending-chart",
+    groupBy: "category",
+    period: "this-month",
+  });
+  if (widget.type !== "spending-chart") throw new Error("Expected chart");
+  const buckets = Option.getOrThrow(
+    projectAggregateChart({
+      widget,
+      ranges: [
+        {
+          key: "2026-07-01",
+          contributions: [
+            {
+              categoryId: otherId,
+              direction: "outflow",
+              sum: cop("90"),
+              maximum: cop("90"),
+              count: 1n,
+            },
+            { categoryId, direction: "outflow", sum: cop("10"), maximum: cop("10"), count: 1n },
+          ],
+        },
+      ],
+      lookupCategory: (id) => Option.some(Schema.decodeSync(Category)({ id, label: "Categoría" })),
+    })
+  );
+  expect(
+    buckets.map((bucket: Readonly<{ key: DashboardBucket }>) =>
+      bucket.key.kind === "category" ? bucket.key.category.id : "unexpected"
+    )
+  ).toEqual([categoryId, otherId]);
 });

@@ -2,6 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Option, Result, Schema } from "effect";
 import {
   AppliedDashboardPeriod,
+  DashboardBucket,
   DashboardCatalog,
   DashboardDocument,
   DashboardTitle,
@@ -414,5 +415,31 @@ it("rejects duplicate widget identities and non-canonical same-axis nesting", ()
   for (const [index, layout] of invalidLayouts.entries()) {
     const result = Schema.decodeUnknownResult(DashboardDocument)({ title: "Resumen", layout });
     expect(Result.isFailure(result) ? String(result.failure) : "").toContain(expectedIssues[index]);
+  }
+});
+
+it("decodes complete local day and month chart bucket labels with their calendar component bounds", () => {
+  const decode = Schema.decodeUnknownResult(DashboardBucket);
+  for (const date of ["2026-01-01", "2026-09-10", "2026-10-20", "2026-11-30", "2026-12-31"]) {
+    expect(Result.isSuccess(decode({ kind: "day", date }))).toBe(true);
+  }
+  for (const date of [
+    "x2026-01-01",
+    "2026-01-01x",
+    "2026-00-01",
+    "2026-13-01",
+    "2026-01-00",
+    "2026-01-32",
+    "2026-1-01",
+    "2026-01-1",
+    "202a-01-01",
+  ]) {
+    expect(Result.isFailure(decode({ kind: "day", date }))).toBe(true);
+  }
+  for (const month of ["2026-01", "2026-09", "2026-10", "2026-12"]) {
+    expect(Result.isSuccess(decode({ kind: "month", month }))).toBe(true);
+  }
+  for (const month of ["x2026-01", "2026-01x", "2026-00", "2026-13", "2026-1", "202a-01"]) {
+    expect(Result.isFailure(decode({ kind: "month", month }))).toBe(true);
   }
 });

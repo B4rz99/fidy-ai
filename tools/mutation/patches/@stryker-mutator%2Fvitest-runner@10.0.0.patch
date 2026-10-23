@@ -1,0 +1,85 @@
+diff --git a/dist/src/stryker-setup.js b/dist/src/stryker-setup.js
+index aecfacbe47b285c272c47e54b3d66a716adfdc41..4c98ae54a062db71c274b78629e5222b00ca8c69 100644
+--- a/dist/src/stryker-setup.js
++++ b/dist/src/stryker-setup.js
+@@ -56,14 +56,14 @@ else {
+     }
+ }
+ // Stryker disable all: this file is copied to the sandbox dir
+-function collectTestName({ name, suite, }) {
++function collectTestName({ name, suite }) {
+     const nameParts = [name];
+     let currentSuite = suite;
+     while (currentSuite) {
+         nameParts.unshift(currentSuite.name);
+         currentSuite = currentSuite.suite;
+     }
+-    return nameParts.join(' ').trim();
++    return nameParts.filter(Boolean).join(' > ');
+ }
+ function toRawTestId(test) {
+     return `${test.file?.filepath ?? 'unknown.js'}#${collectTestName(test)}`;
+diff --git a/dist/src/test-helpers.js b/dist/src/test-helpers.js
+index 56cc786f30c524ae18ce87eef1a67fdf26b703c5..f407adcc905f2a118c42ce654a9c164cbeb1b745 100644
+--- a/dist/src/test-helpers.js
++++ b/dist/src/test-helpers.js
+@@ -1,14 +1,14 @@
+ // Don't merge this file into 'vitest-helpers.ts'!
+ // This file is used from the testing environment (via stryker-setup.js) and thus could be loaded into the browser (when using vitest with browser mode).
+ // Thus we should avoid unnecessary dependencies in this file.
+-export function collectTestName({ name, suite, }) {
++export function collectTestName({ name, suite }) {
+     const nameParts = [name];
+     let currentSuite = suite;
+     while (currentSuite) {
+         nameParts.unshift(currentSuite.name);
+         currentSuite = currentSuite.suite;
+     }
+-    return nameParts.join(' ').trim();
++    return nameParts.filter(Boolean).join(' > ');
+ }
+ export function toRawTestId(test) {
+     return `${test.file?.filepath ?? 'unknown.js'}#${collectTestName(test)}`;
+diff --git a/dist/src/vitest-test-runner.js b/dist/src/vitest-test-runner.js
+index 84f1ca026503b8e92b7adc952ec6c6a401943656..98f8f11d21541c52efa48052300a45586adf3e0e 100644
+--- a/dist/src/vitest-test-runner.js
++++ b/dist/src/vitest-test-runner.js
+@@ -4,7 +4,7 @@ import semver from 'semver';
+ import fs from 'fs';
+ import { INSTRUMENTER_CONSTANTS, } from '@stryker-mutator/api/core';
+ import { commonTokens, tokens, } from '@stryker-mutator/api/plugin';
+-import { DryRunStatus, toMutantRunResult, determineHitLimitReached, TestStatus, } from '@stryker-mutator/api/test-runner';
++import { DryRunStatus, toMutantRunResult, determineHitLimitReached, TestStatus, MutantRunStatus, } from '@stryker-mutator/api/test-runner';
+ import { errorToString, escapeRegExp, normalizeFileName, notEmpty, testFilesProvided, } from '@stryker-mutator/util';
+ import { vitestWrapper } from './vitest-wrapper.js';
+ import { convertTestToTestResult, fromTestId, collectTestsFromSuite, normalizeCoverage, isErrorCodeError, VITEST_ERROR_CODES, } from './vitest-helpers.js';
+@@ -130,6 +130,14 @@ export class VitestTestRunner {
+             testIds: options.testFilter,
+             relatedFiles: [options.sandboxFileName],
+         });
++        if (dryRunResult.status === DryRunStatus.Error &&
++            this.ctx.state.getFiles().some((file) => file.result?.state === 'fail')) {
++            return {
++                status: MutantRunStatus.Killed,
++                killedBy: [],
++                failureMessage: dryRunResult.errorMessage,
++            };
++        }
+         const hitCount = this.readHitCount();
+         const timeOut = determineHitLimitReached(hitCount, options.hitLimit);
+         return toMutantRunResult(timeOut ?? dryRunResult);
+@@ -177,9 +185,13 @@ export class VitestTestRunner {
+             failure ||= testResult.status === TestStatus.Failed;
+             return testResult;
+         });
+-        if (!failure && this.ctx.state.errorsSet.size > 0) {
++        const suiteErrors = this.ctx.state.getFiles()
++            .filter((file) => file.result?.state === 'fail')
++            .flatMap((file) => file.result?.errors ?? []);
++        if (!failure && (this.ctx.state.errorsSet.size > 0 || suiteErrors.length > 0)) {
+             const errorText = [...this.ctx.state.errorsSet]
+                 .map(errorToString)
++                .concat(suiteErrors.map((error) => error.message ?? 'Test suite failed to load'))
+                 .join('\n');
+             return {
+                 status: DryRunStatus.Error,

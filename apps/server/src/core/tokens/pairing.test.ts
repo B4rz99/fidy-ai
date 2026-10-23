@@ -4,9 +4,10 @@ import {
   selectPATPairingPublicCodeSymbols,
 } from "./operations";
 import { expect, it } from "@effect/vitest";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Result, Schema } from "effect";
 import {
   type PATPairingClaimDecision,
+  PATPairingDeviceCode,
   PATPairingLifecycle,
   PATPairingPublicCode,
   PATPairingPublicCodeInput,
@@ -89,5 +90,34 @@ it("distinguishes expiry work while making every terminal lifecycle invalid", ()
   ).toEqual({ _tag: "RevokeUnclaimed" });
   for (const lifecycle of ["claimed", "expired_unapproved", "revoked_unclaimed"] as const) {
     expect(decide({ ...base, lifecycle })).toEqual({ _tag: "Invalid" });
+  }
+});
+
+it("limits selected public-code symbols after discarding biased bytes", () => {
+  expect(selectPATPairingPublicCodeSymbols({ bytes: [240, 0, 1, 2], maximum: 2 })).toBe("BC");
+});
+
+it("accepts a pairing poll at the exact persisted minimum interval", () => {
+  expect(
+    decide({
+      ...base,
+      lastAcceptedPollAt: Option.some(attemptedAt),
+      attemptedAt: DateTime.addDuration(attemptedAt, "5 seconds"),
+    })
+  ).toEqual({
+    _tag: "Pending",
+    acceptedAt: DateTime.addDuration(attemptedAt, "5 seconds"),
+    minimumPollIntervalSeconds: 5,
+  });
+});
+
+it("round trips canonical pairing codes and bounds the private device proof to base64url", () => {
+  const code = PATPairingPublicCode.make("BCDF-GHJK");
+  expect(Schema.encodeSync(PATPairingPublicCodeInput)(code)).toBe("BCDF-GHJK");
+  const decode = Schema.decodeUnknownResult(PATPairingDeviceCode);
+  const valid = `${"Az09_-".repeat(7)}A`;
+  expect(Result.isSuccess(decode(valid))).toBe(true);
+  for (const value of [valid.slice(1), `${valid}A`, `!${valid}`, `${valid}!`, "!".repeat(43)]) {
+    expect(Result.isFailure(decode(value))).toBe(true);
   }
 });

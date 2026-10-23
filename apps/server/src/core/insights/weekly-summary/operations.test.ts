@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Schema } from "effect";
+import { DateTime, Schema } from "effect";
 import { buildWeeklySummary, presentWeeklySummary, summarizeWeek } from "./operations";
 import { Money } from "~/core/_shared/money";
 import { CategoryId, CategoryLabel } from "~/core/categories/contract";
@@ -121,5 +121,87 @@ describe("weekly summary", () => {
       absoluteDelta: { amount: "20.25", currency: "COP" },
     });
     expect(payload.groups[0].inflow.change).toBe("Increased");
+  });
+
+  it("orders Currency groups independently of input order and omits zero-valued leaders", () => {
+    const result = summarizeWeek({
+      periods,
+      financialRevision: 9,
+      current: [
+        aggregate("2", "inflow", { currency: "USD", categoryId }),
+        aggregate("0"),
+        aggregate("1", "inflow"),
+      ],
+      previous: [],
+    });
+    if (result._tag !== "Summary") throw new Error("Expected summary");
+    expect(result.payload.groups).toMatchObject([
+      { currency: "COP", topOutflowCategories: [] },
+      { currency: "USD", topOutflowCategories: [] },
+    ]);
+    expect(
+      summarizeWeek({ periods, financialRevision: 9, current: [aggregate("0")], previous: [] })
+    ).toEqual({ _tag: "NoActivity" });
+  });
+
+  it("presents the captured local cutoffs and every Currency even without outflow leaders", () => {
+    const result = summarizeWeek({
+      periods,
+      financialRevision: 9,
+      current: [aggregate("2", "inflow", { currency: "USD", categoryId })],
+      previous: [],
+    });
+    if (result._tag !== "Summary") throw new Error("Expected summary");
+    const presented = presentWeeklySummary({
+      payload: result.payload,
+      categories: [],
+      timeZone: IanaTimeZone.make("America/Bogota"),
+    });
+    if (presented._tag !== "Some") throw new Error("Expected presentation");
+    expect(presented.value).toEqual({
+      period: "Del 5/10/2026 18:00 al 12/10/2026 18:00 (America/Bogota)",
+      currencies: ["USD"],
+      sections: [
+        {
+          currency: "USD",
+          text: "Ingresos 2 (aumentaron: 2); salidas 0 (sin cambio: 0).",
+        },
+      ],
+    });
+  });
+
+  it("refuses each independently mismatched aggregate bound", () => {
+    for (const index of [0, 1] as const) {
+      for (const boundary of ["from", "toExclusive"] as const) {
+        const captured = [periods.current, periods.previous] as const;
+        const altered = {
+          ...captured[index],
+          [boundary]: DateTime.add(captured[index][boundary], { seconds: 1 }),
+        };
+        expect(() =>
+          buildWeeklySummary({
+            periods,
+            facts: {
+              revision: 9,
+              periods: [
+                { period: index === 0 ? altered : periods.current, aggregates: [aggregate("1")] },
+                { period: index === 1 ? altered : periods.previous, aggregates: [] },
+              ],
+            },
+          })
+        ).toThrow("Weekly aggregate bounds do not match captured report periods");
+      }
+    }
+  });
+
+  it("refuses invalid captured report periods before considering financial activity", () => {
+    expect(() =>
+      summarizeWeek({
+        periods: { ...periods, current: { ...periods.current, from: periods.current.toExclusive } },
+        financialRevision: 9,
+        current: [],
+        previous: [],
+      })
+    ).toThrow();
   });
 });

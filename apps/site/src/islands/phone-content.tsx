@@ -31,9 +31,6 @@ export const PhoneContent = ({
           {conversation}
           <div className="chat-input">
             <span>{"Escribe a Fidy…"}</span>
-            <span className="send" aria-hidden="true">
-              {"↑"}
-            </span>
           </div>
         </div>
         <div className="floating-note">

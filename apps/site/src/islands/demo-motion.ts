@@ -4,7 +4,8 @@ const bubbleDuration = 280;
 const bubbleStagger = 550;
 const previewDuration = 300;
 const previewStagger = 60;
-const channelStagger = 160;
+const channelStagger = 250;
+const channelDuration = 600;
 const fillDuration = 500;
 const reducedDuration = 160;
 const visibilityThreshold = 0.35;
@@ -140,7 +141,7 @@ export const mountChannels = (node: HTMLDivElement): (() => void) =>
     node.querySelectorAll(".channel-card,.channel-connector").forEach((element, index) =>
       enter({
         element,
-        duration: previewDuration,
+        duration: channelDuration,
         delay: index * channelStagger,
         distance: "8px",
       })

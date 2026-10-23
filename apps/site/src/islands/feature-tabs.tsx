@@ -51,6 +51,7 @@ export const FeatureTabs = (): React.JSX.Element => {
       <div
         id="feature-panel"
         className="feature-panel"
+        data-animate={animate}
         role="tabpanel"
         aria-labelledby={`feature-tab-${selected}`}
         tabIndex={0}

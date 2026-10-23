@@ -38,12 +38,27 @@
 @theme {
   --font-heading: Poppins, Arial, sans-serif;
 }
+html {
+  color-scheme: light dark;
+  background-color: light-dark(#fffaf6, #141414);
+  color: light-dark(#000, #fff6ef);
+}
+html:has(.fidy-landing[data-theme="light"]) {
+  color-scheme: light;
+}
+html:has(.fidy-landing[data-theme="dark"]) {
+  color-scheme: dark;
+}
 body {
   margin: 0;
+  background-color: inherit;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 .legal-document {
   max-width: 48rem;
-  padding: 3rem 1.5rem;
+  padding: 3rem 1.5rem calc(3rem + env(safe-area-inset-bottom, 0px));
   margin: auto;
 }
 .legal-navigation {

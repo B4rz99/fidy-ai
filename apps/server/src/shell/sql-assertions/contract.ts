@@ -13,6 +13,8 @@ export type AssertionScope =
   | "erasure_writer"
   | "forwarded_email"
   | "ingestion_review"
+  | "hosted_compaction"
+  | "hosted_mutation"
   | "insight_mutation"
   | "oauth_atomic"
   | "oauth_confirmation"

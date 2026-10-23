@@ -428,7 +428,7 @@ it("does not replace continuity when Consent is revoked during Compaction genera
       const compacted = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations WHERE user_id = ?"
+            "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations WHERE user_id = ?"
           )
           .bind(users[0])
           .all()
@@ -739,7 +739,7 @@ it("expires old CompactedConversation content without exposing it in a later Wor
       const after = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations WHERE user_id = ?"
+            "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations WHERE user_id = ?"
           )
           .bind(users[0])
           .all()
@@ -2376,6 +2376,47 @@ it("counts only selected Transcript rows when native D1 compaction triggers writ
     })
   ));
 
+it("rolls back continuity when a native deletion refuses part of its terminal prefix", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const fixture = yield* closedContinuityFixture(db);
+      const continuity = yield* readHostedContinuity({
+        db,
+        subject: fixture.caller,
+        sessionId: fixture.sessionId,
+        now: fixture.current,
+        admittedWhatsAppTurn: Option.none(),
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_prefix BEFORE DELETE ON transcript_entries BEGIN SELECT RAISE(IGNORE); END"
+          )
+          .run()
+      );
+      expect(
+        yield* commitHostedCompaction({
+          db,
+          subject: fixture.caller,
+          sessionId: fixture.sessionId,
+          continuity,
+          throughSequence: Option.getOrThrow(continuity.terminalThroughSequence),
+          text: "Must not commit",
+          signal: makeAbortController().signal,
+        })
+      ).toBe(false);
+      const after = yield* readHostedContinuity({
+        db,
+        subject: fixture.caller,
+        sessionId: fixture.sessionId,
+        now: fixture.current,
+        admittedWhatsAppTurn: Option.none(),
+      });
+      expect(after).toEqual(continuity);
+    })
+  ));
+
 it("awaits a dispatched compaction commit before releasing an interrupted owner", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -2421,7 +2462,7 @@ it("awaits a dispatched compaction commit before releasing an interrupted owner"
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations"
+              "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations"
             )
             .all()
         )).results

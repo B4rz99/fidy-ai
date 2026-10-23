@@ -1,4 +1,8 @@
 import {
+  prepareChangedRowAssertion,
+  preparePredicateAssertion,
+} from "../../../src/shell/sql-assertions/operations";
+import {
   compactionCounterDeadline,
   prepareResourceCounter,
   sweepCompactionCounters,
@@ -371,7 +375,7 @@ export const readHostedContinuity = ({
     }
     const compactRaw = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT text, through_sequence, revision FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations
+        .prepare(`SELECT text, through_sequence, revision FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations
     WHERE user_id = ? AND hosted_session_id = ? AND updated_at_ms >= ?`)
         .bind(subject.userId, sessionId, now - hostedTranscriptRetentionMs)
         .first()
@@ -608,16 +612,15 @@ export const commitHostedCompaction = ({
       onNone: () => ({ throughSequence: 0, revision: 0 }),
       onSome: ({ throughSequence: cursor, revision }) => ({ throughSequence: cursor, revision }),
     });
-    const nonce = newId();
     const nextRevision = prior.revision + 1;
     if (signal.aborted) return false;
     return yield* Effect.tryPromise(() =>
       db.batch([
         db
           .prepare(`UPDATE hosted_agent_sessions SET compacted_text=?3,compacted_through_sequence=?4,
-        compacted_revision=?5,compacted_nonce=?6,compacted_at_ms=?7
+        compacted_revision=?5,compacted_at_ms=?6
       WHERE user_id=?1 AND id=?2 AND EXISTS
-        (SELECT 1 FROM hosted_agent_sessions WHERE user_id=?8 AND id=?9 AND status='active')
+        (SELECT 1 FROM hosted_agent_sessions WHERE user_id=?7 AND id=?8 AND status='active')
       AND EXISTS (${authority.sql})
       AND (SELECT COUNT(*) FROM transcript_entries WHERE user_id=? AND hosted_session_id=?
         AND sequence<=?)=?
@@ -631,7 +634,6 @@ export const commitHostedCompaction = ({
             text,
             throughSequence,
             nextRevision,
-            nonce,
             current,
             userId,
             sessionId,
@@ -646,18 +648,24 @@ export const commitHostedCompaction = ({
             prior.revision,
             prior.throughSequence
           ),
+        prepareChangedRowAssertion({ db, scope: "hosted_compaction" }),
         db
-          .prepare(`DELETE FROM transcript_entries WHERE user_id = ? AND hosted_session_id = ?
-      AND sequence <= ? AND EXISTS (SELECT 1 FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations
-        WHERE user_id = ? AND hosted_session_id = ? AND nonce = ? AND revision = ?)
-      RETURNING sequence`)
-          .bind(userId, sessionId, throughSequence, userId, sessionId, nonce, nextRevision),
+          .prepare(`DELETE FROM transcript_entries WHERE user_id=? AND hosted_session_id=?
+          AND sequence<=? RETURNING sequence`)
+          .bind(userId, sessionId, throughSequence),
+        preparePredicateAssertion({
+          db,
+          scope: "hosted_compaction",
+          predicate: {
+            sql: "SELECT 1 WHERE changes()=?",
+            params: [selected.length],
+          },
+        }),
       ])
     ).pipe(
-      Effect.map(
-        (results) =>
-          results[0]?.meta.changes === 1 && results[1]?.results.length === selected.length
-      ),
+      Effect.as(true),
+      // Compaction is optional: any refused or failed atomic save retains the original prefix.
+      Effect.orElseSucceed(() => false),
       Effect.uninterruptible
     );
   });
@@ -1097,7 +1105,7 @@ const sweepHostedTranscript = (
     yield* Effect.tryPromise(() =>
       db
         .prepare(`UPDATE hosted_agent_sessions SET compacted_text=NULL,compacted_through_sequence=NULL,
-        compacted_revision=NULL,compacted_nonce=NULL,compacted_at_ms=NULL WHERE rowid IN
+        compacted_revision=NULL,compacted_at_ms=NULL WHERE rowid IN
         (SELECT rowid FROM hosted_agent_sessions WHERE user_id=? AND compacted_revision IS NOT NULL
           AND compacted_at_ms<? ORDER BY compacted_at_ms LIMIT ?)`)
         .bind(userId, cutoff, maximumRetentionRows)
@@ -1131,7 +1139,7 @@ const readHostedRetentionDeadline = (
         SELECT * FROM (SELECT retention_terminal_at_ms + ? AS due_ms FROM hosted_turns
           WHERE user_id=? AND retention_terminal_at_ms IS NOT NULL ORDER BY retention_terminal_at_ms LIMIT 1)
         UNION ALL
-        SELECT * FROM (SELECT updated_at_ms + ? AS due_ms FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations
+        SELECT * FROM (SELECT updated_at_ms + ? AS due_ms FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations
           WHERE user_id=? ORDER BY updated_at_ms LIMIT 1)
         UNION ALL
         SELECT * FROM (SELECT expires_at_ms + 1 AS due_ms FROM hosted_confirmations

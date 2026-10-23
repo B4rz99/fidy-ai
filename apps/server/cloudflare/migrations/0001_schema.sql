@@ -732,7 +732,7 @@ CREATE TABLE hosted_agent_sessions (
   consent_basis_json TEXT NOT NULL,
   started_at_ms INTEGER NOT NULL,
   last_activity_at_ms INTEGER,
-  status TEXT NOT NULL CHECK (status IN ('active','idle-ended','revoked')), compacted_text TEXT, compacted_through_sequence INTEGER, compacted_revision INTEGER, compacted_nonce TEXT, compacted_at_ms INTEGER CHECK((compacted_revision IS NULL AND compacted_text IS NULL AND compacted_through_sequence IS NULL AND compacted_revision IS NULL AND compacted_nonce IS NULL AND compacted_at_ms IS NULL) OR (compacted_revision IS NOT NULL AND compacted_text IS NOT NULL AND (length(compacted_text) > 0) AND compacted_through_sequence IS NOT NULL AND (compacted_through_sequence >= 0) AND compacted_revision IS NOT NULL AND (compacted_revision > 0) AND compacted_nonce IS NOT NULL AND compacted_at_ms IS NOT NULL)),
+  status TEXT NOT NULL CHECK (status IN ('active','idle-ended','revoked')), compacted_text TEXT, compacted_through_sequence INTEGER, compacted_revision INTEGER, compacted_at_ms INTEGER CHECK((compacted_revision IS NULL AND compacted_text IS NULL AND compacted_through_sequence IS NULL AND compacted_revision IS NULL AND compacted_at_ms IS NULL) OR (compacted_revision IS NOT NULL AND compacted_text IS NOT NULL AND (length(compacted_text) > 0) AND compacted_through_sequence IS NOT NULL AND (compacted_through_sequence >= 0) AND compacted_revision IS NOT NULL AND (compacted_revision > 0) AND compacted_at_ms IS NOT NULL)),
   UNIQUE (user_id, id)
 ) STRICT;
 --> statement-breakpoint
@@ -758,9 +758,8 @@ CREATE TABLE hosted_mutation_commits (
   tool_call_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   committed_at_ms INTEGER NOT NULL,
-  valid INTEGER NOT NULL CHECK (valid = 1),
   PRIMARY KEY (turn_id, tool_call_id),
-  FOREIGN KEY (turn_id) REFERENCES hosted_turns(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id,turn_id) REFERENCES hosted_turns(user_id,id) ON DELETE CASCADE
 ) STRICT;
 --> statement-breakpoint
 
@@ -5776,7 +5775,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'hosted_mutation_commits','drain:'||lower(hex(randomblob(16))),json_object('turn_id',OLD."turn_id",'tool_call_id',OLD."tool_call_id",'user_id',OLD."user_id",'committed_at_ms',OLD."committed_at_ms",'valid',OLD."valid")
+  SELECT q.id,'hosted_mutation_commits','drain:'||lower(hex(randomblob(16))),json_object('turn_id',OLD."turn_id",'tool_call_id',OLD."tool_call_id",'user_id',OLD."user_id",'committed_at_ms',OLD."committed_at_ms",'valid',1)
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
@@ -6611,7 +6610,7 @@ END;
 CREATE TRIGGER forwarded_email_receipts_companions_initial BEFORE INSERT ON forwarded_email_receipts WHEN NEW.dispatch_pending<>0 OR NEW.dispatch_sent_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'forwarded_email_receipts_companions_initial'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER hosted_agent_sessions_companions_initial BEFORE INSERT ON hosted_agent_sessions WHEN NEW.compacted_text IS NOT NULL OR NEW.compacted_through_sequence IS NOT NULL OR NEW.compacted_revision IS NOT NULL OR NEW.compacted_nonce IS NOT NULL OR NEW.compacted_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'hosted_agent_sessions_companions_initial'); END;
+CREATE TRIGGER hosted_agent_sessions_companions_initial BEFORE INSERT ON hosted_agent_sessions WHEN NEW.compacted_text IS NOT NULL OR NEW.compacted_through_sequence IS NOT NULL OR NEW.compacted_revision IS NOT NULL OR NEW.compacted_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'hosted_agent_sessions_companions_initial'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER hosted_confirmations_consume_once BEFORE UPDATE ON hosted_confirmations
@@ -7878,7 +7877,7 @@ BEGIN SELECT RAISE(ABORT, 'transcript_append_only'); END;
 CREATE TRIGGER transcript_retention_guard BEFORE DELETE ON transcript_entries
 WHEN (NOT EXISTS (SELECT 1 FROM hosted_turns WHERE id = OLD.turn_id AND user_id = OLD.user_id
   AND status <> 'pending' AND terminal_at_ms < (unixepoch('now') * 1000 - 2592000000))
-AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS c
+AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS c
   JOIN hosted_turns AS t ON t.id = OLD.turn_id AND t.user_id = OLD.user_id
   WHERE c.user_id = OLD.user_id AND c.hosted_session_id = OLD.hosted_session_id
     AND c.through_sequence >= OLD.sequence AND t.status <> 'pending')) AND NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='transcript_entries' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id))

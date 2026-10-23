@@ -87,7 +87,7 @@ it("keeps repeated idle sweeps independent of permanent terminal history", () =>
             .bind(userId, now),
           db
             .prepare(
-              `UPDATE hosted_agent_sessions SET compacted_text=incoming.text,compacted_through_sequence=incoming.through_sequence,compacted_revision=incoming.revision,compacted_nonce=incoming.nonce,compacted_at_ms=incoming.updated_at_ms FROM (SELECT user_id AS user_id,id AS hosted_session_id,'retained' AS text,0 AS through_sequence,1 AS revision,id AS nonce,? AS updated_at_ms FROM hosted_agent_sessions WHERE id LIKE 'compact-%') AS incoming WHERE hosted_agent_sessions.user_id=incoming.user_id AND hosted_agent_sessions.id=incoming.hosted_session_id AND hosted_agent_sessions.compacted_revision IS NULL`
+              `UPDATE hosted_agent_sessions SET compacted_text=incoming.text,compacted_through_sequence=incoming.through_sequence,compacted_revision=incoming.revision,compacted_at_ms=incoming.updated_at_ms FROM (SELECT user_id AS user_id,id AS hosted_session_id,'retained' AS text,0 AS through_sequence,1 AS revision,? AS updated_at_ms FROM hosted_agent_sessions WHERE id LIKE 'compact-%') AS incoming WHERE hosted_agent_sessions.user_id=incoming.user_id AND hosted_agent_sessions.id=incoming.hosted_session_id AND hosted_agent_sessions.compacted_revision IS NULL`
             )
             .bind(now),
           db
@@ -133,7 +133,7 @@ it("cleans only the addressed User and retains discovery after a terminal marker
       SELECT id||'-assistant',user_id,hosted_session_id,id,'assistant',terminal_at_ms,'expired'
       FROM hosted_turns WHERE id IN ('retired-1','other-retired')`),
           db.prepare(`INSERT INTO hosted_mutation_commits
-      SELECT id,'call',user_id,started_at_ms,1 FROM hosted_turns WHERE id IN ('retired-1','other-retired')`),
+      SELECT id,'call',user_id,started_at_ms FROM hosted_turns WHERE id IN ('retired-1','other-retired')`),
           db.prepare("DELETE FROM transcript_entries WHERE id = 'retired-1-assistant'"),
         ])
       );
@@ -218,7 +218,7 @@ it("bounds every due branch before grouping a large retained backlog", () =>
         SELECT 'old-compact-'||i,?,'{}',0,'idle-ended' FROM n`)
             .bind(userId),
           db.prepare(
-            `UPDATE hosted_agent_sessions SET compacted_text=incoming.text,compacted_through_sequence=incoming.through_sequence,compacted_revision=incoming.revision,compacted_nonce=incoming.nonce,compacted_at_ms=incoming.updated_at_ms FROM (SELECT user_id AS user_id,id AS hosted_session_id,'expired' AS text,0 AS through_sequence,1 AS revision,id AS nonce,1 AS updated_at_ms FROM hosted_agent_sessions WHERE id LIKE 'old-compact-%') AS incoming WHERE hosted_agent_sessions.user_id=incoming.user_id AND hosted_agent_sessions.id=incoming.hosted_session_id AND hosted_agent_sessions.compacted_revision IS NULL`
+            `UPDATE hosted_agent_sessions SET compacted_text=incoming.text,compacted_through_sequence=incoming.through_sequence,compacted_revision=incoming.revision,compacted_at_ms=incoming.updated_at_ms FROM (SELECT user_id AS user_id,id AS hosted_session_id,'expired' AS text,0 AS through_sequence,1 AS revision,1 AS updated_at_ms FROM hosted_agent_sessions WHERE id LIKE 'old-compact-%') AS incoming WHERE hosted_agent_sessions.user_id=incoming.user_id AND hosted_agent_sessions.id=incoming.hosted_session_id AND hosted_agent_sessions.compacted_revision IS NULL`
           ),
           db
             .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<4000)
@@ -264,11 +264,11 @@ it("keeps compacted mutation receipts discoverable until their own retention bou
       yield* Effect.tryPromise(() =>
         db.batch([
           db
-            .prepare("INSERT INTO hosted_mutation_commits VALUES ('retained-1','call',?,1,1)")
+            .prepare("INSERT INTO hosted_mutation_commits VALUES ('retained-1','call',?,1)")
             .bind(userId),
           db
             .prepare(
-              `UPDATE hosted_agent_sessions SET compacted_text=incoming.text,compacted_through_sequence=incoming.through_sequence,compacted_revision=incoming.revision,compacted_nonce=incoming.nonce,compacted_at_ms=incoming.updated_at_ms FROM (SELECT user_id AS user_id,hosted_session_id AS hosted_session_id,'compacted' AS text,max(sequence) AS through_sequence,1 AS revision,'compaction' AS nonce,? AS updated_at_ms FROM transcript_entries GROUP BY user_id,hosted_session_id) AS incoming WHERE hosted_agent_sessions.user_id=incoming.user_id AND hosted_agent_sessions.id=incoming.hosted_session_id AND hosted_agent_sessions.compacted_revision IS NULL`
+              `UPDATE hosted_agent_sessions SET compacted_text=incoming.text,compacted_through_sequence=incoming.through_sequence,compacted_revision=incoming.revision,compacted_at_ms=incoming.updated_at_ms FROM (SELECT user_id AS user_id,hosted_session_id AS hosted_session_id,'compacted' AS text,max(sequence) AS through_sequence,1 AS revision,? AS updated_at_ms FROM transcript_entries GROUP BY user_id,hosted_session_id) AS incoming WHERE hosted_agent_sessions.user_id=incoming.user_id AND hosted_agent_sessions.id=incoming.hosted_session_id AND hosted_agent_sessions.compacted_revision IS NULL`
             )
             .bind(now),
           db.prepare("DELETE FROM transcript_entries WHERE user_id=?").bind(userId),

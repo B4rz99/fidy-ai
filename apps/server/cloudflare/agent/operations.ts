@@ -1,3 +1,4 @@
+import { preparePredicateAssertion } from "../../src/shell/sql-assertions/operations";
 import { Effect, type Option } from "effect";
 import { mintHostedStatementCaller as statementCaller } from "./internal/statement-authority";
 import {
@@ -88,7 +89,7 @@ export const prepareHostedChannelRetention = ({
 
 /**
  * Bind one canonical mutation commit to the exact pending Turn and tool call of its stable User.
- * The caller must include this statement and every mutation in the same uninterruptible D1 batch.
+ * The caller must include these statements and every mutation in the same uninterruptible D1 batch.
  * Recovery winning first, a foreign Turn, or a repeated call aborts that entire batch; a successful
  * commit leaves the owner's durable evidence used to recover a reply lost after mutation.
  */
@@ -105,14 +106,20 @@ export const prepareHostedMutationCommit = ({
     userId: string;
     /** One Worker-owned decision instant, in UTC epoch milliseconds. */
     current: number;
-  }>): D1PreparedStatement =>
+  }>): ReadonlyArray<D1PreparedStatement> => [
+  preparePredicateAssertion({
+    db,
+    scope: "hosted_mutation",
+    predicate: {
+      sql: "SELECT 1 FROM hosted_turns WHERE id=? AND user_id=? AND status='pending'",
+      params: [turnId, userId],
+    },
+  }),
   db
-    .prepare(`INSERT INTO hosted_mutation_commits
-              (turn_id, tool_call_id, user_id, committed_at_ms, valid)
-              VALUES (?, ?, ?, ?, CASE WHEN EXISTS (
-                SELECT 1 FROM hosted_turns WHERE id = ? AND user_id = ? AND status = 'pending'
-              ) THEN 1 ELSE 0 END)`)
-    .bind(turnId, toolCallId, userId, current, turnId, userId);
+    .prepare(`INSERT INTO hosted_mutation_commits(turn_id,tool_call_id,user_id,committed_at_ms)
+    VALUES(?,?,?,?)`)
+    .bind(turnId, toolCallId, userId, current),
+];
 
 /**
  * Read the captured Consent basis only for the exact explicit User and still-Pending Turn.

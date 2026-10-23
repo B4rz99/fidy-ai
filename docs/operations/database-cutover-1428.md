@@ -4296,3 +4296,70 @@ INSERT INTO cutover_memories(rowid,id,user_id,text,created_at,updated_at) SELECT
 ```
 
 <!-- memory-clock-rollback-copy:end -->
+
+## Hosted atomic guard fields (#1478)
+
+Remove only hosted_agent_sessions.compacted_nonce and hosted_mutation_commits.valid. The first is
+an update-success token, not conversation identity; the second was always 1. Shared same-batch
+assertions now prove the Pending Turn and exact one-row compaction update before later effects.
+The terminal prefix deletion count is asserted in that batch too. Duplicate call keys and the
+same-User parent relationship remain enforced. A failed optional compaction save returns the
+unchanged continuity; a failed mutation fence aborts all canonical mutations.
+
+Stop writers and unfinished erasure. Export the original session nonce map as reviewed JSON
+objects with id, user_id, compacted_revision and compacted_nonce before conversion, retaining it
+with the rollback artifact until verified. Bind the observed session and commit counts to the
+forward guard. Create scratch tables from the final baseline, run guard/copy/swap and affected
+object recreation in one native batch with deferred foreign keys. Check foreign_key_check.
+Do not rewrite existing archives: commit projections retain valid:1, and the session projection
+already omitted the execution nonce. Rollback uses the frozen definitions in
+agent/atomic-guards-cutover.test-fixture.json and the original nonce map bound to each inverse
+statement. If a new compaction revision has committed, stop rather than invent its old proof;
+rollback requires a reviewed reconciliation of that execution state. No token is fabricated.
+
+<!-- hosted-guard-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_guard_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM hosted_agent_sessions)=? AND (SELECT count(*) FROM hosted_mutation_commits)=? AND NOT EXISTS(SELECT 1 FROM hosted_mutation_commits m LEFT JOIN hosted_turns t ON t.id=m.turn_id AND t.user_id=m.user_id WHERE t.id IS NULL OR m.valid<>1) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- hosted-guard-guard:end -->
+
+<!-- hosted-guard-copy:start -->
+
+```sql
+INSERT INTO cutover_hosted_agent_sessions(rowid,id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status,compacted_text,compacted_through_sequence,compacted_revision,compacted_at_ms) SELECT rowid,id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status,compacted_text,compacted_through_sequence,compacted_revision,compacted_at_ms FROM hosted_agent_sessions;
+INSERT INTO cutover_hosted_mutation_commits(rowid,turn_id,tool_call_id,user_id,committed_at_ms) SELECT rowid,turn_id,tool_call_id,user_id,committed_at_ms FROM hosted_mutation_commits;
+```
+
+<!-- hosted-guard-copy:end -->
+
+<!-- hosted-guard-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_guard_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM hosted_agent_sessions s WHERE s.compacted_revision IS NOT NULL AND (SELECT count(*) FROM json_each(?) j WHERE json_extract(j.value,'$.id')=s.id AND json_extract(j.value,'$.user_id')=s.user_id AND json_extract(j.value,'$.compacted_revision')=s.compacted_revision AND json_extract(j.value,'$.compacted_nonce') IS NOT NULL)<>1) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- hosted-guard-rollback-guard:end -->
+
+<!-- hosted-guard-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_hosted_agent_sessions(rowid,id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status,compacted_text,compacted_through_sequence,compacted_revision,compacted_nonce,compacted_at_ms) SELECT s.rowid,s.id,s.user_id,s.consent_basis_json,s.started_at_ms,s.last_activity_at_ms,s.status,s.compacted_text,s.compacted_through_sequence,s.compacted_revision,(SELECT json_extract(j.value,'$.compacted_nonce') FROM json_each(?) j WHERE json_extract(j.value,'$.id')=s.id AND json_extract(j.value,'$.user_id')=s.user_id AND json_extract(j.value,'$.compacted_revision')=s.compacted_revision),s.compacted_at_ms FROM hosted_agent_sessions s;
+INSERT INTO cutover_hosted_mutation_commits(rowid,turn_id,tool_call_id,user_id,committed_at_ms,valid) SELECT rowid,turn_id,tool_call_id,user_id,committed_at_ms,1 FROM hosted_mutation_commits;
+```
+
+<!-- hosted-guard-rollback-copy:end -->
+
+The populated parent-table swap uses the same explicit whole-database foreign-key assertion and
+return to immediate checking documented for Consent history above. Run this final block in both
+forward and inverse batches; never clear deferred bookkeeping without checking the final graph.
+
+<!-- hosted-guard-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_guard_foreign_keys',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- hosted-guard-verify:end -->

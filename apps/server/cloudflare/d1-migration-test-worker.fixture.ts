@@ -111,8 +111,8 @@ const seedExistingTranscript = Effect.fn(function* (db: D1Database) {
       db
         .prepare(
           `INSERT INTO hosted_mutation_commits
-           (turn_id, tool_call_id, user_id, committed_at_ms, valid)
-           VALUES (?, 'legacy-call', ?, ?, 1)`
+           (turn_id, tool_call_id, user_id, committed_at_ms)
+           VALUES (?, 'legacy-call', ?, ?)`
         )
         .bind(legacyTurn, legacyUser, timestamp),
     ])

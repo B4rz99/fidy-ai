@@ -116,7 +116,7 @@ it("binds the prepared mutation commit to one pending User Turn and rolls back f
         Effect.tryPromise(() =>
           db.batch([
             db.prepare("INSERT INTO prepared_commit_probe (id) VALUES (?)").bind(marker),
-            prepareHostedMutationCommit({
+            ...prepareHostedMutationCommit({
               db,
               userId,
               turnId,

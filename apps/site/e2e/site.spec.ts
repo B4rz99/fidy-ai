@@ -338,3 +338,67 @@ test("keeps the browser canvas and chrome aligned with system and saved appearan
     darkCanvas
   );
 });
+
+const channelMobileWidth = 390;
+const channelDesktopWidth = 1440;
+const channelViewportWidths = [channelMobileWidth, channelDesktopWidth];
+const channelEntryStart = 0.1;
+const channelEntrySecond = 0.57;
+for (const width of channelViewportWidths) {
+  for (const javaScriptEnabled of [true, false]) {
+    test(`reveals channels only with scroll, without a final-state flash: ${width}px JS=${javaScriptEnabled}`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({
+        javaScriptEnabled,
+        viewport: { width, height: 900 },
+        reducedMotion: "no-preference",
+      });
+      const page = await context.newPage();
+      await page.goto("http://127.0.0.1:4322/");
+      const cards = page.locator(".channel-card");
+      await expect(cards.nth(0)).toHaveCSS("opacity", "1");
+      await expect(cards.nth(1)).toHaveCSS("opacity", "0");
+      await expect(cards.nth(2)).toHaveCSS("opacity", "0");
+      const scrollToProgress = async (progress: number): Promise<void> => {
+        await page.locator(".channel-story").evaluate((element, fraction) => {
+          const rect = element.getBoundingClientRect();
+          window.scrollTo({
+            top:
+              window.scrollY +
+              rect.top -
+              window.innerHeight +
+              Math.min(rect.height, window.innerHeight) * fraction,
+            behavior: "instant",
+          });
+        }, progress);
+      };
+      await scrollToProgress(channelEntryStart);
+      await expect(cards.nth(1)).toHaveCSS("opacity", "0");
+      await expect(cards.nth(2)).toHaveCSS("opacity", "0");
+      await scrollToProgress(channelEntrySecond);
+      await expect(cards.nth(1)).toHaveCSS("opacity", "1");
+      await expect(cards.nth(2)).toHaveCSS("opacity", "0");
+      await scrollToProgress(1);
+      await expect(cards.nth(2)).toHaveCSS("opacity", "1");
+      await scrollToProgress(channelEntryStart);
+      await expect(cards.nth(1)).toHaveCSS("opacity", "0");
+      await expect(cards.nth(2)).toHaveCSS("opacity", "0");
+      await page.reload();
+      await expect(cards.nth(1)).toHaveCSS("opacity", "0");
+      await expect(cards.nth(2)).toHaveCSS("opacity", "0");
+      await context.close();
+    });
+  }
+  test(`shows all channels immediately with reduced motion: ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    await Promise.all(
+      (await page.locator(".channel-card").all()).map(async (card) => {
+        await expect(card).toHaveCSS("opacity", "1");
+        await expect(card).toHaveCSS("animation-name", "none");
+      })
+    );
+  });
+}

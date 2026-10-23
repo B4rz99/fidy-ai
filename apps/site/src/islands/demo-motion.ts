@@ -4,8 +4,6 @@ const bubbleDuration = 280;
 const bubbleStagger = 550;
 const previewDuration = 300;
 const previewStagger = 60;
-const channelStagger = 250;
-const channelDuration = 600;
 const fillDuration = 500;
 const reducedDuration = 160;
 const visibilityThreshold = 0.35;
@@ -135,15 +133,3 @@ export const mountPreview = (node: HTMLDivElement): (() => void) => {
   if (art === null) return () => {};
   return mountDemonstration(art, () => playPreview(art));
 };
-
-export const mountChannels = (node: HTMLDivElement): (() => void) =>
-  mountDemonstration(node, () => {
-    node.querySelectorAll(".channel-card,.channel-connector").forEach((element, index) =>
-      enter({
-        element,
-        duration: channelDuration,
-        delay: index * channelStagger,
-        distance: "8px",
-      })
-    );
-  });

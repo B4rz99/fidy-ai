@@ -1,13 +1,14 @@
 import { cva } from "class-variance-authority";
 
 export const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-full border border-transparent bg-clip-padding text-sm font-semibold whitespace-nowrap transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring disabled:pointer-events-none disabled:border-border disabled:bg-muted disabled:text-muted-foreground aria-invalid:border-foreground aria-invalid:ring-3 aria-invalid:ring-ring [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-full border border-transparent bg-clip-padding text-sm font-semibold whitespace-nowrap transition-colors outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:border-disabled-border disabled:bg-disabled disabled:text-disabled-foreground aria-invalid:border-foreground aria-invalid:ring-3 aria-invalid:ring-ring [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary-hover",
+        default:
+          "border-primary-border bg-primary text-primary-foreground hover:border-primary-hover-border hover:bg-primary-hover active:border-primary-pressed-border active:bg-primary-pressed",
         outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
+          "border-control-border bg-transparent hover:bg-control-hover hover:text-foreground active:bg-control-pressed aria-expanded:bg-control-pressed aria-expanded:text-foreground",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         view: "hover:bg-muted aria-pressed:bg-secondary aria-pressed:text-secondary-foreground focus-visible:border-transparent focus-visible:bg-secondary focus-visible:ring-0 focus-visible:underline focus-visible:underline-offset-4",
@@ -25,7 +26,7 @@ export const buttonVariants = cva(
       focusAppearance: {
         ring: "",
         subtle:
-          "focus-visible:border-transparent focus-visible:ring-0 focus-visible:bg-muted focus-visible:underline focus-visible:underline-offset-4",
+          "focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-0 focus-visible:bg-muted focus-visible:underline focus-visible:underline-offset-4",
       },
       size: {
         label: "min-h-11 gap-2 px-0 py-2.5 [&_svg:not([class*='size-'])]:size-4",

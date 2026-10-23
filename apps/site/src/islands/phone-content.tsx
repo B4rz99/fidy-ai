@@ -11,6 +11,13 @@ export const PhoneContent = ({
     {" "}
     <div className="demo-shell">
       <div className="hero-stage">
+        <img
+          className="brand-companion"
+          src="/fidy-mascot.png"
+          alt="Tití cabeciblanco, compañero de Fidy"
+          width={1024}
+          height={1024}
+        />
         <div className="halo"></div>
         <span className="coin" aria-hidden="true">
           {"$"}

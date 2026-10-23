@@ -5,7 +5,7 @@
   "settings": {
     "shadcn": {
       "ui": "@/ui/components",
-      "note": "See DESIGN.md and /ui-reference.html. Reuse shared components and named variants; views own layout and behavior."
+      "note": "See DESIGN.md, design/tokens.css and /ui-reference.html. Use semantic theme utilities and shared component variants; never hard-code the brand palette or override control states."
     }
   },
   "overrides": [
@@ -24,6 +24,11 @@
           {
             "allow": ["layout"],
             "contracts": [
+              {
+                "pattern": "^Alert$",
+                "allow": ["layout", "spacing"],
+                "message": "Use the semantic Alert variant for paired foreground and subtle background tokens. See DESIGN.md and design/tokens.css."
+              },
               {
                 "pattern": "^(Button|Input|Badge|DropdownMenuTrigger|Calendar|TableRow)$",
                 "allow": ["layout"],

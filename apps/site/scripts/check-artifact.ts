@@ -8,6 +8,7 @@ const publicFiles = new Set([
   "sitemap-index.xml",
   "sitemap-0.xml",
   "fidy-logo.png",
+  "fidy-mascot.png",
   "deployment-metadata.json",
 ]);
 const pages =

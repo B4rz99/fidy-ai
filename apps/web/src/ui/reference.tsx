@@ -63,10 +63,10 @@ const ReferenceHeader = ({
 const palette = [
   { name: "Acción principal", fill: "bg-primary", ink: "text-primary-foreground" },
   { name: "Superficie cálida", fill: "bg-secondary", ink: "text-secondary-foreground" },
-  { name: "Guardado", fill: "bg-success", ink: "text-on-pastel" },
-  { name: "Atención", fill: "bg-warning", ink: "text-on-pastel" },
-  { name: "Error", fill: "bg-destructive", ink: "text-destructive-foreground" },
-  { name: "Información", fill: "bg-information", ink: "text-on-pastel" },
+  { name: "Guardado", fill: "bg-success-subtle", ink: "text-success-foreground" },
+  { name: "Atención", fill: "bg-warning-subtle", ink: "text-warning-foreground" },
+  { name: "Error", fill: "bg-error-subtle", ink: "text-error-foreground" },
+  { name: "Información", fill: "bg-info-subtle", ink: "text-info-foreground" },
   { name: "Por revisar", fill: "bg-pending", ink: "text-on-pastel" },
 ];
 const PaletteReference = (): JSX.Element => (

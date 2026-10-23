@@ -35,8 +35,8 @@ const reminderPersistence = (
       .prepare(`
   SELECT s.*,
     (SELECT count(*) FROM insight_events WHERE user_id=s.user_id) AS events,
-    (SELECT count(*) FROM insight_reports WHERE kind='proactivity-delivery' AND reminder_grant_id IS NOT NULL AND user_id=s.user_id) AS reports,
-    (SELECT count(*) FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=s.user_id) AS outbox,
+    (SELECT count(*) FROM insight_events WHERE kind='manual-entry-reminder' AND reminder_grant_id IS NOT NULL AND user_id=s.user_id) AS reports,
+    (SELECT count(*) FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=s.user_id) AS outbox,
     (SELECT count(*) FROM (SELECT rowid,kind,user_id,schedule_id,version AS schedule_version,scheduled_at,outcome FROM schedule_history WHERE record_type='execution') WHERE kind='reminder' AND user_id=s.user_id) AS executions,
     (SELECT count(*) FROM (SELECT rowid,kind,user_id,schedule_id,version,snapshot_json FROM schedule_history WHERE record_type='revision') WHERE kind='reminder' AND user_id=s.user_id) AS revisions,
     (SELECT standing_json FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=s.user_id) AS standing_json
@@ -151,7 +151,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
     (SELECT count(*) FROM schedules WHERE kind='reminder' AND user_id=u.id) AS schedules,
     (SELECT count(*) FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=u.id) AS governors,
     (SELECT count(*) FROM insight_events WHERE user_id=u.id) AS events,
-    (SELECT count(*) FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=u.id) AS outbox
+    (SELECT count(*) FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=u.id) AS outbox
     FROM users u WHERE id=?`)
               .bind(input.userId)
               .first()
@@ -258,7 +258,7 @@ it("rolls back reminder occurrence, outbox and execution advancement together wh
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER reject_proactivity_outbox BEFORE INSERT ON insight_reports WHEN NEW.dispatch_state IS NOT NULL BEGIN SELECT RAISE(ABORT,'test_outbox_refusal'); END"
+            "CREATE TRIGGER reject_proactivity_outbox BEFORE INSERT ON proactive_messages WHEN NEW.dispatch_state IS NOT NULL BEGIN SELECT RAISE(ABORT,'test_outbox_refusal'); END"
           )
           .run()
       );
@@ -281,7 +281,7 @@ it("rolls back reminder occurrence, outbox and execution advancement together wh
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS count FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=?"
+              "SELECT count(*) AS count FROM (SELECT rowid,user_id,kind,id AS delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM proactive_messages WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=?"
             )
             .bind(input.userId)
             .first()

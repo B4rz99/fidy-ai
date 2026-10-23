@@ -116,7 +116,7 @@ const reportStatements = (
   const event = occurrenceGuard({
     ...scope,
     statement: {
-      sql: `INSERT INTO insight_events (id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) SELECT ?,?,'weekly-summary',?,?,?,?,?,?,? WHERE 1 = 1`,
+      sql: `INSERT INTO insight_events (id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json) SELECT ?,?,'weekly-summary',?,?,?,?,?,?,? WHERE 1 = 1`,
       params: [
         candidate.id,
         snapshot.userId,
@@ -125,7 +125,7 @@ const reportStatements = (
         snapshot.serviceMarket,
         snapshot.locale,
         snapshot.timeZone,
-        DateTime.formatIso(scheduledAt),
+        scheduledAt.epochMilliseconds,
         candidate.groupsJson,
       ],
     },
@@ -133,7 +133,23 @@ const reportStatements = (
   const assertion = prepareChangedRowAssertion({ db, scope: "weekly_schedule" });
   const report = db
     .prepare(
-      `INSERT INTO insight_reports (kind,user_id,delivery_id,consent_grant_id,payload_json,presentation_json,scheduled_at_ms,expires_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('weekly-summary',?,?,?,?,?,?,? ,'ready',?,0,0)`
+      `INSERT INTO proactive_messages (kind,user_id,id,role,report_event_id,consent_grant_id,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('weekly-summary',?,?,'weekly-summary',?,?,?,?,?,? ,'ready',?,0,0)`
+    )
+    .bind(
+      snapshot.userId,
+      candidate.id,
+      candidate.id,
+      snapshot.consentGrantId,
+      scheduledAt.epochMilliseconds,
+      expiresAt.epochMilliseconds,
+      snapshot.timeZone,
+      now.epochMilliseconds,
+      now.epochMilliseconds
+    );
+
+  const content = db
+    .prepare(
+      "INSERT INTO insight_reports(user_id,insight_event_id,kind,consent_grant_id,payload_json,presentation_json,content_expires_at_ms) VALUES(?,?,'weekly-summary',?,?,?,?)"
     )
     .bind(
       snapshot.userId,
@@ -141,12 +157,14 @@ const reportStatements = (
       snapshot.consentGrantId,
       candidate.payloadJson,
       candidate.presentationJson,
-      scheduledAt.epochMilliseconds,
-      expiresAt.epochMilliseconds,
-      now.epochMilliseconds
+      expiresAt.epochMilliseconds
     );
-
-  return [event, assertion, report];
+  const association = db
+    .prepare(
+      "UPDATE insight_events SET message_kind='weekly-summary',message_id=? WHERE user_id=? AND id=? AND message_id IS NULL"
+    )
+    .bind(candidate.id, snapshot.userId, candidate.id);
+  return [event, assertion, content, report, association];
 };
 const commit = (
   db: D1Database,
@@ -228,7 +246,7 @@ export const materialize = (
 export const weeklyReportDeliveryQuery = (
   input: Readonly<{ userId: UserId; insightEventId: InsightEventId }>
 ): OwnedStatement => ({
-  sql: `SELECT 1 FROM insight_reports AS r JOIN insight_events AS e ON e.id=r.delivery_id AND e.user_id=r.user_id JOIN schedules AS s ON s.kind='weekly' AND s.id=e.schedule_id AND s.user_id=e.user_id WHERE r.kind='weekly-summary' AND r.user_id=? AND r.delivery_id=? AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS g WHERE g.user_id=s.user_id AND (g.paused_at_ms IS NOT NULL OR (g.question_needed=1 AND g.question_delivered=0)))`,
+  sql: `SELECT 1 FROM proactive_messages AS r JOIN insight_events AS e ON e.id=r.id AND e.user_id=r.user_id JOIN schedules AS s ON s.kind='weekly' AND s.id=e.schedule_id AND s.user_id=e.user_id WHERE r.kind='weekly-summary' AND r.user_id=? AND r.id=? AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS g WHERE g.user_id=s.user_id AND (g.paused_at_ms IS NOT NULL OR (g.question_needed=1 AND g.question_delivered=0)))`,
   params: [input.userId, input.insightEventId],
 });
 
@@ -249,7 +267,7 @@ const readReport = (
 ): Effect.Effect<Option.Option<WeeklySummaryReport>, InsightUnavailable> =>
   Effect.gen(function* () {
     const statement: OwnedStatement = {
-      sql: "SELECT delivery_id AS insight_event_id,consent_grant_id,payload_json,presentation_json,expires_at_ms FROM insight_reports WHERE kind='weekly-summary' AND user_id=? AND delivery_id=?",
+      sql: "SELECT insight_event_id,consent_grant_id,payload_json,presentation_json,content_expires_at_ms AS expires_at_ms FROM insight_reports WHERE kind='weekly-summary' AND user_id=? AND insight_event_id=?",
       params: [input.userId, input.id],
     };
     const raw = yield* Effect.tryPromise(() =>

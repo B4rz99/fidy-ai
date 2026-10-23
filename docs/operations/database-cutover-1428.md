@@ -3880,3 +3880,142 @@ SELECT rowid,user_id,id,currency,counterparty_key,series_json,evidence_json,refe
 ```
 
 <!-- recurring-instant-rollback-copy:end -->
+
+## Insights content and message ownership (#1472)
+
+Use a single synchronized code/schema cutover under the admission fence described above. Stop
+all writers first. Install the five current owner definitions under `cutover_` names, rewriting
+only their mutual foreign-key targets to the scratch names. Execute preflight, copies, removal
+of affected views/triggers/indexes, table swap and reinstatement of current objects in **one D1
+batch**, with `PRAGMA defer_foreign_keys=ON` as its first statement. Existing Transcript and
+WhatsApp tables remain in place; their incoming Event references validate at commit. Never
+turn foreign keys off. A failure, including after the swap, must roll back the whole batch.
+
+Capture source counts immediately before the fence; bind Event count and old report-envelope
+count to the guard below. Before the batch, decode every retained weekly payload/presentation
+and recurring report with the existing Core codecs, rejecting excess properties and malformed
+Money/context/day windows. Pin each checked original JSON and its rowid in a same-batch SQL
+assertion before copying; the native SQL guard additionally verifies the independent original
+header/day/clock projections. Do not repair a mismatch from another copy. Block affected
+retained archives or active erasure work; unrelated logical archive addresses stay untouched.
+The saved preceding definitions are in `insights/content-cutover.test-fixture.json`.
+
+The digest-only `original_delivery_expires_at_ms` preserves the historical public report expiry
+when a financial report has no message. Weekly `content_expires_at_ms` remains independent of
+message dispatch lifetime. Content-only history creates no fake message. Reminder grant and
+its evidence deadline move to the original Event. Provider claims and unresolved sends stay in
+WhatsApp storage. Offer IDs on messages are frozen evidence: consent offers may expire and be
+removed while that evidence remains, so this binding deliberately has no destructive live-offer
+foreign key. Current owner operations still validate the live offer before preparing delivery.
+
+Logical erasure purposes retain their original addresses, with `insight_reports` now financial
+content and `proactive_messages` its separate message purpose. Conversion blocks their affected
+old archives rather than silently changing archive restoration semantics. Original receipts,
+User identity, exact milliseconds and Money JSON strings must survive both directions.
+
+<!-- insight-content-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'insight_content_cutover',CASE WHEN
+ (SELECT count(*) FROM insight_events)=? AND (SELECT count(*) FROM insight_reports)=? AND
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND
+ NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN ('insight_events','insight_delivery_attempts','insight_reports','proactive_messages','proactivity_offer_requests','weekly_question_intents','proactivity_message_events','reminder_delivery_receipts')) AND
+ NOT EXISTS(SELECT 1 FROM insight_events WHERE
+  strftime('%Y-%m-%dT%H:%M:%fZ',scheduled_at) IS NOT scheduled_at OR
+  (delivery_sent_at IS NOT NULL AND strftime('%Y-%m-%dT%H:%M:%fZ',delivery_sent_at) IS NOT delivery_sent_at)) AND
+ NOT EXISTS(SELECT 1 FROM insight_reports r LEFT JOIN insight_events e ON e.user_id=r.user_id AND e.id=r.delivery_id WHERE
+  (r.kind='weekly-summary' AND (e.kind IS NOT 'weekly-summary' OR r.scheduled_at_ms IS NOT CAST(round(unixepoch(e.scheduled_at,'subsec')*1000) AS INTEGER))) OR
+  (r.reminder_grant_id IS NOT NULL AND (e.kind IS NOT 'manual-entry-reminder' OR
+   (r.scheduled_at_ms IS NOT NULL AND (r.consent_grant_id IS NOT r.reminder_grant_id OR r.expires_at_ms IS NOT r.reminder_expires_at_ms)))) OR
+  (r.report_json IS NOT NULL AND (e.kind IS NOT 'new-recurring-series' OR
+   json_extract(r.report_json,'$.insightEventId') IS NOT e.id OR
+   json_extract(r.report_json,'$.serviceMarket') IS NOT e.service_market OR
+   json_extract(r.report_json,'$.locale') IS NOT e.locale OR
+   json_extract(r.report_json,'$.scheduledAt') IS NOT e.scheduled_at OR
+   r.instruction_id IS NOT e.schedule_id OR r.instruction_version IS NOT e.schedule_version OR
+   json_extract(r.report_json,'$.payload.confirmationDay.timeZone') IS NOT e.time_zone OR
+   json_extract(r.report_json,'$.payload.confirmationDay.localDate') IS NOT r.local_date OR
+   CAST(round(unixepoch(json_extract(r.report_json,'$.payload.confirmationDay.from'),'subsec')*1000) AS INTEGER) IS NOT r.day_from_ms OR
+   CAST(round(unixepoch(json_extract(r.report_json,'$.payload.confirmationDay.toExclusive'),'subsec')*1000) AS INTEGER) IS NOT r.day_to_ms OR
+   strftime('%Y-%m-%dT%H:%M:%fZ',json_extract(r.report_json,'$.expiresAt')) IS NOT json_extract(r.report_json,'$.expiresAt') OR
+   (r.scheduled_at_ms IS NOT NULL AND (r.consent_grant_id IS NOT r.grant_id OR r.scheduled_at_ms IS NOT CAST(round(unixepoch(e.scheduled_at,'subsec')*1000) AS INTEGER) OR r.expires_at_ms IS NOT CAST(round(unixepoch(json_extract(r.report_json,'$.expiresAt'),'subsec')*1000) AS INTEGER))) OR
+   EXISTS(SELECT 1 FROM json_each(r.report_json) WHERE key NOT IN ('insightEventId','serviceMarket','locale','scheduledAt','expiresAt','payload')))))
+ THEN 1 ELSE 0 END;
+```
+
+<!-- insight-content-guard:end -->
+
+<!-- insight-content-json-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'insight_content_json',CASE WHEN EXISTS(SELECT 1 FROM insight_reports
+ WHERE rowid=? AND payload_json IS ? AND presentation_json IS ? AND report_json IS ?)
+ THEN 1 ELSE 0 END
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- insight-content-json-guard:end -->
+
+<!-- insight-content-copy:start -->
+
+```sql
+INSERT INTO cutover_insight_events(rowid,id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json,lifecycle_state,delivery_receipt_id,delivery_sent_at_ms,delivery_channel,delivery_provider,delivery_provider_message_id,budget_delivery_group_id,budget_threshold,budget_crossing_json,transcript_id,transcript_kind,weekly_governor_counted,reminder_grant_id,reminder_evidence_expires_at_ms) SELECT e.rowid,e.id,e.user_id,e.kind,e.schedule_id,e.schedule_version,e.service_market,e.locale,e.time_zone,CAST(round(unixepoch(e.scheduled_at,'subsec')*1000) AS INTEGER),e.money_groups_json,e.lifecycle_state,e.delivery_receipt_id,CAST(round(unixepoch(e.delivery_sent_at,'subsec')*1000) AS INTEGER),e.delivery_channel,e.delivery_provider,e.delivery_provider_message_id,e.budget_delivery_group_id,e.budget_threshold,e.budget_crossing_json,e.transcript_id,e.transcript_kind,e.weekly_governor_counted,r.reminder_grant_id,r.reminder_expires_at_ms FROM insight_events e LEFT JOIN insight_reports r ON r.kind='proactivity-delivery' AND r.user_id=e.user_id AND r.delivery_id=e.id;
+
+INSERT INTO cutover_insight_reports(rowid,user_id,insight_event_id,kind,consent_grant_id,payload_json,presentation_json,content_expires_at_ms,local_date,day_from_ms,day_to_ms,original_delivery_expires_at_ms) SELECT rowid,user_id,delivery_id,CASE kind WHEN 'weekly-summary' THEN 'weekly-summary' ELSE 'recurring-digest' END,CASE kind WHEN 'weekly-summary' THEN consent_grant_id ELSE grant_id END,CASE kind WHEN 'weekly-summary' THEN payload_json ELSE json_extract(report_json,'$.payload') END,presentation_json,CASE WHEN kind='weekly-summary' THEN expires_at_ms END,local_date,day_from_ms,day_to_ms,CASE WHEN report_json IS NOT NULL THEN CAST(round(unixepoch(json_extract(report_json,'$.expiresAt'),'subsec')*1000) AS INTEGER) END FROM insight_reports WHERE kind='weekly-summary' OR report_json IS NOT NULL;
+
+INSERT INTO cutover_proactive_messages(rowid,kind,id,user_id,role,report_event_id,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts,reminder_governor_counted) SELECT r.rowid,r.kind,r.delivery_id,r.user_id,CASE r.kind WHEN 'weekly-summary' THEN 'weekly-summary' ELSE r.role END,CASE WHEN r.kind='weekly-summary' OR r.report_json IS NOT NULL THEN r.delivery_id END,r.consent_grant_id,r.offer_id,r.text,r.scheduled_at_ms,r.expires_at_ms,CASE r.kind WHEN 'weekly-summary' THEN e.time_zone ELSE r.time_zone END,CASE r.kind WHEN 'weekly-summary' THEN r.dispatch_created_at_ms ELSE r.created_at_ms END,r.dispatch_state,r.dispatch_created_at_ms,r.dispatch_last_attempt_at_ms,r.dispatch_restart_attempts,r.reminder_governor_counted FROM insight_reports r LEFT JOIN insight_events e ON e.user_id=r.user_id AND e.id=r.delivery_id WHERE (r.kind='weekly-summary' AND r.dispatch_state IS NOT NULL) OR (r.kind='proactivity-delivery' AND r.scheduled_at_ms IS NOT NULL);
+
+INSERT INTO cutover_insight_offer_requests(rowid,id,user_id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms,materialized_at_ms,offer_message_id,current_recurring_opportunity) SELECT rowid,delivery_id,user_id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms,materialized_at_ms,offer_delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request';
+
+INSERT INTO cutover_weekly_question_requests(rowid,id,user_id,origin,request_message_id,rejection_offer_id,created_at_ms,state,last_attempt_at_ms,restart_attempts) SELECT rowid,delivery_id,user_id,origin,request_message_id,rejection_offer_id,created_at_ms,dispatch_state,dispatch_last_attempt_at_ms,dispatch_restart_attempts FROM insight_reports WHERE kind='weekly-question';
+
+UPDATE cutover_insight_events AS e SET message_kind='proactivity-delivery',message_id=(SELECT old.report_delivery_id FROM insight_events old WHERE old.user_id=e.user_id AND old.id=e.id) WHERE EXISTS(SELECT 1 FROM insight_events old WHERE old.user_id=e.user_id AND old.id=e.id AND old.report_delivery_id IS NOT NULL);
+
+UPDATE cutover_insight_events AS e SET message_kind='weekly-summary',message_id=e.id WHERE e.kind='weekly-summary' AND EXISTS(SELECT 1 FROM cutover_proactive_messages m WHERE m.kind='weekly-summary' AND m.user_id=e.user_id AND m.id=e.id);
+```
+
+<!-- insight-content-copy:end -->
+
+Rollback installs the saved two preceding owner definitions as scratch tables, with their mutual
+references rewritten, then executes the guard and reconstruction below before the inverse swap.
+It refuses new report/message aliases that the former one-envelope model cannot represent.
+Messages still using original identities and content-only history round-trip without fabricated
+work. The same admission fence, codec pinning, archive check and atomic-batch rules apply.
+
+<!-- insight-content-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'insight_content_rollback',CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND
+ NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN ('insight_events','insight_delivery_attempts','insight_reports','proactive_messages','proactivity_offer_requests','weekly_question_intents','proactivity_message_events','reminder_delivery_receipts')) AND
+ NOT EXISTS(SELECT 1 FROM proactive_messages WHERE report_event_id IS NOT NULL AND report_event_id<>id) AND
+ NOT EXISTS(SELECT 1 FROM proactive_messages m JOIN insight_reports r ON r.user_id=m.user_id AND r.insight_event_id=m.report_event_id WHERE m.consent_grant_id<>r.consent_grant_id OR (r.kind='recurring-digest' AND m.expires_at_ms<>r.original_delivery_expires_at_ms) OR (r.kind='weekly-summary' AND (m.expires_at_ms<>r.content_expires_at_ms OR m.dispatch_state IS NULL))) AND
+ NOT EXISTS(SELECT 1 FROM insight_events e JOIN proactive_messages m ON m.user_id=e.user_id AND m.kind=e.message_kind AND m.id=e.message_id WHERE e.kind='weekly-summary' AND (m.kind<>'weekly-summary' OR m.id<>e.id)) AND
+ NOT EXISTS(SELECT 1 FROM insight_events WHERE message_kind='proactivity-delivery' AND kind='weekly-summary')
+ THEN 1 ELSE 0 END;
+```
+
+<!-- insight-content-rollback-guard:end -->
+
+<!-- insight-content-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_insight_events(rowid,id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json,lifecycle_state,delivery_receipt_id,delivery_sent_at,delivery_channel,delivery_provider,delivery_provider_message_id,budget_delivery_group_id,budget_threshold,budget_crossing_json,transcript_id,transcript_kind,weekly_governor_counted) SELECT e.rowid,e.id,e.user_id,e.kind,e.schedule_id,e.schedule_version,e.service_market,e.locale,e.time_zone,strftime('%Y-%m-%dT%H:%M:%fZ',e.scheduled_at_ms/1000.0,'unixepoch'),e.money_groups_json,e.lifecycle_state,e.delivery_receipt_id,strftime('%Y-%m-%dT%H:%M:%fZ',e.delivery_sent_at_ms/1000.0,'unixepoch'),e.delivery_channel,e.delivery_provider,e.delivery_provider_message_id,e.budget_delivery_group_id,e.budget_threshold,e.budget_crossing_json,e.transcript_id,e.transcript_kind,e.weekly_governor_counted FROM insight_events e;
+
+INSERT INTO cutover_insight_reports(kind,user_id,delivery_id,role,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,payload_json,presentation_json,reminder_grant_id,reminder_expires_at_ms,instruction_id,instruction_version,grant_id,local_date,day_from_ms,day_to_ms,report_json,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts,reminder_governor_counted) SELECT CASE r.kind WHEN 'weekly-summary' THEN 'weekly-summary' ELSE 'proactivity-delivery' END,r.user_id,r.insight_event_id,CASE WHEN r.kind='recurring-digest' THEN m.role END,CASE WHEN r.kind='weekly-summary' THEN r.consent_grant_id ELSE m.consent_grant_id END,m.offer_id,m.text,CASE WHEN r.kind='weekly-summary' THEN e.scheduled_at_ms ELSE m.scheduled_at_ms END,CASE WHEN r.kind='weekly-summary' THEN r.content_expires_at_ms ELSE m.expires_at_ms END,CASE WHEN r.kind='recurring-digest' THEN m.time_zone END,CASE WHEN r.kind='recurring-digest' THEN m.created_at_ms END,CASE WHEN r.kind='weekly-summary' THEN r.payload_json END,r.presentation_json,NULL,NULL,CASE WHEN r.kind='recurring-digest' THEN e.schedule_id END,CASE WHEN r.kind='recurring-digest' THEN e.schedule_version END,CASE WHEN r.kind='recurring-digest' THEN r.consent_grant_id END,r.local_date,r.day_from_ms,r.day_to_ms,CASE WHEN r.kind='recurring-digest' THEN json_object('insightEventId',r.insight_event_id,'serviceMarket',e.service_market,'locale',e.locale,'scheduledAt',strftime('%Y-%m-%dT%H:%M:%fZ',e.scheduled_at_ms/1000.0,'unixepoch'),'expiresAt',strftime('%Y-%m-%dT%H:%M:%fZ',r.original_delivery_expires_at_ms/1000.0,'unixepoch'),'payload',json(r.payload_json)) END,m.dispatch_state,m.dispatch_created_at_ms,m.dispatch_last_attempt_at_ms,m.dispatch_restart_attempts,m.reminder_governor_counted FROM insight_reports r JOIN insight_events e ON e.user_id=r.user_id AND e.id=r.insight_event_id LEFT JOIN proactive_messages m ON m.user_id=r.user_id AND m.report_event_id=r.insight_event_id;
+
+INSERT INTO cutover_insight_reports(kind,user_id,delivery_id,role,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,reminder_grant_id,reminder_expires_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts,reminder_governor_counted) SELECT m.kind,m.user_id,m.id,m.role,m.consent_grant_id,m.offer_id,m.text,m.scheduled_at_ms,m.expires_at_ms,m.time_zone,m.created_at_ms,e.reminder_grant_id,e.reminder_evidence_expires_at_ms,m.dispatch_state,m.dispatch_created_at_ms,m.dispatch_last_attempt_at_ms,m.dispatch_restart_attempts,m.reminder_governor_counted FROM proactive_messages m LEFT JOIN insight_events e ON e.user_id=m.user_id AND e.id=m.id AND e.kind='manual-entry-reminder' WHERE m.report_event_id IS NULL;
+
+INSERT INTO cutover_insight_reports(kind,user_id,delivery_id,reminder_grant_id,reminder_expires_at_ms) SELECT 'proactivity-delivery',e.user_id,e.id,e.reminder_grant_id,e.reminder_evidence_expires_at_ms FROM insight_events e WHERE e.reminder_grant_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM proactive_messages m WHERE m.kind='proactivity-delivery' AND m.user_id=e.user_id AND m.id=e.id);
+
+INSERT INTO cutover_insight_reports(kind,user_id,delivery_id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms,materialized_at_ms,offer_delivery_id,current_recurring_opportunity) SELECT 'offer-request',user_id,id,request_kind,request_message_id,created_at_ms,last_evaluated_at_ms,materialized_at_ms,offer_message_id,current_recurring_opportunity FROM insight_offer_requests;
+
+INSERT INTO cutover_insight_reports(kind,user_id,delivery_id,origin,request_message_id,rejection_offer_id,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) SELECT 'weekly-question',user_id,id,origin,request_message_id,rejection_offer_id,created_at_ms,state,created_at_ms,last_attempt_at_ms,restart_attempts FROM weekly_question_requests;
+
+UPDATE cutover_insight_events AS e SET report_delivery_id=(SELECT message_id FROM insight_events old WHERE old.user_id=e.user_id AND old.id=e.id AND old.message_kind='proactivity-delivery') WHERE EXISTS(SELECT 1 FROM insight_events old WHERE old.user_id=e.user_id AND old.id=e.id AND old.message_kind='proactivity-delivery');
+```
+
+<!-- insight-content-rollback-copy:end -->

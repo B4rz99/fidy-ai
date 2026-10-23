@@ -106,8 +106,8 @@ const seed = (
         yield* io(() =>
           db.batch([
             db
-              .prepare(`${cte}INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json)
-        SELECT ?||i,?,'weekly-summary',?,1,'CO','es-CO','UTC',cast(i AS text),'[]' FROM n`)
+              .prepare(`${cte}INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json)
+        SELECT ?||i,?,'weekly-summary',?,1,'CO','es-CO','UTC',i,'[]' FROM n`)
               .bind(input.count, input.prefix, owner, input.prefix),
             db
               .prepare(

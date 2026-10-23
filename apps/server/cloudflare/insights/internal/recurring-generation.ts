@@ -11,8 +11,9 @@ import {
   type RecurringDigestAdvanceResult as AdvanceResult,
   InsightUnavailable,
 } from "../contract";
-import { ReportJson, type Scope, Stage, type StageView, maximumItems } from "./recurring-models";
+import { type Scope, Stage, type StageView, maximumItems } from "./recurring-models";
 import { consumeEarlierDays, stageSource } from "./recurring-source";
+import { decodeRecurringReport, recurringReportQuery } from "./recurring-report";
 import { materializeDay } from "./recurring-materialization";
 
 const noteIdleSource = (
@@ -127,14 +128,9 @@ export const findReport = (
         ...input,
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
-        statement: {
-          sql: "SELECT report_json FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL AND user_id=? AND delivery_id=?",
-          params: [input.userId, input.id],
-        },
+        statement: recurringReportQuery(input),
       }).first()
     );
     if (raw === null) return Option.none();
-    const row = yield* Schema.decodeUnknownEffect(Schema.Struct({ report_json: ReportJson }))(raw);
-    if (row.report_json.insightEventId !== input.id) return yield* new InsightUnavailable();
-    return Option.some(row.report_json);
+    return Option.some(yield* decodeRecurringReport(raw));
   }).pipe(Effect.mapError(() => new InsightUnavailable()));

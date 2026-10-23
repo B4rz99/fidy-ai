@@ -43,13 +43,35 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
   {
     id: "insight_reports",
     table: "insight_reports",
+    predicate: "1=1",
+    readPredicate: "1=1",
+    source: "insight_reports",
+    fields: [
+      "user_id",
+      "insight_event_id",
+      "kind",
+      "consent_grant_id",
+      "payload_json",
+      "presentation_json",
+      "content_expires_at_ms",
+      "local_date",
+      "day_from_ms",
+      "day_to_ms",
+      "original_delivery_expires_at_ms",
+    ],
+    dependencies: ["proactive_messages"],
+  },
+  {
+    id: "proactive_messages",
+    table: "proactive_messages",
     predicate: "r.kind IN ('weekly-summary','proactivity-delivery')",
     readPredicate: "r.kind IN ('weekly-summary','proactivity-delivery')",
-    source: "insight_reports",
+    source: "proactive_messages",
     fields: [
       "kind",
       "user_id",
-      "delivery_id",
+      "id",
+      "report_event_id",
       "role",
       "consent_grant_id",
       "offer_id",
@@ -58,23 +80,16 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
       "expires_at_ms",
       "time_zone",
       "created_at_ms",
-      "payload_json",
-      "presentation_json",
-      "reminder_grant_id",
-      "reminder_expires_at_ms",
-      "instruction_id",
-      "instruction_version",
-      "grant_id",
-      "local_date",
-      "day_from_ms",
-      "day_to_ms",
-      "report_json",
       "dispatch_state",
       "dispatch_created_at_ms",
       "dispatch_last_attempt_at_ms",
       "dispatch_restart_attempts",
     ],
-    dependencies: ["proactivity_message_events", "reminder_delivery_receipts"],
+    dependencies: [
+      "proactivity_message_events",
+      "reminder_delivery_receipts",
+      "proactivity_offer_requests",
+    ],
   },
   {
     id: "insight_events",
@@ -91,8 +106,10 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
       "service_market",
       "locale",
       "time_zone",
-      "scheduled_at",
+      "scheduled_at_ms",
       "money_groups_json",
+      "reminder_grant_id",
+      "reminder_evidence_expires_at_ms",
       "lifecycle_state",
     ],
     dependencies: [
@@ -108,11 +125,11 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
   },
   {
     id: "proactivity_offer_requests",
-    table: "insight_reports",
-    predicate: "r.kind='offer-request'",
+    table: "insight_offer_requests",
+    predicate: "1=1",
     readPredicate: "1=1",
     source:
-      "(SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request')",
+      "(SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests)",
     fields: [
       "id",
       "user_id",
@@ -163,11 +180,11 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
   },
   {
     id: "reminder_delivery_receipts",
-    table: "insight_reports",
+    table: "proactive_messages",
     predicate: "r.reminder_governor_counted=1",
     readPredicate: "1=1",
     source:
-      "(SELECT rowid,'reminder' AS kind,user_id,NULL AS insight_event_id,delivery_id,delivery_id AS receipt_id FROM insight_reports WHERE kind='proactivity-delivery' AND reminder_governor_counted=1)",
+      "(SELECT rowid,'reminder' AS kind,user_id,NULL AS insight_event_id,id AS delivery_id,id AS receipt_id FROM proactive_messages WHERE kind='proactivity-delivery' AND reminder_governor_counted=1)",
     fields: ["user_id", "delivery_id"],
     clearFields: ["reminder_governor_counted"],
     dependencies: [],
@@ -223,11 +240,10 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
   },
   {
     id: "weekly_question_intents",
-    table: "insight_reports",
-    predicate: "r.kind='weekly-question'",
+    table: "weekly_question_requests",
+    predicate: "1=1",
     readPredicate: "1=1",
-    source:
-      "(SELECT rowid,delivery_id AS id,user_id,origin,request_message_id,rejection_offer_id,dispatch_state AS state,created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE kind='weekly-question')",
+    source: "weekly_question_requests",
     fields: [
       "id",
       "user_id",
@@ -306,7 +322,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"delivery_receipt_id\",'user_id',r.\"user_id\",'insight_event_id',r.\"id\",'sent_at',r.\"delivery_sent_at\",'channel',r.\"delivery_channel\",'provider',r.\"delivery_provider\",'provider_message_id',r.\"delivery_provider_message_id\") AS body FROM insight_events r WHERE r.delivery_receipt_id IS NOT NULL AND r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"delivery_receipt_id\",'user_id',r.\"user_id\",'insight_event_id',r.\"id\",'sent_at',r.\"delivery_sent_at_ms\",'channel',r.\"delivery_channel\",'provider',r.\"delivery_provider\",'provider_message_id',r.\"delivery_provider_message_id\") AS body FROM insight_events r WHERE r.delivery_receipt_id IS NOT NULL AND r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -319,7 +335,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE insight_events AS r SET delivery_receipt_id=NULL,delivery_sent_at=NULL,delivery_channel=NULL,delivery_provider=NULL,delivery_provider_message_id=NULL WHERE r.delivery_receipt_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE insight_events AS r SET delivery_receipt_id=NULL,delivery_sent_at_ms=NULL,delivery_channel=NULL,delivery_provider=NULL,delivery_provider_message_id=NULL WHERE r.delivery_receipt_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -331,20 +347,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'delivery_id',r.\"delivery_id\",'insight_event_id',r.\"insight_event_id\") AS body FROM (SELECT rowid,user_id AS user_id,report_delivery_id AS delivery_id,id AS insight_event_id FROM insight_events WHERE report_delivery_id IS NOT NULL) r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'message_kind',r.\"message_kind\",'delivery_id',r.\"delivery_id\",'insight_event_id',r.\"insight_event_id\") AS body FROM (SELECT rowid,user_id AS user_id,message_kind,message_id AS delivery_id,id AS insight_event_id FROM insight_events WHERE message_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id AS user_id,report_delivery_id AS delivery_id,id AS insight_event_id FROM insight_events WHERE report_delivery_id IS NOT NULL) r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id AS user_id,message_kind,message_id AS delivery_id,id AS insight_event_id FROM insight_events WHERE message_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM (SELECT rowid,user_id AS user_id,report_delivery_id AS delivery_id,id AS insight_event_id FROM insight_events WHERE report_delivery_id IS NOT NULL) r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,user_id AS user_id,message_kind,message_id AS delivery_id,id AS insight_event_id FROM insight_events WHERE message_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE insight_events AS r SET report_delivery_id=NULL WHERE r.user_id=? AND report_delivery_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE insight_events AS r SET message_kind=NULL,message_id=NULL WHERE r.user_id=? AND message_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -385,20 +401,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'request_id',r.\"request_id\") AS body FROM (SELECT rowid,user_id,id AS request_id FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE current_recurring_opportunity=1) r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'request_id',r.\"request_id\") AS body FROM (SELECT rowid,user_id,id AS request_id FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE current_recurring_opportunity=1) r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id,id AS request_id FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE current_recurring_opportunity=1) r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id,id AS request_id FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE current_recurring_opportunity=1) r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM (SELECT rowid,user_id,id AS request_id FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE current_recurring_opportunity=1) r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,user_id,id AS request_id FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE current_recurring_opportunity=1) r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE insight_reports AS r SET current_recurring_opportunity=NULL WHERE r.kind='offer-request' AND r.user_id=? AND r.current_recurring_opportunity=1 AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE insight_offer_requests AS r SET current_recurring_opportunity=NULL WHERE r.user_id=? AND r.current_recurring_opportunity=1 AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

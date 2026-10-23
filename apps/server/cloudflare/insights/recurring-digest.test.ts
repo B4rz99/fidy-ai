@@ -305,9 +305,7 @@ it("requires every source page, recovers after revision changes, and links the e
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare(
-              "SELECT count(*) AS total FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL"
-            )
+            .prepare("SELECT count(*) AS total FROM insight_reports WHERE kind='recurring-digest'")
             .first()
         )
       ).toEqual({ total: 0 });
@@ -332,7 +330,7 @@ it("requires every source page, recovers after revision changes, and links the e
         yield* Effect.tryPromise((): Promise<unknown> =>
           db
             .prepare(
-              "SELECT text FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND delivery_id=?"
+              "SELECT text FROM proactive_messages WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND id=?"
             )
             .bind(id)
             .first()
@@ -480,7 +478,7 @@ it("refuses a populated foreign report through an admitted hosted Turn without d
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS n FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL AND user_id=?"
+              "SELECT count(*) AS n FROM insight_reports WHERE kind='recurring-digest' AND user_id=?"
             )
             .bind(caller.userId)
             .first()
@@ -723,7 +721,7 @@ it("offers once on foreground discovery, replaces a definitively rejected disclo
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS total FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE kind='new-recurring-series'"
+              "SELECT count(*) AS total FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE kind='new-recurring-series'"
             )
             .first()
         )
@@ -773,7 +771,7 @@ it("offers once on foreground discovery, replaces a definitively rejected disclo
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS total FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE kind='new-recurring-series'"
+              "SELECT count(*) AS total FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE kind='new-recurring-series'"
             )
             .first()
         )
@@ -803,7 +801,7 @@ it("offers once on foreground discovery, replaces a definitively rejected disclo
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS total FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE kind='new-recurring-series'"
+              "SELECT count(*) AS total FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE kind='new-recurring-series'"
             )
             .first()
         )
@@ -859,9 +857,7 @@ it("preserves later same-date discoveries after backward travel in their distinc
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare(
-              "SELECT count(*) AS total FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL"
-            )
+            .prepare("SELECT count(*) AS total FROM insight_reports WHERE kind='recurring-digest'")
             .first()
         )
       ).toEqual({ total: 2 });
@@ -926,7 +922,7 @@ it("excludes earlier-day backlog and permanently suppressed confirmations while 
         yield* Effect.tryPromise(() =>
           suppressedDb
             .prepare(
-              "SELECT count(*) AS total FROM (SELECT rowid,delivery_id AS id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_delivery_id AS delivery_id,current_recurring_opportunity FROM insight_reports WHERE kind='offer-request') WHERE kind='new-recurring-series'"
+              "SELECT count(*) AS total FROM (SELECT rowid,id,user_id,request_kind AS kind,request_message_id,created_at_ms,materialized_at_ms,last_evaluated_at_ms,offer_message_id AS delivery_id,current_recurring_opportunity FROM insight_offer_requests) WHERE kind='new-recurring-series'"
             )
             .first()
         )
@@ -938,9 +934,7 @@ it("excludes earlier-day backlog and permanently suppressed confirmations while 
       expect(
         yield* Effect.tryPromise(() =>
           suppressedDb
-            .prepare(
-              "SELECT count(*) AS total FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL"
-            )
+            .prepare("SELECT count(*) AS total FROM insight_reports WHERE kind='recurring-digest'")
             .first()
         )
       ).toEqual({ total: 0 });
@@ -956,9 +950,7 @@ it("excludes earlier-day backlog and permanently suppressed confirmations while 
       expect(
         yield* Effect.tryPromise(() =>
           suppressedDb
-            .prepare(
-              "SELECT count(*) AS total FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL"
-            )
+            .prepare("SELECT count(*) AS total FROM insight_reports WHERE kind='recurring-digest'")
             .first()
         )
       ).toEqual({ total: 0 });
@@ -1052,9 +1044,7 @@ it("recovers recurring work independently through Maintenance, identity-only Que
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare(
-              "SELECT count(*) AS total FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL"
-            )
+            .prepare("SELECT count(*) AS total FROM insight_reports WHERE kind='recurring-digest'")
             .first()
         )
       ).toEqual({ total: 1 });

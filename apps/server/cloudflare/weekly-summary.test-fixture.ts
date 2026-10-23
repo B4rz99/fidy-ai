@@ -321,13 +321,13 @@ export const seedForeignProviderEvidence = (db: D1Database): Effect.Effect<void>
     yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "UPDATE insight_events SET delivery_receipt_id=?1,delivery_sent_at=?4,delivery_channel='whatsapp',delivery_provider='kapso',delivery_provider_message_id='wamid.proactive' WHERE user_id=?2 AND id=?3"
+          "UPDATE insight_events SET delivery_receipt_id=?1,delivery_sent_at_ms=?4,delivery_channel='whatsapp',delivery_provider='kapso',delivery_provider_message_id='wamid.proactive' WHERE user_id=?2 AND id=?3"
         )
         .bind(
           "30000000-0000-4000-8000-000000000002",
           weeklySummaryOtherUser,
           event.id,
-          DateTime.formatIso(weeklySummaryTestNow)
+          weeklySummaryTestNow.epochMilliseconds
         )
         .run()
     );

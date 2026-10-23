@@ -65,7 +65,7 @@ const prepareQuestionIntent = (
     subject: { _tag: "User", userId: input.userId },
     requirement: "active",
     statement: {
-      sql: `INSERT INTO insight_reports(kind,delivery_id,user_id,origin,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) SELECT 'weekly-question',g.question_event_id,g.user_id,'proactive',v.delivered_at_ms,'ready',v.delivered_at_ms,0,0 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS g JOIN (${input.proof.sql}) AS v ON v.user_id=g.user_id AND v.insight_event_id=g.question_event_id WHERE g.user_id=? AND g.question_needed=1 AND g.paused_at_ms IS NULL`,
+      sql: `INSERT INTO weekly_question_requests(id,user_id,origin,created_at_ms,state,last_attempt_at_ms,restart_attempts) SELECT g.question_event_id,g.user_id,'proactive',v.delivered_at_ms,'ready',0,0 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS g JOIN (${input.proof.sql}) AS v ON v.user_id=g.user_id AND v.insight_event_id=g.question_event_id WHERE g.user_id=? AND g.question_needed=1 AND g.paused_at_ms IS NULL`,
       params: [...input.proof.params, input.userId],
     },
   });

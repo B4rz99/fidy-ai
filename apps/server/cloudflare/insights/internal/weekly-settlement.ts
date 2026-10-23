@@ -22,7 +22,7 @@ export const prepareWeeklyDeliverySettlement = (
   input.db
     .prepare(`UPDATE insight_events SET
       delivery_receipt_id=coalesce(delivery_receipt_id,?),
-      delivery_sent_at=coalesce(delivery_sent_at,strftime('%Y-%m-%dT%H:%M:%fZ',v.send_started_at_ms/1000.0,'unixepoch')),
+      delivery_sent_at_ms=coalesce(delivery_sent_at_ms,v.send_started_at_ms),
       delivery_channel=coalesce(delivery_channel,'whatsapp'),
       delivery_provider=coalesce(delivery_provider,'kapso'),
       delivery_provider_message_id=coalesce(delivery_provider_message_id,v.provider_message_id),
@@ -38,7 +38,7 @@ export const prepareWeeklyDeliverySettlement = (
     ),
   input.db
     .prepare(
-      `UPDATE insight_reports SET dispatch_state='settled' WHERE dispatch_state IS NOT NULL AND kind='weekly-summary' AND user_id=? AND delivery_id=? AND dispatch_state <> 'settled' AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.insight_event_id=?)`
+      `UPDATE proactive_messages SET dispatch_state='settled' WHERE dispatch_state IS NOT NULL AND kind='weekly-summary' AND user_id=? AND id=? AND dispatch_state <> 'settled' AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.insight_event_id=?)`
     )
     .bind(
       input.userId,

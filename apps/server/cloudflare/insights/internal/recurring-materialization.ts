@@ -23,7 +23,7 @@ import {
 } from "../contract";
 
 import type { RecurringUnavailable } from "../../recurring/contract";
-import { ReportJson, type Scope, type StageView } from "./recurring-models";
+import { type Scope, type StageView } from "./recurring-models";
 
 type Publication = Readonly<{
   input: Scope;
@@ -41,7 +41,7 @@ const prepareEvent = ({
     )([]);
     return input.db
       .prepare(
-        "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) VALUES(?,?,'new-recurring-series',?,?,?,?,?,?,?)"
+        "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json) VALUES(?,?,'new-recurring-series',?,?,?,?,?,?,?)"
       )
       .bind(
         report.insightEventId,
@@ -51,8 +51,33 @@ const prepareEvent = ({
         report.serviceMarket,
         report.locale,
         report.payload.confirmationDay.timeZone,
-        DateTime.formatIso(report.scheduledAt),
+        report.scheduledAt.epochMilliseconds,
         groups
+      );
+  });
+const prepareContent = ({
+  input,
+  instruction,
+  report,
+}: Publication): Effect.Effect<D1PreparedStatement, Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const day = report.payload.confirmationDay;
+    const payload = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.toCodecJson(RecurringDigestPayload))
+    )(report.payload);
+    return input.db
+      .prepare(
+        "INSERT INTO insight_reports(user_id,insight_event_id,kind,consent_grant_id,payload_json,local_date,day_from_ms,day_to_ms,original_delivery_expires_at_ms) VALUES(?,?,'recurring-digest',?,?,?,?,?,?)"
+      )
+      .bind(
+        input.userId,
+        report.insightEventId,
+        instruction.grant_id,
+        payload,
+        day.localDate,
+        day.from.epochMilliseconds,
+        day.toExclusive.epochMilliseconds,
+        report.expiresAt.epochMilliseconds
       );
   });
 const prepareReport = (
@@ -64,11 +89,11 @@ const prepareReport = (
     const day = report.payload.confirmationDay;
     const timing = report;
     const statements: D1PreparedStatement[] = [yield* prepareEvent(publication)];
-    const reportJson = yield* Schema.encodeEffect(ReportJson)(report);
+    statements.push(yield* prepareContent(publication));
     statements.push(
       input.db
         .prepare(
-          "INSERT INTO insight_reports(kind,delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,instruction_id,instruction_version,grant_id,local_date,day_from_ms,day_to_ms,report_json,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES('proactivity-delivery',?,?,'new-recurring-series',?,?,?,?,?,?,?,?,?,?,?,?,? ,CASE WHEN ?6<=?8 THEN 'expired' ELSE 'ready' END,?8,0,0)"
+          "INSERT INTO proactive_messages(kind,id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,report_event_id,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES('proactivity-delivery',?,?,'new-recurring-series',?,?,?,?,?,?,? ,CASE WHEN ?6<=?8 THEN 'expired' ELSE 'ready' END,?8,0,0)"
         )
         .bind(
           id,
@@ -79,19 +104,13 @@ const prepareReport = (
           timing.expiresAt.epochMilliseconds,
           day.timeZone,
           input.now.epochMilliseconds,
-          instruction.id,
-          instruction.version,
-          instruction.grant_id,
-          day.localDate,
-          day.from.epochMilliseconds,
-          day.toExclusive.epochMilliseconds,
-          reportJson
+          id
         )
     );
     statements.push(
       input.db
         .prepare(
-          "UPDATE insight_events SET report_delivery_id=?2 WHERE user_id=?1 AND id=?3 AND report_delivery_id IS NULL"
+          "UPDATE insight_events SET message_kind='proactivity-delivery',message_id=?2 WHERE user_id=?1 AND id=?3 AND message_id IS NULL"
         )
         .bind(input.userId, id, id)
     );

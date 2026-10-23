@@ -45,7 +45,7 @@ export const prepareDelivery = (
 ): ReadonlyArray<D1PreparedStatement> => [
   input.db
     .prepare(
-      `UPDATE insight_reports SET reminder_governor_counted=1 WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=? AND reminder_governor_counted IS NULL AND EXISTS(SELECT 1 FROM (${input.proof.sql}) AS v JOIN proactivity_governors g ON g.kind='reminder' AND g.user_id=v.user_id WHERE v.user_id=? AND v.delivery_id=? AND v.role IN ('manual-entry-reminder','reminder-question') AND v.delivered_at_ms>g.last_reply_at_ms)`
+      `UPDATE proactive_messages SET reminder_governor_counted=1 WHERE kind='proactivity-delivery' AND user_id=? AND id=? AND reminder_governor_counted IS NULL AND EXISTS(SELECT 1 FROM (${input.proof.sql}) AS v JOIN proactivity_governors g ON g.kind='reminder' AND g.user_id=v.user_id WHERE v.user_id=? AND v.delivery_id=? AND v.role IN ('manual-entry-reminder','reminder-question') AND v.delivered_at_ms>g.last_reply_at_ms)`
     )
     .bind(input.userId, input.id, ...input.proof.params, input.userId, input.id),
   input.db

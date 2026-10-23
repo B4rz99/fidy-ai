@@ -175,7 +175,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
   historyProjection({
     id: "proactivity_consent_records",
     recordType: "proactivity_grant",
-    dependencies: ["insight_reports", "recurring_digest_instructions", "schedules"],
+    dependencies: [
+      "insight_events",
+      "insight_reports",
+      "recurring_digest_instructions",
+      "schedules",
+    ],
     archiveFields: [
       "id",
       "user_id",
@@ -191,7 +196,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
   historyProjection({
     id: "weekly_consent_records",
     recordType: "weekly_grant",
-    dependencies: ["weekly_consent_revocation_records"],
+    dependencies: ["weekly_consent_revocation_records", "insight_reports"],
     archiveFields: ["id", "user_id", "grant_id", "offer_id", "record_json", "occurred_at_ms"],
     hasChildren: true,
   }),

@@ -287,7 +287,7 @@ const occurrence = (
     Readonly<{ scheduledAt: DateTime.Utc; expiresAt: DateTime.Utc; id: InsightEventId }>
 ): ReadonlyArray<D1PreparedStatement> => [
   guard(input, {
-    sql: "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) SELECT ?,?,'manual-entry-reminder',?,?,?,?,?,?,? WHERE 1=1",
+    sql: "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json,reminder_grant_id,reminder_evidence_expires_at_ms) SELECT ?,?,'manual-entry-reminder',?,?,?,?,?,?,?,?,? WHERE 1=1",
     params: [
       input.id,
       input.userId,
@@ -296,14 +296,16 @@ const occurrence = (
       input.snapshot.serviceMarket,
       input.snapshot.locale,
       input.snapshot.timeZone,
-      DateTime.formatIso(input.scheduledAt),
+      input.scheduledAt.epochMilliseconds,
       Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(MoneyGroups)))([]),
+      input.snapshot.consentGrantId,
+      input.expiresAt.epochMilliseconds,
     ],
   }),
   prepareChangedRowAssertion({ db: input.db, scope: "reminder_schedule" }),
   input.db
     .prepare(
-      "INSERT INTO insight_reports(kind,delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,reminder_grant_id,reminder_expires_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('proactivity-delivery',?,?,'manual-entry-reminder',?,?,?,?,?,?,?,? ,'ready',?8,0,0)"
+      "INSERT INTO proactive_messages(kind,id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('proactivity-delivery',?,?,'manual-entry-reminder',?,?,?,?,?,? ,'ready',?8,0,0)"
     )
     .bind(
       input.id,
@@ -313,13 +315,11 @@ const occurrence = (
       input.scheduledAt.epochMilliseconds,
       input.expiresAt.epochMilliseconds,
       input.snapshot.timeZone,
-      input.now.epochMilliseconds,
-      input.snapshot.consentGrantId,
-      input.expiresAt.epochMilliseconds
+      input.now.epochMilliseconds
     ),
   input.db
     .prepare(
-      "UPDATE insight_events SET report_delivery_id=?2 WHERE user_id=?1 AND id=?3 AND report_delivery_id IS NULL"
+      "UPDATE insight_events SET message_kind='proactivity-delivery',message_id=?2 WHERE user_id=?1 AND id=?3 AND message_id IS NULL"
     )
     .bind(input.userId, input.id, input.id),
 ];

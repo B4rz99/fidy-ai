@@ -78,17 +78,17 @@ it("observes only enabled Proactivity work and its real Workflow identities with
         db.batch([
           db
             .prepare(
-              "INSERT INTO insight_reports(kind,delivery_id,user_id,origin,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('weekly-question',?,?,'requested',?,'ready',?3,0,0)"
+              "INSERT INTO weekly_question_requests(id,user_id,origin,created_at_ms,state,last_attempt_at_ms,restart_attempts) VALUES (?,?,'requested',?,'ready',0,0)"
             )
             .bind(questionId, weeklySummaryOtherUser, now - 600_000),
           db
             .prepare(
-              "INSERT INTO insight_reports(kind,delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES ('proactivity-delivery',?,?,'budget-offer',?,'private-financial-sentinel',?,?,'UTC',?)"
+              "INSERT INTO proactive_messages(kind,id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES ('proactivity-delivery',?,?,'budget-offer',?,'private-financial-sentinel',?,?,'UTC',?)"
             )
             .bind(deliveryId, userId, deliveryId, now - 300_000, now - 1, now - 300_000),
           db
             .prepare(
-              "UPDATE insight_reports SET dispatch_created_at_ms=incoming.created_at_ms,dispatch_state=incoming.state,dispatch_last_attempt_at_ms=incoming.last_attempt_at_ms,dispatch_restart_attempts=incoming.restart_attempts FROM (SELECT source.*, 0 AS restart_attempts FROM (SELECT source.*, 0 AS last_attempt_at_ms FROM (SELECT 'proactivity-delivery' AS kind,? AS user_id,? AS delivery_id,? AS created_at_ms,'started' AS state) AS source) AS source) AS incoming WHERE insight_reports.user_id=incoming.user_id AND insight_reports.kind=incoming.kind AND insight_reports.delivery_id=incoming.delivery_id AND insight_reports.dispatch_state IS NULL"
+              "UPDATE proactive_messages SET dispatch_created_at_ms=incoming.created_at_ms,dispatch_state=incoming.state,dispatch_last_attempt_at_ms=incoming.last_attempt_at_ms,dispatch_restart_attempts=incoming.restart_attempts FROM (SELECT source.*, 0 AS restart_attempts FROM (SELECT source.*, 0 AS last_attempt_at_ms FROM (SELECT 'proactivity-delivery' AS kind,? AS user_id,? AS delivery_id,? AS created_at_ms,'started' AS state) AS source) AS source) AS incoming WHERE proactive_messages.user_id=incoming.user_id AND proactive_messages.kind=incoming.kind AND proactive_messages.id=incoming.delivery_id AND proactive_messages.dispatch_state IS NULL"
             )
             .bind(userId, deliveryId, now - 300_000),
         ])
@@ -189,7 +189,7 @@ it("caps the oldest pending sample and indexed reads independently of terminal d
         db.batch([
           db
             .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<2020)
-      INSERT INTO insight_reports(kind,delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts)
+      INSERT INTO proactive_messages(kind,id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts)
       SELECT 'proactivity-delivery',printf('90000000-0000-4000-8000-%012d', i),?,'budget-offer','offer','private-report',0,?,'UTC',i,CASE WHEN i<=2000 THEN 'settled' ELSE 'ready' END,i,0,0 FROM n`)
             .bind(userId, now + 600_000),
         ])
@@ -235,7 +235,7 @@ it("reports a stalled Proactivity Workflow as unavailable while preserving indep
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO insight_reports(kind,delivery_id,user_id,origin,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('weekly-question',?,?,'requested',?,'ready',?3,0,0)"
+            "INSERT INTO weekly_question_requests(id,user_id,origin,created_at_ms,state,last_attempt_at_ms,restart_attempts) VALUES (?,?,'requested',?,'ready',0,0)"
           )
           .bind(questionId, userId, now - 600_000)
           .run()
@@ -270,7 +270,7 @@ it("rejects malformed stored Work identities before Workflow inspection", () =>
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO insight_reports(kind,delivery_id,user_id,origin,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('weekly-question',?,?,'requested',?,'ready',?3,0,0)"
+            "INSERT INTO weekly_question_requests(id,user_id,origin,created_at_ms,state,last_attempt_at_ms,restart_attempts) VALUES (?,?,'requested',?,'ready',0,0)"
           )
           .bind("-".repeat(36), userId, now - 600_000)
           .run()

@@ -46,7 +46,7 @@ const insightJourneyArgs = (
     yield* wait(
       fixture.db
         .prepare(
-          "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) VALUES(?,?,'weekly-summary','40000000-0000-4000-8000-000000000001',1,'CO','es-CO','America/Bogota','2026-10-03T12:00:00.000Z','[]')"
+          "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json) VALUES(?,?,'weekly-summary','40000000-0000-4000-8000-000000000001',1,'CO','es-CO','America/Bogota',1791028800000,'[]')"
         )
         .bind(id, "10000000-0000-4000-8000-000000000001")
         .run()

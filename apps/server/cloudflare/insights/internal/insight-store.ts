@@ -52,14 +52,14 @@ const EventRow = Schema.Struct({
   service_market: Schema.String,
   locale: Schema.String,
   time_zone: Schema.String,
-  scheduled_at: Schema.String,
+  scheduled_at_ms: Schema.DateTimeUtcFromMillis,
   money_groups_json: Schema.String,
   lifecycle_state: Schema.String,
 });
 const AttemptRow = Schema.Struct({
   id: Schema.String,
   insight_event_id: Schema.String,
-  sent_at: Schema.String,
+  sent_at: Schema.DateTimeUtcFromMillis,
   channel: Schema.String,
   provider: Schema.String,
   provider_message_id: Schema.String,
@@ -79,7 +79,7 @@ const decodeEvent = (raw: unknown): Option.Option<InsightEvent> =>
       serviceMarket: row.service_market,
       locale: row.locale,
       timeZone: row.time_zone,
-      scheduledAt: row.scheduled_at,
+      scheduledAt: DateTime.formatIso(row.scheduled_at_ms),
       moneyGroups: Schema.encodeSync(Schema.toCodecJson(InsightEvent.fields.moneyGroups))(
         groups.value
       ),
@@ -99,7 +99,7 @@ export const findInsight = ({
   Effect.tryPromise(() =>
     db
       .prepare(`SELECT id, kind, schedule_id, schedule_version, service_market,
-    locale, time_zone, scheduled_at, money_groups_json, lifecycle_state FROM insight_events
+    locale, time_zone, scheduled_at_ms, money_groups_json, lifecycle_state FROM insight_events
     WHERE user_id = ? AND id = ?`)
       .bind(userId, id)
       .first()
@@ -125,7 +125,7 @@ export const generateInsight = ({
     const groups = yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.toCodecJson(InsightEvent.fields.moneyGroups))
     )(input.moneyGroups);
-    const scheduledAt = DateTime.formatIso(input.scheduledAt);
+    const scheduledAt = input.scheduledAt.epochMilliseconds;
     const id = InsightEventId.make(transactionId());
     yield* Effect.tryPromise(() =>
       prepareUserContext({
@@ -134,8 +134,8 @@ export const generateInsight = ({
         statement: {
           sql: `INSERT INTO insight_events
       (id, user_id, kind, schedule_id, schedule_version, service_market, locale, time_zone,
-       scheduled_at, money_groups_json) SELECT ?, userId, ?, ?, ?, ?, ?, ?, ?, ? FROM identity_user_context
-       WHERE userId = ? ON CONFLICT(user_id, schedule_id, schedule_version, scheduled_at) DO NOTHING`,
+       scheduled_at_ms, money_groups_json) SELECT ?, userId, ?, ?, ?, ?, ?, ?, ?, ? FROM identity_user_context
+       WHERE userId = ? ON CONFLICT(user_id, schedule_id, schedule_version, scheduled_at_ms) DO NOTHING`,
           params: [
             id,
             input.kind,
@@ -154,7 +154,7 @@ export const generateInsight = ({
     const row = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT id FROM insight_events WHERE user_id = ?
-      AND schedule_id = ? AND schedule_version = ? AND scheduled_at = ?`)
+      AND schedule_id = ? AND schedule_version = ? AND scheduled_at_ms = ?`)
         .bind(userId, input.scheduleId, input.scheduleVersion, scheduledAt)
         .first()
     );
@@ -174,8 +174,8 @@ export const discoverDueInsights = ({
   Effect.tryPromise(() =>
     db
       .prepare(`SELECT user_id AS userId, id FROM insight_events
-  WHERE lifecycle_state = 'pending' AND scheduled_at <= ? ORDER BY scheduled_at, id LIMIT 64`)
-      .bind(DateTime.formatIso(now))
+  WHERE lifecycle_state = 'pending' AND scheduled_at_ms <= ? ORDER BY scheduled_at_ms, id LIMIT 64`)
+      .bind(now.epochMilliseconds)
       .all()
   ).pipe(
     Effect.map((result) => Schema.decodeUnknownOption(Schema.Array(DueInsight))(result.results)),
@@ -251,25 +251,28 @@ const recordInsightCall = (input: InsightCall): Effect.Effect<"recorded" | "unav
     Effect.orElseSucceed(() => "unavailable" as const)
   );
 
-const pendingCursor = (url: URL): Option.Option<Readonly<{ scheduledAt: string; id: string }>> => {
+const pendingCursor = (
+  url: URL
+): Option.Option<Readonly<{ scheduledAt: Option.Option<number>; id: string }>> => {
   const raw = url.searchParams.get("cursor");
-  if (raw === null) return Option.some({ scheduledAt: "", id: "" });
+  if (raw === null) return Option.some({ scheduledAt: Option.none(), id: "" });
   const [scheduledAt, id] = raw.split("|");
+  const timestamp = Schema.decodeUnknownOption(Schema.toCodecJson(InsightEvent.fields.scheduledAt))(
+    scheduledAt
+  );
   if (
     raw.split("|").length !== 2 ||
-    Option.isNone(
-      Schema.decodeUnknownOption(Schema.toCodecJson(InsightEvent.fields.scheduledAt))(scheduledAt)
-    ) ||
+    Option.isNone(timestamp) ||
     Option.isNone(Schema.decodeUnknownOption(InsightEventId)(id))
   ) {
     return Option.none();
   }
-  return Option.some({ scheduledAt: scheduledAt ?? "", id: id ?? "" });
+  return Option.some({ scheduledAt: Option.some(timestamp.value.epochMilliseconds), id: id ?? "" });
 };
 
 const pendingPage = (
   input: InsightCall,
-  cursor: Readonly<{ scheduledAt: string; id: string }>
+  cursor: Readonly<{ scheduledAt: Option.Option<number>; id: string }>
 ): Effect.Effect<
   Option.Option<Readonly<{ events: ReadonlyArray<InsightEvent>; hasMore: boolean }>>,
   Cause.UnknownError
@@ -281,14 +284,15 @@ const pendingPage = (
         ...insightCallStatements(input),
         db
           .prepare(`SELECT id, kind, schedule_id, schedule_version,
-          service_market, locale, time_zone, scheduled_at, money_groups_json, lifecycle_state
+          service_market, locale, time_zone, scheduled_at_ms, money_groups_json, lifecycle_state
           FROM insight_events WHERE user_id = ? AND lifecycle_state = 'pending'
-          AND scheduled_at <= ? AND (scheduled_at, id) > (?, ?)
-          ORDER BY scheduled_at, id LIMIT ${maximumPendingInsights + 1}`)
+          AND scheduled_at_ms <= ? AND (? IS NULL OR (scheduled_at_ms, id) > (?, ?))
+          ORDER BY scheduled_at_ms, id LIMIT ${maximumPendingInsights + 1}`)
           .bind(
             subject.userId,
-            DateTime.formatIso(DateTime.makeUnsafe(current)),
-            cursor.scheduledAt,
+            current,
+            Option.getOrNull(cursor.scheduledAt),
+            Option.getOrNull(cursor.scheduledAt),
             cursor.id
           ),
       ])
@@ -512,7 +516,7 @@ const prepareTransitionWrite = (
   const receiptSet =
     receipt === undefined
       ? ""
-      : ",delivery_receipt_id=?,delivery_sent_at=?,delivery_channel=?,delivery_provider=?,delivery_provider_message_id=?";
+      : ",delivery_receipt_id=?,delivery_sent_at_ms=?,delivery_channel=?,delivery_provider=?,delivery_provider_message_id=?";
   return db
     .prepare(`UPDATE insight_events SET lifecycle_state = ?${receiptSet} WHERE user_id = ? AND id = ?
     AND lifecycle_state IN (${allowed(target)
@@ -525,7 +529,7 @@ const prepareTransitionWrite = (
         ? []
         : [
             receipt.id,
-            DateTime.formatIso(receipt.evidence.sentAt),
+            receipt.evidence.sentAt.epochMilliseconds,
             receipt.evidence.channel,
             receipt.evidence.provider,
             receipt.evidence.providerMessageId,
@@ -594,7 +598,7 @@ const reviewAction = (operation: MutationOperation): string => {
 const receiptColumns = {
   id: "delivery_receipt_id",
   insight_event_id: "id",
-  sent_at: "delivery_sent_at",
+  sent_at: "delivery_sent_at_ms",
   channel: "delivery_channel",
   provider: "delivery_provider",
   provider_message_id: "delivery_provider_message_id",
@@ -641,7 +645,7 @@ const insightReview = ({
         row.service_market,
         row.locale,
         row.time_zone,
-        row.scheduled_at,
+        row.scheduled_at_ms.epochMilliseconds,
         row.money_groups_json,
         row.lifecycle_state,
         ...(attempt === undefined
@@ -649,7 +653,7 @@ const insightReview = ({
           : [
               attempt.id,
               attempt.insight_event_id,
-              attempt.sent_at,
+              attempt.sent_at.epochMilliseconds,
               attempt.channel,
               attempt.provider,
               attempt.provider_message_id,
@@ -664,7 +668,7 @@ const validAttemptSnapshot = (attempt: typeof AttemptRow.Type): boolean =>
     Schema.decodeOption(Schema.toCodecJson(InsightDeliveryAttempt))({
       id: attempt.id,
       insightEventId: attempt.insight_event_id,
-      sentAt: attempt.sent_at,
+      sentAt: DateTime.formatIso(attempt.sent_at),
       channel: attempt.channel,
       provider: attempt.provider,
       providerMessageId: attempt.provider_message_id,
@@ -686,9 +690,9 @@ const observeOAuthInsight = (
       try: () =>
         db
           .prepare(`SELECT id,kind,schedule_id,schedule_version,service_market,locale,
-        time_zone,scheduled_at,money_groups_json,lifecycle_state,
+        time_zone,scheduled_at_ms,money_groups_json,lifecycle_state,
         CASE WHEN delivery_receipt_id IS NOT NULL THEN json_object(
-          'id',delivery_receipt_id,'insight_event_id',id,'sent_at',delivery_sent_at,
+          'id',delivery_receipt_id,'insight_event_id',id,'sent_at',delivery_sent_at_ms,
           'channel',delivery_channel,'provider',delivery_provider,'provider_message_id',delivery_provider_message_id)
         END AS receipt_json FROM insight_events WHERE user_id=? AND id=?`)
           .bind(subject.userId, id)
@@ -710,7 +714,7 @@ const observeOAuthInsight = (
     if (row === undefined) {
       return { event: Option.none<InsightEvent>(), review: Option.none<OAuthMutationReview>() };
     }
-    const event = decodeEvent(row);
+    const event = decodeEvent(observed.results[0]);
     if (Option.isNone(event) || events.length !== 1 || attempts.length > 1) {
       return yield* new InsightUnavailable();
     }
@@ -776,10 +780,10 @@ export const findInsightAttempt = ({
     Effect.flatMap((raw) => {
       if (raw === null) return Effect.succeed(Option.none<InsightDeliveryAttempt>());
       const attempt = Option.flatMap(Schema.decodeUnknownOption(AttemptRow)(raw), (row) =>
-        Schema.decodeOption(InsightDeliveryAttempt)({
+        Schema.decodeOption(Schema.toCodecJson(InsightDeliveryAttempt))({
           id: row.id,
           insightEventId: row.insight_event_id,
-          sentAt: row.sent_at,
+          sentAt: DateTime.formatIso(row.sent_at),
           channel: row.channel,
           provider: row.provider,
           providerMessageId: row.provider_message_id,

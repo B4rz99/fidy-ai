@@ -1,0 +1,14 @@
+apps/site/e2e/site.spec.ts
+  h_c6d49c804e0ad2 114-168,170-195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "241c590ef2afdb485eba702329a930eba4f04791",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

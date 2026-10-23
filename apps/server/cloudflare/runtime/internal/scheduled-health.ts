@@ -199,7 +199,11 @@ const reportOperationalSignals = (
       const alerts = decideOperationalAlerts([signal]);
       const warning = alerts.length > 0 ? "warning" : "none";
       const severity = alerts.some((alert) => alert.severity === "critical") ? "critical" : warning;
-      const observation = { ...signal, severity };
+      const observation = {
+        ...signal,
+        severity,
+        message: `fidy.operational component=${signal.component} operation=${signal.operation} state=${signal.state} severity=${severity}`,
+      };
       return severity === "none" ? Effect.logInfo(observation) : Effect.logWarning(observation);
     },
     { discard: true }

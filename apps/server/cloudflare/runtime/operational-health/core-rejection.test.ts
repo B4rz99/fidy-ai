@@ -139,6 +139,8 @@ it.effect(
             component: "core-rejections",
             operation: "coreRejectionBursts",
             state: "attention",
+            message:
+              "fidy.operational component=core-rejections operation=coreRejectionBursts state=attention severity=warning",
           },
         ],
         reasons: [],
@@ -212,6 +214,8 @@ it.live(
           component: "core-rejections",
           operation: "coreRejectionBursts",
           state: "attention",
+          message:
+            "fidy.operational component=core-rejections operation=coreRejectionBursts state=attention severity=warning",
         },
       ];
       expect(logs).toEqual([expected, expected]);

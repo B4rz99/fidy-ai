@@ -138,13 +138,24 @@ it.effect(
       );
       expect(logs).toEqual(
         expect.arrayContaining([
-          [{ component: "capability", operation: "d1", state: "healthy", severity: "none" }],
+          [
+            {
+              component: "capability",
+              operation: "d1",
+              state: "healthy",
+              severity: "none",
+              message:
+                "fidy.operational component=capability operation=d1 state=healthy severity=none",
+            },
+          ],
           [
             {
               component: "capability",
               operation: "requiredBindings",
               state: "unavailable",
               severity: "warning",
+              message:
+                "fidy.operational component=capability operation=requiredBindings state=unavailable severity=warning",
             },
           ],
           [
@@ -155,6 +166,8 @@ it.effect(
               backlogCount: 1000,
               backlogBytes: 1000,
               severity: "critical",
+              message:
+                "fidy.operational component=async-health operation=billingQueue state=attention severity=critical",
             },
           ],
         ])
@@ -195,6 +208,8 @@ it.effect(
           backlogCount: 99,
           backlogBytes: 1000,
           severity: "none",
+          message:
+            "fidy.operational component=async-health operation=billingQueue state=attention severity=none",
         },
       ]);
       expect(

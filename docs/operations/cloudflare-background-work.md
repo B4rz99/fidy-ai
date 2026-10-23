@@ -154,13 +154,23 @@ destination matches the existing deployed `OPERATOR_ALERT_EMAIL`. The saved quer
 SELECT count() AS "value"
 FROM "logs"."workersLogs"
 WHERE "scriptName" = 'fidycloudflare-core-production-hdv5cspnk7fai6vg'
-  AND "message" LIKE '%coreRejectionBursts%'
-  AND "message" LIKE '%attention%'
+  AND "message" LIKE '%fidy.operational component=core-rejections operation=coreRejectionBursts state=attention severity=warning%'
 ```
 
-This currently observes the existing scheduled presence signal as well as direct detection after
-that code is deployed. Before retiring scheduled presence, validate an explicit five-minute query
-window for direct detections; the current query must not be treated as that replacement. Cloudflare's
+The original message-word query was not coverage: live inspection showed that Cloudflare extracts
+Effect's object arguments into structured attributes while the message contains only the log prefix.
+The account's monitor SQL rejects custom columns (`component`) and filtering the JSON `attributes`
+column (HTTP422). The health records now supply an explicit closed `message` containing component,
+operation, state and policy severity, alongside their existing bounded fields. Match complete
+`state=unavailable` / `severity=warning` tokens, never the word `unavailable`, which also occurs in
+the healthy `unavailableWorkflows: 0` field. The direct burst uses the same fixed message format.
+These local changes still require deployment and verification of actual platform ingestion/query
+matches; saving the revised query does not establish runtime coverage.
+
+The fixed five-minute window for direct detections remains unverified: the documented
+`timestamp >= NOW() - INTERVAL '5' MINUTE` expression failed account preview with
+`RecursionLimitExceeded` (HTTP422). The saved query still uses the automatic interval; validate
+an account-supported five-minute window before retiring scheduled presence. Cloudflare's
 sample-notification action was submitted once to the configured operator. Submission and an enabled
 monitor are not evidence of actual threshold firing, mailbox receipt, resolution or absence handling.
 

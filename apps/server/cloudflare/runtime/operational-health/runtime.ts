@@ -97,6 +97,8 @@ export const makeCoreRejectionObserver = (): ((
         component: "core-rejections",
         operation: "coreRejectionBursts",
         state: "attention",
+        message:
+          "fidy.operational component=core-rejections operation=coreRejectionBursts state=attention severity=warning",
       }).pipe(Effect.catchDefect(() => Effect.void));
       if (pending) return report;
       pending = true;

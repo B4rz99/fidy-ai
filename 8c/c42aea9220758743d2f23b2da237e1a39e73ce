@@ -1,0 +1,41 @@
+apps/server/cloudflare/subscription/internal/billing-transaction.ts
+  s_fb8e6f8c22d2d1::t_b329385dc325d1 4-9,12-16
+  s_fb8e6f8c22d2d1::t_10b4b274087222 17,211,229-230,278
+  s_fb8e6f8c22d2d1::t_fa17eba4cd64af 1-3,10-11,18-22,24-207,210,212-214,216-228,231-277,284-285,287-337
+  s_fb8e6f8c22d2d1::t_db76ead1459930 23
+  s_fb8e6f8c22d2d1::t_4c36fec04e51b0 208-209,215,279-283,286
+apps/server/cloudflare/subscription/internal/billing-workflow.ts
+  s_fb8e6f8c22d2d1::t_4c36fec04e51b0 273,281
+  s_fb8e6f8c22d2d1::t_db76ead1459930 11,14
+  s_fb8e6f8c22d2d1::t_fa17eba4cd64af 26,133,259,261
+  s_fb8e6f8c22d2d1::t_10b4b274087222 25,27
+apps/server/cloudflare/subscription/runtime.ts
+  s_fb8e6f8c22d2d1::t_fa17eba4cd64af 69
+apps/server/cloudflare/subscription/internal/billing-observation.ts
+  s_fb8e6f8c22d2d1::t_fa17eba4cd64af 10,12-13,20-21,23-80,82,84-87,89-98,101-131,133-137,139-140,142-146,148,155-173,186-193,195-210,212-236,238-246,248-259,263,268-271,273-283,285-387,389-412,414-468
+  s_fb8e6f8c22d2d1::t_db76ead1459930 8-9,11
+  s_fb8e6f8c22d2d1::t_10b4b274087222 22,81,83,88,99-100,183,264-267
+  s_fb8e6f8c22d2d1::t_4c36fec04e51b0 179-181,260-262
+  s_fb8e6f8c22d2d1::t_92cab5f142d87f 132,138,141,147,194,211,237,247,272,284,388,413
+  s_fb8e6f8c22d2d1::t_b329385dc325d1 1-7,14-19,149-154,174-178,182,184-185
+apps/server/cloudflare/subscription/internal/source-cancellation.ts
+  s_fb8e6f8c22d2d1::t_db76ead1459930 1
+apps/server/ARCHITECTURE.md
+  s_fb8e6f8c22d2d1::t_8fdfa800ec89b3 154-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8cc42aea9220758743d2f23b2da237e1a39e73ce",
+  "prompts": {},
+  "sessions": {
+    "s_fb8e6f8c22d2d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a168ab-6d1f-73c2-9768-504ba124f3aa",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

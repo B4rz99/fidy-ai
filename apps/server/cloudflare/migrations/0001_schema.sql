@@ -649,7 +649,6 @@ CREATE TABLE erasure_restore_members (
 CREATE TABLE erasure_steps (
   request_id TEXT NOT NULL REFERENCES erasure_requests(id),
   store_id TEXT NOT NULL,
-  data_class TEXT NOT NULL,
   delete_done INTEGER NOT NULL DEFAULT 0 CHECK(delete_done IN (0,1)),
   PRIMARY KEY(request_id,store_id)
 ) STRICT;

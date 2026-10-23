@@ -88,9 +88,7 @@ it("deletes Memory in bounded pages, resumes after reconstruction, and preserves
           )
           .bind(reference, userId, decision),
         db
-          .prepare(
-            "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'memories','memory')"
-          )
+          .prepare("INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'memories')")
           .bind(reference),
         ...Array.from({ length: 70 }, (_, index) =>
           db
@@ -274,9 +272,7 @@ it.each([
               )
               .bind(reference, userId, '{"dispositions":{"credentials":{"action":"Delete"}}}'),
             db
-              .prepare(
-                `INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'${table}','credentials')`
-              )
+              .prepare(`INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'${table}')`)
               .bind(reference),
             db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference),
           ])
@@ -368,7 +364,7 @@ it("erases only the reviewed Dashboard document while preserving Planning and th
             .bind(reference, userId),
           db
             .prepare(
-              "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'dashboard_documents','projections')"
+              "INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'dashboard_documents')"
             )
             .bind(reference),
         ])

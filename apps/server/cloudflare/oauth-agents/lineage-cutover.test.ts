@@ -166,7 +166,7 @@ it.each(failures)("preserves populated OAuth lineage and rolls back $name", (fix
             .bind(request, owner),
           db
             .prepare(
-              "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'oauth_refresh_events','credentials')"
+              "INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'oauth_refresh_events')"
             )
             .bind(request),
           db

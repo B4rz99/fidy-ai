@@ -292,7 +292,7 @@ const eventMetadataErasure = (
           .bind(requestId, owner),
         db
           .prepare(
-            "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'support_recovery_events','credentials')"
+            "INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'support_recovery_events')"
           )
           .bind(requestId),
         db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(requestId),

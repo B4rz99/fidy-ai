@@ -49,7 +49,7 @@ export const restoreCase = (
       record.decision
     );
     const inventory = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-      input.stores.map(({ id, dataClass }) => ({ id, dataClass }))
+      input.stores.map(({ id }) => id)
     );
     yield* importCase({ ...input, admission, record, encoded, inventory });
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
@@ -112,8 +112,8 @@ const importCase = (input: CaseImport): Effect.Effect<void, ErasureUnavailable> 
           ),
 
         db
-          .prepare(`INSERT INTO erasure_steps(request_id,store_id,data_class,delete_done)
-      SELECT q.id,json_extract(s.value,'$.id'),json_extract(s.value,'$.dataClass'),0 FROM erasure_requests q,json_each(?) s
+          .prepare(`INSERT INTO erasure_steps(request_id,store_id,delete_done)
+      SELECT q.id,s.value,0 FROM erasure_requests q,json_each(?) s
       WHERE q.id=? AND q.user_id=? AND q.state IN('Draining','Sealing') AND q.restore_generation=? AND q.decision_json=?
       ON CONFLICT(request_id,store_id) DO UPDATE SET delete_done=0`)
           .bind(inventory, admission.reference, admission.userId, admission.generation, encoded),

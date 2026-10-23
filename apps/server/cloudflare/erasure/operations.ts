@@ -124,6 +124,7 @@ export const executeErasureControl = (
     const result = yield* receipt({
       db: input.db,
       scope: { reference: decoded.value.reference, userId: input.userId },
+      stores: input.stores,
     });
     return Response.json(result, { headers: { "cache-control": "no-store" } });
   }).pipe(Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus })));

@@ -5320,3 +5320,29 @@ does not lift the fence. Existing successful-admission and native restore journe
 R2's [consistency guarantees](https://developers.cloudflare.com/r2/reference/consistency/) and
 [conditional Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)
 are the provider constraints; a negative read says nothing about a PUT still in flight.
+
+### Deletion progress classification (#1489 integration)
+
+`erasure_steps` now has its final three stored columns: request identity, store identity and
+`delete_done`. Class membership is owned by each store's code declaration and is no longer copied
+into every request's progress rows. Admission and restore populate only store identities; exact
+inventory checks still reject missing, extra or foreign-request steps. The receipt derives completed
+classes from those declared stores and their actual completion, and a class remains pending until
+all its participating stores finish. Store dependency order and deletion permits are unchanged.
+
+This bounded local retirement was rehearsed against the previous populated native D1 baseline.
+An active request refuses the batch; a failure after the DDL rolls back both schema and data.
+Successful retirement preserves exact request/store completion, both Users' owner rows, original
+instants, unresolved writer attempts and foreign keys. It is not the final request-metadata rebuild
+or a deployment claim. Apply this retirement only after the preceding archive-retirement cutover:
+
+<!-- erasure-step-classification:start -->
+
+```sql
+SELECT json(CASE WHEN NOT EXISTS(
+  SELECT 1 FROM erasure_requests WHERE state<>'Complete'
+) THEN 'true' ELSE '' END) AS accepted;
+ALTER TABLE erasure_steps DROP COLUMN data_class;
+```
+
+<!-- erasure-step-classification:end -->

@@ -84,7 +84,7 @@ const commitReview = (
     const { db, admission, encoded, record } = input;
     const { decision } = admission;
     const inventory = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-      input.stores.map(({ id, dataClass }) => ({ id, dataClass }))
+      input.stores.map(({ id }) => id)
     );
     return yield* Effect.uninterruptible(
       Effect.tryPromise({
@@ -105,8 +105,8 @@ const commitReview = (
                 admission.userId
               ),
             db
-              .prepare(`INSERT INTO erasure_steps(request_id,store_id,data_class)
-              SELECT q.id,json_extract(s.value,'$.id'),json_extract(s.value,'$.dataClass')
+              .prepare(`INSERT INTO erasure_steps(request_id,store_id)
+              SELECT q.id,s.value
               FROM erasure_requests q,json_each(?) s WHERE q.id=? AND q.user_id=? AND q.decision_json=?
               ON CONFLICT(request_id,store_id) DO NOTHING`)
               .bind(inventory, decision.reference, admission.userId, encoded),

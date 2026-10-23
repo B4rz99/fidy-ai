@@ -255,9 +255,7 @@ it.each([
               )
               .bind(reference, owner, decision),
             db
-              .prepare(
-                "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'keyword_rules','projections')"
-              )
+              .prepare("INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'keyword_rules')")
               .bind(reference),
           ])
         );

@@ -1,7 +1,7 @@
 # Schema integration inventory (#1494)
 
 Local fresh-install snapshot of [the single baseline](../../apps/server/cloudflare/migrations/0001_schema.sql).
-Schema Git blob: `aaad550abe343b7cb96d0de5d9e11df8d6190a15`. This is not a live database inspection or a completed release.
+Schema Git blob: `468e93e56b2a1b1e7ff81db1ec58bb889341330a`. This is not a live database inspection or a completed release.
 
 The baseline creates **111 application tables**. The original 102-name inventory predates the
 approved four-table relational Planning replacement and the retained compact Recovery admission
@@ -271,7 +271,7 @@ Views, indexes and provider-managed storage are excluded.
 | `erasure_permits`         | 3 + 0                      | `(request_id) → erasure_requests(id)`                                                                                                           |
 | `erasure_requests`        | 18 + 0                     | —                                                                                                                                               |
 | `erasure_restore_members` | 3 + 0                      | —                                                                                                                                               |
-| `erasure_steps`           | 4 + 0                      | `(request_id) → erasure_requests(id)`                                                                                                           |
+| `erasure_steps`           | 3 + 0                      | `(request_id) → erasure_requests(id)`                                                                                                           |
 | `erasure_writers`         | 5 + 0                      | —                                                                                                                                               |
 
 ### SQL Assertions (`src/shell/sql-assertions`)

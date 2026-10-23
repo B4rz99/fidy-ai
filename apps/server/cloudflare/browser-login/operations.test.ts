@@ -252,7 +252,7 @@ it("prunes at most 32 expired pairings through the expiry index while retaining 
             )
             .bind(userId, current, decision),
           db.prepare(
-            "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES('session-archive','web_sessions','credentials')"
+            "INSERT INTO erasure_steps(request_id,store_id) VALUES('session-archive','web_sessions')"
           ),
           db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id='session-archive'"),
         ])

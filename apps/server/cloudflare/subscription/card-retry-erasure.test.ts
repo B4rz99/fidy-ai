@@ -159,9 +159,7 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
       for (const store of stores) {
         yield* wait(() =>
           db
-            .prepare(
-              "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,?,'billing')"
-            )
+            .prepare("INSERT INTO erasure_steps(request_id,store_id) VALUES(?,?)")
             .bind(reference, store.id)
             .run()
         );
@@ -250,8 +248,8 @@ it("erases paid standing and billing accountability with their own permits while
       for (const store of stores) {
         yield* wait(() =>
           db
-            .prepare("INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,?,?)")
-            .bind(reference, store.id, store.dataClass)
+            .prepare("INSERT INTO erasure_steps(request_id,store_id) VALUES(?,?)")
+            .bind(reference, store.id)
             .run()
         );
       }

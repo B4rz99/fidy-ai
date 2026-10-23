@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Clock, Effect, Option, Schema } from "effect";
 import { installRetentionTestSchema, isolatedTestStorage } from "../d1-test-fixture";
-import { handleErasureRequest } from "./runtime";
-import { executeErasureReview } from "./operations";
+import { handleErasureRequest, withErasureRecovery } from "./runtime";
+import { executeErasureRestore, executeErasureReview } from "./operations";
 import { deletionDecision } from "./erasure.test-fixture";
 
 const databases = isolatedTestStorage();
@@ -207,4 +207,75 @@ it("binds review to the verified User and immutable request, refusing foreign, e
         )
       ).toBe("Draining");
     })
+  ));
+
+it("keeps recovery fenced when a deletion marker may still be published after a failed admission", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, bucket } = yield* setup;
+      const response = yield* submit(db);
+      const received = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ reference: Schema.String })
+      )(yield* Effect.tryPromise(() => response.json()));
+      const current = yield* Clock.currentTimeMillis;
+      const decision = deletionDecision({ userId, reference: received.reference, current });
+      const nativePut = bucket.put.bind(bucket);
+      let latePublication = Option.none<() => ReturnType<R2Bucket["put"]>>();
+      const put: R2Bucket["put"] = (key, value, options) => {
+        if (key === `recovery/cases/${received.reference}`) {
+          latePublication = Option.some(() => nativePut(key, value, options));
+          return Promise.reject(new Error("Publication outcome unknown"));
+        }
+        return nativePut(key, value, options);
+      };
+      const publicationBucket = new Proxy(bucket, {
+        get: (target, property): unknown =>
+          property === "put" ? put : Reflect.get(target, property, target),
+      });
+      const authority = {
+        permission: "titular.erase",
+        operatorRef: "operator",
+        expiresAtMs: current + 300000,
+      };
+      const recovery = { db, bucket: Option.some(publicationBucket) };
+      expect(
+        (yield* executeErasureReview({
+          db,
+          userId,
+          candidate: { userId, decision, authority, deadlineMs: current + 5000 },
+          signal: yield* Effect.abortSignal,
+          stores: [],
+          recovery,
+        })).status
+      ).toBe(503);
+      const guarded = withErasureRecovery({ DB: db, ERASURE_BUCKET: bucket }).DB;
+      const observe = Effect.tryPromise(() => guarded.prepare("SELECT id FROM users").all());
+      expect((yield* Effect.result(observe))._tag).toBe("Failure");
+      expect(
+        (yield* executeErasureRestore({
+          db,
+          userId,
+          recovery,
+          stores: [],
+          candidate: {
+            userId,
+            reference: received.reference,
+            authority,
+            deadlineMs: current + 5000,
+            generation: "initial",
+          },
+        })).status
+      ).toBe(503);
+      const publish = Option.getOrThrow(latePublication);
+      yield* Effect.tryPromise(publish);
+      expect((yield* Effect.result(observe))._tag).toBe("Failure");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT state FROM erasure_requests WHERE user_id=?")
+            .bind(userId)
+            .first("state")
+        )
+      ).toBe("AwaitingReview");
+    }).pipe(Effect.scoped)
   ));

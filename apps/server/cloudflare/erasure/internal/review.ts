@@ -1,5 +1,5 @@
 import type { RecoveryCase } from "./recovery-case";
-import { persistReviewedCase, prepareCheckpoint } from "./checkpoint";
+import { persistReviewedCase } from "./checkpoint";
 import type { ErasureRecoveryConfiguration, ErasureReviewAdmission } from "../contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import type { ErasureDecision, ErasureRetention } from "../../../src/core/erasure/contract";
@@ -55,7 +55,7 @@ export const review = (input: ReviewInput): Effect.Effect<boolean, ErasureUnavai
     );
     if (Option.isNone(intent)) return false;
     if (Option.isSome(intent.value.decision)) return intent.value.decision.value === encoded;
-    const record = yield* persistReviewedCase({
+    const publication = yield* persistReviewedCase({
       configuration: input.recovery,
       record: {
         decision,
@@ -65,7 +65,7 @@ export const review = (input: ReviewInput): Effect.Effect<boolean, ErasureUnavai
         operatorRef: admission.authority.operatorRef,
       },
     });
-    const results = yield* commitReview({ ...input, encoded, record });
+    const results = yield* commitReview({ ...input, encoded, ...publication });
     const result = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ approved: Schema.Literals([0, 1]) })
     )(results.at(-1)?.results[0]);
@@ -73,7 +73,12 @@ export const review = (input: ReviewInput): Effect.Effect<boolean, ErasureUnavai
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
 const commitReview = (
-  input: ReviewInput & Readonly<{ encoded: string; record: typeof RecoveryCase.Type }>
+  input: ReviewInput &
+    Readonly<{
+      encoded: string;
+      record: typeof RecoveryCase.Type;
+      checkpoint: ReadonlyArray<D1PreparedStatement>;
+    }>
 ): Effect.Effect<ReadonlyArray<D1Result>, ErasureUnavailable> =>
   Effect.gen(function* () {
     const { db, admission, encoded, record } = input;
@@ -81,12 +86,11 @@ const commitReview = (
     const inventory = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
       input.stores.map(({ id, dataClass }) => ({ id, dataClass }))
     );
-    const checkpoint = yield* prepareCheckpoint(input.recovery);
     return yield* Effect.uninterruptible(
       Effect.tryPromise({
         try: () =>
           db.batch([
-            ...checkpoint,
+            ...input.checkpoint,
             db
               .prepare(`UPDATE erasure_requests SET case_ref=?,scope_ref=?,authority_ref=?,decision_json=?,reviewed_at_ms=?,operator_ref=?,state='Draining'
         WHERE id=? AND user_id=? AND state='AwaitingReview'`)

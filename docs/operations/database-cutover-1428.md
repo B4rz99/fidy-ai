@@ -5294,3 +5294,29 @@ all pre-deletion uploads had already settled; only that verified branch may remo
 writer rows for its exact request/User/generation before repeating deletion. It does not clear any
 other User's attempts. The existing native restore journey covers both branches, including a restored
 missing writer history, stale settled rows, real prefix bytes and repeated restore protection.
+
+### Independent marker publication (#1489 integration)
+
+Initial recovery-marker publication now uses the existing independent generation object as a
+publication barrier. It conditionally changes the current generation to `publishing:<opaque UUID>`
+before issuing the initial case-object PUT. This value is deliberately not a published generation:
+ordinary guarded D1 access, restore scanning and restore release refuse it. Only a positively
+completed marker publication can conditionally replace that exact barrier with the new published
+generation, which the native request transition then commits atomically with its generation check.
+Concurrent publishers cannot acquire the same generation version.
+
+A rejected or interrupted PUT has an unknown outcome and leaves the barrier in place. A subsequent
+empty scan, elapsed time, a successful late PUT, or an operator initialization cannot clear it.
+There is no automatic retry that republishes the marker, no timeout release and no additional table
+or file locator. The conservative consequence is that guarded application access remains unavailable
+while this independent publication is unresolved; do not manually overwrite the generation to make
+an ambiguous publication appear settled. Positive reconciliation and the final minimal-marker
+admission/restore integration remain release work under #1489/#1490/#1494.
+
+The public admission regression uses native D1/R2 with a boundary fault that reports a failed PUT
+before its eventual publication. It proves that the failed admission does not advance the request,
+that guarded access and restore refuse the pending publication, and that late object appearance
+does not lift the fence. Existing successful-admission and native restore journeys remain green.
+R2's [consistency guarantees](https://developers.cloudflare.com/r2/reference/consistency/) and
+[conditional Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)
+are the provider constraints; a negative read says nothing about a PUT still in flight.

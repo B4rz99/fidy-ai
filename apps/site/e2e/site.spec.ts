@@ -141,3 +141,124 @@ test("publishes canonical discovery files and keeps draft terms out of the sitem
   await page.goto("/terminos");
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, follow");
 });
+
+const responsiveWidths = { compactPhone: 320, phone: 390, compactTablet: 768, tablet: 820 };
+const minimumPhoneWidth = 280;
+for (const width of Object.values(responsiveWidths)) {
+  test(`keeps the landing demonstration readable without horizontal scrolling at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    await page.locator("#demo").scrollIntoViewIfNeeded();
+    const layout = await page.evaluate(() => ({
+      viewport: window.innerWidth,
+      content: document.documentElement.scrollWidth,
+      phone: document.querySelector(".phone")?.getBoundingClientRect().width ?? 0,
+    }));
+    expect(layout.content).toBeLessThanOrEqual(layout.viewport);
+    expect(layout.phone).toBeGreaterThanOrEqual(minimumPhoneWidth);
+    await expect(page.getByRole("button", { name: "Presupuestar", exact: true })).toBeVisible();
+  });
+}
+
+test("conversation replay does not cancel the visible coin flip on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 500 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  await page.locator("astro-island[component-export='PhoneDemo']:not([ssr])").waitFor();
+  await page.evaluate(() => {
+    const coin = document.querySelector(".coin");
+    if (coin === null) throw new Error("Missing landing coin");
+    window.scrollTo({
+      top: coin.getBoundingClientRect().top + window.scrollY - 100,
+      behavior: "instant",
+    });
+  });
+  await expect
+    .poll(() => page.locator(".coin").evaluate((coin) => coin.getAnimations().length))
+    .toBe(1);
+  await page.locator(".coin").evaluate((coin) => coin.getAnimations()[0]?.pause());
+  await page.getByRole("button", { name: "Repetir animación de la conversación" }).click();
+  expect(await page.locator(".coin").evaluate((coin) => coin.getAnimations()[0]?.playState)).toBe(
+    "paused"
+  );
+});
+
+test("replays the coin and conversation after scrolling away and returning", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  await page.locator("astro-island[component-export='PhoneDemo']:not([ssr])").waitFor();
+  const revisit = async (visit: string): Promise<void> => {
+    await page.evaluate(async () => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "instant" });
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+    await expect
+      .poll(() =>
+        page
+          .locator(".bubble")
+          .first()
+          .evaluate((bubble) => bubble.getAnimations().length)
+      )
+      .toBe(0);
+    await page.locator("#demo").evaluate((demo) => {
+      window.scrollTo({
+        top: demo.getBoundingClientRect().top + window.scrollY,
+        behavior: "instant",
+      });
+    });
+    await expect
+      .poll(() => page.locator(".coin").evaluate((coin) => coin.getAnimations().length), {
+        message: `${visit} coin entrance`,
+      })
+      .toBe(1);
+    await expect
+      .poll(
+        () =>
+          page
+            .locator(".bubble")
+            .last()
+            .evaluate((bubble) => bubble.getAnimations().length),
+        { message: `${visit} conversation entrance` }
+      )
+      .toBe(1);
+    await page.evaluate(settleEntranceMotion);
+  };
+  await revisit("first");
+  await revisit("second");
+});
+
+for (const width of Object.values(responsiveWidths)) {
+  test(`aligns the Pro selection pill after plan changes and resize at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.goto("/");
+    await page.locator("#precios").scrollIntoViewIfNeeded();
+    await page.getByRole("button", { name: "Anual", exact: true }).click();
+    const alignment = (): Promise<number> =>
+      page.locator(".price-options").evaluate((options) => {
+        const pill = options.querySelector(".price-pill")?.getBoundingClientRect();
+        const selected = options.querySelector('[aria-pressed="true"]')?.getBoundingClientRect();
+        if (!pill || !selected) return Infinity;
+        return Math.max(Math.abs(pill.left - selected.left), Math.abs(pill.right - selected.right));
+      });
+    await expect.poll(alignment).toBeLessThan(1);
+    await expect(page.locator('.price-frame[data-visible="true"]')).toContainText("$289.900");
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await expect.poll(alignment).toBeLessThan(1);
+    await page.getByRole("button", { name: "Semanal", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    expect(await alignment()).toBeLessThan(1);
+    await expect(page.locator('.price-frame[data-visible="true"]')).toContainText("$9.900");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.getByRole("button", { name: "Mensual", exact: true }).click();
+    await expect(page.locator(".price-pill")).toBeHidden();
+    await expect(page.locator('.price-frame[data-visible="true"]')).toContainText("$28.900");
+  });
+}

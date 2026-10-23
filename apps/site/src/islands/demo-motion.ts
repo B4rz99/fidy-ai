@@ -14,6 +14,9 @@ const reducedMotion = (): boolean => window.matchMedia("(prefers-reduced-motion:
 
 const settle = (root: Element): void => {
   root.getAnimations({ subtree: true }).forEach((animation) => {
+    if (animation.effect instanceof KeyframeEffect && animation.effect.target?.matches(".coin")) {
+      return;
+    }
     if (typeof CSSAnimation !== "undefined" && animation instanceof CSSAnimation) return;
     animation.cancel();
   });
@@ -55,8 +58,8 @@ export const playConversation = ({
     reduced
       ? [{ opacity: 0 }, { opacity: 1 }]
       : [
-          { opacity: 0, transform: "translateY(8px) rotate(4deg)" },
-          { opacity: 1, transform: "translateY(0) rotate(4deg)" },
+          { opacity: 0, translate: "0 8px" },
+          { opacity: 1, translate: "0 0" },
         ],
     {
       duration: reduced ? reducedDuration : previewDuration,
@@ -76,15 +79,17 @@ const mountDemonstration = (root: HTMLElement, play: () => void): (() => void) =
   const observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        if (!entry.isIntersecting || entry.intersectionRatio < visibilityThreshold) {
+        if (!entry.isIntersecting) {
+          played = false;
+          delete root.dataset.motion;
           stop();
-        } else if (!played && !document.hidden) {
+        } else if (entry.intersectionRatio >= visibilityThreshold && !played && !document.hidden) {
           played = true;
           play();
         }
       }
     },
-    { threshold: visibilityThreshold }
+    { threshold: [0, visibilityThreshold] }
   );
   observer.observe(root);
   preference.addEventListener("change", stop);

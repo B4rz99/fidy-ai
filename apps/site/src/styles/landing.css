@@ -1712,14 +1712,20 @@ html:has(.fidy-landing) {
   padding: 36px;
 }
 .fidy-landing .price-options {
-  display: flex;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
   background: light-dark(#efece5, var(--night-raised));
   border-radius: 100px;
   padding: 5px;
   margin: 28px 0;
 }
 .fidy-landing .price-options button {
-  flex: 1;
+  position: relative;
+  min-height: 44px;
+  min-width: 0;
   border: 0;
   background: none;
   border-radius: 100px;
@@ -1727,8 +1733,48 @@ html:has(.fidy-landing) {
   font-size: var(--type-secondary);
 }
 .fidy-landing .price-options button[aria-pressed="true"] {
-  background: light-dark(#000, var(--night-deep));
   color: light-dark(#fae3d9, #ffffff);
+}
+.fidy-landing .price-pill {
+  position: absolute;
+  z-index: -1;
+  inset: 5px auto 5px 5px;
+  width: calc((100% - 10px) / 3);
+  border-radius: 100px;
+  background: light-dark(#000, var(--night-deep));
+  pointer-events: none;
+  transform: translateX(0);
+  transition: transform 200ms var(--ease-out);
+}
+.fidy-landing .price-options:has(button:nth-child(2)[aria-pressed="true"]) .price-pill {
+  transform: translateX(100%);
+}
+.fidy-landing .price-options:has(button:nth-child(3)[aria-pressed="true"]) .price-pill {
+  transform: translateX(200%);
+}
+.fidy-landing .price-card[data-instant="true"] .price-pill {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fidy-landing .price-pill {
+    display: none;
+  }
+  .fidy-landing .price-options button::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    border-radius: inherit;
+    background: light-dark(#000, var(--night-deep));
+    opacity: 0;
+    transition: opacity 120ms var(--ease-out);
+  }
+  .fidy-landing .price-options button[aria-pressed="true"]::before {
+    opacity: 1;
+  }
+  .fidy-landing .price-card[data-instant="true"] .price-options button::before {
+    transition: none;
+  }
 }
 .fidy-landing .price-value {
   min-height: 68px;
@@ -2752,7 +2798,7 @@ html:has(.fidy-landing) {
       ) {
       animation: landing-scroll-reveal linear both;
       animation-timeline: view();
-      animation-range: entry 0% exit 100%;
+      animation-range: entry 0% entry 100%;
     }
   }
 }
@@ -2761,14 +2807,9 @@ html:has(.fidy-landing) {
     opacity: 0;
     transform: translateY(12px);
   }
-  12%,
-  88% {
+  100% {
     opacity: 1;
     transform: translateY(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-12px);
   }
 }
 
@@ -3109,4 +3150,54 @@ html:has(.fidy-landing) {
 }
 .fidy-landing .dashboard-accent {
   color: #7cb243;
+}
+
+@media (max-width: 900px) {
+  .fidy-landing .hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+  }
+  .fidy-landing .hero-copy {
+    max-width: 640px;
+  }
+  .fidy-landing .hero-copy p {
+    max-width: 520px;
+  }
+  .fidy-landing .story-demo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .fidy-landing .hero-stage {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    padding: 36px 0 0;
+    gap: 24px;
+    zoom: 1;
+  }
+  .fidy-landing .phone {
+    width: min(306px, 100%);
+    transform: none;
+  }
+  .fidy-landing .coin {
+    width: 64px;
+    height: 64px;
+    font-size: 32px;
+    top: 0;
+    right: 0;
+    z-index: 2;
+  }
+  .fidy-landing .halo {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    top: 100px;
+  }
+  .fidy-landing .floating-note {
+    position: relative;
+    inset: auto;
+    width: min(306px, 100%);
+    transform: none;
+  }
 }

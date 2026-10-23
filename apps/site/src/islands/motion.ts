@@ -4,6 +4,7 @@ const heroStagger = 60;
 const cardStagger = 50;
 const cardDuration = 300;
 const demoDuration = 600;
+const visibilityThreshold = 0.12;
 const ease = "cubic-bezier(0.23, 1, 0.32, 1)";
 
 const supportsScrollMotion = (): boolean =>
@@ -27,8 +28,8 @@ export const enter = ({
     reduced
       ? [{ opacity: 0 }, { opacity: 1 }]
       : [
-          { opacity: 0, transform: `translateY(${distance})` },
-          { opacity: 1, transform: "translateY(0)" },
+          { opacity: 0, translate: `0 ${distance}` },
+          { opacity: 1, translate: "0 0" },
         ],
     {
       duration: reduced ? reducedDuration : duration,
@@ -39,20 +40,36 @@ export const enter = ({
   );
 };
 
-const flipCoin = (root: Element): void => {
+const flipCoin = (coin: Element): void => {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  root
-    .querySelector(".coin")
-    ?.animate(
-      [
-        { transform: "perspective(600px) rotate(13deg) rotateY(0deg)" },
-        { transform: "perspective(600px) rotate(13deg) rotateY(360deg)" },
-      ],
-      { duration: 900, delay: demoDuration, easing: "cubic-bezier(0.77, 0, 0.175, 1)" }
+  coin.getAnimations().forEach((animation) => animation.cancel());
+  coin.animate(
+    [
+      { transform: "perspective(600px) rotate(13deg) rotateY(0deg)" },
+      { transform: "perspective(600px) rotate(13deg) rotateY(360deg)" },
+    ],
+    { duration: 900, delay: 0, easing: "cubic-bezier(0.77, 0, 0.175, 1)" }
+  );
+};
+
+const revealHero = (target: Element): void => {
+  if (supportsScrollMotion()) return;
+  target
+    .querySelectorAll(":scope > *")
+    .forEach((element, index) =>
+      enter({ element, duration: entranceDuration, distance: "5%", delay: index * heroStagger })
     );
 };
 
 const revealSection = (target: Element): void => {
+  if (target.matches(".coin")) {
+    flipCoin(target);
+    return;
+  }
+  if (target.matches(".hero-copy")) {
+    revealHero(target);
+    return;
+  }
   if (target.matches(".agent-system")) {
     target.querySelectorAll(".agent-entry").forEach((card, index) =>
       enter({
@@ -72,9 +89,6 @@ const revealSection = (target: Element): void => {
     duration: isDemo ? demoDuration : entranceDuration,
     distance: isDemo ? "3%" : "4%",
   });
-  if (isDemo) {
-    flipCoin(target);
-  }
 };
 
 /** Owns mounted browser animations; cleanup also supports Strict Mode replay. */
@@ -85,33 +99,31 @@ export const mountMotion = (root: HTMLDivElement): (() => void) => {
       if (typeof CSSAnimation !== "undefined" && animation instanceof CSSAnimation) return;
       animation.cancel();
     });
-  if (!supportsScrollMotion()) {
-    root
-      .querySelectorAll(".hero-copy > *")
-      .forEach((element, index) =>
-        enter({ element, duration: entranceDuration, distance: "5%", delay: index * heroStagger })
-      );
-  }
+  const revealed = new Set<Element>();
   const observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        observer.unobserve(entry.target);
+        if (!entry.isIntersecting) {
+          revealed.delete(entry.target);
+          continue;
+        }
+        if (entry.intersectionRatio < visibilityThreshold || revealed.has(entry.target)) continue;
+        revealed.add(entry.target);
         revealSection(entry.target);
       }
     },
-    { threshold: 0.12 }
+    { threshold: [0, visibilityThreshold] }
   );
   root
-    .querySelectorAll("#demo,.section-head,.agent-system,.faq > div,.closing > *")
+    .querySelectorAll(".hero-copy,.coin,#demo,.section-head,.agent-system,.faq > div,.closing > *")
     .forEach((element) => observer.observe(element));
   const stop = (): void => {
     observer.disconnect();
     cancel();
   };
-  preference.addEventListener("change", stop);
+  preference.addEventListener("change", cancel);
   return (): void => {
     stop();
-    preference.removeEventListener("change", stop);
+    preference.removeEventListener("change", cancel);
   };
 };

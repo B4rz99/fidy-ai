@@ -1,0 +1,14 @@
+scripts/design-tokens.test.js
+  h_c6d49c804e0ad2 9-13,17,21,32-35,40-51,54-55,58-78,80,83-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1fa20d90604365c27645725cf4be3fbbe15496cd",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

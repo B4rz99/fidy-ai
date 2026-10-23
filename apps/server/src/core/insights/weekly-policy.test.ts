@@ -149,3 +149,14 @@ it("rejects empty or reversed captured financial periods independently of adjace
     )
   ).toBe(true);
 });
+
+it("never rounds a future 09:30 scheduled send backwards into the open window", () => {
+  const scheduledAt = DateTime.makeUnsafe("2026-10-12T14:30:00Z");
+  const decision = decideInsightDelivery({
+    scheduledAt,
+    expiresAt: DateTime.makeUnsafe("2026-10-12T18:00:00Z"),
+    now: DateTime.makeUnsafe("2026-10-12T14:15:00Z"),
+    timeZone: IanaTimeZone.make("America/Bogota"),
+  });
+  expect(decision).toEqual({ _tag: "Deferred", nextEligibleAt: scheduledAt });
+});

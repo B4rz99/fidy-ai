@@ -75,3 +75,19 @@ it("retains the caller's current Connection projection through discovery and bro
     ).toEqual(value);
   }
 });
+
+it("keeps the current Connection identity and state in institution discovery", () => {
+  const id = "10000000-0000-4000-8000-000000000001";
+  const decoded = Schema.decodeUnknownSync(InstitutionSummary)({
+    id: "bank",
+    displayName: "Banco",
+    availability: "available",
+    connection: { id, state: "Active", institutionId: "hidden" },
+  });
+  expect(Schema.encodeSync(InstitutionSummary)(decoded)).toEqual({
+    id: "bank",
+    displayName: "Banco",
+    availability: "available",
+    connection: { id, state: "Active" },
+  });
+});

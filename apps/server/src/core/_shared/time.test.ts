@@ -107,4 +107,16 @@ it("documents itself as a date-time string without regex lookaround", () => {
     format: "date-time",
   });
   expect(JSON.stringify(document)).not.toMatch(/\(\?[=!<]/);
+  expect(document.definitions.UtcTimestamp).toHaveProperty(
+    "pattern",
+    expect.stringMatching(/^\^.*\$$/)
+  );
+});
+
+it("marks calendar validation as approximate when exporting an exclusive schema union", () => {
+  const document = Schema.toJsonSchemaDocument(
+    Schema.Union([UtcTimestamp, Schema.Literal("2026-02-30T00:00:00Z")], { mode: "oneOf" })
+  );
+  expect(document.schema).toHaveProperty("anyOf");
+  expect(document.schema).not.toHaveProperty("oneOf");
 });

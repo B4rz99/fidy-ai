@@ -97,3 +97,16 @@ it.effect("uses the captured local date and wall clock across month ends and day
     expect(DateTime.formatIso(yearly.endsAt)).toBe("2026-06-15T15:00:00.000Z");
   })
 );
+
+it.effect("keeps monthly renewals adjacent across a year boundary", () =>
+  Effect.gen(function* () {
+    const period = yield* renewalPeriod({
+      billingPeriod: "monthly",
+      timeZone: IanaTimeZone.make("America/Bogota"),
+      originalStartsAt: DateTime.makeUnsafe("2025-12-31T15:30:00Z"),
+      previousEndsAt: DateTime.makeUnsafe("2026-01-31T15:30:00Z"),
+    });
+    expect(DateTime.formatIso(period.startsAt)).toBe("2026-01-31T15:30:00.000Z");
+    expect(DateTime.formatIso(period.endsAt)).toBe("2026-02-28T15:30:00.000Z");
+  })
+);

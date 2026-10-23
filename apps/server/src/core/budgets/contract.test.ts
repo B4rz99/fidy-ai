@@ -377,3 +377,16 @@ it("preserves the exact remaining or overage Money in all valid Budget progress 
     expect(Schema.encodeSync(codec)(Schema.decodeUnknownSync(codec)(value))).toEqual(value);
   }
 });
+
+it("reports missing collection context before a dependent group rename refusal", () => {
+  const decoded = Schema.decodeResult(UpdateBudgetInput)({
+    categoryId: budgetInput.categoryId,
+    cap: budgetInput.cap,
+    groupCurrency: "COP",
+    groupCategoryIds: [budgetInput.categoryId],
+    month: "2026-10",
+  });
+  expect(Result.isFailure(decoded) ? String(decoded.failure) : "").toContain(
+    "Group currency requires a selected collection, name, and month"
+  );
+});

@@ -1,7 +1,11 @@
 import { CORE_SRC } from "./source-scope.mjs";
 
 export default {
-  plugins: ["../../tools/mutation/node_modules/@stryker-mutator/vitest-runner/dist/src/index.js"],
+  plugins: [
+    "../../tools/mutation/node_modules/@stryker-mutator/vitest-runner/dist/src/index.js",
+    "../../tools/mutation/equivalents.mjs",
+  ],
+  ignorers: ["exact-equivalents"],
   testRunner: "vitest",
   vitest: { configFile: "vitest.mutation.config.ts" },
   concurrency: 4,
@@ -10,7 +14,7 @@ export default {
   mutator: {
     excludedMutations: ["StringLiteral", "ObjectLiteral"],
   },
-  thresholds: { high: 100, low: 95, break: 95 },
+  thresholds: { high: 100, low: 100, break: 100 },
   reporters: ["clear-text", "html", "json", "progress"],
   htmlReporter: { fileName: "reports/mutation/mutation.html" },
   tempDirName: ".stryker-tmp",

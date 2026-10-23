@@ -1,6 +1,13 @@
+import {
+  MemoryCapacityExceeded,
+  MemoryNotFound,
+  MemoryText,
+  MemoryTextInput,
+  RememberInput,
+  ReviseInput,
+} from "./contract";
 import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
-import { MemoryText, MemoryTextInput, RememberInput, ReviseInput } from "./contract";
 
 const decode = Schema.decodeUnknownSync(MemoryTextInput);
 
@@ -27,4 +34,11 @@ it("rejects an empty or overlong normalized Memory", () => {
   expect(() => decode(" \r\n ")).toThrow();
   expect(() => decode("x".repeat(2_001))).toThrow();
   expect(decode("x".repeat(2_000))).toHaveLength(2_000);
+});
+
+it("explains capacity and absence failures without including Memory content", () => {
+  expect(new MemoryCapacityExceeded().message).toBe(
+    "The User's current Memories have reached their aggregate token capacity"
+  );
+  expect(new MemoryNotFound().message).toBe("No current Memory belongs to the User");
 });

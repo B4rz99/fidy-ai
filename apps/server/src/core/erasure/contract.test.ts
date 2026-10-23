@@ -1,11 +1,12 @@
-import { Result, Schema } from "effect";
-import { expect, it } from "vitest";
 import {
+  ErasureCustodyEvidence,
   ErasureDecision,
   ErasureOperatorReceipt,
   ErasureRequest,
   ErasureRetention,
 } from "./contract";
+import { Result, Schema } from "effect";
+import { expect, it } from "vitest";
 
 const reference = "10000000-0000-4000-8000-000000000001";
 const retention = {
@@ -98,4 +99,27 @@ it("preserves completed, retained and unresolved external evidence in the operat
   };
   const decoded = Schema.decodeUnknownSync(ErasureOperatorReceipt)(value);
   expect(Schema.encodeSync(ErasureOperatorReceipt)(decoded)).toEqual(value);
+});
+
+it("retains accepted custody evidence and safe unresolved reasons", () => {
+  const identity = {
+    reference: "10000000-0000-4000-8000-000000000001",
+    custodian: "Cloudflare",
+    evidenceRef: "10000000-0000-4000-8000-000000000002",
+  };
+  const outcomes = [
+    ...["Accepted", "Verified", "NotApplicable"].map((status) => ({ status })),
+    ...["capability-unverified", "retention-conflict", "request-declined"].map((reason) => ({
+      status: "Unresolved",
+      reason,
+    })),
+  ];
+  for (const outcome of outcomes) {
+    const value = { ...identity, outcome };
+    expect(
+      Schema.encodeSync(ErasureCustodyEvidence)(
+        Schema.decodeUnknownSync(ErasureCustodyEvidence)(value)
+      )
+    ).toEqual(value);
+  }
 });

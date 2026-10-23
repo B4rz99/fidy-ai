@@ -201,3 +201,17 @@ it("begins a new session after an explicitly ended one even when its activity is
     })
   ).toEqual({ _tag: "BeginSession", consentBasis: consent });
 });
+
+it("refuses a future session start even when no activity or Pending Turn has been recorded", () => {
+  const request = admission();
+  expect(
+    decideHostedAdmission({
+      ...request,
+      nowMs: session.startedAtMs - 1,
+      state: {
+        session: Option.some({ ...session, lastActivityAtMs: Option.none() }),
+        pendingStartedAtMs: Option.none(),
+      },
+    })
+  ).toEqual({ _tag: "Refused", reason: "InvalidState" });
+});

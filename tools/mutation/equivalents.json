@@ -1,0 +1,1012 @@
+{
+  "files": {
+    "src/core/insights/operations.ts": {
+      "sourceSha256": "25872e1875ddd473a3f9af14d3019a50b19b664a9cd5c44a9d747ebed49a8d4f",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 80,
+              "line": 91
+            },
+            "start": {
+              "column": 3,
+              "line": 91
+            }
+          },
+          "mutatorName": "CallExpression",
+          "replacement": ";",
+          "original": "throw new Error(\"Reminder calendar could not locate an anchored occurrence\");",
+          "reason": "Daily Cron advances through local calendar dates, including a skipped or repeated date at an offset transition. The three-day anchor residue is reached before seven candidates. Changing the bound equality or counter direction therefore preserves the first matching occurrence; the exhaustion statement is unreachable for valid instructions."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 60,
+              "line": 81
+            },
+            "start": {
+              "column": 25,
+              "line": 81
+            }
+          },
+          "mutatorName": "EqualityOperator",
+          "replacement": "attempt <= maximumCalendarCandidates",
+          "original": "attempt < maximumCalendarCandidates",
+          "reason": "Daily Cron advances through local calendar dates, including a skipped or repeated date at an offset transition. The three-day anchor residue is reached before seven candidates. Changing the bound equality or counter direction therefore preserves the first matching occurrence; the exhaustion statement is unreachable for valid instructions."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 74,
+              "line": 81
+            },
+            "start": {
+              "column": 62,
+              "line": 81
+            }
+          },
+          "mutatorName": "AssignmentOperator",
+          "replacement": "attempt -= 1",
+          "original": "attempt += 1",
+          "reason": "Daily Cron advances through local calendar dates, including a skipped or repeated date at an offset transition. The three-day anchor residue is reached before seven candidates. Changing the bound equality or counter direction therefore preserves the first matching occurrence; the exhaustion statement is unreachable for valid instructions."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 71,
+              "line": 204
+            },
+            "start": {
+              "column": 7,
+              "line": 204
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "false",
+          "original": "input.now.epochMilliseconds >= input.expiresAt.epochMilliseconds",
+          "reason": "The later eligible-at expiry check also rejects these instants: eligible is at least max(now, scheduledAt), and delivery-window adjustments only advance it. Removing the early check or changing its equality boundary preserves the decision."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 71,
+              "line": 204
+            },
+            "start": {
+              "column": 7,
+              "line": 204
+            }
+          },
+          "mutatorName": "EqualityOperator",
+          "replacement": "input.now.epochMilliseconds > input.expiresAt.epochMilliseconds",
+          "original": "input.now.epochMilliseconds >= input.expiresAt.epochMilliseconds",
+          "reason": "The later eligible-at expiry check also rejects these instants: eligible is at least max(now, scheduledAt), and delivery-window adjustments only advance it. Removing the early check or changing its equality boundary preserves the decision."
+        }
+      ]
+    },
+    "src/core/recurring-plans/operations.ts": {
+      "sourceSha256": "0f973caaab2198636a09c0c2b4041226412a51ca48cc621d930d2d4fbaba0493",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 81,
+              "line": 41
+            },
+            "start": {
+              "column": 61,
+              "line": 41
+            }
+          },
+          "mutatorName": "ArrayDeclaration",
+          "replacement": "[]",
+          "original": "[anchor.day, \"last\"]",
+          "reason": "RecurringPlanInput requires an explicit distinct monthDays pair for twice-monthly frequency. This fallback is unreachable for valid plan input; other frequencies do not evaluate it."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 45,
+              "line": 361
+            },
+            "start": {
+              "column": 43,
+              "line": 361
+            }
+          },
+          "mutatorName": "ArrayDeclaration",
+          "replacement": "[\"Stryker was here\"]",
+          "original": "[]",
+          "reason": "The extra allocated string sentinel is not a UUID and cannot equal any validated RecurringMatchFact identity. It therefore excludes no additional candidate."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 18,
+              "line": 402
+            },
+            "start": {
+              "column": 14,
+              "line": 402
+            }
+          },
+          "mutatorName": "BooleanLiteral",
+          "replacement": "false",
+          "original": "true",
+          "reason": "RecurringFilters has a closed set of schema-decoded keys. Every other key returned earlier; accountId is the sole remaining valid key. Making that final test unconditional, or changing the unreachable default, cannot change a validated filter result."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 83,
+              "line": 63
+            },
+            "start": {
+              "column": 18,
+              "line": 63
+            }
+          },
+          "mutatorName": "ArithmeticOperator",
+          "replacement": "(end.year - first.year) * monthsPerYear + end.month + first.month",
+          "original": "(end.year - first.year) * monthsPerYear + end.month - first.month",
+          "reason": "Adding the initial month rather than subtracting it only extends the last loop offset. The final date <= through filter removes every additional future date, leaving the same ordered projection."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 29,
+              "line": 64
+            },
+            "start": {
+              "column": 27,
+              "line": 64
+            }
+          },
+          "mutatorName": "ArrayDeclaration",
+          "replacement": "[\"Stryker was here\"]",
+          "original": "[]",
+          "reason": "The extra allocated string sentinel is not a UUID and cannot equal any validated RecurringMatchFact identity. It therefore excludes no additional candidate."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 74,
+              "line": 66
+            },
+            "start": {
+              "column": 19,
+              "line": 66
+            }
+          },
+          "mutatorName": "ArithmeticOperator",
+          "replacement": "(start.year - first.year) * monthsPerYear - start.month",
+          "original": "(start.year - first.year) * monthsPerYear + start.month",
+          "reason": "Subtracting the selected start month only lowers the initial offset. Both offsets remain aligned multiples of step; the final from/firstDate filters remove extra earlier occurrences, so none of the original requested occurrences is lost."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 70,
+              "line": 67
+            },
+            "start": {
+              "column": 25,
+              "line": 67
+            }
+          },
+          "mutatorName": "MethodExpression",
+          "replacement": "Math.min(0, Math.ceil(elapsed / step) * step)",
+          "original": "Math.max(0, Math.ceil(elapsed / step) * step)",
+          "reason": "Using the minimum starts earlier along the same step-aligned sequence. Final firstDate/from bounds remove earlier candidates, retaining exactly the requested occurrences."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 41,
+              "line": 83
+            },
+            "start": {
+              "column": 15,
+              "line": 83
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "plan.endDate !== undefined",
+          "reason": "When endDate is absent, undefined < through is false and the conditional still selects through. Defined end dates retain the same comparison and result."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 67,
+              "line": 83
+            },
+            "start": {
+              "column": 45,
+              "line": 83
+            }
+          },
+          "mutatorName": "EqualityOperator",
+          "replacement": "plan.endDate <= through",
+          "original": "plan.endDate < through",
+          "reason": "At equality both ternary branches contain the identical date string. Including equality in the comparison cannot change the selected end bound."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 29,
+              "line": 181
+            },
+            "start": {
+              "column": 5,
+              "line": 181
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "plan.money !== undefined",
+          "reason": "The preceding fixed amountMode check is a validated RecurringPlanInput invariant: fixed plans must contain positive Money in the plan Currency. This money-defined conjunct is therefore always true here."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 33,
+              "line": 229
+            },
+            "start": {
+              "column": 13,
+              "line": 229
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "revision.from > from",
+          "reason": "Using revision.from may generate additional dates before the requested month, but the final expectedDate range check removes them. No requested occurrence is removed."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 33,
+              "line": 229
+            },
+            "start": {
+              "column": 13,
+              "line": 229
+            }
+          },
+          "mutatorName": "EqualityOperator",
+          "replacement": "revision.from >= from",
+          "original": "revision.from > from",
+          "reason": "At equality both ternary branches contain the same date. The strict or non-strict comparison therefore selects the identical projection start."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 34,
+              "line": 318
+            },
+            "start": {
+              "column": 10,
+              "line": 318
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "plan.money !== undefined",
+          "reason": "The preceding fixed amountMode check is a validated RecurringPlanInput invariant: fixed plans must contain positive Money in the plan Currency. This money-defined conjunct is therefore always true here."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 40,
+              "line": 361
+            },
+            "start": {
+              "column": 7,
+              "line": 361
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "false",
+          "original": "entry.transactionId === undefined",
+          "reason": "A manual mark without a Transaction identity adds undefined to the allocated Set instead of adding nothing. Match facts have defined UUID identities, so no candidate can match that extra member."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 30,
+              "line": 401
+            },
+            "start": {
+              "column": 11,
+              "line": 401
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "key === \"accountId\"",
+          "reason": "RecurringFilters has a closed set of schema-decoded keys. Every other key returned earlier; accountId is the sole remaining valid key. Making that final test unconditional, or changing the unreachable default, cannot change a validated filter result."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 26,
+              "line": 671
+            },
+            "start": {
+              "column": 7,
+              "line": 671
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "false",
+          "original": "Option.isNone(next)",
+          "reason": "A rejected decision without a value is spread into a revision-only object when this guard is removed. RecurringDocument decoding rejects that object and mapError returns the same content-free InvalidRecurringEdit failure as the original guard."
+        }
+      ]
+    },
+    "src/core/agent/operations.ts": {
+      "sourceSha256": "e28c9f333da35d5ec2fcf40eb0de0a7e4b43f8348978e9c505052c58e882d9a5",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 50,
+              "line": 64
+            },
+            "start": {
+              "column": 39,
+              "line": 64
+            }
+          },
+          "mutatorName": "EqualityOperator",
+          "replacement": "pending <= 0",
+          "original": "pending < 0",
+          "reason": "The outer pending === 0 branch has already returned None. In the remaining branch pending can only be negative or positive, so pending < 0 and pending <= 0 choose the same terminal entry."
+        }
+      ]
+    },
+    "src/core/categories/internal/rules.ts": {
+      "sourceSha256": "7d0667fea58520d7484d29503d526ecc8988d74d4377ae20d29afe55546f2594",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 36,
+              "line": 57
+            },
+            "start": {
+              "column": 11,
+              "line": 57
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "excluding._tag === \"Some\"",
+          "reason": "None has no value, and every KeywordRule identity is a defined UUID. Reading its absent value cannot exclude a real rule; Some still compares the same identity."
+        }
+      ]
+    },
+    "src/core/categories/operations.ts": {
+      "sourceSha256": "9e975c7d308f815a88be82bdaf19d9527249772b30e2550a3402aada48745479",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 62,
+              "line": 79
+            },
+            "start": {
+              "column": 11,
+              "line": 79
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "change.operation === \"categories.updateKeywordRule\"",
+          "reason": "Create commands have no ruleId, whereas all existing rule identities are defined UUIDs. Some(undefined) excludes no rule, just as None does; the enclosing delete guard bypasses this check for deletion."
+        }
+      ]
+    },
+    "src/core/dashboard/operations.ts": {
+      "sourceSha256": "e9dfc28b4f1289bc47e197e55437229216b0fb588540a52a601bff6368cd00b3",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 63,
+              "line": 353
+            },
+            "start": {
+              "column": 36,
+              "line": 353
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "false",
+          "original": "contributions === undefined",
+          "reason": "The loop iterates the current Map keys without deleting entries. Every selected key therefore has contributions; removing only this undefined check cannot change a category result or absence decision."
+        }
+      ]
+    },
+    "src/core/ingestion/operations.ts": {
+      "sourceSha256": "240d3b5b4fba57354620d0ed6a3f991c1f4a9559209e8c0ba4674c3ac6d6bf01",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 30,
+              "line": 43
+            },
+            "start": {
+              "column": 3,
+              "line": 41
+            }
+          },
+          "mutatorName": "LogicalOperator",
+          "replacement": "actual.year === expected.year && actual.month === expected.month || actual.day === expected.day",
+          "original": "actual.year === expected.year &&\n  actual.month === expected.month &&\n  actual.day === expected.day",
+          "reason": "CaptureOccurrence constrains month, day and clock spelling before interpretation. Valid clock components cannot normalize; calendar overflow changes both month and day, so the remaining comparisons still reject it. DST gaps and overlaps are independently rejected by makeZoned(disambiguation: reject)."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 34,
+              "line": 42
+            },
+            "start": {
+              "column": 3,
+              "line": 41
+            }
+          },
+          "mutatorName": "LogicalOperator",
+          "replacement": "actual.year === expected.year || actual.month === expected.month",
+          "original": "actual.year === expected.year &&\n  actual.month === expected.month",
+          "reason": "CaptureOccurrence constrains month, day and clock spelling before interpretation. Valid clock components cannot normalize; calendar overflow changes both month and day, so the remaining comparisons still reject it. DST gaps and overlaps are independently rejected by makeZoned(disambiguation: reject)."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 34,
+              "line": 42
+            },
+            "start": {
+              "column": 3,
+              "line": 41
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "actual.year === expected.year &&\n  actual.month === expected.month",
+          "reason": "CaptureOccurrence constrains month, day and clock spelling before interpretation. Valid clock components cannot normalize; calendar overflow changes both month and day, so the remaining comparisons still reject it. DST gaps and overlaps are independently rejected by makeZoned(disambiguation: reject)."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 32,
+              "line": 41
+            },
+            "start": {
+              "column": 3,
+              "line": 41
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "actual.year === expected.year",
+          "reason": "CaptureOccurrence constrains month, day and clock spelling before interpretation. Valid clock components cannot normalize; calendar overflow changes both month and day, so the remaining comparisons still reject it. DST gaps and overlaps are independently rejected by makeZoned(disambiguation: reject)."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 34,
+              "line": 42
+            },
+            "start": {
+              "column": 3,
+              "line": 42
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "actual.month === expected.month",
+          "reason": "CaptureOccurrence constrains month, day and clock spelling before interpretation. Valid clock components cannot normalize; calendar overflow changes both month and day, so the remaining comparisons still reject it. DST gaps and overlaps are independently rejected by makeZoned(disambiguation: reject)."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 30,
+              "line": 43
+            },
+            "start": {
+              "column": 3,
+              "line": 43
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "actual.day === expected.day",
+          "reason": "CaptureOccurrence constrains month, day and clock spelling before interpretation. Valid clock components cannot normalize; calendar overflow changes both month and day, so the remaining comparisons still reject it. DST gaps and overlaps are independently rejected by makeZoned(disambiguation: reject)."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 32,
+              "line": 44
+            },
+            "start": {
+              "column": 3,
+              "line": 44
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "actual.hour === expected.hour",
+          "reason": "CaptureOccurrence constrains month, day and clock spelling before interpretation. Valid clock components cannot normalize; calendar overflow changes both month and day, so the remaining comparisons still reject it. DST gaps and overlaps are independently rejected by makeZoned(disambiguation: reject)."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 36,
+              "line": 45
+            },
+            "start": {
+              "column": 3,
+              "line": 45
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "actual.minute === expected.minute",
+          "reason": "CaptureOccurrence constrains month, day and clock spelling before interpretation. Valid clock components cannot normalize; calendar overflow changes both month and day, so the remaining comparisons still reject it. DST gaps and overlaps are independently rejected by makeZoned(disambiguation: reject)."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 36,
+              "line": 46
+            },
+            "start": {
+              "column": 3,
+              "line": 46
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "actual.second === expected.second",
+          "reason": "CaptureOccurrence constrains month, day and clock spelling before interpretation. Valid clock components cannot normalize; calendar overflow changes both month and day, so the remaining comparisons still reject it. DST gaps and overlaps are independently rejected by makeZoned(disambiguation: reject)."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 25,
+              "line": 58
+            },
+            "start": {
+              "column": 11,
+              "line": 58
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "false",
+          "original": "parts.year < 1",
+          "reason": "Year 0000 either fails zoned construction or fails the calendar-parts round trip: the pinned named-zone formatter exposes a positive BCE year-of-era. GMT-style aliases that cannot be parsed also return None. Both paths retain the invalid-occurrence refusal without the early guard."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 92,
+              "line": 632
+            },
+            "start": {
+              "column": 84,
+              "line": 632
+            }
+          },
+          "mutatorName": "ArrowFunction",
+          "replacement": "() => undefined",
+          "original": "() => \"\"",
+          "reason": "An absent amount becomes undefined instead of empty text, but reviewText decodes either through ReviewDraft.amount and returns empty text for decoding failure. Both paths therefore produce the same empty draft amount."
+        }
+      ]
+    },
+    "src/core/insights/contract.ts": {
+      "sourceSha256": "24bda3fb6d1005f6c95f7d5376e21868d552ce5b110896975c1cfa642dbacea4",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 57,
+              "line": 212
+            },
+            "start": {
+              "column": 12,
+              "line": 212
+            }
+          },
+          "mutatorName": "EqualityOperator",
+          "replacement": "previous.money.currency <= item.money.currency",
+          "original": "previous.money.currency < item.money.currency",
+          "reason": "This branch is reached only after the same strings were compared as unequal. Strict and non-strict ordering consequently give the same result."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 100,
+              "line": 214
+            },
+            "start": {
+              "column": 59,
+              "line": 214
+            }
+          },
+          "mutatorName": "EqualityOperator",
+          "replacement": "previous.counterparty <= item.counterparty",
+          "original": "previous.counterparty < item.counterparty",
+          "reason": "This branch is reached only after the same strings were compared as unequal. Strict and non-strict ordering consequently give the same result."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 55,
+              "line": 215
+            },
+            "start": {
+              "column": 10,
+              "line": 215
+            }
+          },
+          "mutatorName": "EqualityOperator",
+          "replacement": "previous.confirmationId <= item.confirmationId",
+          "original": "previous.confirmationId < item.confirmationId",
+          "reason": "RecurringDigestPayload independently requires unique confirmation identities. Equal identities are rejected before ordering can admit a payload, so a non-strict tie comparator cannot change accepted payloads."
+        }
+      ]
+    },
+    "src/core/insights/weekly-summary/contract.ts": {
+      "sourceSha256": "5a00fc9870bef703c9596e53044894d66fb376199d133c056da1740515775e51",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 73,
+              "line": 49
+            },
+            "start": {
+              "column": 39,
+              "line": 49
+            }
+          },
+          "mutatorName": "EqualityOperator",
+          "replacement": "left.categoryId <= right.categoryId",
+          "original": "left.categoryId < right.categoryId",
+          "reason": "Repeated Category identities are rejected by the seen set before the ordering comparison. The strict versus non-strict identity tie can never decide acceptance."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 68,
+              "line": 69
+            },
+            "start": {
+              "column": 7,
+              "line": 69
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "false",
+          "original": "BigDecimal.Order(category.outflow.amount, current.amount) > 0",
+          "reason": "WeeklyCategory totals are positive and categoryCoverage independently requires their sum to be at most the current total. A single category above that total necessarily fails the sum check as well."
+        }
+      ]
+    },
+    "src/core/insights/weekly-summary/operations.ts": {
+      "sourceSha256": "d9155134d13d2fa1e8614d1d339abb280da819ace605b340e9f7ab964e3b9bba",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 45,
+              "line": 109
+            },
+            "start": {
+              "column": 7,
+              "line": 109
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "false",
+          "original": "!Array.isReadonlyArrayNonEmpty(groups)",
+          "reason": "The earlier NoActivity branch rejects empty or all-zero current facts. At least one current Currency is therefore present in the union used to construct groups; this nonempty guard is always false."
+        }
+      ]
+    },
+    "src/core/recurring/operations.ts": {
+      "sourceSha256": "aea0a84771131cf8212bea1ab25b3ce96060c5c97fa2e0ee0c38930efeb90d8b",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 32,
+              "line": 70
+            },
+            "start": {
+              "column": 18,
+              "line": 70
+            }
+          },
+          "mutatorName": "OptionalChaining",
+          "replacement": "months[1][0]",
+          "original": "months[1]?.[0]",
+          "reason": "The months array is constructed from exactly three offsets. Its indices one and two always exist, so removing this optional access cannot alter execution."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 31,
+              "line": 71
+            },
+            "start": {
+              "column": 17,
+              "line": 71
+            }
+          },
+          "mutatorName": "OptionalChaining",
+          "replacement": "months[2][0]",
+          "original": "months[2]?.[0]",
+          "reason": "The months array is constructed from exactly three offsets. Its indices one and two always exist, so removing this optional access cannot alter execution."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 50,
+              "line": 72
+            },
+            "start": {
+              "column": 7,
+              "line": 72
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "false",
+          "original": "second === undefined || third === undefined",
+          "reason": "The preceding months.some check has already required each of the three arrays to contain exactly one fact. Both selected facts are therefore defined whenever this guard is reached."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 50,
+              "line": 72
+            },
+            "start": {
+              "column": 7,
+              "line": 72
+            }
+          },
+          "mutatorName": "LogicalOperator",
+          "replacement": "second === undefined && third === undefined",
+          "original": "second === undefined || third === undefined",
+          "reason": "The preceding months.some check has already required each of the three arrays to contain exactly one fact. Both selected facts are therefore defined whenever this guard is reached."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 27,
+              "line": 72
+            },
+            "start": {
+              "column": 7,
+              "line": 72
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "false",
+          "original": "second === undefined",
+          "reason": "The preceding months.some check has already required each of the three arrays to contain exactly one fact. Both selected facts are therefore defined whenever this guard is reached."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 50,
+              "line": 72
+            },
+            "start": {
+              "column": 31,
+              "line": 72
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "false",
+          "original": "third === undefined",
+          "reason": "The preceding months.some check has already required each of the three arrays to contain exactly one fact. Both selected facts are therefore defined whenever this guard is reached."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 76,
+              "line": 87
+            },
+            "start": {
+              "column": 74,
+              "line": 87
+            }
+          },
+          "mutatorName": "ArrayDeclaration",
+          "replacement": "[\"Stryker was here\"]",
+          "original": "[]",
+          "reason": "A missing month contains no real DatedFact. The injected string sentinel has no key and related rejects it before accessing any fact fields, so the candidate selection remains empty."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 49,
+              "line": 91
+            },
+            "start": {
+              "column": 25,
+              "line": 91
+            }
+          },
+          "mutatorName": "MethodExpression",
+          "replacement": "triples",
+          "original": "triples.slice(index + 1)",
+          "reason": "Scanning all triples repeats symmetric conflict comparisons and includes self comparisons that immediately continue. Conflicts are accumulated in a Set, so repeated comparisons add no new identities and preserve the retained triples."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 88,
+              "line": 201
+            },
+            "start": {
+              "column": 5,
+              "line": 201
+            }
+          },
+          "mutatorName": "EqualityOperator",
+          "replacement": "last.fact.occurredAt.epochMilliseconds < proposal.lastOccurredAt.epochMilliseconds",
+          "original": "last.fact.occurredAt.epochMilliseconds <= proposal.lastOccurredAt.epochMilliseconds",
+          "reason": "When the latest unique fact equals the retained last instant, both paths retain the same Money, Counterparty, instant and Transaction identity. The copied proposal preserves all original confirmation evidence as well."
+        }
+      ]
+    },
+    "src/core/recurring-plans/contract.ts": {
+      "sourceSha256": "c30a96ad6f1be27c61bc0382a1ffc3189488d327f184b2b5dba8e01c1e3b9e29",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 35,
+              "line": 69
+            },
+            "start": {
+              "column": 9,
+              "line": 69
+            }
+          },
+          "mutatorName": "ConditionalExpression",
+          "replacement": "true",
+          "original": "plan.endDate !== undefined",
+          "reason": "When endDate is absent, undefined < firstDate is false. Removing the undefined conjunct therefore preserves the validation result and refusal message."
+        }
+      ]
+    },
+    "src/core/subscription/contract.ts": {
+      "sourceSha256": "574aef9060eaf53a5dbd040e730a38c9cbd59e54bc3e057a637b6af937f32a8d",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 37,
+              "line": 90
+            },
+            "start": {
+              "column": 9,
+              "line": 90
+            }
+          },
+          "mutatorName": "OptionalChaining",
+          "replacement": "offers[index].billingPeriod",
+          "original": "offers[index]?.billingPeriod",
+          "reason": "The Subscription offer schema requires exactly three entries and this loop uses the three corresponding fixed period indices. Each indexed offer exists before the refinement runs."
+        }
+      ]
+    },
+    "src/core/tokens/contract.ts": {
+      "sourceSha256": "426f3c13a3ebe3d0ead9714186a3bcedea3c84402f51619f4f261836ac2efb27",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 64,
+              "line": 298
+            },
+            "start": {
+              "column": 34,
+              "line": 298
+            }
+          },
+          "mutatorName": "Regex",
+          "replacement": "/[BCDFGHJKLMNPQRSTVWXZ]{8}$/u",
+          "original": "/^[BCDFGHJKLMNPQRSTVWXZ]{8}$/u",
+          "reason": "Loosening an anchor can only change normalization for an input longer than eight symbols. The transformation preserves every input character and inserts a hyphen, so the canonical four-plus-four target still rejects that longer result. Valid eight-symbol input normalizes identically."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 64,
+              "line": 298
+            },
+            "start": {
+              "column": 34,
+              "line": 298
+            }
+          },
+          "mutatorName": "Regex",
+          "replacement": "/^[BCDFGHJKLMNPQRSTVWXZ]{8}/u",
+          "original": "/^[BCDFGHJKLMNPQRSTVWXZ]{8}$/u",
+          "reason": "Loosening an anchor can only change normalization for an input longer than eight symbols. The transformation preserves every input character and inserts a hyphen, so the canonical four-plus-four target still rejects that longer result. Valid eight-symbol input normalizes identically."
+        }
+      ]
+    },
+    "src/core/transactions/operations.ts": {
+      "sourceSha256": "349ddd583b4daf83b27482cf54fa4f3238b0c6b80f6e9bf41b6c2c2393833e18",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 74,
+              "line": 56
+            },
+            "start": {
+              "column": 5,
+              "line": 56
+            }
+          },
+          "mutatorName": "EqualityOperator",
+          "replacement": "input.firstTransactionId.localeCompare(input.secondTransactionId) <= 0",
+          "original": "input.firstTransactionId.localeCompare(input.secondTransactionId) < 0",
+          "reason": "Distinct Transaction identities are checked before this comparison. UUID locale ordering is nonzero for distinct accepted identities, and the visible-member comparator falls back to that identity order for equal creation instants. Including equality therefore cannot change either result."
+        },
+        {
+          "location": {
+            "end": {
+              "column": 75,
+              "line": 73
+            },
+            "start": {
+              "column": 30,
+              "line": 73
+            }
+          },
+          "mutatorName": "EqualityOperator",
+          "replacement": "compareVisibleMembers(visible, candidate) <= 0",
+          "original": "compareVisibleMembers(visible, candidate) < 0",
+          "reason": "Distinct Transaction identities are checked before this comparison. UUID locale ordering is nonzero for distinct accepted identities, and the visible-member comparator falls back to that identity order for equal creation instants. Including equality therefore cannot change either result."
+        }
+      ]
+    },
+    "src/core/_shared/time.ts": {
+      "sourceSha256": "e4626fa67316b2bfd7efb238d1e4dcb5d281fdbb99495f453b714c029ed73719",
+      "mutants": [
+        {
+          "location": {
+            "end": {
+              "column": 34,
+              "line": 41
+            },
+            "start": {
+              "column": 30,
+              "line": 41
+            }
+          },
+          "mutatorName": "BooleanLiteral",
+          "replacement": "false",
+          "original": "true",
+          "reason": "The pinned Effect JSON Schema compiler recognizes approximate check output solely with Array.isArray and reads only element zero. It never reads the tuple marker, so replacing true with false preserves the generated constraints and approximation metadata."
+        }
+      ]
+    }
+  }
+}

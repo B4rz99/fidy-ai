@@ -1,6 +1,11 @@
+import {
+  TrialPeriod,
+  UserContext,
+  UserPreferences,
+  WhatsAppBusinessPhoneNumberId,
+} from "./contract";
 import { expect, it } from "@effect/vitest";
 import { DateTime, Result, Schema } from "effect";
-import { TrialPeriod, UserContext, UserPreferences } from "./contract";
 
 it("accepts only a TrialPeriod lasting exactly 168 hours", () => {
   const startedAt = "2026-08-01T12:00:00Z";
@@ -56,4 +61,14 @@ it("retains explicit User context without inferring defaults or exposing identit
       Schema.decodeUnknownResult(UserContext)({ serviceMarket: "CO", locale: "es-CO" })
     )
   ).toBe(true);
+});
+
+it("requires the entire Meta phone-number identity to contain only bounded digits", () => {
+  const decode = Schema.decodeUnknownResult(WhatsAppBusinessPhoneNumberId);
+  for (const value of ["0", "123456789", "1".repeat(32)]) {
+    expect(Result.isSuccess(decode(value))).toBe(true);
+  }
+  for (const value of ["", "1".repeat(33), "x123", "123x", "123\n"]) {
+    expect(Result.isFailure(decode(value))).toBe(true);
+  }
 });

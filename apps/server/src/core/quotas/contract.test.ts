@@ -1,6 +1,6 @@
+import { AllowanceKind, AllowanceMeter, CanonicalRetryKey } from "./contract";
 import { Result, Schema } from "effect";
 import { expect, it } from "vitest";
-import { CanonicalRetryKey } from "./contract";
 
 it("accepts bounded opaque retry references without whitespace or interpreter punctuation", () => {
   const decode = Schema.decodeUnknownResult(CanonicalRetryKey);
@@ -24,5 +24,27 @@ it("accepts bounded opaque retry references without whitespace or interpreter pu
     "a\u0000",
   ]) {
     expect(Result.isFailure(decode(value)), value).toBe(true);
+  }
+});
+
+it("decodes each independent commercial meter and both entitlement states", () => {
+  for (const kind of [
+    "forwarded_email",
+    "media_submission",
+    "hosted_history_turn",
+    "canonical_call",
+  ]) {
+    expect(Schema.decodeUnknownSync(AllowanceKind)(kind)).toBe(kind);
+  }
+  const limited = {
+    _tag: "Limited",
+    limit: 30,
+    consumed: 2,
+    remaining: 28,
+    period: { startsAt: "2026-10-01T05:00:00.000Z", resetsAt: "2026-11-01T05:00:00.000Z" },
+  };
+  const codec = Schema.toCodecJson(AllowanceMeter);
+  for (const value of [limited, { _tag: "Uncapped" }]) {
+    expect(Schema.encodeSync(codec)(Schema.decodeSync(codec)(value))).toEqual(value);
   }
 });

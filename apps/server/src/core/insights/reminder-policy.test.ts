@@ -107,3 +107,27 @@ it("keeps the anchored local time across daylight saving rather than adding 72 e
     )
   ).toBe("2026-11-02T23:00:00.000Z");
 });
+
+it("keeps daily reminders on weekends while weekdays skip them", () => {
+  const input = {
+    after: DateTime.makeUnsafe("2026-10-23T23:00:00Z"),
+    timing: { hour: 18, minute: 0 },
+    timeZone: IanaTimeZone.make("America/Bogota"),
+  };
+  expect(DateTime.formatIso(nextReminderOccurrence({ ...input, cadence: { kind: "daily" } }))).toBe(
+    "2026-10-24T23:00:00.000Z"
+  );
+  expect(
+    DateTime.formatIso(nextReminderOccurrence({ ...input, cadence: { kind: "weekdays" } }))
+  ).toBe("2026-10-26T23:00:00.000Z");
+});
+
+it("keeps the calendar anchor when a time-zone transition skips an entire local date", () => {
+  const next = nextReminderOccurrence({
+    after: DateTime.makeUnsafe("2011-12-29T00:00:00Z"),
+    timing: { hour: 9, minute: 0 },
+    cadence: { kind: "every-three-days", anchorDate: "2011-12-27" },
+    timeZone: IanaTimeZone.make("Pacific/Apia"),
+  });
+  expect(DateTime.formatIso(next)).toBe("2012-01-01T19:00:00.000Z");
+});

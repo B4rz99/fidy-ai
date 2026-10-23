@@ -183,3 +183,23 @@ it("orders unfiltered category buckets by stable identity regardless of projecti
     )
   ).toEqual([categoryId, otherId]);
 });
+
+it("ignores same-Category income when calculating Budget spend", () => {
+  const widget = Schema.decodeSync(Widget)({
+    id: widgetId,
+    type: "budget-bar",
+    categoryId,
+    currency: "COP",
+  });
+  if (widget.type !== "budget-bar") throw new Error("Expected Budget bar");
+  const selected: ReadonlyArray<ProjectedRange> = [
+    {
+      key: "",
+      contributions: [
+        { categoryId, direction: "outflow", sum: cop("14"), maximum: cop("14"), count: 1n },
+        { categoryId, direction: "inflow", sum: cop("100"), maximum: cop("100"), count: 1n },
+      ],
+    },
+  ];
+  expect(BigDecimal.format(projectAggregateBudgetSpent(widget, selected).amount)).toBe("14");
+});

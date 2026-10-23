@@ -51,22 +51,16 @@ const monthlyDates = ({
   plan,
   from,
   through,
+  step,
 }: Readonly<{
   plan: RecurringPlanInput;
   from: string;
   through: string;
+  step: number;
 }>): ReadonlyArray<string> => {
   const first = DateTime.toPartsUtc(DateTime.makeUnsafe(plan.firstDate));
   const end = DateTime.toPartsUtc(DateTime.makeUnsafe(through));
   const months = (end.year - first.year) * monthsPerYear + end.month - first.month;
-  const step =
-    plan.frequency === "twice-monthly"
-      ? 1
-      : monthlyStep[
-          plan.frequency === "weekly" || plan.frequency === "fortnightly"
-            ? "monthly"
-            : plan.frequency
-        ];
   const dates: string[] = [];
   const start = DateTime.toPartsUtc(DateTime.makeUnsafe(from));
   const elapsed = (start.year - first.year) * monthsPerYear + start.month - first.month;
@@ -88,7 +82,12 @@ export const projectDates = ({
 }>): ReadonlyArray<string> => {
   const end = plan.endDate !== undefined && plan.endDate < through ? plan.endDate : through;
   if (plan.frequency !== "weekly" && plan.frequency !== "fortnightly") {
-    return monthlyDates({ plan, from, through: end });
+    return monthlyDates({
+      plan,
+      from,
+      through: end,
+      step: plan.frequency === "twice-monthly" ? 1 : monthlyStep[plan.frequency],
+    });
   }
   const step = plan.frequency === "weekly" ? daysPerWeek : fortnight;
   const dates: string[] = [];
@@ -97,7 +96,7 @@ export const projectDates = ({
     date <= end;
     date = DateTime.formatIsoDateUtc(DateTime.add(DateTime.makeUnsafe(date), { days: step }))
   ) {
-    if (date >= from) dates.push(date);
+    dates.push(date);
   }
   return dates;
 };
@@ -497,14 +496,13 @@ const scopedEdit = (
       skipped: false,
       replacement: { ...planAt({ plan, date: entry.date }), firstDate: entry.date },
     }));
-  const revisions = [
-    ...plan.revisions.filter((entry) => entry.from < edit.date),
-    { from: edit.date, plan: edit.plan },
-  ];
-  const first = revisions[0];
-  if (first === undefined) return Option.none();
+  const previous = plan.revisions.filter((entry) => entry.from < edit.date);
+  const replacement = { from: edit.date, plan: edit.plan };
+  const first = previous[0];
+  const revisions: RecurringPlan["revisions"] =
+    first === undefined ? [replacement] : [first, ...previous.slice(1), replacement];
   return Option.some({
-    ...withPlan(document, { ...plan, revisions: [first, ...revisions.slice(1)] }),
+    ...withPlan(document, { ...plan, revisions }),
     exceptions: [...document.exceptions, ...frozen],
   });
 };

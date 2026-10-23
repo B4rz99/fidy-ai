@@ -57,7 +57,15 @@ export const precedingSchema = ({
   const restored = [
     ...current
       .filter((sql) => !history.introducedNames.includes(schemaObjectName(sql)))
-      .map((sql) => original.get(schemaObjectName(sql)) ?? sql),
+      .map((sql) => original.get(schemaObjectName(sql)) ?? sql)
+      .map((sql) =>
+        schemaObjectName(sql) === "erasure_requests" && !sql.includes("decision_json")
+          ? sql.replace(
+              "CREATE TABLE erasure_requests (",
+              "CREATE TABLE erasure_requests (\n  decision_json TEXT,"
+            )
+          : sql
+      ),
     ...history.originalDefinitions.filter((sql) => !names.has(schemaObjectName(sql))),
   ];
   if (!restored.some((sql) => schemaObjectName(sql) === "erasure_archives")) {
@@ -155,8 +163,19 @@ const historicalErasureStorage = [
 ];
 
 export const installHistoricalErasureStorage = (db: D1Database): Promise<ReadonlyArray<D1Result>> =>
-  db.batch(
-    historicalErasureStorage.map((sql) =>
-      db.prepare(sql.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS "))
-    )
-  );
+  db
+    .prepare("PRAGMA table_info(erasure_requests)")
+    .all()
+    .then((columns) => {
+      const historical = columns.results.some((column) => column.name === "decision_json")
+        ? []
+        : ["ALTER TABLE erasure_requests ADD COLUMN decision_json TEXT"];
+      return db.batch(
+        [
+          ...historical,
+          ...historicalErasureStorage.map((sql) =>
+            sql.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ")
+          ),
+        ].map((sql) => db.prepare(sql))
+      );
+    });

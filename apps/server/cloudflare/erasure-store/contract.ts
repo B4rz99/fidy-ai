@@ -13,7 +13,7 @@ export type ErasureOriginalConfiguration = Readonly<{
   db: D1Database;
   email: Option.Option<R2Bucket>;
   statement: Option.Option<R2Bucket>;
-  retained: Option.Option<R2Bucket>;
+  registry: Option.Option<R2Bucket>;
 }>;
 export type ErasureStore = Readonly<{
   id: string;

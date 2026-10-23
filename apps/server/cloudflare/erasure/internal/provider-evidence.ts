@@ -1,5 +1,5 @@
 import { Clock, Effect, Schema } from "effect";
-import { ErasureDecision } from "../../../src/core/erasure/contract";
+import { recoveryWindowMs } from "./retention-policy";
 import { ErasureUnavailable } from "../../erasure-store/contract";
 import type { ErasureCustodyAdmission } from "../contract";
 
@@ -8,7 +8,6 @@ const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
 const validOutcome = (
   input: Readonly<{
     admission: typeof ErasureCustodyAdmission.Type;
-    decision: ErasureDecision;
     lastErasedAtMs: number;
     current: number;
   }>
@@ -16,15 +15,9 @@ const validOutcome = (
   const { evidence } = input.admission;
   if (invalidApplicability(evidence)) return false;
   if (evidence.custodian === "Cloudflare" && evidence.outcome.status === "Verified") {
-    return input.lastErasedAtMs + input.decision.recovery.windowMs <= input.current;
+    return input.lastErasedAtMs + recoveryWindowMs <= input.current;
   }
-  if (evidence.outcome.status !== "Retained") return true;
-  const { retention } = evidence.outcome;
-  return (
-    retention.reviewAtMs > input.current &&
-    retention.reviewAtMs <= retention.untilMs &&
-    retention.untilMs <= input.decision.receiptRetention.untilMs
-  );
+  return true;
 };
 const persistEvidence = (
   input: Readonly<{
@@ -84,14 +77,13 @@ export const recordCustodyEvidence = (
     const current = yield* Clock.currentTimeMillis;
     const raw = yield* io(() =>
       db
-        .prepare(`SELECT decision_json AS decision,last_erased_at_ms AS lastErasedAtMs
+        .prepare(`SELECT last_erased_at_ms AS lastErasedAtMs
     FROM erasure_requests WHERE id=? AND user_id=? AND state='ExternalPending'`)
         .bind(admission.reference, admission.userId)
         .first()
     );
     const row = yield* Schema.decodeUnknownEffect(
       Schema.Struct({
-        decision: Schema.fromJsonString(ErasureDecision),
         lastErasedAtMs: Schema.Int,
       })
     )(raw);
@@ -107,5 +99,4 @@ export const recordCustodyEvidence = (
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
 const invalidApplicability = (evidence: typeof ErasureCustodyAdmission.Type.evidence): boolean =>
-  evidence.outcome.status === "NotApplicable" &&
-  ["Cloudflare", "CaseRegister", "CaseEvidence"].includes(evidence.custodian);
+  evidence.outcome.status === "NotApplicable" && evidence.custodian === "Cloudflare";

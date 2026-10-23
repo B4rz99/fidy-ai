@@ -6,7 +6,7 @@ import {
 import { makeRecoveryErasureStores } from "../recovery/runtime";
 import { makeEmailAuthenticationErasureStores } from "../email-authentication/runtime";
 import { afterAll, expect, it } from "vitest";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option } from "effect";
 import { installRetentionTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { retainedReviewRows } from "./native.test-fixture";
 import { sweepReviewDrafts } from "../ingestion/runtime";
@@ -66,14 +66,6 @@ it("deletes Memory in bounded pages, resumes after reconstruction, and preserves
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
       yield* Effect.tryPromise(() => installRetentionTestSchema(db));
-      const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-        dispositions: {
-          memory: {
-            action: "Retain",
-            retention: { untilMs: (yield* Clock.currentTimeMillis) + 86400000 },
-          },
-        },
-      });
       const statements = [
         ...[userId, foreignUser].map((id) =>
           db
@@ -84,9 +76,9 @@ it("deletes Memory in bounded pages, resumes after reconstruction, and preserves
         ),
         db
           .prepare(
-            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,'AwaitingReview',?)"
+            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Draining')"
           )
-          .bind(reference, userId, decision),
+          .bind(reference, userId),
         db
           .prepare("INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'memories')")
           .bind(reference),
@@ -268,9 +260,9 @@ it.each([
               .bind(userId, foreignUser),
             db
               .prepare(
-                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,'AwaitingReview',?)"
+                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Draining')"
               )
-              .bind(reference, userId, '{"dispositions":{"credentials":{"action":"Delete"}}}'),
+              .bind(reference, userId),
             db
               .prepare(`INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'${table}')`)
               .bind(reference),
@@ -359,7 +351,7 @@ it("erases only the reviewed Dashboard document while preserving Planning and th
             .bind(foreignUser),
           db
             .prepare(
-              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'AwaitingReview')"
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Draining')"
             )
             .bind(reference, userId),
           db

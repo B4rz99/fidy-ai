@@ -17,7 +17,7 @@ const discardUserPrefixPage = (
   Effect.gen(function* () {
     const userId = yield* Schema.decodeEffect(UserId)(input.scope.userId);
     const prefix = userPrivateObjectPrefix(userId);
-    for (const code of ["email", "statement", "retained"] as const) {
+    for (const code of ["email", "statement", "registry"] as const) {
       const bucket = input.configuration[code];
       if (Option.isNone(bucket)) return yield* new ErasureUnavailable();
       const page = yield* io(() => bucket.value.list({ prefix, limit: maximumObjects }));

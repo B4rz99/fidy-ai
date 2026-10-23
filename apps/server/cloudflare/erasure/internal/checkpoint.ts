@@ -1,13 +1,12 @@
 import { RecoveryCase } from "./recovery-case";
 import { sealRecoveryCase } from "./sealed-case";
 import { Effect, Option, Schema } from "effect";
-import { ErasureDecision } from "../../../src/core/erasure/contract";
 import { type ErasureScope, ErasureUnavailable } from "../../erasure-store/contract";
 import { newId } from "../../secret-material/operations";
 import type { ErasureRecoveryConfiguration } from "../contract";
 import { expectedGeneration, generationAssertion, generationKey } from "./generation";
 
-const maximumCaseBytes = 32768;
+const maximumCaseBytes = 512;
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
 type Checkpoint = Readonly<{
@@ -45,7 +44,7 @@ const checkpointStatements = (
 ];
 
 /** An uncertain initial publication keeps ordinary data access and restore release fenced. Commit the returned checkpoint with the exact request transition. */
-export const persistReviewedCase = (
+export const publishDeletionMarker = (
   input: Readonly<{
     configuration: ErasureRecoveryConfiguration;
     record: typeof RecoveryCase.Type;
@@ -81,7 +80,7 @@ const installCase = (
 ): Effect.Effect<typeof RecoveryCase.Type, ErasureUnavailable> =>
   Effect.gen(function* () {
     const { bucket } = input;
-    const key = `recovery/cases/${input.record.decision.reference}`;
+    const key = `recovery/cases/${input.record.reference}`;
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(RecoveryCase))(input.record);
     const installed = yield* io(() =>
       bucket.put(key, encoded, { onlyIf: { etagDoesNotMatch: "*" } })
@@ -93,19 +92,13 @@ const installCase = (
       yield* io(() => object.body.cancel());
       return yield* new ErasureUnavailable();
     }
-    const previous = yield* Schema.decodeEffect(Schema.fromJsonString(RecoveryCase))(
-      yield* io(() => object.text())
-    );
-    const decision = yield* Schema.encodeEffect(Schema.fromJsonString(ErasureDecision))(
-      previous.decision
-    );
-    const expected = yield* Schema.encodeEffect(Schema.fromJsonString(ErasureDecision))(
-      input.record.decision
-    );
+    const previous = yield* Schema.decodeEffect(Schema.fromJsonString(RecoveryCase), {
+      onExcessProperty: "error",
+    })(yield* io(() => object.text()));
     if (
-      decision !== expected ||
-      previous.requestedAtMs !== input.record.requestedAtMs ||
-      previous.operatorRef !== input.record.operatorRef
+      previous.reference !== input.record.reference ||
+      previous.userId !== input.record.userId ||
+      previous.requestedAtMs !== input.record.requestedAtMs
     ) {
       return yield* new ErasureUnavailable();
     }

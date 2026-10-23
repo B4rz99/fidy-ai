@@ -1,7 +1,7 @@
 # Schema integration inventory (#1494)
 
 Local fresh-install snapshot of [the single baseline](../../apps/server/cloudflare/migrations/0001_schema.sql).
-Schema Git blob: `468e93e56b2a1b1e7ff81db1ec58bb889341330a`. This is not a live database inspection or a completed release.
+Schema Git blob: `38d34f2b59f7f12c5008b22fa2b5173c2bc58db3`. This is not a live database inspection or a completed release.
 
 The baseline creates **111 application tables**. The original 102-name inventory predates the
 approved four-table relational Planning replacement and the retained compact Recovery admission
@@ -269,7 +269,7 @@ Views, indexes and provider-managed storage are excluded.
 | `erasure_control`         | 4 + 0                      | —                                                                                                                                               |
 | `erasure_custody_records` | 9 + 1                      | `(request_id,custodian,current_event_id) → erasure_custody_records(request_id,custodian,event_identity)`; `(request_id) → erasure_requests(id)` |
 | `erasure_permits`         | 3 + 0                      | `(request_id) → erasure_requests(id)`                                                                                                           |
-| `erasure_requests`        | 18 + 0                     | —                                                                                                                                               |
+| `erasure_requests`        | 12 + 0                     | —                                                                                                                                               |
 | `erasure_restore_members` | 3 + 0                      | —                                                                                                                                               |
 | `erasure_steps`           | 3 + 0                      | `(request_id) → erasure_requests(id)`                                                                                                           |
 | `erasure_writers`         | 5 + 0                      | —                                                                                                                                               |

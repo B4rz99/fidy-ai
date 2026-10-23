@@ -287,7 +287,7 @@ const eventMetadataErasure = (
       db.batch([
         db
           .prepare(
-            'INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,\'AwaitingReview\',\'{"dispositions":{"credentials":{"action":"Retain","retention":{"untilMs":4102444800000}}}}\')'
+            'INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,\'Draining\',\'{"dispositions":{"credentials":{"action":"Retain","retention":{"untilMs":4102444800000}}}}\')'
           )
           .bind(requestId, owner),
         db

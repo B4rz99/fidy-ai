@@ -127,7 +127,6 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "strictEffectProvide:./apps/server/cloudflare/browser-acceptance-core-module.ts",
           "strictEffectProvide:./scripts/browser-core-bundle.test.ts",
           "strictEffectProvide:./scripts/titular-requests/main.ts",
-          "strictEffectProvide:./scripts/titular-erasure/main.ts",
           "strictEffectProvide:./scripts/dev-browser.ts",
           "strictEffectProvide:./scripts/titular-requests/runtime.test.ts",
           "strictEffectProvide:./infra/cloudflare/inspect-worker-drift.ts",

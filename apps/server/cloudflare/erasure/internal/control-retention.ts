@@ -1,11 +1,10 @@
-import { UserId } from "../../../src/core/identity/contract";
-import { userPrivateObjectPrefix } from "../../private-objects/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../../erasure-store/contract";
 import type { ErasureRecoveryConfiguration } from "../contract";
+import { expectedGeneration } from "./generation";
+import { recoveryWindowMs } from "./retention-policy";
 
 const maximumCases = 4;
-const maximumObjects = 8;
 const maximumRows = 64;
 const Case = Schema.Struct({ reference: Schema.String, userId: Schema.String });
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
@@ -16,20 +15,6 @@ const deleteControls = (
   Effect.gen(function* () {
     const { db, bucket, scope } = input;
     if (Option.isNone(bucket)) return yield* new ErasureUnavailable();
-    for (const prefix of [
-      `${userPrivateObjectPrefix(UserId.make(scope.userId))}held/${scope.reference}/`,
-      `${userPrivateObjectPrefix(UserId.make(scope.userId))}held-records/${scope.reference}/`,
-    ]) {
-      const retained = yield* io(() => bucket.value.list({ prefix, limit: 1 }));
-      if (retained.objects.length > 0) return yield* new ErasureUnavailable();
-    }
-    const locators = yield* io(() =>
-      bucket.value.list({ prefix: `recovery/objects/${scope.reference}/`, limit: maximumObjects })
-    );
-    if (locators.objects.length > 0) {
-      yield* io(() => bucket.value.delete(locators.objects.map((object) => object.key)));
-      return;
-    }
     yield* io(() => bucket.value.delete(`recovery/cases/${scope.reference}`));
     const children = [
       "erasure_steps",
@@ -48,26 +33,41 @@ const deleteControls = (
         ),
         db
           .prepare(`DELETE FROM erasure_requests WHERE id=? AND user_id=? AND state='Complete'
-      AND ${children.map((table) => `NOT EXISTS(SELECT 1 FROM ${table} WHERE request_id=erasure_requests.id)`).join(" AND ")}`)
+        AND ${children.map((table) => `NOT EXISTS(SELECT 1 FROM ${table} WHERE request_id=erasure_requests.id)`).join(" AND ")}`)
           .bind(scope.reference, scope.userId),
       ])
     );
   });
 
-/** Only completed cases past both approved control deadlines and the last personal-data backup window qualify. Failed or unresolved cases remain visible for operator review. */
+/** Remove only externally completed deletion metadata beyond the supported backup horizon. A restored or unpublished database never purges its independent markers. */
 export const purgeCompletedCases = (
   input: ErasureRecoveryConfiguration
 ): Effect.Effect<void, ErasureUnavailable> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
+    const count = yield* io(() =>
+      input.db
+        .prepare("SELECT count(*) AS count FROM erasure_requests WHERE state='Complete'")
+        .first<number>("count")
+    );
+    if (count === 0) return;
+    const expected = yield* expectedGeneration(input);
+    const matched = yield* io(() =>
+      input.db
+        .prepare(
+          "SELECT count(*) AS matched FROM erasure_control WHERE kind='published' AND generation=?"
+        )
+        .bind(expected.generation)
+        .first<number>("matched")
+    );
+    if (matched !== 1) return;
     const rows = yield* io(() =>
       input.db
         .prepare(`SELECT id AS reference,user_id AS userId FROM erasure_requests
-    WHERE state='Complete' AND json_extract(decision_json,'$.receiptRetention.untilMs')<=?
-    AND json_extract(decision_json,'$.recovery.retention.untilMs')<=?
-    AND last_erased_at_ms+json_extract(decision_json,'$.recovery.windowMs')<=?
-    ORDER BY last_continued_at_ms,requested_at_ms LIMIT ?`)
-        .bind(current, current, current, maximumCases)
+      WHERE state='Complete' AND last_erased_at_ms+?<=?
+      AND NOT EXISTS(SELECT 1 FROM erasure_writers WHERE user_id=erasure_requests.user_id)
+      ORDER BY last_continued_at_ms,requested_at_ms LIMIT ?`)
+        .bind(recoveryWindowMs, current, maximumCases)
         .all()
     );
     const cases = yield* Schema.decodeUnknownEffect(Schema.Array(Case))(rows.results);

@@ -1,9 +1,8 @@
 import { executeErasureContinuation } from "./operations";
 import { afterAll, expect, it } from "vitest";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option } from "effect";
 import { installRetentionTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import { makeErasureOriginals } from "../erasure-store/runtime";
-import { deletionDecision } from "./erasure.test-fixture";
 
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
@@ -20,8 +19,6 @@ it("resumes bounded original-byte erasure and refuses a mismatched User without 
       const { bucket: retainedBucket } = yield* Effect.tryPromise(() => storage.acquire());
       yield* Effect.tryPromise(() => installRetentionTestSchema(db));
       const current = yield* Clock.currentTimeMillis;
-      const decision = deletionDecision({ userId, reference, current });
-      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(decision);
       yield* Effect.tryPromise(() =>
         db.batch([
           ...[userId, foreignUser].map((id) =>
@@ -43,9 +40,9 @@ it("resumes bounded original-byte erasure and refuses a mismatched User without 
           ),
           db
             .prepare(
-              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,?,'Sealing',?)"
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,?,'Sealing')"
             )
-            .bind(reference, userId, current, encoded),
+            .bind(reference, userId, current),
         ])
       );
       yield* Effect.tryPromise(() => bucket.put(targetKey, "Target bytes"));
@@ -78,7 +75,7 @@ it("resumes bounded original-byte erasure and refuses a mismatched User without 
           db,
           email: Option.some(cleanupBucket),
           statement: Option.some(cleanupBucket),
-          retained: Option.some(retainedBucket),
+          registry: Option.some(retainedBucket),
         });
 
       yield* Effect.tryPromise(() =>

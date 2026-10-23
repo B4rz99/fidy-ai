@@ -1644,14 +1644,14 @@ const prepareStagingRetention = (database: D1Database, nowEpochMs: number): D1Pr
              SELECT id FROM (
                SELECT id,expires_at_ms FROM (
                  SELECT id,expires_at_ms FROM statement_staging_objects
-                 WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=statement_staging_objects.user_id AND q.state<>'AwaitingReview')
+                 WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=statement_staging_objects.user_id)
                  AND status = 'deleting' AND object_deleted_at_ms IS NULL
                  ORDER BY expires_at_ms,id LIMIT ?
                )
                UNION ALL
                SELECT id,expires_at_ms FROM (
                  SELECT id,expires_at_ms FROM statement_staging_objects
-                 WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=statement_staging_objects.user_id AND q.state<>'AwaitingReview')
+                 WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=statement_staging_objects.user_id)
                  AND status IN ('pending','available') AND object_deleted_at_ms IS NULL
                    AND expires_at_ms <= ?
                  ORDER BY expires_at_ms,id LIMIT ?

@@ -5,11 +5,10 @@ import {
 import { withErasureRecovery } from "../erasure/runtime";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import {
+  executeErasureAdmission,
   executeErasureContinuation,
   executeErasureControl,
   executeErasureRestore,
-  executeErasureRetentionReview,
-  executeErasureReview,
 } from "../erasure/operations";
 import { makeAuditErasureStores } from "../audit/runtime";
 import { makeBrowserLoginErasureStores } from "../browser-login/runtime";
@@ -420,9 +419,9 @@ const privateErasureActivity = (
   const restore = privateErasureRestore(input);
   if (Option.isSome(restore)) return restore;
   const erasurePath = new URL(input.request.url).pathname;
-  if (erasurePath === "/erasure-review") {
+  if (erasurePath === "/erasure-admit") {
     return Option.some(
-      executeErasureReview({
+      executeErasureAdmission({
         db: input.environment.DB,
         userId: input.userId,
         candidate: input.candidate,
@@ -446,7 +445,7 @@ const privateErasureActivity = (
           db: input.environment.DB,
           email: Option.fromUndefinedOr(input.environment.EMAIL_BUCKET),
           statement: Option.fromUndefinedOr(input.environment.STATEMENT_STAGING_BUCKET),
-          retained: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
+          registry: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
         }),
         recovery: {
           db: input.environment.DB,
@@ -473,19 +472,6 @@ const privateErasureRestore = (
   input: Parameters<typeof privateProactivityActivity>[0]
 ): Option.Option<Effect.Effect<Response>> => {
   const erasurePath = new URL(input.request.url).pathname;
-  if (input.request.method === "POST" && erasurePath === "/erasure-retention-review") {
-    return Option.some(
-      executeErasureRetentionReview({
-        userId: input.userId,
-        candidate: input.candidate,
-        stores: erasureStores(input.environment.DB),
-        recovery: {
-          db: input.environment.DB,
-          bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
-        },
-      })
-    );
-  }
   if (input.request.method === "POST" && erasurePath === "/erasure-restore") {
     return Option.some(
       executeErasureRestore({

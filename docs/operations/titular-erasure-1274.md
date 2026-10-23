@@ -1,3 +1,8 @@
+> **Current implementation:** authenticated full account deletion starts directly; selective retention,
+> operator retention review and the `titular:erasure:prepare` CLI have been removed on the integration
+> branch. This historical procedure is not the new release runbook. Follow the
+> [current cutover and evidence gates](database-cutover-1428.md#direct-account-deletion-and-minimal-metadata-1489--1490-integration).
+
 > **Local full-deletion integration:** the current branch no longer archives User records, copies
 > originals into holds, or stores file inventory. Cleanup deletes bounded owner records and all
 > canonical User-prefix objects after confirmed upload settlement. The historical selective-retention

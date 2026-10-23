@@ -1,21 +1,22 @@
-import { type ErasureDecision, ErasureOperatorReceipt } from "../../src/core/erasure/contract";
+import { ErasureOperatorReceipt } from "../../src/core/erasure/contract";
 import { it as effectIt } from "@effect/vitest";
 import { NodeFileSystem } from "@effect/platform-node";
-import { type Cause, Clock, Effect, Schema } from "effect";
+import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { HttpClient } from "effect/http";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import { afterEach, expect, vi } from "vitest";
 import { fixtureNativeHttpClient } from "../core-worker.test-fixture";
 import { installRetentionTestSchema } from "../d1-test-fixture";
-import { deletionDecision } from "./erasure.test-fixture";
 import { nativeErasurePlatform, seedPersonalClasses } from "./native.test-fixture";
+import type { ErasureUnavailable } from "../erasure-store/contract";
+import { resumeErasureCases } from "./operations";
 import { handleErasureOperator, withErasureRecovery } from "./runtime";
 import { makePublicWorker } from "../public-worker";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 
 const userId = "12740000-0000-4000-8000-000000000001";
 const foreignUser = "12740000-0000-4000-8000-000000000099";
-const reference = "12740000-0000-4000-8000-000000000002";
+let reference = "12740000-0000-4000-8000-000000000002";
 const issuer = "https://erasure-test.cloudflareaccess.com";
 const audience = "erasure-only";
 const ingress = makePublicWorker(
@@ -52,11 +53,9 @@ const advanceToExternal = (
   });
 
 const verifyProcessorEvidence = (
-  send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError>,
-  decision: ErasureDecision
+  send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError>
 ): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
   Effect.gen(function* () {
-    yield* verifyControlReview({ send, decision });
     expect(
       (yield* send({
         action: "CustodyEvidence",
@@ -66,18 +65,6 @@ const verifyProcessorEvidence = (
           custodian: "Cloudflare",
           evidenceRef: "12740000-0000-4000-8000-000000000070",
           outcome: { status: "Verified" },
-        },
-      })).status
-    ).toBe(409);
-    expect(
-      (yield* send({
-        action: "CustodyEvidence",
-        userId,
-        evidence: {
-          reference,
-          custodian: "CaseEvidence",
-          evidenceRef: "12740000-0000-4000-8000-000000000071",
-          outcome: { status: "NotApplicable" },
         },
       })).status
     ).toBe(409);
@@ -116,31 +103,165 @@ const verifyProcessorEvidence = (
     });
   });
 
-const verifyControlReview = (
+const expiredRequest = "12740000-0000-4000-8000-000000000084";
+const expiredUser = "12740000-0000-4000-8000-000000000083";
+const seedExpiredCase = (
+  db: D1Database,
+  current: number,
+  bucket: R2Bucket
+): Effect.Effect<number, Schema.SchemaError | Cause.UnknownError | ErasureUnavailable> =>
+  Effect.gen(function* () {
+    // A supported snapshot can still contain completed metadata whose independent
+    // marker legitimately expired after all backups containing User content aged out.
+    const erasedAt = current - 31 * 86400000;
+    yield* Effect.tryPromise(() =>
+      db.batch([
+        db
+          .prepare(
+            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,last_erased_at_ms,marker_written,coordinator_cleared) VALUES(?,?,?,'Complete',?,1,1)"
+          )
+          .bind(expiredRequest, expiredUser, erasedAt, erasedAt),
+        db.prepare("INSERT INTO erasure_steps VALUES(?,'users',1)").bind(expiredRequest),
+      ])
+    );
+    for (const [index, custodian] of ["Cloudflare", "Kapso", "Meta", "Resend", "Wompi"].entries()) {
+      const evidenceRef = `12740000-0000-4000-8000-00000000010${index}`;
+      const evidence = yield* Schema.encodeEffect(json)({
+        reference: expiredRequest,
+        custodian,
+        evidenceRef,
+        outcome: { status: "Verified" },
+      });
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO erasure_custody_records(record_type,request_id,custodian,id,evidence_json,recorded_at_ms,operator_ref) VALUES('event',?,?,?,?,?,'operator')"
+            )
+            .bind(expiredRequest, custodian, evidenceRef, evidence, erasedAt),
+          db
+            .prepare(
+              "INSERT INTO erasure_custody_records(record_type,request_id,custodian,state,current_event_id) VALUES('current',?,?,'Verified',?)"
+            )
+            .bind(expiredRequest, custodian, evidenceRef),
+        ])
+      );
+    }
+    for (let index = 0; index < 65; index++) {
+      const evidenceRef = `12740000-0000-4000-8000-${String(200 + index).padStart(12, "0")}`;
+      const evidence = yield* Schema.encodeEffect(json)({
+        reference: expiredRequest,
+        custodian: "Kapso",
+        evidenceRef,
+        outcome: { status: "Accepted" },
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO erasure_custody_records(record_type,request_id,custodian,id,evidence_json,recorded_at_ms,operator_ref) VALUES('event',?,'Kapso',?,?,?,'operator')"
+          )
+          .bind(expiredRequest, evidenceRef, evidence, erasedAt)
+          .run()
+      );
+    }
+    const marker = yield* Schema.encodeEffect(json)({
+      reference: expiredRequest,
+      userId: expiredUser,
+      requestedAtMs: erasedAt,
+      sealed: true,
+    });
+    yield* Effect.tryPromise(() => bucket.put(`recovery/cases/${expiredRequest}`, marker));
+    yield* resumeErasureCases({
+      db,
+      bucket: Option.some(bucket),
+      coordinator: {
+        getByName: (): Pick<Fetcher, "fetch"> => ({
+          fetch: (): Promise<Response> =>
+            Promise.reject(new Error("Completed cleanup requires no User operation")),
+        }),
+      },
+    });
+    expect(
+      yield* Effect.tryPromise(() => bucket.head(`recovery/cases/${expiredRequest}`))
+    ).toBeNull();
+    expect(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT count(*) AS count FROM erasure_requests WHERE id=?")
+          .bind(expiredRequest)
+          .first("count")
+      )
+    ).toBe(1);
+    expect(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT count(*) AS count FROM erasure_custody_records WHERE request_id=?")
+          .bind(expiredRequest)
+          .first("count")
+      )
+    ).toBe(11);
+    return erasedAt;
+  });
+const verifyExpiredMetadata = (
   input: Readonly<{
+    db: D1Database;
+    guarded: D1Database;
+    current: number;
+    erasedAt: number;
     send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError>;
-    decision: ErasureDecision;
   }>
 ): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
   Effect.gen(function* () {
-    const current = yield* Clock.currentTimeMillis;
-    const reviewRef = "12740000-0000-4000-8000-000000000060";
-    const renewal = { reviewRef, reviewAtMs: current + 86400000, untilMs: current + 45 * 86400000 };
+    yield* Effect.tryPromise(() =>
+      input.db
+        .prepare("UPDATE erasure_requests SET last_erased_at_ms=? WHERE id=?")
+        .bind(input.current - 29 * 86400000, expiredRequest)
+        .run()
+    );
+    expect((yield* input.send({ action: "ReleaseRestore" })).status).toBe(202);
+    yield* Effect.tryPromise(() =>
+      input.db
+        .prepare("UPDATE erasure_requests SET last_erased_at_ms=NULL WHERE id=?")
+        .bind(expiredRequest)
+        .run()
+    );
+    expect((yield* input.send({ action: "ReleaseRestore" })).status).toBe(202);
     expect(
-      (yield* input.send({
-        action: "ReviewRetention",
-        userId,
-        reference,
-        previousReviewRef: input.decision.receiptRetention.reviewRef,
-        receiptRetention: { ...input.decision.receiptRetention, ...renewal },
-        recoveryRetention: { ...input.decision.recovery.retention, ...renewal },
-      })).status
-    ).toBe(202);
-    const response = yield* input.send({ action: "Receipt", userId, reference });
-    expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
-      controlRetention: { receipt: { reviewRef }, recovery: { reviewRef } },
-      state: "ExternalPending",
+      (yield* Effect.result(
+        Effect.tryPromise(() => input.guarded.prepare("SELECT * FROM users").all())
+      ))._tag
+    ).toBe("Failure");
+    yield* Effect.tryPromise(() =>
+      input.db
+        .prepare("UPDATE erasure_requests SET last_erased_at_ms=? WHERE id=?")
+        .bind(input.erasedAt, expiredRequest)
+        .run()
+    );
+    expect((yield* input.send({ action: "ReleaseRestore" })).status).toBe(200);
+  });
+
+const admitNativeDeletion = (
+  coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>
+): Effect.Effect<string, Schema.SchemaError | Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const admissionBody = yield* Schema.encodeEffect(json)({
+      userId,
+      sessionId: userId,
+      digest: Array.from(new Uint8Array(32).fill(1)),
+      deadlineMs: (yield* Clock.currentTimeMillis) + 5000,
     });
+    const admissionResponse = yield* Effect.tryPromise(() =>
+      coordinator.getByName(userId).fetch(
+        new Request("https://coordinator.internal/erasure-admit", {
+          method: "POST",
+          body: admissionBody,
+        })
+      )
+    );
+    expect(admissionResponse.status).toBe(202);
+    return (yield* Schema.decodeUnknownEffect(Schema.Struct({ reference: Schema.String }))(
+      yield* Effect.tryPromise(() => admissionResponse.json())
+    )).reference;
   });
 
 const verifyRestore = Effect.gen(function* () {
@@ -150,20 +271,15 @@ const verifyRestore = Effect.gen(function* () {
   for (const db of [native.db, native.snapshot]) {
     yield* Effect.tryPromise(() => installRetentionTestSchema(db));
     yield* Effect.tryPromise(() =>
-      db.batch([
-        ...[userId, foreignUser].map((id) =>
+      db.batch(
+        [userId, foreignUser].map((id) =>
           db
             .prepare(
               "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?)"
             )
             .bind(id, current)
-        ),
-        db
-          .prepare(
-            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,?,'AwaitingReview')"
-          )
-          .bind(reference, userId, current),
-      ])
+        )
+      )
     );
     yield* Effect.tryPromise(() =>
       db.batch([
@@ -201,6 +317,7 @@ const verifyRestore = Effect.gen(function* () {
         ),
     ])
   );
+  const erasedAt = yield* seedExpiredCase(native.snapshot, current, native.registry);
   const { publicKey, privateKey } = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
   const jwk = {
     ...(yield* Effect.tryPromise(() => exportJWK(publicKey))),
@@ -336,17 +453,9 @@ const verifyRestore = Effect.gen(function* () {
   );
   expect((yield* send({ action: "Initialize" }, forgedAssertion, "candidate")).status).toBe(401);
   expect((yield* send({ action: "Restore", userId })).status).toBe(400);
-  expect(
-    (yield* send({
-      action: "Review",
-      decision: deletionDecision({ userId: foreignUser, reference, current }),
-    })).status
-  ).toBe(409);
   yield* Effect.tryPromise(() => native.registry.delete("recovery/generation"));
   expect((yield* send({ action: "Initialize" }, token, "candidate")).status).toBe(204);
-  const decisionCurrent = yield* Clock.currentTimeMillis;
-  const decision = deletionDecision({ userId, reference, current: decisionCurrent });
-  expect((yield* send({ action: "Review", decision })).status).toBe(202);
+  reference = yield* admitNativeDeletion(native.coordinator);
   expect((yield* send({ action: "Initialize" }, token, "candidate")).status).toBe(503);
   yield* Effect.tryPromise(() =>
     native.db.prepare("DELETE FROM memories WHERE user_id=?").bind(userId).run()
@@ -417,7 +526,7 @@ const verifyRestore = Effect.gen(function* () {
       native.registry.list({ prefix: `users/${userId}/held-records/${reference}/` })
     )).objects.length
   ).toBe(0);
-  yield* verifyProcessorEvidence(send, decision);
+  yield* verifyProcessorEvidence(send);
   native = yield* Effect.tryPromise(() => platform.restoreSnapshot());
   const guarded = withErasureRecovery({
     DB: native.db,
@@ -437,7 +546,7 @@ const verifyRestore = Effect.gen(function* () {
       ._tag
   ).toBe("Failure");
   yield* advanceToExternal({ db: () => native.db, send });
-  expect((yield* send({ action: "ReleaseRestore" })).status).toBe(200);
+  yield* verifyExpiredMetadata({ db: native.db, guarded, send, current, erasedAt });
   expect(
     yield* Effect.tryPromise(() =>
       native.db
@@ -478,7 +587,6 @@ const verifyRestore = Effect.gen(function* () {
   expect(receipt.status).toBe(200);
   expect(yield* Effect.tryPromise(() => receipt.json())).toMatchObject({
     state: "ExternalPending",
-    retained: [],
     next: "provider-evidence",
   });
   expect(

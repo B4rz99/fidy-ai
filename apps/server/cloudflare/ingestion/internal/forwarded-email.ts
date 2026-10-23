@@ -488,7 +488,7 @@ const prepareCleanupSelection = (db: D1Database, now: number): D1PreparedStateme
     db,
     statement: {
       sql: `SELECT id, user_id, object_key, state FROM forwarded_email_receipts
-        WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=forwarded_email_receipts.user_id AND q.state<>'AwaitingReview')
+        WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=forwarded_email_receipts.user_id)
         AND state IN ('storing', 'queued') AND (expires_at_ms <= ?
           OR (state = 'storing' AND received_at_ms <= ?))
         ORDER BY expires_at_ms ASC, id ASC LIMIT ?`,

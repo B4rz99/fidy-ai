@@ -1,6 +1,6 @@
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, expect, it } from "vitest";
-import { Clock, Effect, Schema } from "effect";
+import { Effect } from "effect";
 import { makeSubscriptionErasureStores } from "./runtime";
 import { makeAuditErasureStores } from "../audit/runtime";
 import { seedRefundCharge } from "./refund-charge.test-fixture";
@@ -89,16 +89,12 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
             .bind(id(3, 3), userId, id(2, 3)),
         ])
       );
-      const current = yield* Clock.currentTimeMillis;
-      const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-        dispositions: { billing: { action: "Delete", retention: { untilMs: current + 86400000 } } },
-      });
       yield* wait(() =>
         db
           .prepare(
-            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,'Sealing',?)"
+            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Sealing')"
           )
-          .bind(reference, userId, decision)
+          .bind(reference, userId)
           .run()
       );
       for (const sql of [
@@ -117,9 +113,9 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
         db.batch([
           db
             .prepare(
-              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,'Erasing',?)"
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Erasing')"
             )
-            .bind(foreignReference, foreignUser, decision),
+            .bind(foreignReference, foreignUser),
           db
             .prepare("INSERT INTO erasure_permits VALUES(?,?,'billing_checkout_responses')")
             .bind(foreignReference, foreignUser),
@@ -239,7 +235,7 @@ it("erases paid standing and billing accountability with their own permits while
             .bind(id(4, 2)),
           db
             .prepare(
-              'INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,\'Erasing\',\'{"dispositions":{"billing":{"action":"Delete"},"audit":{"action":"Delete"}}}\')'
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Erasing')"
             )
             .bind(reference, userId),
         ])

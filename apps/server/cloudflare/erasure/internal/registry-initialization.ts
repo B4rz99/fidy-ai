@@ -12,7 +12,7 @@ export const initializeRegistryStorage = <Requirements>(
     if (input.mode === "LocalStartup" && exists) return;
     const raw =
       yield* input.query(`SELECT EXISTS(SELECT 1 FROM erasure_control WHERE kind='published' AND generation='initial')
-      AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE decision_json IS NOT NULL) AS ready`);
+      AND NOT EXISTS(SELECT 1 FROM erasure_requests ) AS ready`);
     const row = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ ready: Schema.Literals([0, 1]) })
     )(raw);

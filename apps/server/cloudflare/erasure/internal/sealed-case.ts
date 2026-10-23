@@ -3,7 +3,7 @@ import { RecoveryCase } from "./recovery-case";
 import { type ErasureScope, ErasureUnavailable } from "../../erasure-store/contract";
 import type { ErasureRecoveryConfiguration } from "../contract";
 
-const maximumCaseBytes = 32768;
+const maximumCaseBytes = 512;
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
 /** Persist independent evidence of the native drain before deleting source rows. An older D1's pending work must not be mistaken for a new provider instruction after recovery. */
@@ -28,9 +28,9 @@ export const sealRecoveryCase = (
       yield* io(() => object.body.cancel());
       return yield* new ErasureUnavailable();
     }
-    const record = yield* Schema.decodeEffect(Schema.fromJsonString(RecoveryCase))(
-      yield* io(() => object.text())
-    );
+    const record = yield* Schema.decodeEffect(Schema.fromJsonString(RecoveryCase), {
+      onExcessProperty: "error",
+    })(yield* io(() => object.text()));
     if (!matchesScope(record, input.scope)) {
       return yield* new ErasureUnavailable();
     }
@@ -46,4 +46,4 @@ export const sealRecoveryCase = (
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
 const matchesScope = (record: typeof RecoveryCase.Type, scope: ErasureScope): boolean =>
-  record.decision.userId === scope.userId && record.decision.reference === scope.reference;
+  record.userId === scope.userId && record.reference === scope.reference;

@@ -1,5 +1,4 @@
 import { initializeRegistryStorage } from "./internal/registry-initialization";
-import { reviewControlRetention } from "./internal/retention-review";
 import { sweepControlObjects } from "./internal/control-objects";
 import { requireInventory } from "./internal/inventory";
 import { purgeCompletedCases } from "./internal/control-retention";
@@ -9,25 +8,24 @@ import { recordCustodyEvidence } from "./internal/provider-evidence";
 import { receipt } from "./internal/receipt";
 import { Clock, Effect, Option, Schema } from "effect";
 import {
+  ErasureBrowserAdmission,
   ErasureContinuation,
   ErasureCustodyAdmission,
   type ErasureExecution,
   type ErasureRecoveryConfiguration,
   type ErasureRegistryInitialization,
-  ErasureRetentionAdmission,
-  ErasureReviewAdmission,
 } from "./contract";
 import { progress } from "./internal/progress";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import type { ErasureStore } from "../erasure-store/contract";
-import { review } from "./internal/review";
+import { admitDeletion } from "./internal/admission";
 
 const conflictStatus = 409;
 const admissionLifetimeMs = 5000;
 const acceptedStatus = 202;
 const unavailableStatus = 503;
 /** Accepts only private Core admissions, rechecked under the named User's existing coordinator. */
-export const executeErasureReview = (
+export const executeErasureAdmission = (
   input: Readonly<{
     db: D1Database;
     userId: string;
@@ -38,7 +36,7 @@ export const executeErasureReview = (
   }>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const admission = Schema.decodeUnknownOption(ErasureReviewAdmission, {
+    const admission = Schema.decodeUnknownOption(ErasureBrowserAdmission, {
       onExcessProperty: "error",
     })(input.candidate);
     if (
@@ -48,11 +46,20 @@ export const executeErasureReview = (
     ) {
       return new Response(null, { status: conflictStatus });
     }
-    const approved = yield* review({ ...input, admission: admission.value });
-    return new Response(null, {
-      status: approved ? acceptedStatus : conflictStatus,
-      headers: { "cache-control": "no-store" },
-    });
+    const current = yield* Clock.currentTimeMillis;
+    if (
+      admission.value.deadlineMs <= current ||
+      admission.value.deadlineMs > current + admissionLifetimeMs
+    ) {
+      return new Response(null, { status: conflictStatus });
+    }
+    const accepted = yield* admitDeletion({ ...input, admission: admission.value });
+    return Option.isSome(accepted)
+      ? Response.json(accepted.value, {
+          status: acceptedStatus,
+          headers: { "cache-control": "no-store" },
+        })
+      : new Response(null, { status: conflictStatus });
   }).pipe(Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus })));
 
 /** A continuation is bound to the reviewed User and inventory; unresolved independent stores refuse progression. */
@@ -150,9 +157,7 @@ export const resumeErasureCases = (
     const pending = yield* Effect.tryPromise({
       try: () =>
         input.db
-          .prepare(
-            "SELECT count(*) AS pending FROM erasure_requests WHERE decision_json IS NOT NULL AND state<>'Complete'"
-          )
+          .prepare("SELECT count(*) AS pending FROM erasure_requests WHERE state<>'Complete'")
           .first<number>("pending"),
       catch: () => new ErasureUnavailable(),
     });
@@ -162,8 +167,8 @@ export const resumeErasureCases = (
     const rows = yield* Effect.tryPromise({
       try: () =>
         input.db
-          .prepare(`SELECT id AS reference,user_id AS userId,operator_ref AS operatorRef
-    FROM erasure_requests WHERE state NOT IN('AwaitingReview','Complete') AND decision_json IS NOT NULL AND next_continuation_at_ms<=?
+          .prepare(`SELECT id AS reference,user_id AS userId
+    FROM erasure_requests WHERE state<>'Complete' AND next_continuation_at_ms<=?
     AND (EXISTS(SELECT 1 FROM erasure_control WHERE kind='published' AND generation=?) OR EXISTS(SELECT 1 FROM erasure_control r
       JOIN erasure_restore_members m ON m.generation=r.generation WHERE r.kind='restore' AND r.scanned=1 AND r.generation=?
       AND m.request_id=erasure_requests.id AND m.user_id=erasure_requests.user_id AND erasure_requests.restore_generation=r.generation))
@@ -195,7 +200,7 @@ const resumeCase = (
       deadlineMs: now + admissionLifetimeMs,
       authority: {
         permission: "titular.erase",
-        operatorRef: entry.operatorRef,
+        operatorRef: "erasure-maintenance",
         expiresAtMs: now + admissionLifetimeMs,
       },
     };
@@ -224,7 +229,6 @@ const resumeCase = (
 const ResumableCase = Schema.Struct({
   reference: Schema.String,
   userId: Schema.String,
-  operatorRef: Schema.String,
 });
 
 export const executeErasureRestore = (
@@ -265,37 +269,6 @@ const continueDisposition = (
 export const sweepErasureControlObjects = (
   input: Parameters<typeof sweepControlObjects>[0]
 ): ReturnType<typeof sweepControlObjects> => sweepControlObjects(input);
-
-export const executeErasureRetentionReview = (
-  input: Readonly<{
-    userId: string;
-    candidate: unknown;
-    recovery: ErasureRecoveryConfiguration;
-    stores: ReadonlyArray<ErasureStore>;
-  }>
-): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const admission = Schema.decodeUnknownOption(ErasureRetentionAdmission, {
-      onExcessProperty: "error",
-    })(input.candidate);
-    const current = yield* Clock.currentTimeMillis;
-    if (
-      Option.isNone(admission) ||
-      !validContinuation({ admission: admission.value, current, userId: input.userId })
-    ) {
-      return new Response(null, { status: conflictStatus });
-    }
-    yield* requireInventory({
-      db: input.recovery.db,
-      stores: input.stores,
-      scope: { reference: admission.value.reference, userId: input.userId },
-    });
-    const accepted = yield* reviewControlRetention({
-      configuration: input.recovery,
-      admission: admission.value,
-    });
-    return new Response(null, { status: accepted ? acceptedStatus : conflictStatus });
-  }).pipe(Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus })));
 
 /** Only local deployment startup may use this preparation. Ordinary data access never initializes a missing registry; existing checkpoints are preserved. */
 export const prepareLocalErasureRegistry = <Requirements>(

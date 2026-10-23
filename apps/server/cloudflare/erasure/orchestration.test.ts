@@ -3,7 +3,6 @@ import {
   prepareResourceCounter,
 } from "../resource-admission/operations";
 import { it as effectIt } from "@effect/vitest";
-import { deletionDecision } from "./erasure.test-fixture";
 import { expect } from "vitest";
 import { type Cause, Clock, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { prepareOriginalWrite, trackOriginalWrite } from "../erasure-store/operations";
@@ -206,11 +205,6 @@ const verifyNativeErasure = Effect.gen(function* () {
           "INSERT INTO memories VALUES('foreign-memory',?,'Conservar',1792022400000,1792022400000)"
         )
         .bind(foreignUser),
-      db
-        .prepare(
-          "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,?,'AwaitingReview')"
-        )
-        .bind(reference, userId, current),
     ])
   );
   for (const [index, id] of [userId, foreignUser].entries()) {
@@ -314,19 +308,16 @@ const verifyNativeErasure = Effect.gen(function* () {
     }),
   }).pipe(Effect.forkScoped);
   yield* Deferred.await(admitted);
-  const decision = deletionDecision({ userId, reference, current });
-  expect(
-    (yield* send("erasure-review", {
-      userId,
-      decision,
-      authority: {
-        permission: "titular.erase",
-        operatorRef: "operator",
-        expiresAtMs: current + 300000,
-      },
-      deadlineMs: current + 5000,
-    })).status
-  ).toBe(202);
+  const admissionResponse = yield* send("erasure-admit", {
+    userId,
+    sessionId: userId,
+    digest: Array.from(new Uint8Array(32).fill(1)),
+    deadlineMs: (yield* Clock.currentTimeMillis) + 5000,
+  });
+  expect(admissionResponse.status).toBe(202);
+  const { reference } = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ reference: Schema.String })
+  )(yield* Effect.tryPromise(() => admissionResponse.json()));
   yield* verifyRenewalFence({ db, current });
   expect(
     (yield* send("erasure-continue", {

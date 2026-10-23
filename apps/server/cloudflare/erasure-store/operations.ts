@@ -16,7 +16,7 @@ export const prepareOriginalWrite = (
 ): ReadonlyArray<D1PreparedStatement> => [
   input.db
     .prepare(`INSERT INTO erasure_writers(id,user_id,bucket,object_key,started_at_ms)
-    SELECT ?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=? AND state<>'AwaitingReview')`)
+    SELECT ?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=?)`)
     .bind(
       input.reference,
       input.userId,
@@ -60,7 +60,7 @@ export const originalWriteActive = (
       try: () =>
         input.db
           .prepare(`SELECT count(*) AS active FROM erasure_writers WHERE id=? AND user_id=? AND bucket=? AND object_key=?
-              AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=? AND state NOT IN('AwaitingReview','Draining'))`)
+              AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=? AND state <>'Draining')`)
           .bind(input.reference, input.userId, input.bucket, input.objectKey, input.userId)
           .first<number>("active"),
       catch: () => new ErasureUnavailable(),

@@ -5346,3 +5346,175 @@ ALTER TABLE erasure_steps DROP COLUMN data_class;
 ```
 
 <!-- erasure-step-classification:end -->
+
+### Direct account deletion and minimal metadata (#1489 / #1490 integration)
+
+The local account-deletion entry point now forwards a fresh browser proof to the exact User's
+existing coordinator. Native admission rechecks the session identity, credential digest, revocation,
+freshness and expiry in the same batch that creates the Draining request, store steps and five
+processor statuses. User-supplied subjects, case references and alternate scopes are refused.
+Replays retain the original request identity and instant. Independent publication must complete and
+the native checkpoint/fresh proof must commit before the caller receives acceptance. A rejected or
+ambiguous independent PUT keeps its publication barrier; no elapsed-time or negative-read release.
+An admitted request with an uncertain response remains fenced and pending.
+
+The old operator Review/ReviewRetention actions, preparation CLI and selective-retention test cases
+are removed. Continuation, metadata receipts, manual processor evidence and restore controls retain
+their authenticated boundaries. Normal feature retention, rights-request handling and support
+recovery remain separate owners. Manual evidence still records the actual operator, original
+instant and exact processor/request linkage. Applicable processors are Cloudflare, Kapso, Meta,
+Resend and Wompi; the old SupportInbox, CaseRegister and CaseEvidence erasure-case machinery is no
+longer created for a new account deletion. Acceptance never substitutes for verified deletion.
+
+Requests now have the final 12 stored columns; steps have three. Independent recovery records contain
+only request reference, stable User identity, original request instant and confirmed-drain status.
+Readers bound these records to 512 bytes and reject hidden extra fields. They retain neither User
+content nor file locators, case/scope/authority references, old review decisions or retention envelopes.
+An unsealed restored request still cannot infer upload settlement from missing writer history. The
+verified independent sealed branch alone may reconcile its exact User's stale restored attempts.
+All expected restore members must finish local cleanup before ordinary access can resume.
+
+The fixed supported backup horizon is **30 days** from the latest completed local erase, covering
+both D1 Workers plans; [Cloudflare documents 30 days for Paid and seven for Free](https://developers.cloudflare.com/d1/reference/time-travel/).
+Cloudflare verification cannot predate that horizon. Minimal metadata is purged in bounded pages
+only after external completion and the horizon, and only when the independent published generation
+matches the native database. Unknown provider outcomes stay pending. This policy covers D1 Time
+Travel only: enabling longer-lived exports/backups first requires extending restore protection.
+
+Before release, decode and reconcile every existing independent marker to the minimal schema under
+a controlled recovery fence, preserving its exact request/User/original instant and actual sealed
+proof. Never infer sealed=true from an empty ledger, request label or elapsed time. Refuse malformed,
+missing, extra or unexplained markers. In-flight publication remains unavailable until its entire
+outcome is positively known; an object listing alone cannot settle it. Do not overwrite the global
+generation to force progress. Old operator-case artifacts and retained content require explicit
+verified retirement before the old custody records can be removed; the new code does not manufacture
+non-applicability for them. Final deployment/convergence remains gated by #1494.
+
+A populated native D1 rehearsal of the request/custody metadata rebuild preserves exact request and
+store completion, row identities, processor evidence/linkage, both Users' unrelated owner records,
+unresolved writer attempts and instants. An active request or any obsolete custody owner refuses
+the whole batch. Injected failure after the rebuild rolls back all schema/data changes. The following
+SQL is that tested bounded metadata retirement, after the preceding archive/step cutovers and the
+independent-marker/artifact reconciliation above; it is not an instruction to replay 0001 over data.
+
+<!-- erasure-minimal-metadata:start -->
+
+```sql
+PRAGMA defer_foreign_keys=ON;
+
+SELECT json(CASE WHEN
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete' OR last_erased_at_ms IS NULL OR marker_written<>1 OR coordinator_cleared<>1)
+ AND NOT EXISTS(SELECT 1 FROM erasure_custody_records WHERE custodian NOT IN('Cloudflare','Kapso','Meta','Resend','Wompi') OR state='Retained' OR (record_type='event' AND (json_valid(evidence_json)<>1 OR json_extract(evidence_json,'$.outcome.status')='Retained')))
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE EXISTS(SELECT 1 FROM erasure_writers WHERE user_id=q.user_id)
+ OR NOT EXISTS(SELECT 1 FROM erasure_steps WHERE request_id=q.id)
+ OR EXISTS(SELECT 1 FROM erasure_steps WHERE request_id=q.id AND delete_done<>1)
+ OR (SELECT count(*) FROM erasure_custody_records WHERE record_type='current' AND request_id=q.id AND state IN('Verified','NotApplicable'))<>5)
+ THEN 'true' ELSE '' END) AS accepted;
+
+CREATE TABLE cutover_erasure_requests (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL UNIQUE,
+  requested_at_ms INTEGER NOT NULL,
+  restoring INTEGER NOT NULL DEFAULT 0 CHECK(restoring IN(0,1)),
+  restore_generation TEXT,
+  state TEXT NOT NULL CHECK(state IN ('Draining','Sealing','Erasing','ExternalPending','Complete')),
+  last_erased_at_ms INTEGER,
+  last_continued_at_ms INTEGER NOT NULL DEFAULT 0,
+  next_continuation_at_ms INTEGER NOT NULL DEFAULT 0,
+  connection_blocked INTEGER NOT NULL DEFAULT 0 CHECK(connection_blocked IN(0,1)),
+  coordinator_cleared INTEGER NOT NULL DEFAULT 0 CHECK(coordinator_cleared IN (0,1)),
+  marker_written INTEGER NOT NULL DEFAULT 0 CHECK(marker_written IN (0,1))
+) STRICT;
+
+INSERT INTO cutover_erasure_requests(rowid,id,user_id,requested_at_ms,restoring,restore_generation,state,last_erased_at_ms,last_continued_at_ms,next_continuation_at_ms,connection_blocked,coordinator_cleared,marker_written) SELECT rowid,id,user_id,requested_at_ms,restoring,restore_generation,state,last_erased_at_ms,last_continued_at_ms,next_continuation_at_ms,connection_blocked,coordinator_cleared,marker_written FROM erasure_requests;
+
+DROP TABLE erasure_requests;
+
+CREATE TABLE erasure_requests (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL UNIQUE,
+  requested_at_ms INTEGER NOT NULL,
+  restoring INTEGER NOT NULL DEFAULT 0 CHECK(restoring IN(0,1)),
+  restore_generation TEXT,
+  state TEXT NOT NULL CHECK(state IN ('Draining','Sealing','Erasing','ExternalPending','Complete')),
+  last_erased_at_ms INTEGER,
+  last_continued_at_ms INTEGER NOT NULL DEFAULT 0,
+  next_continuation_at_ms INTEGER NOT NULL DEFAULT 0,
+  connection_blocked INTEGER NOT NULL DEFAULT 0 CHECK(connection_blocked IN(0,1)),
+  coordinator_cleared INTEGER NOT NULL DEFAULT 0 CHECK(coordinator_cleared IN (0,1)),
+  marker_written INTEGER NOT NULL DEFAULT 0 CHECK(marker_written IN (0,1))
+) STRICT;
+
+INSERT INTO erasure_requests(rowid,id,user_id,requested_at_ms,restoring,restore_generation,state,last_erased_at_ms,last_continued_at_ms,next_continuation_at_ms,connection_blocked,coordinator_cleared,marker_written) SELECT rowid,id,user_id,requested_at_ms,restoring,restore_generation,state,last_erased_at_ms,last_continued_at_ms,next_continuation_at_ms,connection_blocked,coordinator_cleared,marker_written FROM cutover_erasure_requests;
+
+DROP TABLE cutover_erasure_requests;
+
+CREATE TABLE cutover_erasure_custody_records (
+ record_type TEXT NOT NULL CHECK(record_type IN ('current','event')),
+ request_id TEXT NOT NULL REFERENCES erasure_requests(id),
+ custodian TEXT NOT NULL,
+ id TEXT,
+ state TEXT,
+ evidence_json TEXT CHECK(evidence_json IS NULL OR length(evidence_json)<=4096),
+ recorded_at_ms INTEGER,
+ operator_ref TEXT,
+ current_event_id TEXT,
+ event_identity TEXT GENERATED ALWAYS AS(CASE WHEN record_type='event' THEN id END) VIRTUAL UNIQUE,
+ UNIQUE(request_id,custodian,event_identity),
+ FOREIGN KEY(request_id,custodian,current_event_id) REFERENCES erasure_custody_records(request_id,custodian,event_identity),
+ CHECK((record_type='current' AND id IS NULL AND state IS NOT NULL AND state IN ('Pending','Accepted','Verified','NotApplicable','Unresolved') AND custodian IN ('Cloudflare','Kapso','Meta','Resend','Wompi') AND evidence_json IS NULL AND recorded_at_ms IS NULL AND operator_ref IS NULL)
+ OR(record_type='event' AND id IS NOT NULL AND state IS NULL AND evidence_json IS NOT NULL AND recorded_at_ms IS NOT NULL AND operator_ref IS NOT NULL AND current_event_id IS NULL))
+) STRICT;
+
+INSERT INTO cutover_erasure_custody_records(rowid,record_type,request_id,custodian,id,state,evidence_json,recorded_at_ms,operator_ref,current_event_id) SELECT rowid,record_type,request_id,custodian,id,state,evidence_json,recorded_at_ms,operator_ref,current_event_id FROM erasure_custody_records;
+
+DROP TABLE erasure_custody_records;
+
+CREATE TABLE erasure_custody_records (
+ record_type TEXT NOT NULL CHECK(record_type IN ('current','event')),
+ request_id TEXT NOT NULL REFERENCES erasure_requests(id),
+ custodian TEXT NOT NULL,
+ id TEXT,
+ state TEXT,
+ evidence_json TEXT CHECK(evidence_json IS NULL OR length(evidence_json)<=4096),
+ recorded_at_ms INTEGER,
+ operator_ref TEXT,
+ current_event_id TEXT,
+ event_identity TEXT GENERATED ALWAYS AS(CASE WHEN record_type='event' THEN id END) VIRTUAL UNIQUE,
+ UNIQUE(request_id,custodian,event_identity),
+ FOREIGN KEY(request_id,custodian,current_event_id) REFERENCES erasure_custody_records(request_id,custodian,event_identity),
+ CHECK((record_type='current' AND id IS NULL AND state IS NOT NULL AND state IN ('Pending','Accepted','Verified','NotApplicable','Unresolved') AND custodian IN ('Cloudflare','Kapso','Meta','Resend','Wompi') AND evidence_json IS NULL AND recorded_at_ms IS NULL AND operator_ref IS NULL)
+ OR(record_type='event' AND id IS NOT NULL AND state IS NULL AND evidence_json IS NOT NULL AND recorded_at_ms IS NOT NULL AND operator_ref IS NOT NULL AND current_event_id IS NULL))
+) STRICT;
+
+INSERT INTO erasure_custody_records(rowid,record_type,request_id,custodian,id,state,evidence_json,recorded_at_ms,operator_ref,current_event_id) SELECT rowid,record_type,request_id,custodian,id,state,evidence_json,recorded_at_ms,operator_ref,current_event_id FROM cutover_erasure_custody_records;
+
+DROP TABLE cutover_erasure_custody_records;
+
+CREATE UNIQUE INDEX custody_current_identity ON erasure_custody_records(request_id,custodian) WHERE record_type='current';
+
+CREATE TRIGGER custody_record_identity_immutable BEFORE UPDATE ON erasure_custody_records WHEN NEW.record_type IS NOT OLD.record_type OR NEW.request_id IS NOT OLD.request_id OR NEW.custodian IS NOT OLD.custodian OR NEW.id IS NOT OLD.id BEGIN SELECT RAISE(ABORT,'custody_record_identity_immutable'); END;
+
+SELECT json(CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 'true' ELSE '' END) AS accepted;
+```
+
+<!-- erasure-minimal-metadata:end -->
+
+The public browser/native coordinator regression first failed because acceptance still returned
+AwaitingReview/operator-review; it now starts Draining directly. Existing native restore and delayed
+upload journeys pass with the minimal records. The broader focused run passes 322 tests across 33
+files with one existing skip, including original-byte staging, forwarding, account security,
+resource admission and historical populated owner migrations. Historical rehearsals explicitly
+restore the old decision field only where their original archived triggers require it; ordinary
+runtime uses the final baseline. No schema-inventory or removal-only tests were added.
+
+A supported backup can still contain terminal metadata after its independent marker has legitimately
+expired: the User content was already absent before that backup. Restore release accepts this exact
+case only with Complete state, a known erase instant older than the 30-day horizon, sealed/coordinator
+proof and no unresolved writer. Complete is the durable result of verified local and five-processor
+completion; expired child records can already be partially purged and are not required again. A recent
+or missing erase instant still requires independent membership and refuses release. The existing
+native restore journey reproduced the permanent wait on such expired metadata, then verifies both
+negative cases and successful release from an actual partial-cleanup backup while preserving the
+other User and all active-case fences. The cleanup fixture includes 70 evidence events, so the first
+bounded page removes the marker and current rows while 11 events and the completed request remain.

@@ -161,7 +161,7 @@ it.each(failures)("preserves populated OAuth lineage and rolls back $name", (fix
             .bind(owner),
           db
             .prepare(
-              'INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,\'AwaitingReview\',\'{"dispositions":{"credentials":{"action":"Retain","retention":{"untilMs":4102444800000}}}}\')'
+              'INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,\'Draining\',\'{"dispositions":{"credentials":{"action":"Retain","retention":{"untilMs":4102444800000}}}}\')'
             )
             .bind(request, owner),
           db

@@ -239,18 +239,13 @@ it("prunes at most 32 expired pairings through the expiry index while retaining 
         );
       }
       const observedOwner = observeRetentionCost(db);
-      const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-        dispositions: {
-          credentials: { action: "Delete", retention: { untilMs: current + 600000 } },
-        },
-      });
       yield* Effect.tryPromise(() =>
         db.batch([
           db
             .prepare(
-              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES('session-archive',?,?,'AwaitingReview',?)"
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES('session-archive',?,?,'Draining')"
             )
-            .bind(userId, current, decision),
+            .bind(userId, current),
           db.prepare(
             "INSERT INTO erasure_steps(request_id,store_id) VALUES('session-archive','web_sessions')"
           ),

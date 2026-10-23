@@ -185,7 +185,7 @@ it.each(["complete", "interrupted", "invalid_history"] as const)(
             db.prepare("INSERT INTO resource_admission_grants VALUES('existing',1000000,1)"),
             db
               .prepare(
-                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'AwaitingReview')"
+                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Draining')"
               )
               .bind(owner, owner),
             db

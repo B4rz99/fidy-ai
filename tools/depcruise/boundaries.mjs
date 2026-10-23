@@ -29,6 +29,7 @@ const compositionRoots = new Set([
   "cloudflare/maintenance/monitoring-isolation.test.ts",
   "cloudflare/maintenance-performance.test-fixture.ts",
   "cloudflare/transactions/performance.test.ts",
+  "cloudflare/erasure/erasure.test.ts",
   "cloudflare/erasure/orchestration.test.ts",
   "cloudflare/erasure/restore.test.ts",
   "cloudflare/erasure/originals.test.ts",

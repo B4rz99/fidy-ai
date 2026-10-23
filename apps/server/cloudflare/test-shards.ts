@@ -95,7 +95,6 @@ const estimatedSeconds: Readonly<Record<string, number>> = {
   "ingestion/statement-document.test.ts": 1.0,
   "maintenance/cadence.test.ts": 0.96,
   "consent/weekly-consent.test.ts": 0.94,
-  "erasure/retention-review.test.ts": 0.92,
   "runtime/operational-health/event-metrics.test.ts": 0.87,
   "runtime/operational-health/core-rejection.test.ts": 0.81,
   "ai/workers-ai.test.ts": 0.8,

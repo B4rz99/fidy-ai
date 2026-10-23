@@ -1,10 +1,10 @@
 import { Schema } from "effect";
-import { ErasureDecision } from "../../../src/core/erasure/contract";
+import { ErasureReference } from "../../../src/core/erasure/contract";
+import { UserId } from "../../../src/core/identity/contract";
 
 export const RecoveryCase = Schema.Struct({
-  decision: ErasureDecision,
-  sealed: Schema.Boolean,
+  reference: ErasureReference,
+  userId: UserId,
   requestedAtMs: Schema.Int,
-  reviewedAtMs: Schema.Int,
-  operatorRef: Schema.String,
+  sealed: Schema.Boolean,
 });

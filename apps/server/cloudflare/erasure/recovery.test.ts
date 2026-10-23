@@ -1,4 +1,3 @@
-import { deletionDecision } from "./erasure.test-fixture";
 import {
   prepareLocalErasureRegistry,
   resumeErasureCases,
@@ -186,7 +185,7 @@ it("fences reads, writes and native Sessions after an interrupted checkpoint or 
     })
   ));
 
-it("purges completed case controls only after both reviewed deadlines, in resumable bounded steps", () =>
+it("purges completed deletion metadata beyond the backup horizon while preserving recent requests", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
@@ -196,24 +195,30 @@ it("purges completed case controls only after both reviewed deadlines, in resuma
       const foreignRef = "12740000-0000-4000-8000-000000000098";
       const foreignUser = "12740000-0000-4000-8000-000000000099";
       const historical = current - 41 * 86400000;
-      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-        deletionDecision({ userId, reference, current: historical })
-      );
-      const foreignDecision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-        deletionDecision({ userId: foreignUser, reference: foreignRef, current })
-      );
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        reference,
+        userId,
+        requestedAtMs: historical,
+        sealed: true,
+      });
+      const foreignDecision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        reference: foreignRef,
+        userId: foreignUser,
+        requestedAtMs: current,
+        sealed: true,
+      });
       yield* Effect.tryPromise(() =>
         db.batch([
           db
             .prepare(
-              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json,last_erased_at_ms) VALUES(?,?,?,'Complete',?,?)"
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,last_erased_at_ms) VALUES(?,?,?,'Complete',?)"
             )
-            .bind(reference, userId, historical, encoded, historical),
+            .bind(reference, userId, historical, historical),
           db
             .prepare(
-              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json,last_erased_at_ms) VALUES(?,?,?,'Complete',?,?)"
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,last_erased_at_ms) VALUES(?,?,?,'Complete',?)"
             )
-            .bind(foreignRef, foreignUser, current, foreignDecision, current),
+            .bind(foreignRef, foreignUser, current, current),
           db
             .prepare(
               "INSERT INTO erasure_steps(request_id,store_id,delete_done) VALUES(?,'users',1)"
@@ -221,13 +226,9 @@ it("purges completed case controls only after both reviewed deadlines, in resuma
             .bind(reference),
         ])
       );
-      for (let index = 0; index < 9; index++) {
-        yield* Effect.tryPromise(() =>
-          bucket.put(`recovery/objects/${reference}/statement/${index}`, "locator")
-        );
-      }
       yield* Effect.tryPromise(() => bucket.put(`recovery/cases/${reference}`, encoded));
       yield* Effect.tryPromise(() => bucket.put(`recovery/cases/${foreignRef}`, foreignDecision));
+      yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
       const configuration = {
         db,
         bucket: Option.some(bucket),
@@ -238,18 +239,6 @@ it("purges completed case controls only after both reviewed deadlines, in resuma
         },
       };
       yield* resumeErasureCases(configuration);
-      expect(
-        (yield* Effect.tryPromise(() => bucket.list({ prefix: `recovery/objects/${reference}/` })))
-          .objects
-      ).toHaveLength(1);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT count(*) FROM erasure_requests WHERE id=?")
-            .bind(reference)
-            .first("count(*)")
-        )
-      ).toBe(1);
       yield* resumeErasureCases(configuration);
       yield* resumeErasureCases(configuration);
       expect(
@@ -407,15 +396,12 @@ it("initializes an empty local registry but refuses to recreate a lost approved-
       );
       const current = yield* Clock.currentTimeMillis;
       const reference = "12740000-0000-4000-8000-000000000002";
-      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-        deletionDecision({ userId, reference, current })
-      );
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,?,'Draining',?)"
+            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,?,'Draining')"
           )
-          .bind(reference, userId, current, encoded)
+          .bind(reference, userId, current)
           .run()
       );
       yield* Effect.tryPromise(() => bucket.delete("recovery/generation"));

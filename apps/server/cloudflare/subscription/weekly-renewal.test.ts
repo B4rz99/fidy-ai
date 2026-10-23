@@ -1584,6 +1584,8 @@ it("recovers one cancellation execution after an engine interruption and preserv
       let interrupted = true;
       let puts = 0;
       let gets = 0;
+      const activities: string[] = [];
+      const waits: number[] = [];
       vi.stubGlobal("fetch", (url: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(url, init);
         expect(new URL(request.url).pathname).toBe(
@@ -1608,15 +1610,19 @@ it("recovers one cancellation execution after an engine interruption and preserv
             WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
           },
           payload: Option.getOrThrow(execution),
-          activity: (_name, _options, work) => {
+          activity: (name, options, work) => {
+            expect(options.retries).toEqual({ limit: 0, delay: "1 second" });
             if (interrupted) {
               status = "errored";
               return Promise.reject(new Error("engine interrupted"));
             }
+            activities.push(name);
             status = "running";
             return work();
           },
-          sleep: (_name, duration) => {
+          sleep: (name, duration) => {
+            expect(name).toBe(`source-cancellation-wait-v2-${waits.length + 1}`);
+            waits.push(duration);
             now += duration;
             vi.setSystemTime(now);
             return Promise.resolve();
@@ -1655,6 +1661,10 @@ it("recovers one cancellation execution after an engine interruption and preserv
       expect(ack).toHaveBeenCalledTimes(4);
       expect(puts).toBe(1);
       expect(gets).toBe(8);
+      expect(activities).toEqual(
+        Array.from({ length: 8 }, (_, index) => `cancel-wompi-source-v2-${index}`)
+      );
+      expect(waits).toEqual(Array.from({ length: 7 }, () => 60001));
       expect(
         yield* fromPromise(() =>
           db

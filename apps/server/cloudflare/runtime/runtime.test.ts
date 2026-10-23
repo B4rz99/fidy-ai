@@ -1,7 +1,7 @@
 import { type PlatformMaintenanceInput, PlatformMaintenanceUnavailable } from "./contract";
 import { deepStrictEqual } from "node:assert";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Exit, FileSystem, Option } from "effect";
+import { Clock, Effect, Exit, FileSystem, Logger, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, expect, vi } from "vitest";
 import { Miniflare } from "miniflare";
@@ -110,10 +110,18 @@ it.effect(
           )
           .run()
       );
+      let backlogCount = 1000;
+      const logs: Array<unknown> = [];
+      const logger = Logger.make<unknown, void>(({ message }) => logs.push(message));
+      const loggers = new Set([logger]);
       const configured = input(db, {
         ASYNC_HEALTH_ENABLED: Option.some("enabled"),
         RESEND_API_KEY: Option.some("configured"),
         WOMPI_EVENT_SECRET: Option.some("configured"),
+        BILLING_COLLECTION_QUEUE: Option.some({
+          ...queue,
+          metrics: () => Promise.resolve({ backlogCount, backlogBytes: 1000 }),
+        }),
         USER_TRANSACTION_COORDINATOR: {
           getByName: () => ({
             fetch: (): Promise<Response> => Promise.resolve(new Response(null, { status: 204 })),
@@ -121,8 +129,35 @@ it.effect(
         },
       });
       deepStrictEqual(
-        yield* Effect.exit(makePlatformMaintenance(configured).inspectHealth()),
+        yield* Effect.exit(
+          makePlatformMaintenance(configured)
+            .inspectHealth()
+            .pipe(Effect.provideService(Logger.CurrentLoggers, loggers))
+        ),
         Exit.fail(new PlatformMaintenanceUnavailable())
+      );
+      expect(logs).toEqual(
+        expect.arrayContaining([
+          [{ component: "capability", operation: "d1", state: "healthy", severity: "none" }],
+          [
+            {
+              component: "capability",
+              operation: "requiredBindings",
+              state: "unavailable",
+              severity: "warning",
+            },
+          ],
+          [
+            {
+              component: "async-health",
+              operation: "billingQueue",
+              state: "attention",
+              backlogCount: 1000,
+              backlogBytes: 1000,
+              severity: "critical",
+            },
+          ],
+        ])
       );
       expect(
         yield* Effect.tryPromise(() =>
@@ -142,12 +177,26 @@ it.effect(
           { operation: "workflowFailures", state: "unavailable" },
         ],
       });
+      logs.length = 0;
+      backlogCount = 99;
       yield* Effect.exit(
         makePlatformMaintenance({
           ...configured,
           RESEND_API_KEY: Option.some("  "),
-        }).inspectHealth()
+        })
+          .inspectHealth()
+          .pipe(Effect.provideService(Logger.CurrentLoggers, loggers))
       );
+      expect(logs).toContainEqual([
+        {
+          component: "async-health",
+          operation: "billingQueue",
+          state: "attention",
+          backlogCount: 99,
+          backlogBytes: 1000,
+          severity: "none",
+        },
+      ]);
       expect(
         yield* Effect.tryPromise(() =>
           db

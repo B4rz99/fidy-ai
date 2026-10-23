@@ -195,7 +195,13 @@ const reportOperationalSignals = (
 ): Effect.Effect<void, void> =>
   Effect.forEach(
     signals,
-    (signal) => (signal.state === "healthy" ? Effect.logInfo(signal) : Effect.logWarning(signal)),
+    (signal) => {
+      const alerts = decideOperationalAlerts([signal]);
+      const warning = alerts.length > 0 ? "warning" : "none";
+      const severity = alerts.some((alert) => alert.severity === "critical") ? "critical" : warning;
+      const observation = { ...signal, severity };
+      return severity === "none" ? Effect.logInfo(observation) : Effect.logWarning(observation);
+    },
     { discard: true }
   ).pipe(
     Effect.andThen(retainOperationalSignals(environment, signals)),

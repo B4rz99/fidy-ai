@@ -113,6 +113,12 @@ only after 100 new refusals; a backward clock cannot reopen an old minute. The b
 not a deployment-wide write cap: different isolates or User coordinators can each admit a write.
 This is telemetry, never authorization or request admission.
 
+Scheduled health logs include `severity: none | warning | critical`, selected by the existing
+alert policy for that observation. An `attention` sample below its alert threshold has `none`;
+an unavailable inspection has `warning`. Any critical alert for an owner takes precedence over
+its warnings. This field augments the same bounded observation, without another emission or
+retained state. Queries must distinguish missing observations from observations with `none`.
+
 Each detected burst also emits the closed `core-rejections / coreRejectionBursts / attention`
 warning directly to platform logs. Database failures or a previous unresolved native write do not
 suppress this observation; the existing threshold and one observation per observer per minute still
@@ -136,6 +142,32 @@ No request path, IP, User, credential, body, error detail or caller-supplied dim
 The native MCP observation test substitutes canonical dispatch and proves protocol detection;
 existing canonical suites remain the authorization evidence. Live receipt and response evidence
 remains #1262.
+
+### Platform migration verification (#1491)
+
+On 2026-10-23, the account dashboard saved and enabled **Fidy production: Core rejection bursts**
+(`fc9c5304807746699773a58bb8287594`), scoped to the deployed Core Worker. It reports a one-minute
+check interval, threshold `>= 1`, one-minute averaging and four-hour notification repeats. Its email
+destination matches the existing deployed `OPERATOR_ALERT_EMAIL`. The saved query is:
+
+```sql
+SELECT count() AS "value"
+FROM "logs"."workersLogs"
+WHERE "scriptName" = 'fidycloudflare-core-production-hdv5cspnk7fai6vg'
+  AND "message" LIKE '%coreRejectionBursts%'
+  AND "message" LIKE '%attention%'
+```
+
+This currently observes the existing scheduled presence signal as well as direct detection after
+that code is deployed. Before retiring scheduled presence, validate an explicit five-minute query
+window for direct detections; the current query must not be treated as that replacement. Cloudflare's
+sample-notification action was submitted once to the configured operator. Submission and an enabled
+monitor are not evidence of actual threshold firing, mailbox receipt, resolution or absence handling.
+
+The full #1491 coverage gate remains open. Required next evidence includes policy-severity queries,
+native Queue and completed Workflow observations, missing/stale inspections, actual firing and
+resolution, delivery results, account-supported execution cadence, privacy and independent outage
+behavior. Keep the operational tables and existing notification machinery until these pass.
 
 | Signal                                                      | Interpretation                                                                          | Action                                                                            |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |

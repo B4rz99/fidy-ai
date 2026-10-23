@@ -1,0 +1,25 @@
+diff --git a/dist/src/transformers/babel-transformer.js b/dist/src/transformers/babel-transformer.js
+index 494e3064201511f9e9658b87e0311fa0f626d0f6..ea48f1649a9513cfce38e6ee925a20dbaee274dd 100644
+--- a/dist/src/transformers/babel-transformer.js
++++ b/dist/src/transformers/babel-transformer.js
+@@ -173,7 +173,19 @@ export const transformBabel = ({ root, originFileName, rawContent, offset }, mut
+      */
+     function collectMutants(path) {
+         return [...mutate(path)]
+-            .map((mutable) => mutantCollector.collect(originFileName, path.node, mutable, offset))
++            .map((mutable) => {
++                const mutant = mutantCollector.collect(originFileName, path.node, mutable, offset);
++                if (!mutant.ignoreReason) {
++                    for (const ignorer of options.ignorers) {
++                        const reason = ignorer.shouldIgnoreMutant?.(mutant.toApiMutant(), rawContent);
++                        if (reason) {
++                            mutant.ignoreReason = reason;
++                            break;
++                        }
++                    }
++                }
++                return mutant;
++            })
+             .filter((mutant) => !mutant.ignoreReason);
+     }
+     /**

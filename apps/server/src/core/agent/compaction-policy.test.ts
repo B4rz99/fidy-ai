@@ -26,3 +26,12 @@ it("selects the terminal prefix before pending work, including an empty or entir
   ).toEqual(Option.some(30));
   expect(terminalPrefixCursor([{ sequence: 0, status: "completed" }])).toEqual(Option.some(0));
 });
+
+it("retains a terminal entry immediately before the Pending Turn at index one", () => {
+  expect(
+    terminalPrefixCursor([
+      { sequence: 10, status: "completed" },
+      { sequence: 20, status: "pending" },
+    ])
+  ).toEqual(Option.some(10));
+});

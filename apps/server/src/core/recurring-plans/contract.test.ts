@@ -1,6 +1,14 @@
+import {
+  RecurringDate,
+  RecurringEdit,
+  RecurringFilters,
+  RecurringMatchFact,
+  RecurringMonth,
+  RecurringOccurrence,
+  RecurringPlanInput,
+} from "./contract";
 import { Result, Schema } from "effect";
 import { expect, it } from "vitest";
-import { RecurringDate, RecurringMonth, RecurringPlanInput } from "./contract";
 
 const plan = {
   name: "Arriendo",
@@ -98,4 +106,38 @@ it("requires bounded trimmed names, coherent Money and a nondecreasing schedule"
   ]) {
     expect(Result.isFailure(decode({ ...plan, ...change })), JSON.stringify(change)).toBe(true);
   }
+});
+
+it("round-trips commands for each editable scope and lifecycle decision", () => {
+  const key = { planId: "10000000-0000-4000-8000-000000000001", date: "2026-01-31" };
+  const edits = [
+    { kind: "create", id: key.planId, plan },
+    ...["once", "forward"].map((scope) => ({ kind: "edit", ...key, scope, plan })),
+    ...["pause", "resume", "stop"].map((action) => ({ kind: "lifecycle", ...key, action })),
+    ...["dismiss", "restore", "link"].map((action) => ({
+      kind: "suggestion",
+      seriesId: key.planId,
+      action,
+    })),
+  ];
+  for (const value of edits) {
+    expect(
+      Schema.encodeSync(RecurringEdit)(Schema.decodeUnknownSync(RecurringEdit)(value))
+    ).toEqual(value);
+  }
+  for (const status of ["upcoming", "unconfirmed", "partial", "completed", "skipped"]) {
+    expect(Schema.decodeUnknownSync(RecurringFilters)({ status })).toEqual({ status });
+    expect(Schema.decodeUnknownSync(RecurringOccurrence.fields.status)(status)).toBe(status);
+  }
+  for (const direction of ["inflow", "outflow"]) {
+    expect(Schema.decodeUnknownSync(RecurringMatchFact.fields.direction)(direction)).toBe(
+      direction
+    );
+  }
+});
+
+it("exports a whole-date pattern for structured-output validators", () => {
+  expect(Schema.toJsonSchemaDocument(RecurringDate).schema).toMatchObject({
+    pattern: "^20\\d{2}-\\d{2}-\\d{2}$",
+  });
 });

@@ -230,3 +230,47 @@ it("bounds explicit local occurrence spellings before calendar interpretation", 
     expect(Result.isFailure(decode({ _tag: "LocalDate", date: "2026-01-01", time }))).toBe(true);
   }
 });
+
+it("accepts an explicit source date in the first supported Gregorian year", () => {
+  const result = interpretCapture({
+    context: { ...context, timeZone: IanaTimeZone.make("Etc/UTC") },
+    proposal: {
+      ...singleMovement(),
+      occurrence: Option.some({ _tag: "LocalDate", date: "0001-01-01", time: Option.none() }),
+    },
+    submittedAt,
+    now: submittedAt,
+  });
+  expect(result._tag).toBe("Extracted");
+});
+
+it("reports invalid Money before an independently invalid occurrence", () => {
+  const proposal = {
+    ...singleMovement(),
+    money: Option.some({
+      amount: BigDecimal.make(-1n, 0),
+      currency: Option.some(Currency.make("COP")),
+    }),
+    occurrence: Option.some({
+      _tag: "Instant" as const,
+      value: DateTime.makeUnsafe("2027-01-01T00:00:00Z"),
+    }),
+  };
+  expect(interpretCapture({ context, proposal, submittedAt, now: submittedAt })).toEqual({
+    _tag: "NeedsReview",
+    reason: "canonical-validation-failed",
+  });
+});
+
+it("rejects year zero as an invalid occurrence even for the GMT named-zone alias", () => {
+  const result = interpretCapture({
+    context: { ...context, timeZone: IanaTimeZone.make("GMT") },
+    proposal: {
+      ...singleMovement(),
+      occurrence: Option.some({ _tag: "LocalDate", date: "0000-01-01", time: Option.none() }),
+    },
+    submittedAt,
+    now: submittedAt,
+  });
+  expect(result).toEqual({ _tag: "NeedsReview", reason: "invalid-occurrence" });
+});

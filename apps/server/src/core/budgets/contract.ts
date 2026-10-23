@@ -224,6 +224,21 @@ const hasExactOverProgress = (
   BigDecimal.Order(spent.amount, cap.amount) > 0 &&
   BigDecimal.equals(overBy.amount, BigDecimal.subtract(spent.amount, cap.amount));
 
+const hasExactBudgetStatus = (
+  cap: ReadonlyMoney,
+  spent: ReadonlyMoney,
+  status: BudgetProgressFact["status"]
+): boolean => {
+  switch (status.type) {
+    case "under":
+      return hasExactUnderProgress(cap, spent, status.remaining);
+    case "reached":
+      return BigDecimal.equals(spent.amount, cap.amount);
+    case "over":
+      return hasExactOverProgress(cap, spent, status.overBy);
+  }
+};
+
 const hasExactBudgetProgress = ({ cap, spent, status }: BudgetProgressFact): boolean => {
   if (
     spent.currency !== cap.currency ||
@@ -233,14 +248,7 @@ const hasExactBudgetProgress = ({ cap, spent, status }: BudgetProgressFact): boo
     return false;
   }
   if (BigDecimal.Order(cap.amount, zero) !== 1) return false;
-  const checks = {
-    under: (): boolean =>
-      status.type === "under" && hasExactUnderProgress(cap, spent, status.remaining),
-    reached: (): boolean =>
-      status.type === "reached" && BigDecimal.equals(spent.amount, cap.amount),
-    over: (): boolean => status.type === "over" && hasExactOverProgress(cap, spent, status.overBy),
-  };
-  return checks[status.type]();
+  return hasExactBudgetStatus(cap, spent, status);
 };
 
 /** Exact progress over decoded Money, shared by monthly status and Dashboard projections. */

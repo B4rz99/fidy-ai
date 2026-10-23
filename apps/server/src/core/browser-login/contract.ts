@@ -94,7 +94,6 @@ export type PendingBrowserLoginProofInput = Readonly<{
 
 const normalizePublicCodeText = (input: string): string => {
   const upper = input.replace(/^[\t\n\r ]+|[\t\n\r ]+$/gu, "").toUpperCase();
-  if (browserLoginPublicCodePattern.test(upper)) return upper;
   return browserLoginPublicCodeSymbolsPattern.test(upper)
     ? `${upper.slice(0, 4)}-${upper.slice(4)}`
     : upper;

@@ -45,7 +45,7 @@ const dated = (fact: RecurringFact, timeZone: IanaTimeZone): DatedFact => {
   ).day;
   return {
     fact,
-    key: Option.match(fact.counterparty, { onNone: () => "", onSome: normalizeCounterparty }),
+    key: normalizeCounterparty(Option.getOrThrow(fact.counterparty)),
     month: parts.year * monthsPerYear + parts.month,
     day: parts.day,
     lastDay,
@@ -72,10 +72,7 @@ const tripleAt = (
   if (second === undefined || third === undefined) return Option.none();
   const competing = firstMonth.some(
     (candidate) =>
-      candidate.fact.id !== first.fact.id &&
-      candidate.month === first.month &&
-      related(candidate, second) &&
-      related(candidate, third)
+      candidate.fact.id !== first.fact.id && related(candidate, second) && related(candidate, third)
   );
   return competing ? Option.none() : Option.some([first, second, third]);
 };

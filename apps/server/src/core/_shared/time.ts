@@ -35,7 +35,7 @@ const existingCalendarDate = Schema.makeFilter<string>(
       shortMonthDays,
       longMonthDays,
     ];
-    return (day >= 1 && day <= (days[month - 1] ?? 0)) || "Expected an existing calendar date";
+    return day <= (days[month - 1] ?? 0) || "Expected an existing calendar date";
   },
   {
     toJsonSchema: () => [{}, true],

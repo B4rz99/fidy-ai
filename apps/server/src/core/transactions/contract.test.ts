@@ -1,10 +1,8 @@
-import { SourceAttestation } from "~/core/source-attestation/contract";
-import { expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
 import {
   CreateTransactionInput,
   Direction,
   InstrumentLabel,
+  NotificationCurrencyBasis,
   NotificationFormatId,
   RestoredTransactionPair,
   Transaction,
@@ -12,6 +10,9 @@ import {
   TransactionPresentation,
   TransactionQueryValues,
 } from "./contract";
+import { SourceAttestation } from "~/core/source-attestation/contract";
+import { expect, it } from "@effect/vitest";
+import { Result, Schema } from "effect";
 
 const decodeDirection = Schema.decodeUnknownResult(Direction);
 const decodeTransaction = Schema.decodeUnknownResult(Transaction);
@@ -260,5 +261,11 @@ it("preserves notification-email attestation integrity and the fields explicitly
         Schema.decodeUnknownResult(SourceAttestation)({ ...notification, messageContentSha256 })
       )
     ).toBe(true);
+  }
+});
+
+it("retains whether Currency was explicit or came from the versioned notification format", () => {
+  for (const value of ["explicit", "format-cop-default-v1"]) {
+    expect(Schema.decodeUnknownSync(NotificationCurrencyBasis)(value)).toBe(value);
   }
 });

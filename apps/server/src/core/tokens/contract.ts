@@ -305,7 +305,6 @@ export type PATPairingPublicCode = typeof PATPairingPublicCode.Type;
 
 const normalizePublicCode = (input: string): string => {
   const upper = input.replace(/^[\t\n\r ]+|[\t\n\r ]+$/gu, "").toUpperCase();
-  if (publicCodePattern.test(upper)) return upper;
   return publicCodeSymbolsPattern.test(upper) ? `${upper.slice(0, 4)}-${upper.slice(4)}` : upper;
 };
 

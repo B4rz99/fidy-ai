@@ -224,3 +224,28 @@ it("requires sorted unique Currency groups and actual current activity in a capt
     )
   ).toBe(false);
 });
+
+it("requires descending totals even when the smaller leader has an earlier identity", () => {
+  expect(
+    Result.isFailure(
+      Schema.decodeUnknownResult(WeeklyCurrencyGroup)({
+        ...group,
+        topOutflowCategories: [category(1, "40"), category(2, "60")],
+      })
+    )
+  ).toBe(true);
+});
+it("rejects an otherwise internally consistent outflow comparison in a different Currency", () => {
+  const value = {
+    ...group,
+    outflow: comparison({
+      current: "100",
+      previous: "50",
+      change: "Increased",
+      delta: "50",
+      currency: "USD",
+    }),
+    topOutflowCategories: [category(1, "100", "USD")],
+  };
+  expect(Result.isFailure(Schema.decodeUnknownResult(WeeklyCurrencyGroup)(value))).toBe(true);
+});

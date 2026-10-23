@@ -589,3 +589,22 @@ it.effect("retains repeated unmatched results when each one fits the active suff
     ).toEqual([user, previousResult, trailingResult]);
   })
 );
+
+it.effect(
+  "counts committed output unavailability as retained evidence in the Transcript window",
+  () =>
+    Effect.gen(function* () {
+      const entry = CanonicalToolResultEntry.make({
+        id: entryId("301"),
+        turnId: turnId("30"),
+        iteration: AgentIteration.make(1),
+        toolCallId: ToolCallId.make("committed"),
+        operation: CanonicalOperationId.make("categories.listCategories"),
+        outcome: { _tag: "CommittedOutputUnavailable" },
+        occurredAt,
+      });
+      const characters = 37;
+      expect(yield* selectWindow([entry], 1, characters)).toEqual([entry]);
+      expect(yield* selectWindow([entry], 1, characters - 1)).toEqual([]);
+    })
+);

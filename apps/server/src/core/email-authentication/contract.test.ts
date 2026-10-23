@@ -1,6 +1,6 @@
+import { EmailAddress, EmailProofPurpose, EmailVerificationCode } from "./contract";
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { EmailAddress, EmailVerificationCode } from "./contract";
 
 const decodeEmail = Schema.decodeUnknownResult(EmailAddress);
 
@@ -14,6 +14,8 @@ it("trims and lowercases a conservative mailbox without provider alias folding",
 it("rejects mailbox forms outside the bounded launch grammar", () => {
   const rejected = [
     "a@localhost",
+    "a@example.com!",
+    "a@example.com@other.com",
     ".a@example.com",
     "a.@example.com",
     "a..b@example.com",
@@ -89,4 +91,10 @@ it("preserves allowed local-part punctuation and accepts one-character and maxim
 it("encodes a canonical mailbox without losing the normalization established at decode", () => {
   const decoded = Schema.decodeSync(EmailAddress)(" Person.Name+Fidy@Example.COM ");
   expect(Schema.encodeSync(EmailAddress)(decoded)).toBe("person.name+fidy@example.com");
+});
+
+it("accepts the two explicit mailbox proof purposes", () => {
+  for (const purpose of ["credential-replacement", "browser-pairing-approval"]) {
+    expect(Schema.decodeUnknownSync(EmailProofPurpose)(purpose)).toBe(purpose);
+  }
 });

@@ -1,6 +1,6 @@
 import { BackupRecoveryCode } from "./contract";
 import { expect, it } from "@effect/vitest";
-import { DateTime, Option, Redacted, Schema } from "effect";
+import { DateTime, Option, Redacted, Result, Schema } from "effect";
 import { BrowserLoginPairingId } from "~/core/browser-login/contract";
 import { UserId } from "~/core/identity/contract";
 import {
@@ -134,4 +134,53 @@ it("models terminal SupportRecoveryCases and only closed metadata event combinat
       outcome: "rejected",
     })
   ).toThrow();
+});
+
+it("reports the time field that violates the Recovery lifecycle", () => {
+  const credential = {
+    _tag: "Consumed",
+    userId,
+    consumedAt: DateTime.subtract(createdAt, { milliseconds: 1 }),
+    consumedByCaseId: Option.none(),
+    revision: 1,
+    createdAt,
+  };
+  const invalidCredential = Schema.decodeUnknownResult(Schema.toType(BackupRecoveryCredential))(
+    credential
+  );
+  expect(Result.isFailure(invalidCredential) ? String(invalidCredential.failure) : "").toContain(
+    '["consumedAt"]'
+  );
+  const identity = {
+    id: caseId,
+    userId,
+    pairingId: BrowserLoginPairingId.make("f1d1a000-0000-4000-8000-000000000904"),
+    credentialRevision: 1,
+    openedAt: createdAt,
+  };
+  const invalidExpiry = Schema.decodeResult(Schema.toType(SupportRecoveryCase))({
+    ...identity,
+    lifecycle: "open",
+    expiresAt: createdAt,
+  });
+  expect(Result.isFailure(invalidExpiry) ? String(invalidExpiry.failure) : "").toContain(
+    '["expiresAt"]'
+  );
+  const invalidClosure = Schema.decodeResult(Schema.toType(SupportRecoveryCase))({
+    ...identity,
+    lifecycle: "approved",
+    expiresAt: DateTime.add(createdAt, { minutes: 5 }),
+    closedAt: DateTime.subtract(createdAt, { milliseconds: 1 }),
+  });
+  expect(Result.isFailure(invalidClosure) ? String(invalidClosure.failure) : "").toContain(
+    '["closedAt"]'
+  );
+  expect(
+    SupportRecoveryCase.make({
+      ...identity,
+      lifecycle: "approved",
+      expiresAt: DateTime.add(createdAt, { minutes: 5 }),
+      closedAt: createdAt,
+    }).lifecycle
+  ).toBe("approved");
 });

@@ -121,3 +121,10 @@ it("round trips canonical pairing codes and bounds the private device proof to b
     expect(Result.isFailure(decode(value))).toBe(true);
   }
 });
+
+it("rejects any suffix after a canonical public pairing identity", () => {
+  for (const value of ["BCDF-GHJKX", "BCDF-GHJKBCDF"]) {
+    expect(Schema.is(PATPairingPublicCode)(value)).toBe(false);
+    expect(Option.isNone(Schema.decodeOption(PATPairingPublicCodeInput)(value))).toBe(true);
+  }
+});

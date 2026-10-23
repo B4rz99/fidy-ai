@@ -1,6 +1,8 @@
 // Stryker requires Node for Babel instrumentation and the classic TypeScript compiler API.
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { loadMutationReport, loadRegistry, verifyEquivalentReport } from "./equivalents.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -22,6 +24,10 @@ child.on("exit", (code, signal) => {
   if (signal !== null) {
     process.kill(process.pid, signal);
     return;
+  }
+  if (code === 0 && existsSync(resolve("src/core")) && process.argv.length === 2) {
+    const report = loadMutationReport(resolve("reports/mutation/mutation.json"));
+    verifyEquivalentReport(loadRegistry(), report);
   }
   process.exit(code ?? 1);
 });

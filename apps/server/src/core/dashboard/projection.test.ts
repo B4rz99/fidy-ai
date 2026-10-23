@@ -70,3 +70,22 @@ it("uses one complete local month for Budget bars without a configurable period"
     },
   ]);
 });
+
+it("uses one complete period for a Category chart rather than calendar buckets", () => {
+  const widget = Schema.decodeSync(Widget)({
+    id: "30000000-0000-4000-8000-000000000001",
+    type: "spending-chart",
+    groupBy: "category",
+    period: "last-month",
+  });
+  if (widget.type !== "spending-chart") throw new Error("Expected spending chart");
+  expect(
+    dashboardProjectionRanges(widget, DateTime.makeUnsafe("2026-04-02T12:00:00Z"), zone)
+  ).toEqual([
+    {
+      key: "",
+      from: DateTime.makeUnsafe("2026-03-01T05:00:00Z").epochMilliseconds,
+      toExclusive: DateTime.makeUnsafe("2026-04-01T04:00:00Z").epochMilliseconds,
+    },
+  ]);
+});

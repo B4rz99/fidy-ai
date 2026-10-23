@@ -741,13 +741,19 @@ it("runs the bounded provider checks in one execution with durable cooldowns", (
       );
       vi.stubGlobal("fetch", provider);
       const waits: number[] = [];
+      const activities: string[] = [];
       const workflow = {
         create: vi.fn((options: { id: string; params: unknown }) =>
           runBillingCollectionWorkflow({
             environment: billingRuntime(db),
             payload: options.params,
-            activity: (_name, _options, run) => run(),
-            sleep: (_name, duration) => {
+            activity: (name, options, run) => {
+              activities.push(name);
+              expect(options.retries).toEqual({ limit: 0, delay: "1 second" });
+              return run();
+            },
+            sleep: (name, duration) => {
+              expect(name).toBe(`billing-observation-wait-v2-${waits.length + 1}`);
               waits.push(duration);
               now += duration;
               return Promise.resolve();
@@ -761,6 +767,9 @@ it("runs the bounded provider checks in one execution with durable cooldowns", (
         yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
         expect(workflow.create).toHaveBeenCalledTimes(1);
         expect(provider).toHaveBeenCalledTimes(8);
+        expect(activities).toEqual(
+          Array.from({ length: 8 }, (_, index) => `lookup-wompi-billing-v2-${index}`)
+        );
         expect(waits).toEqual(Array.from({ length: 7 }, () => 60001));
         expect(
           yield* Effect.tryPromise(() =>

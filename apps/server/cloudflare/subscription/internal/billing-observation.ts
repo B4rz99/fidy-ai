@@ -129,20 +129,13 @@ export const receiveSourceCancellation = (
     if (!offered) return yield* new BillingCollectionFailure({ cause: Option.none() });
   });
 
-type ObservationActivity = (
-  name: string,
-  options: WorkflowStepConfig,
-  run: () => Promise<void>
-) => Promise<void>;
-
 type BillingObservationExecution = Readonly<{
   environment: BillingRuntime;
   payload: unknown;
-  activity: ObservationActivity;
+  activity: (name: string, options: WorkflowStepConfig, run: () => Promise<void>) => Promise<void>;
   sleep: (name: string, duration: number) => Promise<void>;
   wompiHttp: WompiTransportFactory;
 }>;
-type RunActivity = <E>(activity: Effect.Effect<void, E>) => Promise<void>;
 /** Execute retained observation work; identities never replace live eligibility or provider evidence. */
 export const runBillingObservation = (input: BillingObservationExecution): Promise<void> => {
   const work = Schema.decodeUnknownOption(
@@ -164,83 +157,71 @@ export const runBillingObservation = (input: BillingObservationExecution): Promi
       }),
       Effect.runPromise
     );
-  if (work.value.kind === "source-cancellation") {
-    return runCancellationExecution({ input, work: work.value, runActivity });
-  }
-  if (work.value.version === 2) {
-    return runLookupLoop({ input, work: work.value, runActivity });
-  }
-  const transactionId = work.value.transactionId;
-  return input.activity(
-    "lookup-wompi-billing-v1",
-    { retries: { limit: 0, delay: "1 second" } },
-    () =>
+  const retained = work.value;
+  const options = { retries: { limit: 0, delay: "1 second" } } as const;
+  if (retained.version === 1) {
+    if (retained.kind === "source-cancellation") {
+      return input.activity("cancel-wompi-source-v1", options, () =>
+        runActivity(
+          cancelSource({
+            environment: input.environment,
+            work: retained,
+            wompiHttp: input.wompiHttp,
+          })
+        )
+      );
+    }
+    return input.activity("lookup-wompi-billing-v1", options, () =>
       runActivity(
         reconcileEventCandidate({
           environment: input.environment,
-          transactionId,
+          transactionId: retained.transactionId,
           wompiHttp: input.wompiHttp,
           generation: { signedAt: Option.none(), signedStatus: Option.none() },
         })
       )
-  );
+    );
+  }
+  return runObservationLoop({ input, work: retained, runActivity });
 };
 
-const runCancellationExecution = ({
+const runObservationLoop = ({
   input,
   work,
   runActivity,
 }: Readonly<{
   input: BillingObservationExecution;
-  work: typeof CancellationExecution.Type | typeof SubscriptionCancellationWork.Type;
-  runActivity: RunActivity;
-}>): Promise<void> =>
-  work.version === 2
-    ? runCancellationLoop({ input, work, runActivity })
-    : input.activity("cancel-wompi-source-v1", { retries: { limit: 0, delay: "1 second" } }, () =>
-        runActivity(
-          cancelSource({ environment: input.environment, work, wompiHttp: input.wompiHttp })
-        )
-      );
-
-const runCancellationLoop = ({
-  input,
-  work,
-  runActivity,
-}: Readonly<{
-  input: BillingObservationExecution;
-  work: typeof CancellationExecution.Type;
-  runActivity: RunActivity;
-}>): Promise<void> =>
-  Effect.runPromise(
+  work: typeof LookupWork.Type | typeof CancellationExecution.Type;
+  runActivity: (activity: Effect.Effect<void, BillingCollectionFailure>) => Promise<void>;
+}>): Promise<void> => {
+  const cancellation = work.kind === "source-cancellation";
+  const options = { retries: { limit: 0, delay: "1 second" } } as const;
+  const observe = (index: number): Promise<void> =>
+    runActivity(
+      work.kind === "source-cancellation"
+        ? cancelSource({ environment: input.environment, work, wompiHttp: input.wompiHttp })
+        : observeLookup({ execution: input, work, index })
+    ).catch(() => undefined);
+  const check = (index: number): Promise<void> =>
+    input.activity(
+      cancellation ? `cancel-wompi-source-v2-${index}` : `lookup-wompi-billing-v2-${index}`,
+      options,
+      () => observe(index)
+    );
+  return Effect.runPromise(
     Effect.gen(function* () {
-      const options = { retries: { limit: 0, delay: "1 second" } } as const;
       for (let index = 0; index < maximumCandidateLookupAttempts; index++) {
         if (index > 0) {
-          yield* attempt(() =>
-            input.sleep(`source-cancellation-wait-v2-${index}`, candidateCooldownMs + 1)
-          );
+          const name = cancellation
+            ? `source-cancellation-wait-v2-${index}`
+            : `billing-observation-wait-v2-${index}`;
+          yield* attempt(() => input.sleep(name, candidateCooldownMs + 1));
         }
-        yield* attempt(() =>
-          input.activity(`cancel-wompi-source-v2-${index}`, options, () =>
-            runCancellationCheck({ input, work, runActivity })
-          )
-        );
+        yield* attempt(() => check(index));
       }
     })
   );
-const runCancellationCheck = ({
-  input,
-  work,
-  runActivity,
-}: Readonly<{
-  input: BillingObservationExecution;
-  work: typeof CancellationExecution.Type;
-  runActivity: RunActivity;
-}>): Promise<void> =>
-  runActivity(
-    cancelSource({ environment: input.environment, work, wompiHttp: input.wompiHttp })
-  ).catch(() => undefined);
+};
 
 const observeLookup = (
   input: Readonly<{
@@ -267,42 +248,6 @@ const observeLookup = (
       },
     });
   });
-const runObservedLookup = (
-  input: Readonly<{
-    execution: BillingObservationExecution;
-    work: typeof LookupWork.Type;
-    index: number;
-    runActivity: RunActivity;
-  }>
-): Promise<void> => input.runActivity(observeLookup(input)).catch(() => undefined);
-
-const runLookupLoop = ({
-  input,
-  work,
-  runActivity,
-}: Readonly<{
-  input: BillingObservationExecution;
-  work: typeof LookupWork.Type;
-  runActivity: RunActivity;
-}>): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const options = { retries: { limit: 0, delay: "1 second" } } as const;
-      for (let index = 0; index < maximumCandidateLookupAttempts; index++) {
-        if (index > 0) {
-          yield* attempt(() =>
-            input.sleep(`billing-observation-wait-v2-${index}`, candidateCooldownMs + 1)
-          );
-        }
-        yield* attempt(() =>
-          input.activity(`lookup-wompi-billing-v2-${index}`, options, () =>
-            runObservedLookup({ execution: input, work, index, runActivity })
-          )
-        );
-      }
-    })
-  );
-
 type LookupGeneration = Pick<typeof LookupWork.Type, "transactionId" | "signedAt" | "signedStatus">;
 const lookupEligibility = `FROM billing_provider_transactions c
   LEFT JOIN billing_attempt_context a ON a.id=c.attempt_id

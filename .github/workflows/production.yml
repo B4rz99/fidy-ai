@@ -9,6 +9,18 @@ on:
         description: Recover the inspected deleted Queue incident under isolated public admission
         type: boolean
         default: false
+      isolate_schema_cutover:
+        description: Install exact isolated Workers for the reviewed populated-schema cutover; do not release public admission
+        type: boolean
+        default: false
+      schema_cutover_public_version_id:
+        description: Inspected currently serving public Worker version for schema isolation
+        type: string
+        default: ""
+      schema_cutover_core_version_id:
+        description: Inspected currently serving Core Worker version for schema isolation
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -19,12 +31,16 @@ concurrency:
 
 jobs:
   deploy:
+    if: ${{ github.ref == 'refs/heads/trunk' && (vars.SCHEMA_CUTOVER_PENDING != 'true' || (github.event_name == 'workflow_dispatch' && inputs.isolate_schema_cutover)) }}
     name: Alchemy Cloudflare topology
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
     env:
       RELEASE_GIT_SHA: ${{ github.sha }}
+      ISOLATE_SCHEMA_CUTOVER: ${{ inputs.isolate_schema_cutover && 'true' || 'false' }}
+      SCHEMA_CUTOVER_PUBLIC_VERSION_ID: ${{ inputs.schema_cutover_public_version_id }}
+      SCHEMA_CUTOVER_CORE_VERSION_ID: ${{ inputs.schema_cutover_core_version_id }}
       GITHUB_TOKEN: ${{ github.token }}
       ALCHEMY_PROFILE: ci
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -40,6 +56,21 @@ jobs:
       WOMPI_DAVIPLATA_OTP_SEND_URL: ${{ vars.WOMPI_DAVIPLATA_OTP_SEND_URL }}
       WOMPI_DAVIPLATA_OTP_CONFIRM_URL: ${{ vars.WOMPI_DAVIPLATA_OTP_CONFIRM_URL }}
     steps:
+      - name: Validate the explicit schema-isolation request
+        env:
+          INCIDENT_RECOVERY: ${{ inputs.recover_deleted_queue && 'true' || 'false' }}
+          SCHEMA_CUTOVER_PENDING: ${{ vars.SCHEMA_CUTOVER_PENDING || 'false' }}
+        run: |
+          if [[ "$ISOLATE_SCHEMA_CUTOVER" == true ]]; then
+            if [[ "$SCHEMA_CUTOVER_PENDING" != true || "$INCIDENT_RECOVERY" == true || -z "$SCHEMA_CUTOVER_PUBLIC_VERSION_ID" || -z "$SCHEMA_CUTOVER_CORE_VERSION_ID" ]]; then
+              echo "Schema isolation requires the Production hold, inspected Worker versions, and a separate invocation from incident recovery." >&2
+              exit 1
+            fi
+          elif [[ -n "$SCHEMA_CUTOVER_PUBLIC_VERSION_ID" || -n "$SCHEMA_CUTOVER_CORE_VERSION_ID" ]]; then
+            echo "Schema-isolation versions require the explicit maintenance invocation." >&2
+            exit 1
+          fi
+
       - name: Check out the exact trunk revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -79,7 +110,7 @@ jobs:
       - name: Plan the complete Cloudflare topology
         working-directory: infra/cloudflare
         env:
-          RECOVERY_ISOLATION: ${{ inputs.recover_deleted_queue && 'isolated' || '' }}
+          RECOVERY_ISOLATION: ${{ (inputs.recover_deleted_queue || inputs.isolate_schema_cutover) && 'isolated' || '' }}
           MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -123,7 +154,7 @@ jobs:
       - name: Upload zero-traffic Worker candidates with Alchemy
         working-directory: infra/cloudflare
         env:
-          RECOVERY_ISOLATION: ${{ inputs.recover_deleted_queue && 'isolated' || '' }}
+          RECOVERY_ISOLATION: ${{ (inputs.recover_deleted_queue || inputs.isolate_schema_cutover) && 'isolated' || '' }}
           MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -144,9 +175,24 @@ jobs:
           bun production-resources.ts upload
 
       - name: Isolate public admission before replacing incompatible private Core
-        if: ${{ inputs.recover_deleted_queue }}
+        id: isolate
+        if: ${{ inputs.recover_deleted_queue || inputs.isolate_schema_cutover }}
         working-directory: infra/cloudflare
-        run: bun production-release.ts isolate
+        run: |
+          if [[ "$ISOLATE_SCHEMA_CUTOVER" == true ]]; then
+            bun production-release.ts isolate-schema
+          else
+            bun production-release.ts isolate
+          fi
+
+      - name: Retain the exact schema-maintenance isolation receipt
+        if: ${{ inputs.isolate_schema_cutover }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: fidy-schema-isolation
+          path: ${{ env.RELEASE_SNAPSHOT_FILE }}
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Export isolated recovery smoke identities
         if: ${{ inputs.recover_deleted_queue }}
@@ -197,10 +243,12 @@ jobs:
           bun production-resources.ts upload
 
       - name: Install zero-traffic candidate routing
+        if: ${{ !inputs.isolate_schema_cutover }}
         working-directory: infra/cloudflare
         run: bun production-release.ts stage
 
       - name: Export captured smoke identities for both gates
+        if: ${{ !inputs.isolate_schema_cutover }}
         run: |
           {
             echo "PUBLIC_VERSION_ID=$(jq -r .publicVersionId "$RELEASE_SNAPSHOT_FILE")"
@@ -214,27 +262,31 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Compare GET and pre-admission POST routing without synthetic work
+        if: ${{ !inputs.isolate_schema_cutover }}
         working-directory: infra/cloudflare
         run: bun diagnose-smoke-routing.ts
 
       - name: Require settled exact-pair routing before synthetic work
+        if: ${{ !inputs.isolate_schema_cutover }}
         working-directory: infra/cloudflare
         env:
           SMOKE_ROUTING_WINDOW: settled
         run: bun diagnose-smoke-routing.ts
 
       - name: Prove both candidate and intermediate Worker pairings
+        if: ${{ !inputs.isolate_schema_cutover }}
         id: candidate_smoke
         working-directory: infra/cloudflare
         run: bun verify-production-smoke.ts
 
       - name: Promote the exact smoke-tested Workers
+        if: ${{ !inputs.isolate_schema_cutover }}
         id: promote
         working-directory: infra/cloudflare
         run: bun production-release.ts promote
 
       - name: Retain guarded recovery receipt for operator fallback
-        if: ${{ steps.promote.outcome == 'success' }}
+        if: ${{ !inputs.isolate_schema_cutover && (steps.promote.outcome == 'success') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: fidy-rollback
@@ -244,7 +296,7 @@ jobs:
 
       - name: Probe normal Worker traffic after promotion
         id: post_smoke
-        if: ${{ always() && steps.promote.outcome == 'success' }}
+        if: ${{ !inputs.isolate_schema_cutover && (always() && steps.promote.outcome == 'success') }}
         working-directory: infra/cloudflare
         run: |
           for attempt in {1..3}; do
@@ -255,16 +307,17 @@ jobs:
           exit 1
 
       - name: Restore captured Worker code after failed post-promotion probe
-        if: ${{ failure() && steps.post_smoke.outcome == 'failure' && steps.promote.outcome == 'success' }}
+        if: ${{ !inputs.isolate_schema_cutover && (failure() && steps.post_smoke.outcome == 'failure' && steps.promote.outcome == 'success') }}
         working-directory: infra/cloudflare
         run: bun production-release.ts rollback
 
       - name: Remove failed zero-traffic candidates when safe
-        if: ${{ failure() && steps.capture.outcome == 'success' && steps.promote.outcome != 'success' && (!inputs.recover_deleted_queue || steps.recovery_capture.outcome == 'success') }}
+        if: ${{ !inputs.isolate_schema_cutover && (failure() && steps.capture.outcome == 'success' && steps.promote.outcome != 'success' && (!inputs.recover_deleted_queue || steps.recovery_capture.outcome == 'success')) }}
         working-directory: infra/cloudflare
         run: bun production-release.ts cleanup
 
       - name: Verify the migrated public topology
+        if: ${{ !inputs.isolate_schema_cutover }}
         run: |
           verified=false
           for attempt in {1..20}; do
@@ -306,11 +359,12 @@ jobs:
           fi
 
       - name: Probe production edge without valid User or provider authority
+        if: ${{ !inputs.isolate_schema_cutover }}
         working-directory: infra/cloudflare
         run: bun verify-production-smoke.ts promoted
 
       - name: Retire obsolete resources after verified promotion
-        if: ${{ success() && steps.post_smoke.outcome == 'success' }}
+        if: ${{ !inputs.isolate_schema_cutover && (success() && steps.post_smoke.outcome == 'success') }}
         working-directory: infra/cloudflare
         env:
           RECOVERY_ISOLATION: ""
@@ -332,6 +386,7 @@ jobs:
         run: bun production-resources.ts retire
 
       - name: Reject post-deployment Cloudflare drift
+        if: ${{ !inputs.isolate_schema_cutover }}
         working-directory: infra/cloudflare
         run: bash scripts/check-topology-drift.sh
 
@@ -356,9 +411,17 @@ jobs:
 
       - name: Record the release
         if: ${{ always() }}
+        env:
+          ISOLATION_OUTCOME: ${{ steps.isolate.outcome }}
         run: |
           {
-            echo "### Production release"
+            if [[ "$ISOLATE_SCHEMA_CUTOVER" == true ]]; then
+              echo "### Schema maintenance invocation"
+              echo "- Isolation outcome: $ISOLATION_OUTCOME. Only a successful isolation receipt confirms the closed serving pair."
+              echo "- Database transition and ordinary release verification are still required."
+            else
+              echo "### Production release"
+            fi
             echo "- Git revision: \`$RELEASE_GIT_SHA\`"
             echo "- Contract digest: \`${CONTRACT_DIGEST:-not-planned}\`"
             echo "- Alchemy stack: \`FidyCloudflare/production\`"

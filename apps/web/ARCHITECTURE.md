@@ -275,8 +275,10 @@ The browser verification group also runs the native CLI journey through
 `bun run test:browser:cli` in its dedicated `4183–4185` public/Core topology, with fresh D1 and
 isolated native credentials. The shared suite excludes that journey: other tests must not change
 its exact result comparisons or PAT Audit counts, and its loopback evidence observer exists only in
-CLI acceptance mode. CI preserves separate shared/CLI per-test JSON timings without capturing
-traces, screenshots, or video.
+CLI acceptance mode. CI preserves separate shared/CLI per-test JSON timings. Dashboard Core journeys
+retain failed-run traces for seven days in the repository CI artifacts while diagnosing the
+Ubuntu pointer-drop failure. Other journeys capture no traces; separate screenshot and video artifacts
+stay disabled.
 
 The authenticated `/insights/recurring/$id` route reads the complete frozen recurring-charge report
 through `insights.getRecurringDigestReport`. Its server-owned report/path schemas cross the single

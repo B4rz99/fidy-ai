@@ -1,0 +1,25 @@
+infra/cloudflare/package.json
+  s_fb8e6f8c22d2d1::t_2f36101d0bdda4 20,26
+apps/server/package.json
+  s_fb8e6f8c22d2d1::t_2f36101d0bdda4 300,311
+apps/web/package.json
+  s_fb8e6f8c22d2d1::t_2f36101d0bdda4 62
+bun.lock
+  s_fb8e6f8c22d2d1::t_439a55f6375aaf 58,69,135,146,152,346,2056,2318
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3836fb1d372c08dae17bc1f7ee91109a6efdd7ac",
+  "prompts": {},
+  "sessions": {
+    "s_fb8e6f8c22d2d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a168ab-6d1f-73c2-9768-504ba124f3aa",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

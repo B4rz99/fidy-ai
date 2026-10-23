@@ -28,18 +28,16 @@ export const prepareStatementDocumentAdmission = ({
   db,
   source,
   mediaId,
-  current,
 }: Readonly<{
   db: D1Database;
   source: OwnedStatement;
   mediaId: WhatsAppMediaId;
-  current: number;
 }>): ReadonlyArray<D1PreparedStatement> => [
   db
-    .prepare(`UPDATE hosted_turns SET document_media_id=?,document_created_at_ms=?
+    .prepare(`UPDATE hosted_turns SET document_media_id=?
     WHERE document_media_id IS NULL AND EXISTS(SELECT 1 FROM (${source.sql}) source
     WHERE source.turn_id=hosted_turns.id AND source.user_id=hosted_turns.user_id)`)
-    .bind(mediaId, current, ...source.params),
+    .bind(mediaId, ...source.params),
 ];
 const Document = Schema.Struct({
   media_id: WhatsAppMediaId,
@@ -61,7 +59,7 @@ const findDocument = ({
     try: () =>
       db
         .prepare(
-          `SELECT media_id,staging_id,reference_json,upload_grant_id,upload_expires_at_ms FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,document_created_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL) WHERE turn_id=? AND user_id=? AND EXISTS (SELECT 1 FROM ${caller.authority.table} WHERE ${caller.authority.predicate})`
+          `SELECT media_id,staging_id,reference_json,upload_grant_id,upload_expires_at_ms FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,started_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL) WHERE turn_id=? AND user_id=? AND EXISTS (SELECT 1 FROM ${caller.authority.table} WHERE ${caller.authority.predicate})`
         )
         .bind(caller.turnId, caller.userId, ...caller.authority.bindings)
         .first(),

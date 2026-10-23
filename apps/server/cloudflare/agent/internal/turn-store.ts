@@ -773,7 +773,6 @@ const prepareChannelAdmission = ({
           ? prepareStatementDocumentAdmission({
               db,
               mediaId: channel.document.mediaId,
-              current: now,
               source: {
                 sql: `SELECT id AS turn_id,user_id FROM hosted_turns WHERE id=? AND user_id=? AND status='pending'`,
                 params: [id, channel.subject.userId],

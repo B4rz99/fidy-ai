@@ -60,9 +60,9 @@ const heldDocument = (): Effect.Effect<
           .bind(caller.userId, current),
         db
           .prepare(
-            "WITH incoming(turn_id,user_id,media_id,created_at_ms) AS (VALUES ('turn',?,'media',?)) UPDATE hosted_turns SET document_media_id=incoming.media_id,document_created_at_ms=incoming.created_at_ms FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id"
+            "WITH incoming(turn_id,user_id,media_id) AS (VALUES ('turn',?,'media')) UPDATE hosted_turns SET document_media_id=incoming.media_id FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id"
           )
-          .bind(caller.userId, current),
+          .bind(caller.userId),
       ])
     );
     const bytes = new TextEncoder().encode("Fecha,Descripcion,Valor\n2026-01-01,Mercado,1000\n");
@@ -133,7 +133,7 @@ it("refuses a held document at exact supplied Clock lease expiry before retainin
         yield* wait(() =>
           db
             .prepare(
-              "SELECT upload_grant_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,document_created_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL)"
+              "SELECT upload_grant_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,started_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL)"
             )
             .first("upload_grant_id")
         )
@@ -160,7 +160,7 @@ it("recovers the same staged reference without provider retrieval or another upl
         yield* wait(() =>
           work.db
             .prepare(
-              "SELECT upload_grant_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,document_created_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL)"
+              "SELECT upload_grant_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,started_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL)"
             )
             .first("upload_grant_id")
         )
@@ -201,7 +201,7 @@ it("refuses another User's admitted document without provider work, charges or s
         yield* wait(() =>
           work.db
             .prepare(
-              "SELECT staging_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,document_created_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL)"
+              "SELECT staging_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,started_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL)"
             )
             .first("staging_id")
         )

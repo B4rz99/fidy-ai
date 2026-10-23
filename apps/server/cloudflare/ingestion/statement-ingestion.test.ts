@@ -2092,9 +2092,9 @@ it("publishes a staged statement under held WhatsApp authority and atomically bi
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "WITH incoming(turn_id,user_id,media_id,staging_id,reference_json,created_at_ms) AS (VALUES (?,?,?,?,?,?)) UPDATE hosted_turns SET document_media_id=incoming.media_id,document_staging_id=incoming.staging_id,document_reference_json=incoming.reference_json,document_created_at_ms=incoming.created_at_ms FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id"
+            "WITH incoming(turn_id,user_id,media_id,staging_id,reference_json) AS (VALUES (?,?,?,?,?)) UPDATE hosted_turns SET document_media_id=incoming.media_id,document_staging_id=incoming.staging_id,document_reference_json=incoming.reference_json FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id"
           )
-          .bind(turnId, userA, "direct-document", staged.stagingId, JSON.stringify(staged), current)
+          .bind(turnId, userA, "direct-document", staged.stagingId, JSON.stringify(staged))
           .run()
       );
       const response = yield* executeHostedStatementCall({

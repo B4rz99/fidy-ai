@@ -4387,3 +4387,65 @@ INSERT INTO sql_assertions(scope,accepted) SELECT 'transcript_session_cutover',C
 ```
 
 <!-- transcript-session-guard:end -->
+
+## Hosted document admission clock (#1480)
+
+Document admission is composed with Turn admission in prepareChannelAdmission using the same now
+value. Remove document_created_at_ms and derive the logical document created_at_ms from the
+immutable started_at_ms only while document_media_id is present. Keep the independent provider
+occurrence/receipt, dispatch creation/offer, upload lease and visible-delivery clocks. The original
+reference JSON is a held upload-proof snapshot, not a second staging owner; retain it. Hosted Turns
+keep Queue-to-User-coordinator ordering, alarms and sweeps; no per-Turn Workflow is introduced.
+
+Stop writers and unfinished erasure, bind the observed Turn count, then validate before conversion.
+A historical document clock differing from Turn admission is unexplained: stop and investigate.
+Create scratch hosted_turns and hosted_mutation_commits tables from the final baseline. Copy both
+before dropping the receipts table first, then the parent Turn table, to avoid ON DELETE CASCADE
+losing committed evidence. Swap and rebuild every affected index and
+trigger together with deferred foreign keys. Run the final whole-graph assertion before restoring
+immediate checking. Rollback uses agent/document-clock-cutover.test-fixture.json, recreating the
+original clock exactly from its validated source, with absent-document NULL preserved. Original
+row addresses, generated inbound identity, receipt evidence and erasure JSON fields remain exact.
+
+<!-- hosted-document-clock-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_document_clock_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM hosted_turns)=? AND NOT EXISTS(SELECT 1 FROM hosted_turns WHERE (document_media_id IS NOT NULL AND document_created_at_ms IS NOT started_at_ms) OR (document_media_id IS NULL AND document_created_at_ms IS NOT NULL)) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- hosted-document-clock-guard:end -->
+
+<!-- hosted-document-clock-copy:start -->
+
+```sql
+INSERT INTO cutover_hosted_mutation_commits(rowid,turn_id,tool_call_id,user_id,committed_at_ms) SELECT rowid,turn_id,tool_call_id,user_id,committed_at_ms FROM hosted_mutation_commits;
+INSERT INTO cutover_hosted_turns(rowid,id,user_id,hosted_session_id,started_at_ms,terminal_at_ms,status,failure_reason,proposal_receipt_digest,proposed_at_ms,proposal_text,retention_terminal_at_ms,inbound_portfolio_id,inbound_bsuid,inbound_message_id,inbound_business_phone_number_id,inbound_occurred_at_ms,inbound_received_at_ms,inbound_reply_to_message_id,inbound_sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms,document_media_id,document_staging_id,document_upload_grant_id,document_upload_expires_at_ms,document_reference_json) SELECT rowid,id,user_id,hosted_session_id,started_at_ms,terminal_at_ms,status,failure_reason,proposal_receipt_digest,proposed_at_ms,proposal_text,retention_terminal_at_ms,inbound_portfolio_id,inbound_bsuid,inbound_message_id,inbound_business_phone_number_id,inbound_occurred_at_ms,inbound_received_at_ms,inbound_reply_to_message_id,inbound_sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms,document_media_id,document_staging_id,document_upload_grant_id,document_upload_expires_at_ms,document_reference_json FROM hosted_turns;
+```
+
+<!-- hosted-document-clock-copy:end -->
+
+<!-- hosted-document-clock-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_hosted_mutation_commits(rowid,turn_id,tool_call_id,user_id,committed_at_ms) SELECT rowid,turn_id,tool_call_id,user_id,committed_at_ms FROM hosted_mutation_commits;
+INSERT INTO cutover_hosted_turns(rowid,id,user_id,hosted_session_id,started_at_ms,terminal_at_ms,status,failure_reason,proposal_receipt_digest,proposed_at_ms,proposal_text,retention_terminal_at_ms,inbound_portfolio_id,inbound_bsuid,inbound_message_id,inbound_business_phone_number_id,inbound_occurred_at_ms,inbound_received_at_ms,inbound_reply_to_message_id,inbound_sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms,document_media_id,document_staging_id,document_upload_grant_id,document_upload_expires_at_ms,document_reference_json,document_created_at_ms) SELECT rowid,id,user_id,hosted_session_id,started_at_ms,terminal_at_ms,status,failure_reason,proposal_receipt_digest,proposed_at_ms,proposal_text,retention_terminal_at_ms,inbound_portfolio_id,inbound_bsuid,inbound_message_id,inbound_business_phone_number_id,inbound_occurred_at_ms,inbound_received_at_ms,inbound_reply_to_message_id,inbound_sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms,document_media_id,document_staging_id,document_upload_grant_id,document_upload_expires_at_ms,document_reference_json,CASE WHEN document_media_id IS NOT NULL THEN started_at_ms END FROM hosted_turns;
+```
+
+<!-- hosted-document-clock-rollback-copy:end -->
+
+<!-- hosted-document-clock-verify:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_document_clock_foreign_keys',CASE WHEN NOT EXISTS(SELECT 1 FROM pragma_foreign_key_check) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+PRAGMA defer_foreign_keys=OFF;
+```
+
+<!-- hosted-document-clock-verify:end -->
+
+<!-- hosted-document-clock-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'hosted_document_clock_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- hosted-document-clock-rollback-guard:end -->

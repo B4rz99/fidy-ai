@@ -15,7 +15,7 @@ export const prepareOptInFence = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      "INSERT INTO sql_assertions (scope, accepted) SELECT 'budget_mutation',CASE WHEN NOT EXISTS (SELECT 1 FROM budget_state WHERE kind='work' AND user_id=?) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted"
+      "INSERT INTO sql_assertions (scope, accepted) SELECT 'budget_mutation',CASE WHEN NOT EXISTS (SELECT 1 FROM budget_evaluation_work WHERE user_id=?) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted"
     )
     .bind(input.userId);
 
@@ -130,7 +130,7 @@ export const reconcileStatus = ({
       ),
       db
         .prepare(
-          "INSERT OR IGNORE INTO budget_state(kind,user_id,record_id,detected_at_ms,version) SELECT 'publication',?,?,?,NULL WHERE EXISTS (SELECT 1 FROM budget_threshold_alerts WHERE user_id=? AND delivery_group_id=?)"
+          "INSERT OR IGNORE INTO budget_publications(user_id,delivery_group_id,detected_at_ms) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM budget_threshold_alerts WHERE user_id=? AND delivery_group_id=?)"
         )
         .bind(userId, groupId, detectedAt.epochMilliseconds, userId, groupId),
     ];

@@ -3597,3 +3597,149 @@ INSERT INTO cutover_budget_month_plan_records(rowid,kind,user_id,month,budget_id
 ```
 
 <!-- budget-months-rollback-copy:end -->
+
+## Budget work and fair User clock (#1469)
+
+The three final stores separate one User's concurrency/first-creation facts, versioned affected
+financial instants, and grouped publication evidence. One User clock replaces the three old clock
+locations. Discovery still returns at most 16 Users; generation still attempts at most four per sweep.
+Attempts rotate before coordinator/processing checks. Work insertion/version invalidation and a new
+pending publication reset priority atomically through owner triggers. Completion clears only the
+observed financial-work version; publication and first-offer completion retain their original Consent
+and same-User proof guards. A completed first-offer opportunity survives deletion of the original
+Budget. No workflow or delivery authority is inferred from the clock.
+
+Stop writers and verify an independent backup before conversion. This is a synchronized baseline
+cutover, not a second migration or compatibility release. Reconstruct the preceding schema from the
+verbatim definitions in `apps/server/cloudflare/budgets/work-cutover.test-fixture.json`. Capture the
+old row count and bind it to the guard below. Reject invalid or colliding financial instants rather
+than normalizing them silently. Decode each old `occurred_at` with the original `UtcTimestamp` codec,
+reject nonzero sub-millisecond digits, and bind the exact integer milliseconds to each work copy.
+Every prepared work copy includes its original rowid/raw instant/version guard in the same batch.
+
+<!-- budget-work-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'budget_work_cutover',CASE WHEN
+ (SELECT count(*) FROM budget_state)=?
+ AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete')
+ AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN
+  ('budget_user_state','budget_reconciliation_work','budget_crossing_publications'))
+ AND NOT EXISTS(SELECT 1 FROM budget_state WHERE
+  (kind='work' AND version<1) OR
+  abs(coalesce(detected_at_ms,0))>8640000000000000 OR
+  abs(coalesce(materialized_at_ms,0))>8640000000000000 OR
+  abs(coalesce(created_at_ms,0))>8640000000000000 OR
+  abs(coalesce(offer_requested_at_ms,0))>8640000000000000 OR
+  abs(coalesce(first_last_evaluated_at_ms,0))>8640000000000000 OR
+  abs(coalesce(last_evaluated_at_ms,0))>8640000000000000)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-work-guard:end -->
+
+Create scratch `cutover_budget_user_state`, `cutover_budget_evaluation_work`, and
+`cutover_budget_publications` using their final table definitions, without final indexes/triggers.
+Copy User facts first. Only eligible pending scopes contribute to the initial minimum clock; completed
+publication/offer clocks cannot delay pending work. Absent first-creation facts stay absent. Missing
+User roots required by pending work receive new helper rowids above the old state rowid range.
+
+<!-- budget-work-roots-copy:start -->
+
+```sql
+INSERT INTO cutover_budget_user_state(rowid,user_id,revision,first_budget_id,first_created_at_ms,offer_requested_at_ms,last_evaluated_at_ms)
+SELECT r.rowid,r.user_id,coalesce(r.revision,0),r.budget_id,r.created_at_ms,r.offer_requested_at_ms,
+ coalesce((SELECT min(clock) FROM (
+  SELECT user_id,last_evaluated_at_ms AS clock FROM budget_state WHERE kind='work'
+  UNION ALL SELECT user_id,last_evaluated_at_ms FROM budget_state WHERE kind='publication' AND materialized_at_ms IS NULL
+  UNION ALL SELECT user_id,first_last_evaluated_at_ms FROM budget_state WHERE kind='user' AND budget_id IS NOT NULL AND offer_requested_at_ms IS NULL
+ ) p WHERE p.user_id=r.user_id),0)
+FROM budget_state r WHERE r.kind='user';
+INSERT INTO cutover_budget_user_state(rowid,user_id,last_evaluated_at_ms)
+SELECT (SELECT coalesce(max(rowid),0) FROM budget_state)+row_number() OVER(ORDER BY user_id),user_id,min(clock)
+FROM (
+ SELECT user_id,last_evaluated_at_ms AS clock FROM budget_state WHERE kind='work'
+ UNION ALL SELECT user_id,last_evaluated_at_ms FROM budget_state WHERE kind='publication' AND materialized_at_ms IS NULL
+) p WHERE NOT EXISTS(SELECT 1 FROM cutover_budget_user_state s WHERE s.user_id=p.user_id) GROUP BY user_id;
+INSERT INTO cutover_budget_publications(rowid,user_id,delivery_group_id,detected_at_ms,materialized_at_ms)
+SELECT rowid,user_id,record_id,detected_at_ms,materialized_at_ms FROM budget_state WHERE kind='publication';
+```
+
+<!-- budget-work-roots-copy:end -->
+
+<!-- budget-work-instant-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'budget_work_instant',CASE WHEN ?=1 AND EXISTS(
+ SELECT 1 FROM budget_state WHERE kind='work' AND rowid=? AND occurred_at=? AND version=?)
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-work-instant-guard:end -->
+
+<!-- budget-work-instant-copy:start -->
+
+```sql
+INSERT INTO cutover_budget_evaluation_work(rowid,user_id,occurred_at_ms,version)
+SELECT rowid,user_id,?,version FROM budget_state WHERE kind='work' AND rowid=?;
+```
+
+<!-- budget-work-instant-copy:end -->
+
+In that same native batch, drop all old indexes/triggers that reference `budget_state`, drop the old
+table, rename the three scratch stores, and install all final indexes/triggers referencing the new
+stores (including financial mutation, revision and erasure guards). A failing guard or interrupted
+batch rolls back the whole copy/swap. Original source/group keys, versions, first-creation identity,
+Consent, Budget/alert/Insight facts and logical erasure purposes remain intact. Old affected retained
+archive bodies must be resolved before conversion; unrelated archive addresses are untouched.
+
+For rollback, stop writers and take a new backup. Refuse active erasure or affected archives again.
+Create `cutover_budget_state` from the saved old definition. Copy the following in the same batch as
+the reverse object swap. This copies the shared clock into each old eligible location; historical
+per-scope scheduling timestamps cannot be recovered after clock consolidation. Revision zero maps
+to the former absent revision. Work instants use the canonical ISO representation of the exact
+millisecond value. Helper rowids may change on rollback because separate target tables can allocate
+the same rowid; logical identities and unrelated archive addresses remain unchanged.
+
+<!-- budget-work-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_budget_state(kind,user_id,revision,budget_id,created_at_ms,offer_requested_at_ms,first_last_evaluated_at_ms,version,last_evaluated_at_ms)
+SELECT 'user',user_id,nullif(revision,0),first_budget_id,first_created_at_ms,offer_requested_at_ms,
+ CASE WHEN first_budget_id IS NOT NULL THEN last_evaluated_at_ms END,NULL,NULL FROM budget_user_state;
+INSERT INTO cutover_budget_state(kind,user_id,occurred_at,version,last_evaluated_at_ms)
+SELECT 'work',w.user_id,strftime('%Y-%m-%dT%H:%M:%fZ',w.occurred_at_ms/1000.0,'unixepoch'),w.version,s.last_evaluated_at_ms
+FROM budget_evaluation_work w JOIN budget_user_state s ON s.user_id=w.user_id;
+INSERT INTO cutover_budget_state(kind,user_id,record_id,detected_at_ms,materialized_at_ms,version,last_evaluated_at_ms)
+SELECT 'publication',p.user_id,p.delivery_group_id,p.detected_at_ms,p.materialized_at_ms,NULL,coalesce(s.last_evaluated_at_ms,0)
+FROM budget_publications p LEFT JOIN budget_user_state s ON s.user_id=p.user_id;
+```
+
+<!-- budget-work-rollback-copy:end -->
+
+Validate rollback instants with the same original codec before swapping, guard the source counts,
+and block if any instant cannot round-trip exactly through the original timestamp representation.
+Drop target indexes/triggers before dropping the three tables, rename the scratch state, and reinstall
+its saved related indexes/triggers. Use the backup or a forward fix when historical inconsistencies
+or erasure prevent a safe conversion; never erase unexplained rows to make a conversion pass.
+
+<!-- budget-work-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'budget_work_rollback',CASE WHEN
+ (SELECT count(*) FROM budget_user_state)=? AND
+ (SELECT count(*) FROM budget_evaluation_work)=? AND
+ (SELECT count(*) FROM budget_publications)=? AND
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND
+ NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN
+ ('budget_user_state','budget_reconciliation_work','budget_crossing_publications')) AND
+ NOT EXISTS(SELECT 1 FROM budget_evaluation_work w WHERE
+  NOT EXISTS(SELECT 1 FROM budget_user_state s WHERE s.user_id=w.user_id) OR
+  occurred_at_ms IS NOT CAST(round(unixepoch(strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch'),'subsec')*1000) AS INTEGER))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- budget-work-rollback-guard:end -->

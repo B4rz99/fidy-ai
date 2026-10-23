@@ -7,20 +7,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'delivery_group_id',r.\"delivery_group_id\",'detected_at_ms',r.\"detected_at_ms\",'materialized_at_ms',r.\"materialized_at_ms\",'last_evaluated_at_ms',r.\"last_evaluated_at_ms\") AS body FROM (SELECT rowid,user_id AS user_id,record_id AS delivery_group_id,detected_at_ms AS detected_at_ms,materialized_at_ms AS materialized_at_ms,last_evaluated_at_ms AS last_evaluated_at_ms FROM budget_state WHERE kind='publication') r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'delivery_group_id',r.\"delivery_group_id\",'detected_at_ms',r.\"detected_at_ms\",'materialized_at_ms',r.\"materialized_at_ms\") AS body FROM budget_publications r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id AS user_id,record_id AS delivery_group_id,detected_at_ms AS detected_at_ms,materialized_at_ms AS materialized_at_ms,last_evaluated_at_ms AS last_evaluated_at_ms FROM budget_state WHERE kind='publication') r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM budget_publications r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM (SELECT rowid,user_id AS user_id,record_id AS delivery_group_id,detected_at_ms AS detected_at_ms,materialized_at_ms AS materialized_at_ms,last_evaluated_at_ms AS last_evaluated_at_ms FROM budget_state WHERE kind='publication') r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM budget_publications r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budget_state AS r WHERE r.kind='publication' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM budget_publications AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -127,20 +127,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'occurred_at',r.\"occurred_at\",'version',r.\"version\",'last_evaluated_at_ms',r.\"last_evaluated_at_ms\") AS body FROM budget_state r WHERE r.kind='work' AND r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'occurred_at_ms',r.\"occurred_at_ms\",'version',r.\"version\") AS body FROM budget_evaluation_work r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM budget_state r WHERE r.kind='work' AND r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM budget_evaluation_work r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM budget_state r WHERE r.kind='work' AND r.user_id=?",
+      sql: "SELECT 1 FROM budget_evaluation_work r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budget_state AS r WHERE r.kind='work' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM budget_evaluation_work AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -175,20 +175,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: ["budgets"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'revision',r.\"revision\",'budget_id',r.budget_id,'created_at_ms',r.created_at_ms,'offer_requested_at_ms',r.offer_requested_at_ms,'first_last_evaluated_at_ms',r.first_last_evaluated_at_ms) AS body FROM budget_state r WHERE r.kind='user' AND r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'revision',r.\"revision\",'first_budget_id',r.first_budget_id,'first_created_at_ms',r.first_created_at_ms,'offer_requested_at_ms',r.offer_requested_at_ms,'last_evaluated_at_ms',r.last_evaluated_at_ms) AS body FROM budget_user_state r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM budget_state r WHERE r.kind='user' AND r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM budget_user_state r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM budget_state r WHERE r.kind='user' AND r.user_id=?",
+      sql: "SELECT 1 FROM budget_user_state r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budget_state AS r WHERE r.kind='user' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM budget_user_state AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

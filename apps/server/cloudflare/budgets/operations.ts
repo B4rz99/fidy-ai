@@ -742,7 +742,10 @@ export const readBudgetCrossings = (
 
 const maximumPendingWork = 1;
 
-const PendingWork = Schema.Struct({ occurred_at: Schema.String, version: Schema.Int });
+const PendingWork = Schema.Struct({
+  occurred_at_ms: Schema.DateTimeUtcFromMillis,
+  version: Schema.Int,
+});
 
 const reconcilePendingPeriod = ({
   db,
@@ -784,32 +787,35 @@ export const evaluateBudgetAlerts = ({
     if (Option.isNone(context)) return false;
     const pending = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT occurred_at, version
-    FROM budget_state WHERE kind='work' AND user_id = ? ORDER BY occurred_at LIMIT ${maximumPendingWork}`)
+        .prepare(`SELECT occurred_at_ms, version
+    FROM budget_evaluation_work WHERE user_id = ? ORDER BY occurred_at_ms LIMIT ${maximumPendingWork}`)
         .bind(userId)
         .all()
     );
     for (const row of pending.results) {
       const item = Schema.decodeUnknownOption(PendingWork)(row);
       if (Option.isNone(item)) return false;
-      const instant = DateTime.make(item.value.occurred_at);
-      if (Option.isNone(instant)) return false;
       if (
-        !(yield* reconcilePendingPeriod({ db, userId, context: context.value, now: instant.value }))
+        !(yield* reconcilePendingPeriod({
+          db,
+          userId,
+          context: context.value,
+          now: item.value.occurred_at_ms,
+        }))
       ) {
         return false;
       }
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`DELETE FROM budget_state
-      WHERE kind='work' AND user_id = ? AND occurred_at = ? AND version = ?`)
-          .bind(userId, item.value.occurred_at, item.value.version)
+          .prepare(`DELETE FROM budget_evaluation_work
+      WHERE user_id = ? AND occurred_at_ms = ? AND version = ?`)
+          .bind(userId, item.value.occurred_at_ms.epochMilliseconds, item.value.version)
           .run()
       );
     }
     const remaining = yield* Effect.tryPromise(() =>
       db
-        .prepare("SELECT 1 FROM budget_state WHERE kind='work' AND user_id = ? LIMIT 1")
+        .prepare("SELECT 1 FROM budget_evaluation_work WHERE user_id = ? LIMIT 1")
         .bind(userId)
         .first()
     );

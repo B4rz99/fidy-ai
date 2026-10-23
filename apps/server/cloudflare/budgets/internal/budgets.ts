@@ -320,7 +320,7 @@ const groupReview = ({
     const groupSql =
       groupIds.length === 0
         ? ""
-        : ` AND (SELECT json_array(COALESCE((SELECT revision FROM (SELECT rowid,user_id,revision FROM budget_state WHERE kind='user' AND revision IS NOT NULL) AS budget_user_versions WHERE user_id=budgets.user_id),0),json_group_array(json_array(id,group_name,updated_at_ms))) FROM (SELECT user_id,id,group_name,updated_at_ms FROM budgets WHERE user_id=? AND category_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY id) budgets) = ?`;
+        : ` AND (SELECT json_array(COALESCE((SELECT revision FROM budget_user_state WHERE user_id=budgets.user_id),0),json_group_array(json_array(id,group_name,updated_at_ms))) FROM (SELECT user_id,id,group_name,updated_at_ms FROM budgets WHERE user_id=? AND category_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY id) budgets) = ?`;
     const groupRevision =
       groupIds.length === 0
         ? ""
@@ -328,7 +328,7 @@ const groupReview = ({
             try: () =>
               db
                 .prepare(
-                  `SELECT json_array(COALESCE((SELECT revision FROM (SELECT rowid,user_id,revision FROM budget_state WHERE kind='user' AND revision IS NOT NULL) AS budget_user_versions WHERE user_id=budgets.user_id),0),json_group_array(json_array(id,group_name,updated_at_ms))) AS revision FROM (SELECT user_id,id,group_name,updated_at_ms FROM budgets WHERE user_id=? AND category_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY id) budgets`
+                  `SELECT json_array(COALESCE((SELECT revision FROM budget_user_state WHERE user_id=budgets.user_id),0),json_group_array(json_array(id,group_name,updated_at_ms))) AS revision FROM (SELECT user_id,id,group_name,updated_at_ms FROM budgets WHERE user_id=? AND category_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY id) budgets`
                 )
                 .bind(userId, ...groupIds)
                 .first<string>("revision")

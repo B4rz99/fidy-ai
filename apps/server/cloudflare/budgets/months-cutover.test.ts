@@ -121,11 +121,17 @@ it.each(["valid", "invalid-flags", "lossy-clock", "retained-archive", "interrupt
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* native(() => databases.acquire());
-        const source = schemaStatements(
+        const current = schemaStatements(
           yield* native(() =>
             Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
           )
         );
+        const workHistory = yield* Schema.decodeEffect(CutoverHistory)(
+          yield* native(() =>
+            Bun.file(new URL("./work-cutover.test-fixture.json", import.meta.url)).text()
+          )
+        );
+        const source = precedingSchema({ current, history: workHistory });
         const saved = yield* Schema.decodeEffect(CutoverHistory)(
           yield* native(() =>
             Bun.file(new URL("./months-cutover.test-fixture.json", import.meta.url)).text()

@@ -1,3 +1,4 @@
+
 PRAGMA foreign_keys=ON;
 --> statement-breakpoint
 
@@ -254,17 +255,27 @@ CREATE TABLE budget_month_plan_records (
 ) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE "budget_state" (
- kind TEXT NOT NULL CHECK(kind IN ('user','work','publication')),user_id TEXT NOT NULL REFERENCES users(id),occurred_at TEXT NOT NULL DEFAULT '',
- record_id TEXT NOT NULL DEFAULT '',detected_at_ms INTEGER,materialized_at_ms INTEGER,
- revision INTEGER CHECK(revision>=1),budget_id TEXT,created_at_ms INTEGER,offer_requested_at_ms INTEGER,first_last_evaluated_at_ms INTEGER,
- version INTEGER DEFAULT 1,last_evaluated_at_ms INTEGER DEFAULT 0,
- PRIMARY KEY(kind,user_id,occurred_at,record_id),
- CHECK((kind='user' AND record_id='' AND detected_at_ms IS NULL AND materialized_at_ms IS NULL AND occurred_at='' AND version IS NULL AND last_evaluated_at_ms IS NULL
-   AND ((budget_id IS NULL AND created_at_ms IS NULL AND offer_requested_at_ms IS NULL AND first_last_evaluated_at_ms IS NULL)
-    OR(budget_id IS NOT NULL AND created_at_ms IS NOT NULL AND first_last_evaluated_at_ms IS NOT NULL) OR (kind='publication' AND occurred_at='' AND record_id<>'' AND detected_at_ms IS NOT NULL AND last_evaluated_at_ms IS NOT NULL AND version IS NULL AND revision IS NULL AND budget_id IS NULL AND created_at_ms IS NULL AND offer_requested_at_ms IS NULL AND first_last_evaluated_at_ms IS NULL)))
- OR(kind='work' AND record_id='' AND detected_at_ms IS NULL AND materialized_at_ms IS NULL AND revision IS NULL AND budget_id IS NULL AND created_at_ms IS NULL
-   AND offer_requested_at_ms IS NULL AND first_last_evaluated_at_ms IS NULL AND version IS NOT NULL AND last_evaluated_at_ms IS NOT NULL) OR (kind='publication' AND occurred_at='' AND record_id<>'' AND detected_at_ms IS NOT NULL AND last_evaluated_at_ms IS NOT NULL AND version IS NULL AND revision IS NULL AND budget_id IS NULL AND created_at_ms IS NULL AND offer_requested_at_ms IS NULL AND first_last_evaluated_at_ms IS NULL))
+CREATE TABLE budget_user_state (
+ user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
+ first_budget_id TEXT, first_created_at_ms INTEGER, offer_requested_at_ms INTEGER,
+ last_evaluated_at_ms INTEGER NOT NULL DEFAULT 0,
+ CHECK((first_budget_id IS NULL AND first_created_at_ms IS NULL AND offer_requested_at_ms IS NULL)
+   OR (first_budget_id IS NOT NULL AND first_created_at_ms IS NOT NULL))
+) STRICT;
+--> statement-breakpoint
+
+CREATE TABLE budget_evaluation_work (
+ user_id TEXT NOT NULL REFERENCES users(id),
+ occurred_at_ms INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1 CHECK(version>=1),
+ PRIMARY KEY(user_id,occurred_at_ms)
+) STRICT;
+--> statement-breakpoint
+
+CREATE TABLE budget_publications (
+ user_id TEXT NOT NULL REFERENCES users(id), delivery_group_id TEXT NOT NULL CHECK(delivery_group_id<>''),
+ detected_at_ms INTEGER NOT NULL, materialized_at_ms INTEGER,
+ PRIMARY KEY(user_id,delivery_group_id)
 ) STRICT;
 --> statement-breakpoint
 
@@ -1843,7 +1854,7 @@ CREATE UNIQUE INDEX browser_pairing_email_proofs_identity_3 ON browser_login_pai
 CREATE UNIQUE INDEX browser_pairing_email_proofs_identity_4 ON browser_login_pairings(email_work_id) WHERE email_work_id IS NOT NULL;
 --> statement-breakpoint
 
-CREATE INDEX budget_first_offer_due ON budget_state(first_last_evaluated_at_ms,user_id) WHERE kind='user' AND budget_id IS NOT NULL;
+CREATE INDEX budget_first_offer_due ON budget_user_state(user_id,first_created_at_ms) WHERE first_budget_id IS NOT NULL AND offer_requested_at_ms IS NULL;
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX budget_month_cap_identity ON budget_month_plan_records(user_id,budget_id,month) WHERE kind='cap';
@@ -1855,10 +1866,7 @@ CREATE UNIQUE INDEX budget_month_currency_identity ON budget_month_plan_records(
 CREATE UNIQUE INDEX budget_month_plan_identity ON budget_month_plan_records(user_id,month) WHERE kind='plan';
 --> statement-breakpoint
 
-CREATE INDEX budget_publication_due ON budget_state(user_id,detected_at_ms,record_id) WHERE kind='publication' AND materialized_at_ms IS NULL;
---> statement-breakpoint
-
-CREATE INDEX budget_work_due ON budget_state(last_evaluated_at_ms,user_id,occurred_at) WHERE kind='work';
+CREATE INDEX budget_publication_due ON budget_publications(user_id,detected_at_ms,delivery_group_id) WHERE materialized_at_ms IS NULL;
 --> statement-breakpoint
 
 CREATE INDEX budgets_by_user ON budgets(user_id, currency, category_id);
@@ -2032,9 +2040,6 @@ CREATE INDEX forwarded_email_outbox_pending ON forwarded_email_receipts(dispatch
 --> statement-breakpoint
 
 CREATE INDEX forwarded_email_receipts_capacity ON forwarded_email_receipts(state, user_id, expires_at_ms);
---> statement-breakpoint
-
-
 --> statement-breakpoint
 
 CREATE INDEX hosted_agent_sessions_by_user ON hosted_agent_sessions(user_id, started_at_ms DESC);
@@ -2668,76 +2673,52 @@ CREATE VIEW subscription_standing AS SELECT u.rowid,s.user_id,a.id AS attempt_id
  JOIN billing_attempt_context a ON a.id=s.current_paid_attempt_id AND a.user_id=s.user_id
  WHERE a.paid_starts_at_ms IS NOT NULL;
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000001','Restaurantes',0);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000002','Domicilios',1);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000003','Mercado',2);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000004','Transporte',3);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000005','Vivienda',4);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000006','Servicios',5);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000007','Salud',6);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000008','Educación',7);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000009','Compras',8);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000010','Entretenimiento',9);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000011','Viajes',10);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000012','Impuestos',11);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000013','Transferencias',12);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000014','Retiros de efectivo',13);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000015','Ingresos',14);
 --> statement-breakpoint
-
 INSERT INTO "categories"("id","label","display_order") VALUES('10000000-0000-4000-8000-000000000016','Otros',15);
 --> statement-breakpoint
-
 INSERT INTO "connection_institution_gate"("institution_id","enabled") VALUES('bancolombia',0);
 --> statement-breakpoint
-
 INSERT INTO "erasure_control"("kind","generation","cursor","scanned") VALUES('published','initial',NULL,NULL);
 --> statement-breakpoint
-
 INSERT INTO "recurring_dispatch"("id","last_user","next_discovery_at_ms") VALUES(1,'',0);
 --> statement-breakpoint
-
 INSERT INTO "sql_assertions"("scope","accepted") VALUES('statement_submission',1);
 --> statement-breakpoint
-
 INSERT INTO "statement_review_capacity"("id","pending_count") VALUES(1,0);
 --> statement-breakpoint
-
 INSERT INTO "subscription_prices"("id","amount","currency","billing_period","service_market","tax_treatment","terms_json","published_order") VALUES('22700000-0000-4000-8000-000000000001','9900','COP','weekly','CO','not-taxable','{"automaticRenewal":true,"renewalReminder":"none","cancellation":"future-renewals-only","paidAccessEnds":"paid-period-end","paymentMethods":["card","nequi","daviplata"]}',1);
 --> statement-breakpoint
-
 INSERT INTO "subscription_prices"("id","amount","currency","billing_period","service_market","tax_treatment","terms_json","published_order") VALUES('22700000-0000-4000-8000-000000000002','28900','COP','monthly','CO','not-taxable','{"automaticRenewal":true,"renewalReminder":"none","cancellation":"future-renewals-only","paidAccessEnds":"paid-period-end","paymentMethods":["card","nequi","daviplata"]}',2);
 --> statement-breakpoint
-
 INSERT INTO "subscription_prices"("id","amount","currency","billing_period","service_market","tax_treatment","terms_json","published_order") VALUES('22700000-0000-4000-8000-000000000003','289900','COP','yearly','CO','not-taxable','{"automaticRenewal":true,"renewalReminder":"none","cancellation":"future-renewals-only","paidAccessEnds":"paid-period-end","paymentMethods":["card","nequi","daviplata"]}',3);
 --> statement-breakpoint
 
@@ -3079,21 +3060,21 @@ BEGIN SELECT RAISE(ABORT, 'budget_capacity_limit'); END;
 
 CREATE TRIGGER budget_capture_work AFTER INSERT ON transactions
 WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
-BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ',NEW.occurred_at_ms/1000.0,'unixepoch'))
-  ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET version = version + 1; END;
+BEGIN INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(NEW.user_id,NEW.occurred_at_ms)
+  ON CONFLICT(user_id,occurred_at_ms) DO UPDATE SET version = version + 1; END;
 --> statement-breakpoint
 
 CREATE TRIGGER budget_correction_work AFTER UPDATE ON transactions
 WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) AND EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
-BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ',NEW.occurred_at_ms/1000.0,'unixepoch'))
-  ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET version = version + 1;
-  INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',OLD.user_id, strftime('%Y-%m-%dT%H:%M:%fZ',OLD.occurred_at_ms/1000.0,'unixepoch'))
-  ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET version = version + 1; END;
+BEGIN INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(NEW.user_id,NEW.occurred_at_ms)
+  ON CONFLICT(user_id,occurred_at_ms) DO UPDATE SET version = version + 1;
+  INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(OLD.user_id,OLD.occurred_at_ms)
+  ON CONFLICT(user_id,occurred_at_ms) DO UPDATE SET version = version + 1; END;
 --> statement-breakpoint
 
 CREATE TRIGGER budget_created_work AFTER INSERT ON budgets
-BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-  ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET version = version + 1; END;
+BEGIN INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(NEW.user_id,CAST(round(unixepoch('subsec')*1000) AS INTEGER))
+  ON CONFLICT(user_id,occurred_at_ms) DO UPDATE SET version = version + 1; END;
 --> statement-breakpoint
 
 CREATE TRIGGER budget_crossing_delivery_frozen BEFORE UPDATE OF delivery_group_id,consent_grant_id ON budget_threshold_alerts
@@ -3108,29 +3089,30 @@ BEGIN SELECT RAISE(ABORT, 'budget_crossing_immutable'); END;
 
 CREATE TRIGGER budget_first_creation_capture AFTER INSERT ON budgets
 BEGIN
- INSERT INTO budget_state(kind,user_id,budget_id,created_at_ms,first_last_evaluated_at_ms,version,last_evaluated_at_ms) VALUES('user',NEW.user_id,NEW.id,NEW.created_at_ms,0,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET budget_id=excluded.budget_id,created_at_ms=excluded.created_at_ms,first_last_evaluated_at_ms=0 WHERE budget_state.budget_id IS NULL;
+ INSERT INTO budget_user_state(user_id,first_budget_id,first_created_at_ms) VALUES(NEW.user_id,NEW.id,NEW.created_at_ms)
+ ON CONFLICT(user_id) DO UPDATE SET first_budget_id=excluded.first_budget_id,first_created_at_ms=excluded.first_created_at_ms,last_evaluated_at_ms=0 WHERE budget_user_state.first_budget_id IS NULL;
 END;
 --> statement-breakpoint
 
 CREATE TRIGGER budget_group_currency_version_insert AFTER INSERT ON budget_month_plan_records
 WHEN NEW.kind='currency'
 BEGIN
-  INSERT INTO budget_state(kind,user_id,revision,version,last_evaluated_at_ms) VALUES('user',NEW.user_id,1,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET revision=coalesce(revision,0)+1;
+  INSERT INTO budget_user_state(user_id,revision) VALUES(NEW.user_id,1) ON CONFLICT(user_id) DO UPDATE SET revision=revision+1;
 END;
 --> statement-breakpoint
 
 CREATE TRIGGER budget_group_currency_version_update AFTER UPDATE ON budget_month_plan_records
 WHEN (NEW.kind='currency' OR OLD.kind='currency')
 BEGIN
-  INSERT INTO budget_state(kind,user_id,revision,version,last_evaluated_at_ms) VALUES('user',NEW.user_id,1,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET revision=coalesce(revision,0)+1;
+  INSERT INTO budget_user_state(user_id,revision) VALUES(NEW.user_id,1) ON CONFLICT(user_id) DO UPDATE SET revision=revision+1;
 END;
 --> statement-breakpoint
 
 CREATE TRIGGER budget_link_work AFTER INSERT ON transaction_reconciliation_decisions
 WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
-BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) SELECT 'work', NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') FROM transactions
+BEGIN INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) SELECT NEW.user_id,occurred_at_ms FROM transactions
   WHERE user_id = NEW.user_id AND id IN (NEW.first_transaction_id, NEW.second_transaction_id)
-  ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET version = version + 1; END;
+  ON CONFLICT(user_id,occurred_at_ms) DO UPDATE SET version = version + 1; END;
 --> statement-breakpoint
 
 CREATE TRIGGER budget_month_plan_kind_immutable BEFORE UPDATE ON budget_month_plan_records WHEN NEW.kind IS NOT OLD.kind BEGIN SELECT RAISE(ABORT,'budget_month_plan_kind_immutable'); END;
@@ -3144,34 +3126,31 @@ CREATE TRIGGER budget_occurrence_no_delete BEFORE DELETE ON insight_events WHEN 
 
 CREATE TRIGGER budget_removed_version AFTER DELETE ON budgets
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE q.state='Erasing' AND p.user_id=q.user_id AND p.store_id='budgets' AND (OLD.user_id=q.user_id))
-BEGIN INSERT INTO budget_state(kind,user_id,revision,version,last_evaluated_at_ms) VALUES('user',OLD.user_id,1,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET revision=coalesce(revision,0)+1;
-  DELETE FROM budget_state WHERE kind='work' AND user_id = OLD.user_id
+BEGIN INSERT INTO budget_user_state(user_id,revision) VALUES(OLD.user_id,1) ON CONFLICT(user_id) DO UPDATE SET revision=revision+1;
+  DELETE FROM budget_evaluation_work WHERE user_id = OLD.user_id
     AND NOT EXISTS (SELECT 1 FROM budgets WHERE user_id = OLD.user_id); END;
 --> statement-breakpoint
 
 CREATE TRIGGER budget_revised_work AFTER UPDATE ON budgets
-BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-  ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET version = version + 1; END;
---> statement-breakpoint
-
-CREATE TRIGGER budget_state_kind_immutable BEFORE UPDATE OF kind ON budget_state WHEN NEW.kind<>OLD.kind BEGIN SELECT RAISE(ABORT,'budget_state_kind_immutable'); END;
+BEGIN INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(NEW.user_id,CAST(round(unixepoch('subsec')*1000) AS INTEGER))
+  ON CONFLICT(user_id,occurred_at_ms) DO UPDATE SET version = version + 1; END;
 --> statement-breakpoint
 
 CREATE TRIGGER budget_unlink_work AFTER UPDATE ON transaction_reconciliation_decisions
 WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
-BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) SELECT 'work', NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') FROM transactions
+BEGIN INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) SELECT NEW.user_id,occurred_at_ms FROM transactions
   WHERE user_id = NEW.user_id AND id IN (NEW.first_transaction_id, NEW.second_transaction_id)
-  ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET version = version + 1; END;
+  ON CONFLICT(user_id,occurred_at_ms) DO UPDATE SET version = version + 1; END;
 --> statement-breakpoint
 
-CREATE TRIGGER budget_work_version_insert AFTER INSERT ON budget_state
-WHEN NEW.kind='work'
-BEGIN INSERT INTO budget_state(kind,user_id,revision,version,last_evaluated_at_ms) VALUES('user',NEW.user_id,1,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET revision=coalesce(revision,0)+1; END;
+CREATE TRIGGER budget_work_version_insert AFTER INSERT ON budget_evaluation_work
+BEGIN INSERT INTO budget_user_state(user_id,revision) VALUES(NEW.user_id,1)
+ ON CONFLICT(user_id) DO UPDATE SET revision=revision+1,last_evaluated_at_ms=0; END;
 --> statement-breakpoint
 
-CREATE TRIGGER budget_work_version_update AFTER UPDATE ON budget_state
-WHEN NEW.kind='work'
-BEGIN INSERT INTO budget_state(kind,user_id,revision,version,last_evaluated_at_ms) VALUES('user',NEW.user_id,1,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at,record_id) DO UPDATE SET revision=coalesce(revision,0)+1; END;
+CREATE TRIGGER budget_work_version_update AFTER UPDATE OF version ON budget_evaluation_work
+BEGIN INSERT INTO budget_user_state(user_id,revision) VALUES(NEW.user_id,1)
+ ON CONFLICT(user_id) DO UPDATE SET revision=revision+1,last_evaluated_at_ms=0; END;
 --> statement-breakpoint
 
 CREATE TRIGGER canonical_request_concurrency BEFORE INSERT ON canonical_request_leases
@@ -3732,13 +3711,13 @@ CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_insert BEFORE INS
 CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_update BEFORE UPDATE ON resource_admission_counters WHEN ((NEW.owner_user_id IS NOT OLD.owner_user_id OR NEW.used IS NOT OLD.used OR NEW.window_start_ms IS NOT OLD.window_start_ms OR NEW.window_ends_ms IS NOT OLD.window_ends_ms OR NEW.policy_key IS NOT OLD.policy_key) AND (OLD.policy_key='email.pairing.user.v1' OR NEW.policy_key='email.pairing.user.v1')) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.owner_user_id=q.user_id) OR (OLD.owner_user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_budget_crossing_publications_delete BEFORE DELETE ON budget_state WHEN (OLD.kind='publication') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_crossing_publications'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_budget_crossing_publications_delete BEFORE DELETE ON budget_publications WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_crossing_publications'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_budget_crossing_publications_insert BEFORE INSERT ON budget_state WHEN (NEW.kind='publication') AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_crossing_publications'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_budget_crossing_publications_insert BEFORE INSERT ON budget_publications WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_crossing_publications'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_budget_crossing_publications_update BEFORE UPDATE ON budget_state WHEN ((NEW.materialized_at_ms IS NOT OLD.materialized_at_ms OR NEW.user_id IS NOT OLD.user_id OR NEW.last_evaluated_at_ms IS NOT OLD.last_evaluated_at_ms OR NEW.detected_at_ms IS NOT OLD.detected_at_ms OR NEW.kind IS NOT OLD.kind OR NEW.record_id IS NOT OLD.record_id) AND (OLD.kind='publication' OR NEW.kind='publication')) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_crossing_publications'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_budget_crossing_publications_update BEFORE UPDATE ON budget_publications WHEN ((NEW.materialized_at_ms IS NOT OLD.materialized_at_ms OR NEW.user_id IS NOT OLD.user_id OR NEW.detected_at_ms IS NOT OLD.detected_at_ms OR NEW.delivery_group_id IS NOT OLD.delivery_group_id)) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_crossing_publications'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_group_currencies_delete BEFORE DELETE ON budget_month_plan_records
@@ -3801,18 +3780,18 @@ WHEN (NEW.kind='plan' OR OLD.kind='plan') AND (EXISTS(SELECT 1 FROM erasure_requ
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_budget_reconciliation_work_delete BEFORE DELETE ON budget_state
-WHEN OLD.kind='work' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_reconciliation_work'))
+CREATE TRIGGER erasure_fence_budget_reconciliation_work_delete BEFORE DELETE ON budget_evaluation_work
+WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_reconciliation_work'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_budget_reconciliation_work_insert BEFORE INSERT ON budget_state
-WHEN NEW.kind='work' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_reconciliation_work'))
+CREATE TRIGGER erasure_fence_budget_reconciliation_work_insert BEFORE INSERT ON budget_evaluation_work
+WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_reconciliation_work'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_budget_reconciliation_work_update BEFORE UPDATE ON budget_state
-WHEN NEW.kind='work' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_reconciliation_work'))
+CREATE TRIGGER erasure_fence_budget_reconciliation_work_update BEFORE UPDATE ON budget_evaluation_work
+WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_reconciliation_work'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -3831,18 +3810,18 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingRevie
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_budget_user_versions_delete BEFORE DELETE ON budget_state
-WHEN OLD.kind='user' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_user_state'))
+CREATE TRIGGER erasure_fence_budget_user_versions_delete BEFORE DELETE ON budget_user_state
+WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_user_state'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_budget_user_versions_insert BEFORE INSERT ON budget_state
-WHEN NEW.kind='user' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_user_state'))
+CREATE TRIGGER erasure_fence_budget_user_versions_insert BEFORE INSERT ON budget_user_state
+WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_user_state'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_budget_user_versions_update BEFORE UPDATE ON budget_state
-WHEN NEW.kind='user' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_user_state'))
+CREATE TRIGGER erasure_fence_budget_user_versions_update BEFORE UPDATE ON budget_user_state
+WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_user_state'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
@@ -5398,12 +5377,12 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_budget_crossing_publications_delete BEFORE DELETE ON budget_state WHEN (OLD.kind='publication') AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+CREATE TRIGGER erasure_preserve_budget_crossing_publications_delete BEFORE DELETE ON budget_publications WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'budget_crossing_publications','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.user_id,'delivery_group_id',OLD.record_id,'detected_at_ms',OLD.detected_at_ms,'materialized_at_ms',OLD.materialized_at_ms,'last_evaluated_at_ms',OLD.last_evaluated_at_ms)
+  SELECT q.id,'budget_crossing_publications','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.user_id,'delivery_group_id',OLD.delivery_group_id,'detected_at_ms',OLD.detected_at_ms,'materialized_at_ms',OLD.materialized_at_ms)
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
@@ -5462,13 +5441,13 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_budget_reconciliation_work_delete BEFORE DELETE ON budget_state
-WHEN OLD.kind='work' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+CREATE TRIGGER erasure_preserve_budget_reconciliation_work_delete BEFORE DELETE ON budget_evaluation_work
+WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
 ) BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'budget_reconciliation_work','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'occurred_at',OLD."occurred_at",'version',OLD."version",'last_evaluated_at_ms',OLD."last_evaluated_at_ms")
+  SELECT q.id,'budget_reconciliation_work','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'occurred_at_ms',OLD."occurred_at_ms",'version',OLD."version")
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
@@ -5488,13 +5467,13 @@ BEGIN
 END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_preserve_budget_user_versions_delete BEFORE DELETE ON budget_state
-WHEN OLD.kind='user' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+CREATE TRIGGER erasure_preserve_budget_user_versions_delete BEFORE DELETE ON budget_user_state
+WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
   AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000)
 ) BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'budget_user_state','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'revision',OLD."revision",'budget_id',OLD.budget_id,'created_at_ms',OLD.created_at_ms,'offer_requested_at_ms',OLD.offer_requested_at_ms,'first_last_evaluated_at_ms',OLD.first_last_evaluated_at_ms)
+  SELECT q.id,'budget_user_state','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'revision',OLD."revision",'first_budget_id',OLD.first_budget_id,'first_created_at_ms',OLD.first_created_at_ms,'offer_requested_at_ms',OLD.offer_requested_at_ms,'last_evaluated_at_ms',OLD.last_evaluated_at_ms)
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
@@ -8238,7 +8217,6 @@ CREATE TRIGGER billing_price_notice_identity BEFORE UPDATE OF subscription_id,pr
 WHEN NEW.subscription_id IS NOT OLD.subscription_id OR NEW.price_id IS NOT OLD.price_id OR NEW.created_at_ms IS NOT OLD.created_at_ms
 BEGIN SELECT RAISE(ABORT,'billing_price_notice_identity'); END;
 --> statement-breakpoint
---> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_materializations_delete BEFORE DELETE ON statement_materializations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=OLD.submission_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_materializations'))
@@ -8515,3 +8493,9 @@ BEGIN
  SELECT q.id,'recurring_plan_fulfillments','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'id',OLD."id",'plan_id',OLD."plan_id",'position',OLD."position",'local_date',OLD."local_date",'actual_date',OLD."actual_date",'amount',OLD."amount",'currency',OLD."currency",'settled',OLD."settled",'automatic',OLD."automatic",'transaction_id',OLD."transaction_id") FROM erasure_requests q
  WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
+
+CREATE TRIGGER budget_publication_priority AFTER INSERT ON budget_publications
+WHEN NEW.materialized_at_ms IS NULL
+BEGIN INSERT INTO budget_user_state(user_id) VALUES(NEW.user_id)
+ ON CONFLICT(user_id) DO UPDATE SET last_evaluated_at_ms=0; END;

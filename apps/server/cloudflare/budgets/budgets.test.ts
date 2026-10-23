@@ -619,10 +619,7 @@ it("attributes the second Budget create when the first fills the owner capacity"
           .run()
       );
       yield* Effect.tryPromise(() =>
-        db
-          .prepare("DELETE FROM budget_state WHERE kind='work' AND user_id = ?")
-          .bind(users[0])
-          .run()
+        db.prepare("DELETE FROM budget_evaluation_work WHERE user_id = ?").bind(users[0]).run()
       );
       const limited = yield* Effect.tryPromise(() =>
         send(
@@ -1999,11 +1996,8 @@ it(
         const earlier = DateTime.makeUnsafe(instant.epochMilliseconds - 40 * 86400000);
         const work = Array.from({ length: 9 }, (_, index) =>
           db
-            .prepare(`INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',?, ?)`)
-            .bind(
-              users[0],
-              DateTime.formatIso(DateTime.makeUnsafe(earlier.epochMilliseconds + index * 1000))
-            )
+            .prepare(`INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(?,?)`)
+            .bind(users[0], earlier.epochMilliseconds + index * 1000)
         );
         yield* Effect.tryPromise(() => db.batch(work));
         const correction = (): Promise<Response> =>
@@ -2017,9 +2011,7 @@ it(
         expect((yield* Effect.tryPromise(() => correction())).status).toBe(503);
         const pending = yield* Effect.tryPromise(() =>
           db
-            .prepare(
-              "SELECT COUNT(*) AS count FROM (SELECT rowid,user_id,occurred_at,version,last_evaluated_at_ms FROM budget_state WHERE kind='work') AS budget_reconciliation_work WHERE user_id = ?"
-            )
+            .prepare("SELECT COUNT(*) AS count FROM budget_evaluation_work WHERE user_id = ?")
             .bind(users[0])
             .first<{ count: number }>()
         );
@@ -2207,7 +2199,7 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
               ),
             db
               .prepare(
-                "INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',?, 'zz-invalid')"
+                "INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(?,9000000000000000)"
               )
               .bind(users[index]),
           ])
@@ -2224,11 +2216,7 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
               "SELECT * FROM budget_threshold_alerts ORDER BY user_id, budget_id, from_utc_ms, threshold"
             )
             .all(),
-          db
-            .prepare(
-              "SELECT * FROM (SELECT user_id,occurred_at,version,last_evaluated_at_ms FROM budget_state WHERE kind='work') AS budget_reconciliation_work ORDER BY user_id, occurred_at"
-            )
-            .all(),
+          db.prepare("SELECT * FROM budget_evaluation_work ORDER BY user_id,occurred_at_ms").all(),
         ]).then((results) => results.map((result) => result.results));
       const before = yield* Effect.tryPromise(snapshot);
       const subject = {

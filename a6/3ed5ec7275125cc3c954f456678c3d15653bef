@@ -1,0 +1,27 @@
+apps/site/src/islands/pricing.tsx
+  s_81e16d06024631::t_bd8ce4687c5782 53
+apps/site/e2e/site.spec.ts
+  s_81e16d06024631::t_4ec6f1a53ed023 144-264
+apps/site/src/islands/motion.ts
+  s_81e16d06024631::t_aa414618512856 7,31-32,43,45-60,65-72,102,106-111,115,118,124,127
+apps/site/src/islands/demo-motion.ts
+  s_81e16d06024631::t_a706aa53f17dc4 17-19,61-62,82-84,86,92
+apps/site/src/styles/landing.css
+  s_81e16d06024631::t_ac47b055a15d4c 1715-1719,1726-1728,1738-1778,2801,2810,3154-3203
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a63ed5ec7275125cc3c954f456678c3d15653bef",
+  "prompts": {},
+  "sessions": {
+    "s_81e16d06024631": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a168ad-36fa-7e02-b964-cedc4b926672",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

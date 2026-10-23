@@ -147,7 +147,7 @@ test("publishes canonical discovery files and keeps draft terms out of the sitem
 });
 
 const responsiveWidths = { compactPhone: 320, phone: 390, compactTablet: 768, tablet: 820 };
-const minimumPhoneWidth = 280;
+const minimumDemoFontSize = 11;
 for (const width of Object.values(responsiveWidths)) {
   test(`keeps the landing demonstration readable without horizontal scrolling at ${width}px`, async ({
     page,
@@ -159,10 +159,12 @@ for (const width of Object.values(responsiveWidths)) {
     const layout = await page.evaluate(() => ({
       viewport: window.innerWidth,
       content: document.documentElement.scrollWidth,
-      phone: document.querySelector(".phone")?.getBoundingClientRect().width ?? 0,
+      fontSize: Number.parseFloat(
+        getComputedStyle(document.querySelector(".bubble") ?? document.body).fontSize
+      ),
     }));
     expect(layout.content).toBeLessThanOrEqual(layout.viewport);
-    expect(layout.phone).toBeGreaterThanOrEqual(minimumPhoneWidth);
+    expect(layout.fontSize).toBeGreaterThanOrEqual(minimumDemoFontSize);
     await expect(page.getByRole("button", { name: "Presupuestar", exact: true })).toBeVisible();
   });
 }
@@ -267,3 +269,72 @@ for (const width of Object.values(responsiveWidths)) {
     await expect(page.locator('.price-frame[data-visible="true"]')).toContainText("$28.900");
   });
 }
+
+const compositionWidths = { narrow: 320, mobile: 491, wideMobile: 557, tablet: 664 };
+for (const width of Object.values(compositionWidths)) {
+  test(`keeps the budget card overlapping the phone and the coin visible at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 978 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    await page.locator("#demo").scrollIntoViewIfNeeded();
+    await page.locator("astro-island[component-export='PhoneDemo']:not([ssr])").waitFor();
+    await page.evaluate(settleEntranceMotion);
+    const composition = await page.locator(".hero-stage").evaluate((stage) => {
+      const bounds = (selector: string): DOMRect => {
+        const element = stage.querySelector(selector);
+        if (element === null) throw new Error("Missing phone composition");
+        return element.getBoundingClientRect();
+      };
+      const phone = bounds(".phone");
+      const note = bounds(".floating-note");
+      const coin = bounds(".coin");
+      return {
+        overlaps: note.top < phone.bottom && note.left < phone.right && note.right > phone.left,
+        noteOnRight: note.left > phone.left,
+        coinNearTop: coin.top < phone.top + coin.height,
+        contained: coin.left >= 0 && coin.right <= innerWidth && note.right <= innerWidth,
+      };
+    });
+    expect(composition).toEqual({
+      overlaps: true,
+      noteOnRight: true,
+      coinNearTop: true,
+      contained: true,
+    });
+  });
+}
+
+test("keeps the browser canvas and chrome aligned with system and saved appearance", async ({
+  page,
+}) => {
+  const darkCanvas = "rgb(20, 20, 20)";
+  const lightCanvas = "rgb(255, 250, 246)";
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  await page.goto("/");
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
+    "content",
+    /viewport-fit=cover/u
+  );
+  await expect(page.locator("html")).toHaveCSS("background-color", darkCanvas);
+  await expect(page.locator("body")).toHaveCSS("background-color", darkCanvas);
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute(
+    "content",
+    darkCanvas
+  );
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator("html")).toHaveCSS("background-color", lightCanvas);
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute(
+    "content",
+    lightCanvas
+  );
+  await page.getByRole("button", { name: "Activar tema oscuro" }).click();
+  await page.reload();
+  await expect(page.locator("html")).toHaveCSS("background-color", darkCanvas);
+  await expect(page.locator("body")).toHaveCSS("background-color", darkCanvas);
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute(
+    "content",
+    darkCanvas
+  );
+});

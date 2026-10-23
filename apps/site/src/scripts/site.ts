@@ -15,6 +15,10 @@ const mountTheme = (root: HTMLDivElement): void => {
   const isDark = (): boolean => theme === "dark" || (theme === "system" && preference.matches);
   const updateTheme = (): void => {
     root.dataset.theme = theme;
+    const canvasColor = getComputedStyle(document.documentElement).backgroundColor;
+    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+      meta.content = canvasColor;
+    }
     const label = isDark() ? "Activar tema claro" : "Activar tema oscuro";
     for (const button of document.querySelectorAll<HTMLButtonElement>(".theme-toggle")) {
       button.setAttribute("aria-label", label);

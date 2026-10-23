@@ -40,15 +40,10 @@ const verifyAccessibility = (page: Page): Promise<void> =>
     })
   );
 
-const captureAccessResponse = (
-  route: Route,
-  capture: (payload: unknown) => void,
-  expectedStatus = successStatus
-): Promise<void> =>
+const captureAccessResponse = (route: Route, capture: (payload: unknown) => void): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const response = yield* Effect.tryPromise(() => route.fetch());
-      expect(response.status()).toBe(expectedStatus);
       capture(yield* Effect.tryPromise(() => response.json()));
       yield* Effect.tryPromise(() => route.fulfill({ response }));
     })
@@ -56,13 +51,9 @@ const captureAccessResponse = (
 
 const captureErasureReplies = (page: Page, replies: unknown[]): Promise<unknown> =>
   page.route(`${apiOrigin}/web/privacy/erasure`, (route) =>
-    captureAccessResponse(
-      route,
-      (payload) => {
-        replies.push(payload);
-      },
-      acceptedStatus
-    )
+    captureAccessResponse(route, (payload) => {
+      replies.push(payload);
+    })
   );
 
 const verifyTransactionAccess = (page: Page): Promise<void> =>

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../../../design/tokens.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @font-face {
@@ -40,8 +41,28 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --color-primary-pressed: var(--primary-pressed);
+  --color-primary-border: var(--primary-border);
+  --color-primary-hover-border: var(--primary-hover-border);
+  --color-primary-pressed-border: var(--primary-pressed-border);
+  --color-control-border: var(--control-border);
+  --color-control-hover: var(--control-hover);
+  --color-control-pressed: var(--control-pressed);
+  --color-disabled: var(--disabled);
+  --color-disabled-foreground: var(--disabled-foreground);
+  --color-disabled-border: var(--disabled-border);
+  --color-link: var(--link);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-error-subtle: var(--error-subtle);
+  --color-error-foreground: var(--error-foreground);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-foreground: var(--info-foreground);
+
   --font-heading: var(--font-sans);
-  --font-sans: Poppins, Arial, sans-serif;
+  --font-sans: var(--fidy-font-family);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -91,27 +112,47 @@
 }
 
 :root {
+  --primary-pressed: var(--fidy-button-primary-pressed-background);
+  --primary-border: var(--fidy-button-primary-default-border);
+  --primary-hover-border: var(--fidy-button-primary-hover-border);
+  --primary-pressed-border: var(--fidy-button-primary-pressed-border);
+  --control-border: var(--fidy-border-control);
+  --control-hover: var(--fidy-button-secondary-hover-background);
+  --control-pressed: var(--fidy-button-secondary-pressed-background);
+  --disabled: var(--fidy-button-disabled-background);
+  --disabled-foreground: var(--fidy-button-disabled-foreground);
+  --disabled-border: var(--fidy-button-disabled-border);
+  --link: var(--fidy-text-link);
+  --success-subtle: var(--fidy-semantic-success-subtle-background);
+  --success-foreground: var(--fidy-semantic-success-foreground);
+  --warning-subtle: var(--fidy-semantic-warning-subtle-background);
+  --warning-foreground: var(--fidy-semantic-warning-foreground);
+  --error-subtle: var(--fidy-semantic-error-subtle-background);
+  --error-foreground: var(--fidy-semantic-error-foreground);
+  --info-subtle: var(--fidy-semantic-info-subtle-background);
+  --info-foreground: var(--fidy-semantic-info-foreground);
+
   color-scheme: light;
-  --background: #fffaf6;
-  --foreground: #000000;
-  --card: #ffffff;
-  --card-foreground: #000000;
-  --popover: #ffffff;
-  --popover-foreground: #000000;
-  --primary: #7cb243;
-  --primary-hover: #8abe53;
-  --primary-foreground: #000000;
+  --background: var(--fidy-background-canvas);
+  --foreground: var(--fidy-text-primary);
+  --card: var(--fidy-background-surface);
+  --card-foreground: var(--fidy-text-primary);
+  --popover: var(--fidy-background-raised);
+  --popover-foreground: var(--fidy-text-primary);
+  --primary: var(--fidy-button-primary-default-background);
+  --primary-hover: var(--fidy-button-primary-hover-background);
+  --primary-foreground: var(--fidy-text-on-brand-lime);
   --secondary: #fae3d9;
   --secondary-foreground: #000000;
   --muted: #fae3d9;
-  --muted-foreground: #514d48;
+  --muted-foreground: var(--fidy-text-muted);
   --accent: #fae3d9;
   --accent-foreground: #000000;
   --destructive: #f0b4ae;
   --destructive-foreground: #171916;
-  --border: #e3d7ce;
-  --input: #6b6862;
-  --ring: #497423;
+  --border: var(--fidy-border-decorative-divider);
+  --input: var(--fidy-border-control);
+  --ring: var(--fidy-focus-ring-color);
   --success: #c5dfa5;
   --warning: #f5dfa0;
   --information: #b8d4ef;
@@ -135,21 +176,21 @@
 
 .dark {
   color-scheme: dark;
-  --background: #141414;
-  --foreground: #fff6ef;
-  --card: #202020;
-  --card-foreground: #fff6ef;
-  --popover: #2e2e2e;
-  --popover-foreground: #fff6ef;
+  --background: var(--fidy-background-canvas);
+  --foreground: var(--fidy-text-primary);
+  --card: var(--fidy-background-surface);
+  --card-foreground: var(--fidy-text-primary);
+  --popover: var(--fidy-background-raised);
+  --popover-foreground: var(--fidy-text-primary);
   --secondary: #2e2e2e;
   --secondary-foreground: #fff6ef;
   --muted: #2e2e2e;
-  --muted-foreground: #c7c7c7;
+  --muted-foreground: var(--fidy-text-muted);
   --accent: #2e2e2e;
   --accent-foreground: #fff6ef;
-  --border: #606060;
-  --input: #c7c7c7;
-  --ring: #7cb243;
+  --border: var(--fidy-border-decorative-divider);
+  --input: var(--fidy-border-control);
+  --ring: var(--fidy-focus-ring-color);
   --chart-3: #fae3d9;
   --sidebar: var(--background);
   --sidebar-foreground: var(--foreground);

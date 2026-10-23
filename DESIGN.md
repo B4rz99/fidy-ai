@@ -3,17 +3,18 @@ version: alpha
 name: Fidy
 description: Brand foundations and approved public website and application patterns for Fidy.
 colors:
-  brand-green: "#7CB243"
+  brand-green: "#88CC20"
   primary: "{colors.brand-green}"
-  on-primary: "#000000"
-  primary-hover: "#8ABE53"
+  on-primary: "#141414"
+  primary-hover: "#79B91B"
+  primary-pressed: "#6BA414"
   secondary: "#FAE3D9"
   neutral: "#FFFAF6"
   surface: "#FFFFFF"
   on-surface: "#000000"
   text-secondary: "#514D48"
-  heading-accent: "#537C2D"
-  focus: "#497423"
+  heading-accent: "{colors.brand-green}"
+  focus: "#141414"
   border: "#E3D7CE"
   demo-timestamp: "#62695C"
   demo-placeholder: "#6B6862"
@@ -36,7 +37,7 @@ colors:
   dark-border: "#606060"
   dark-text: "#FFF6EF"
   dark-text-secondary: "#C7C7C7"
-  dark-heading-accent: "{colors.secondary}"
+  dark-heading-accent: "{colors.brand-green}"
 typography:
   headline-display:
     fontFamily: Poppins
@@ -170,24 +171,79 @@ warm, broad section changes. The original brand green marks important actions an
 White surfaces help illustrative financial records stand out.
 
 Use `heading-accent` for the large green headline emphasis. Use `text-secondary` for
-supporting prose. The original green is shared by the logo, actions, and progress accents. Supporting colors use the pastel
+supporting prose. The approved lime is shared by actions and progress accents; original artwork retains its supplied colors. Supporting colors use the pastel
 family; muted dark text and structural neutrals remain available for legibility.
 
-Keep normal text at a contrast ratio of at least 4.5:1 and large text at least 3:1.
+Keep normal text at a contrast ratio of at least 4.5:1 and large text at least 3:1,
+except for the explicitly accepted landing slogan treatment below.
 Check the actual foreground/background pair, including tinted chat bubbles. The two
 demo text colors preserve readability for timestamps and the illustrated composer.
 Pair color with labels, selection states, or icons when it carries meaning.
 
+### Token implementation and approved reconciliation
+
+`design/tokens.css` is the runtime source for the shared v1.1 tokens. Both
+`apps/site/src/styles/global.css` and `apps/web/src/index.css` import it. Theme values
+use `light-dark()` under each surface's existing color-scheme owner; the application
+maps them to its existing shadcn/Tailwind semantic names. The frontmatter above is a
+design reference, not a separate generated stylesheet. Do not copy the source JSON
+into another runtime token registry.
+
+The source is the approved `fidy-tokens-v1.1.json` (Library
+`libfile_8abe371f29748191824ff88284e72d1f`), reconciled with the later decisions:
+
+- Primary default is exactly sRGB `#88CC20` in both themes. Hover is `#79B91B`,
+  pressed is `#6BA414`, and labels use ink `#141414`. Primary buttons have a solid
+  border: ink in light mode and their fill color in dark mode.
+- The slogan “Tu vida, más tranquila” is lime in both themes with no backing band.
+  This supersedes the JSON's graphite highlight. Its light peach contrast is about
+  1.59:1 and is an explicitly accepted exception, not an accessibility compliance claim.
+  The user explicitly approved a narrowly scoped test exception in #1524. Axe still
+  scans the entire document in both themes. Only the homepage light `h1 > em`,
+  its exact slogan markup, and the `#88CC20` / `#FAE3D9` pair may be accepted.
+  The report retains the raw failing node as an attachment and annotation. A guard
+  test rejects other rules, pages, themes, elements, text and color pairs, including
+  another failing node in the same violation. This is an accepted design debt,
+  not a contrast fix or a claim of WCAG AA compliance. Do not lower thresholds,
+  exclude the element from axe, or disable contrast checks globally.
+- Control borders (`#76716B` / `#858585`) differ from decorative dividers
+  (`#DED6CE` / `#606060`). Outline buttons consume the control tokens.
+- Primary and outline buttons use explicit interaction and disabled colors. Focus uses
+  a 2px external outline with a 2px gap exposing the adjacent surface. Existing named
+  subtle-focus and destructive treatments retain their distinct behavior.
+- Alerts and state badges pair semantic foregrounds with their matching subtle fill
+  for success, warning and information; destructive alerts use the error pair.
+  Keep labels/icons. The existing pastel categorical charts, pending state and
+  destructive action treatment retain their separate semantics.
+- The JSON typography scale, 4–48px spacing steps, 8/12/20px radii and motion/target
+  dimensions are available as `--fidy-type-*`, `--fidy-space-*`, `--fidy-radius-*`,
+  `--fidy-motion-*` and `--fidy-touch-target` tokens. Existing approved responsive
+  typography, pill buttons and 24px pricing cards take precedence over replacing
+  screen geometry with the proposed scale. Applying that alternative scale needs
+  a separate composition decision. Poppins remains unchanged.
+
+Shared app controls therefore change color, states and borders; no authenticated
+screen layout is redesigned. The UI reference renders the same components for review.
+The logo uses the supplied rounded backing and coin/$ artwork without redrawing;
+the original tití artwork is placed beside the hero phone and at the desktop closing.
+At narrow widths the mascot must stay clear of controls and financial text.
+
+`@shadcn/lint` 0.2.1 discovers theme utilities from `components.json` and the imported
+CSS `@theme` declarations. Its built-in rules enforce token use and component ownership;
+they do not validate token contrast or CSS literals. The design-token tests run with
+`lint:rules` and check the primary identity, semantic contrast, control borders and
+focus pairs. No rule is disabled to admit the new palette.
+
 ### Themes and semantic accents
 
 Light retains the original off-white canvas and peach sections. Dark uses neutral graphite
-surfaces with warm text, peach emphasis, and brand-green actions. Distinguish nested product
+surfaces with warm text, lime headline emphasis, and brand-green actions. Distinguish nested product
 surfaces by tone; light peach messages and budget cards can remain luminous within
-a dark illustration. Reserve subtle background illumination for the landing hero.
+a dark illustration. Keep the landing hero background flat.
 Offer Light, Dark, and System, following the system by default and remembering the
 user's explicit choice. Apply the chosen theme to feature detail pages as well.
 
-Supporting chromatic accents are pastel. Brand green (`#7CB243`) is the explicit
+Supporting chromatic accents are pastel. Brand green (`#88CC20`) is the explicit
 exception for primary actions and progress in both themes. Neutrals provide readable text, borders,
 and dark backgrounds. Never apply pastel text directly to a pale surface without
 checking contrast. Use dark text on pastel fills in both themes.
@@ -252,7 +308,7 @@ and closing sections have their own composition. Use the spacing tokens for recu
 relationships; illustration geometry may need optical adjustments.
 
 Collapse the main navigation into its menu at 1100px before labels become cramped.
-Stack the hero at 700px. Other grids collapse according to their content needs.
+Stack the hero at 900px. Other grids collapse according to their content needs.
 Buttons and their arrows stay together; important actions must not become awkward
 multi-line fragments. Feature tabs may scroll horizontally on narrow screens while
 the page itself stays within the viewport.

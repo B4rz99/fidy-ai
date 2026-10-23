@@ -1,9 +1,9 @@
 .fidy-landing {
-  font-family: Poppins, Arial, sans-serif;
+  font-family: var(--fidy-font-family);
   font-size: 15px;
   line-height: 1.6;
-  background: light-dark(#fffaf6, var(--night-canvas));
-  color: light-dark(#000, var(--night-text));
+  background: var(--fidy-background-canvas);
+  color: var(--fidy-text-primary);
   min-height: 100svh;
 }
 .fidy-landing button {
@@ -32,9 +32,9 @@ html:has(.fidy-landing) {
 }
 .fidy-landing {
   margin: 0;
-  background: light-dark(#fffaf6, var(--night-canvas));
-  color: light-dark(#000, var(--night-text));
-  font-family: Poppins, Arial, sans-serif;
+  background: var(--fidy-background-canvas);
+  color: var(--fidy-text-primary);
+  font-family: var(--fidy-font-family);
   font-size: 15px;
   line-height: 1.6;
 }
@@ -53,8 +53,8 @@ html:has(.fidy-landing) {
 .fidy-landing button:focus-visible,
 .fidy-landing a:focus-visible,
 .fidy-landing summary:focus-visible {
-  outline: 3px solid light-dark(#497423, var(--night-emphasis));
-  outline-offset: 5px;
+  outline: var(--fidy-focus-ring-width-px) solid var(--fidy-focus-ring-color);
+  outline-offset: var(--fidy-focus-offset-px);
 }
 .fidy-landing h1,
 .fidy-landing h2,
@@ -157,10 +157,11 @@ html:has(.fidy-landing) {
 }
 .fidy-landing .btn.green {
   background: var(--brand-green);
-  color: light-dark(#000, var(--night-text));
+  color: var(--fidy-text-primary);
 }
 .fidy-landing .btn.green:hover {
-  background: #8abe53;
+  background: var(--fidy-button-primary-hover-background);
+  border-color: var(--fidy-button-primary-hover-border);
 }
 .fidy-landing .textlink {
   font-size: 13px;
@@ -190,7 +191,7 @@ html:has(.fidy-landing) {
 }
 .fidy-landing .hero-copy h1 em {
   font-style: normal;
-  color: light-dark(#537c2d, var(--night-emphasis));
+  color: var(--brand-green);
 }
 .fidy-landing .fine {
   display: block;
@@ -690,7 +691,7 @@ html:has(.fidy-landing) {
   padding: 38px;
   max-width: 430px;
   width: calc(100% - 36px);
-  background: light-dark(#fffaf6, var(--night-canvas));
+  background: var(--fidy-background-canvas);
   box-shadow: 0 20px 100px #0005;
 }
 .fidy-landing dialog::backdrop {
@@ -905,7 +906,8 @@ html:has(.fidy-landing) {
   background: light-dark(#000, var(--night-deep));
 }
 .fidy-landing.variant-a .btn.green:hover {
-  background: var(--brand-green);
+  background: var(--fidy-button-primary-hover-background);
+  border-color: var(--fidy-button-primary-hover-border);
 }
 .fidy-landing.variant-a .btn,
 .fidy-landing.variant-a .demo-controls button {
@@ -921,7 +923,7 @@ html:has(.fidy-landing) {
   color: light-dark(#fae3d9, #ffffff);
 }
 .fidy-landing.variant-a .btn.green {
-  color: light-dark(#000, var(--night-text));
+  color: var(--fidy-text-primary);
 }
 .fidy-landing.variant-a .btn:active:not(:focus-visible),
 .fidy-landing.variant-a .demo-controls button:active:not(:focus-visible) {
@@ -934,7 +936,7 @@ html:has(.fidy-landing) {
     background: light-dark(#252921, var(--night-deep));
   }
   .fidy-landing.variant-a .btn.green:hover {
-    background: #8abe53;
+    background: var(--brand-green);
   }
   .fidy-landing.variant-a .btn:active:not(:focus-visible) {
     transform: translateY(0) scale(0.97);
@@ -1062,12 +1064,12 @@ html:has(.fidy-landing) {
   color: light-dark(#aaa, var(--night-muted));
 }
 .fidy-landing .story-chat .avatar {
-  color: light-dark(#000, var(--night-text));
+  color: var(--fidy-text-primary);
   flex-shrink: 0;
 }
 .fidy-landing .story-message {
   background: light-dark(#fae3d9, var(--night-surface));
-  color: light-dark(#000, var(--night-text));
+  color: var(--fidy-text-primary);
   padding: 18px 20px;
   border-radius: 18px 18px 4px 18px;
   font-size: 14px;
@@ -1535,8 +1537,8 @@ html:has(.fidy-landing) {
   color: light-dark(#625e57, var(--night-muted));
 }
 .fidy-landing .feature-tabs button[aria-selected="true"] {
-  border-color: light-dark(#537c2d, var(--night-emphasis));
-  color: light-dark(#000, var(--night-text));
+  border-color: var(--brand-green);
+  color: var(--fidy-text-primary);
   font-weight: 600;
 }
 .fidy-landing .feature-panel {
@@ -1694,10 +1696,10 @@ html:has(.fidy-landing) {
   padding: 6px 0;
 }
 .fidy-landing .pricing-copy li::marker {
-  color: light-dark(#537c2d, var(--night-emphasis));
+  color: var(--brand-green);
 }
 .fidy-landing .price-card {
-  background: light-dark(#fffaf6, var(--night-canvas));
+  background: var(--fidy-background-canvas);
   border: 1px solid light-dark(#e3d7ce, var(--night-border));
   border-radius: 24px;
   padding: 36px;
@@ -1963,7 +1965,7 @@ html:has(.fidy-landing) {
   gap: 24px;
 }
 .fidy-landing .detail-budget-card {
-  background: light-dark(#fffaf6, var(--night-canvas));
+  background: var(--fidy-background-canvas);
   border-radius: 20px;
   padding: 28px;
 }
@@ -2018,7 +2020,7 @@ html:has(.fidy-landing) {
   color: light-dark(#b5b5a9, var(--night-muted));
 }
 .fidy-landing .detail-transcript {
-  background: light-dark(#fffaf6, var(--night-canvas));
+  background: var(--fidy-background-canvas);
   border-radius: 20px;
   padding: 32px;
   font-size: var(--type-body);
@@ -2046,7 +2048,7 @@ html:has(.fidy-landing) {
   color: light-dark(#625e57, var(--night-muted));
 }
 .fidy-landing .detail-composer span {
-  color: light-dark(#000, var(--night-text));
+  color: var(--fidy-text-primary);
 }
 .fidy-landing .detail-widget-grid {
   display: grid;
@@ -2228,7 +2230,7 @@ html:has(.fidy-landing) {
   gap: 24px;
 }
 .fidy-landing .insight-stream article {
-  background: light-dark(#fffaf6, var(--night-canvas));
+  background: var(--fidy-background-canvas);
   padding: 32px;
   border-radius: 20px;
 }
@@ -2289,8 +2291,8 @@ html:has(.fidy-landing) {
   margin-top: 8px;
 }
 .fidy-landing .agent-grant {
-  background: light-dark(#fffaf6, var(--night-canvas));
-  color: light-dark(#000, var(--night-text));
+  background: var(--fidy-background-canvas);
+  color: var(--fidy-text-primary);
   border-radius: 20px;
   padding: 32px;
   align-self: center;
@@ -2449,34 +2451,38 @@ html:has(.fidy-landing) {
   color: #000;
 }
 .fidy-landing .logo {
-  background: #000;
+  background: transparent;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.fidy-landing .logo img {
+  width: 100%;
+  display: block;
 }
 
 .fidy-landing {
-  --night-canvas: #141414;
-  --night-surface: #202020;
-  --night-raised: #2e2e2e;
-  --night-deep: #141414;
-  --night-bubble: #2e2e2e;
+  --night-canvas: var(--fidy-background-canvas);
+  --night-surface: var(--fidy-background-surface);
+  --night-raised: var(--fidy-background-raised);
+  --night-deep: var(--fidy-ink);
+  --night-bubble: var(--fidy-background-raised);
   --night-border: #606060;
-  --night-text: #fff6ef;
-  --night-muted: #c7c7c7;
+  --night-text: var(--fidy-text-primary);
+  --night-muted: var(--fidy-text-muted);
   --night-emphasis: #fae3d9;
 }
 .fidy-landing .hero {
-  background-image: radial-gradient(
-    ellipse at 80% 35%,
-    light-dark(transparent, #7cb24312),
-    transparent 58%
-  );
+  background-image: none;
 }
 .fidy-landing.variant-a .btn.green {
   background: var(--brand-green);
-  color: #10140d;
-  box-shadow: 0 5px 25px light-dark(transparent, #7cb24318);
+  color: var(--fidy-text-on-brand-lime);
+  border: 1px solid var(--fidy-button-primary-default-border);
+  box-shadow: 0 5px 25px light-dark(transparent, #88cc2018);
 }
 .fidy-landing.variant-a .btn.green:hover {
-  background: #8abe53;
+  background: var(--fidy-button-primary-hover-background);
+  border-color: var(--fidy-button-primary-hover-border);
 }
 .fidy-landing .phone {
   background: light-dark(#f5f3ed, var(--night-surface));
@@ -2515,13 +2521,13 @@ html:has(.fidy-landing) {
 }
 
 .fidy-landing {
-  --brand-green: #7cb243;
+  --brand-green: var(--fidy-lime);
   --pastel-success: #c5dfa5;
   --pastel-warning: #f5dfa0;
   --pastel-error: #f0b4ae;
   --pastel-info: #b8d4ef;
   --pastel-pending: #d2c4ec;
-  --pastel-peach: #fae3d9;
+  --pastel-peach: var(--fidy-peach);
   --pastel-rose: #e8bed5;
 }
 .fidy-landing .feature-chart i,
@@ -3139,7 +3145,7 @@ html:has(.fidy-landing) {
   height: 85%;
 }
 .fidy-landing .dashboard-accent {
-  color: #7cb243;
+  color: var(--brand-green);
 }
 
 @media (max-width: 900px) {
@@ -3211,5 +3217,87 @@ html:has(.fidy-landing) {
     transition-duration: 100ms !important;
     transform: none;
     opacity: 0.75;
+  }
+}
+
+.fidy-landing .brand-companion {
+  position: absolute;
+  width: 200px;
+  max-width: none;
+  height: auto;
+  left: -105px;
+  bottom: -18px;
+  z-index: 3;
+  pointer-events: none;
+}
+.fidy-landing .closing {
+  position: relative;
+}
+.fidy-landing .closing .brand-companion {
+  width: 210px;
+  left: calc(50% + 345px);
+  bottom: 20px;
+}
+@media (max-width: 1100px) {
+  .fidy-landing .brand-companion {
+    width: 150px;
+    left: -66px;
+    bottom: -12px;
+  }
+  .fidy-landing .closing .brand-companion {
+    display: none;
+  }
+}
+@media (max-width: 600px) {
+  .fidy-landing .hero-stage {
+    margin-bottom: 90px;
+  }
+  .fidy-landing .hero-stage .brand-companion {
+    width: 110px;
+    left: 0;
+    bottom: -90px;
+  }
+}
+
+.fidy-landing.variant-a .btn.green:active {
+  background: var(--fidy-button-primary-pressed-background);
+  border-color: var(--fidy-button-primary-pressed-border);
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .fidy-landing .channel-story {
+      view-timeline-name: --channel-progress;
+      view-timeline-axis: block;
+    }
+    .fidy-landing .channel-story > :is(.channel-card, .channel-connector):not(:first-child) {
+      /* Longhands keep the CSS optimizer from folding the named timeline into an unsupported shorthand. */
+      animation-name: channel-scroll-reveal;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: --channel-progress;
+    }
+    .fidy-landing .channel-connector:nth-child(2) {
+      animation-range: entry 15% entry 30%;
+    }
+    .fidy-landing .channel-card:nth-child(3) {
+      animation-range: entry 30% entry 55%;
+    }
+    .fidy-landing .channel-connector:nth-child(4) {
+      animation-range: entry 45% entry 60%;
+    }
+    .fidy-landing .channel-card:nth-child(5) {
+      animation-range: entry 60% entry 85%;
+    }
+  }
+}
+@keyframes channel-scroll-reveal {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
   }
 }

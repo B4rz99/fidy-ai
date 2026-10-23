@@ -111,22 +111,135 @@ const settleEntranceMotion = async (): Promise<void> => {
   );
 };
 
-for (const path of publicPaths) {
-  test(`keeps rendered public content accessible and CSP compatible: ${path}`, async ({ page }) => {
+type Violation = Awaited<ReturnType<AxeBuilder["analyze"]>>["violations"][number];
+type Node = Violation["nodes"][number];
+type Appearance = { path: string; theme: string };
+
+const hasApprovedColors = (data: unknown): boolean => {
+  if (typeof data !== "object" || data === null) return false;
+  return (
+    "fgColor" in data &&
+    data.fgColor === "#88cc20" &&
+    "bgColor" in data &&
+    data.bgColor === "#fae3d9" &&
+    "expectedContrastRatio" in data &&
+    data.expectedContrastRatio === "3:1"
+  );
+};
+
+const isExactSloganNode = (node: Node): boolean =>
+  node.target.length === 1 &&
+  node.target[0] === "h1 > em" &&
+  node.html === "<em>Tu vida, <br>más tranquila.</em>" &&
+  node.all.length === 0 &&
+  node.none.length === 0 &&
+  node.any.length === 1;
+
+// Design exception approved in #1524: this exact light slogan does NOT meet WCAG AA.
+// Keep axe running on the entire document and retain every other failing node.
+const isAcceptedSloganContrast = (appearance: Appearance, rule: string, node: Node): boolean =>
+  appearance.path === "/" &&
+  appearance.theme === "light" &&
+  rule === "color-contrast" &&
+  isExactSloganNode(node) &&
+  node.any[0]?.id === "color-contrast" &&
+  hasApprovedColors(node.any[0]?.data);
+
+const unexpectedViolations = (violations: Violation[], path: string, theme: string): Violation[] =>
+  violations
+    .map((violation) => ({
+      ...violation,
+      nodes: violation.nodes.filter(
+        (node) => !isAcceptedSloganContrast({ path, theme }, violation.id, node)
+      ),
+    }))
+    .filter(({ nodes }) => nodes.length > 0);
+
+const accessibilityPages = [
+  ...publicPaths.map((path) => ({ path, theme: "light" as const })),
+  { path: "/", theme: "dark" as const },
+];
+for (const { path, theme } of accessibilityPages) {
+  test(`audits rendered public content and CSP with documented design exceptions: ${path} ${theme}`, async ({
+    page,
+  }) => {
     const errors: string[] = [];
     page.on("console", (message) => {
       if (message.type() === "error") errors.push(message.text());
     });
-    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
     await page.goto(path);
     await page.evaluate(settleEntranceMotion);
     const results = await new AxeBuilder({ page }).analyze();
+    const violations = unexpectedViolations(results.violations, path, theme);
+    const accepted = results.violations.flatMap((violation) =>
+      violation.nodes.filter((node) =>
+        isAcceptedSloganContrast({ path, theme }, violation.id, node)
+      )
+    );
+    if (accepted.length > 0) {
+      test.info().annotations.push({
+        type: "accepted-design-exception",
+        description:
+          "#1524: light slogan #88CC20 on #FAE3D9 is 1.59:1 and does not meet WCAG AA (3:1).",
+      });
+      await test.info().attach("accepted-slogan-contrast.json", {
+        body: JSON.stringify(accepted, null, 2),
+        contentType: "application/json",
+      });
+    }
     expect(
-      results.violations.filter(({ impact }) => impact === "serious" || impact === "critical")
+      violations.filter(({ impact }) => impact === "serious" || impact === "critical")
     ).toEqual([]);
     expect(errors).toEqual([]);
   });
 }
+
+test("limits the approved contrast exception to the exact light slogan and color pair", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  await page.goto("/");
+  const results = await new AxeBuilder({ page }).analyze();
+  const violation = results.violations.find(({ id }) => id === "color-contrast");
+  expect(violation).toBeDefined();
+  if (!violation) throw new Error("Expected the explicitly documented slogan contrast violation");
+  const node = violation.nodes[0];
+  expect(isAcceptedSloganContrast({ path: "/", theme: "light" }, violation.id, node)).toBe(true);
+  expect(isAcceptedSloganContrast({ path: "/", theme: "dark" }, violation.id, node)).toBe(false);
+  expect(
+    isAcceptedSloganContrast({ path: "/funciones/agentes", theme: "light" }, violation.id, node)
+  ).toBe(false);
+  expect(isAcceptedSloganContrast({ path: "/", theme: "light" }, "another-rule", node)).toBe(false);
+  const otherElement = { ...node, target: [".other-heading"] };
+  const changedText = { ...node, html: "<em>Different slogan</em>" };
+  const changedForeground = {
+    ...node,
+    any: [
+      {
+        ...node.any[0],
+        data: { fgColor: "#97ca47", bgColor: "#fae3d9", expectedContrastRatio: "3:1" },
+      },
+    ],
+  };
+  const changedBackground = {
+    ...node,
+    any: [
+      {
+        ...node.any[0],
+        data: { fgColor: "#88cc20", bgColor: "#fffaf6", expectedContrastRatio: "3:1" },
+      },
+    ],
+  };
+  for (const changed of [otherElement, changedText, changedForeground, changedBackground]) {
+    expect(unexpectedViolations([{ ...violation, nodes: [changed] }], "/", "light")).toHaveLength(
+      1
+    );
+  }
+  expect(
+    unexpectedViolations([{ ...violation, nodes: [node, otherElement] }], "/", "light")[0].nodes
+  ).toEqual([otherElement]);
+});
 
 test("publishes canonical discovery files and keeps draft terms out of the sitemap", async ({
   page,
@@ -338,3 +451,67 @@ test("keeps the browser canvas and chrome aligned with system and saved appearan
     darkCanvas
   );
 });
+
+const channelMobileWidth = 390;
+const channelDesktopWidth = 1440;
+const channelViewportWidths = [channelMobileWidth, channelDesktopWidth];
+const channelEntryStart = 0.1;
+const channelEntrySecond = 0.57;
+for (const width of channelViewportWidths) {
+  for (const javaScriptEnabled of [true, false]) {
+    test(`reveals channels only with scroll, without a final-state flash: ${width}px JS=${javaScriptEnabled}`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({
+        javaScriptEnabled,
+        viewport: { width, height: 900 },
+        reducedMotion: "no-preference",
+      });
+      const page = await context.newPage();
+      await page.goto("http://127.0.0.1:4322/");
+      const cards = page.locator(".channel-card");
+      await expect(cards.nth(0)).toHaveCSS("opacity", "1");
+      await expect(cards.nth(1)).toHaveCSS("opacity", "0");
+      await expect(cards.nth(2)).toHaveCSS("opacity", "0");
+      const scrollToProgress = async (progress: number): Promise<void> => {
+        await page.locator(".channel-story").evaluate((element, fraction) => {
+          const rect = element.getBoundingClientRect();
+          window.scrollTo({
+            top:
+              window.scrollY +
+              rect.top -
+              window.innerHeight +
+              Math.min(rect.height, window.innerHeight) * fraction,
+            behavior: "instant",
+          });
+        }, progress);
+      };
+      await scrollToProgress(channelEntryStart);
+      await expect(cards.nth(1)).toHaveCSS("opacity", "0");
+      await expect(cards.nth(2)).toHaveCSS("opacity", "0");
+      await scrollToProgress(channelEntrySecond);
+      await expect(cards.nth(1)).toHaveCSS("opacity", "1");
+      await expect(cards.nth(2)).toHaveCSS("opacity", "0");
+      await scrollToProgress(1);
+      await expect(cards.nth(2)).toHaveCSS("opacity", "1");
+      await scrollToProgress(channelEntryStart);
+      await expect(cards.nth(1)).toHaveCSS("opacity", "0");
+      await expect(cards.nth(2)).toHaveCSS("opacity", "0");
+      await page.reload();
+      await expect(cards.nth(1)).toHaveCSS("opacity", "0");
+      await expect(cards.nth(2)).toHaveCSS("opacity", "0");
+      await context.close();
+    });
+  }
+  test(`shows all channels immediately with reduced motion: ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    await Promise.all(
+      (await page.locator(".channel-card").all()).map(async (card) => {
+        await expect(card).toHaveCSS("opacity", "1");
+        await expect(card).toHaveCSS("animation-name", "none");
+      })
+    );
+  });
+}

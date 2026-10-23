@@ -1,9 +1,6 @@
-import { mountChannels } from "./demo-motion";
-
 export const ChannelStory = (): React.JSX.Element => (
   <div
     className="channel-story"
-    ref={mountChannels}
     aria-label="Una transacción de ejemplo, tres formas de consultarla"
   >
     <div className="channel-card">

@@ -292,6 +292,16 @@ try {
 
 const designProbe = join(workspaceRoot, "apps/web/src/app/.lint-design-probe.tsx");
 const designCases = [
+  { expression: '<Alert className="bg-success-subtle" />', rule: "no-restyle" },
+  { expression: '<Alert variant="success">Guardado</Alert>' },
+  { expression: '<div className="bg-[#88CC20]" />', rule: "no-arbitrary-values" },
+  {
+    expression: '<Button className="active:bg-primary-pressed">Guardar</Button>',
+    rule: "no-restyle",
+  },
+  { expression: '<Button className="disabled:opacity-50">Guardar</Button>', rule: "no-restyle" },
+  { expression: '<div className="bg-success-subtle text-success-foreground" />' },
+  { expression: '<div className="border-control-border text-link" />' },
   { expression: '<div className="bg-blue-500" />', rule: "no-raw-colors" },
   { expression: '<div className={cn("text-[#123456]")} />', rule: "no-arbitrary-values" },
   { expression: '<Button className="bg-secondary">Guardar</Button>', rule: "no-restyle" },
@@ -315,6 +325,7 @@ try {
         (expression.includes("Button")
           ? `import { Button } from "@/ui/components/button";\n`
           : "") +
+        (expression.includes("Alert") ? `import { Alert } from "@/ui/components/alert";\n` : "") +
         (expression.includes("Badge") ? `import { Badge } from "@/ui/components/badge";\n` : "") +
         (expression.includes("TableRow")
           ? `import { TableRow } from "@/ui/components/table";\n`

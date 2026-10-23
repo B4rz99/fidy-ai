@@ -1,0 +1,31 @@
+apps/site/e2e/site.spec.ts
+  s_81e16d06024631::t_d872022dd8e88d 150,162-164,167,272-340
+apps/site/src/islands/demo-motion.ts
+  s_81e16d06024631::t_0675356dcd83d9 7-8,144
+apps/site/src/islands/feature-tabs.tsx
+  s_81e16d06024631::t_a21b932f9d4907 54
+apps/site/src/layouts/site-layout.astro
+  s_81e16d06024631::t_65c2d8bfb82fc3 22-25
+apps/site/src/scripts/site.ts
+  s_81e16d06024631::t_72bacff182d9c6 18-21
+apps/site/src/styles/global.css
+  s_81e16d06024631::t_dc6148fac6da75 41-51,54-57,61
+apps/site/src/styles/landing.css
+  s_81e16d06024631::t_57aba7e82f7917 649,2448,3162-3164,3168,3172-3174,3177-3211,3213
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c176e11df148c57f1263567d1dc4327deee2a175",
+  "prompts": {},
+  "sessions": {
+    "s_81e16d06024631": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a168ad-36fa-7e02-b964-cedc4b926672",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

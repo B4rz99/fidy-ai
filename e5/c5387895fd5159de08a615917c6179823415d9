@@ -1,0 +1,19 @@
+apps/site/e2e/site.spec.ts
+  s_81e16d06024631::t_87dccb694573a8 78,85,90-91,247
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e5c5387895fd5159de08a615917c6179823415d9",
+  "prompts": {},
+  "sessions": {
+    "s_81e16d06024631": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a168ad-36fa-7e02-b964-cedc4b926672",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

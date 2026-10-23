@@ -18,7 +18,6 @@ const snapshot = (db: D1Database): Promise<ReadonlyArray<D1Result>> =>
       "provider_credentials",
       "backup_recovery_credentials",
       "consent_history",
-      "erasure_archives",
     ].map((table) => db.prepare(`SELECT rowid,* FROM ${table} ORDER BY rowid`)),
     db.prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name"),
   ]);

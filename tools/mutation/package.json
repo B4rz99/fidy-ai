@@ -23,7 +23,8 @@
     "fast-uri": "4.2.1",
     "nanoid": "6.0.1",
     "postcss": "8.5.26",
-    "qs": "6.16.1"
+    "qs": "6.16.1",
+    "zod": "4.6.7"
   },
   "patchedDependencies": {
     "@stryker-mutator/vitest-runner@10.0.0": "patches/@stryker-mutator%2Fvitest-runner@10.0.0.patch",

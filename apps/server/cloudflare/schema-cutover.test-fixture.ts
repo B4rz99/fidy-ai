@@ -66,3 +66,54 @@ export const precedingSchema = ({
     ...restored.filter((sql) => !sql.startsWith("CREATE TABLE ")),
   ];
 };
+
+type SchemaSwap = Readonly<{
+  db: D1Database;
+  source: ReadonlyArray<string>;
+  target: ReadonlyArray<string>;
+  sourceNames: ReadonlyArray<string>;
+  targetNames: ReadonlyArray<string>;
+}>;
+type SchemaCutover = Readonly<{
+  scratch: (source: ReadonlyArray<string>, names: ReadonlyArray<string>) => ReadonlyArray<string>;
+  swap: (input: SchemaSwap) => ReadonlyArray<D1PreparedStatement>;
+}>;
+
+/** Shared native DDL mechanics; each rehearsal supplies its owner tables, guards and copy SQL. */
+export const makeSchemaCutover = (tables: ReadonlyArray<string>): SchemaCutover => {
+  const related = (source: ReadonlyArray<string>): ReadonlyArray<string> =>
+    source.filter(
+      (sql) =>
+        !sql.startsWith("CREATE TABLE ") &&
+        tables.some((table) => new RegExp(`\\b${table}\\b`, "u").test(sql))
+    );
+  const objectType = (sql: string): string => {
+    if (sql.startsWith("CREATE TRIGGER ")) return "TRIGGER";
+    if (sql.startsWith("CREATE VIEW ")) return "VIEW";
+    return "INDEX";
+  };
+  return {
+    scratch: (source: ReadonlyArray<string>, names: ReadonlyArray<string>): ReadonlyArray<string> =>
+      names.map((target) => {
+        let sql = schemaDefinition({ source, target });
+        for (const name of names) {
+          sql = sql.replace(new RegExp(`\\b${name}\\b`, "gu"), `cutover_${name}`);
+        }
+        return sql;
+      }),
+    swap: ({
+      db,
+      source,
+      target,
+      sourceNames,
+      targetNames,
+    }: SchemaSwap): ReadonlyArray<D1PreparedStatement> => [
+      ...related(source).map((sql) =>
+        db.prepare(`DROP ${objectType(sql)} ${schemaObjectName(sql)}`)
+      ),
+      ...sourceNames.map((name) => db.prepare(`DROP TABLE ${name}`)),
+      ...targetNames.map((name) => db.prepare(`ALTER TABLE cutover_${name} RENAME TO ${name}`)),
+      ...related(target).map((sql) => db.prepare(sql)),
+    ],
+  };
+};

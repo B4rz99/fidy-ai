@@ -1177,6 +1177,73 @@ it("sixteen unserviceable contextual offers cannot starve an eligible reminder d
     })
   ));
 
+it("rotates more than one batch of due reminders while every coordinator is unavailable", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const now = DateTime.makeUnsafe("2026-10-06T23:01:00Z");
+      vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
+      const schedule = yield* activateTestReminder(db);
+      const userId = proactivityTestUsers[0];
+      const others = Array.from({ length: 35 }, () => UserId.make(newId()));
+      yield* Effect.tryPromise(() =>
+        db.batch(
+          others.flatMap((owner) => [
+            db
+              .prepare(
+                "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?)"
+              )
+              .bind(owner, now.epochMilliseconds),
+            db
+              .prepare(
+                "INSERT INTO consent_offers(id,user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,disclosure_message_id,decision_message_id,decision) SELECT ?,?,kind,portfolio_id,?,disclosure_json,created_at_ms,expires_at_ms,?, ?,decision FROM consent_offers WHERE user_id=? AND kind='manual-entry-reminder'"
+              )
+              .bind(owner, owner, owner, owner, owner, userId),
+            db
+              .prepare(
+                "INSERT INTO consent_history(record_type,id,user_id,kind,offer_id,decision_message_id,record_json,occurred_at_ms) SELECT record_type,?,?,kind,?,?,record_json,occurred_at_ms FROM consent_history WHERE record_type='proactivity_grant' AND user_id=? AND kind='manual-entry-reminder'"
+              )
+              .bind(owner, owner, owner, owner, userId),
+            db
+              .prepare(
+                "INSERT INTO reminder_proactivity_state(user_id,standing_json) VALUES(?,json_object('_tag','Attentive','unanswered',0))"
+              )
+              .bind(owner),
+            db
+              .prepare(
+                "INSERT INTO schedules(kind,id,user_id,version,enabled,snapshot_json,next_scheduled_at,consent_grant_id) SELECT kind,?, ?,version,enabled,snapshot_json,next_scheduled_at,? FROM schedules WHERE kind='reminder' AND user_id=? AND id=?"
+              )
+              .bind(newId(), owner, owner, userId, schedule.id),
+          ])
+        )
+      );
+      const harness = proactivityWorkflowHarness({
+        environment: { DB: db, PROACTIVITY_ENABLED: "enabled" },
+        userId,
+        otherUserIds: others,
+        unavailableUserIds: [userId, ...others],
+      });
+      for (let sweep = 0; sweep < 9; sweep++) yield* Effect.exit(harness.sweep());
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS n FROM schedules WHERE kind='reminder' AND last_evaluated_at_ms=?"
+            )
+            .bind(now.epochMilliseconds)
+            .first()
+        )
+      ).toEqual({ n: 36 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT count(*) AS n FROM insight_events WHERE kind='manual-entry-reminder'")
+            .first()
+        )
+      ).toEqual({ n: 0 });
+    })
+  ));
+
 it("a crash after question acceptance cannot authorize an expiry replacement or invalidate its qualified controls", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -1729,7 +1796,7 @@ it.each(["paused", "stopped"] as const)(
         const raw = yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT question_id FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=?"
+              "SELECT question_id FROM reminder_proactivity_state AS reminder_governors WHERE user_id=?"
             )
             .bind(userId)
             .first()

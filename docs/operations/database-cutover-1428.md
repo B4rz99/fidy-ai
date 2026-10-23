@@ -3974,6 +3974,8 @@ INSERT INTO cutover_weekly_question_requests(rowid,id,user_id,origin,request_mes
 UPDATE cutover_insight_events AS e SET message_kind='proactivity-delivery',message_id=(SELECT old.report_delivery_id FROM insight_events old WHERE old.user_id=e.user_id AND old.id=e.id) WHERE EXISTS(SELECT 1 FROM insight_events old WHERE old.user_id=e.user_id AND old.id=e.id AND old.report_delivery_id IS NOT NULL);
 
 UPDATE cutover_insight_events AS e SET message_kind='weekly-summary',message_id=e.id WHERE e.kind='weekly-summary' AND EXISTS(SELECT 1 FROM cutover_proactive_messages m WHERE m.kind='weekly-summary' AND m.user_id=e.user_id AND m.id=e.id);
+INSERT INTO cutover_proactive_transcript_entries(sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms) SELECT sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms FROM proactive_transcript_entries;
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='proactive_transcript_entries'),0)) WHERE name='cutover_proactive_transcript_entries';
 ```
 
 <!-- insight-content-copy:end -->
@@ -4016,6 +4018,8 @@ INSERT INTO cutover_insight_reports(kind,user_id,delivery_id,request_kind,reques
 INSERT INTO cutover_insight_reports(kind,user_id,delivery_id,origin,request_message_id,rejection_offer_id,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) SELECT 'weekly-question',user_id,id,origin,request_message_id,rejection_offer_id,created_at_ms,state,created_at_ms,last_attempt_at_ms,restart_attempts FROM weekly_question_requests;
 
 UPDATE cutover_insight_events AS e SET report_delivery_id=(SELECT message_id FROM insight_events old WHERE old.user_id=e.user_id AND old.id=e.id AND old.message_kind='proactivity-delivery') WHERE EXISTS(SELECT 1 FROM insight_events old WHERE old.user_id=e.user_id AND old.id=e.id AND old.message_kind='proactivity-delivery');
+INSERT INTO cutover_proactive_transcript_entries(sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms) SELECT sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms FROM proactive_transcript_entries;
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='proactive_transcript_entries'),0)) WHERE name='cutover_proactive_transcript_entries';
 ```
 
 <!-- insight-content-rollback-copy:end -->
@@ -4118,3 +4122,70 @@ INSERT INTO cutover_proactive_messages(rowid,kind,id,user_id,role,report_event_i
 ```
 
 <!-- reminder-control-rollback-copy:end -->
+
+## Independent weekly and reminder state (#1474)
+
+Weekly pause/reply state now lives in `weekly_proactivity_state` (11 fields), and reminder
+pause/reply state in `reminder_proactivity_state` (7 fields). Offer and question requests already
+have their final stores from #1472. Receipt markers remain on the original Event or Message;
+there is no second delivery counter. Reminder discovery now rotates attempted work even when the
+coordinator is unavailable. Discovery remains capped at 16 Users and generation at 4 per sweep.
+
+Proactive Transcript retains its original sequence, identity, exact text, occurrence and independent
+expiry. Its generated `delivery_kind` qualifies Message links, with a same-User, kind, role and ID
+foreign key. Message erasure depends on Transcript erasure as Event erasure already did. Logical
+archive purpose IDs and original governor rowids remain unchanged across extraction.
+
+Before deployment, stop writers and use the single-batch native procedure below. Save the preceding
+schema from `governor-cutover.test-fixture.json`. Refuse active erasure or affected archives; do not
+invent parents for orphan historical Transcript content. Bind the observed governor and Transcript
+counts to the forward guard. Create scratch tables from the final definitions, rewriting references
+between scratch tables. Run guard, copies, drop/recreate affected non-table objects and swap tables
+in one `D1Database.batch`, starting with `PRAGMA defer_foreign_keys=ON`. No remote change is performed
+by the local proof. Recheck foreign keys after the swap before admitting traffic.
+
+Rollback uses the preceding governor/Transcript definitions and the inverse copies in one batch.
+It refuses rowid collisions between independently created governor rows; no existing archive address
+is silently reassigned. Resolve such a post-cutover collision explicitly before rollback. Original
+migrated rows preserve their distinct rowids, and Transcript allocator high-water marks survive.
+Earlier #1472 rehearsals also rebuild/copy Transcript alongside its changed parents.
+
+<!-- insight-governor-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'insight_governor_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN ('weekly_governors','reminder_governors','proactive_transcript_entries','proactive_transcript_event_links')) AND (SELECT count(*) FROM proactivity_governors)=? AND (SELECT count(*) FROM proactive_transcript_entries)=? AND NOT EXISTS(SELECT 1 FROM proactive_transcript_entries t WHERE t.kind='message' AND NOT EXISTS(SELECT 1 FROM proactive_messages m WHERE m.user_id=t.user_id AND m.kind='proactivity-delivery' AND m.role=t.role AND m.id=t.delivery_id)) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- insight-governor-guard:end -->
+
+<!-- insight-governor-copy:start -->
+
+```sql
+INSERT INTO cutover_weekly_proactivity_state(rowid,user_id,unanswered,last_reply_at_ms,question_needed,question_delivered,question_delivered_at_ms,question_event_id,paused_at_ms,notice_session_id,notice_turn_id,notice_completed) SELECT rowid,user_id,unanswered,last_reply_at_ms,question_needed,question_delivered,question_delivered_at_ms,question_event_id,paused_at_ms,notice_session_id,notice_turn_id,notice_completed FROM proactivity_governors WHERE kind='weekly';
+INSERT INTO cutover_reminder_proactivity_state(rowid,user_id,standing_json,last_reply_at_ms,question_id,question_delivered_at_ms,notice_turn_id,notice_completed) SELECT rowid,user_id,standing_json,last_reply_at_ms,question_id,question_delivered_at_ms,notice_turn_id,notice_completed FROM proactivity_governors WHERE kind='reminder';
+INSERT INTO cutover_proactive_transcript_entries(sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms) SELECT sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms FROM proactive_transcript_entries;
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='proactive_transcript_entries'),0)) WHERE name='cutover_proactive_transcript_entries';
+
+```
+
+<!-- insight-governor-copy:end -->
+
+<!-- insight-governor-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'insight_governor_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN ('weekly_governors','reminder_governors','proactive_transcript_entries','proactive_transcript_event_links')) AND NOT EXISTS(SELECT 1 FROM weekly_proactivity_state w JOIN reminder_proactivity_state r ON r.rowid=w.rowid) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- insight-governor-rollback-guard:end -->
+
+<!-- insight-governor-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_proactivity_governors(rowid,kind,user_id,unanswered,last_reply_at_ms,question_needed,question_delivered,question_delivered_at_ms,question_event_id,paused_at_ms,notice_session_id,notice_turn_id,notice_completed) SELECT rowid,'weekly',user_id,unanswered,last_reply_at_ms,question_needed,question_delivered,question_delivered_at_ms,question_event_id,paused_at_ms,notice_session_id,notice_turn_id,notice_completed FROM weekly_proactivity_state;
+INSERT INTO cutover_proactivity_governors(rowid,kind,user_id,standing_json,last_reply_at_ms,question_id,question_delivered_at_ms,notice_turn_id,notice_completed) SELECT rowid,'reminder',user_id,standing_json,last_reply_at_ms,question_id,question_delivered_at_ms,notice_turn_id,notice_completed FROM reminder_proactivity_state;
+INSERT INTO cutover_proactive_transcript_entries(sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms) SELECT sequence,kind,id,user_id,insight_event_id,delivery_id,role,occurred_at_ms,text,expires_at_ms FROM proactive_transcript_entries;
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='proactive_transcript_entries'),0)) WHERE name='cutover_proactive_transcript_entries';
+
+```
+
+<!-- insight-governor-rollback-copy:end -->

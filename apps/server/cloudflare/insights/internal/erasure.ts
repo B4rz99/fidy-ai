@@ -90,6 +90,7 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
       "reminder_delivery_receipts",
       "reminder_control_receipts",
       "proactivity_offer_requests",
+      "proactive_transcript_entries",
     ],
   },
   {
@@ -192,10 +193,10 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
   },
   {
     id: "reminder_governors",
-    table: "proactivity_governors",
-    predicate: "kind='reminder'",
+    table: "reminder_proactivity_state",
+    predicate: "1=1",
     readPredicate: "1=1",
-    source: "(SELECT rowid,* FROM proactivity_governors WHERE kind='reminder')",
+    source: "reminder_proactivity_state",
     fields: [
       "user_id",
       "standing_json",
@@ -220,10 +221,10 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
   },
   {
     id: "weekly_governors",
-    table: "proactivity_governors",
-    predicate: "kind='weekly'",
+    table: "weekly_proactivity_state",
+    predicate: "1=1",
     readPredicate: "1=1",
-    source: "(SELECT rowid,* FROM proactivity_governors WHERE kind='weekly')",
+    source: "weekly_proactivity_state",
     fields: [
       "user_id",
       "unanswered",

@@ -21,7 +21,7 @@ const findQuestionCandidate = (
     const current = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT question_id FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=? AND json_extract(standing_json,'$._tag')='QuestionPending'"
+          "SELECT question_id FROM reminder_proactivity_state AS reminder_governors WHERE user_id=? AND json_extract(standing_json,'$._tag')='QuestionPending'"
         )
         .bind(input.userId)
         .first()
@@ -37,7 +37,7 @@ const findQuestionCandidate = (
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          `SELECT question_id FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS g WHERE user_id=? AND json_extract(standing_json,'$._tag')='QuestionPending' AND (EXISTS (SELECT 1 FROM proactive_messages AS o WHERE o.kind='proactivity-delivery' AND o.user_id=g.user_id AND o.id=g.question_id AND o.dispatch_state IN ('expired','refused') AND NOT EXISTS (SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=g.user_id AND c.delivery_id=g.question_id)) OR EXISTS (SELECT 1 FROM (${failureProof.sql}) AS f WHERE f.user_id=g.user_id AND f.delivery_id=g.question_id))`
+          `SELECT question_id FROM reminder_proactivity_state AS g WHERE user_id=? AND json_extract(standing_json,'$._tag')='QuestionPending' AND (EXISTS (SELECT 1 FROM proactive_messages AS o WHERE o.kind='proactivity-delivery' AND o.user_id=g.user_id AND o.id=g.question_id AND o.dispatch_state IN ('expired','refused') AND NOT EXISTS (SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=g.user_id AND c.delivery_id=g.question_id)) OR EXISTS (SELECT 1 FROM (${failureProof.sql}) AS f WHERE f.user_id=g.user_id AND f.delivery_id=g.question_id))`
         )
         .bind(input.userId, ...failureProof.params)
         .first()
@@ -66,7 +66,7 @@ export const generateReminderQuestion = (
           kind: "manual-entry-reminder",
           grantId: current.consentGrantId,
           statement: {
-            sql: "INSERT INTO proactive_messages(kind,id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) SELECT 'proactivity-delivery',?,?,'reminder-question',?,?,?,?,?,? ,'ready',?8,0,0 WHERE EXISTS (SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=? AND json_extract(standing_json,'$._tag')='QuestionPending' AND question_id IS NULLIF(?,''))",
+            sql: "INSERT INTO proactive_messages(kind,id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) SELECT 'proactivity-delivery',?,?,'reminder-question',?,?,?,?,?,? ,'ready',?8,0,0 WHERE EXISTS (SELECT 1 FROM reminder_proactivity_state AS reminder_governors WHERE user_id=? AND json_extract(standing_json,'$._tag')='QuestionPending' AND question_id IS NULLIF(?,''))",
             params: [
               id,
               input.userId,
@@ -84,7 +84,7 @@ export const generateReminderQuestion = (
         prepareChangedRowAssertion({ db: input.db, scope: "proactivity_message" }),
         input.db
           .prepare(
-            "UPDATE proactivity_governors AS reminder_governors SET question_id=?,question_delivered_at_ms=NULL WHERE kind='reminder' AND user_id=?"
+            "UPDATE reminder_proactivity_state AS reminder_governors SET question_id=?,question_delivered_at_ms=NULL WHERE user_id=?"
           )
           .bind(id, input.userId),
       ])

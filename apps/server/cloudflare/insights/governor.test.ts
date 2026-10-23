@@ -33,7 +33,7 @@ it.live("rejects corrupt retained pause dates before materializing any report", 
     yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "INSERT INTO proactivity_governors AS weekly_governors(kind,user_id,paused_at_ms) VALUES ('weekly',?,?)"
+          "INSERT INTO weekly_proactivity_state AS weekly_governors(user_id,paused_at_ms) VALUES (?,?)"
         )
         .bind(userId, 8_640_000_000_000_001)
         .run()

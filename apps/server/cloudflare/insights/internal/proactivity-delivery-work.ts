@@ -187,7 +187,7 @@ export const markOffered = (
 export const questionIntentQuery = (
   input: Readonly<{ userId: UserId; id: string }>
 ): OwnedStatement => ({
-  sql: `SELECT 1 FROM weekly_question_requests AS i WHERE i.user_id=? AND i.id=? AND i.state='ready' AND (i.origin='requested' OR EXISTS (SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS g WHERE g.user_id=i.user_id AND g.question_event_id=i.id AND g.question_needed=1 AND g.question_delivered=0 AND g.paused_at_ms IS NULL))`,
+  sql: `SELECT 1 FROM weekly_question_requests AS i WHERE i.user_id=? AND i.id=? AND i.state='ready' AND (i.origin='requested' OR EXISTS (SELECT 1 FROM weekly_proactivity_state AS g WHERE g.user_id=i.user_id AND g.question_event_id=i.id AND g.question_needed=1 AND g.question_delivered=0 AND g.paused_at_ms IS NULL))`,
   params: [input.userId, input.id],
 });
 

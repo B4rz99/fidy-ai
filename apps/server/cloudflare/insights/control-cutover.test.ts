@@ -9,9 +9,8 @@ import {
 import {
   CutoverHistory,
   documentedSqlBlock,
+  makeSchemaCutover,
   precedingSchema,
-  schemaDefinition,
-  schemaObjectName,
   schemaStatements,
 } from "../schema-cutover.test-fixture";
 
@@ -23,38 +22,7 @@ const stores = ["audit_entries", "proactive_messages"];
 const question = "14730000-0000-4000-8000-000000000001";
 const missing = "14730000-0000-4000-8000-000000000002";
 afterAll(() => proactivityTestDatabases.dispose());
-const related = (source: ReadonlyArray<string>): ReadonlyArray<string> =>
-  source.filter(
-    (sql) =>
-      !sql.startsWith("CREATE TABLE ") &&
-      stores.some((store) => new RegExp(`\\b${store}\\b`, "u").test(sql))
-  );
-const scratch = (source: ReadonlyArray<string>): ReadonlyArray<string> =>
-  stores.map((target) =>
-    schemaDefinition({ source, target }).replace(
-      new RegExp(`CREATE TABLE "?${target}"?`, "u"),
-      `CREATE TABLE cutover_${target}`
-    )
-  );
-const objectType = (sql: string): string => {
-  if (sql.startsWith("CREATE TRIGGER ")) return "TRIGGER";
-  if (sql.startsWith("CREATE VIEW ")) return "VIEW";
-  return "INDEX";
-};
-const swap = ({
-  db,
-  source,
-  target,
-}: Readonly<{
-  db: D1Database;
-  source: ReadonlyArray<string>;
-  target: ReadonlyArray<string>;
-}>): ReadonlyArray<D1PreparedStatement> => [
-  ...related(source).map((sql) => db.prepare(`DROP ${objectType(sql)} ${schemaObjectName(sql)}`)),
-  ...stores.map((store) => db.prepare(`DROP TABLE ${store}`)),
-  ...stores.map((store) => db.prepare(`ALTER TABLE cutover_${store} RENAME TO ${store}`)),
-  ...related(target).map((sql) => db.prepare(sql)),
-];
+const { scratch, swap } = makeSchemaCutover(stores);
 it.each([
   "valid",
   "archive",
@@ -115,9 +83,15 @@ it.each([
         db.batch([
           db.prepare("PRAGMA defer_foreign_keys=ON"),
           ...block("rollback-guard").map((sql) => db.prepare(sql)),
-          ...scratch(previous).map((sql) => db.prepare(sql)),
+          ...scratch(previous, stores).map((sql) => db.prepare(sql)),
           ...block("rollback-copy").map((sql) => db.prepare(sql)),
-          ...swap({ db, source: current, target: previous }),
+          ...swap({
+            db,
+            source: current,
+            target: previous,
+            sourceNames: stores,
+            targetNames: stores,
+          }),
         ])
       );
       const receiptOwner = historyCase === "foreign-question" ? proactivityTestUsers[1] : userId;
@@ -166,9 +140,15 @@ it.each([
           db.batch([
             db.prepare("PRAGMA defer_foreign_keys=ON"),
             db.prepare(block("guard")[0] ?? "").bind(historyCase === "two-receipts" ? 2 : 1, 1),
-            ...scratch(current).map((sql) => db.prepare(sql)),
+            ...scratch(current, stores).map((sql) => db.prepare(sql)),
             ...block("copy").map((sql) => db.prepare(sql)),
-            ...swap({ db, source: previous, target: current }),
+            ...swap({
+              db,
+              source: previous,
+              target: current,
+              sourceNames: stores,
+              targetNames: stores,
+            }),
             ...(historyCase === "interruption"
               ? [db.prepare("INSERT INTO sql_assertions VALUES('interrupted_control_copy',0)")]
               : []),
@@ -288,9 +268,15 @@ it.each([
         db.batch([
           db.prepare("PRAGMA defer_foreign_keys=ON"),
           ...block("rollback-guard").map((sql) => db.prepare(sql)),
-          ...scratch(previous).map((sql) => db.prepare(sql)),
+          ...scratch(previous, stores).map((sql) => db.prepare(sql)),
           ...block("rollback-copy").map((sql) => db.prepare(sql)),
-          ...swap({ db, source: current, target: previous }),
+          ...swap({
+            db,
+            source: current,
+            target: previous,
+            sourceNames: stores,
+            targetNames: stores,
+          }),
         ])
       );
       expect(

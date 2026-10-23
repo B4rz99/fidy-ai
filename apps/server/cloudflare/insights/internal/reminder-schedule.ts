@@ -87,7 +87,7 @@ export const findStanding = (input: Scope): Effect.Effect<ReminderStanding, Insi
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT standing_json FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=?",
+          sql: "SELECT standing_json FROM reminder_proactivity_state AS reminder_governors WHERE user_id=?",
           params: [input.userId],
         },
       }).first()
@@ -101,7 +101,7 @@ export const findStanding = (input: Scope): Effect.Effect<ReminderStanding, Insi
 const resetStanding = (input: Scope & Readonly<{ now: DateTime.Utc }>): D1PreparedStatement =>
   input.db
     .prepare(
-      "INSERT INTO proactivity_governors AS reminder_governors(kind,user_id,standing_json,last_reply_at_ms) VALUES ('reminder',?, ?, ?) ON CONFLICT(kind,user_id) DO UPDATE SET standing_json=excluded.standing_json,last_reply_at_ms=excluded.last_reply_at_ms"
+      "INSERT INTO reminder_proactivity_state AS reminder_governors(user_id,standing_json,last_reply_at_ms) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET standing_json=excluded.standing_json,last_reply_at_ms=excluded.last_reply_at_ms"
     )
     .bind(
       input.userId,
@@ -255,7 +255,7 @@ const guard = (input: GenerationScope, statement: OwnedStatement): D1PreparedSta
     kind: "manual-entry-reminder",
     grantId: input.snapshot.consentGrantId,
     statement: {
-      sql: `${statement.sql} AND EXISTS (SELECT 1 FROM schedules AS s JOIN (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS g ON g.user_id=s.user_id WHERE s.kind='reminder' AND s.user_id=? AND s.id=? AND s.version=? AND s.enabled=1 AND s.next_scheduled_at=? AND s.next_scheduled_at<=? AND s.consent_grant_id=? AND json_extract(g.standing_json,'$._tag') IN ('Attentive','QuestionPending','QuestionDelivered'))`,
+      sql: `${statement.sql} AND EXISTS (SELECT 1 FROM schedules AS s JOIN reminder_proactivity_state AS g ON g.user_id=s.user_id WHERE s.kind='reminder' AND s.user_id=? AND s.id=? AND s.version=? AND s.enabled=1 AND s.next_scheduled_at=? AND s.next_scheduled_at<=? AND s.consent_grant_id=? AND json_extract(g.standing_json,'$._tag') IN ('Attentive','QuestionPending','QuestionDelivered'))`,
       params: [
         ...statement.params,
         input.userId,

@@ -3,9 +3,8 @@ import { afterAll, afterEach, expect, it, vi } from "vitest";
 import {
   CutoverHistory,
   documentedSqlBlock,
+  makeSchemaCutover,
   precedingSchema,
-  schemaDefinition,
-  schemaObjectName,
   schemaStatements,
 } from "../schema-cutover.test-fixture";
 import {
@@ -91,51 +90,12 @@ const tables = [
   "proactive_messages",
   "insight_offer_requests",
   "weekly_question_requests",
+  "proactive_transcript_entries",
 ];
-const oldTables = tables.slice(0, 2);
+const oldTables = ["insight_events", "insight_reports", "proactive_transcript_entries"];
 afterAll(() => proactivityTestDatabases.dispose());
 afterEach(() => vi.restoreAllMocks());
-const affected = (source: ReadonlyArray<string>): ReadonlyArray<string> =>
-  source.filter(
-    (sql) =>
-      !sql.startsWith("CREATE TABLE ") &&
-      tables.some((table) => new RegExp(`\\b${table}\\b`, "u").test(sql))
-  );
-const scratch = (
-  source: ReadonlyArray<string>,
-  names: ReadonlyArray<string>
-): ReadonlyArray<string> =>
-  names.map((target) => {
-    let sql = schemaDefinition({ source, target });
-    for (const table of names) {
-      sql = sql.replace(new RegExp(`\\b${table}\\b`, "gu"), `cutover_${table}`);
-    }
-    return sql;
-  });
-const objectType = (sql: string): string => {
-  if (sql.startsWith("CREATE TRIGGER ")) return "TRIGGER";
-  if (sql.startsWith("CREATE VIEW ")) return "VIEW";
-  return "INDEX";
-};
-const swap = ({
-  db,
-  source,
-  target,
-  sourceNames,
-  targetNames,
-}: Readonly<{
-  db: D1Database;
-  source: ReadonlyArray<string>;
-  target: ReadonlyArray<string>;
-  sourceNames: ReadonlyArray<string>;
-  targetNames: ReadonlyArray<string>;
-}>): ReadonlyArray<D1PreparedStatement> => [
-  ...affected(source).map((sql) => db.prepare(`DROP ${objectType(sql)} ${schemaObjectName(sql)}`)),
-  ...sourceNames.map((name) => db.prepare(`DROP TABLE ${name}`)),
-  ...targetNames.map((name) => db.prepare(`ALTER TABLE cutover_${name} RENAME TO ${name}`)),
-  ...affected(target).map((sql) => db.prepare(sql)),
-];
-
+const { scratch, swap } = makeSchemaCutover(tables);
 it.each([
   "valid",
   "header-mismatch",

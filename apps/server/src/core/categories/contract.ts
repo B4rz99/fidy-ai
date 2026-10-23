@@ -1,5 +1,5 @@
 import { Data, Schema, Struct } from "effect";
-import { normalizeSearchText as normalizeCategoryKeyword } from "~/core/search/operations";
+import { NormalizedSearchText } from "~/core/search/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 
 /** Stable Category identity, independent of label, display order, and taxonomy version. */
@@ -9,6 +9,7 @@ export const CategoryId = Schema.String.check(Schema.isUUID())
 export type CategoryId = typeof CategoryId.Type;
 
 const maximumCategoryTextLength = 80;
+const normalizeCategoryKeyword = Schema.decodeSync(NormalizedSearchText);
 
 /** Stable identity of one user keyword rule; tie-breaking may rely on its lexical UUID order. */
 export const KeywordRuleId = Schema.String.check(Schema.isUUID())

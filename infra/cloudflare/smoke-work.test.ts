@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { DateTime, Deferred, Effect, Schema } from "effect";
+import { Clock, DateTime, Deferred, Effect, Schema } from "effect";
 import { describe, expect } from "vitest";
 import {
   SyntheticBindings,
@@ -29,7 +29,7 @@ const body = JSON.stringify({
 });
 
 describe("private release smoke", () => {
-  it.effect("bounds Workflow handoffs at four and leaves only failed work unacknowledged", () =>
+  it.live("bounds Workflow handoffs at four and leaves only failed work unacknowledged", () =>
     Effect.gen(function* () {
       const filled = yield* Deferred.make<void>();
       const release = Promise.withResolvers<void>();
@@ -38,16 +38,7 @@ describe("private release smoke", () => {
       let started = 0;
       const acknowledged: string[] = [];
       const retried: string[] = [];
-      const database = {
-        prepare: (): { bind: () => { first: () => Promise<unknown> } } => ({
-          bind: (): { first: () => Promise<unknown> } => ({
-            first: (): Promise<unknown> =>
-              Promise.resolve({ expires_at_ms: Number.MAX_SAFE_INTEGER }),
-          }),
-        }),
-      };
       const environment = smokeEnvironment({
-        DB: withMethods(unavailableDatabase, { prepare: database.prepare }),
         SMOKE_QUEUE_NAME: "reserved-smoke",
         SMOKE_WORKFLOW: withMethods(unavailableWorkflow, {
           create: (): Promise<object> => {
@@ -66,13 +57,17 @@ describe("private release smoke", () => {
           get: (): Promise<object> => Promise.reject(new Error("handoff unavailable")),
         }),
       });
+      const now = yield* Clock.currentTimeMillis;
       const messages = Array.from({ length: 9 }, (_, index) => ({
         id: `smoke-${index}`,
         timestamp: DateTime.toDate(DateTime.makeUnsafe(0)),
         body: {
-          protocolVersion: 1,
+          protocolVersion: 2,
           probeId: (index + 1).toString(16).repeat(32),
           gitRevision: revision,
+          contractDigest: digest,
+          coreVersionId: version,
+          expiresAtMs: now + 300000,
         },
         attempts: 1,
         ack: (): void => {
@@ -185,6 +180,30 @@ describe("private release smoke", () => {
           status: "pending",
           core: { workerVersionId: environment.CF_VERSION_METADATA.id },
         });
+        const deniedLimiter: RateLimit = {
+          limit: ({ key }): Promise<{ success: boolean }> => {
+            expect(key).toBe("release-smoke");
+            return Promise.resolve({ success: false });
+          },
+        };
+        const limitedEnvironment = {
+          ...environment,
+          CF_VERSION_METADATA: { id: version },
+          SMOKE_LIMITER: deniedLimiter,
+        };
+        const requests = Array.from({ length: 32 }, () => request(body, true));
+        const responses = requests.map((value) =>
+          handleSmoke({ request: value, environment: limitedEnvironment })
+        );
+        const limited = yield* Effect.tryPromise(() => Promise.all(responses));
+        expect(
+          limited.every(
+            (response) =>
+              response.status === 503 &&
+              response.headers.get("x-fidy-smoke-failure") === "admission"
+          )
+        ).toBe(true);
+        expect(effects).toBe(0);
         const mismatch = yield* Effect.tryPromise(() =>
           handleSmoke({ request: request(body, true), environment })
         );
@@ -244,7 +263,7 @@ describe("private release smoke", () => {
           })
         );
         expect(admissionFailure.status).toBe(503);
-        expect(admissionFailure.headers.get("x-fidy-smoke-failure")).toBe("admission");
+        expect(admissionFailure.headers.get("x-fidy-smoke-failure")).toBe("schema");
         expect(yield* Effect.tryPromise(() => admissionFailure.text())).not.toContain(
           "secret-provider-body"
         );
@@ -267,165 +286,6 @@ describe("private release smoke", () => {
           "secret-runtime-defect"
         );
         expect(effects).toBe(0);
-      })
-  );
-
-  it.effect(
-    "uses only reserved bindings and allows a stable consumer to hand off candidate synthetic work",
-    () =>
-      Effect.gen(function* () {
-        const actions: Array<string> = [];
-        let offered: unknown;
-        let claimed = false;
-        const database = {
-          prepare: (
-            sql: string
-          ): {
-            all: () => Promise<unknown>;
-            bind: (...values: ReadonlyArray<unknown>) => {
-              run: () => Promise<unknown>;
-              first: () => Promise<unknown>;
-              all: () => Promise<unknown>;
-            };
-          } => ({
-            all: (): Promise<unknown> => {
-              actions.push("schema");
-              return Promise.resolve({});
-            },
-            bind: (
-              ...values: ReadonlyArray<unknown>
-            ): {
-              run: () => Promise<unknown>;
-              first: () => Promise<unknown>;
-              all: () => Promise<unknown>;
-            } => ({
-              all: (): Promise<unknown> => {
-                actions.push("schema");
-                return Promise.resolve({});
-              },
-              run: (): Promise<unknown> => {
-                actions.push(sql.startsWith("UPDATE") ? "synthetic-claim" : "synthetic-insert");
-                if (sql.startsWith("UPDATE")) claimed = true;
-                return Promise.resolve({ meta: { changes: 1 } });
-              },
-              first: (): Promise<unknown> => {
-                actions.push("synthetic-read");
-                return Promise.resolve(
-                  sql.includes("expires_at_ms FROM")
-                    ? { expires_at_ms: Number.MAX_SAFE_INTEGER }
-                    : {
-                        git_revision: revision,
-                        expires_at_ms: Number.MAX_SAFE_INTEGER,
-                        status: claimed ? "queued" : "pending",
-                        id: values[0],
-                      }
-                );
-              },
-            }),
-          }),
-        };
-        const environment = smokeEnvironment({
-          DB: withMethods(unavailableDatabase, { prepare: database.prepare }),
-          SMOKE_BUCKET: withMethods(unavailableBucket, {
-            put: (): Promise<void> => {
-              actions.push("marker-write");
-              return Promise.resolve();
-            },
-            get: (): Promise<object> => {
-              actions.push("marker-read");
-              return Promise.resolve({});
-            },
-          }),
-          SMOKE_QUEUE: withMethods(unavailableQueue, {
-            send: (value: unknown): Promise<void> => {
-              offered = value;
-              actions.push("queue");
-              return Promise.resolve();
-            },
-          }),
-          SMOKE_WORKFLOW: withMethods(unavailableWorkflow, {
-            create: (): Promise<object> => {
-              actions.push("workflow");
-              return Promise.resolve({});
-            },
-          }),
-          USER_TRANSACTION_COORDINATOR: {
-            getByName: (name: string): { fetch: () => Promise<Response> } => ({
-              fetch: (): Promise<Response> => {
-                actions.push(name);
-                return Promise.resolve(Response.json({ status: "compatible" }));
-              },
-            }),
-          },
-          CF_VERSION_METADATA: { id: version },
-        });
-        const result = yield* Effect.tryPromise(() =>
-          handleSmoke({
-            request: new Request("https://core.internal/internal/release-smoke", {
-              method: "POST",
-              headers: { "content-type": "application/json", "x-fidy-smoke-proof": proof },
-              body,
-            }),
-            environment,
-          })
-        );
-        expect(result.status).toBe(202);
-        expect(actions).toEqual([
-          "synthetic-insert",
-          "synthetic-read",
-          "synthetic-claim",
-          "schema",
-          "schema",
-          "schema",
-          "marker-write",
-          "marker-read",
-          "_release-smoke-v1",
-          "queue",
-        ]);
-        expect(offered).toEqual({
-          protocolVersion: 1,
-          probeId: "b".repeat(32),
-          gitRevision: revision,
-        });
-        const replay = yield* Effect.tryPromise(() =>
-          handleSmoke({
-            request: new Request("https://core.internal/internal/release-smoke", {
-              method: "POST",
-              headers: { "content-type": "application/json", "x-fidy-smoke-proof": proof },
-              body,
-            }),
-            environment,
-          })
-        );
-        expect(replay.status).toBe(202);
-        expect(actions.filter((action) => action === "queue")).toHaveLength(1);
-        expect(actions.filter((action) => action === "marker-write")).toHaveLength(1);
-        const candidateWork = offered;
-        const stableConsumer = { ...environment, RELEASE_GIT_SHA: "0".repeat(40) };
-        yield* Effect.tryPromise(() =>
-          receiveSmoke({
-            batch: {
-              queue: "reserved-smoke",
-              messages: [
-                {
-                  id: "synthetic-fixture",
-                  timestamp: DateTime.toDate(DateTime.makeUnsafe(0)),
-                  body: candidateWork,
-                  attempts: 1,
-                  retry: (): void => {},
-                  ack: (): void => {
-                    actions.push("ack");
-                  },
-                },
-              ],
-              metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
-              retryAll: () => {},
-              ackAll: () => {},
-            },
-            environment: stableConsumer,
-          })
-        );
-        expect(actions.slice(-3)).toEqual(["synthetic-read", "workflow", "ack"]);
       })
   );
 });

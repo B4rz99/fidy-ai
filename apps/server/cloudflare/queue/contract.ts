@@ -1,13 +1,11 @@
 import type { ProactivityDeliveryWork } from "../insights/contract";
-import type { SmokeBindings } from "../runtime/release-smoke/contract";
 
-/** Queue composition receives only native handoff bindings and the existing smoke readiness inputs. */
+/** Queue composition receives only native handoff bindings. */
 export type CoreQueueEnvironment = Readonly<{
   DB: D1Database;
   RELEASE_GIT_SHA: string;
   USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
 }> &
-  Partial<SmokeBindings> &
   Partial<
     Readonly<{
       EMAIL_BUCKET: R2Bucket;

@@ -10,16 +10,8 @@ import {
   smokeDiagnosticRevision,
 } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import publicWorker from "../../apps/server/cloudflare/public-worker";
-import {
-  SyntheticBindings,
-  smokeEnvironment,
-  unavailableBucket,
-  unavailableDatabase,
-  unavailableQueue,
-  unavailableWorkflow,
-} from "./incomplete-platform-fixture";
+import { smokeEnvironment } from "./incomplete-platform-fixture";
 
-const withMethods = SyntheticBindings.withMethods;
 const revision = "0123456789abcdef0123456789abcdef01234567";
 const digest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 const version = "dc8dcd28-271b-4367-9840-6c244f84cb40";
@@ -371,71 +363,5 @@ describe("production smoke ingress", () => {
         public: { contractDigest: "0".repeat(64) },
       });
     })
-  );
-
-  it.effect(
-    "rejects excess authorized probes at the public-to-Core boundary before synthetic work",
-    () =>
-      Effect.gen(function* () {
-        const actions: string[] = [];
-        const blocked = (): never => {
-          actions.push("binding");
-          throw new Error("synthetic work should not run");
-        };
-        const coreEnvironment = smokeEnvironment({
-          DB: withMethods(unavailableDatabase, {
-            prepare: (sql: string): object => {
-              actions.push(sql.startsWith("INSERT") ? "admission" : "read");
-              return {
-                bind: (): object => ({
-                  run: (): Promise<void> => Promise.resolve(),
-                  first: (): Promise<unknown> => Promise.resolve(null),
-                }),
-              };
-            },
-          }),
-          SMOKE_BUCKET: withMethods(unavailableBucket, { put: blocked }),
-          SMOKE_QUEUE: withMethods(unavailableQueue, { send: blocked }),
-          SMOKE_WORKFLOW: withMethods(unavailableWorkflow, { create: blocked }),
-          USER_TRANSACTION_COORDINATOR: { getByName: blocked },
-          CF_VERSION_METADATA: { id: version },
-          SMOKE_PROOF: "a".repeat(64),
-          RELEASE_GIT_SHA: revision,
-          CONTRACT_DIGEST: digest,
-        });
-        const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-          protocolVersion: 1,
-          probeId: "b".repeat(32),
-          expectedPublicVersionId: version,
-          expectedCoreVersionId: version,
-          expectedGitRevision: revision,
-          expectedContractDigest: digest,
-        });
-        const response = yield* Effect.tryPromise(() =>
-          publicWorker.fetch(
-            new Request("https://api.fidyapp.com/internal/release-smoke", {
-              method: "POST",
-              headers: { "x-fidy-smoke-proof": "a".repeat(64), "content-type": "application/json" },
-              body,
-            }),
-            {
-              BROWSER_ORIGIN: "https://app.fidyapp.com",
-              CORE: {
-                fetch: (request: Request): Promise<Response> =>
-                  handleSmoke({ request, environment: coreEnvironment }),
-              },
-              LOCAL_CANONICAL_READ_BEARER: "",
-              PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
-              RELEASE_GIT_SHA: revision,
-              CONTRACT_DIGEST: digest,
-              SMOKE_PROOF: "a".repeat(64),
-              CF_VERSION_METADATA: { id: version },
-            }
-          )
-        );
-        expect(response.status).toBe(503);
-        expect(actions).toEqual(["admission", "read"]);
-        expect(response.headers.get("x-fidy-smoke-failure")).toBe("probe_state");
-      })
   );
 });

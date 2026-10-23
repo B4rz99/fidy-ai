@@ -4781,6 +4781,111 @@ CREATE TABLE erasure_chunk (
 
 <!-- erasure-selection-rollback:end -->
 
+## Release verification through native execution (#1493)
+
+The reserved proof-authenticated HTTP gate checks exact Public/Core upload receipts, Git revision,
+contract digest, required secrets, Category storage, protected-read dependencies, private R2 and
+coordinator connectivity. It now proves native D1 write and atomic rollback capability before
+publishing synthetic work: one batch creates a private transient verification table, writes a valid
+value, then deliberately violates a uniquely named CHECK. Only that exact expected failure qualifies;
+a refused write, quota, unrelated failure or unexpectedly successful batch does not. A subsequent
+schema query must confirm complete rollback. Nothing is committed, no fake User is created, and
+this object is not part of the baseline or an operational ledger.
+
+The HTTP response manifest remains version 1, including `asyncWorkVersion: 1`, so the required
+stable-Public/candidate-Core readiness exchange retains its deployed wire contract. The internal
+Queue envelope version is independent of that HTTP contract.
+
+Each release owns a private Queue, a distinct hosted Workflow logical identity, and a private Queue-only executor named by its validated Git
+revision. The executor is deployed normally before zero-traffic Core is uploaded; it hosts the V2
+Workflow and receives only D1, native execution, and release metadata bindings. Core references that
+foreign Workflow. Its Queue consumer targets the executor, never the stable Core Worker. Deferred
+retirement preserves previous release resources through the existing promotion gates; no candidate
+message depends on routing to a zero-percent Core Queue consumer. There are no public routes,
+provider grants or User authority on the executor. Its immutable revision and digest come from its
+actual runtime environment; the Core version is a correlation captured by the already verified Core
+publisher, not an assertion that the executor itself is the Core Worker.
+
+The dedicated Queue carries protocol-v2 immutable release metadata and a five-minute expiry, with
+no User/provider/model authority. Queue acceptance returns pending. At most four messages are handed
+off concurrently; duplicate handoffs reuse the same native execution ID bound to Core version and
+random probe identity. The versioned native Workflow rechecks its actual environment against the
+requested revision/digest, verifies D1 write/rollback in a bounded named step, and returns only probe/release/
+expiry metadata. Native engine status is the completion source. A complete execution with wrong
+probe, revision, digest, Core version, expiry or malformed output fails verification. Missing or
+unreadable execution remains pending until the independent CI poll budget fails; it is never health.
+The existing candidate/intermediate/promoted identity and bounded timeout checks remain. Deployment
+failure email runs in GitHub Actions using its own provider credential, independently of Worker/D1.
+No new provider notification is sent by local verification.
+
+The User-approved policy is one CI verification at a time with bounded retries and timeouts.
+Deployment, inspection, rollback and recovery already share the `production-deployment` Actions
+concurrency group with `cancel-in-progress: false`; candidate/intermediate/promoted checks execute
+sequentially within a run. #1426 records this replacement of the persisted global-eight semaphore.
+The old eight-active-row admission and pending/queued status transitions are intentionally retired
+with the ledger; they are not preserved through KV/DO state. Before expensive D1/R2/coordinator
+checks or Queue publication, Core requires a native RateLimit decision using namespace 1493 and one
+constant key (never a caller-controlled probe ID). Rejected or unavailable decisions fail closed.
+The platform setting is eight submissions per minute per Cloudflare location, approximately enforced:
+it is not a strict worldwide eight-active-probe semaphore. This locality/burst difference follows
+the platform contract and must not be presented as preservation of the old global cap. See
+[Cloudflare Rate Limiting locality and accuracy](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/#locality).
+This limit protects deployment verification, not free/paid User operations.
+CI serializes releases and bounds probe submission/retries/polls, while the platform owns Workflow admission/concurrency. Repeated POSTs may
+republish the same metadata-only Queue work after an ambiguous acknowledgment; deterministic native
+execution IDs prevent repeating completed verification steps. This differs from the old DB claim,
+which could strand a queued row after a lost send. The authenticated gate is not a public User API.
+Native instance metadata has one-day success/error retention; the five-minute proof expiry still
+prevents stale completion from satisfying a new check. No application cleanup job is needed.
+
+Stop active release runners and old smoke consumers before schema/code cutover, retain a database
+backup, and require every old probe to have expired. New verification uses the V2 Workflow class;
+old execution histories are not reinterpreted. Apply the guarded DROP in one native batch. A failed
+batch must preserve the original rows and unrelated feature data. To roll the binary back, stop all
+new release runners/consumers, recreate the exact original table/index and restore its original
+metadata from the verified backup, including rowids and exact clocks. Never synthesize a passed probe.
+Run fresh revision-specific verification after either direction. These local native rehearsals prove
+D1 and Workflow behavior; account permissions, remote routing and notification delivery remain actual
+deployment evidence, not claims inferred from a local test.
+
+<!-- release-smoke-ledger-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'release_smoke_ledger_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM release_smoke_probes WHERE expires_at_ms>?) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- release-smoke-ledger-guard:end -->
+
+<!-- release-smoke-ledger-drop:start -->
+
+```sql
+DROP TABLE release_smoke_probes;
+```
+
+<!-- release-smoke-ledger-drop:end -->
+
+<!-- release-smoke-ledger-rollback:start -->
+
+```sql
+CREATE TABLE release_smoke_probes (
+  probe_id TEXT PRIMARY KEY NOT NULL CHECK (length(probe_id) = 32),
+  git_revision TEXT NOT NULL CHECK (length(git_revision) = 40),
+  expires_at_ms INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'queued', 'passed'))
+) STRICT;
+CREATE INDEX release_smoke_expiry ON release_smoke_probes(expires_at_ms);
+```
+
+<!-- release-smoke-ledger-rollback:end -->
+
+<!-- release-smoke-ledger-rollback-copy:start -->
+
+```sql
+INSERT INTO release_smoke_probes(rowid,probe_id,git_revision,expires_at_ms,status) SELECT json_extract(value,'$.rowid'),json_extract(value,'$.probe_id'),json_extract(value,'$.git_revision'),json_extract(value,'$.expires_at_ms'),json_extract(value,'$.status') FROM json_each(?);
+```
+
+<!-- release-smoke-ledger-rollback-copy:end -->
+
 ## WhatsApp recipient cutover (#1483)
 
 Stop old routing writers before this synchronized cutover. Back up the original schema, populated

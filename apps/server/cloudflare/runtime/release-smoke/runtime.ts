@@ -1,7 +1,8 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Clock, Effect, Option, Schema } from "effect";
-import type { SmokeEnvironment } from "./contract";
-import { SmokeWork } from "./internal/protocol";
+import type { SmokeCompletion, SmokeExecutorEnvironment } from "./contract";
+import { SmokeWork, smokeExecutionId, smokeLifetimeMs } from "./internal/protocol";
+import { verifySmokeDatabase } from "./internal/database";
 import { SmokeBindingFailed, platform } from "./internal/platform";
 import {
   cloudflareWorkerTelemetry,
@@ -9,38 +10,51 @@ import {
   workerRelease,
 } from "../telemetry/operations";
 
-const settleSyntheticSmoke = (db: D1Database, work: SmokeWork): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const now = yield* Clock.currentTimeMillis;
-      yield* platform({
-        stage: "platform",
-        tryWork: () =>
-          db
-            .prepare(
-              "UPDATE release_smoke_probes SET status = 'passed' WHERE probe_id = ? AND git_revision = ? AND expires_at_ms > ? AND status = 'queued'"
-            )
-            .bind(work.probeId, work.gitRevision, now)
-            .run(),
-      });
-    })
-  );
-
-/** Stable Workflow name and step: no provider call, model inference, or User-owned table. */
-export class ReleaseSmokeWorkflowV1 extends WorkflowEntrypoint<SmokeEnvironment, unknown> {
-  run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    const db = this.env.DB;
+/** Native execution output is the completion receipt; only immutable release metadata is retained. */
+export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<SmokeExecutorEnvironment, unknown> {
+  run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<SmokeCompletion> {
+    const environment = this.env;
     const work = Effect.gen(function* () {
       const decoded = Schema.decodeUnknownOption(SmokeWork)(event.payload);
       if (Option.isNone(decoded)) return yield* new SmokeBindingFailed({ stage: "platform" });
-      yield* platform({
+      const input = decoded.value;
+      const now = yield* Clock.currentTimeMillis;
+      if (
+        input.expiresAtMs <= now ||
+        input.expiresAtMs > now + smokeLifetimeMs ||
+        event.instanceId !== smokeExecutionId(input) ||
+        input.gitRevision !== environment.RELEASE_GIT_SHA ||
+        input.contractDigest !== environment.CONTRACT_DIGEST
+      ) {
+        return yield* new SmokeBindingFailed({ stage: "identity" });
+      }
+      const context = yield* Effect.context<never>();
+      return yield* platform({
         stage: "platform",
         tryWork: () =>
-          step.do("settle-synthetic-smoke-v1", () => settleSyntheticSmoke(db, decoded.value)),
+          step.do(
+            "verify-synthetic-release-v2",
+            { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" },
+            () =>
+              Effect.runPromiseWith(context)(
+                verifySmokeDatabase(environment.DB).pipe(
+                  Effect.as({
+                    probeId: input.probeId,
+                    expiresAtMs: input.expiresAtMs,
+                    coreVersionId: input.coreVersionId,
+                    executor: {
+                      gitRevision: environment.RELEASE_GIT_SHA,
+                      contractDigest: environment.CONTRACT_DIGEST,
+                      workerVersionId: environment.CF_VERSION_METADATA.id,
+                    },
+                  })
+                )
+              )
+          ),
       });
     });
     return observeWorkerPromise(() => Effect.runPromise(work), {
-      environment: workerRelease(this.env),
+      environment: workerRelease(environment),
       telemetry: cloudflareWorkerTelemetry,
       operation: "workflow.releaseSmoke",
     });

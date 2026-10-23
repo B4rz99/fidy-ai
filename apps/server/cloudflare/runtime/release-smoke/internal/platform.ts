@@ -35,9 +35,6 @@ export const platform = <A>({
     try: tryWork,
     catch: (cause) =>
       new SmokeBindingFailed({
-        stage:
-          ["admission", "claim", "probe_read", "schema"].includes(stage) && dailyQuota(cause)
-            ? "d1_quota"
-            : stage,
+        stage: stage === "schema" && dailyQuota(cause) ? "d1_quota" : stage,
       }),
   });

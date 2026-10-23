@@ -55,12 +55,6 @@ export const maintenancePerformanceEnvironment = ({
   OPERATOR_ALERT_EMAIL: Option.some("performance@example.invalid"),
   RESEND_API_KEY: Option.some("configured"),
   WOMPI_EVENT_SECRET: Option.some("configured"),
-  SMOKE_BUCKET: Option.some(bucket),
-  SMOKE_QUEUE: Option.some(queue),
-  SMOKE_WORKFLOW: Option.some(workflow),
-  SMOKE_QUEUE_NAME: Option.some("fixture"),
-  SMOKE_PROOF: Option.some("fixture"),
-  CF_VERSION_METADATA: Option.some({ id: "fixture" }),
 });
 
 /** Production recovery policy for the complete native maintenance composition. */

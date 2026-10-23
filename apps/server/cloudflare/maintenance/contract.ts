@@ -38,7 +38,6 @@ export type ScheduledOperation =
   | "ingestion.uploadAdmissionSweep"
   | "ingestion.mediaRetention"
   | "agent.workersAiAdmissionSweep"
-  | "release.smoke.expiry"
   | "ingestion.reviewDraftExpiry"
   | "ingestion.reviewEvidenceExpiry"
   | "ingestion.submissionRetention"

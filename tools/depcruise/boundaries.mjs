@@ -9,6 +9,7 @@ const compositionRoots = new Set([
   "src/client.ts",
   "src/shell/memory/memory-policy.test.ts",
   "cloudflare/core-worker.ts",
+  "cloudflare/release-smoke-worker.ts",
   "cloudflare/core-worker.test-fixture.ts",
   "cloudflare/public-worker.ts",
   "cloudflare/operational-canary-workflow.ts",

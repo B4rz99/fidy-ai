@@ -1284,14 +1284,6 @@ CHECK(access_ends_at_ms IS NULL OR (status='succeeded' AND access_ends_at_ms=obs
 CHECK(renewal_stopped_at_ms IS NULL OR (status='succeeded' AND renewal_stopped_at_ms=observed_at_ms))) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE release_smoke_probes (
-  probe_id TEXT PRIMARY KEY NOT NULL CHECK (length(probe_id) = 32),
-  git_revision TEXT NOT NULL CHECK (length(git_revision) = 40),
-  expires_at_ms INTEGER NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('pending', 'queued', 'passed'))
-) STRICT;
---> statement-breakpoint
-
 CREATE TABLE resource_admission_events (
   grant_id TEXT NOT NULL
     REFERENCES resource_admission_grants(id) DEFERRABLE INITIALLY DEFERRED,
@@ -2378,9 +2370,6 @@ CREATE INDEX refunds_by_charge ON refund_attempts(billing_attempt_id,status);
 --> statement-breakpoint
 
 CREATE INDEX refunds_by_user ON refund_attempts(user_id,created_at_ms);
---> statement-breakpoint
-
-CREATE INDEX release_smoke_expiry ON release_smoke_probes(expires_at_ms);
 --> statement-breakpoint
 
 CREATE INDEX reminder_delivery_receipts_marker_user ON proactive_messages(user_id,id) WHERE reminder_governor_counted=1;

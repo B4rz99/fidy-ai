@@ -163,7 +163,6 @@ const estimatedSeconds: Readonly<Record<string, number>> = {
   "runtime/operational-health/probes.test.ts": 0.02,
   "test-shards.test.ts": 0.02,
   "runtime/operational-health/alerts.test.ts": 0.01,
-  "runtime/release-smoke/admission.test.ts": 0.01,
   "runtime/release-smoke/platform.test.ts": 0.01,
   "maintenance/performance.test.ts": 0.0,
   "transactions/performance.test.ts": 0.0,

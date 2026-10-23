@@ -13,14 +13,13 @@ export const smokeDiagnosticRevision = "0000000000000000000000000000000000000000
 export const SmokeIdentityEquality = Schema.String.check(Schema.isPattern(/^[01]{3}$/u));
 /** Only closed stages cross the proof-admitted smoke boundary, never foreign error text. */
 export const SmokeFailureStage = Schema.Literals([
+  "admission",
   "d1_quota",
   "identity",
   "secrets",
   "schema",
   "storage",
   "coordinator",
-  "admission",
-  "claim",
   "publication",
   "probe_read",
   "probe_state",
@@ -62,9 +61,18 @@ export const SmokeResponse = Schema.Struct({
   manifest: SmokeManifest,
 });
 
+export const SmokeCompletion = Schema.Struct({
+  probeId: SmokeRequest.fields.probeId,
+  coreVersionId: SmokeIdentity.fields.workerVersionId,
+  executor: SmokeIdentity,
+  expiresAtMs: Schema.Int,
+});
+export type SmokeCompletion = typeof SmokeCompletion.Type;
+
 /** Native synthetic release proof bindings; these never grant User authority. */
 export type SmokeEnvironment = Readonly<{
   DB: D1Database;
+  SMOKE_LIMITER: RateLimit;
   SMOKE_BUCKET: R2Bucket;
   SMOKE_QUEUE: Queue;
   SMOKE_WORKFLOW: Workflow;
@@ -84,6 +92,7 @@ export type SmokeEnvironment = Readonly<{
 /** The native bindings the existing readiness gate requires before any synthetic smoke path. */
 export type SmokeBindings = Pick<
   SmokeEnvironment,
+  | "SMOKE_LIMITER"
   | "SMOKE_BUCKET"
   | "SMOKE_QUEUE"
   | "SMOKE_WORKFLOW"
@@ -93,7 +102,15 @@ export type SmokeBindings = Pick<
 >;
 
 /** Synthetic Queue handoff has no provider, model, or User-data authority. */
-export type SmokeQueueEnvironment = Pick<
+export type SmokeQueueEnvironment = Pick<SmokeEnvironment, "SMOKE_QUEUE_NAME" | "SMOKE_WORKFLOW">;
+
+/** Separate, release-owned executor: no User, provider, or public ingress authority. */
+export type SmokeExecutorEnvironment = Pick<
   SmokeEnvironment,
-  "DB" | "RELEASE_GIT_SHA" | "SMOKE_QUEUE_NAME" | "SMOKE_WORKFLOW"
+  | "DB"
+  | "SMOKE_QUEUE_NAME"
+  | "SMOKE_WORKFLOW"
+  | "RELEASE_GIT_SHA"
+  | "CONTRACT_DIGEST"
+  | "CF_VERSION_METADATA"
 >;

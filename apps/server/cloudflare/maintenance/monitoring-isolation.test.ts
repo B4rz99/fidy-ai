@@ -49,12 +49,6 @@ const environment = (
   OPERATOR_ALERT_EMAIL: Option.none(),
   RESEND_API_KEY: Option.none(),
   WOMPI_EVENT_SECRET: Option.none(),
-  SMOKE_BUCKET: Option.none(),
-  SMOKE_QUEUE: Option.none(),
-  SMOKE_WORKFLOW: Option.none(),
-  SMOKE_QUEUE_NAME: Option.none(),
-  SMOKE_PROOF: Option.none(),
-  CF_VERSION_METADATA: Option.none(),
   ...overrides,
 });
 

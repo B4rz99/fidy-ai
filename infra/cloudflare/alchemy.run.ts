@@ -320,10 +320,17 @@ export default Alchemy.Stack(
       className: "OperationalCanaryWorkflowV1",
     });
     const smokeBucket = yield* Cloudflare.R2.Bucket("ReleaseSmokeBucket");
-    const smokeQueue = yield* Cloudflare.Queues.Queue("ReleaseSmokeQueue");
-    const smokeWorkflow = Cloudflare.Workflow("ReleaseSmokeWorkflowV1", {
-      className: "ReleaseSmokeWorkflowV1",
-    });
+    // Release-owned resources cannot dispatch a candidate envelope into the stable Core consumer.
+    // Deferred retirement keeps the previous release's path intact until promotion passes.
+    const smokeQueue = yield* Cloudflare.Queues.Queue(
+      `ReleaseSmokeQueue-${releaseMetadata.gitRevision}`
+    );
+    const smokeWorkflow = Cloudflare.Workflow(
+      `ReleaseSmokeWorkflowV2-${releaseMetadata.gitRevision}`,
+      {
+        className: "ReleaseSmokeWorkflowV2",
+      }
+    );
     const billingCollectionQueue = yield* Cloudflare.Queues.Queue("BillingCollectionQueue");
     const billingCollectionWorkflow = Cloudflare.Workflow("BillingCollectionWorkflowV1", {
       className: "BillingCollectionWorkflowV1",
@@ -343,6 +350,20 @@ export default Alchemy.Stack(
     const emailReplacementQueue = yield* Cloudflare.Queues.Queue("EmailReplacementQueue");
     const emailReplacementWorkflow = Cloudflare.Workflow("EmailReplacementWorkflowV1", {
       className: "EmailReplacementWorkflowV1",
+    });
+    const smokeExecutor = yield* Cloudflare.Worker(`ReleaseSmoke-${releaseMetadata.gitRevision}`, {
+      main: "../../apps/server/cloudflare/release-smoke-worker.ts",
+      observability: freeTierWorkerObservability,
+      compatibility: { date: "2026-09-08" },
+      workersDev: false,
+      env: {
+        DB: database,
+        CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
+        SMOKE_QUEUE_NAME: smokeQueue.queueName,
+        SMOKE_WORKFLOW: smokeWorkflow,
+        RELEASE_GIT_SHA: releaseMetadata.gitRevision,
+        CONTRACT_DIGEST: releaseMetadata.contractDigest,
+      },
     });
     const core = yield* Cloudflare.Worker("Core", {
       main: "../../apps/server/cloudflare/core-worker.ts",
@@ -365,13 +386,20 @@ export default Alchemy.Stack(
         RECOVERY_ISOLATION: isolation,
         AI: Cloudflare.Workers.AI(),
         CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
+        SMOKE_LIMITER: Cloudflare.RateLimit("ReleaseSmokeAdmission", {
+          namespaceId: 1493,
+          simple: { limit: 8, period: 60 },
+        }),
         SMOKE_PROOF: yield* development
           ? smokeProof.pipe(Config.withDefault(Redacted.make("")))
           : smokeProof,
         SMOKE_BUCKET: smokeBucket,
         SMOKE_QUEUE: smokeQueue,
         SMOKE_QUEUE_NAME: smokeQueue.queueName,
-        SMOKE_WORKFLOW: smokeWorkflow,
+        SMOKE_WORKFLOW: Cloudflare.Workflow("ReleaseSmokeReference", {
+          className: "ReleaseSmokeWorkflowV2",
+          scriptName: smokeExecutor.workerName,
+        }),
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         [productionTopology.core.d1Binding]: database,
         EMAIL_BUCKET: emailBucket,
@@ -484,9 +512,9 @@ export default Alchemy.Stack(
       deadLetterQueue: asyncDeadLetters.queueName,
       settings: { batchSize: 1, maxRetries: 3 },
     });
-    yield* Cloudflare.Queues.Consumer("ReleaseSmokeConsumer", {
+    yield* Cloudflare.Queues.Consumer(`ReleaseSmokeConsumer-${releaseMetadata.gitRevision}`, {
       queueId: smokeQueue.queueId,
-      scriptName: core.workerName,
+      scriptName: smokeExecutor.workerName,
       deadLetterQueue: asyncDeadLetters.queueName,
       settings: { batchSize: 1, maxRetries: 3 },
     });

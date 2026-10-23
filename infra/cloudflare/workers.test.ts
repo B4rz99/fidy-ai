@@ -1,3 +1,8 @@
+import { receiveSmoke } from "../../apps/server/cloudflare/runtime/release-smoke/operations";
+import {
+  installTestSchema,
+  isolatedTestDatabases,
+} from "../../apps/server/cloudflare/d1-test-fixture";
 import { browserSessionBindingPath } from "../../apps/server/src/shell/web-session/contract";
 import {
   microsoftProviderPaths,
@@ -12,7 +17,7 @@ import {
   telemetryTraceHeader,
 } from "@fidy/server/telemetry-contract";
 import { type Cause, Clock, DateTime, Effect, Result, Schema } from "effect";
-import { describe, expect, vi } from "vitest";
+import { afterAll, describe, expect, vi } from "vitest";
 import { Miniflare } from "miniflare";
 import {
   fixtureWorker as coreWorker,
@@ -22,6 +27,7 @@ import { resolveDeploymentConfiguration, resolveStateBackend } from "./deploymen
 import { edgeSecurityPolicy } from "./edge-security";
 import {
   SyntheticBindings,
+  smokeEnvironment,
   unavailableBucket,
   unavailableQueue,
   unavailableWorkflow,
@@ -33,6 +39,8 @@ import {
   productionTopology,
 } from "../../apps/server/cloudflare/runtime/contract";
 
+const smokeDatabases = isolatedTestDatabases();
+afterAll(() => smokeDatabases.dispose());
 const withIsolatedD1 = <A, E, R>(
   name: string,
   use: (db: D1Database) => Effect.Effect<A, E, R>
@@ -174,6 +182,7 @@ describe("Core smoke adapter", () => {
       const proof = "a".repeat(64);
       const environment: Parameters<typeof coreWorker.fetch>[1] = {
         ...coreEnvironment,
+        SMOKE_LIMITER: smokeEnvironment().SMOKE_LIMITER,
         SMOKE_PROOF: proof,
         CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
         SMOKE_QUEUE_NAME: "SmokeQueue",
@@ -194,74 +203,50 @@ describe("Core smoke adapter", () => {
       expect(response.status).toBe(503);
 
       let acked = false;
-      const queueEnvironment: Parameters<typeof coreWorker.queue>[1] = {
-        ...environment,
-        DB: withMethods(failingDatabase, {
-          prepare: (): object => ({
-            bind: (): object => ({
-              first: (): Promise<{ expires_at_ms: number }> =>
-                Promise.resolve({ expires_at_ms: 0 }),
-            }),
-          }),
-        }),
-      };
       const fixtureMessage = queueBatch({}).messages.at(0);
       if (fixtureMessage === undefined) throw new Error("Missing Queue fixture message");
       yield* Effect.tryPromise(() =>
-        coreWorker.queue(
-          {
+        receiveSmoke({
+          batch: {
             ...queueBatch({ protocolVersion: 1, probeId: "b".repeat(32), gitRevision }),
             queue: "SmokeQueue",
             messages: [
               {
                 ...fixtureMessage,
-                body: { protocolVersion: 1, probeId: "b".repeat(32), gitRevision },
+                body: {
+                  protocolVersion: 2,
+                  probeId: "b".repeat(32),
+                  gitRevision,
+                  coreVersionId: environment.CF_VERSION_METADATA?.id,
+                  contractDigest,
+                  expiresAtMs: 0,
+                },
                 ack: (): void => {
                   acked = true;
                 },
               },
             ],
           },
-          queueEnvironment
-        )
+          environment: smokeEnvironment(environment),
+        })
       );
       expect(acked).toBe(true);
     })
   );
 
   it.effect(
-    "publishes an admitted probe through Core fetch and hands it to the Workflow via Core Queue",
+    "publishes an admitted probe through Core fetch and hands it to the private smoke executor",
     () =>
       Effect.gen(function* () {
         let work: unknown;
         let started: unknown;
         let acked = false;
-        let claimed = false;
-        const database = {
-          prepare: (sql: string): object => ({
-            all: (): Promise<object> => Promise.resolve({}),
-            bind: (): object => ({
-              all: (): Promise<object> => Promise.resolve({}),
-              run: (): Promise<object> => {
-                if (sql.startsWith("UPDATE")) claimed = true;
-                return Promise.resolve({ meta: { changes: 1 } });
-              },
-              first: (): Promise<unknown> =>
-                Promise.resolve(
-                  sql.includes("expires_at_ms FROM")
-                    ? { expires_at_ms: Number.MAX_SAFE_INTEGER }
-                    : {
-                        git_revision: gitRevision,
-                        expires_at_ms: Number.MAX_SAFE_INTEGER,
-                        status: claimed ? "queued" : "pending",
-                      }
-                ),
-            }),
-          }),
-        };
+        const database = yield* Effect.tryPromise(() => smokeDatabases.acquire());
+        yield* Effect.tryPromise(() => installTestSchema({ db: database }));
         const environment: Parameters<typeof coreWorker.fetch>[1] = {
           ...coreEnvironment,
-          DB: withMethods(failingDatabase, { prepare: database.prepare }),
+          DB: database,
+          SMOKE_LIMITER: smokeEnvironment().SMOKE_LIMITER,
           SMOKE_PROOF: "a".repeat(64),
           CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
           SMOKE_QUEUE_NAME: "SmokeQueue",
@@ -306,12 +291,18 @@ describe("Core smoke adapter", () => {
           )
         );
         expect(response.status).toBe(202);
-        expect(work).toEqual({ protocolVersion: 1, probeId: "b".repeat(32), gitRevision });
+        expect(work).toMatchObject({
+          protocolVersion: 2,
+          probeId: "b".repeat(32),
+          gitRevision,
+          coreVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
+          contractDigest,
+        });
         const fixtureMessage = queueBatch({}).messages.at(0);
         if (fixtureMessage === undefined) throw new Error("Missing Queue fixture message");
         yield* Effect.tryPromise(() =>
-          coreWorker.queue(
-            {
+          receiveSmoke({
+            batch: {
               ...queueBatch(work),
               queue: "SmokeQueue",
               messages: [
@@ -324,13 +315,14 @@ describe("Core smoke adapter", () => {
                 },
               ],
             },
-            environment
-          )
+            environment: smokeEnvironment(environment),
+          })
         );
         expect(acked).toBe(true);
         expect(started).toEqual({
-          id: `release-smoke-${"b".repeat(32)}`,
+          id: `smoke-v2-dc8dcd28-271b-4367-9840-6c244f84cb40-${"b".repeat(32)}`,
           params: work,
+          retention: { successRetention: "1 day", errorRetention: "1 day" },
         });
       })
   );

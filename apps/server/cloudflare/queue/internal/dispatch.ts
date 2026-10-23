@@ -17,7 +17,6 @@ import {
   receiveEmailReplacement,
 } from "../../email-authentication/runtime";
 import { receiveCanary } from "../../runtime/operational-health/operations";
-import { receiveSmoke, smokeReady } from "../../runtime/release-smoke/operations";
 import {
   isForwardedEmailWork,
   isStatementExtractionWork,
@@ -186,20 +185,6 @@ const receiveCanaryBatch = ({
     );
   });
 
-const receiveReservedSmoke = ({
-  batch,
-  environment,
-}: QueueInput): Option.Option<Effect.Effect<void, QueueDeliveryUnavailable>> => {
-  if (environment.SMOKE_QUEUE_NAME === undefined || batch.queue !== environment.SMOKE_QUEUE_NAME) {
-    return Option.none();
-  }
-  return Option.some(
-    smokeReady(environment)
-      ? nativeDelivery(() => receiveSmoke({ batch, environment }))
-      : Effect.fail(deliveryFailure(new Error("Smoke wiring unavailable")))
-  );
-};
-
 const receiveBillingQueue = ({
   batch,
   environment,
@@ -261,8 +246,6 @@ const receiveIdentityOnlyQueue = ({
 
 const receiveWorkQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryUnavailable> => {
   const { batch, environment } = input;
-  const smoke = receiveReservedSmoke(input);
-  if (Option.isSome(smoke)) return smoke.value;
   const identityOnly = receiveIdentityOnlyQueue(input);
   if (Option.isSome(identityOnly)) return identityOnly.value;
   if (batch.messages.some((message) => isForwardedEmailWork(message.body))) {

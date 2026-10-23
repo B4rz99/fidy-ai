@@ -31,7 +31,6 @@ export {
   runBillingCollectionWorkflow,
 } from "./subscription/runtime";
 export { ProactivityDeliveryWorkflow } from "./insights/runtime";
-export { ReleaseSmokeWorkflowV1 } from "./runtime/release-smoke/runtime";
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
 type CoreEnvironment = ProviderEnvironment &
@@ -183,12 +182,6 @@ const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput =>
   OPERATOR_ALERT_EMAIL: Option.fromUndefinedOr(environment.OPERATOR_ALERT_EMAIL),
   RESEND_API_KEY: Option.fromUndefinedOr(environment.RESEND_API_KEY),
   WOMPI_EVENT_SECRET: Option.fromUndefinedOr(environment.WOMPI_EVENT_SECRET),
-  SMOKE_BUCKET: Option.fromUndefinedOr(environment.SMOKE_BUCKET),
-  SMOKE_QUEUE: Option.fromUndefinedOr(environment.SMOKE_QUEUE),
-  SMOKE_WORKFLOW: Option.fromUndefinedOr(environment.SMOKE_WORKFLOW),
-  SMOKE_QUEUE_NAME: Option.fromUndefinedOr(environment.SMOKE_QUEUE_NAME),
-  SMOKE_PROOF: Option.fromUndefinedOr(environment.SMOKE_PROOF),
-  CF_VERSION_METADATA: Option.fromUndefinedOr(environment.CF_VERSION_METADATA),
 });
 
 /** Private, non-User executor; the object key coordinates ticks and grants no domain authority. */

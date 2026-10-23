@@ -5068,3 +5068,20 @@ continues to check the surrounding behavior. This is a preparation slice on the 
 branch, not completion of #1489: selective retention, original-file inventory and minimal restore
 markers still require their synchronized owner/schema changes. No production schema or object is
 changed by this local work.
+
+### Bounded personal-prefix cleanup
+
+A full-Delete request now scans the canonical User prefix in the email and statement buckets,
+removing at most four objects per continuation before returning Continue. Missing bindings and
+native failures refuse completion. The request must still match the exact User, be Erasing or
+ExternalPending with its marker/capture guards, and have no unresolved User writer. Selective
+retention requests keep their original path until #1489's final policy conversion; broad prefix
+cleanup does not run under a mixed disposition.
+
+The existing native original-byte erasure case includes five unindexed temporary objects plus its
+indexed original. The first continuation leaves two objects, later continuations remove them,
+and other-User files remain intact, including while PUT is unavailable. The original locator path
+still handles its bounded inventory checkpoint and known historical noncanonical locators; no
+inventory row is dropped by this preparation. Its final removal, erasure-bucket retained-content
+purge and minimal restore-marker conversion remain open #1489/#1490 work. No empty prefix is treated
+as proof that an earlier unresolved upload has settled.

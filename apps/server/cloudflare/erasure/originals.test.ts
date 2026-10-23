@@ -47,6 +47,12 @@ it("resumes original-byte erasure after capture and refuses a mismatched User wi
         ])
       );
       yield* Effect.tryPromise(() => bucket.put(targetKey, "Target bytes"));
+      const orphanKeys = ["c", "d", "e", "f", "0"].map(
+        (digit) => `users/${userId}/staging/statement/v1/${digit.repeat(64)}`
+      );
+      for (const key of orphanKeys) {
+        yield* Effect.tryPromise(() => bucket.put(key, "Unindexed temporary bytes"));
+      }
       yield* Effect.tryPromise(() => bucket.put(foreignKey, "Foreign bytes"));
       let cleanupOnly = false;
       const cleanupBucket = new Proxy(bucket, {
@@ -77,8 +83,18 @@ it("resumes original-byte erasure after capture and refuses a mismatched User wi
       const refused = yield* Effect.result(make().discard({ userId: foreignUser, reference }));
       expect(refused._tag).toBe("Failure");
       expect(yield* make().discard({ userId, reference })).toBe("Continue");
-      expect(yield* make().discard({ userId, reference })).toBe("Done");
+      expect(
+        (yield* Effect.tryPromise(() => bucket.list({ prefix: `users/${userId}/` }))).objects
+      ).toHaveLength(2);
+      let outcome: "Done" | "Continue" | "Retained" = "Continue";
+      for (let remaining = 4; remaining > 0 && outcome === "Continue"; remaining -= 1) {
+        outcome = yield* make().discard({ userId, reference });
+      }
+      expect(outcome).toBe("Done");
       expect(yield* Effect.tryPromise(() => bucket.head(targetKey))).toBeNull();
+      for (const key of orphanKeys) {
+        expect(yield* Effect.tryPromise(() => bucket.head(key))).toBeNull();
+      }
       expect(
         yield* Effect.tryPromise(() => bucket.get(foreignKey).then((body) => body?.text()))
       ).toBe("Foreign bytes");

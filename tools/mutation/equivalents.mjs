@@ -163,7 +163,9 @@ export const verifyEquivalentReport = (registry, report) => {
           mutant.mutatorName === entry.mutatorName &&
           mutant.replacement === entry.replacement &&
           mutant.location.start.line === entry.location.start.line &&
-          mutant.location.start.column === entry.location.start.column
+          mutant.location.start.column === entry.location.start.column &&
+          mutant.location.end.line === entry.location.end.line &&
+          mutant.location.end.column === entry.location.end.column
       );
       if (matched.length !== 1 || matched[0]?.status !== "Ignored") {
         throw new Error(

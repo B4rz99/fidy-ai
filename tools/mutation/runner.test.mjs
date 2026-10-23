@@ -214,11 +214,11 @@ await test("reviewed equivalents exclude only the exact replacement in unchanged
 });
 
 const equivalentReportFixture = () => {
-  const source = "x < 0";
+  const source = "x < 0 && y > 0";
   const entry = {
-    location: { start: { line: 1, column: 1 }, end: { line: 1, column: 6 } },
-    mutatorName: "EqualityOperator",
-    replacement: "x <= 0",
+    location: { start: { line: 1, column: 1 }, end: { line: 1, column: source.length + 1 } },
+    mutatorName: "ConditionalExpression",
+    replacement: "true",
     original: source,
     reason: "Fixture-only exact-match control",
   };
@@ -283,4 +283,22 @@ await test("full reports reject stale, missing, or extra equivalent exclusions",
       }),
     /Stale equivalent mutant/
   );
+});
+
+await test("full reports distinguish nested equivalents sharing a start position", async () => {
+  const { verifyEquivalentReport } = await import("./equivalents.mjs");
+  const { registry, report } = equivalentReportFixture();
+  const name = "src/core/example.ts";
+  const entry = registry.files[name].mutants[0];
+  assert.ok(entry);
+  const nested = {
+    ...entry,
+    original: "x < 0",
+    location: { ...entry.location, end: { line: 1, column: 6 } },
+  };
+  registry.files[name].mutants.push(nested);
+  const parent = report.files[name].mutants[0];
+  assert.ok(parent);
+  report.files[name].mutants.push({ ...parent, id: "2", location: nested.location });
+  verifyEquivalentReport(registry, report);
 });

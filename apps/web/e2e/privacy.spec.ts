@@ -40,10 +40,15 @@ const verifyAccessibility = (page: Page): Promise<void> =>
     })
   );
 
-const captureAccessResponse = (route: Route, capture: (payload: unknown) => void): Promise<void> =>
+const captureAccessResponse = (
+  route: Route,
+  capture: (payload: unknown) => void,
+  expectedStatus = successStatus
+): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const response = yield* Effect.tryPromise(() => route.fetch());
+      expect(response.status()).toBe(expectedStatus);
       capture(yield* Effect.tryPromise(() => response.json()));
       yield* Effect.tryPromise(() => route.fulfill({ response }));
     })
@@ -51,9 +56,13 @@ const captureAccessResponse = (route: Route, capture: (payload: unknown) => void
 
 const captureErasureReplies = (page: Page, replies: unknown[]): Promise<unknown> =>
   page.route(`${apiOrigin}/web/privacy/erasure`, (route) =>
-    captureAccessResponse(route, (payload) => {
-      replies.push(payload);
-    })
+    captureAccessResponse(
+      route,
+      (payload) => {
+        replies.push(payload);
+      },
+      acceptedStatus
+    )
   );
 
 const verifyTransactionAccess = (page: Page): Promise<void> =>
@@ -540,7 +549,7 @@ test("read-only Transactions retain loaded history through a failed continuation
     })
   ));
 
-test("an erasure intention uses fresh Core authority and an explicit retry returns the same request", ({
+test("account deletion uses fresh Core authority and an explicit retry returns the same request", ({
   page,
   request,
 }) =>
@@ -561,7 +570,7 @@ test("an erasure intention uses fresh Core authority and an explicit retry retur
       const initial: unknown = replies[0];
       expect(initial).toBeDefined();
       yield* Effect.tryPromise(() =>
-        expect(region.getByRole("alert")).toContainText("Aún no hemos eliminado tus datos")
+        expect(region.getByRole("alert")).toContainText("La eliminación está en curso")
       );
       yield* Effect.tryPromise(() => expect(button).toBeDisabled());
       yield* Effect.tryPromise(() => expect(region).not.toContainText("Referencia:"));

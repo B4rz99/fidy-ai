@@ -1,12 +1,13 @@
 import { Clock, DateTime, Effect, Schema } from "effect";
 import { DisclosureSnapshot } from "../src/shell/consent/contract";
 import { currentDisclosureFor } from "../src/shell/consent/operations";
-import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
+import { installTestSchema, isolatedTestStorage } from "./d1-test-fixture";
 
-const databases = isolatedTestDatabases();
-export const db = await databases.acquire();
+const storage = isolatedTestStorage();
+export const { db, bucket: erasureRegistry } = await storage.acquire();
 
 await installTestSchema({ db });
+await erasureRegistry.put("recovery/generation", "initial");
 
 export const fixtureUserId = "24000000-0000-4000-8000-000000000241";
 export const firstCardUserId = "24000000-0000-4000-8000-000000000281";

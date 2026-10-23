@@ -25,17 +25,20 @@ the authentication registry rather than browser persistence.
 
 ## Whole-User erasure — #1274
 
-`erasure-request.tsx` records one fresh-cookie, explicit confirmation for the same User through the
-server-declared `processingConsent.erase` endpoint. It displays review pending, never completed
-deletion. Reload and explicit retry reuse the same server intention; no erasure UUID, provider
-reference, raw error or operator controls are shown. Support remains accessible without login.
-The existing register/handoff, dedicated operator Access, current owner inventory and resumable
-D1/R2/User-coordinator disposition are described in
-[the erasure procedure](../../../../../docs/operations/titular-erasure-1274.md).
+`erasure-request.tsx` starts full account deletion after fresh-cookie, explicit confirmation for the
+same User through the server-declared `processingConsent.erase` endpoint. Its confirmation explains
+that new operations stop and provider/backup cleanup can take longer. Acceptance displays deletion
+in progress, never completed deletion or a pending operator review. Reload and explicit retry reuse
+the same request; no erasure UUID, provider reference, raw error or operator controls are shown.
+Support remains accessible without login. The final admission, confirmed-upload drain and minimal
+restore protection are described in the
+[integration contract](../../../../../docs/operations/database-cutover-1428.md#direct-account-deletion-and-minimal-metadata-1489--1490-integration).
 
-The production-built local browser test exercises real public ingress/Core/D1, confirms disabled
-submission until explicit choice, records HTTP 202, refuses a false deletion claim and verifies the
-identical response on retry. This is local evidence; no Production erasure was performed.
+The production-built local browser test exercises real public ingress/Core/D1 and the native R2
+registry, confirms disabled submission until explicit choice, records HTTP 202, refuses a false
+completion claim and verifies the identical response on retry. The fixture initializes only its
+new empty registry and binds the same recovery guard used by ordinary production activity. This is
+local evidence; no Production erasure was performed.
 
 ## Evidence — 2026-10-14
 

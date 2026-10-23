@@ -20,6 +20,7 @@ import {
   budgetUserId,
   dashboardUserId,
   db,
+  erasureRegistry,
   firstCardUserId,
   fixtureUserId,
   navigationIdentities,
@@ -504,6 +505,8 @@ const admissionKeyLength = 32;
 const digestHexLength = 64;
 const coreEnvironment: Parameters<typeof core.fetch>[1] = {
   DB: browserDatabase,
+  ERASURE_REQUIRED: "true",
+  ERASURE_BUCKET: erasureRegistry,
   AI: { run: () => Promise.reject(new Error("unused")) },
   CONTRACT_DIGEST: "a".repeat(digestHexLength),
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",

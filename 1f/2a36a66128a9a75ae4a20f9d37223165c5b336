@@ -1,0 +1,29 @@
+apps/server/cloudflare/canonical-operations/internal/batch.ts
+  s_fb8e6f8c22d2d1::t_1b5a929a4edf5b 40,732,738-749
+apps/server/cloudflare/canonical-operations/internal/mutation-unit.ts
+  s_fb8e6f8c22d2d1::t_1b5a929a4edf5b 524,532-546,548-553,555-563,565-574,577-607
+  s_fb8e6f8c22d2d1::t_db8ecff07c9e42 547,554
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_fb8e6f8c22d2d1::t_1b5a929a4edf5b 352-355,367
+  s_fb8e6f8c22d2d1::t_c4231a60bce7fe 28
+apps/server/cloudflare/canonical-operations/mutation-recovery.test.ts
+  s_fb8e6f8c22d2d1::t_73b5cce3ac69e7 1,6-8,11-21,23-29,34-41,43-46,48-52,54-61,63,66-71,83-98,102-103,105-109,115-116,119-120,123,126-129,133-134,138-139,141-146,152-153,156-157,160-162,165,167-168,172-173,175-179,185-186,189-190,193-195,198,200-201,204,207,209-212,215,265-292,294,297-298,300
+  s_fb8e6f8c22d2d1::t_cf55f049f9b305 42,47
+  s_fb8e6f8c22d2d1::t_7be18e308ff505 2-5,9-10,22,30-33,53,62,64-65,72-82,99-101,104,110-114,117-118,121-122,124-125,130-132,135-137,140,147-151,154-155,158-159,163-164,166,169-171,174,180-184,187-188,191-192,196-197,199,202-203,205-206,208,213-214,216-264,293,295-296,299,301-303
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1f2a36a66128a9a75ae4a20f9d37223165c5b336",
+  "prompts": {},
+  "sessions": {
+    "s_fb8e6f8c22d2d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a168ab-6d1f-73c2-9768-504ba124f3aa",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

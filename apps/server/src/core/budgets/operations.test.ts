@@ -101,7 +101,7 @@ it("latches exactly eighty percent before the full cap and never reopens it afte
     advanceBudgetLatch({ budget, spent: money("800"), latch: initialLatch() })
   );
   expect(reached).toEqual({
-    latch: { ...initialLatch(), reached80: true },
+    latch: { ...initialLatch(), highestReached: 80 },
     newlyReached: [80],
   });
   expect(

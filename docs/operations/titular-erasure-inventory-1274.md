@@ -24,7 +24,7 @@ class-wide hold. Stop review until the actual source and executable scope agree.
 | `whatsapp`                | `hosted_whatsapp_inbound`               | conversation | `hosted_turns (inbound fields)`                                                 |
 | `whatsapp`                | `hosted_whatsapp_windows`               | conversation | `hosted_whatsapp_windows`                                                       |
 | `whatsapp`                | `insight_whatsapp_claims`               | conversation | `whatsapp_deliveries`                                                           |
-| `whatsapp`                | `insight_whatsapp_routes`               | conversation | `users (route fields)`                                                          |
+| `whatsapp`                | `insight_whatsapp_routes`               | conversation | `whatsapp_recipients`                                                          |
 | `whatsapp`                | `proactivity_whatsapp_claims`           | conversation | `whatsapp_deliveries`                                                           |
 | `whatsapp`                | `weekly_governor_questions`             | conversation | `whatsapp_deliveries`                                                           |
 | `tokens`                  | `pat_pairings`                          | credentials  | `pat_pairings`                                                                  |

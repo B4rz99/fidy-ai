@@ -13,9 +13,9 @@ establishes the design basis for tickets #1428–#1494. The current implementati
 does not establish migration equivalence, benchmark results, upload safety, platform coverage, or
 deployment success.
 
-The accepted inventory contains **101 distinct named target tables**, including four conditional
-Transaction projections. Removing all four after measurement gives **97**. The recipient proposal
-below is **not accepted or included**: approval would make these counts 102 and 98 respectively.
+The accepted inventory contains **102 distinct named target tables**, including the approved
+WhatsApp recipient table and four conditional Transaction projections. Removing all four after
+measurement would give **98**. Each projection remains subject to its own measured removal gate.
 These are target counts, not a database inspection or a claim about Production.
 
 Work stays on `refactor/schema-low-medium` for the coupled schema/code integration. Independent,
@@ -61,7 +61,7 @@ erasure store IDs identify permissions, not extra tables.
 | [#1415](https://github.com/B4rz99/fidy-ai/issues/1415)                                                         | Consent (`consent`)                                 | `consent_offers`, `consent_history`, `pending_consent_exchanges`                                                                                                                                                                                                                                                                                  |
 | [#1416](https://github.com/B4rz99/fidy-ai/issues/1416)                                                         | Agent (`agent`)                                     | `hosted_agent_sessions`, `hosted_turns`, `hosted_confirmations`, `hosted_mutation_commits`, `transcript_entries`                                                                                                                                                                                                                                  |
 | [#1417](https://github.com/B4rz99/fidy-ai/issues/1417)                                                         | Memory (`memory`)                                   | `memories`                                                                                                                                                                                                                                                                                                                                        |
-| [#1418](https://github.com/B4rz99/fidy-ai/issues/1418)                                                         | WhatsApp (`whatsapp`)                               | `whatsapp_service_windows`, `whatsapp_deliveries`, `whatsapp_event_records`                                                                                                                                                                                                                                                                       |
+| [#1418](https://github.com/B4rz99/fidy-ai/issues/1418)                                                         | WhatsApp (`whatsapp`)                               | `whatsapp_service_windows`, `whatsapp_deliveries`, `whatsapp_event_records`, `whatsapp_recipients`                                                                                                                                                                                                                                                |
 | [#1425](https://github.com/B4rz99/fidy-ai/issues/1425)                                                         | Erasure (`erasure`)                                 | `erasure_requests`, `erasure_steps`, `erasure_custody_records`, `erasure_permits`, `erasure_control`, `erasure_restore_members`                                                                                                                                                                                                                   |
 | [#1427](https://github.com/B4rz99/fidy-ai/issues/1427)                                                         | Canonical Admission (`canonical-admission`)         | `canonical_request_replays`                                                                                                                                                                                                                                                                                                                       |
 | [#1427](https://github.com/B4rz99/fidy-ai/issues/1427)                                                         | SQL Assertions (`src/shell/sql-assertions`)         | `sql_assertions`                                                                                                                                                                                                                                                                                                                                  |
@@ -73,12 +73,12 @@ revision write. There is one physical table, not a table per consumer. Operation
 application table; platform observability and exact-revision CI replace its stores only after the
 coverage gates pass. Onboarding composes owners and owns no persistent table.
 
-## Recipient routing: explicit review gate
+## Recipient routing: accepted destination
 
-**Proposed, awaiting User review:** `whatsapp_recipients`, owned by WhatsApp, one current route per
-User. This is a newly identified table, not an accepted addition to #1418. Do not implement it or
-remove the source fields before approval. [#1483](https://github.com/B4rz99/fidy-ai/issues/1483) and
-the route-dependent part of [#1485](https://github.com/B4rz99/fidy-ai/issues/1485) remain gated.
+**User-approved:** `whatsapp_recipients`, owned by WhatsApp, one current route per
+User. The User accepted this five-column addition to #1418 after reviewing its purpose and layout.
+[#1483](https://github.com/B4rz99/fidy-ai/issues/1483) implements it;
+[#1485](https://github.com/B4rz99/fidy-ai/issues/1485) consumes the final Identity separation.
 
 | Column                     | SQL type                  | Contract                                                                |
 | -------------------------- | ------------------------- | ----------------------------------------------------------------------- |
@@ -88,7 +88,9 @@ the route-dependent part of [#1485](https://github.com/B4rz99/fidy-ai/issues/148
 | `business_phone_number_id` | TEXT NOT NULL             | `WhatsAppBusinessPhoneNumberId`; sending endpoint                       |
 | `verified_at_ms`           | INTEGER NOT NULL          | Original authenticated receipt instant; preserve current integer bounds |
 
-Copy the four complete `users.route_*` fields exactly and use `users.id` as `user_id`. Complete
+Copy the four complete `users.route_*` fields exactly and use `users.id` as `user_id`. Preserve
+the original User rowid as the recipient rowid for unchanged erasure archive references; new route
+inserts use that same owning User rowid. Complete
 absence produces no recipient row. Partial groups block migration. Preserve the current update
 comparison `incoming_received_at_ms >= verified_at_ms`, including equal-time behavior. The channel
 must prepare the write inside the authenticated inbound/decision batch and recheck Identity's
@@ -96,7 +98,7 @@ current `(UserId, PortfolioId, BSUID)` association there. Reading a route is not
 egress must independently recheck current association and applicable Consent/queued-work authority.
 Do not repair historical route/association mismatches by rebinding their owner or fabricating proof.
 
-The proposed table has no login authority, window timestamp, delivery history, public operation,
+The table has no login authority, window timestamp, delivery history, public operation,
 new expiry policy or sandbox phone fallback. Existing route erasure remains channel-owned under
 the `insight_whatsapp_routes` logical purpose until the full-deletion cutover replaces that adapter.
 Historical Consent recipients and already-started deliveries retain their own frozen bindings.
@@ -156,7 +158,7 @@ composite foreign key alone does not reject a partially populated reference.
 | Backfill                             | `statement_backfill_entitlements(user_id)`                         | Row absence remains absence; validate same-User submission; reserve/release/consume with the submission transition                                       |
 | Mailbox                              | `verified_email_credentials(user_id)`; normalized unique `address` | Replacement validates prior credential snapshot and fresh session, installs the new credential and consumes proof together                               |
 | Recovery                             | `backup_recovery_credentials(user_id)`; unique `code_digest`       | Preserve digest bytes/revision/consumption; approval and code use commit together; never disclose a migrated code                                        |
-| Recipient                            | Proposed `whatsapp_recipients(user_id)`                            | Approval gate above; channel update and identity recheck remain in one unit                                                                              |
+| Recipient                            | Accepted `whatsapp_recipients(user_id)`                            | Channel update and current Identity recheck remain in one unit                                                                                           |
 | Ordinary Audit cutoff                | `audit_retention_permits(user_id)`                                 | Acquire, assert, delete only eligible kinds before cutoff, and clear in one batch; retained source permits are an anomaly to investigate                 |
 
 `completeEnrollment` remains a composition of published owner preparations. In one D1 batch:
@@ -4778,3 +4780,88 @@ CREATE TABLE erasure_chunk (
 ```
 
 <!-- erasure-selection-rollback:end -->
+
+## WhatsApp recipient cutover (#1483)
+
+Stop old routing writers before this synchronized cutover. Back up the original schema, populated
+rows and archive manifest; record the independently inspected complete-route count. Use one native
+D1 batch for the guard, target table creation, copy, old trigger removal, four column drops and
+new target triggers. Obtain the exact `whatsapp_recipients` table and its four triggers from
+`0001_schema.sql`; the original five `insight_whatsapp_routes_field_*` triggers and User definition
+are retained in `whatsapp/recipient-cutover.test-fixture.json` for inverse rehearsal. This is a
+runbook, not an additional migration file.
+
+Do not rebuild or drop `users`: its foreign keys include cascading feature records. Native column
+drops retain User rowids, references and unrelated data. Drop the old route triggers first, then
+`route_verified_at_ms` (which owns the group CHECK) before the other three route columns.
+
+<!-- whatsapp-recipient-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'recipient_route_count',count(*)=? FROM users WHERE route_portfolio_id IS NOT NULL;
+INSERT INTO sql_assertions(scope,accepted) SELECT 'recipient_route_complete',NOT EXISTS(SELECT 1 FROM users WHERE ((route_portfolio_id IS NOT NULL)+(route_bsuid IS NOT NULL)+(route_phone_number_id IS NOT NULL)+(route_verified_at_ms IS NOT NULL)) NOT IN(0,4));
+INSERT INTO sql_assertions(scope,accepted) SELECT 'recipient_route_association',NOT EXISTS(SELECT 1 FROM users WHERE route_portfolio_id IS NOT NULL AND (route_portfolio_id IS NOT whatsapp_portfolio_id OR route_bsuid IS NOT whatsapp_bsuid OR whatsapp_verified_at_ms IS NULL));
+DELETE FROM sql_assertions WHERE scope IN('recipient_route_count','recipient_route_complete','recipient_route_association');
+```
+
+<!-- whatsapp-recipient-guard:end -->
+
+<!-- whatsapp-recipient-copy:start -->
+
+```sql
+INSERT INTO whatsapp_recipients(rowid,user_id,portfolio_id,bsuid,business_phone_number_id,verified_at_ms) SELECT rowid,id,route_portfolio_id,route_bsuid,route_phone_number_id,route_verified_at_ms FROM users WHERE route_portfolio_id IS NOT NULL;
+```
+
+<!-- whatsapp-recipient-copy:end -->
+
+<!-- whatsapp-recipient-drop:start -->
+
+```sql
+ALTER TABLE users DROP COLUMN route_verified_at_ms;
+ALTER TABLE users DROP COLUMN route_phone_number_id;
+ALTER TABLE users DROP COLUMN route_bsuid;
+ALTER TABLE users DROP COLUMN route_portfolio_id;
+```
+
+<!-- whatsapp-recipient-drop:end -->
+
+For inverse restoration, stop new route writers and use one native batch. Guard the same inspected
+route count and exact User association/rowid below, drop the four recipient triggers, add the
+original nullable columns, copy routes into their original Users, drop `whatsapp_recipients`, then
+reinstall the original five field triggers. Existing archives are untouched in both directions.
+Absent routes remain absent. Do not rebind a mismatch or invent receipt times.
+
+<!-- whatsapp-recipient-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'recipient_inverse_count',count(*)=? FROM whatsapp_recipients;
+INSERT INTO sql_assertions(scope,accepted) SELECT 'recipient_inverse_association',NOT EXISTS(SELECT 1 FROM whatsapp_recipients r LEFT JOIN users u ON u.id=r.user_id WHERE u.id IS NULL OR r.rowid IS NOT u.rowid OR r.portfolio_id IS NOT u.whatsapp_portfolio_id OR r.bsuid IS NOT u.whatsapp_bsuid OR u.whatsapp_verified_at_ms IS NULL);
+DELETE FROM sql_assertions WHERE scope IN('recipient_inverse_count','recipient_inverse_association');
+```
+
+<!-- whatsapp-recipient-rollback-guard:end -->
+
+<!-- whatsapp-recipient-rollback-columns:start -->
+
+```sql
+ALTER TABLE users ADD COLUMN route_portfolio_id TEXT;
+ALTER TABLE users ADD COLUMN route_bsuid TEXT;
+ALTER TABLE users ADD COLUMN route_phone_number_id TEXT;
+ALTER TABLE users ADD COLUMN route_verified_at_ms INTEGER CHECK((route_portfolio_id IS NULL AND route_bsuid IS NULL AND route_phone_number_id IS NULL AND route_verified_at_ms IS NULL) OR (route_portfolio_id IS NOT NULL AND route_bsuid IS NOT NULL AND route_phone_number_id IS NOT NULL AND route_verified_at_ms IS NOT NULL));
+```
+
+<!-- whatsapp-recipient-rollback-columns:end -->
+
+<!-- whatsapp-recipient-rollback-copy:start -->
+
+```sql
+UPDATE users SET (route_portfolio_id,route_bsuid,route_phone_number_id,route_verified_at_ms)=(SELECT portfolio_id,bsuid,business_phone_number_id,verified_at_ms FROM whatsapp_recipients r WHERE r.user_id=users.id) WHERE EXISTS(SELECT 1 FROM whatsapp_recipients r WHERE r.user_id=users.id);
+```
+
+<!-- whatsapp-recipient-rollback-copy:end -->
+
+Native rehearsal covers populated/absent routes, historical association/count refusal, interrupted
+DDL rollback, original route/archive row references, foreign keys and preservation of unrelated
+cascading documents. Channel behavior covers older/equal-time observations, foreign-User refusal,
+failed inbound rollback, independent window cleanup and purpose-specific erasure. Local evidence
+does not claim a remote cutover has run.

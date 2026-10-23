@@ -182,20 +182,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'business_phone_number_id',r.\"business_phone_number_id\",'verified_at_ms',r.\"verified_at_ms\") AS body FROM (SELECT rowid,id AS user_id,route_portfolio_id AS portfolio_id,route_bsuid AS bsuid,route_phone_number_id AS business_phone_number_id,route_verified_at_ms AS verified_at_ms FROM users WHERE route_portfolio_id IS NOT NULL) r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'business_phone_number_id',r.\"business_phone_number_id\",'verified_at_ms',r.\"verified_at_ms\") AS body FROM whatsapp_recipients r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,id AS user_id,route_portfolio_id AS portfolio_id,route_bsuid AS bsuid,route_phone_number_id AS business_phone_number_id,route_verified_at_ms AS verified_at_ms FROM users WHERE route_portfolio_id IS NOT NULL) r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM whatsapp_recipients r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM (SELECT rowid,id AS user_id,route_portfolio_id AS portfolio_id,route_bsuid AS bsuid,route_phone_number_id AS business_phone_number_id,route_verified_at_ms AS verified_at_ms FROM users WHERE route_portfolio_id IS NOT NULL) r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM whatsapp_recipients r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE users AS r SET route_portfolio_id=NULL,route_bsuid=NULL,route_phone_number_id=NULL,route_verified_at_ms=NULL WHERE r.id=? AND r.route_portfolio_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        sql: "DELETE FROM whatsapp_recipients AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
         params: [scope.userId, scope.rowRefsJson],
       },
     ],

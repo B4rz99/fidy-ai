@@ -16,7 +16,7 @@ const database = Effect.gen(function* () {
   yield* io(() =>
     db.batch([
       db.prepare(
-        "CREATE TABLE users (id TEXT PRIMARY KEY, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
+        "CREATE TABLE users (id TEXT PRIMARY KEY, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER)"
       ),
       db.prepare(
         "CREATE TABLE subscriptions (user_id TEXT PRIMARY KEY,current_paid_attempt_id TEXT)"

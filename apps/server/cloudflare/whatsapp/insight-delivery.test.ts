@@ -30,6 +30,8 @@ import {
 import { type InsightUnavailable } from "../insights/contract";
 import { InsightRecipient, type InsightWhatsAppStage, WhatsAppUnavailable } from "./contract";
 import {
+  findInsightRecipient,
+  prepareInsightRecipient,
   readInsightDeliveryEvidence,
   reconcileInsightStatus,
   recordInsightSend,
@@ -344,4 +346,55 @@ it.live("a staged report cannot send after explicit revocation", () =>
     });
     expect((yield* startInsightSend(input))._tag).toBe("NotClaimed");
   })
+);
+
+it.live(
+  "keeps the freshest authenticated recipient, accepts equal-time endpoint changes and rolls back failed inbound work",
+  () =>
+    Effect.gen(function* () {
+      const input = yield* prepare(yield* weeklySummaryTestDatabase);
+      const db = input.db;
+      const read = (): ReturnType<typeof findInsightRecipient> =>
+        findInsightRecipient({ db, userId: input.userId });
+      const write = (
+        receivedAtMs: number,
+        businessPhoneNumberId: string,
+        userId = input.userId
+      ): D1PreparedStatement =>
+        prepareInsightRecipient({
+          db,
+          userId,
+          receivedAtMs,
+          recipient: {
+            ...recipient,
+            businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make(businessPhoneNumberId),
+          },
+        });
+      yield* Effect.tryPromise(() => db.batch([write(17, "111111111")]));
+      yield* Effect.tryPromise(() =>
+        db.batch([write(16, "222222222"), write(18, "333333333", weeklySummaryOtherUser)])
+      );
+      expect(yield* read()).toEqual(
+        Option.some({ ...recipient, businessPhoneNumberId: "111111111" })
+      );
+      expect(yield* findInsightRecipient({ db, userId: weeklySummaryOtherUser })).toEqual(
+        Option.none()
+      );
+      yield* Effect.tryPromise(() => db.batch([write(17, "444444444")]));
+      expect(yield* read()).toEqual(
+        Option.some({ ...recipient, businessPhoneNumberId: "444444444" })
+      );
+      const failed = yield* Effect.result(
+        Effect.tryPromise(() =>
+          db.batch([
+            write(18, "555555555"),
+            db.prepare("INSERT INTO sql_assertions VALUES('recipient_inbound_rollback',0)"),
+          ])
+        )
+      );
+      expect(failed._tag).toBe("Failure");
+      expect(yield* read()).toEqual(
+        Option.some({ ...recipient, businessPhoneNumberId: "444444444" })
+      );
+    })
 );

@@ -1,5 +1,6 @@
 import {
   documentedSqlBlock,
+  installHistoricalErasureChunk,
   schemaDefinition,
   schemaStatements,
 } from "../schema-cutover.test-fixture";
@@ -701,6 +702,7 @@ it.each(["valid", "foreign-owner", "changed-grant", "late-claim", "interrupted"]
         if (alterations[history].length > 0) {
           yield* awaitPromise(db.prepare(alterations[history]).run());
         }
+        yield* awaitPromise(installHistoricalErasureChunk(db));
         const snapshot = (): Promise<ReadonlyArray<D1Result>> =>
           db.batch(
             [

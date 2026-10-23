@@ -1,0 +1,37 @@
+apps/web/src/ui/reference.tsx
+  s_fb8e6f8c22d2d1::t_2670d94d2d3ffe 66-69
+scripts/oxlint/lint-rules.test.js
+  s_fb8e6f8c22d2d1::t_c364a2bae0415a 295-304,328
+.oxlintrc.ui.json
+  s_fb8e6f8c22d2d1::t_016a299464a877 8,27-31
+DESIGN.md
+  s_fb8e6f8c22d2d1::t_08458f9a0725bf 6,8-10,16-17,40,174,177-178,183-229,233,235,239,304
+apps/site/src/styles/global.css
+  s_fb8e6f8c22d2d1::t_f247d7b8706d81 2,44-45
+apps/web/src/index.css
+  s_fb8e6f8c22d2d1::t_cec3ba9b400eb7 2,44-63,65,115-134,136-144,148,153-155,179-184,188,191-193
+apps/web/src/ui/components/alert.tsx
+  s_fb8e6f8c22d2d1::t_6664e0abc8b305 12-18
+apps/web/src/ui/components/badge.tsx
+  s_fb8e6f8c22d2d1::t_8f65108701fbbf 15-17
+apps/web/src/ui/components/button-variants.ts
+  s_fb8e6f8c22d2d1::t_03357d31233a61 4,8-9,11,29
+design/tokens.css
+  s_fb8e6f8c22d2d1::t_a9a44bdd4d4bac 1-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "58e69ce93ae5ac217b316a262ac09d618b43c3ed",
+  "prompts": {},
+  "sessions": {
+    "s_fb8e6f8c22d2d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a168ab-6d1f-73c2-9768-504ba124f3aa",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

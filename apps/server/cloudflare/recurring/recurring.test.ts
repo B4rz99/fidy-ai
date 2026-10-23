@@ -932,7 +932,7 @@ const seedRetainedPatternLimit = (db: D1Database): Effect.Effect<void> =>
           .bind(userId, userId),
         db
           .prepare(`WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM copies WHERE n < ?)
-        INSERT INTO recurring_series(user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,confirmed_at,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence)
+        INSERT INTO recurring_series(user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,confirmed_at_ms,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence)
         SELECT user_id, printf('51000000-0000-4000-8000-%012d',n), currency,
           printf('limit merchant %03d',n),
           json_set(series_json, '$.id', printf('51000000-0000-4000-8000-%012d',n),
@@ -942,7 +942,7 @@ const seedRetainedPatternLimit = (db: D1Database): Effect.Effect<void> =>
             printf('%08d-0000-4000-8000-000000000002',50000000+n),
             printf('%08d-0000-4000-8000-000000000003',50000000+n)),
             '$.latestTransactionId', printf('%08d-0000-4000-8000-000000000003',50000000+n)),
-          reference_json, valid, printf('52000000-0000-4000-8000-%012d',n), confirmed_at, confirmation_context_json,
+          reference_json, valid, printf('52000000-0000-4000-8000-%012d',n), confirmed_at_ms, confirmation_context_json,
           json_set(confirmation_json, '$.id', printf('52000000-0000-4000-8000-%012d',n),
             '$.seriesId', printf('51000000-0000-4000-8000-%012d',n)),digest_excluded,
           (SELECT max(confirmation_sequence) FROM recurring_series)+n
@@ -1040,10 +1040,16 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const db = yield* setup();
+      const completedAt = DateTime.makeUnsafe("2026-10-22T12:34:56.007Z");
+      yield* TestClock.setTime(completedAt.epochMilliseconds);
       for (const month of [1, 2, 3]) yield* capture(db, month);
       yield* evaluate(db);
       const page = yield* readRecurringDigestSource({ db, userId, cursor: Option.none() }).pipe(
         Effect.orDie
+      );
+      expect(page.sourceIdentity).toContain(":2026-10-22T12:34:56.007Z:");
+      expect(page.confirmations[0]?.confirmedAt.epochMilliseconds).toBe(
+        completedAt.epochMilliseconds
       );
       expect(page.complete).toBe(true);
       expect(page.confirmations).toHaveLength(1);
@@ -1184,7 +1190,7 @@ it.effect("discovers new Users hourly while resuming interrupted evaluation on t
       yield* fromPromise(() =>
         db
           .prepare(
-            "SELECT phase FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id=?"
+            "SELECT phase FROM (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id=?"
           )
           .bind(userId)
           .first("phase")

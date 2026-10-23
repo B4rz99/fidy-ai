@@ -3743,3 +3743,140 @@ SELECT 'budget_work_rollback',CASE WHEN
 ```
 
 <!-- budget-work-rollback-guard:end -->
+
+### #1471 — Recurring instants on the selected coordinator
+
+The [measured gate](../research/recurring-detection-storage-gate.md) keeps the existing User
+coordinator, bounded scratch facts/proposals and both D1 cursors. There is no new Workflow history
+or expiry dependency. Phase, financial revision and page checkpoint commit together; retrying after
+an unobserved commit reloads that checkpoint. A completed revision is a no-op until facts change.
+The weekly changed-User interval, hourly idle discovery and four-User round-robin batch remain.
+
+Only the physical instants change to integer UTC milliseconds. An unstarted scan uses
+`cursor_at_ms=NULL,cursor_id=''`; a real cursor retains its Transaction identity. Reinitialization
+preserves the preceding complete evaluation time/revision. JSON financial payloads keep their owned
+codecs: the current Series, immutable first confirmation, initial reference Money and detector
+support evidence have different lifetimes and are not interchangeable. Public cursor and digest
+identity timestamps remain canonical ISO strings.
+
+For a populated conversion, stop writers and snapshot the database. Save the two old definitions and
+all their related indexes/triggers. Read and pin both source counts, then run the guard, create
+`cutover_recurring_evaluation_records` and `cutover_recurring_series` from the final definitions,
+copy, and swap both tables and related objects in **one native batch**. Preserve rowids, all JSON,
+confirmation sequence, logical erasure purposes and dispatcher state. Fresh installs use only 0001.
+The original writer emitted canonical ISO timestamps; noncanonical or submillisecond history is
+blocked for investigation instead of silently rounded. Resolve active erasure or affected retained
+archives first. Unrelated archives stay untouched.
+
+<!-- recurring-instant-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recurring_instant_cutover',CASE WHEN
+ (SELECT count(*) FROM recurring_evaluation_records)=? AND
+ (SELECT count(*) FROM recurring_series)=? AND
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND
+ NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN
+ ('recurring_facts','recurring_progress','recurring_proposals','recurring_series','recurring_confirmations')) AND
+ NOT EXISTS(SELECT 1 FROM recurring_evaluation_records WHERE
+  (occurred_at IS NOT NULL AND strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at) IS NOT occurred_at) OR
+  (cursor_at IS NOT NULL AND cursor_at<>'' AND strftime('%Y-%m-%dT%H:%M:%fZ',cursor_at) IS NOT cursor_at) OR
+  (evaluated_at IS NOT NULL AND strftime('%Y-%m-%dT%H:%M:%fZ',evaluated_at) IS NOT evaluated_at) OR
+  (first_captured_at IS NOT NULL AND strftime('%Y-%m-%dT%H:%M:%fZ',first_captured_at) IS NOT first_captured_at) OR
+  (kind='progress' AND (revision<1 OR evaluated_revision<0 OR
+   (cursor_at='')<>(cursor_id='') OR (evaluated_at IS NULL)<>(evaluated_revision=0) OR
+   (phase='complete' AND (evaluated_revision<>revision OR evaluated_at IS NULL)))) OR
+  (kind='fact' AND (json_extract(fact_json,'$.id') IS NOT id OR
+   json_extract(fact_json,'$.occurredAt') IS NOT occurred_at))) AND
+ NOT EXISTS(SELECT 1 FROM recurring_series WHERE
+  json_extract(series_json,'$.id') IS NOT id OR json_extract(series_json,'$.money.currency') IS NOT currency OR
+  (confirmed_at IS NOT NULL AND (strftime('%Y-%m-%dT%H:%M:%fZ',confirmed_at) IS NOT confirmed_at OR
+   json_extract(confirmation_json,'$.id') IS NOT confirmation_id OR
+   json_extract(confirmation_json,'$.seriesId') IS NOT id OR
+   json_extract(confirmation_json,'$.confirmedAt') IS NOT confirmed_at OR
+   json_extract(series_json,'$.confirmedAt') IS NOT confirmed_at)))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recurring-instant-guard:end -->
+
+Before preparing the batch, decode each retained `series_json` with the existing `RecurringSeries`
+JSON codec and compute its key with Core Recurring's `normalizeCounterparty` (Unicode NFKC,
+Unicode whitespace folding and lowercase). Do not replace that policy with SQLite `lower/trim`.
+For every Series, include this guard in the same batch, binding its rowid, exact observed JSON and
+computed normalized key. The global count check and stopped writers bind the entire preflight;
+missing, undecodable, changed or mismatched rows block rather than being rewritten.
+
+<!-- recurring-instant-series-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recurring_series_projection',CASE WHEN EXISTS(
+ SELECT 1 FROM recurring_series WHERE rowid=? AND series_json=? AND counterparty_key=?
+) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recurring-instant-series-guard:end -->
+
+<!-- recurring-instant-copy:start -->
+
+```sql
+INSERT INTO cutover_recurring_evaluation_records
+(rowid,user_id,kind,id,group_key,occurred_at_ms,fact_json,proposal_json,revision,phase,cursor_at_ms,cursor_id,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone)
+SELECT rowid,user_id,kind,id,group_key,CAST(round(unixepoch(occurred_at,'subsec')*1000) AS INTEGER),fact_json,proposal_json,revision,phase,
+ CAST(round(unixepoch(nullif(cursor_at,''),'subsec')*1000) AS INTEGER),cursor_id,
+ CAST(round(unixepoch(evaluated_at,'subsec')*1000) AS INTEGER),evaluated_revision,
+ CAST(round(unixepoch(first_captured_at,'subsec')*1000) AS INTEGER),time_zone FROM recurring_evaluation_records;
+INSERT INTO cutover_recurring_series
+(rowid,user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,confirmed_at_ms,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence)
+SELECT rowid,user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,
+ CAST(round(unixepoch(confirmed_at,'subsec')*1000) AS INTEGER),confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence FROM recurring_series;
+```
+
+<!-- recurring-instant-copy:end -->
+
+For rollback stop writers and take another snapshot. Pin the current counts and use the guard below;
+refuse values outside the original timestamp range or which do not round-trip exactly. Create the
+two scratch tables from the saved old definitions and copy with the reverse SQL, then replace both
+stores and restore their old related objects in the same batch. The initial timestamp sentinel
+returns to `''`. A failing guard or failure anywhere in either copy/swap rolls back the whole batch.
+
+<!-- recurring-instant-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'recurring_instant_rollback',CASE WHEN
+ (SELECT count(*) FROM recurring_evaluation_records)=? AND
+ (SELECT count(*) FROM recurring_series)=? AND
+ NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND
+ NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN
+ ('recurring_facts','recurring_progress','recurring_proposals','recurring_series','recurring_confirmations')) AND
+ NOT EXISTS(SELECT 1 FROM (
+ SELECT occurred_at_ms AS instant FROM recurring_evaluation_records UNION ALL
+ SELECT cursor_at_ms FROM recurring_evaluation_records UNION ALL
+ SELECT evaluated_at_ms FROM recurring_evaluation_records UNION ALL
+ SELECT first_captured_at_ms FROM recurring_evaluation_records UNION ALL
+ SELECT confirmed_at_ms FROM recurring_series
+ ) WHERE instant IS NOT NULL AND (instant NOT BETWEEN -62135596800000 AND 253402300799999 OR
+ instant IS NOT CAST(round(unixepoch(strftime('%Y-%m-%dT%H:%M:%fZ',instant/1000.0,'unixepoch'),'subsec')*1000) AS INTEGER)))
+ THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- recurring-instant-rollback-guard:end -->
+
+<!-- recurring-instant-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_recurring_evaluation_records
+(rowid,user_id,kind,id,group_key,occurred_at,fact_json,proposal_json,revision,phase,cursor_at,cursor_id,evaluated_at,evaluated_revision,first_captured_at,time_zone)
+SELECT rowid,user_id,kind,id,group_key,strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch'),fact_json,proposal_json,revision,phase,
+ CASE WHEN kind='progress' AND cursor_at_ms IS NULL THEN '' ELSE strftime('%Y-%m-%dT%H:%M:%fZ',cursor_at_ms/1000.0,'unixepoch') END,cursor_id,
+ strftime('%Y-%m-%dT%H:%M:%fZ',evaluated_at_ms/1000.0,'unixepoch'),evaluated_revision,
+ strftime('%Y-%m-%dT%H:%M:%fZ',first_captured_at_ms/1000.0,'unixepoch'),time_zone FROM recurring_evaluation_records;
+INSERT INTO cutover_recurring_series
+(rowid,user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,confirmed_at,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence)
+SELECT rowid,user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,
+ strftime('%Y-%m-%dT%H:%M:%fZ',confirmed_at_ms/1000.0,'unixepoch'),confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence FROM recurring_series;
+```
+
+<!-- recurring-instant-rollback-copy:end -->

@@ -1175,22 +1175,22 @@ CREATE TABLE "recurring_evaluation_records" (
  kind TEXT NOT NULL CHECK(kind IN ('fact','proposal','progress')),
  id TEXT NOT NULL,
  group_key TEXT,
- occurred_at TEXT,
+ occurred_at_ms INTEGER,
  fact_json TEXT,
  proposal_json TEXT,
  revision INTEGER,
  phase TEXT CHECK(phase IN ('scan','detect','complete')),
- cursor_at TEXT,
+ cursor_at_ms INTEGER,
  cursor_id TEXT,
- evaluated_at TEXT,
+ evaluated_at_ms INTEGER,
  evaluated_revision INTEGER,
- first_captured_at TEXT,
+ first_captured_at_ms INTEGER,
  time_zone TEXT,
- CHECK((kind='fact' AND group_key IS NOT NULL AND occurred_at IS NOT NULL AND fact_json IS NOT NULL AND proposal_json IS NULL)
- OR(kind='proposal' AND group_key IS NULL AND occurred_at IS NULL AND fact_json IS NULL AND proposal_json IS NOT NULL)
- OR(kind='progress' AND id='progress' AND group_key IS NOT NULL AND occurred_at IS NULL AND fact_json IS NULL AND proposal_json IS NULL)),
- CHECK((kind='progress' AND revision IS NOT NULL AND phase IS NOT NULL AND cursor_at IS NOT NULL AND cursor_id IS NOT NULL AND evaluated_revision IS NOT NULL AND first_captured_at IS NOT NULL AND time_zone IS NOT NULL)
- OR(kind<>'progress' AND revision IS NULL AND phase IS NULL AND cursor_at IS NULL AND cursor_id IS NULL AND evaluated_at IS NULL AND evaluated_revision IS NULL AND first_captured_at IS NULL AND time_zone IS NULL)),
+ CHECK((kind='fact' AND group_key IS NOT NULL AND occurred_at_ms IS NOT NULL AND fact_json IS NOT NULL AND proposal_json IS NULL)
+ OR(kind='proposal' AND group_key IS NULL AND occurred_at_ms IS NULL AND fact_json IS NULL AND proposal_json IS NOT NULL)
+ OR(kind='progress' AND id='progress' AND group_key IS NOT NULL AND occurred_at_ms IS NULL AND fact_json IS NULL AND proposal_json IS NULL)),
+ CHECK((kind='progress' AND revision IS NOT NULL AND phase IS NOT NULL AND cursor_id IS NOT NULL AND ((cursor_at_ms IS NULL AND cursor_id='') OR (cursor_at_ms IS NOT NULL AND cursor_id IS NOT NULL AND cursor_id<>'')) AND evaluated_revision IS NOT NULL AND first_captured_at_ms IS NOT NULL AND time_zone IS NOT NULL)
+ OR(kind<>'progress' AND revision IS NULL AND phase IS NULL AND cursor_at_ms IS NULL AND cursor_id IS NULL AND evaluated_at_ms IS NULL AND evaluated_revision IS NULL AND first_captured_at_ms IS NULL AND time_zone IS NULL)),
  PRIMARY KEY(user_id,kind,id)
 ) STRICT;
 --> statement-breakpoint
@@ -1203,10 +1203,10 @@ CREATE TABLE recurring_series (
   series_json TEXT NOT NULL,
   evidence_json TEXT NOT NULL,
   reference_json TEXT NOT NULL,
-  valid INTEGER NOT NULL CHECK(valid IN (0, 1)), confirmation_id TEXT, confirmed_at TEXT, confirmation_context_json TEXT, confirmation_json TEXT, digest_excluded INTEGER CHECK(digest_excluded IN(0,1)), confirmation_sequence INTEGER CHECK(
- (confirmation_id IS NULL AND confirmed_at IS NULL AND confirmation_context_json IS NULL
+  valid INTEGER NOT NULL CHECK(valid IN (0, 1)), confirmation_id TEXT, confirmed_at_ms INTEGER, confirmation_context_json TEXT, confirmation_json TEXT, digest_excluded INTEGER CHECK(digest_excluded IN(0,1)), confirmation_sequence INTEGER CHECK(
+ (confirmation_id IS NULL AND confirmed_at_ms IS NULL AND confirmation_context_json IS NULL
   AND confirmation_json IS NULL AND digest_excluded IS NULL AND confirmation_sequence IS NULL)
- OR (confirmation_id IS NOT NULL AND confirmed_at IS NOT NULL AND confirmation_context_json IS NOT NULL
+ OR (confirmation_id IS NOT NULL AND confirmed_at_ms IS NOT NULL AND confirmation_context_json IS NOT NULL
   AND confirmation_json IS NOT NULL AND digest_excluded IS NOT NULL AND confirmation_sequence IS NOT NULL
   AND confirmation_sequence>0)),
   PRIMARY KEY(user_id, id)
@@ -2296,7 +2296,7 @@ CREATE UNIQUE INDEX reconciliation_record_reference ON transactions(reconciliati
 CREATE UNIQUE INDEX recurring_confirmation_identity ON recurring_series(user_id,confirmation_id) WHERE confirmation_id IS NOT NULL;
 --> statement-breakpoint
 
-CREATE INDEX recurring_confirmation_order ON recurring_series(user_id,confirmed_at,confirmation_id) WHERE confirmation_id IS NOT NULL;
+CREATE INDEX recurring_confirmation_order ON recurring_series(user_id,confirmed_at_ms,confirmation_id) WHERE confirmation_id IS NOT NULL;
 --> statement-breakpoint
 
 CREATE INDEX recurring_confirmation_page ON recurring_series(user_id,confirmation_sequence) WHERE confirmation_sequence IS NOT NULL;
@@ -2308,7 +2308,7 @@ CREATE UNIQUE INDEX recurring_confirmation_sequence ON recurring_series(confirma
 CREATE UNIQUE INDEX recurring_current_opportunity ON insight_reports(user_id) WHERE current_recurring_opportunity=1 AND kind='offer-request';
 --> statement-breakpoint
 
-CREATE INDEX recurring_facts_by_group_typed ON recurring_evaluation_records(user_id, group_key, occurred_at, id) WHERE kind='fact';
+CREATE INDEX recurring_facts_by_group_typed ON recurring_evaluation_records(user_id, group_key, occurred_at_ms, id) WHERE kind='fact';
 --> statement-breakpoint
 
 CREATE INDEX recurring_series_by_order ON recurring_series(user_id, currency, counterparty_key, id);
@@ -6069,7 +6069,7 @@ WHEN OLD.kind='fact' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state=
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000))
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'recurring_facts','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'id',OLD."id",'group_key',OLD."group_key",'occurred_at',OLD."occurred_at",'fact_json',OLD."fact_json")
+  SELECT q.id,'recurring_facts','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'id',OLD."id",'group_key',OLD."group_key",'occurred_at_ms',OLD."occurred_at_ms",'fact_json',OLD."fact_json")
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
@@ -6095,7 +6095,7 @@ WHEN OLD.kind='progress' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.st
   AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000))
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'recurring_progress','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'revision',OLD."revision",'phase',OLD."phase",'cursor_at',OLD."cursor_at",'cursor_id',OLD."cursor_id",'group_key',OLD."group_key",'evaluated_at',OLD."evaluated_at",'evaluated_revision',OLD."evaluated_revision",'first_captured_at',OLD."first_captured_at",'time_zone',OLD."time_zone")
+  SELECT q.id,'recurring_progress','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'revision',OLD."revision",'phase',OLD."phase",'cursor_at_ms',OLD."cursor_at_ms",'cursor_id',OLD."cursor_id",'group_key',OLD."group_key",'evaluated_at_ms',OLD."evaluated_at_ms",'evaluated_revision',OLD."evaluated_revision",'first_captured_at_ms',OLD."first_captured_at_ms",'time_zone',OLD."time_zone")
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
@@ -7136,8 +7136,8 @@ BEGIN SELECT RAISE(ABORT,'recurring_confirmation_pending'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER recurring_confirmation_no_update BEFORE UPDATE ON recurring_series
-WHEN OLD.confirmation_id IS NOT NULL AND (NEW.confirmation_id IS NOT OLD.confirmation_id OR NEW.confirmed_at IS NOT OLD.confirmed_at OR NEW.confirmation_context_json IS NOT OLD.confirmation_context_json OR NEW.confirmation_json IS NOT OLD.confirmation_json OR NEW.digest_excluded IS NOT OLD.digest_excluded OR NEW.confirmation_sequence IS NOT OLD.confirmation_sequence OR NEW.user_id IS NOT OLD.user_id OR NEW.id IS NOT OLD.id)
- AND NOT (NEW.confirmation_id IS NULL AND NEW.confirmed_at IS NULL AND NEW.confirmation_context_json IS NULL AND NEW.confirmation_json IS NULL AND NEW.digest_excluded IS NULL AND NEW.confirmation_sequence IS NULL AND NEW.user_id IS OLD.user_id AND NEW.id IS OLD.id AND NEW.currency IS OLD.currency AND NEW.counterparty_key IS OLD.counterparty_key AND NEW.series_json IS OLD.series_json AND NEW.evidence_json IS OLD.evidence_json AND NEW.reference_json IS OLD.reference_json AND NEW.valid IS OLD.valid AND EXISTS(
+WHEN OLD.confirmation_id IS NOT NULL AND (NEW.confirmation_id IS NOT OLD.confirmation_id OR NEW.confirmed_at_ms IS NOT OLD.confirmed_at_ms OR NEW.confirmation_context_json IS NOT OLD.confirmation_context_json OR NEW.confirmation_json IS NOT OLD.confirmation_json OR NEW.digest_excluded IS NOT OLD.digest_excluded OR NEW.confirmation_sequence IS NOT OLD.confirmation_sequence OR NEW.user_id IS NOT OLD.user_id OR NEW.id IS NOT OLD.id)
+ AND NOT (NEW.confirmation_id IS NULL AND NEW.confirmed_at_ms IS NULL AND NEW.confirmation_context_json IS NULL AND NEW.confirmation_json IS NULL AND NEW.digest_excluded IS NULL AND NEW.confirmation_sequence IS NULL AND NEW.user_id IS OLD.user_id AND NEW.id IS OLD.id AND NEW.currency IS OLD.currency AND NEW.counterparty_key IS OLD.counterparty_key AND NEW.series_json IS OLD.series_json AND NEW.evidence_json IS OLD.evidence_json AND NEW.reference_json IS OLD.reference_json AND NEW.valid IS OLD.valid AND EXISTS(
   SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id AND q.user_id=p.user_id
   WHERE p.user_id=OLD.user_id AND p.store_id='recurring_confirmations'))
 BEGIN SELECT RAISE(ABORT,'recurring_confirmation_immutable'); END;

@@ -39,7 +39,7 @@ export const evaluationGuard = ({
 }: Readonly<{ db: D1Database; userId: UserId; revision: number }>): D1PreparedStatement =>
   db
     .prepare(
-      "INSERT INTO sql_assertions (scope, accepted) VALUES ('recurring', CASE WHEN EXISTS (SELECT 1 FROM (SELECT rowid,user_id,revision,phase,cursor_at,cursor_id,group_key,evaluated_at,evaluated_revision,first_captured_at,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id = ? AND evaluated_revision = ? AND phase = 'complete') THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted"
+      "INSERT INTO sql_assertions (scope, accepted) VALUES ('recurring', CASE WHEN EXISTS (SELECT 1 FROM (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id = ? AND evaluated_revision = ? AND phase = 'complete') THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted"
     )
     .bind(userId, revision);
 export const decodeRow = ({

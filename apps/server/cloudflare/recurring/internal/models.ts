@@ -1,19 +1,24 @@
 import { Schema } from "effect";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
-import { UtcTimestamp } from "../../../src/core/_shared/time";
 import { RecurringProposal } from "../../../src/core/recurring/contract";
 import { TransactionId } from "../../../src/core/transactions/contract";
 
-export const Progress = Schema.Struct({
+const progressFields = {
   revision: Schema.Int.check(Schema.isGreaterThan(0)),
   phase: Schema.Literals(["scan", "detect", "complete"]),
-  cursor_at: Schema.String,
-  cursor_id: Schema.String,
   group_key: Schema.String,
-  evaluated_at: Schema.OptionFromNullOr(UtcTimestamp),
-  first_captured_at: UtcTimestamp,
+  evaluated_at_ms: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
+  first_captured_at_ms: Schema.DateTimeUtcFromMillis,
   time_zone: IanaTimeZone,
-});
+};
+export const Progress = Schema.Union([
+  Schema.Struct({ ...progressFields, cursor_at_ms: Schema.Null, cursor_id: Schema.Literal("") }),
+  Schema.Struct({
+    ...progressFields,
+    cursor_at_ms: Schema.DateTimeUtcFromMillis,
+    cursor_id: TransactionId,
+  }),
+]);
 export type Progress = typeof Progress.Type;
 export const Proposal = RecurringProposal;
 export const Evidence = Schema.Struct({

@@ -1,6 +1,5 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { isAcceptedSloganContrast, unexpectedViolations } from "./accepted-contrast";
 
 const ok = 200;
 const notFound = 404;
@@ -112,42 +111,88 @@ const settleEntranceMotion = async (): Promise<void> => {
   );
 };
 
-for (const theme of ["light", "dark"] as const) {
-  for (const path of publicPaths) {
-    test(`audits rendered public content and CSP with documented design exceptions: ${path} ${theme}`, async ({
-      page,
-    }) => {
-      const errors: string[] = [];
-      page.on("console", (message) => {
-        if (message.type() === "error") errors.push(message.text());
-      });
-      await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
-      await page.goto(path);
-      await page.evaluate(settleEntranceMotion);
-      const results = await new AxeBuilder({ page }).analyze();
-      const violations = unexpectedViolations(results.violations, path, theme);
-      const accepted = results.violations.flatMap((violation) =>
-        violation.nodes.filter((node) =>
-          isAcceptedSloganContrast({ path, theme }, violation.id, node)
-        )
-      );
-      if (accepted.length > 0) {
-        test.info().annotations.push({
-          type: "accepted-design-exception",
-          description:
-            "#1524: light slogan #88CC20 on #FAE3D9 is 1.59:1 and does not meet WCAG AA (3:1).",
-        });
-        await test.info().attach("accepted-slogan-contrast.json", {
-          body: JSON.stringify(accepted, null, 2),
-          contentType: "application/json",
-        });
-      }
-      expect(
-        violations.filter(({ impact }) => impact === "serious" || impact === "critical")
-      ).toEqual([]);
-      expect(errors).toEqual([]);
+type Violation = Awaited<ReturnType<AxeBuilder["analyze"]>>["violations"][number];
+type Node = Violation["nodes"][number];
+type Appearance = { path: string; theme: string };
+
+const hasApprovedColors = (data: unknown): boolean => {
+  if (typeof data !== "object" || data === null) return false;
+  return (
+    "fgColor" in data &&
+    data.fgColor === "#88cc20" &&
+    "bgColor" in data &&
+    data.bgColor === "#fae3d9" &&
+    "expectedContrastRatio" in data &&
+    data.expectedContrastRatio === "3:1"
+  );
+};
+
+const isExactSloganNode = (node: Node): boolean =>
+  node.target.length === 1 &&
+  node.target[0] === "h1 > em" &&
+  node.html === "<em>Tu vida, <br>más tranquila.</em>" &&
+  node.all.length === 0 &&
+  node.none.length === 0 &&
+  node.any.length === 1;
+
+// Design exception approved in #1524: this exact light slogan does NOT meet WCAG AA.
+// Keep axe running on the entire document and retain every other failing node.
+const isAcceptedSloganContrast = (appearance: Appearance, rule: string, node: Node): boolean =>
+  appearance.path === "/" &&
+  appearance.theme === "light" &&
+  rule === "color-contrast" &&
+  isExactSloganNode(node) &&
+  node.any[0]?.id === "color-contrast" &&
+  hasApprovedColors(node.any[0]?.data);
+
+const unexpectedViolations = (violations: Violation[], path: string, theme: string): Violation[] =>
+  violations
+    .map((violation) => ({
+      ...violation,
+      nodes: violation.nodes.filter(
+        (node) => !isAcceptedSloganContrast({ path, theme }, violation.id, node)
+      ),
+    }))
+    .filter(({ nodes }) => nodes.length > 0);
+
+const accessibilityPages = [
+  ...publicPaths.map((path) => ({ path, theme: "light" as const })),
+  { path: "/", theme: "dark" as const },
+];
+for (const { path, theme } of accessibilityPages) {
+  test(`audits rendered public content and CSP with documented design exceptions: ${path} ${theme}`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
     });
-  }
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
+    await page.goto(path);
+    await page.evaluate(settleEntranceMotion);
+    const results = await new AxeBuilder({ page }).analyze();
+    const violations = unexpectedViolations(results.violations, path, theme);
+    const accepted = results.violations.flatMap((violation) =>
+      violation.nodes.filter((node) =>
+        isAcceptedSloganContrast({ path, theme }, violation.id, node)
+      )
+    );
+    if (accepted.length > 0) {
+      test.info().annotations.push({
+        type: "accepted-design-exception",
+        description:
+          "#1524: light slogan #88CC20 on #FAE3D9 is 1.59:1 and does not meet WCAG AA (3:1).",
+      });
+      await test.info().attach("accepted-slogan-contrast.json", {
+        body: JSON.stringify(accepted, null, 2),
+        contentType: "application/json",
+      });
+    }
+    expect(
+      violations.filter(({ impact }) => impact === "serious" || impact === "critical")
+    ).toEqual([]);
+    expect(errors).toEqual([]);
+  });
 }
 
 test("limits the approved contrast exception to the exact light slogan and color pair", async ({

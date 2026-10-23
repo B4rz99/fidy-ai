@@ -351,14 +351,6 @@ const verifyRestore = Effect.gen(function* () {
   yield* Effect.tryPromise(() =>
     native.db.prepare("DELETE FROM memories WHERE user_id=?").bind(userId).run()
   );
-  expect(
-    yield* Effect.tryPromise(() =>
-      native.db
-        .prepare("SELECT count(*) FROM erasure_archives WHERE request_id=? AND store_id='memories'")
-        .bind(reference)
-        .first("count(*)")
-    )
-  ).toBe(0);
 
   native = yield* Effect.tryPromise(() => platform.restoreSnapshot());
   expect((yield* send({ action: "Restore" })).status).toBe(202);
@@ -377,7 +369,47 @@ const verifyRestore = Effect.gen(function* () {
       native.db.prepare("SELECT count(*) FROM users WHERE id=?").bind(userId).first("count(*)")
     )
   ).toBe(1);
+  // A restored empty writer ledger cannot prove that uploads admitted after that
+  // snapshot have settled, even after every visible owner reports quiescence.
+  yield* Effect.tryPromise(() =>
+    native.db.batch([
+      native.db
+        .prepare(
+          "INSERT INTO transcript_entries(id,user_id,hosted_session_id,turn_id,kind,occurred_at_ms) SELECT ?,user_id,hosted_session_id,id,'interrupted',? FROM hosted_turns WHERE user_id=? AND status='pending'"
+        )
+        .bind("12740000-0000-4000-8000-000000000052", current, userId),
+      native.db
+        .prepare(
+          "UPDATE hosted_turns SET status='interrupted',terminal_at_ms=? WHERE user_id=? AND status='pending'"
+        )
+        .bind(current, userId),
+    ])
+  );
+  expect((yield* send({ action: "Continue", userId, reference })).status).toBe(202);
+  expect(
+    yield* Effect.tryPromise(() =>
+      native.db
+        .prepare("SELECT state FROM erasure_requests WHERE id=?")
+        .bind(reference)
+        .first("state")
+    )
+  ).toBe("Draining");
+  expect((yield* send({ action: "ReleaseRestore" })).status).toBe(202);
   native = yield* Effect.tryPromise(() => platform.restoreLive());
+  // These source-snapshot attempts had settled before the live deletion sealed.
+  // Its independent sealed marker is the positive evidence for reconciling them.
+  const staleKey = `users/${userId}/staging/statement/v1/${"c".repeat(64)}`;
+  yield* Effect.tryPromise(() =>
+    native.snapshot.batch([
+      native.snapshot
+        .prepare("INSERT INTO erasure_writers VALUES('old-target-attempt',?,'statement',?,?)")
+        .bind(userId, staleKey, current),
+      native.snapshot
+        .prepare("INSERT INTO erasure_writers VALUES('other-User-attempt',?,'statement',?,?)")
+        .bind(foreignUser, `users/${foreignUser}/staging/statement/v1/${"d".repeat(64)}`, current),
+    ])
+  );
+  yield* Effect.tryPromise(() => native.originals.put(staleKey, "Completed upload"));
   yield* advanceToExternal({ db: () => native.db, send });
   expect((yield* send({ action: "Receipt", userId, reference })).status).toBe(200);
   expect(
@@ -406,6 +438,16 @@ const verifyRestore = Effect.gen(function* () {
   ).toBe("Failure");
   yield* advanceToExternal({ db: () => native.db, send });
   expect((yield* send({ action: "ReleaseRestore" })).status).toBe(200);
+  expect(
+    yield* Effect.tryPromise(() =>
+      native.db
+        .prepare("SELECT id FROM erasure_writers ORDER BY id")
+        .all()
+        .then((rows) => rows.results)
+    )
+  ).toEqual([{ id: "other-User-attempt" }]);
+  expect(yield* Effect.tryPromise(() => native.originals.head(staleKey))).toBeNull();
+
   expect(
     yield* Effect.tryPromise(() =>
       guarded.prepare("SELECT count(*) FROM users WHERE id=?").bind(userId).first("count(*)")
@@ -444,14 +486,7 @@ const verifyRestore = Effect.gen(function* () {
       native.registry.list({ prefix: `users/${userId}/held-records/${reference}/` })
     )).objects.length
   ).toBe(0);
-  expect(
-    yield* Effect.tryPromise(() =>
-      native.db
-        .prepare("SELECT count(*) FROM erasure_archives WHERE request_id=?")
-        .bind(reference)
-        .first("count(*)")
-    )
-  ).toBe(0);
+
   expect(
     yield* Effect.tryPromise(() =>
       native.db

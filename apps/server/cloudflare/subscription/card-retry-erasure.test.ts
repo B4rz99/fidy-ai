@@ -91,7 +91,7 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
       );
       const current = yield* Clock.currentTimeMillis;
       const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-        dispositions: { billing: { action: "Retain", retention: { untilMs: current + 86400000 } } },
+        dispositions: { billing: { action: "Delete", retention: { untilMs: current + 86400000 } } },
       });
       yield* wait(() =>
         db
@@ -151,18 +151,9 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
           db.prepare("DELETE FROM payment_sources WHERE id=?").bind(id(3, 3)),
         ])
       );
-      expect(
-        yield* wait(() =>
-          db
-            .prepare(
-              "SELECT count(*) FROM erasure_archives WHERE request_id=? AND store_id='card_payment_sources' AND json_type(body,'$.retired_at_ms')='null'"
-            )
-            .bind(reference)
-            .first("count(*)")
-        )
-      ).toBe(1);
+
       yield* wait(() =>
-        db.prepare("UPDATE erasure_requests SET state='Archiving' WHERE id=?").bind(reference).run()
+        db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference).run()
       );
       const stores = makeSubscriptionErasureStores(db);
       for (const store of stores) {
@@ -174,28 +165,8 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
             .bind(reference, store.id)
             .run()
         );
-        expect(yield* store.archive({ userId, reference })).toBe(true);
       }
-      expect(
-        yield* wait(() =>
-          db
-            .prepare(
-              "SELECT json_extract(body,'$.retired_at_ms') FROM erasure_archives WHERE request_id=? AND store_id='card_payment_sources' AND json_extract(body,'$.id')=?"
-            )
-            .bind(reference, id(3, 1))
-            .first("json_extract(body,'$.retired_at_ms')")
-        )
-      ).toBe(200000);
-      expect(
-        yield* wait(() =>
-          db
-            .prepare(
-              "SELECT count(*) FROM erasure_archives WHERE request_id=? AND store_id='billing_checkout_responses'"
-            )
-            .bind(reference)
-            .first("count(*)")
-        )
-      ).toBe(1);
+
       yield* wait(() =>
         db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference).run()
       );
@@ -279,9 +250,7 @@ it("erases paid standing and billing accountability with their own permits while
       for (const store of stores) {
         yield* wait(() =>
           db
-            .prepare(
-              "INSERT INTO erasure_steps(request_id,store_id,data_class,archive_done) VALUES(?,?,?,1)"
-            )
+            .prepare("INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,?,?)")
             .bind(reference, store.id, store.dataClass)
             .run()
         );

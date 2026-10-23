@@ -1,4 +1,4 @@
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import {
   proactivityDatabase,
@@ -11,23 +11,24 @@ import { seedRefundCharge } from "../subscription/refund-charge.test-fixture";
 import {
   CutoverHistory,
   documentedSqlBlock,
+  installHistoricalErasureStorage,
   makeSchemaCutover,
   precedingSchema,
   schemaStatements,
 } from "../schema-cutover.test-fixture";
-import { makeAuditErasureStores } from "./runtime";
 
 const tables = ["audit_entries"];
 const { scratch, swap } = makeSchemaCutover(tables);
 const recordId = (value: number): string =>
   `14760000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 afterAll(() => proactivityTestDatabases.dispose());
-it.each(["valid", "empty", "archive", "count-mismatch", "interruption"])(
+it.each(["valid", "empty", "count-mismatch", "interruption"])(
   "preserves all nine Audit variants and exact admission archives across conversion and rollback: %s",
   (historyCase) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* proactivityDatabase;
+        yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
         const userId = proactivityTestUsers[0];
         const browser = yield* proactivityTestBrowser(db);
         const pat = yield* proactivityTestPAT(db);
@@ -193,52 +194,7 @@ it.each(["valid", "empty", "archive", "count-mismatch", "interruption"])(
         expect(
           (yield* Effect.tryPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
         ).toEqual([]);
-        if (historyCase === "archive") {
-          const archiveNow = yield* Clock.currentTimeMillis;
-          const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-            dispositions: {
-              schedules: { action: "Retain", retention: { untilMs: archiveNow + 86400000 } },
-            },
-          });
-          yield* Effect.tryPromise(() =>
-            db.batch([
-              db
-                .prepare(
-                  "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES('audit-case',?,?,'Archiving',?)"
-                )
-                .bind(userId, archiveNow, decision),
-              db.prepare(
-                "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES('audit-case','canonical_request_acceptances','schedules')"
-              ),
-            ])
-          );
-          const store = Option.getOrThrow(
-            Option.fromUndefinedOr(
-              makeAuditErasureStores(db).find((item) => item.id === "canonical_request_acceptances")
-            )
-          );
-          const scope = { userId, reference: "audit-case" };
-          expect(yield* store.archive(scope)).toBe(true);
-          expect(
-            yield* Effect.tryPromise(() =>
-              db
-                .prepare(
-                  "SELECT row_ref,json_extract(body,'$.accepted_at_ms') AS accepted_at_ms,json_extract(body,'$.id') AS id FROM erasure_archives WHERE request_id='audit-case'"
-                )
-                .first()
-            )
-          ).toEqual({ row_ref: "initial:1507", accepted_at_ms: now, id: recordId(7) });
-          yield* Effect.tryPromise(() =>
-            db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id='audit-case'").run()
-          );
-          expect(yield* store.remove(scope)).toBe(true);
-          expect(
-            yield* Effect.tryPromise(() =>
-              db.prepare("SELECT count(*) AS n FROM audit_entries").first()
-            )
-          ).toEqual({ n: 9 });
-          return;
-        }
+
         yield* Effect.tryPromise(() =>
           db.batch([
             db.prepare("PRAGMA defer_foreign_keys=ON"),

@@ -93,7 +93,6 @@ export const ErasureReceipt = Schema.Struct({
     "AwaitingReview",
     "Draining",
     "Sealing",
-    "Archiving",
     "Erasing",
     "ExternalPending",
     "Complete",

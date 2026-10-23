@@ -6,10 +6,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM provider_authentication_attempts r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM provider_authentication_attempts r WHERE r.user_id=?",
       params: [userId],
@@ -30,10 +27,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM provider_credentials r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM provider_credentials r WHERE r.user_id=?",
       params: [userId],
@@ -54,10 +48,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: ["provider_authentication_attempts"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM whatsapp_provider_handoffs r WHERE EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=r.pairing_id AND p.user_id=?)",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM whatsapp_provider_handoffs r WHERE EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=r.pairing_id AND p.user_id=?)",
       params: [userId],

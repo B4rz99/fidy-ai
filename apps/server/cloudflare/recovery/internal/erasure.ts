@@ -6,10 +6,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM backup_recovery_credentials r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM backup_recovery_credentials r WHERE r.user_id=?",
       params: [userId],
@@ -30,10 +27,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: ["support_recovery_events"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM support_recovery_cases r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM support_recovery_cases r WHERE r.user_id=?",
       params: [userId],
@@ -54,10 +48,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM (SELECT user_id,opened_event_row_ref AS rowid FROM support_recovery_cases WHERE opened_event_id IS NOT NULL UNION ALL SELECT user_id,decision_event_row_ref AS rowid FROM support_recovery_cases WHERE decision_event_id IS NOT NULL) r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT user_id,opened_event_row_ref AS rowid FROM support_recovery_cases WHERE opened_event_id IS NOT NULL UNION ALL SELECT user_id,decision_event_row_ref AS rowid FROM support_recovery_cases WHERE decision_event_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],

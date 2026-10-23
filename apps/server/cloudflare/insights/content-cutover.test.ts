@@ -3,6 +3,7 @@ import { afterAll, afterEach, expect, it, vi } from "vitest";
 import {
   CutoverHistory,
   documentedSqlBlock,
+  installHistoricalErasureStorage,
   makeSchemaCutover,
   precedingSchema,
   schemaStatements,
@@ -110,6 +111,7 @@ it.each([
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* proactivityDatabase;
+        yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
         const userId = proactivityTestUsers[0];
         const accepted = DateTime.makeUnsafe("2026-10-06T18:00:00.007Z");
         vi.spyOn(Date, "now").mockReturnValue(accepted.epochMilliseconds);

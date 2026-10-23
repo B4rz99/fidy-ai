@@ -10,6 +10,7 @@ import { findProactivityConsentGrant } from "../consent/operations";
 import {
   CutoverHistory,
   documentedSqlBlock,
+  installHistoricalErasureStorage,
   makeSchemaCutover,
   precedingSchema,
   schemaStatements,
@@ -31,6 +32,7 @@ it.each(["valid", "orphan-transcript", "retained-archive", "interruption"])(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* proactivityDatabase;
+        yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
         const userId = proactivityTestUsers[0];
         yield* activateTestReminder(db);
         const grant = Option.getOrThrow(

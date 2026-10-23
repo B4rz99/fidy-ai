@@ -1,6 +1,4 @@
-import { checkpointOriginals } from "./internal/original-checkpoint";
-import { holdOriginals, purgeHeldOriginals } from "./internal/original-holds";
-import { archive, remove } from "./internal/d1";
+import { remove } from "./internal/d1";
 import type {
   ErasureOriginalConfiguration,
   ErasureOriginals,
@@ -16,7 +14,6 @@ export const makeErasureStore = (
   id: input.projection.id,
   dataClass: input.projection.dataClass,
   dependencies: input.projection.dependencies,
-  archive: (scope) => archive({ ...input, scope }),
   remove: (scope) => remove({ ...input, scope }),
   protectDrained: ({ statement, scope, current }) => {
     if (input.projection.quiescence._tag === "Synchronous") return statement;
@@ -31,9 +28,5 @@ export const makeErasureStore = (
 export const makeErasureOriginals = (
   configuration: ErasureOriginalConfiguration
 ): ErasureOriginals => ({
-  checkpoint: (scope) => checkpointOriginals({ configuration, scope }),
-  purge: (scope) => purgeHeldOriginals({ configuration, scope }),
-  archive: (scope) => holdOriginals({ configuration, scope }),
-  capture: (scope) => originals.capture({ configuration, scope }),
   discard: (scope) => originals.discard({ configuration, scope }),
 });

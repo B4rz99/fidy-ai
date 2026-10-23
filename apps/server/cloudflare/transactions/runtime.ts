@@ -21,7 +21,7 @@ import { makeConsentErasureStores } from "../consent/runtime";
 import { makeDashboardErasureStores } from "../dashboard/runtime";
 import { makeEmailAuthenticationErasureStores } from "../email-authentication/runtime";
 import { makeIdentityErasureStores } from "../identity/runtime";
-import { makeIngestionErasureOriginals, makeIngestionErasureStores } from "../ingestion/runtime";
+import { makeIngestionErasureStores } from "../ingestion/runtime";
 import { makeMemoryErasureStores } from "../memory/runtime";
 import { makeOauthAgentsErasureStores } from "../oauth-agents/runtime";
 import { makeOauthConfirmationErasureStores } from "../oauth-confirmation/runtime";
@@ -36,7 +36,7 @@ import { makeTokensErasureStores } from "../tokens/runtime";
 import { makeWebSessionErasureStores } from "../web-session/runtime";
 import { makeWhatsappErasureStores } from "../whatsapp/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
-import { makeErasureStore } from "../erasure-store/runtime";
+import { makeErasureOriginals, makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
@@ -442,7 +442,7 @@ const privateErasureActivity = (
         userId: input.userId,
         candidate: input.candidate,
         stores: erasureStores(input.environment.DB),
-        originals: makeIngestionErasureOriginals({
+        originals: makeErasureOriginals({
           db: input.environment.DB,
           email: Option.fromUndefinedOr(input.environment.EMAIL_BUCKET),
           statement: Option.fromUndefinedOr(input.environment.STATEMENT_STAGING_BUCKET),
@@ -464,7 +464,6 @@ const privateErasureActivity = (
         candidate: input.candidate,
         operation: erasurePath === "/erasure-receipt" ? "Receipt" : "CustodyEvidence",
         stores: erasureStores(input.environment.DB),
-        bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
       })
     );
   }

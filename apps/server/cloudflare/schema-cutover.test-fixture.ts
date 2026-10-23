@@ -60,6 +60,9 @@ export const precedingSchema = ({
       .map((sql) => original.get(schemaObjectName(sql)) ?? sql),
     ...history.originalDefinitions.filter((sql) => !names.has(schemaObjectName(sql))),
   ];
+  if (!restored.some((sql) => schemaObjectName(sql) === "erasure_archives")) {
+    restored.push(...historicalErasureStorage);
+  }
   // Removed parent tables must exist before their restored triggers and indexes.
   return [
     ...restored.filter((sql) => sql.startsWith("CREATE TABLE ")),
@@ -127,3 +130,33 @@ export const installHistoricalErasureChunk = (db: D1Database): Promise<D1Result>
   PRIMARY KEY(request_id,row_ref)
 ) STRICT;`)
     .run();
+
+/** Explicit pre-full-deletion source records for populated historical migration rehearsals. */
+const historicalErasureStorage = [
+  `CREATE TABLE erasure_archives (
+  request_id TEXT NOT NULL REFERENCES erasure_requests(id),
+  store_id TEXT NOT NULL,
+  row_ref TEXT NOT NULL,
+  body TEXT NOT NULL CHECK(length(body)<=1048576),
+  recovery_written INTEGER NOT NULL DEFAULT 0 CHECK(recovery_written IN(0,1)),
+  PRIMARY KEY(request_id,store_id,row_ref)
+) STRICT;`,
+  `CREATE TABLE erasure_objects (
+  request_id TEXT NOT NULL REFERENCES erasure_requests(id),
+  bucket TEXT NOT NULL CHECK(bucket IN ('email','statement')),
+  object_key TEXT NOT NULL CHECK(length(object_key) BETWEEN 1 AND 1024),
+  retained_key TEXT,
+  recovery_written INTEGER NOT NULL DEFAULT 0 CHECK(recovery_written IN(0,1)),
+  held_deleted INTEGER NOT NULL DEFAULT 0 CHECK(held_deleted IN(0,1)),
+  missing INTEGER NOT NULL DEFAULT 0 CHECK(missing IN (0,1)),
+  done INTEGER NOT NULL DEFAULT 0 CHECK(done IN (0,1)),
+  PRIMARY KEY(request_id,bucket,object_key)
+) STRICT;`,
+];
+
+export const installHistoricalErasureStorage = (db: D1Database): Promise<ReadonlyArray<D1Result>> =>
+  db.batch(
+    historicalErasureStorage.map((sql) =>
+      db.prepare(sql.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS "))
+    )
+  );

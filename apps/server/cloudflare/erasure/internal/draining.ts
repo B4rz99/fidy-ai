@@ -31,8 +31,10 @@ export const seal = (
     });
     if (blocked) return;
     const current = yield* Clock.currentTimeMillis;
+    // A restored ledger can omit later uploads. Only a previously sealed independent
+    // marker proves that original drain; restoreCase resumes those cases in Sealing.
     const initial: OwnedStatement = {
-      sql: `UPDATE erasure_requests SET state='Sealing' WHERE id=? AND user_id=? AND state='Draining'
+      sql: `UPDATE erasure_requests SET state='Sealing' WHERE id=? AND user_id=? AND state='Draining' AND restoring=0
       AND NOT EXISTS(SELECT 1 FROM erasure_writers WHERE user_id=?)`,
       params: [input.scope.reference, input.scope.userId, input.scope.userId],
     };

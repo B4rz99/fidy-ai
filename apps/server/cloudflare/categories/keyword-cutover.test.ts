@@ -222,9 +222,7 @@ it.each([
         expect((yield* wait(() => db.prepare("SELECT * FROM transactions").all())).results).toEqual(
           before[1]
         );
-        expect(
-          (yield* wait(() => db.prepare("SELECT * FROM erasure_archives").all())).results
-        ).toEqual(before[2]);
+
         const capture = {
           caller: Option.none<CategoryId>(),
           counterparty: Option.some("CAFÉ Bogotá"),
@@ -244,7 +242,7 @@ it.each([
         const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
           dispositions: {
             projections: {
-              action: "Retain",
+              action: "Delete",
               retention: { untilMs: DateTime.toEpochMillis(yield* DateTime.now) + 86400000 },
             },
           },
@@ -253,7 +251,7 @@ it.each([
           db.batch([
             db
               .prepare(
-                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,'Archiving',?)"
+                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,'Erasing',?)"
               )
               .bind(reference, owner, decision),
             db
@@ -265,29 +263,8 @@ it.each([
         );
         const store = makeCategoriesErasureStores(db)[0];
         if (store === undefined) throw new Error("Missing Category disposition");
-        expect(yield* store.archive({ userId: owner, reference })).toBe(true);
-        yield* wait(() =>
-          db.batch([
-            db.prepare("UPDATE erasure_requests SET state='Draining' WHERE id=?").bind(reference),
-            db.prepare("DELETE FROM keyword_rules WHERE user_id=?").bind(owner),
-          ])
-        );
-        const retained = yield* wait(() =>
-          db
-            .prepare("SELECT body FROM erasure_archives WHERE request_id=? ORDER BY row_ref")
-            .bind(reference)
-            .all<{ body: string }>()
-        );
-        const expectedBody = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-          id: rule,
-          user_id: owner,
-          keyword: "cafe",
-          normalized_keyword: "cafe",
-          category_id: targetCategory,
-          created_at: "2026-09-01T05:01:02.003Z",
-          updated_at: "2026-09-02T05:01:02.007Z",
-        });
-        expect(retained.results.map((row) => row.body)).toEqual([expectedBody, expectedBody]);
+
+        expect(yield* store.remove({ userId: owner, reference })).toBe(true);
         expect(yield* categorizeCaptures({ db, userId: other, captures: [capture] })).toEqual([
           oldCategory,
         ]);

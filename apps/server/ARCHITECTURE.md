@@ -121,9 +121,9 @@ Exact Money and historical interpretation context remain intact across these bou
 
 Erasure composes each owner's bounded deletion and SQL authorization under User coordination.
 An independent registry fences ordinary activity after database restoration until reconciliation.
-The installed selective-retention implementation remains distinct from the accepted full-deletion
-target. Consult the [cutover contracts](../../docs/operations/database-cutover-1428.md) before schema
-moves or removing archive, file-write or restore safeguards; the detailed target table map lives there.
+Full deletion waits for confirmed upload settlement before sweeping User file prefixes.
+The [cutover contracts](../../docs/operations/database-cutover-1428.md) track unfinished admission and
+restore-marker conversion; the detailed target table map and release gates live there.
 
 ## 6. Hosted execution and delivery
 

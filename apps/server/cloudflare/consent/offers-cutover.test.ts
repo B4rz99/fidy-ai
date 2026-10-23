@@ -1,3 +1,4 @@
+import { installHistoricalErasureStorage } from "../schema-cutover.test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { Data, Effect, Schema } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
@@ -114,6 +115,7 @@ it.each([
     Effect.gen(function* () {
       const db = yield* native(() => databases.acquire());
       yield* native(() => installTestSchema({ db }));
+      yield* native(() => installHistoricalErasureStorage(db));
       yield* native(() => seed(db));
       expect(
         (yield* Effect.exit(
@@ -178,6 +180,7 @@ it.each([
     Effect.gen(function* () {
       const db = yield* native(() => databases.acquire());
       yield* native(() => installTestSchema({ db }));
+      yield* native(() => installHistoricalErasureStorage(db));
       yield* native(() => seed(db));
       expect(
         (yield* Effect.exit(native(() => db.batch([db.prepare(candidate.sql).bind(owner)]))))._tag
@@ -244,6 +247,7 @@ it.each([
     Effect.gen(function* () {
       const db = yield* native(() => databases.acquire());
       yield* native(() => installTestSchema({ db }));
+      yield* native(() => installHistoricalErasureStorage(db));
       const baseline = yield* native(() =>
         Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
       );

@@ -92,8 +92,8 @@ export const checkpoint = (
       input.configuration.db.batch([
         ...statements,
         input.configuration.db
-          .prepare(`UPDATE erasure_requests SET marker_written=1,state='Archiving'
-      WHERE id=? AND user_id=? AND state='Sealing' AND objects_captured=1 AND coordinator_cleared=1`)
+          .prepare(`UPDATE erasure_requests SET marker_written=1,state='Erasing'
+      WHERE id=? AND user_id=? AND state='Sealing' AND coordinator_cleared=1`)
           .bind(input.scope.reference, input.scope.userId),
       ])
     );

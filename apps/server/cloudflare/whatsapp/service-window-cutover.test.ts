@@ -1,4 +1,4 @@
-import { Clock, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import {
   proactivityDatabase,
@@ -12,13 +12,12 @@ import {
   precedingSchema,
   schemaStatements,
 } from "../schema-cutover.test-fixture";
-import { makeWhatsappErasureStores } from "./runtime";
 
 const originalName = "hosted_whatsapp_windows";
 const targetName = "whatsapp_service_windows";
 const { scratch, swap } = makeSchemaCutover([originalName, targetName]);
 afterAll(() => proactivityTestDatabases.dispose());
-it.each(["valid", "deadline", "count", "interruption", "archive"])(
+it.each(["valid", "deadline", "count", "interruption"])(
   "preserves original recipient activity and deadline through service-window conversion and rollback: %s",
   (historyCase) =>
     Effect.runPromise(
@@ -99,7 +98,7 @@ it.each(["valid", "deadline", "count", "interruption", "archive"])(
             ])
           )
         );
-        if (historyCase !== "valid" && historyCase !== "archive") {
+        if (historyCase !== "valid") {
           expect(result._tag).toBe("Failure");
           expect((yield* Effect.tryPromise(() => read(originalName))).results).toEqual(original);
           return;
@@ -108,43 +107,7 @@ it.each(["valid", "deadline", "count", "interruption", "archive"])(
         expect(
           (yield* Effect.tryPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
         ).toEqual([]);
-        if (historyCase === "archive") {
-          const currentTime = yield* Clock.currentTimeMillis;
-          const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-            dispositions: {
-              conversation: { action: "Retain", retention: { untilMs: currentTime + 86400000 } },
-            },
-          });
-          yield* Effect.tryPromise(() =>
-            db.batch([
-              db
-                .prepare(
-                  "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES('window-clock',?,?,'Archiving',?)"
-                )
-                .bind(proactivityTestUsers[0], currentTime, decision),
-              db.prepare(
-                "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES('window-clock','hosted_whatsapp_windows','conversation')"
-              ),
-            ])
-          );
-          const store = makeWhatsappErasureStores(db).find((item) => item.id === originalName);
-          if (store === undefined) {
-            return yield* Effect.die("Missing service-window erasure purpose");
-          }
-          expect(
-            yield* store.archive({ userId: proactivityTestUsers[0], reference: "window-clock" })
-          ).toBe(true);
-          expect(
-            yield* Effect.tryPromise(() =>
-              db
-                .prepare(
-                  "SELECT row_ref,json_extract(body,'$.closes_at_ms') AS closes_at_ms FROM erasure_archives WHERE request_id='window-clock'"
-                )
-                .first()
-            )
-          ).toEqual({ row_ref: "initial:17", closes_at_ms: 1791327600007 });
-          return;
-        }
+
         yield* Effect.tryPromise(() =>
           db.batch([
             ...block("rollback-guard"),

@@ -8,10 +8,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "ingestion",
     dependencies: ["ingestion_review_state"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.id,'user_id',r.user_id,'source_kind',r.source_kind,'email_receipt_id',r.email_receipt_id,'media_submission_id',r.media_submission_id,'reason',r.reason,'created_at_ms',r.created_at_ms,'evidence_expires_at_ms',r.evidence_expires_at_ms,'service_market',r.service_market,'locale',r.locale,'time_zone',r.time_zone,'suggestions_json',r.suggestions_json) AS body FROM ingestion_review_items r WHERE r.source_kind<>'statement' AND r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM ingestion_review_items r WHERE r.source_kind<>'statement' AND r.user_id=?",
       params: [userId],
@@ -33,10 +30,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "ingestion",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'status',r.\"status\",'revision',r.\"revision\",'draft_json',r.\"draft_json\",'transaction_id',r.\"transaction_id\",'expires_at_ms',r.\"expires_at_ms\",'updated_at_ms',r.\"updated_at_ms\",'created_at_ms',r.\"created_at_ms\") AS body FROM ingestion_review_workspace_state r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM ingestion_review_workspace_state r WHERE r.user_id=?",
       params: [userId],
@@ -57,10 +51,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "ingestion",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'local_part',r.\"local_part\",'created_at_ms',r.\"issued_at_ms\") AS body FROM forwarding_addresses r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM forwarding_addresses r WHERE r.user_id=?",
       params: [userId],
@@ -87,10 +78,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
         params: [userId, current, current - storingInterruptionMs],
       }),
     },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'object_key',r.\"object_key\",'byte_length',r.\"byte_length\",'state',r.\"state\",'received_at_ms',r.\"received_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'time_zone',r.\"time_zone\",'deferred_checked_at_ms',r.\"deferred_checked_at_ms\",'outcome',r.outcome,'outcome_transaction_id',r.outcome_transaction_id,'outcome_review_id',r.outcome_review_id,'outcome_completed_at_ms',r.outcome_completed_at_ms,'review_id',(SELECT id FROM ingestion_review_items i WHERE i.source_kind='email' AND i.user_id=r.user_id AND i.email_receipt_id=r.id),'review_reason',(SELECT reason FROM ingestion_review_items i WHERE i.source_kind='email' AND i.user_id=r.user_id AND i.email_receipt_id=r.id),'review_created_at_ms',(SELECT created_at_ms FROM ingestion_review_items i WHERE i.source_kind='email' AND i.user_id=r.user_id AND i.email_receipt_id=r.id),'review_evidence_expires_at_ms',(SELECT evidence_expires_at_ms FROM ingestion_review_items i WHERE i.source_kind='email' AND i.user_id=r.user_id AND i.email_receipt_id=r.id),'dispatch_user_id',CASE WHEN r.dispatch_pending=1 THEN r.user_id END,'dispatch_sent_at_ms',r.dispatch_sent_at_ms) AS body FROM forwarded_email_receipts r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM forwarded_email_receipts r WHERE r.user_id=?",
       params: [userId],
@@ -111,10 +99,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "ingestion",
     dependencies: ["media_submission_audit", "ingestion_review_items"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'portfolio_id',r.\"portfolio_id\",'bsuid',r.\"bsuid\",'message_id',r.\"message_id\",'media_id',r.\"media_id\",'caption',r.\"caption\",'accepted_at_ms',r.\"accepted_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'review_reason',(SELECT reason FROM ingestion_review_items i WHERE i.source_kind='media' AND i.user_id=r.user_id AND i.media_submission_id=r.id),'review_created_at_ms',(SELECT created_at_ms FROM ingestion_review_items i WHERE i.source_kind='media' AND i.user_id=r.user_id AND i.media_submission_id=r.id)) AS body FROM media_submissions r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM media_submissions r WHERE r.user_id=?",
       params: [userId],
@@ -135,10 +120,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "ingestion",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'submission_id',r.\"submission_id\",'consumed_at_ms',r.\"consumed_at_ms\") AS body FROM statement_backfill_entitlements r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_backfill_entitlements r WHERE r.user_id=?",
       params: [userId],
@@ -160,10 +142,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "ingestion",
     dependencies: ["statement_materialization_parts"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('submission_id',r.\"submission_id\",'source_sha256',r.\"source_sha256\",'parts_sha256',r.\"parts_sha256\",'representation_revision',r.\"representation_revision\",'expires_at_ms',r.\"expires_at_ms\",'headers_json',r.\"headers_json\",'row_count',r.\"row_count\",'part_count',r.\"part_count\",'byte_length',r.\"byte_length\",'state',r.\"state\") AS body FROM statement_materializations r WHERE EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=r.submission_id AND p.user_id=?)",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_materializations r WHERE EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=r.submission_id AND p.user_id=?)",
       params: [userId],
@@ -185,10 +164,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "ingestion",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('submission_id',r.\"submission_id\",'chunk_index',r.\"chunk_index\",'part_index',r.\"part_index\",'body',r.\"body\",'sha256',r.\"sha256\") AS body FROM statement_materialization_parts r WHERE EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=r.submission_id AND p.user_id=?)",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_materialization_parts r WHERE EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=r.submission_id AND p.user_id=?)",
       params: [userId],
@@ -210,10 +186,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "ingestion",
     dependencies: ["ingestion_review_state"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'submission_id',r.\"submission_id\",'record_number',r.\"record_number\",'reason',r.\"reason\",'original_evidence',r.\"original_evidence\",'known_money',r.\"known_money\",'issues',r.\"issues\",'status',r.\"status\",'evidence_expires_at_ms',r.\"evidence_expires_at_ms\",'created_at_ms',r.\"created_at_ms\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'source_format',r.\"source_format\",'parser_revision',r.\"parser_revision\",'extractor_revision',r.\"extractor_revision\",'review_suggestions_json',r.\"review_suggestions_json\") AS body FROM statement_review_context r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_review_context r WHERE r.user_id=?",
       params: [userId],
@@ -234,10 +207,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "ingestion",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'submission_id',r.\"submission_id\",'record_number',r.\"record_number\",'outcome',r.\"outcome\",'transaction_id',r.\"transaction_id\") AS body FROM statement_record_outcomes r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_record_outcomes r WHERE r.user_id=?",
       params: [userId],
@@ -258,10 +228,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "ingestion",
     dependencies: ["statement_submissions", "statement_whatsapp_documents"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'object_key',r.\"object_key\",'byte_length',r.\"byte_length\",'sha256',r.\"sha256\",'status',r.\"status\",'created_at_ms',r.\"created_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'published_submission_id',r.\"published_submission_id\",'source_format',r.\"source_format\",'object_deleted_at_ms',r.\"object_deleted_at_ms\") AS body FROM statement_staging_objects r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_staging_objects r WHERE r.user_id=?",
       params: [userId],
@@ -294,10 +261,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
         params: [userId, current],
       }),
     },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'idempotency_key',r.\"idempotency_key\",'staging_id',r.\"staging_id\",'submitted_at_ms',r.\"submitted_at_ms\",'source_format',r.\"source_format\",'parser_revision',r.\"parser_revision\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'status',r.\"status\",'started_at_ms',r.\"started_at_ms\",'completed_at_ms',r.\"completed_at_ms\",'input_rows',r.\"input_rows\",'accepted_rows',r.\"accepted_rows\",'needs_review_rows',r.\"needs_review_rows\",'retention_expires_at_ms',r.\"retention_expires_at_ms\",'failure_reason',r.\"failure_reason\",'source_parse_attempts',r.\"source_parse_attempts\",'processed_rows',r.\"processed_rows\",'processed_accepted_rows',r.\"processed_accepted_rows\",'processed_review_rows',r.\"processed_review_rows\",'hosted_session_id',r.hosted_session_id,'hosted_turn_id',r.hosted_turn_id,'hosted_expires_at_ms',r.hosted_expires_at_ms,'hosted_abandoned_at_ms',r.hosted_abandoned_at_ms,'clarification_state',r.clarification_state,'clarification_expires_at_ms',r.clarification_expires_at_ms,'clarification_ended_at_ms',r.clarification_ended_at_ms,'work_user_id',CASE WHEN r.work_published_at_ms IS NOT NULL THEN r.user_id END,'work_revision',CASE WHEN r.work_published_at_ms IS NOT NULL THEN 1 END,'work_published_at_ms',r.work_published_at_ms,'work_last_attempt_at_ms',r.work_last_attempt_at_ms,'work_last_reconciled_at_ms',r.work_last_reconciled_at_ms) AS body FROM statement_submission_context r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM statement_submissions r WHERE r.user_id=?",
       params: [userId],
@@ -318,10 +282,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "ingestion",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('turn_id',r.\"turn_id\",'user_id',r.\"user_id\",'media_id',r.\"media_id\",'staging_id',r.\"staging_id\",'upload_grant_id',r.\"upload_grant_id\",'upload_expires_at_ms',r.\"upload_expires_at_ms\",'reference_json',r.\"reference_json\",'created_at_ms',r.\"created_at_ms\") AS body FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,started_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL) r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,started_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],

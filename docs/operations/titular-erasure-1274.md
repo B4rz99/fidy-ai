@@ -1,3 +1,9 @@
+> **Local full-deletion integration:** the current branch no longer archives User records, copies
+> originals into holds, or stores file inventory. Cleanup deletes bounded owner records and all
+> canonical User-prefix objects after confirmed upload settlement. The historical selective-retention
+> procedure below is superseded for new requests. Do not use it as the current release runbook;
+> #1489/#1490 admission and minimal-marker conversion remain unfinished and undeployed.
+
 # Whole-Titular erasure — #1274
 
 Implementation, operator procedure and verification evidence. The Production bootstrap and release

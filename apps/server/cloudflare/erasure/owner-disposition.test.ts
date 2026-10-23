@@ -1,4 +1,8 @@
-import { documentedSqlBlock, installHistoricalErasureChunk } from "../schema-cutover.test-fixture";
+import {
+  documentedSqlBlock,
+  installHistoricalErasureChunk,
+  installHistoricalErasureStorage,
+} from "../schema-cutover.test-fixture";
 import { makeRecoveryErasureStores } from "../recovery/runtime";
 import { makeEmailAuthenticationErasureStores } from "../email-authentication/runtime";
 import { afterAll, expect, it } from "vitest";
@@ -18,6 +22,7 @@ const scope = { userId, reference };
 
 const rehearseSelectionCutover = Effect.fn(function* (db: D1Database) {
   yield* Effect.tryPromise(() => installHistoricalErasureChunk(db));
+  yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
   const guide = yield* Effect.tryPromise(() =>
     Bun.file(
       new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)
@@ -32,7 +37,6 @@ const rehearseSelectionCutover = Effect.fn(function* (db: D1Database) {
       db.prepare("SELECT rowid,* FROM memories ORDER BY rowid"),
       db.prepare("SELECT rowid,* FROM erasure_requests ORDER BY rowid"),
       db.prepare("SELECT rowid,* FROM erasure_steps ORDER BY rowid"),
-      db.prepare("SELECT rowid,* FROM erasure_archives ORDER BY rowid"),
     ]);
   const before = (yield* Effect.tryPromise(snapshot)).map((result) => result.results);
   yield* Effect.tryPromise(() =>
@@ -57,7 +61,7 @@ const rehearseSelectionCutover = Effect.fn(function* (db: D1Database) {
   ).toEqual([]);
 });
 
-it("archives reviewed Memory in bounded pages, resumes after reconstruction, and preserves the other User", () =>
+it("deletes Memory in bounded pages, resumes after reconstruction, and preserves the other User", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
@@ -103,15 +107,12 @@ it("archives reviewed Memory in bounded pages, resumes after reconstruction, and
       ];
       yield* Effect.tryPromise(() => db.batch(statements));
       yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE erasure_requests SET state='Archiving' WHERE id=?").bind(reference).run()
+        db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference).run()
       );
-      const first = makeMemoryErasureStores(db)[0];
-      if (first === undefined) throw new Error("Missing Memory disposition");
-      expect(yield* first.archive(scope)).toBe(false);
+
       const resumed = makeMemoryErasureStores(db)[0];
       if (resumed === undefined) throw new Error("Missing Memory disposition");
-      expect(yield* resumed.archive(scope)).toBe(true);
-      expect(yield* resumed.archive(scope)).toBe(true);
+
       yield* Effect.tryPromise(() =>
         db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference).run()
       );
@@ -159,14 +160,7 @@ it("archives reviewed Memory in bounded pages, resumes after reconstruction, and
           db.prepare("SELECT text FROM memories WHERE user_id=?").bind(foreignUser).first("text")
         )
       ).toBe("Privado");
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT count(*) FROM erasure_archives WHERE request_id=?")
-            .bind(reference)
-            .first("count(*)")
-        )
-      ).toBe(70);
+
       expect(
         yield* Effect.tryPromise(() =>
           db.prepare("SELECT count(*) FROM erasure_permits").first("count(*)")
@@ -284,7 +278,7 @@ it.each([
                 `INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'${table}','credentials')`
               )
               .bind(reference),
-            db.prepare("UPDATE erasure_requests SET state='Archiving' WHERE id=?").bind(reference),
+            db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference),
           ])
         );
         const before = yield* Effect.tryPromise(() =>
@@ -292,7 +286,7 @@ it.each([
         );
         const store = stores(db).find((item) => item.id === table);
         if (store === undefined) throw Error("Missing credential erasure owner");
-        expect(yield* store.archive(scope)).toBe(true);
+
         yield* Effect.tryPromise(() =>
           db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference).run()
         );
@@ -374,7 +368,7 @@ it("erases only the reviewed Dashboard document while preserving Planning and th
             .bind(reference, userId),
           db
             .prepare(
-              "INSERT INTO erasure_steps(request_id,store_id,data_class,archive_done) VALUES(?,'dashboard_documents','projections',1)"
+              "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'dashboard_documents','projections')"
             )
             .bind(reference),
         ])

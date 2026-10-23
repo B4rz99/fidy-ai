@@ -1,24 +1,24 @@
 # Schema integration inventory (#1494)
 
 Local fresh-install snapshot of [the single baseline](../../apps/server/cloudflare/migrations/0001_schema.sql).
-Schema Git blob: `97c1d2d7556af70670a8f0f84f3ecea7369116a2`. This is not a live database inspection or a completed release.
+Schema Git blob: `aaad550abe343b7cb96d0de5d9e11df8d6190a15`. This is not a live database inspection or a completed release.
 
-The baseline creates **113 application tables**. The original 102-name inventory predates the
+The baseline creates **111 application tables**. The original 102-name inventory predates the
 approved four-table relational Planning replacement and the retained compact Recovery admission
-exception, plus the approved retained upload-writer safeguard. Including those outcomes gives **108 target tables**. Five additional stores remain
-behind explicit Erasure and Operational Health gates; their presence is intentional until the
+exception, plus the approved retained upload-writer safeguard. Including those outcomes gives **108 target tables**. Three additional Operational Health stores remain
+behind their platform-coverage gate; their presence is intentional until the
 replacement is proven. The four Transaction projections remain after the direct-read benchmark
 failed its cost gate. Counts describe these decisions; they are not test assertions or success criteria.
 
 ## Outstanding decisions and evidence
 
-| Area                 | Current outcome                                                                                                        | Reference                                                                                                                    |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Planning             | Shared root plus four ordered relational stores; the full aggregate exceeded the native row limit                      | [#1467](https://github.com/B4rz99/fidy-ai/issues/1467), [size evidence](../research/recurring-planning-storage-gate.md)      |
-| Recovery admission   | Retain compact specialized accounting; generic conversion failed the accepted cost gate                                | [#1434](https://github.com/B4rz99/fidy-ai/issues/1434), [comparison](recovery-admission-1434.md)                             |
-| Erasure              | Retain unresolved writers in the approved seven-table target; archives and object inventory await #1489                | [#1487](https://github.com/B4rz99/fidy-ai/issues/1487), [cutover gate](database-cutover-1428.md#confirmed-upload-drain-1487) |
-| Operational Health   | Retain alert/event/health stores until platform query coverage and actual notification/dashboard behavior are verified | [#1491](https://github.com/B4rz99/fidy-ai/issues/1491), [#1492](https://github.com/B4rz99/fidy-ai/issues/1492)               |
-| Release verification | Native release-owned execution replaces the synthetic D1 ledger locally; remote rollout remains separate evidence      | [#1493](https://github.com/B4rz99/fidy-ai/issues/1493)                                                                       |
+| Area                 | Current outcome                                                                                                                                          | Reference                                                                                                                    |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Planning             | Shared root plus four ordered relational stores; the full aggregate exceeded the native row limit                                                        | [#1467](https://github.com/B4rz99/fidy-ai/issues/1467), [size evidence](../research/recurring-planning-storage-gate.md)      |
+| Recovery admission   | Retain compact specialized accounting; generic conversion failed the accepted cost gate                                                                  | [#1434](https://github.com/B4rz99/fidy-ai/issues/1434), [comparison](recovery-admission-1434.md)                             |
+| Erasure              | Retain unresolved writers in the approved seven-table target; archive/inventory layer removed locally; self-service admission and minimal markers remain | [#1487](https://github.com/B4rz99/fidy-ai/issues/1487), [cutover gate](database-cutover-1428.md#confirmed-upload-drain-1487) |
+| Operational Health   | Retain alert/event/health stores until platform query coverage and actual notification/dashboard behavior are verified                                   | [#1491](https://github.com/B4rz99/fidy-ai/issues/1491), [#1492](https://github.com/B4rz99/fidy-ai/issues/1492)               |
+| Release verification | Native release-owned execution replaces the synthetic D1 ledger locally; remote rollout remains separate evidence                                        | [#1493](https://github.com/B4rz99/fidy-ai/issues/1493)                                                                       |
 
 ## Physical ownership and declared relationships
 
@@ -266,14 +266,12 @@ Views, indexes and provider-managed storage are excluded.
 
 | Table                     | Stored + generated columns | Foreign keys                                                                                                                                    |
 | ------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `erasure_archives`        | 5 + 0                      | `(request_id) → erasure_requests(id)`                                                                                                           |
 | `erasure_control`         | 4 + 0                      | —                                                                                                                                               |
 | `erasure_custody_records` | 9 + 1                      | `(request_id,custodian,current_event_id) → erasure_custody_records(request_id,custodian,event_identity)`; `(request_id) → erasure_requests(id)` |
-| `erasure_objects`         | 8 + 0                      | `(request_id) → erasure_requests(id)`                                                                                                           |
 | `erasure_permits`         | 3 + 0                      | `(request_id) → erasure_requests(id)`                                                                                                           |
-| `erasure_requests`        | 26 + 0                     | —                                                                                                                                               |
+| `erasure_requests`        | 18 + 0                     | —                                                                                                                                               |
 | `erasure_restore_members` | 3 + 0                      | —                                                                                                                                               |
-| `erasure_steps`           | 5 + 0                      | `(request_id) → erasure_requests(id)`                                                                                                           |
+| `erasure_steps`           | 4 + 0                      | `(request_id) → erasure_requests(id)`                                                                                                           |
 | `erasure_writers`         | 5 + 0                      | —                                                                                                                                               |
 
 ### SQL Assertions (`src/shell/sql-assertions`)

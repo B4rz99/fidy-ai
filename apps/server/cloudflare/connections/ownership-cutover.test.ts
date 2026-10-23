@@ -1,7 +1,7 @@
-import { Clock, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { expect, it } from "vitest";
 import { setup, users } from "../agent/hosted-turn.test-fixture";
-import { UserId } from "../../src/core/identity/contract";
+
 import {
   CutoverHistory,
   documentedSqlBlock,
@@ -9,7 +9,6 @@ import {
   precedingSchema,
   schemaStatements,
 } from "../schema-cutover.test-fixture";
-import { makeConnectionsErasureStores } from "./runtime";
 
 const sourceTables = ["connection_attempts", "connections", "connection_institution_gate"];
 const targetTables = ["connection_attempts", "connections"];
@@ -21,7 +20,6 @@ it.each([
   "enabled-history",
   "count",
   "interruption",
-  "archive",
 ])(
   "preserves original Connection attempts, owners and prepared sessions through conversion and inverse: %s",
   (historyCase) =>
@@ -122,7 +120,7 @@ it.each([
             ])
           )
         );
-        if (historyCase !== "valid" && historyCase !== "archive") {
+        if (historyCase !== "valid") {
           expect(result._tag).toBe("Failure");
           const restored = yield* Effect.tryPromise(() => Promise.all(sourceTables.map(read)));
           expect(restored.map((result) => result.results)).toEqual(
@@ -131,50 +129,7 @@ it.each([
           return;
         }
         expect(result._tag).toBe("Success");
-        if (historyCase === "archive") {
-          const clock = yield* Clock.currentTimeMillis;
-          const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-            dispositions: {
-              projections: { action: "Retain", retention: { untilMs: clock + 86400000 } },
-            },
-          });
-          yield* Effect.tryPromise(() =>
-            db.batch([
-              db
-                .prepare(
-                  "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES('connection-archive',?,?,'Archiving',?)"
-                )
-                .bind(users[1], clock, decision),
-              db.prepare(
-                "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES('connection-archive','connection_attempts','projections')"
-              ),
-            ])
-          );
-          const store = makeConnectionsErasureStores(db).find(
-            (item) => item.id === "connection_attempts"
-          );
-          if (store === undefined) {
-            return yield* Effect.die("Missing attempt erasure purpose");
-          }
-          expect(
-            yield* store.archive({ userId: UserId.make(users[1]), reference: "connection-archive" })
-          ).toBe(true);
-          expect(
-            yield* Effect.tryPromise(() =>
-              db
-                .prepare(
-                  "SELECT row_ref,json_extract(body,'$.user_id') AS user_id,json_extract(body,'$.institution_id') AS institution_id,json_extract(body,'$.prepared_at_ms') AS prepared_at_ms FROM erasure_archives WHERE request_id='connection-archive'"
-                )
-                .first()
-            )
-          ).toEqual({
-            row_ref: "initial:83",
-            user_id: users[1],
-            institution_id: "bancolombia",
-            prepared_at_ms: 19,
-          });
-          return;
-        }
+
         yield* Effect.tryPromise(() =>
           db.batch([
             db.prepare("PRAGMA defer_foreign_keys=ON"),

@@ -4,6 +4,7 @@ import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   documentedSqlBlock,
   installHistoricalErasureChunk,
+  installHistoricalErasureStorage,
   schemaDefinition,
   schemaObjectName,
   schemaStatements,
@@ -294,7 +295,7 @@ const eventMetadataErasure = (
             "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'support_recovery_events','credentials')"
           )
           .bind(requestId),
-        db.prepare("UPDATE erasure_requests SET state='Archiving' WHERE id=?").bind(requestId),
+        db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(requestId),
       ])
     );
     const store = makeRecoveryErasureStores(db).find(
@@ -302,23 +303,7 @@ const eventMetadataErasure = (
     );
     if (store === undefined) throw Error("Missing recovery metadata erasure");
     const scope = { userId: owner, reference: requestId };
-    expect(yield* store.archive(scope)).toBe(false);
-    expect(yield* store.archive(scope)).toBe(true);
-    const archives = yield* native(() =>
-      db
-        .prepare(
-          "SELECT store_id,row_ref,body FROM erasure_archives WHERE request_id=? ORDER BY row_ref"
-        )
-        .bind(requestId)
-        .all()
-    );
-    expect(archives.results).toHaveLength(66);
-    expect(
-      archives.results.filter((row) => row.row_ref === "initial:10" || row.row_ref === "initial:11")
-    ).toEqual([
-      { store_id: "support_recovery_events", row_ref: "initial:10", body: "{}" },
-      { store_id: "support_recovery_events", row_ref: "initial:11", body: "{}" },
-    ]);
+
     yield* native(() =>
       db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(requestId).run()
     );
@@ -510,6 +495,7 @@ it.each(cases)("preserves recovery evidence or refuses $description atomically",
     Effect.gen(function* () {
       const db = yield* native(() => databases.acquire());
       yield* native(() => installTestSchema({ db }));
+      yield* native(() => installHistoricalErasureStorage(db));
       yield* native(() => installHistoricalErasureChunk(db));
       const baseline = schemaStatements(
         yield* native(() =>

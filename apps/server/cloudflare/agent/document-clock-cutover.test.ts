@@ -1,10 +1,10 @@
-import { makeIngestionErasureStores } from "../ingestion/runtime";
-import { Clock, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { expect, it } from "vitest";
 import { closedContinuityFixture, setup } from "./hosted-turn.test-fixture";
 import {
   CutoverHistory,
   documentedSqlBlock,
+  installHistoricalErasureStorage,
   makeSchemaCutover,
   precedingSchema,
   schemaDefinition,
@@ -13,12 +13,13 @@ import {
 
 const tables = ["hosted_mutation_commits", "hosted_turns"];
 const { scratch, swap } = makeSchemaCutover(tables);
-it.each(["valid", "different-clock", "count", "interruption", "archive"])(
+it.each(["valid", "different-clock", "count", "interruption"])(
   "preserves document proof and exact Turn evidence through clock conversion and rollback: %s",
   (historyCase) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* Effect.tryPromise(() => setup());
+        yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
         const fixture = yield* closedContinuityFixture(db);
         yield* Effect.tryPromise(() =>
           db
@@ -113,7 +114,7 @@ it.each(["valid", "different-clock", "count", "interruption", "archive"])(
             ])
           )
         );
-        if (historyCase !== "valid" && historyCase !== "archive") {
+        if (historyCase !== "valid") {
           expect(result._tag).toBe("Failure");
           expect((yield* Effect.tryPromise(read)).map((row) => row.results)).toEqual(original);
           return;
@@ -122,43 +123,7 @@ it.each(["valid", "different-clock", "count", "interruption", "archive"])(
         expect(
           (yield* Effect.tryPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
         ).toEqual([]);
-        if (historyCase === "archive") {
-          const archiveNow = yield* Clock.currentTimeMillis;
-          const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-            dispositions: {
-              ingestion: { action: "Retain", retention: { untilMs: archiveNow + 86400000 } },
-            },
-          });
-          yield* Effect.tryPromise(() =>
-            db.batch([
-              db
-                .prepare(
-                  "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES('document-clock',?,?,'Archiving',?)"
-                )
-                .bind(fixture.caller.userId, archiveNow, decision),
-              db.prepare(
-                "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES('document-clock','statement_whatsapp_documents','ingestion')"
-              ),
-            ])
-          );
-          const store = makeIngestionErasureStores(db).find(
-            (item) => item.id === "statement_whatsapp_documents"
-          );
-          if (store === undefined) return yield* Effect.die("Missing document owner");
-          expect(
-            yield* store.archive({ userId: fixture.caller.userId, reference: "document-clock" })
-          ).toBe(true);
-          expect(
-            yield* Effect.tryPromise(() =>
-              db
-                .prepare(
-                  "SELECT json_extract(body,'$.created_at_ms') AS created_at_ms,json_extract(body,'$.media_id') AS media_id FROM erasure_archives WHERE request_id='document-clock'"
-                )
-                .first()
-            )
-          ).toEqual({ created_at_ms: fixture.current, media_id: "original-media" });
-          return;
-        }
+
         yield* Effect.tryPromise(() => db.batch(rollback().slice()));
         expect((yield* Effect.tryPromise(read)).map((row) => row.results)).toEqual(original);
       })

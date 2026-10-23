@@ -6,10 +6,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: ["pat_grant_consents", "pat_revocation_consents", "pats"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM pat_pairings r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM pat_pairings r WHERE r.user_id=?",
       params: [userId],
@@ -30,10 +27,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: ["canonical_request_acceptances", "pat_audit", "pat_revocation_consents"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM pats r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM pats r WHERE r.user_id=?",
       params: [userId],

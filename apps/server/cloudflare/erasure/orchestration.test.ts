@@ -228,7 +228,7 @@ const verifyNativeErasure = Effect.gen(function* () {
         }),
       ])
     );
-    const key = `staging/statement/v1/${(index === 0 ? "a" : "b").repeat(64)}`;
+    const key = `users/${id}/staging/statement/v1/${(index === 0 ? "a" : "b").repeat(64)}`;
     yield* Effect.tryPromise(() =>
       db
         .prepare(
@@ -514,13 +514,15 @@ const verifyNativeErasure = Effect.gen(function* () {
     );
   }
   expect(
-    yield* Effect.tryPromise(() => native.originals.head(`staging/statement/v1/${"a".repeat(64)}`))
+    yield* Effect.tryPromise(() =>
+      native.originals.head(`users/${userId}/staging/statement/v1/${"a".repeat(64)}`)
+    )
   ).toBeNull();
   expect(yield* Effect.tryPromise(() => native.originals.head(delayedKey))).toBeNull();
   expect(
     yield* Effect.tryPromise(() =>
       native.originals
-        .get(`staging/statement/v1/${"b".repeat(64)}`)
+        .get(`users/${foreignUser}/staging/statement/v1/${"b".repeat(64)}`)
         .then((object) => object?.text())
     )
   ).toBe("Personal");

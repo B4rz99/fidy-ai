@@ -3,7 +3,10 @@ import { type QueryCaller } from "../canonical-work/operations";
 import { Cause, Config, DateTime, Effect, Option, Schema } from "effect";
 import { RecurringDocument } from "../../src/core/recurring-plans/contract";
 import { withErasureRecovery } from "../erasure/runtime";
-import { documentedSqlBlock } from "../schema-cutover.test-fixture";
+import {
+  documentedSqlBlock,
+  installHistoricalErasureStorage,
+} from "../schema-cutover.test-fixture";
 import { RecurringWorkspace } from "../../src/shell/recurring-plans/contract";
 import {
   installTestSchema,
@@ -1300,6 +1303,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const { db, subjects } = yield* fixture();
+        yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
         const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
         const legacy = {
           revision: 8,
@@ -1442,6 +1446,7 @@ it.each(["revision", "duplicate", "foreign-parent", "archive"])(
     Effect.runPromise(
       Effect.gen(function* () {
         const { db, subjects } = yield* fixture();
+        yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
         const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
         const plan = {
           id: planId,

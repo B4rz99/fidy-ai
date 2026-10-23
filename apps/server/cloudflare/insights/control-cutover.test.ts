@@ -1,4 +1,4 @@
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import {
   activateTestReminder,
@@ -9,14 +9,13 @@ import {
 import {
   CutoverHistory,
   documentedSqlBlock,
+  installHistoricalErasureStorage,
   makeSchemaCutover,
   precedingSchema,
   schemaStatements,
 } from "../schema-cutover.test-fixture";
 
 import { findProactivityConsentGrant } from "../consent/operations";
-
-import { makeInsightsErasureStores } from "./runtime";
 
 const stores = ["audit_entries", "proactive_messages"];
 const question = "14730000-0000-4000-8000-000000000001";
@@ -25,7 +24,7 @@ afterAll(() => proactivityTestDatabases.dispose());
 const { scratch, swap } = makeSchemaCutover(stores);
 it.each([
   "valid",
-  "archive",
+
   "receipt-only",
   "missing-question",
   "foreign-question",
@@ -37,6 +36,7 @@ it.each([
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* proactivityDatabase;
+      yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
       const userId = proactivityTestUsers[0];
       yield* activateTestReminder(db);
       const grant = Option.getOrThrow(
@@ -155,7 +155,7 @@ it.each([
           ])
         )
       );
-      if (!["valid", "receipt-only", "archive"].includes(historyCase)) {
+      if (!["valid", "receipt-only"].includes(historyCase)) {
         expect(result._tag).toBe("Failure");
         expect((yield* Effect.tryPromise(snapshot)).map((row) => row.results)).toEqual(before);
         return;
@@ -190,64 +190,7 @@ it.each([
           db.prepare("SELECT seq FROM sqlite_sequence WHERE name='audit_entries'").first()
         )
       ).toEqual({ seq: 999 });
-      if (historyCase === "archive") {
-        const archiveNow = yield* Clock.currentTimeMillis;
-        const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-          dispositions: {
-            schedules: { action: "Retain", retention: { untilMs: archiveNow + 86400000 } },
-          },
-        });
-        yield* Effect.tryPromise(() =>
-          db.batch([
-            db
-              .prepare(
-                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES('receipt-case',?,?,'Archiving',?)"
-              )
-              .bind(userId, archiveNow, decision),
-            db.prepare(
-              "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES('receipt-case','reminder_control_receipts','schedules')"
-            ),
-          ])
-        );
-        const store = Option.getOrThrow(
-          Option.fromUndefinedOr(
-            makeInsightsErasureStores(db).find(
-              (candidate) => candidate.id === "reminder_control_receipts"
-            )
-          )
-        );
-        const scope = { userId, reference: "receipt-case" };
-        expect(yield* store.archive(scope)).toBe(true);
-        expect(
-          yield* Effect.tryPromise(() =>
-            db
-              .prepare(
-                "SELECT row_ref,json_extract(body,'$.message_id') AS message_id,json_extract(body,'$.choice') AS choice FROM erasure_archives WHERE request_id='receipt-case' AND store_id='reminder_control_receipts'"
-              )
-              .first()
-          )
-        ).toEqual({ row_ref: "initial:83", message_id: "original-reply", choice });
-        yield* Effect.tryPromise(() =>
-          db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id='receipt-case'").run()
-        );
-        expect(yield* store.remove(scope)).toBe(true);
-        expect(
-          yield* Effect.tryPromise(() =>
-            db
-              .prepare(
-                "SELECT control_message_id,control_choice,control_audit_sequence,text FROM proactive_messages WHERE user_id=? AND id=?"
-              )
-              .bind(userId, question)
-              .first()
-          )
-        ).toEqual({
-          control_message_id: null,
-          control_choice: null,
-          control_audit_sequence: null,
-          text: "Original question",
-        });
-        return;
-      }
+
       yield* Effect.tryPromise(() =>
         db
           .prepare("UPDATE proactive_messages SET text=NULL WHERE user_id=? AND id=?")

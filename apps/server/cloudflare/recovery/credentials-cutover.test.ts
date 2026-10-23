@@ -1,6 +1,7 @@
 import {
   documentedSqlBlock,
   installHistoricalErasureChunk,
+  installHistoricalErasureStorage,
   schemaDefinition,
   schemaObjectName,
   schemaStatements,
@@ -186,6 +187,7 @@ it.each(cases)(
       Effect.gen(function* () {
         const db = yield* native(() => databases.acquire());
         yield* native(() => installTestSchema({ db }));
+        yield* native(() => installHistoricalErasureStorage(db));
         yield* native(() => installHistoricalErasureChunk(db));
         const baseline = schemaStatements(
           yield* native(() =>

@@ -33,10 +33,8 @@ const deleteControls = (
     yield* io(() => bucket.value.delete(`recovery/cases/${scope.reference}`));
     const children = [
       "erasure_steps",
-      "erasure_archives",
       "erasure_permits",
       "erasure_custody_records",
-      "erasure_objects",
       "erasure_restore_members",
     ];
     yield* io(() =>

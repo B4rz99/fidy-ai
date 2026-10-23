@@ -417,11 +417,11 @@ speaking about data-protection rights, never as a synonym for User.
 
 **ErasureDecision**:
 An authenticated decision to delete one stable User's application data in full, with deletion
-reapplied if a backup restores it. It stops new admissions while exact pre-cutoff work drains within
-its original bounds. Completion requires verified local deletion and applicable external cleanup;
+reapplied if a backup restores it. It stops new admissions while exact pre-cutoff work drains and every outstanding upload is
+confirmed settled; an unknown upload outcome can keep deletion pending indefinitely. Completion requires verified local deletion and applicable external cleanup;
 acceptance by a processor alone is insufficient. It is neither ordinary Transaction deletion nor
-a processing-Consent withdrawal. This is the accepted full-deletion meaning in #1425; the earlier
-selective-disposition model remains only until its cutover prerequisites pass.
+a processing-Consent withdrawal. This is the accepted full-deletion meaning in #1425. The integration
+branch removes content archives; self-service admission and minimal restore markers remain in progress.
 _Avoid_: Delete-account flag, automatic wipe, withdrawal receipt.
 
 **ErasureRetention**:
@@ -429,9 +429,9 @@ The superseded selective-disposition model's restricted exception, tied to a rev
 contractual source, exact data scope, limited purpose, finite expiry, review instant and terminal
 deletion. A reference only
 addresses the source evidence; it is not itself a retention basis. Linked/pseudonymous copies remain
-personal data and remain visible in the legacy disposition receipt. The accepted full-deletion
-design has no selective retention of deleted User content; ordinary feature retention remains a
-separate purpose.
+personal data. New account-deletion requests cannot select this exception, and the integration branch
+no longer copies content into holds. The remaining control-metadata retention envelope is being
+replaced under #1490. Ordinary feature retention remains a separate purpose.
 _Avoid_: Keep for audit, indefinite legal hold, anonymized identifier.
 
 **ErasureCustodyEvidence**:

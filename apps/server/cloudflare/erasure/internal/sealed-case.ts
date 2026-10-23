@@ -16,7 +16,7 @@ export const sealRecoveryCase = (
     const approved = yield* io(() =>
       input.configuration.db
         .prepare(`SELECT count(*) AS approved FROM erasure_requests WHERE id=? AND user_id=?
-   AND state='Sealing' AND objects_captured=1 AND coordinator_cleared=1`)
+   AND state='Sealing' AND coordinator_cleared=1`)
         .bind(input.scope.reference, input.scope.userId)
         .first<number>("approved")
     );

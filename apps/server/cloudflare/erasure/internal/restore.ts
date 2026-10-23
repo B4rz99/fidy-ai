@@ -136,8 +136,7 @@ export const releaseRestore = (input: RestoreInput): Effect.Effect<Response, Era
     AND EXISTS(SELECT 1 FROM erasure_control WHERE kind='restore' AND generation=? AND scanned=1)
     AND NOT EXISTS(SELECT 1 FROM erasure_restore_members m LEFT JOIN erasure_requests q ON q.id=m.request_id
       WHERE m.generation=? AND (q.id IS NULL OR q.user_id<>m.user_id OR q.restore_generation IS NOT m.generation
-      OR q.state NOT IN('ExternalPending','Complete') OR NOT EXISTS(SELECT 1 FROM erasure_steps WHERE request_id=q.id) OR EXISTS(SELECT 1 FROM erasure_steps s WHERE s.request_id=q.id AND s.delete_done=0)
-      OR EXISTS(SELECT 1 FROM erasure_objects o WHERE o.request_id=q.id AND o.done=0)))
+      OR q.state NOT IN('ExternalPending','Complete') OR NOT EXISTS(SELECT 1 FROM erasure_steps WHERE request_id=q.id) OR EXISTS(SELECT 1 FROM erasure_steps s WHERE s.request_id=q.id AND s.delete_done=0)))
     AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.decision_json IS NOT NULL
       AND NOT EXISTS(SELECT 1 FROM erasure_restore_members m WHERE m.generation=? AND m.request_id=q.id AND m.user_id=q.user_id))`)
         .bind(expected.generation, expected.generation, expected.generation, expected.generation)

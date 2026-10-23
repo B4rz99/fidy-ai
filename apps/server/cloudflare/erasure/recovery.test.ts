@@ -216,7 +216,7 @@ it("purges completed case controls only after both reviewed deadlines, in resuma
             .bind(foreignRef, foreignUser, current, foreignDecision, current),
           db
             .prepare(
-              "INSERT INTO erasure_steps(request_id,store_id,data_class,archive_done,delete_done) VALUES(?,'users','identity',1,1)"
+              "INSERT INTO erasure_steps(request_id,store_id,data_class,delete_done) VALUES(?,'users','identity',1)"
             )
             .bind(reference),
         ])

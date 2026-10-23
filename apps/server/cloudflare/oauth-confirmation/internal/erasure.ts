@@ -6,10 +6,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM oauth_operation_intents r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM oauth_operation_intents r WHERE r.user_id=?",
       params: [userId],

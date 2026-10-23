@@ -1,4 +1,4 @@
-import { Clock, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import {
   weeklySummaryTestCaller,
@@ -9,22 +9,24 @@ import {
 import {
   CutoverHistory,
   documentedSqlBlock,
+  installHistoricalErasureStorage,
   schemaDefinition,
   schemaObjectName,
   schemaStatements,
 } from "../schema-cutover.test-fixture";
 import { InsightRecipient } from "./contract";
 import { findInsightRecipient, prepareInsightRecipient } from "./operations";
-import { makeWhatsappErasureStores, sweepExpiredWhatsAppWindows } from "./runtime";
+import { sweepExpiredWhatsAppWindows } from "./runtime";
 
 afterAll(() => weeklySummaryTestDatabases.dispose());
 
-it.each(["valid", "absent", "association", "count", "interruption", "archive"])(
+it.each(["valid", "absent", "association", "count", "interruption"])(
   "preserves recipient ownership, original archive references and unrelated User data through cutover and inverse: %s",
   (historyCase) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* weeklySummaryTestDatabase;
+        yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
         const userId = weeklySummaryTestUser;
         const recipient = yield* Schema.decodeEffect(InsightRecipient)({
           portfolioId: weeklySummaryTestCaller.businessPortfolioId,
@@ -144,61 +146,7 @@ it.each(["valid", "absent", "association", "count", "interruption", "archive"])(
         expect(yield* findInsightRecipient({ db, userId })).toEqual(
           historyCase === "absent" ? Option.none() : Option.some(recipient)
         );
-        if (historyCase === "archive") {
-          const now = yield* Clock.currentTimeMillis;
-          const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-            dispositions: {
-              conversation: { action: "Retain", retention: { untilMs: now + 86400000 } },
-            },
-          });
-          yield* Effect.tryPromise(() =>
-            db.batch([
-              db
-                .prepare(
-                  "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES('recipient-erasure',?,?,'Archiving',?)"
-                )
-                .bind(userId, now, decision),
-              db.prepare(
-                "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES('recipient-erasure','insight_whatsapp_routes','conversation')"
-              ),
-            ])
-          );
-          const store = Option.getOrThrow(
-            Option.fromUndefinedOr(
-              makeWhatsappErasureStores(db).find((item) => item.id === "insight_whatsapp_routes")
-            )
-          );
-          const scope = { userId, reference: "recipient-erasure" };
-          expect(yield* store.archive(scope)).toBe(true);
-          expect(
-            yield* Effect.tryPromise(() =>
-              db
-                .prepare(
-                  "SELECT row_ref,json_extract(body,'$.verified_at_ms') AS verified_at_ms FROM erasure_archives WHERE request_id='recipient-erasure'"
-                )
-                .first()
-            )
-          ).toEqual({ row_ref: "initial:17", verified_at_ms: 17 });
-          yield* Effect.tryPromise(() =>
-            db
-              .prepare("UPDATE erasure_requests SET state='Erasing' WHERE id='recipient-erasure'")
-              .run()
-          );
-          expect(yield* store.remove(scope)).toBe(true);
-          const fenced = yield* Effect.result(
-            Effect.tryPromise(() =>
-              db.batch([prepareInsightRecipient({ db, userId, recipient, receivedAtMs: 18 })])
-            )
-          );
-          expect(fenced._tag).toBe("Failure");
-          expect(yield* findInsightRecipient({ db, userId })).toEqual(Option.none());
-          expect(
-            yield* Effect.tryPromise(() =>
-              db.prepare("SELECT revision FROM user_documents WHERE user_id=?").bind(userId).first()
-            )
-          ).toEqual({ revision: 1 });
-          return;
-        }
+
         yield* Effect.tryPromise(() => db.batch(inverse(historyCase === "absent" ? 0 : 1).slice()));
         expect((yield* Effect.tryPromise(read)).map((row) => row.results)).toEqual(original);
       })

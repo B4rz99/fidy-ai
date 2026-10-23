@@ -12,10 +12,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "whatsapp_provider_handoffs",
     ],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM browser_login_pairings r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM browser_login_pairings r WHERE r.user_id=?",
       params: [userId],

@@ -2,7 +2,10 @@ import { Effect, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
-import { documentedSqlBlock } from "../schema-cutover.test-fixture";
+import {
+  documentedSqlBlock,
+  installHistoricalErasureStorage,
+} from "../schema-cutover.test-fixture";
 
 const originalEmailDigest = (historyCase: string, sha256: string): string =>
   historyCase === "email-digest-mismatch" ? "d".repeat(64) : sha256;
@@ -87,6 +90,7 @@ it.each([
       Effect.gen(function* () {
         const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
         yield* Effect.tryPromise(() => installTestSchema({ db }));
+        yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
         const bytes = new TextEncoder().encode("original private bytes");
         const digest = yield* Effect.tryPromise(() => crypto.subtle.digest("SHA-256", bytes));
         const sha256 = Hex.encode(new Uint8Array(digest));

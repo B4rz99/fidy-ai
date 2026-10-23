@@ -6,10 +6,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: ["pat_audit", "oauth_refresh_events"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM oauth_credentials r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM oauth_credentials r WHERE r.user_id=?",
       params: [userId],
@@ -38,10 +35,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "pat_audit",
     ],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM oauth_connections r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM oauth_connections r WHERE r.user_id=?",
       params: [userId],
@@ -63,10 +57,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT COALESCE(r.refresh_event_row_ref,'credential:'||r.id) AS rowRef,'{}' AS body FROM oauth_credentials r WHERE r.kind='refresh' AND r.replacement_refresh_id IS NOT NULL AND r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT COALESCE(r.refresh_event_row_ref,'credential:'||r.id) AS rowRef FROM oauth_credentials r WHERE r.kind='refresh' AND r.replacement_refresh_id IS NOT NULL AND r.user_id=?",
       params: [userId],
@@ -87,10 +78,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM oauth_review_requests r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM oauth_review_requests r WHERE r.user_id=?",
       params: [userId],

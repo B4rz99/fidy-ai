@@ -1,6 +1,4 @@
-import { UserId } from "../../../src/core/identity/contract";
-import { userPrivateObjectPrefix } from "../../private-objects/operations";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Schema } from "effect";
 import {
   ErasureClass,
   ErasureCustodian,
@@ -21,10 +19,9 @@ const Stored = Schema.Struct({
 const ClassProgress = Schema.Struct({
   dataClass: ErasureClass,
   pending: Schema.Int,
-  retained: Schema.Int,
 });
 export const receipt = (
-  input: Readonly<{ db: D1Database; scope: ErasureScope; bucket: Option.Option<R2Bucket> }>
+  input: Readonly<{ db: D1Database; scope: ErasureScope }>
 ): Effect.Effect<typeof ErasureOperatorReceipt.Type, ErasureUnavailable> =>
   Effect.gen(function* () {
     const { db, scope } = input;
@@ -36,9 +33,7 @@ export const receipt = (
           )
           .bind(scope.reference, scope.userId),
         db
-          .prepare(`SELECT s.data_class AS dataClass,sum(1-s.delete_done) AS pending,
-      (SELECT count(*) FROM erasure_archives a JOIN erasure_steps t ON t.request_id=a.request_id AND t.store_id=a.store_id
-        WHERE a.request_id=s.request_id AND t.data_class=s.data_class) AS retained
+          .prepare(`SELECT s.data_class AS dataClass,sum(1-s.delete_done) AS pending
       FROM erasure_steps s JOIN erasure_requests q ON q.id=s.request_id WHERE q.id=? AND q.user_id=? GROUP BY s.data_class`)
           .bind(scope.reference, scope.userId),
         db
@@ -48,19 +43,14 @@ export const receipt = (
       ])
     );
     const stored = yield* Schema.decodeUnknownEffect(Stored)(rows[0]?.results[0]);
-    const classes = yield* includePrivateCopies({
-      ...input,
-      decision: stored.decision,
-      classes: yield* Schema.decodeUnknownEffect(Schema.Array(ClassProgress))(rows[1]?.results),
-    });
+    const classes = yield* Schema.decodeUnknownEffect(Schema.Array(ClassProgress))(
+      rows[1]?.results
+    );
     const custodyRows = yield* Schema.decodeUnknownEffect(Schema.Array(CustodyRow))(
       rows[2]?.results
     );
     const custodians = yield* decodeCustodians({ rows: custodyRows, reference: scope.reference });
-    const retained = retainedClasses({ classes, decision: stored.decision });
-    const completed = classes
-      .filter((item) => item.pending === 0 && item.retained === 0)
-      .map((item) => item.dataClass);
+    const completed = classes.filter((item) => item.pending === 0).map((item) => item.dataClass);
     const recoveryUntilMs =
       stored.lastErasedAtMs._tag === "Some"
         ? stored.lastErasedAtMs.value + stored.decision.recovery.windowMs
@@ -70,18 +60,18 @@ export const receipt = (
       responseRouteRef: stored.decision.responseRouteRef,
       state: stored.state,
       completed,
-      retained,
+      retained: [],
       custodians,
       recoveryUntilMs,
       controlRetention: {
         receipt: stored.decision.receiptRetention,
         recovery: stored.decision.recovery.retention,
       },
-      next: yield* receiptNext({ stored, retained: retained.length }),
+      next: yield* receiptNext({ stored }),
     };
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 const receiptNext = (
-  input: Readonly<{ stored: typeof Stored.Type; retained: number }>
+  input: Readonly<{ stored: typeof Stored.Type }>
 ): Effect.Effect<typeof ErasureOperatorReceipt.Type.next> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
@@ -98,17 +88,7 @@ const receiptNext = (
     if (stored.state === "Draining") return "admitted-work";
     if (stored.state === "Complete") return "none";
     if (stored.state !== "ExternalPending") return "continue";
-    return input.retained > 0 ? "retention-review" : "provider-evidence";
-  });
-
-const retainedClasses = (
-  input: Readonly<{ classes: ReadonlyArray<typeof ClassProgress.Type>; decision: ErasureDecision }>
-): typeof ErasureOperatorReceipt.Type.retained =>
-  input.classes.flatMap((item) => {
-    const disposition = input.decision.dispositions[item.dataClass];
-    return item.retained > 0 && disposition.action === "Retain"
-      ? [{ dataClass: item.dataClass, retention: disposition.retention }]
-      : [];
+    return "provider-evidence";
   });
 
 const CustodyRow = Schema.Struct({
@@ -141,54 +121,3 @@ const decodeCustodians = (
       return { custodian: row.custodian, ...evidence.outcome };
     })
   );
-
-const includePrivateCopies = (
-  input: Readonly<{
-    bucket: Option.Option<R2Bucket>;
-    scope: ErasureScope;
-    decision: ErasureDecision;
-    classes: ReadonlyArray<typeof ClassProgress.Type>;
-  }>
-): Effect.Effect<ReadonlyArray<typeof ClassProgress.Type>, ErasureUnavailable> =>
-  Effect.gen(function* () {
-    const bucket = input.bucket;
-    if (Option.isNone(bucket)) return yield* new ErasureUnavailable();
-    const originals = yield* io(() =>
-      bucket.value.list({
-        prefix: `${userPrivateObjectPrefix(UserId.make(input.scope.userId))}held/${input.scope.reference}/`,
-        limit: 1,
-      })
-    );
-    return yield* Effect.forEach(input.classes, (item) =>
-      privateCopiesForClass({
-        bucket: bucket.value,
-        scope: input.scope,
-        decision: input.decision,
-        item,
-        originalsPresent: originals.objects.length > 0,
-      })
-    );
-  });
-
-const privateCopiesForClass = (
-  input: Readonly<{
-    bucket: R2Bucket;
-    scope: ErasureScope;
-    decision: ErasureDecision;
-    item: typeof ClassProgress.Type;
-    originalsPresent: boolean;
-  }>
-): Effect.Effect<typeof ClassProgress.Type, ErasureUnavailable> =>
-  Effect.gen(function* () {
-    const { item } = input;
-    if (input.decision.dispositions[item.dataClass].action !== "Retain") return item;
-    const records = yield* io(() =>
-      input.bucket.list({
-        prefix: `${userPrivateObjectPrefix(UserId.make(input.scope.userId))}held-records/${input.scope.reference}/${item.dataClass}/`,
-        limit: 1,
-      })
-    );
-    const retained =
-      records.objects.length > 0 || (item.dataClass === "ingestion" && input.originalsPresent);
-    return { ...item, retained: retained ? Math.max(1, item.retained) : item.retained };
-  });

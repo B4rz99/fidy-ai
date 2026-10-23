@@ -6,6 +6,7 @@ import { isolatedTestDatabases } from "../d1-test-fixture";
 import {
   CutoverHistory,
   documentedSqlBlock,
+  installHistoricalErasureStorage,
   schemaDefinition,
   schemaObjectName,
   schemaStatements,
@@ -108,6 +109,7 @@ it.each([
       Effect.gen(function* () {
         const db = yield* Effect.tryPromise(() => databases.acquire());
         yield* seedDetectionHistory(db, { count: 6, groups: 1 });
+        yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
         const current = schemaStatements(
           yield* Effect.tryPromise(() =>
             Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()

@@ -1,7 +1,6 @@
-import { Clock, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { expect, it } from "vitest";
-import { UserId } from "../../src/core/identity/contract";
-import { makeWhatsappErasureStores } from "./runtime";
+
 import { queuedWhatsAppTurn, setup, users } from "../agent/hosted-turn.test-fixture";
 import {
   CutoverHistory,
@@ -13,15 +12,7 @@ import {
 
 const tables = ["whatsapp_event_records", "whatsapp_deliveries"];
 const { scratch, swap } = makeSchemaCutover(tables);
-it.each([
-  "valid",
-  "grant-collision",
-  "unexpected-grant",
-  "retry-history",
-  "count",
-  "interruption",
-  "archive",
-])(
+it.each(["valid", "grant-collision", "unexpected-grant", "retry-history", "count", "interruption"])(
   "preserves delivery grants, outcomes and callback replay evidence through cutover and inverse: %s",
   (historyCase) =>
     Effect.runPromise(
@@ -149,7 +140,7 @@ it.each([
             ])
           )
         );
-        if (historyCase !== "valid" && historyCase !== "archive") {
+        if (historyCase !== "valid") {
           expect(result._tag).toBe("Failure");
           expect((yield* Effect.tryPromise(() => read("whatsapp_deliveries"))).results).toEqual(
             original.results
@@ -176,50 +167,7 @@ it.each([
         expect((yield* Effect.tryPromise(() => read("whatsapp_event_records"))).results).toEqual(
           callbacks.results
         );
-        if (historyCase === "archive") {
-          const clock = yield* Clock.currentTimeMillis;
-          const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-            dispositions: {
-              conversation: { action: "Retain", retention: { untilMs: clock + 86400000 } },
-            },
-          });
-          yield* Effect.tryPromise(() =>
-            db.batch([
-              db
-                .prepare(
-                  "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES('delivery-archive',?,?,'Archiving',?)"
-                )
-                .bind(users[0], clock, decision),
-              db.prepare(
-                "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES('delivery-archive','weekly_governor_questions','conversation')"
-              ),
-            ])
-          );
-          const store = makeWhatsappErasureStores(db).find(
-            (item) => item.id === "weekly_governor_questions"
-          );
-          if (store === undefined) {
-            return yield* Effect.die("Missing weekly delivery erasure purpose");
-          }
-          expect(
-            yield* store.archive({ userId: UserId.make(users[0]), reference: "delivery-archive" })
-          ).toBe(true);
-          expect(
-            yield* Effect.tryPromise(() =>
-              db
-                .prepare(
-                  "SELECT row_ref,json_extract(body,'$.grant_id') AS grant_id,json_extract(body,'$.last_attempt_at_ms') AS last_attempt_at_ms,json_extract(body,'$.state') AS state FROM erasure_archives WHERE request_id='delivery-archive'"
-                )
-                .first()
-            )
-          ).toEqual({
-            row_ref: "initial:17",
-            grant_id: "original-weekly-grant",
-            last_attempt_at_ms: 0,
-            state: "ambiguous",
-          });
-          return;
-        }
+
         yield* Effect.tryPromise(() =>
           db.batch([
             db.prepare("PRAGMA defer_foreign_keys=ON"),

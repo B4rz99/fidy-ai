@@ -11,10 +11,7 @@ const counterProjection = (
     dataClass: "credentials",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: `SELECT CAST(rowid AS TEXT) AS rowRef,'{}' AS body FROM resource_admission_counters WHERE ${where}`,
-      params: params(userId),
-    }),
+
     candidates: (userId) => ({
       sql: `SELECT CAST(rowid AS TEXT) AS rowRef FROM resource_admission_counters WHERE ${where}`,
       params: params(userId),
@@ -43,10 +40,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "conversation",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"owner_user_id\",'day_ms',r.\"window_start_ms\",'used',r.\"used\") AS body FROM resource_admission_counters r WHERE r.policy_key='hosted.compaction.user.v1' AND r.window_kind='calendar' AND r.scope_key=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM resource_admission_counters r WHERE r.policy_key='hosted.compaction.user.v1' AND r.window_kind='calendar' AND r.scope_key=?",
       params: [userId],
@@ -70,10 +64,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "credentials",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM resource_admission_events r WHERE ${reviewOwnerSql}`,
-      params: reviewOwnerParams(userId),
-    }),
+
     candidates: (userId) => ({
       sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef FROM resource_admission_events r WHERE ${reviewOwnerSql}`,
       params: reviewOwnerParams(userId),
@@ -94,10 +85,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "schedules",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('grant_id',r.\"grant_id\",'policy_key',r.\"policy_key\",'dimension',r.\"dimension\",'scope_key',r.\"scope_key\",'policy_kind',r.\"policy_kind\",'units',r.\"units\",'admitted_at_epoch_ms',r.\"admitted_at_epoch_ms\",'window_start_epoch_ms',r.\"window_start_epoch_ms\",'expires_at_epoch_ms',r.\"expires_at_epoch_ms\",'released_at_epoch_ms',r.\"released_at_epoch_ms\") AS body FROM resource_admission_events r WHERE r.policy_key<>'pat.review.session.v1' AND r.scope_key=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM resource_admission_events r WHERE r.policy_key<>'pat.review.session.v1' AND r.scope_key=?",
       params: [userId],

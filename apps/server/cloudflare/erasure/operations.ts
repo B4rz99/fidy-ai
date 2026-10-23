@@ -89,7 +89,6 @@ export const executeErasureControl = (
     userId: string;
     candidate: unknown;
     operation: "Receipt" | "CustodyEvidence";
-    bucket: Option.Option<R2Bucket>;
     stores: ReadonlyArray<ErasureStore>;
   }>
 ): Effect.Effect<Response> =>
@@ -124,7 +123,6 @@ export const executeErasureControl = (
     }
     const result = yield* receipt({
       db: input.db,
-      bucket: input.bucket,
       scope: { reference: decoded.value.reference, userId: input.userId },
     });
     return Response.json(result, { headers: { "cache-control": "no-store" } });
@@ -244,27 +242,23 @@ export const executeErasureRestore = (
     Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus }))
   );
 
-const maximumContinuationSteps = 2;
 const continueDisposition = (
   input: ErasureExecution &
     Readonly<{ scope: Readonly<{ reference: string; userId: string }>; deadlineMs: number }>
 ): Effect.Effect<void, ErasureUnavailable> =>
   Effect.gen(function* () {
     const scope = input.scope;
-    for (let count = 0; count < maximumContinuationSteps; count++) {
-      if ((yield* Clock.currentTimeMillis) >= input.deadlineMs) return;
-      const raw = yield* Effect.tryPromise({
-        try: () =>
-          input.db
-            .prepare("SELECT state FROM erasure_requests WHERE id=? AND user_id=?")
-            .bind(scope.reference, scope.userId)
-            .first(),
-        catch: () => new ErasureUnavailable(),
-      });
-      const row = yield* Schema.decodeUnknownEffect(Schema.Struct({ state: Schema.String }))(raw);
-      yield* progress({ ...input, scope, phase: row.state });
-      if (!["Archiving", "Erasing"].includes(row.state)) return;
-    }
+    if ((yield* Clock.currentTimeMillis) >= input.deadlineMs) return;
+    const raw = yield* Effect.tryPromise({
+      try: () =>
+        input.db
+          .prepare("SELECT state FROM erasure_requests WHERE id=? AND user_id=?")
+          .bind(scope.reference, scope.userId)
+          .first(),
+      catch: () => new ErasureUnavailable(),
+    });
+    const row = yield* Schema.decodeUnknownEffect(Schema.Struct({ state: Schema.String }))(raw);
+    yield* progress({ ...input, scope, phase: row.state });
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
 export const sweepErasureControlObjects = (

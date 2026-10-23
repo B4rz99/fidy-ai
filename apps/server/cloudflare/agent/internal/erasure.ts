@@ -6,10 +6,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "conversation",
     dependencies: ["hosted_turns", "transcript_entries"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'consent_basis_json',r.\"consent_basis_json\",'started_at_ms',r.\"started_at_ms\",'last_activity_at_ms',r.\"last_activity_at_ms\",'status',r.\"status\",'compacted_text',r.compacted_text,'compacted_through_sequence',r.compacted_through_sequence,'compacted_revision',r.compacted_revision,'compacted_at_ms',r.compacted_at_ms) AS body FROM hosted_agent_sessions r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_agent_sessions r WHERE r.user_id=?",
       params: [userId],
@@ -30,10 +27,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "conversation",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'issued_turn_id',r.\"issued_turn_id\",'operation',r.\"operation\",'input_json',r.\"input_json\",'command',r.\"command\",'issued_at_ms',r.\"issued_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'consumed_turn_id',r.\"consumed_turn_id\",'consumed_at_ms',r.\"consumed_at_ms\") AS body FROM hosted_confirmations r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_confirmations r WHERE r.user_id=?",
       params: [userId],
@@ -54,10 +48,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "conversation",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('turn_id',r.\"turn_id\",'tool_call_id',r.\"tool_call_id\",'user_id',r.\"user_id\",'committed_at_ms',r.\"committed_at_ms\",'valid',1) AS body FROM hosted_mutation_commits r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_mutation_commits r WHERE r.user_id=?",
       params: [userId],
@@ -96,10 +87,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
         params: [userId],
       }),
     },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'hosted_session_id',r.\"hosted_session_id\",'started_at_ms',r.\"started_at_ms\",'terminal_at_ms',r.\"terminal_at_ms\",'status',r.\"status\",'failure_reason',r.\"failure_reason\",'proposal_user_id',CASE WHEN r.proposed_at_ms IS NOT NULL THEN r.user_id END,'proposed_at_ms',r.proposed_at_ms,'proposal_text',r.proposal_text,'retention_user_id',CASE WHEN r.retention_terminal_at_ms IS NOT NULL THEN r.user_id END,'retention_terminal_at_ms',r.retention_terminal_at_ms) AS body FROM hosted_turns r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_turns r WHERE r.user_id=?",
       params: [userId],
@@ -120,10 +108,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "conversation",
     dependencies: ["proactive_transcript_event_links"],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('kind',r.\"kind\",'delivery_id',r.\"delivery_id\",'role',r.\"role\",'sequence',r.\"sequence\",'id',r.\"id\",'user_id',r.\"user_id\",'insight_event_id',r.\"insight_event_id\",'occurred_at_ms',r.\"occurred_at_ms\",'text',r.\"text\",'expires_at_ms',r.\"expires_at_ms\") AS body FROM proactive_transcript_entries r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM proactive_transcript_entries r WHERE r.user_id=?",
       params: [userId],
@@ -144,10 +129,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "conversation",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('transcript_kind',r.\"transcript_kind\",'user_id',r.\"user_id\",'transcript_id',r.\"transcript_id\",'insight_event_id',r.\"insight_event_id\") AS body FROM (SELECT rowid,user_id AS user_id,transcript_id AS transcript_id,id AS insight_event_id,transcript_kind AS transcript_kind FROM insight_events WHERE transcript_id IS NOT NULL) r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id AS user_id,transcript_id AS transcript_id,id AS insight_event_id,transcript_kind AS transcript_kind FROM insight_events WHERE transcript_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
@@ -168,10 +150,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "conversation",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('sequence',r.\"sequence\",'id',r.\"id\",'user_id',r.\"user_id\",'hosted_session_id',r.\"hosted_session_id\",'turn_id',r.\"turn_id\",'kind',r.\"kind\",'occurred_at_ms',r.\"occurred_at_ms\",'text',r.\"text\",'failure_reason',r.\"failure_reason\",'iteration',r.\"iteration\",'tool_call_id',r.\"tool_call_id\",'operation',r.\"operation\",'input_json',r.\"input_json\",'outcome_json',r.\"outcome_json\") AS body FROM transcript_entries r WHERE r.user_id=?",
-      params: [userId],
-    }),
+
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM transcript_entries r WHERE r.user_id=?",
       params: [userId],

@@ -176,7 +176,6 @@ it("prunes at most 32 expired pairings through the expiry index while retaining 
           db.prepare("SELECT rowid,* FROM browser_login_pairings ORDER BY id"),
           db.prepare("SELECT rowid,* FROM web_sessions ORDER BY id"),
           db.prepare("SELECT rowid,* FROM support_recovery_cases ORDER BY id"),
-          db.prepare("SELECT rowid,* FROM erasure_archives ORDER BY rowid"),
         ]);
       const before = yield* Effect.tryPromise(snapshot);
       yield* Effect.tryPromise(() =>
@@ -242,7 +241,7 @@ it("prunes at most 32 expired pairings through the expiry index while retaining 
       const observedOwner = observeRetentionCost(db);
       const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
         dispositions: {
-          credentials: { action: "Retain", retention: { untilMs: current + 600000 } },
+          credentials: { action: "Delete", retention: { untilMs: current + 600000 } },
         },
       });
       yield* Effect.tryPromise(() =>
@@ -255,26 +254,18 @@ it("prunes at most 32 expired pairings through the expiry index while retaining 
           db.prepare(
             "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES('session-archive','web_sessions','credentials')"
           ),
-          db.prepare("UPDATE erasure_requests SET state='Archiving' WHERE id='session-archive'"),
+          db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id='session-archive'"),
         ])
       );
       const store = Option.getOrThrow(
         Option.fromUndefinedOr(makeWebSessionErasureStores(observedOwner.database)[0])
       );
-      expect(yield* store.archive({ userId, reference: "session-archive" })).toBe(true);
+
+      expect(yield* store.remove({ userId, reference: "session-archive" })).toBe(true);
       expect(
         (yield* Effect.tryPromise(observedOwner.plans)).some(
           (plan) => plan.includes("web_sessions_by_user") && plan.includes("user_id=?")
         )
       ).toBe(true);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT store_id,row_ref,body FROM erasure_archives WHERE request_id='session-archive'"
-            )
-            .all()
-        )).results
-      ).toEqual([{ store_id: "web_sessions", row_ref: "initial:1", body: "{}" }]);
     })
   ));

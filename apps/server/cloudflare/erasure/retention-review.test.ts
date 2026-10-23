@@ -77,7 +77,6 @@ it("requires a fresh exact-User control review, preserves unresolved custody and
         candidate: admission,
         operation: "Receipt",
         stores: [],
-        bucket: Option.some(bucket),
       });
       const before = yield* Schema.decodeUnknownEffect(ErasureOperatorReceipt)(
         yield* Effect.tryPromise(() => receipt.json())

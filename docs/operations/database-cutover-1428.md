@@ -5104,3 +5104,193 @@ credentials, other-User preservation and uncertain external-provider evidence. N
 new seams are added. Historical selective-retention decoders and archive tables remain behind the
 synchronized conversion gate; this local policy change does not claim their removal or completion
 of #1489/#1490.
+
+### Full-deletion archive retirement (#1489 integration slice)
+
+The integration branch removes the personal-record and original-file archives: all owner projections
+now publish bounded deletion only; `erasure_archives`, `erasure_objects`, 127 copy-on-change triggers,
+R2 hold/copy/purge code, locator checkpoints, archive progress and obsolete content cursors are gone.
+The remaining seven Erasure tables retain confirmed-upload drain, exact per-store SQL permits,
+independent request markers, restore membership and truthful external outcomes. Prefix deletion covers
+Email, Statement and Erasure buckets in pages of at most four objects per continuation. It also wipes
+historical held content under that User prefix without creating a new copy.
+
+This is a local integration slice, not completion or deployment of #1489/#1490. Fresh authenticated
+self-service admission, removal of the operator decision envelope, minimal independent marker format,
+metadata lifecycle and final three-column step schema still need the synchronized cutover. Do not
+ship this slice independently or mark the parent complete. Existing native journeys continue to
+exercise the installed review boundary until that admission conversion is implemented.
+
+Before retiring historical file inventory, complete and verify the #1486 canonical-key conversion
+for every configured bucket, including incomplete uploads. Every same-User unresolved writer remains
+tracked. Known noncanonical files must be moved/cleaned with their existing owner scope before dropping
+inventory; an empty prefix is not evidence that an unresolved upload has settled. Retained artifacts
+outside canonical prefixes or unexplained locators block cutover; never infer their absence from the
+new schema. The final #1494 release check must verify these prerequisites against the actual database
+and buckets. No live operations were performed for this slice.
+
+For populated historical source databases, this bounded retirement refuses active deletion requests
+and any retained database rows or inventory. Finish/reconcile those cases under the approved full-delete
+scope first; do not bypass the guard or discard unexplained content. Keep a database snapshot for the
+inverse while changes remain local. The native rehearsal runs the statements below in one atomic batch
+and injects failure to prove owner rows, unresolved attempts and the original DDL survive rollback.
+These statements retire the archive layer only; the final metadata-table rebuild belongs to #1490/#1494.
+
+<!-- full-delete-archive-retirement:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'full_delete_archive_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM erasure_archives) AND NOT EXISTS(SELECT 1 FROM erasure_objects) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+DROP TRIGGER budget_alert_occurrences_field_preserve_delete;
+DROP TRIGGER budget_alert_occurrences_field_preserve_update;
+DROP TRIGGER email_forwarding_addresses_field_preserve_delete;
+DROP TRIGGER erasure_preserve_audit_entries_billing_transition;
+DROP TRIGGER erasure_preserve_audit_entries_identity_read;
+DROP TRIGGER erasure_preserve_audit_entries_insight_call;
+DROP TRIGGER erasure_preserve_audit_entries_media_admission;
+DROP TRIGGER erasure_preserve_audit_entries_publication;
+DROP TRIGGER erasure_preserve_audit_entries_request_admission;
+DROP TRIGGER erasure_preserve_audit_entries_security_mutation;
+DROP TRIGGER erasure_preserve_audit_entries_session_call;
+DROP TRIGGER erasure_preserve_audit_retention_permits_delete;
+DROP TRIGGER erasure_preserve_billing_attempts_delete;
+DROP TRIGGER erasure_preserve_billing_event_candidates_delete;
+DROP TRIGGER erasure_preserve_billing_event_candidates_update;
+DROP TRIGGER erasure_preserve_billing_price_notices_delete;
+DROP TRIGGER erasure_preserve_billing_provider_transactions_delete;
+DROP TRIGGER erasure_preserve_budget_crossing_publications_delete;
+DROP TRIGGER erasure_preserve_budget_group_currencies_delete;
+DROP TRIGGER erasure_preserve_budget_month_caps_delete;
+DROP TRIGGER erasure_preserve_budget_month_latches_delete;
+DROP TRIGGER erasure_preserve_budget_plan_months_delete;
+DROP TRIGGER erasure_preserve_budget_reconciliation_work_delete;
+DROP TRIGGER erasure_preserve_budget_threshold_alerts_delete;
+DROP TRIGGER erasure_preserve_budget_user_versions_delete;
+DROP TRIGGER erasure_preserve_budgets_delete;
+DROP TRIGGER erasure_preserve_canonical_request_buckets_delete;
+DROP TRIGGER erasure_preserve_canonical_request_leases_delete;
+DROP TRIGGER erasure_preserve_canonical_request_replays_delete;
+DROP TRIGGER erasure_preserve_card_enrollments_delete;
+DROP TRIGGER erasure_preserve_commercial_allowance_consumptions_delete;
+DROP TRIGGER erasure_preserve_connection_attempts_delete;
+DROP TRIGGER erasure_preserve_connections_delete;
+DROP TRIGGER erasure_preserve_consent_history_delete;
+DROP TRIGGER erasure_preserve_dashboard_documents_delete;
+DROP TRIGGER erasure_preserve_transaction_projection_bucket_delete;
+DROP TRIGGER erasure_preserve_transaction_projection_digit_delete;
+DROP TRIGGER erasure_preserve_transaction_projection_leaf_delete;
+DROP TRIGGER erasure_preserve_transaction_projection_state_delete;
+DROP TRIGGER erasure_preserve_forwarded_email_receipts_delete;
+DROP TRIGGER erasure_preserve_hosted_agent_sessions_delete;
+DROP TRIGGER erasure_preserve_hosted_compaction_attempts_delete;
+DROP TRIGGER erasure_preserve_hosted_confirmations_delete;
+DROP TRIGGER erasure_preserve_hosted_mutation_commits_delete;
+DROP TRIGGER erasure_preserve_hosted_turns_delete;
+DROP TRIGGER erasure_preserve_hosted_voice_refusals_delete;
+DROP TRIGGER erasure_preserve_hosted_whatsapp_delivery_delete;
+DROP TRIGGER erasure_preserve_hosted_whatsapp_delivery_events_delete;
+DROP TRIGGER erasure_preserve_whatsapp_service_windows_delete;
+DROP TRIGGER erasure_preserve_insight_events_delete;
+DROP TRIGGER erasure_preserve_proactive_messages_delete;
+DROP TRIGGER erasure_preserve_insight_whatsapp_claims_delete;
+DROP TRIGGER erasure_preserve_keyword_rules_delete;
+DROP TRIGGER erasure_preserve_media_submissions_delete;
+DROP TRIGGER erasure_preserve_memories_delete;
+DROP TRIGGER erasure_preserve_pending_consent_exchanges_delete;
+DROP TRIGGER erasure_preserve_proactive_transcript_entries_delete;
+DROP TRIGGER erasure_preserve_proactive_transcript_event_links_delete;
+DROP TRIGGER erasure_preserve_proactive_transcript_event_links_delete_clear;
+DROP TRIGGER erasure_preserve_proactivity_consent_offers_delete;
+DROP TRIGGER erasure_preserve_proactivity_message_events_delete;
+DROP TRIGGER erasure_preserve_proactivity_message_events_delete_clear;
+DROP TRIGGER erasure_preserve_proactivity_offer_requests_delete;
+DROP TRIGGER erasure_preserve_proactivity_whatsapp_claims_delete;
+DROP TRIGGER erasure_preserve_recurring_digest_consumption_clear_shared;
+DROP TRIGGER erasure_preserve_recurring_digest_consumption_delete_shared;
+DROP TRIGGER erasure_preserve_recurring_digest_days_delete;
+DROP TRIGGER erasure_preserve_recurring_digest_instructions_delete;
+DROP TRIGGER erasure_preserve_recurring_digest_staging_clear_shared;
+DROP TRIGGER erasure_preserve_recurring_digest_staging_delete_shared;
+DROP TRIGGER erasure_preserve_recurring_dispatch_delete;
+DROP TRIGGER erasure_preserve_recurring_facts_delete_typed;
+DROP TRIGGER erasure_preserve_recurring_plan_documents_delete;
+DROP TRIGGER erasure_preserve_recurring_progress_delete;
+DROP TRIGGER erasure_preserve_recurring_proposals_delete_typed;
+DROP TRIGGER erasure_preserve_recurring_series_delete;
+DROP TRIGGER erasure_preserve_refund_attempts_delete;
+DROP TRIGGER erasure_preserve_reminder_governors_delete;
+DROP TRIGGER erasure_preserve_resource_admission_events_delete;
+DROP TRIGGER erasure_preserve_schedule_executions_delete;
+DROP TRIGGER erasure_preserve_schedule_revisions_delete;
+DROP TRIGGER erasure_preserve_schedules_delete;
+DROP TRIGGER erasure_preserve_source_attestations_delete;
+DROP TRIGGER erasure_preserve_statement_materialization_parts_delete;
+DROP TRIGGER erasure_preserve_statement_needs_review_delete;
+DROP TRIGGER erasure_preserve_statement_record_outcomes_delete;
+DROP TRIGGER erasure_preserve_statement_staging_objects_delete;
+DROP TRIGGER erasure_preserve_statement_submissions_delete;
+DROP TRIGGER erasure_preserve_subscription_cancellations_delete;
+DROP TRIGGER erasure_preserve_subscriptions_delete;
+DROP TRIGGER erasure_preserve_subscriptions_delete_clear;
+DROP TRIGGER erasure_preserve_transaction_corrections_delete;
+DROP TRIGGER erasure_preserve_transaction_reconciliation_decisions_delete;
+DROP TRIGGER erasure_preserve_transaction_reconciliation_members_delete;
+DROP TRIGGER erasure_preserve_transaction_reconciliation_members_update;
+DROP TRIGGER erasure_preserve_transactions_delete;
+DROP TRIGGER erasure_preserve_transcript_entries_delete;
+DROP TRIGGER erasure_preserve_weekly_consent_offers_delete;
+DROP TRIGGER erasure_preserve_weekly_governor_questions_delete;
+DROP TRIGGER erasure_preserve_weekly_governors_delete;
+DROP TRIGGER erasure_preserve_weekly_question_intents_delete;
+DROP TRIGGER hosted_whatsapp_inbound_field_preserve_delete;
+DROP TRIGGER hosted_whatsapp_inbound_field_preserve_update;
+DROP TRIGGER insight_delivery_attempts_field_preserve_delete;
+DROP TRIGGER insight_delivery_attempts_field_preserve_update;
+DROP TRIGGER whatsapp_recipients_preserve_delete;
+DROP TRIGGER recurring_opportunity_preserve_delete;
+DROP TRIGGER recurring_opportunity_preserve_update;
+DROP TRIGGER reminder_delivery_receipts_marker_preserve_delete;
+DROP TRIGGER reminder_delivery_receipts_marker_preserve_update;
+DROP TRIGGER statement_whatsapp_documents_field_preserve_delete;
+DROP TRIGGER statement_whatsapp_documents_field_preserve_update;
+DROP TRIGGER weekly_governor_deliveries_marker_preserve_delete;
+DROP TRIGGER weekly_governor_deliveries_marker_preserve_update;
+DROP TRIGGER erasure_preserve_subscription_identities_delete;
+DROP TRIGGER erasure_preserve_payment_sources_delete;
+DROP TRIGGER erasure_preserve_statement_materializations_delete;
+DROP TRIGGER erasure_preserve_ingestion_review_item_workspace_update;
+DROP TRIGGER erasure_preserve_ingestion_review_item_workspace_delete;
+DROP TRIGGER erasure_preserve_ingestion_review_item_source_delete;
+DROP TRIGGER statement_backfill_entitlements_field_preserve_delete;
+DROP TRIGGER erasure_preserve_recurring_plans_delete;
+DROP TRIGGER erasure_preserve_recurring_plan_revisions_delete;
+DROP TRIGGER erasure_preserve_recurring_plan_exceptions_delete;
+DROP TRIGGER erasure_preserve_recurring_plan_fulfillments_delete;
+DROP TRIGGER reminder_control_preserve_delete;
+DROP TRIGGER reminder_control_preserve_update;
+DROP TABLE erasure_archives;
+DROP TABLE erasure_objects;
+ALTER TABLE erasure_requests DROP COLUMN restore_cursor;
+ALTER TABLE erasure_requests DROP COLUMN restore_objects_done;
+ALTER TABLE erasure_requests DROP COLUMN restore_records_cursor;
+ALTER TABLE erasure_requests DROP COLUMN restore_records_done;
+ALTER TABLE erasure_requests DROP COLUMN archive_generation;
+ALTER TABLE erasure_requests DROP COLUMN objects_captured;
+ALTER TABLE erasure_requests DROP COLUMN purge_pending;
+ALTER TABLE erasure_requests DROP COLUMN purge_records_cursor;
+ALTER TABLE erasure_steps DROP COLUMN archive_done;
+```
+
+<!-- full-delete-archive-retirement:end -->
+
+Historical migration rehearsals explicitly reconstruct the original archive/inventory tables when
+testing an earlier cutover. Ordinary erasure integration uses the actual new baseline. Archive-only
+cases are removed; populated-history, failure, rollback, deletion-authorization and isolation checks
+remain. No schema-inventory/removal-only test cases were added.
+
+Restoration cannot infer upload settlement from an empty restored writer ledger: a backup may predate
+later admitted writes. An unsealed restored request stays in Draining and normal activity remains
+fenced even after all visible owner work ends. An independent same-User sealed marker proves that
+all pre-deletion uploads had already settled; only that verified branch may remove stale restored
+writer rows for its exact request/User/generation before repeating deletion. It does not clear any
+other User's attempts. The existing native restore journey covers both branches, including a restored
+missing writer history, stale settled rows, real prefix bytes and repeated restore protection.

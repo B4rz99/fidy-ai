@@ -151,6 +151,11 @@ publication. Independent activities retain bounded work, fair discovery and fail
 Cadence, spend bounds, diagnostics and incident procedures belong in the
 [background-work runbook](../../docs/operations/cloudflare-background-work.md).
 
+Subscription privately owns billing observation from candidate discovery and cancellation handoff
+through durable progression and recovery. Transaction lookup and PaymentSource cancellation retain
+distinct evidence and budget rules behind that module; collection and observation share private
+transaction verification. Queue publication remains upstream of observation admission.
+
 ## 8. Evidence and test boundaries
 
 Core tests exercise pure decisions; contract tests check derived public declarations; provider tests

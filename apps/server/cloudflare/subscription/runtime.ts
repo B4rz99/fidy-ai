@@ -64,9 +64,9 @@ import {
   dispatchBillingCollection as dispatch,
   receiveBillingCollection as receive,
   isBillingCollectionWork as recognizesWork,
-  reconcileBillingCandidates as reconcile,
   runBillingCollectionWorkflow as runWorkflow,
 } from "./internal/billing-workflow";
+import { reconcileBillingCandidates as reconcile } from "./internal/billing-observation";
 import { sweepExpiredEnrollmentAdmission as sweep } from "./internal/enrollment-admission";
 
 /** Construct the native provider transport at the Subscription composition boundary. */

@@ -6,33 +6,12 @@ import {
   workTraceParent,
   workerRelease,
 } from "../../runtime/telemetry/operations";
-import { offerBillingWorkflow } from "./workflow-execution";
-import { cancelSource, receiveCancellation } from "./source-cancellation";
 import { receivePriceNotice, sendPriceNotice } from "./price-notice";
-import { protectConsentStatement } from "../../../src/shell/consent/operations";
-import { UserId } from "../../../src/core/identity/contract";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
-import {
-  BillingAttemptId,
-  BillingEmail,
-  EnrollmentMethod,
-  renewalGraceMs,
-} from "../../../src/core/subscription/contract";
-import { IanaTimeZone } from "../../../src/core/_shared/context";
-import { Money } from "../../../src/core/_shared/money";
-import {
-  type WompiBillingClientService,
-  type WompiTransaction,
-  makeWompiBillingClient,
-} from "./wompi-billing-client";
-import { WompiSourceId, WompiTransactionId, WompiTransactionReference } from "./wompi-model";
-import { amountInCentsForBilling } from "./billing-rules";
-import { paidPeriodFor } from "../../../src/core/subscription/operations";
-import { type VerifiedOutcome, recordVerifiedBillingEvidence } from "./billing-settlement";
+import { BillingAttemptId } from "../../../src/core/subscription/contract";
 import { verifiedWompiEventHint } from "./wompi-event";
 import { type WorkflowStepConfig } from "cloudflare:workers";
-import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
-import { Hex } from "effect/encoding";
+import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { type WompiTransportFactory } from "./wompi-runtime";
 import {
   type BillingCollectionEnvironment,
@@ -43,34 +22,19 @@ import {
   SubscriptionCancellationWork,
 } from "../contract";
 
+import { collectBillingTransaction } from "./billing-transaction";
+import { receiveSourceCancellation, runBillingObservation } from "./billing-observation";
+
 const CollectionMessage = Schema.Struct({
   traceContext: Schema.optionalKey(Schema.Unknown),
   version: Schema.Literal(1),
   attemptId: BillingAttemptId,
-});
-const PreviousLookupWork = Schema.Struct({
-  traceContext: Schema.optionalKey(Schema.Unknown),
-  version: Schema.Literal(1),
-  kind: Schema.Literal("lookup"),
-  transactionId: WompiTransactionId,
-});
-const LookupWork = Schema.Struct({
-  version: Schema.Literal(2),
-  kind: Schema.Literal("lookup"),
-  transactionId: WompiTransactionId,
-  signedAt: Schema.NullOr(Schema.Finite),
-  signedStatus: Schema.NullOr(Schema.String),
-});
-const CancellationExecution = Schema.Struct({
-  ...SubscriptionCancellationWork.fields,
-  version: Schema.Literal(2),
 });
 const workflowRetention = { successRetention: "3 days", errorRetention: "3 days" } as const;
 type CollectionQueue = Readonly<{
   send: (work: typeof CollectionMessage.Type) => Promise<unknown>;
 }>;
 type CollectionWorkflow = BillingObservationWorkflow;
-type LookupWorkflowBinding = BillingObservationWorkflow;
 /** Identify this Queue payload without interpreting any provider data as authority. */
 export const isBillingCollectionWork = (body: unknown): boolean =>
   Option.isSome(
@@ -78,40 +42,9 @@ export const isBillingCollectionWork = (body: unknown): boolean =>
       Schema.Union([CollectionMessage, BillingPriceNoticeWork, SubscriptionCancellationWork])
     )(body)
   );
-const Snapshot = Schema.Struct({
-  id: BillingAttemptId,
-  user_id: Schema.String.check(Schema.isUUID()),
-  amount: Schema.String,
-  currency: Schema.Literal("COP"),
-  billing_period: Schema.Literals(["weekly", "monthly", "yearly"]),
-  time_zone: IanaTimeZone,
-  wompi_environment: WompiEnvironment,
-  wompi_reference: WompiTransactionReference,
-  billing_email: BillingEmail,
-  wompi_source_id: WompiSourceId,
-  method: EnrollmentMethod,
-  previous_paid_attempt_id: Schema.OptionFromNullOr(BillingAttemptId),
-  period_starts_at_ms: Schema.OptionFromNullOr(Schema.Int),
-  period_ends_at_ms: Schema.OptionFromNullOr(Schema.Int),
-});
-const Candidate = Schema.Struct({
-  transaction_id: WompiTransactionId,
-  signed_at: Schema.OptionFromNullOr(Schema.Finite),
-  signed_status: Schema.OptionFromNullOr(Schema.String),
-});
 const ArmState = Schema.Struct({ state: Schema.Literals(["armed", "sent", "rejected"]) });
-const billingAmount = (
-  captured: typeof Snapshot.Type
-): Effect.Effect<number, BillingCollectionFailure> =>
-  Effect.flatMap(decode(Money, { amount: captured.amount, currency: captured.currency }), (money) =>
-    amountInCentsForBilling(money.amount)
-  );
 const pendingBatchSize = 32;
 const dispatchCooldownMs = 60_000;
-const candidateCooldownMs = 60_000;
-const maximumCandidateLookupAttempts = 8;
-const eventCandidateLifetimeMs = 86_400_000;
-
 const failure = (cause: Option.Option<unknown> = Option.none()): BillingCollectionFailure =>
   new BillingCollectionFailure({ cause });
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, BillingCollectionFailure> =>
@@ -123,37 +56,6 @@ const decode = <A, E>(
   Schema.decodeUnknownEffect(schema)(value).pipe(
     Effect.mapError((cause) => failure(Option.some(cause)))
   );
-
-const billingClient = (
-  environment: BillingRuntime,
-  wompiHttp: WompiTransportFactory
-): Effect.Effect<WompiBillingClientService, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const configured = yield* decode(WompiEnvironment, environment.WOMPI_ENVIRONMENT);
-    const outboundHttp = yield* wompiHttp({
-      ...environment,
-      WOMPI_ENVIRONMENT: configured,
-    });
-    return makeWompiBillingClient({ outboundHttp, environment: configured });
-  });
-
-const snapshot = (
-  db: D1Database,
-  id: BillingAttemptId
-): Effect.Effect<typeof Snapshot.Type, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const row = yield* attempt(() =>
-      db
-        .prepare(`SELECT a.id, a.user_id, a.amount, a.currency, a.billing_period, a.time_zone,
-          a.wompi_environment, a.wompi_reference, s.billing_email, s.wompi_source_id, s.method,
-          a.previous_paid_attempt_id, a.period_starts_at_ms, a.period_ends_at_ms
-        FROM billing_attempt_context AS a JOIN payment_source_context AS s ON s.id = a.payment_source_id
-        WHERE a.id = ? AND a.user_id = s.user_id`)
-        .bind(id)
-        .first()
-    );
-    return yield* decode(Snapshot, row);
-  });
 
 const publishBillingEntry = (
   input: Readonly<{
@@ -228,7 +130,7 @@ const receiveAuxiliaryWork = (
   work: typeof BillingPriceNoticeWork.Type | typeof SubscriptionCancellationWork.Type
 ): Effect.Effect<void, BillingCollectionFailure> =>
   work.kind === "source-cancellation"
-    ? receiveCancellation({
+    ? receiveSourceCancellation({
         db: environment.DB,
         workflow: environment.BILLING_COLLECTION_WORKFLOW,
         work,
@@ -288,152 +190,6 @@ export const receiveBillingCollection = (
     }
   }).pipe(Effect.withSpan("billing.collection.receive"));
 
-const matchesSnapshot = (
-  input: Readonly<{
-    found: WompiTransaction;
-    captured: typeof Snapshot.Type;
-    expectedId: WompiTransactionId;
-    expectedAmount: number;
-    environment: WompiEnvironment;
-    requireFinalization: boolean;
-  }>
-): boolean => {
-  const facts: ReadonlyArray<readonly [unknown, unknown]> = [
-    [input.found.transactionId, input.expectedId],
-    [input.found.reference, input.captured.wompi_reference],
-    [input.found.amountInCents, input.expectedAmount],
-    [input.found.currency, input.captured.currency],
-    [input.environment, input.captured.wompi_environment],
-  ];
-  return (
-    facts.every(([observed, expected]) => observed === expected) &&
-    (Option.isNone(input.found.sourceId) ||
-      input.found.sourceId.value === input.captured.wompi_source_id) &&
-    (!input.requireFinalization ||
-      input.found.status !== "APPROVED" ||
-      Option.isSome(input.found.finalizedAt))
-  );
-};
-
-const verifiedSnapshot = (
-  input: Readonly<{
-    db: D1Database;
-    client: WompiBillingClientService;
-    transactionId: WompiTransactionId;
-    found: WompiTransaction;
-  }>
-): Effect.Effect<typeof Snapshot.Type, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const row = yield* attempt(() =>
-      input.db
-        .prepare(
-          "SELECT id FROM billing_attempt_context WHERE wompi_reference = ? AND wompi_environment = ?"
-        )
-        .bind(input.found.reference, input.client.environment)
-        .first()
-    );
-    const match = yield* decode(Schema.Struct({ id: BillingAttemptId }), row);
-    const captured = yield* snapshot(input.db, match.id);
-    const amount = yield* billingAmount(captured);
-    if (
-      !matchesSnapshot({
-        found: input.found,
-        captured,
-        expectedId: input.transactionId,
-        expectedAmount: amount,
-        environment: input.client.environment,
-        requireFinalization: true,
-      })
-    ) {
-      return yield* failure();
-    }
-    return captured;
-  });
-
-/** A provider id is a lookup hint only: provider GET and the full captured snapshot authorize evidence. */
-export const reconcileBillingTransaction = (
-  input: Readonly<{
-    db: D1Database;
-    client: WompiBillingClientService;
-    transactionId: WompiTransactionId;
-  }>
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const found = yield* input.client
-      .findTransaction(input.transactionId)
-      .pipe(Effect.mapError((cause) => failure(Option.some(cause))));
-    const captured = yield* verifiedSnapshot({ ...input, found });
-    const now = yield* Clock.currentTimeMillis;
-    let settlement: VerifiedOutcome;
-    if (found.status === "APPROVED") {
-      if (Option.isNone(found.finalizedAt)) return yield* failure();
-      const period = Option.isSome(captured.previous_paid_attempt_id)
-        ? {
-            startsAt: DateTime.makeUnsafe(Option.getOrThrow(captured.period_starts_at_ms)),
-            endsAt: DateTime.makeUnsafe(Option.getOrThrow(captured.period_ends_at_ms)),
-            renewalAnchor: DateTime.makeUnsafe(Option.getOrThrow(captured.period_ends_at_ms)),
-          }
-        : yield* paidPeriodFor(
-            captured.billing_period,
-            captured.time_zone,
-            found.finalizedAt.value
-          );
-      settlement = {
-        status: "APPROVED",
-        finalizedAtMs: DateTime.toEpochMillis(found.finalizedAt.value),
-        paidPeriod: {
-          startsAtMs: DateTime.toEpochMillis(period.startsAt),
-          endsAtMs: DateTime.toEpochMillis(period.endsAt),
-          renewalAnchorMs: DateTime.toEpochMillis(period.renewalAnchor),
-        },
-      };
-    } else {
-      settlement = {
-        status: found.status,
-        finalizedAtMs: Option.map(found.finalizedAt, DateTime.toEpochMillis),
-      };
-    }
-    yield* attempt(() =>
-      recordVerifiedBillingEvidence({
-        db: input.db,
-        attemptId: captured.id,
-        transactionId: input.transactionId,
-        observedAtMs: now,
-        outcome: settlement,
-      })
-    );
-  });
-
-const reconcileEventCandidate = (
-  environment: BillingRuntime,
-  transactionId: WompiTransactionId,
-  input: Readonly<{
-    wompiHttp: WompiTransportFactory;
-    generation: Pick<typeof LookupWork.Type, "signedAt" | "signedStatus">;
-  }>
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const client = yield* billingClient(environment, input.wompiHttp);
-    yield* reconcileBillingTransaction({ db: environment.DB, client, transactionId });
-    const now = yield* Clock.currentTimeMillis;
-    yield* attempt(() =>
-      environment.DB.prepare(`UPDATE billing_provider_transactions
-      SET event_resolved_at_ms = ? WHERE transaction_id = ? AND event_received_at_ms IS NOT NULL AND event_resolved_at_ms IS NULL
-      AND event_signed_at IS ? AND event_signed_status IS ?
-      AND EXISTS (SELECT 1 FROM billing_provider_transactions AS e
-        JOIN billing_attempt_context AS a ON a.id = e.attempt_id
-        WHERE e.transaction_id = ? AND a.status IN ('succeeded', 'failed'))`)
-        .bind(
-          now,
-          transactionId,
-          input.generation.signedAt,
-          input.generation.signedStatus,
-          transactionId
-        )
-        .run()
-    );
-  }).pipe(Effect.withSpan("billing.collection.lookup"));
-
 /** A valid signed event persists only a bounded transaction-id hint, then independently verifies provider evidence. */
 export const receiveWompiBillingEvent = (
   input: Readonly<{
@@ -483,105 +239,6 @@ export const receiveWompiBillingEvent = (
     return new Response(null, { status: 200 });
   });
 
-const claimCollection = (
-  input: Readonly<{
-    environment: BillingRuntime;
-    captured: typeof Snapshot.Type;
-    attemptId: BillingAttemptId;
-    now: number;
-  }>
-): Effect.Effect<boolean, BillingCollectionFailure> => {
-  const { environment, captured, attemptId, now } = input;
-  const collectionClaim = {
-    sql: `UPDATE billing_attempts AS billing_collection_work SET collection_state = 'sent', collection_sent_at_ms = ? WHERE collection_state IS NOT NULL AND id = ? AND collection_state = 'armed'`,
-    params: [now, attemptId],
-  };
-  const protectedClaim = Option.isSome(captured.previous_paid_attempt_id)
-    ? protectConsentStatement({
-        subject: { _tag: "User", userId: UserId.make(captured.user_id) },
-        requirement: "active",
-        statement: {
-          sql: `${collectionClaim.sql}
-            AND EXISTS (SELECT 1 FROM subscription_standing WHERE user_id = ? AND attempt_id = ?)
-            AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences WHERE user_id = ?)
-            AND EXISTS (SELECT 1 FROM billing_attempt_context due WHERE due.id=? AND
-              (due.renewal_attempt_number=1 OR due.period_starts_at_ms + ${renewalGraceMs} > ?))`,
-          params: [
-            ...collectionClaim.params,
-            captured.user_id,
-            captured.previous_paid_attempt_id.value,
-            captured.user_id,
-            attemptId,
-            now,
-          ],
-        },
-      })
-    : collectionClaim;
-  return attempt(() =>
-    environment.DB.prepare(protectedClaim.sql)
-      .bind(...protectedClaim.params)
-      .run()
-  ).pipe(Effect.map((result) => result.meta.changes === 1));
-};
-
-const collect = (
-  environment: BillingRuntime,
-  attemptId: BillingAttemptId,
-  wompiHttp: WompiTransportFactory
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const captured = yield* snapshot(environment.DB, attemptId);
-    if (captured.wompi_environment !== environment.WOMPI_ENVIRONMENT) return yield* failure();
-    const client = yield* billingClient(environment, wompiHttp);
-    const amount = yield* billingAmount(captured);
-    // Claim BEFORE outbound I/O: a crash between this write and POST is ambiguous, never retried blindly.
-    const now = yield* Clock.currentTimeMillis;
-    const claimed = yield* claimCollection({ environment, captured, attemptId, now });
-    if (!claimed) return;
-    const created = yield* Effect.exit(
-      client.createTransaction({
-        reference: captured.wompi_reference,
-        amountInCents: amount,
-        currency: captured.currency,
-        billingEmail: captured.billing_email,
-        sourceId: captured.wompi_source_id,
-        method: captured.method,
-      })
-    );
-    // Wompi documents charge lookup by provider id, not by reference. Without a response id,
-    // retain ambiguity until a signed callback supplies a lookup hint; NEVER repeat the POST.
-    if (Exit.isFailure(created)) return;
-    if (
-      !matchesSnapshot({
-        found: created.value,
-        captured,
-        expectedId: created.value.transactionId,
-        expectedAmount: amount,
-        environment: client.environment,
-        requireFinalization: false,
-      })
-    ) {
-      return;
-    }
-    const candidate = created.value.transactionId;
-    yield* attempt(() =>
-      environment.DB.batch([
-        environment.DB.prepare(`INSERT INTO billing_provider_transactions
-      (transaction_id, attempt_id) VALUES (?, ?)
-      ON CONFLICT(transaction_id) DO UPDATE SET attempt_id=excluded.attempt_id
-      WHERE billing_provider_transactions.attempt_id IS NULL`).bind(candidate, attemptId),
-        ...(captured.method === "card" && Option.isNone(captured.previous_paid_attempt_id)
-          ? [
-              environment.DB.prepare(
-                `UPDATE billing_attempts SET checkout_transaction_id=incoming.transaction_id FROM (SELECT ? AS attempt_id,? AS transaction_id) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.checkout_transaction_id IS NULL`
-              ).bind(attemptId, candidate),
-            ]
-          : []),
-      ])
-    );
-    yield* reconcileBillingTransaction({ db: environment.DB, client, transactionId: candidate });
-  }).pipe(Effect.withSpan("billing.collection.collect"));
-
 type CollectionActivity = (
   name: string,
   options: WorkflowStepConfig,
@@ -595,21 +252,13 @@ type BillingWorkflowExecution = Readonly<{
   sleep: (name: string, duration: number) => Promise<void>;
   wompiHttp: WompiTransportFactory;
 }>;
-type RunActivity = <E>(activity: Effect.Effect<void, E>) => Promise<void>;
 /** Only a versioned identity enters Workflow state. The named Activity owns the one armed POST. */
 export const runBillingCollectionWorkflow = (input: BillingWorkflowExecution): Promise<void> => {
   const { wompiHttp } = input;
   const work = Schema.decodeUnknownOption(
-    Schema.Union([
-      CollectionMessage,
-      LookupWork,
-      PreviousLookupWork,
-      BillingPriceNoticeWork,
-      SubscriptionCancellationWork,
-      CancellationExecution,
-    ])
+    Schema.Union([CollectionMessage, BillingPriceNoticeWork])
   )(input.payload);
-  if (Option.isNone(work)) return Promise.resolve();
+  if (Option.isNone(work)) return runBillingObservation(input);
   const options = { retries: { limit: 0, delay: "1 second" } } as const;
   const runActivity = <E>(activity: Effect.Effect<void, E>): Promise<void> =>
     activity.pipe(
@@ -621,307 +270,14 @@ export const runBillingCollectionWorkflow = (input: BillingWorkflowExecution): P
       }),
       Effect.runPromise
     );
-  if ("kind" in work.value && work.value.kind === "price-notice") {
+  if ("kind" in work.value) {
     const notice = work.value;
     return input.activity("send-billing-price-notice-v1", options, () =>
       runActivity(sendPriceNotice({ environment: input.environment, work: notice }))
     );
   }
-  if ("kind" in work.value && work.value.kind === "source-cancellation") {
-    return runCancellationExecution({ input, work: work.value, runActivity });
-  }
-  if ("kind" in work.value) {
-    if (work.value.version === 2) {
-      return runLookupLoop({ input, work: work.value, runActivity });
-    }
-    const transactionId = work.value.transactionId;
-    return input.activity("lookup-wompi-billing-v1", options, () =>
-      runActivity(
-        reconcileEventCandidate(input.environment, transactionId, {
-          wompiHttp,
-          generation: { signedAt: null, signedStatus: null },
-        })
-      )
-    );
-  }
   const attemptId = work.value.attemptId;
   return input.activity("collect-wompi-billing-v1", options, () =>
-    runActivity(collect(input.environment, attemptId, wompiHttp))
+    runActivity(collectBillingTransaction({ environment: input.environment, attemptId, wompiHttp }))
   );
 };
-
-const runCancellationExecution = ({
-  input,
-  work,
-  runActivity,
-}: Readonly<{
-  input: BillingWorkflowExecution;
-  work: typeof CancellationExecution.Type | typeof SubscriptionCancellationWork.Type;
-  runActivity: RunActivity;
-}>): Promise<void> =>
-  work.version === 2
-    ? runCancellationLoop({ input, work, runActivity })
-    : input.activity("cancel-wompi-source-v1", { retries: { limit: 0, delay: "1 second" } }, () =>
-        runActivity(
-          cancelSource({ environment: input.environment, work, wompiHttp: input.wompiHttp })
-        )
-      );
-
-const runCancellationLoop = ({
-  input,
-  work,
-  runActivity,
-}: Readonly<{
-  input: BillingWorkflowExecution;
-  work: typeof CancellationExecution.Type;
-  runActivity: RunActivity;
-}>): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const options = { retries: { limit: 0, delay: "1 second" } } as const;
-      for (let index = 0; index < maximumCandidateLookupAttempts; index++) {
-        if (index > 0) {
-          yield* attempt(() =>
-            input.sleep(`source-cancellation-wait-v2-${index}`, candidateCooldownMs + 1)
-          );
-        }
-        yield* attempt(() =>
-          input.activity(`cancel-wompi-source-v2-${index}`, options, () =>
-            runCancellationCheck({ input, work, runActivity })
-          )
-        );
-      }
-    })
-  );
-const runCancellationCheck = ({
-  input,
-  work,
-  runActivity,
-}: Readonly<{
-  input: BillingWorkflowExecution;
-  work: typeof CancellationExecution.Type;
-  runActivity: RunActivity;
-}>): Promise<void> =>
-  runActivity(
-    cancelSource({ environment: input.environment, work, wompiHttp: input.wompiHttp })
-  ).catch(() => undefined);
-
-const observeLookup = (
-  input: Readonly<{
-    execution: BillingWorkflowExecution;
-    work: typeof LookupWork.Type;
-    index: number;
-  }>
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const { execution, work, index } = input;
-    const now = yield* Clock.currentTimeMillis;
-    const reserved =
-      index === 0
-        ? yield* initialLookupReservation(execution.environment.DB, work, now)
-        : yield* reserveLookup(execution.environment.DB, work, now);
-    if (!reserved) return;
-    yield* reconcileEventCandidate(execution.environment, work.transactionId, {
-      wompiHttp: execution.wompiHttp,
-      generation: work,
-    });
-  });
-const runObservedLookup = (
-  input: Readonly<{
-    execution: BillingWorkflowExecution;
-    work: typeof LookupWork.Type;
-    index: number;
-    runActivity: RunActivity;
-  }>
-): Promise<void> => input.runActivity(observeLookup(input)).catch(() => undefined);
-
-const runLookupLoop = ({
-  input,
-  work,
-  runActivity,
-}: Readonly<{
-  input: BillingWorkflowExecution;
-  work: typeof LookupWork.Type;
-  runActivity: RunActivity;
-}>): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const options = { retries: { limit: 0, delay: "1 second" } } as const;
-      for (let index = 0; index < maximumCandidateLookupAttempts; index++) {
-        if (index > 0) {
-          yield* attempt(() =>
-            input.sleep(`billing-observation-wait-v2-${index}`, candidateCooldownMs + 1)
-          );
-        }
-        yield* attempt(() =>
-          input.activity(`lookup-wompi-billing-v2-${index}`, options, () =>
-            runObservedLookup({ execution: input, work, index, runActivity })
-          )
-        );
-      }
-    })
-  );
-
-type LookupGeneration = Pick<typeof LookupWork.Type, "transactionId" | "signedAt" | "signedStatus">;
-const lookupEligibility = `FROM billing_provider_transactions c
-  LEFT JOIN billing_attempt_context a ON a.id=c.attempt_id
-  WHERE c.transaction_id=? AND c.event_signed_at IS ? AND c.event_signed_status IS ?`;
-const attemptEligible = `a.status='pending' AND c.lookup_attempts<8`;
-const eventEligible = `c.event_received_at_ms>=? AND c.event_resolved_at_ms IS NULL
-  AND c.event_lookup_attempts<8 AND (a.id IS NULL OR a.status='pending'
-  OR (a.status='failed' AND c.event_received_at_ms>=a.finalized_at_ms))`;
-const reserveLookup = (
-  db: D1Database,
-  generation: LookupGeneration,
-  now: number
-): Effect.Effect<boolean, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const key = [generation.transactionId, generation.signedAt, generation.signedStatus];
-    const results = yield* attempt(() =>
-      db.batch([
-        db
-          .prepare(`UPDATE billing_provider_transactions SET last_checked_at_ms=?,lookup_attempts=lookup_attempts+1
-        WHERE transaction_id IN (SELECT c.transaction_id ${lookupEligibility}
-          AND ${attemptEligible} AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms<?))
-        RETURNING lookup_attempts,event_lookup_attempts`)
-          .bind(now, ...key, now - candidateCooldownMs),
-        db
-          .prepare(`UPDATE billing_provider_transactions SET event_last_checked_at_ms=?,event_lookup_attempts=event_lookup_attempts+1
-        WHERE transaction_id IN (SELECT c.transaction_id ${lookupEligibility}
-          AND ${eventEligible} AND (c.event_last_checked_at_ms IS NULL OR c.event_last_checked_at_ms<?))
-        RETURNING lookup_attempts,event_lookup_attempts`)
-          .bind(now, ...key, now - eventCandidateLifetimeMs, now - candidateCooldownMs),
-      ])
-    );
-    const first = results[0];
-    const second = results[1];
-    if (first === undefined || second === undefined) return yield* failure();
-    if (first.meta.changes === 0 && second.meta.changes === 0) return false;
-    return true;
-  });
-const initialLookupReservation = (
-  db: D1Database,
-  work: typeof LookupWork.Type,
-  now: number
-): Effect.Effect<boolean, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const row = yield* attempt(() =>
-      db
-        .prepare(`SELECT c.transaction_id ${lookupEligibility}
-      AND ((a.status='pending' AND c.lookup_attempts>0) OR
-        (c.event_received_at_ms>=? AND c.event_resolved_at_ms IS NULL AND c.event_lookup_attempts>0
-        AND (a.id IS NULL OR a.status='pending' OR (a.status='failed' AND c.event_received_at_ms>=a.finalized_at_ms))))`)
-        .bind(work.transactionId, work.signedAt, work.signedStatus, now - eventCandidateLifetimeMs)
-        .first()
-    );
-    return row !== null;
-  });
-
-const lookupExecutionId = ({
-  transactionId,
-  signedAt,
-  signedStatus,
-}: Readonly<{
-  transactionId: WompiTransactionId;
-  signedAt: Option.Option<number>;
-  signedStatus: Option.Option<string>;
-}>): Effect.Effect<string, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const fingerprint = Hex.encode(
-      new Uint8Array(
-        yield* attempt(() =>
-          crypto.subtle.digest(
-            "SHA-256",
-            new TextEncoder().encode(
-              `${transactionId}:${Option.getOrElse(signedAt, () => 0)}:${Option.getOrElse(signedStatus, () => "")}`
-            )
-          )
-        )
-      )
-    );
-    return `billing-lookup-v2-${fingerprint}`;
-  });
-const offerBillingLookup = (
-  input: Readonly<{
-    db: D1Database;
-    workflow: LookupWorkflowBinding;
-    transactionId: WompiTransactionId;
-    signedAt: Option.Option<number>;
-    signedStatus: Option.Option<string>;
-    now: number;
-  }>
-): Effect.Effect<boolean, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const { db, workflow, transactionId, signedAt, signedStatus, now } = input;
-    const id = yield* lookupExecutionId({ transactionId, signedAt, signedStatus });
-    const generation = {
-      transactionId,
-      signedAt: Option.getOrNull(signedAt),
-      signedStatus: Option.getOrNull(signedStatus),
-    };
-    return yield* offerBillingWorkflow({
-      workflow,
-      id,
-      params: { version: 2, kind: "lookup", ...generation },
-      reserve: reserveLookup(db, generation, now),
-    });
-  });
-
-/** Recheck known candidates by starting a bounded, named Workflow Activity. Failed handoffs retain D1 intent. */
-export const reconcileBillingCandidates = (
-  environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: LookupWorkflowBinding }>
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    const rows = yield* attempt(() =>
-      environment.DB.prepare(`WITH candidates AS (SELECT transaction_id, MAX(signed_at) AS signed_at,
-      MAX(signed_status) AS signed_status, MIN(priority) AS priority FROM (
-      SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, a.created_at_ms) AS priority,
-        c.event_signed_at AS signed_at, c.event_signed_status AS signed_status
-        FROM billing_provider_transactions AS c
-        JOIN billing_attempt_context AS a ON a.id = c.attempt_id WHERE a.status = 'pending'
-          AND c.lookup_attempts < ?
-          AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
-      UNION
-      SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, c.received_at_ms) AS priority,
-        c.signed_at, c.signed_status FROM billing_callback_hints AS c
-        LEFT JOIN billing_provider_transactions AS e ON e.transaction_id = c.transaction_id
-        LEFT JOIN billing_attempt_context AS a ON a.id = e.attempt_id
-        WHERE c.resolved_at_ms IS NULL AND c.lookup_attempts < ?
-        AND c.received_at_ms >= ?
-        AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
-        AND (a.id IS NULL OR a.status = 'pending' OR (a.status = 'failed'
-          AND c.received_at_ms >= a.finalized_at_ms))
-    ) GROUP BY transaction_id), ranked AS (
-      SELECT *,row_number() OVER (ORDER BY priority,transaction_id)-1 AS position,
-        count(*) OVER () AS candidate_count FROM candidates
-    ) SELECT transaction_id,signed_at,signed_status FROM ranked
-      ORDER BY (position+?)%candidate_count LIMIT ?`)
-        .bind(
-          maximumCandidateLookupAttempts,
-          now - candidateCooldownMs,
-          maximumCandidateLookupAttempts,
-          now - eventCandidateLifetimeMs,
-          now - candidateCooldownMs,
-          Math.floor(now / candidateCooldownMs) * pendingBatchSize,
-          pendingBatchSize
-        )
-        .all()
-    );
-    const candidates = yield* decode(Schema.Array(Candidate), rows.results);
-    let failed = false;
-    for (const candidate of candidates) {
-      const offered = yield* Effect.exit(
-        offerBillingLookup({
-          db: environment.DB,
-          workflow: environment.BILLING_COLLECTION_WORKFLOW,
-          transactionId: candidate.transaction_id,
-          signedAt: candidate.signed_at,
-          signedStatus: candidate.signed_status,
-          now,
-        })
-      );
-      if (Exit.isFailure(offered) || !offered.value) failed = true;
-    }
-    if (failed) return yield* failure();
-  }).pipe(Effect.withSpan("billing.collection.reconcile"));

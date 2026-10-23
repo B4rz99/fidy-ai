@@ -113,14 +113,21 @@ only after 100 new refusals; a backward clock cannot reopen an old minute. The b
 not a deployment-wide write cap: different isolates or User coordinators can each admit a write.
 This is telemetry, never authorization or request admission.
 
-The single `operational_core_rejection_burst` row stores only `id = 1` and the most recent
-minute timestamp; monotonic writes cannot replace it with older evidence. The scheduled health sweep
+Each detected burst also emits the closed `core-rejections / coreRejectionBursts / attention`
+warning directly to platform logs. Database failures or a previous unresolved native write do not
+suppress this observation; the existing threshold and one observation per observer per minute still
+apply. The record contains no request or error details. This emission is preparation for #1491,
+not evidence that platform alert queries and delivery are configured or verified.
+
+The single `operational_event_buckets` presence row with `kind = 'core_rejection'` and `bucket_ms = 0`
+stores the most recent minute timestamp; monotonic writes cannot replace it with older evidence. The scheduled health sweep
 emits `core_rejection_burst / coreRejectionBursts` as a warning while that minute is less than five
 minutes old. Missing evidence means no recorded burst, not absence of attacks. Failed reads or a
 future timestamp are unavailable, not healthy. The ordinary warning delivery/acknowledgement policy
 applies. Retention deletes the row at 24 hours; it remains at most one row even if cleanup stops.
 
-Restarts, low-rate or distributed traffic, stalled writes and scheduling outages can lose this signal.
+Restarts and low-rate or distributed traffic can lose this signal. Stalled writes and scheduling
+outages can also lose its D1-backed scheduled observation; the direct log emission is independent.
 It excludes edge refusals, OAuth provider refusals represented by redirects, and MCP SDK protocol
 errors carried in HTTP 200 before canonical dispatch. Native-confirmation failures projected as
 unavailable are not counted as client 4xx refusals. A warning is evidence of refusals, not proof of

@@ -67,7 +67,8 @@ const observedRefusal = (boundary: CoreRejectionBoundary, status: number): boole
 /**
  * Records concentrated refusal bursts without retaining request metadata. One observer belongs to
  * one Core HTTP assembly or MCP residency. It is deliberately lossy across restarts and
- * distributed traffic; all observers share one metadata-only presence row.
+ * distributed traffic. Each detected burst emits closed platform metadata independently of D1;
+ * all observers also share one metadata-only presence row.
  */
 export const makeCoreRejectionObserver = (): ((
   input: Readonly<{
@@ -91,25 +92,35 @@ export const makeCoreRejectionObserver = (): ((
       }
       if (refusals >= burstThreshold) return Effect.void;
       refusals += 1;
-      if (refusals < burstThreshold || pending) return Effect.void;
+      if (refusals < burstThreshold) return Effect.void;
+      const report = Effect.logWarning({
+        component: "core-rejections",
+        operation: "coreRejectionBursts",
+        state: "attention",
+      }).pipe(Effect.catchDefect(() => Effect.void));
+      if (pending) return report;
       pending = true;
-      return Effect.tryPromise(() =>
-        Promise.resolve()
-          .then(() =>
-            db
-              .prepare(`INSERT INTO operational_event_buckets(kind,bucket_ms,count,observed_at_ms)
+      return report.pipe(
+        Effect.andThen(
+          Effect.tryPromise(() =>
+            Promise.resolve()
+              .then(() =>
+                db
+                  .prepare(`INSERT INTO operational_event_buckets(kind,bucket_ms,count,observed_at_ms)
           VALUES ('core_rejection',0,1,?) ON CONFLICT(kind,bucket_ms) DO UPDATE SET observed_at_ms = excluded.observed_at_ms
           WHERE excluded.observed_at_ms > observed_at_ms`)
-              .bind(observedAtMs)
-              .run()
+                  .bind(observedAtMs)
+                  .run()
+              )
+              .finally(() => {
+                // D1 has no cancellation API: retain this guard until the actual promise settles.
+                pending = false;
+              })
+          ).pipe(
+            Effect.timeout("250 millis"),
+            Effect.orElseSucceed(() => undefined)
           )
-          .finally(() => {
-            // D1 has no cancellation API: retain this guard until the actual promise settles.
-            pending = false;
-          })
-      ).pipe(
-        Effect.timeout("250 millis"),
-        Effect.orElseSucceed(() => undefined)
+        )
       );
     });
 };

@@ -5048,3 +5048,23 @@ writer tracking resolves the former fixed-deadline design blocker, not the remai
 Sources: [Workers duration limits](https://developers.cloudflare.com/workers/platform/limits/),
 [R2 consistency](https://developers.cloudflare.com/r2/reference/consistency/), and
 [atomic conditional PUT](https://developers.cloudflare.com/r2/api/s3/extensions/).
+
+## Full-deletion preparation (#1489)
+
+Owner-authorized private-object cleanup now uses native R2 DELETE directly. The former unconditional
+nonce PUT was another outstanding write that could recreate a control object after deletion. A
+successful DELETE invalidates the placeholder ETag: an earlier conditional payload either committed
+before deletion and is removed, or its old precondition fails afterward. Unknown original uploads
+remain tracked; neither DELETE nor an empty read proves that an earlier placeholder PUT has settled.
+
+Observed-version control cleanup retains its conditional ETag fence so an expired listing cannot
+delete a replacement. These are different authorities: an owner's exact disposable key versus a
+specific control version observed by a bounded scan. No public caller supplies either authority.
+
+The existing native original-byte deletion journey now also runs when R2 writes are unavailable but
+deletes remain available, while preserving other-User and wrong-request refusal checks. Existing
+interrupted/ambiguous staging, conditional publication, retained-copy and restart/restore coverage
+continues to check the surrounding behavior. This is a preparation slice on the named integration
+branch, not completion of #1489: selective retention, original-file inventory and minimal restore
+markers still require their synchronized owner/schema changes. No production schema or object is
+changed by this local work.

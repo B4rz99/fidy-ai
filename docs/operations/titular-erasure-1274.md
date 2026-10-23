@@ -84,8 +84,11 @@ After lost acknowledgements, timeouts, partial R2 success or worker restart, rep
 reference and decision. Do not create a second case or replay a payment/provider request as a
 cleanup shortcut. A missing original or a failed retained copy blocks its disposition rather than
 inventing a successful copy. Original payload writes use a private placeholder ETag and a live owner
-reservation; deletion changes that ETag before removing the object, so a delayed payload cannot
-recreate the financial bytes. Ambiguous control-object cleanup remains pending for reconciliation. A metadata-only maintenance
+reservation; deleting the object invalidates that ETag, so a delayed conditional payload cannot
+recreate the financial bytes. Owner-authorized deletion issues only DELETE, without first writing
+an erased nonce that could itself finish late. Unknown upload outcomes still remain tracked until
+confirmed settlement. Scanned control cleanup separately uses the observed ETag to preserve
+a replacement. Ambiguous control-object cleanup remains pending for reconciliation. A metadata-only maintenance
 sweep separately reconciles expired placeholders and erased nonces, including late orphan control
 writes after an owner row has gone. It never deletes financial payloads or held records by that
 control-only path. The scan is bounded and durable; eligibility at expiry is not a promise that a

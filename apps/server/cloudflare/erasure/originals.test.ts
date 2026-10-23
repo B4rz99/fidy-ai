@@ -48,12 +48,21 @@ it("resumes original-byte erasure after capture and refuses a mismatched User wi
       );
       yield* Effect.tryPromise(() => bucket.put(targetKey, "Target bytes"));
       yield* Effect.tryPromise(() => bucket.put(foreignKey, "Foreign bytes"));
+      let cleanupOnly = false;
+      const cleanupBucket = new Proxy(bucket, {
+        get(target, property): unknown {
+          if (property === "put" && cleanupOnly) {
+            return (): Promise<never> => Promise.reject(new Error("Object writes unavailable"));
+          }
+          return Reflect.get(target, property, target);
+        },
+      });
       const make = (): ReturnType<typeof makeIngestionErasureOriginals> =>
         makeIngestionErasureOriginals({
           db,
-          email: Option.some(bucket),
-          statement: Option.some(bucket),
-          retained: Option.some(bucket),
+          email: Option.some(cleanupBucket),
+          statement: Option.some(cleanupBucket),
+          retained: Option.some(cleanupBucket),
         });
       expect(yield* make().capture({ userId, reference })).toBe(true);
       expect(yield* make().checkpoint({ userId, reference })).toBe(false);
@@ -64,6 +73,7 @@ it("resumes original-byte erasure after capture and refuses a mismatched User wi
           .bind(reference)
           .run()
       );
+      cleanupOnly = true;
       const refused = yield* Effect.result(make().discard({ userId: foreignUser, reference }));
       expect(refused._tag).toBe("Failure");
       expect(yield* make().discard({ userId, reference })).toBe("Continue");

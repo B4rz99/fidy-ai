@@ -1,0 +1,18 @@
+DESIGN.md
+  h_c6d49c804e0ad2 201-208
+apps/site/e2e/accepted-contrast.ts
+  h_c6d49c804e0ad2 1-53
+apps/site/e2e/site.spec.ts
+  h_c6d49c804e0ad2 3,115-148,150,153-198
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6ba8a7e00c827e13051cdb7d9cd1da95e42339d2",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

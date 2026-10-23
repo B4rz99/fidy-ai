@@ -11,7 +11,7 @@
     "@stryker-mutator/core": "10.0.0",
     "@stryker-mutator/vitest-runner": "10.0.0",
     "ajv": "8.20.0",
-    "mutation-testing-report-schema": "3.8.4",
+    "mutation-testing-report-schema": "3.9.0",
     "typescript": "6.0.3",
     "vitest": "5.0.5"
   },

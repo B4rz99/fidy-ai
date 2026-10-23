@@ -25,7 +25,7 @@ import { readBrowserConfirmation } from "./internal/hosted-browser-confirmation"
 import { readAdmittedHostedConsent } from "./operations";
 import { makeAgentRetention, makeAgentService } from "./runtime";
 
-import { Cause, Clock, DateTime, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
+import { Cause, Clock, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import assert from "node:assert/strict";
 import { expect, it, vi } from "vitest";
 
@@ -771,21 +771,21 @@ it("prepares current evidence only for its User and session, never mixing a seco
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => setup());
-      const instant = DateTime.formatIso(DateTime.makeUnsafe(now()));
+      const instant = now();
       const memories = [
         {
           id: "20000000-0000-4000-8000-0000000000a1",
           user_id: users[0],
           text: "retained-Memory-A",
-          created_at: instant,
-          updated_at: instant,
+          created_at_ms: instant,
+          updated_at_ms: instant,
         },
         {
           id: "20000000-0000-4000-8000-0000000000a2",
           user_id: users[1],
           text: "retained-Memory-B",
-          created_at: instant,
-          updated_at: instant,
+          created_at_ms: instant,
+          updated_at_ms: instant,
         },
       ];
       yield* Effect.tryPromise(() =>
@@ -793,9 +793,15 @@ it("prepares current evidence only for its User and session, never mixing a seco
           memories.map((memory) =>
             db
               .prepare(
-                "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+                "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?)"
               )
-              .bind(memory.id, memory.user_id, memory.text, memory.created_at, memory.updated_at)
+              .bind(
+                memory.id,
+                memory.user_id,
+                memory.text,
+                memory.created_at_ms,
+                memory.updated_at_ms
+              )
           )
         )
       );
@@ -834,7 +840,7 @@ it("prepares current evidence only for its User and session, never mixing a seco
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT id, user_id, text, created_at, updated_at FROM memories ORDER BY user_id, id"
+              "SELECT id, user_id, text, created_at_ms, updated_at_ms FROM memories ORDER BY user_id, id"
             )
             .all()
         )).results

@@ -4251,3 +4251,48 @@ UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence
 ```
 
 <!-- audit-clock-rollback-copy:end -->
+
+## Memory's exact creation and revision instants (#1477)
+
+Keep the five-column owner, text, identity and row addresses. Stop writers and unfinished erasure
+before the native batch. Bind the observed source count. Only canonical UTC millisecond strings
+are convertible: malformed dates, noncanonical offsets and sub-millisecond precision require
+investigation rather than rounding. The fixed-width canonical ordering maps exactly to numeric
+milliseconds; equal creation instants still sort by identity. No creation/revision ordering rule
+is invented. Create the scratch table from the final baseline, copy, swap and recreate affected
+objects together; a failed statement rolls the entire batch back. Check foreign keys before
+resuming. Rollback uses memory/timestamps-cutover.test-fixture.json and the inverse SQL below.
+Existing erasure archives and OAuth approval revisions retain their original ISO timestamp fields;
+new projections and drain-time preservation format the integer clock back to that same value.
+
+<!-- memory-clock-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'memory_clock_cutover',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND (SELECT count(*) FROM memories)=? AND NOT EXISTS(SELECT 1 FROM memories WHERE created_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',created_at) OR updated_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',updated_at) OR CAST(substr(created_at,1,4) AS INTEGER) NOT BETWEEN 1 AND 9999 OR CAST(substr(updated_at,1,4) AS INTEGER) NOT BETWEEN 1 AND 9999) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- memory-clock-guard:end -->
+
+<!-- memory-clock-copy:start -->
+
+```sql
+INSERT INTO cutover_memories(rowid,id,user_id,text,created_at_ms,updated_at_ms) SELECT rowid,id,user_id,text,CAST(round(unixepoch(created_at,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(updated_at,'subsec')*1000) AS INTEGER) FROM memories;
+```
+
+<!-- memory-clock-copy:end -->
+
+<!-- memory-clock-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted) SELECT 'memory_clock_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM memories WHERE created_at_ms NOT BETWEEN -62135596800000 AND 253402300799999 OR updated_at_ms NOT BETWEEN -62135596800000 AND 253402300799999) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- memory-clock-rollback-guard:end -->
+
+<!-- memory-clock-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_memories(rowid,id,user_id,text,created_at,updated_at) SELECT rowid,id,user_id,text,strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch'),strftime('%Y-%m-%dT%H:%M:%fZ',updated_at_ms/1000.0,'unixepoch') FROM memories;
+```
+
+<!-- memory-clock-rollback-copy:end -->

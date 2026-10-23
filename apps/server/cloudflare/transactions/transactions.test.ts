@@ -5050,9 +5050,14 @@ it("attributes a cross-owner Memory conflict at commit time and keeps no earlier
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES (?, ?, 'Original', ?, ?)"
+            "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, 'Original', ?, ?)"
           )
-          .bind(memoryId, users[0] ?? "", current, current)
+          .bind(
+            memoryId,
+            users[0] ?? "",
+            DateTime.makeUnsafe(current).epochMilliseconds,
+            DateTime.makeUnsafe(current).epochMilliseconds
+          )
           .run()
       );
       const response = yield* fromTestPromise(() =>
@@ -5281,9 +5286,14 @@ it("refuses two children addressing one retained rule or Memory before any child
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES (?, ?, 'Repetida', ?, ?)"
+            "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, 'Repetida', ?, ?)"
           )
-          .bind(memoryId, users[0] ?? "", current, current)
+          .bind(
+            memoryId,
+            users[0] ?? "",
+            DateTime.makeUnsafe(current).epochMilliseconds,
+            DateTime.makeUnsafe(current).epochMilliseconds
+          )
           .run()
       );
       const repeatedRule = yield* fromTestPromise(() =>
@@ -5374,9 +5384,14 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES (?, ?, 'Olvidar', ?, ?)"
+            "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, 'Olvidar', ?, ?)"
           )
-          .bind(forgottenMemoryId, users[0] ?? "", current, current)
+          .bind(
+            forgottenMemoryId,
+            users[0] ?? "",
+            DateTime.makeUnsafe(current).epochMilliseconds,
+            DateTime.makeUnsafe(current).epochMilliseconds
+          )
           .run()
       );
       const response = yield* fromTestPromise(() =>
@@ -5509,9 +5524,13 @@ it("fails closed on a cross-owner dependency defect without partial state", () =
       yield* fromTestPromise(() =>
         memoryDb
           .prepare(
-            "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES ('corrupt-memory', ?, 'Corrupt', ?, ?)"
+            "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES ('corrupt-memory', ?, 'Corrupt', ?, ?)"
           )
-          .bind(users[0] ?? "", current, current)
+          .bind(
+            users[0] ?? "",
+            DateTime.makeUnsafe(current).epochMilliseconds,
+            DateTime.makeUnsafe(current).epochMilliseconds
+          )
           .run()
       );
       const memoryResponse = yield* fromTestPromise(() =>

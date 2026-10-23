@@ -179,12 +179,12 @@ const verifyRestore = Effect.gen(function* () {
       db.batch([
         db
           .prepare(
-            "INSERT INTO memories VALUES('target-memory',?,'Retener','2026-10-15','2026-10-15')"
+            "INSERT INTO memories VALUES('target-memory',?,'Retener',1792022400000,1792022400000)"
           )
           .bind(userId),
         db
           .prepare(
-            "INSERT INTO memories VALUES('foreign-memory',?,'Conservar','2026-10-15','2026-10-15')"
+            "INSERT INTO memories VALUES('foreign-memory',?,'Conservar',1792022400000,1792022400000)"
           )
           .bind(foreignUser),
       ])

@@ -929,8 +929,8 @@ CREATE TABLE memories (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),
   text TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL CHECK (created_at_ms BETWEEN -62135596800000 AND 253402300799999),
+  updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms BETWEEN -62135596800000 AND 253402300799999),
   UNIQUE (user_id, id)
 ) STRICT;
 --> statement-breakpoint
@@ -2254,7 +2254,7 @@ CREATE INDEX media_content_retention
 CREATE INDEX media_expiry ON media_submissions(expires_at_ms,id);
 --> statement-breakpoint
 
-CREATE INDEX memories_by_user_creation ON memories(user_id, created_at, id);
+CREATE INDEX memories_by_user_creation ON memories(user_id, created_at_ms, id);
 --> statement-breakpoint
 
 CREATE INDEX oauth_clients_unused ON oauth_public_clients(last_used_at_ms);
@@ -5916,7 +5916,7 @@ WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.u
   AND json_extract(q.decision_json,'$.dispositions.memory.retention.untilMs')>unixepoch('subsec')*1000)
 BEGIN
   INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'memories','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'text',OLD."text",'created_at',OLD."created_at",'updated_at',OLD."updated_at")
+  SELECT q.id,'memories','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'text',OLD."text",'created_at',strftime('%Y-%m-%dT%H:%M:%fZ',OLD.created_at_ms/1000.0,'unixepoch'),'updated_at',strftime('%Y-%m-%dT%H:%M:%fZ',OLD.updated_at_ms/1000.0,'unixepoch'))
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.memory.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.memory.retention.untilMs')>unixepoch('subsec')*1000;

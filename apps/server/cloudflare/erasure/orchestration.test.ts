@@ -197,12 +197,12 @@ const verifyNativeErasure = Effect.gen(function* () {
       ),
       db
         .prepare(
-          "INSERT INTO memories VALUES('target-memory',?,'Borrar','2026-10-15','2026-10-15')"
+          "INSERT INTO memories VALUES('target-memory',?,'Borrar',1792022400000,1792022400000)"
         )
         .bind(userId),
       db
         .prepare(
-          "INSERT INTO memories VALUES('foreign-memory',?,'Conservar','2026-10-15','2026-10-15')"
+          "INSERT INTO memories VALUES('foreign-memory',?,'Conservar',1792022400000,1792022400000)"
         )
         .bind(foreignUser),
       db

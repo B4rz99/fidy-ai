@@ -250,7 +250,7 @@ it("does not release another User's Memory through a valid but borrowed associat
             "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
           ),
           db.prepare(
-            "CREATE TABLE memories (id TEXT, user_id TEXT, text TEXT, created_at TEXT, updated_at TEXT)"
+            "CREATE TABLE memories (id TEXT, user_id TEXT, text TEXT, created_at_ms INTEGER, updated_at_ms INTEGER)"
           ),
           db
             .prepare(
@@ -259,12 +259,12 @@ it("does not release another User's Memory through a valid but borrowed associat
             .bind(userA),
           db
             .prepare(
-              "INSERT INTO memories VALUES ('30000000-0000-4000-8000-000000000001', ?, 'A private context', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')"
+              "INSERT INTO memories VALUES ('30000000-0000-4000-8000-000000000001', ?, 'A private context', 1790812800000, 1790812800000)"
             )
             .bind(userA),
           db
             .prepare(
-              "INSERT INTO memories VALUES ('30000000-0000-4000-8000-000000000002', ?, 'B private context', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')"
+              "INSERT INTO memories VALUES ('30000000-0000-4000-8000-000000000002', ?, 'B private context', 1790812800000, 1790812800000)"
             )
             .bind(userB),
         ])

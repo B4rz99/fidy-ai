@@ -1,4 +1,4 @@
-import { DateTime, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { expect, it } from "vitest";
 import { ingestHostileStatement } from "./hosted-ingestion.test-fixture";
 import {
@@ -30,11 +30,11 @@ it.each([
           ingestHostileStatement({ format, hostile })
         );
         const credential = yield* Effect.tryPromise(() => subject(0));
-        const instant = DateTime.formatIso(DateTime.makeUnsafe(now()));
+        const instant = now();
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO memories (id,user_id,text,created_at,updated_at) VALUES (?,?,'Presupuesto familiar',?,?)"
+              "INSERT INTO memories (id,user_id,text,created_at_ms,updated_at_ms) VALUES (?,?,'Presupuesto familiar',?,?)"
             )
             .bind(memoryId, users[0], instant, instant)
             .run()

@@ -49,13 +49,13 @@ it("archives reviewed Memory in bounded pages, resumes after reconstruction, and
         ...Array.from({ length: 70 }, (_, index) =>
           db
             .prepare(
-              "INSERT INTO memories VALUES(?,?,'Contexto económico','2026-10-15','2026-10-15')"
+              "INSERT INTO memories VALUES(?,?,'Contexto económico',1792022400000,1792022400000)"
             )
             .bind(`memory-${index}`, userId)
         ),
         db
           .prepare(
-            "INSERT INTO memories VALUES('foreign-memory',?,'Privado','2026-10-15','2026-10-15')"
+            "INSERT INTO memories VALUES('foreign-memory',?,'Privado',1792022400000,1792022400000)"
           )
           .bind(foreignUser),
       ];

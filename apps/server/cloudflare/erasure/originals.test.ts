@@ -16,6 +16,7 @@ it("resumes original-byte erasure after capture and refuses a mismatched User wi
   Effect.runPromise(
     Effect.gen(function* () {
       const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      const { bucket: retainedBucket } = yield* Effect.tryPromise(() => storage.acquire());
       yield* Effect.tryPromise(() => installRetentionTestSchema(db));
       const current = yield* Clock.currentTimeMillis;
       const decision = deletionDecision({ userId, reference, current });
@@ -54,6 +55,14 @@ it("resumes original-byte erasure after capture and refuses a mismatched User wi
         yield* Effect.tryPromise(() => bucket.put(key, "Unindexed temporary bytes"));
       }
       yield* Effect.tryPromise(() => bucket.put(foreignKey, "Foreign bytes"));
+      const retainedKey = `users/${userId}/held/${reference}/original`;
+      const foreignRetainedKey = `users/${foreignUser}/held/${reference}/original`;
+      const markerKey = `recovery/cases/${reference}`;
+      yield* Effect.tryPromise(() => retainedBucket.put(retainedKey, "Old retained bytes"));
+      yield* Effect.tryPromise(() =>
+        retainedBucket.put(foreignRetainedKey, "Other User retained bytes")
+      );
+      yield* Effect.tryPromise(() => retainedBucket.put(markerKey, "Independent deletion marker"));
       let cleanupOnly = false;
       const cleanupBucket = new Proxy(bucket, {
         get(target, property): unknown {
@@ -68,7 +77,7 @@ it("resumes original-byte erasure after capture and refuses a mismatched User wi
           db,
           email: Option.some(cleanupBucket),
           statement: Option.some(cleanupBucket),
-          retained: Option.some(cleanupBucket),
+          retained: Option.some(retainedBucket),
         });
       expect(yield* make().capture({ userId, reference })).toBe(true);
       expect(yield* make().checkpoint({ userId, reference })).toBe(false);
@@ -92,6 +101,15 @@ it("resumes original-byte erasure after capture and refuses a mismatched User wi
       }
       expect(outcome).toBe("Done");
       expect(yield* Effect.tryPromise(() => bucket.head(targetKey))).toBeNull();
+      expect(yield* Effect.tryPromise(() => retainedBucket.head(retainedKey))).toBeNull();
+      expect(
+        yield* Effect.tryPromise(() =>
+          retainedBucket.get(foreignRetainedKey).then((body) => body?.text())
+        )
+      ).toBe("Other User retained bytes");
+      expect(
+        yield* Effect.tryPromise(() => retainedBucket.get(markerKey).then((body) => body?.text()))
+      ).toBe("Independent deletion marker");
       for (const key of orphanKeys) {
         expect(yield* Effect.tryPromise(() => bucket.head(key))).toBeNull();
       }

@@ -5071,7 +5071,7 @@ changed by this local work.
 
 ### Bounded personal-prefix cleanup
 
-A full-Delete request now scans the canonical User prefix in the email and statement buckets,
+A full-Delete request now scans the canonical User prefix in the email, statement and private erasure buckets,
 removing at most four objects per continuation before returning Continue. Missing bindings and
 native failures refuse completion. The request must still match the exact User, be Erasing or
 ExternalPending with its marker/capture guards, and have no unresolved User writer. Selective
@@ -5080,8 +5080,10 @@ cleanup does not run under a mixed disposition.
 
 The existing native original-byte erasure case includes five unindexed temporary objects plus its
 indexed original. The first continuation leaves two objects, later continuations remove them,
-and other-User files remain intact, including while PUT is unavailable. The original locator path
+and other-User files remain intact, including while PUT is unavailable. A separate native erasure
+bucket supplies old User-prefixed retained bytes: full deletion removes those bytes while preserving
+the other User's retained bytes and an independent recovery marker outside the User prefix. The original locator path
 still handles its bounded inventory checkpoint and known historical noncanonical locators; no
-inventory row is dropped by this preparation. Its final removal, erasure-bucket retained-content
-purge and minimal restore-marker conversion remain open #1489/#1490 work. No empty prefix is treated
+inventory row is dropped by this preparation. Its final removal, database retained-content purge
+and minimal restore-marker conversion remain open #1489/#1490 work. No empty prefix is treated
 as proof that an earlier unresolved upload has settled.

@@ -37,7 +37,7 @@ import {
 import {
   type CanonicalMutationUnitExecution,
   committedMutationPayload,
-  executeCanonicalMutationUnit,
+  executeMutationProgression,
 } from "./mutation-unit";
 import { type CanonicalMutationAdapter, canonicalMutationAdapter } from "./mutation-registry";
 import { oauthConfirmationRefusal, requiresOAuthConfirmation } from "./oauth-confirmation";
@@ -729,43 +729,25 @@ const executeBatch = (
     const { db, subject, current, hostedFence, oauthConfirmation } = work;
     const invalidShape = batchShapeRefusal(work.calls);
     if (Option.isSome(invalidShape)) return invalidShape.value;
-    const batch = yield* prepareBatch(work);
-    if (batch._tag === "Response") return batch.response;
-    const execution = yield* executeCanonicalMutationUnit({
+    return yield* executeMutationProgression({
       db,
       subject,
       current,
-      mutations: batch.children.map((child) => child.mutation),
       hostedFence,
       oauthConfirmation,
+      prepare: prepareBatch(work).pipe(
+        Effect.map((batch) =>
+          batch._tag === "Response"
+            ? batch
+            : {
+                _tag: "Prepared" as const,
+                mutations: batch.children.map((child) => child.mutation),
+                respond: (execution: CanonicalMutationUnitExecution) =>
+                  executionResponse({ db, subject, children: batch.children, execution }),
+              }
+        )
+      ),
     });
-    if (execution._tag === "Aborted") {
-      const statement = batch.children.find(
-        (child) => child.mutation.outcome._tag === "StatementSubmission"
-      );
-      if (
-        statement?.mutation.outcome._tag === "StatementSubmission" &&
-        (yield* statement.mutation.outcome.publication.lostReplay)
-      ) {
-        const replay = yield* prepareBatch(work);
-        if (replay._tag === "Response") return replay.response;
-        const retried = yield* executeCanonicalMutationUnit({
-          db,
-          subject,
-          current,
-          mutations: replay.children.map((child) => child.mutation),
-          hostedFence,
-          oauthConfirmation,
-        });
-        return yield* executionResponse({
-          db,
-          subject,
-          children: replay.children,
-          execution: retried,
-        });
-      }
-    }
-    return yield* executionResponse({ db, subject, children: batch.children, execution });
   });
 
 export const executeCanonicalBatch = (

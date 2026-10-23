@@ -25,10 +25,9 @@ import { userOwnedAgentCapability } from "../../src/shell/canonical-policy/contr
 import { type HostedCommitFence } from "../agent/contract";
 import { type OAuthConfirmationAttempt } from "../../src/shell/mcp/contract";
 import { type OAuthConfirmationWork } from "../oauth-confirmation/contract";
-import { type CanonicalMutationPreparation, type CanonicalWork } from "./contract";
+import { type CanonicalWork } from "./contract";
 import { executeCanonicalBatch, executeHostedCanonicalBatch, rawOperation } from "./internal/batch";
 import {
-  type CanonicalMutationAdapter,
   canonicalHostedStatementAdapter,
   canonicalMutationAdapter,
 } from "./internal/mutation-registry";
@@ -331,13 +330,6 @@ type WorkInput = Readonly<{
   oauthConfirmation: Option.Option<OAuthConfirmationWork>;
 }>;
 
-/** Reprepare only the statement whose identical material won a concurrent publication race. */
-const retryStatementPreparation = (
-  adapter: CanonicalMutationAdapter,
-  input: Parameters<CanonicalMutationAdapter["prepare"]>[0]
-): Effect.Effect<CanonicalMutationPreparation> =>
-  adapter.prepare(input).pipe(Effect.provideService(HostedInference, unreachableHostedInference));
-
 const executeCall = (
   input: WorkInput & Readonly<{ work: Extract<CanonicalWork, { _tag: "Call" }> }>
 ): Effect.Effect<Response, never, HostedInference> => {
@@ -357,27 +349,23 @@ const executeCall = (
         db,
         subject,
         current,
-        preparation: refusedPreparation(
-          adapter.value.invalidRefusal({ db, subject, current, input: work.input, bucket })
+        preparation: Effect.succeed(
+          refusedPreparation(
+            adapter.value.invalidRefusal({ db, subject, current, input: work.input, bucket })
+          )
         ),
         present: adapter.value.present,
-        retryStatement: Option.none(),
         hostedFence,
         oauthConfirmation,
       });
     }
     const ownerWork = { db, subject, current, input: decodedInput.value, bucket };
-    const preparation = yield* adapter.value.prepare(ownerWork);
     const response = yield* executeSingleCanonicalMutation({
       db,
       subject,
       current,
-      preparation,
+      preparation: adapter.value.prepare(ownerWork),
       present: adapter.value.present,
-      retryStatement:
-        work.operation === "ingestion.submitForExtraction"
-          ? Option.some(() => retryStatementPreparation(adapter.value, ownerWork))
-          : Option.none(),
       hostedFence,
       oauthConfirmation,
     });

@@ -1,0 +1,98 @@
+[
+  {
+    "sample": 0,
+    "mode": "coordinator",
+    "count": 128,
+    "groups": 8,
+    "steps": 12,
+    "elapsedMs": 76.78300000000002
+  },
+  {
+    "sample": 0,
+    "mode": "workflow",
+    "count": 128,
+    "groups": 8,
+    "steps": 12,
+    "elapsedMs": 90.53691600000002
+  },
+  {
+    "sample": 1,
+    "mode": "coordinator",
+    "count": 128,
+    "groups": 8,
+    "steps": 12,
+    "elapsedMs": 69.49108300000012
+  },
+  {
+    "sample": 1,
+    "mode": "workflow",
+    "count": 128,
+    "groups": 8,
+    "steps": 12,
+    "elapsedMs": 79.39049999999997
+  },
+  {
+    "sample": 2,
+    "mode": "coordinator",
+    "count": 128,
+    "groups": 8,
+    "steps": 12,
+    "elapsedMs": 63.1432920000002
+  },
+  {
+    "sample": 2,
+    "mode": "workflow",
+    "count": 128,
+    "groups": 8,
+    "steps": 12,
+    "elapsedMs": 77.7912080000001
+  },
+  {
+    "sample": 0,
+    "mode": "coordinator",
+    "count": 2000,
+    "groups": 32,
+    "steps": 50,
+    "elapsedMs": 394.2384579999998
+  },
+  {
+    "sample": 0,
+    "mode": "workflow",
+    "count": 2000,
+    "groups": 32,
+    "steps": 50,
+    "elapsedMs": 381.9550420000005
+  },
+  {
+    "sample": 1,
+    "mode": "coordinator",
+    "count": 2000,
+    "groups": 32,
+    "steps": 50,
+    "elapsedMs": 372.87241600000016
+  },
+  {
+    "sample": 1,
+    "mode": "workflow",
+    "count": 2000,
+    "groups": 32,
+    "steps": 50,
+    "elapsedMs": 401.1607499999991
+  },
+  {
+    "sample": 2,
+    "mode": "coordinator",
+    "count": 2000,
+    "groups": 32,
+    "steps": 50,
+    "elapsedMs": 388.7388749999991
+  },
+  {
+    "sample": 2,
+    "mode": "workflow",
+    "count": 2000,
+    "groups": 32,
+    "steps": 50,
+    "elapsedMs": 391.9495419999985
+  }
+]

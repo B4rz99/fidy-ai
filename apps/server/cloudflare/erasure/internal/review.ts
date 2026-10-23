@@ -17,14 +17,7 @@ const validDecision = (decision: ErasureDecision, current: number): boolean =>
   decision.recovery.retention.purpose === "restore-enforcement" &&
   validRetention(decision.recovery.retention, current) &&
   current + decision.recovery.windowMs < decision.recovery.retention.untilMs &&
-  Object.values(decision.dispositions).every(
-    (disposition) =>
-      disposition.action === "Delete" ||
-      (validRetention(disposition.retention, current) &&
-        disposition.retention.untilMs <= decision.receiptRetention.untilMs &&
-        disposition.retention.untilMs + decision.recovery.windowMs <=
-          decision.recovery.retention.untilMs)
-  );
+  Object.values(decision.dispositions).every((disposition) => disposition.action === "Delete");
 
 type ReviewInput = Readonly<{
   db: D1Database;

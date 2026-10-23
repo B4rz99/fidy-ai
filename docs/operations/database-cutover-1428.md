@@ -5087,3 +5087,20 @@ still handles its bounded inventory checkpoint and known historical noncanonical
 inventory row is dropped by this preparation. Its final removal, database retained-content purge
 and minimal restore-marker conversion remain open #1489/#1490 work. No empty prefix is treated
 as proof that an earlier unresolved upload has settled.
+
+### New requests require full deletion
+
+The existing private review boundary now accepts only Delete for every personal-data class. A
+selective Retain decision is refused before writing independent case metadata or mutating the
+request. Same-User binding, fresh operator admission, exact request replay, control-metadata
+retention and external cleanup evidence retain their existing checks pending the final admission
+and minimal-marker conversion.
+
+The existing native admission test supplies a previously valid, bounded memory hold and now expects
+refusal, then verifies an unchanged full-Delete admission/replay. The older-database restore journey
+now uses full deletion instead of manufacturing a memory hold and waiting for its expiry. It keeps
+native JWT/Access refusals, generation and missing-member fencing, repeated restoration, revoked
+credentials, other-User preservation and uncertain external-provider evidence. No test cases or
+new seams are added. Historical selective-retention decoders and archive tables remain behind the
+synchronized conversion gate; this local policy change does not claim their removal or completion
+of #1489/#1490.

@@ -170,6 +170,26 @@ it("binds review to the verified User and immutable request, refusing foreign, e
           },
         })).status
       ).toBe(409);
+      expect(
+        (yield* act({
+          ...admission,
+          decision: {
+            ...decision,
+            dispositions: {
+              ...decision.dispositions,
+              memory: {
+                action: "Retain",
+                retention: {
+                  ...decision.receiptRetention,
+                  purpose: "legal-hold",
+                  reviewAtMs: current + 60000,
+                  untilMs: current + 3600000,
+                },
+              },
+            },
+          },
+        })).status
+      ).toBe(409);
       expect((yield* act(admission)).status).toBe(202);
       expect((yield* act(admission)).status).toBe(202);
       expect(

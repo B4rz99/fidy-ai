@@ -143,16 +143,6 @@ const verifyControlReview = (
     });
   });
 
-const expireNativeHold = Effect.fn(function* (
-  advance: (milliseconds: number) => Promise<void>,
-  deadline: number
-) {
-  const liveNow = Date.now.bind(Date);
-  const remaining = Math.max(deadline - liveNow() + 20, 1);
-  yield* Effect.tryPromise(() => advance(remaining));
-  vi.spyOn(Date, "now").mockImplementation(() => liveNow() + remaining);
-});
-
 const verifyRestore = Effect.gen(function* () {
   const platform = yield* nativeErasurePlatform;
   let native = yield* Effect.tryPromise(() => platform.acquire());
@@ -355,24 +345,7 @@ const verifyRestore = Effect.gen(function* () {
   yield* Effect.tryPromise(() => native.registry.delete("recovery/generation"));
   expect((yield* send({ action: "Initialize" }, token, "candidate")).status).toBe(204);
   const decisionCurrent = yield* Clock.currentTimeMillis;
-  const heldUntil = decisionCurrent + 30000;
-  const baseDecision = deletionDecision({ userId, reference, current: decisionCurrent });
-  const decision = {
-    ...baseDecision,
-    dispositions: {
-      ...baseDecision.dispositions,
-      memory: {
-        action: "Retain",
-        retention: {
-          ...baseDecision.receiptRetention,
-          purpose: "legal-hold",
-          untilMs: heldUntil,
-          reviewAtMs: heldUntil,
-        },
-      },
-    },
-  };
-
+  const decision = deletionDecision({ userId, reference, current: decisionCurrent });
   expect((yield* send({ action: "Review", decision })).status).toBe(202);
   expect((yield* send({ action: "Initialize" }, token, "candidate")).status).toBe(503);
   yield* Effect.tryPromise(() =>
@@ -385,7 +358,7 @@ const verifyRestore = Effect.gen(function* () {
         .bind(reference)
         .first("count(*)")
     )
-  ).toBe(1);
+  ).toBe(0);
 
   native = yield* Effect.tryPromise(() => platform.restoreSnapshot());
   expect((yield* send({ action: "Restore" })).status).toBe(202);
@@ -411,8 +384,8 @@ const verifyRestore = Effect.gen(function* () {
     (yield* Effect.tryPromise(() =>
       native.registry.list({ prefix: `users/${userId}/held-records/${reference}/` })
     )).objects.length
-  ).toBe(1);
-  yield* verifyProcessorEvidence(send, baseDecision);
+  ).toBe(0);
+  yield* verifyProcessorEvidence(send, decision);
   native = yield* Effect.tryPromise(() => platform.restoreSnapshot());
   const guarded = withErasureRecovery({
     DB: native.db,
@@ -463,23 +436,14 @@ const verifyRestore = Effect.gen(function* () {
   expect(receipt.status).toBe(200);
   expect(yield* Effect.tryPromise(() => receipt.json())).toMatchObject({
     state: "ExternalPending",
-    retained: [{ dataClass: "memory" }],
-    next: "retention-review",
+    retained: [],
+    next: "provider-evidence",
   });
   expect(
     (yield* Effect.tryPromise(() =>
       native.registry.list({ prefix: `users/${userId}/held-records/${reference}/` })
     )).objects.length
-  ).toBe(2);
-  yield* expireNativeHold(platform.advanceClock, heldUntil);
-  for (let count = 0; count < 5; count++) {
-    expect((yield* send({ action: "Continue", userId, reference })).status).toBe(202);
-  }
-  expect(
-    (yield* Effect.tryPromise(() =>
-      native.registry.list({ prefix: `users/${userId}/held-records/${reference}/` })
-    )).objects
-  ).toHaveLength(0);
+  ).toBe(0);
   expect(
     yield* Effect.tryPromise(() =>
       native.db

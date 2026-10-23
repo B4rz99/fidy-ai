@@ -5,6 +5,11 @@ proof below do not establish execution of a real erasure case or processor delet
 `obarboza@fidyapp.com` remains the sole operator. There is no backup operator and no new document,
 selfie or emailed-ID verification. Exceptional entitlement remains #1326.
 
+The integration-branch full-deletion redesign in [#1425](https://github.com/B4rz99/fidy-ai/issues/1425)
+rejects new selective Retain decisions. Historical hold/archive descriptions below explain the
+existing data being converted; they do not authorize a new content hold. The final synchronized
+conversion is tracked by #1489/#1490, and this document does not claim its deployment.
+
 ## Verified request and review
 
 1. Receive the request through the existing free rights channel. Preserve its actual received time,

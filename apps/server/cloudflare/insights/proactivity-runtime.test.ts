@@ -1636,7 +1636,7 @@ it.each(["paused", "stopped"] as const)(
                 yield* Effect.tryPromise(() =>
                   db
                     .prepare(
-                      "SELECT count(*) AS n FROM (SELECT user_id,json_extract(id,'$[1]') AS message_id,outcome AS choice FROM audit_entries WHERE record_type='reminder_control') WHERE user_id=?"
+                      "SELECT count(*) AS n FROM proactive_messages WHERE control_message_id IS NOT NULL AND user_id=?"
                     )
                     .bind(userId)
                     .first()
@@ -1753,9 +1753,59 @@ it.each(["paused", "stopped"] as const)(
         > =>
           Effect.gen(function* () {
             if (reactivationState === "stopped") {
+              const governorBefore = yield* findReminderGovernor({ db, userId });
+              const scheduleBefore = yield* findReminderSchedule({ db, userId });
+              yield* Effect.tryPromise(() =>
+                db
+                  .prepare(
+                    "CREATE TRIGGER refuse_reminder_control_schedule BEFORE UPDATE ON schedules WHEN OLD.kind='reminder' AND NEW.enabled=0 BEGIN SELECT RAISE(ABORT,'test_control_schedule_failure'); END"
+                  )
+                  .run()
+              );
+              expect(
+                (yield* Effect.exit(
+                  controlManualReminders({ db, proof, now: afterTime.epochMilliseconds })
+                ))._tag
+              ).toBe("Failure");
+              expect(yield* findReminderGovernor({ db, userId })).toEqual(governorBefore);
+              expect(yield* findReminderSchedule({ db, userId })).toEqual(scheduleBefore);
+              expect(
+                yield* Effect.tryPromise(() =>
+                  db
+                    .prepare(
+                      "SELECT control_message_id,control_choice FROM proactive_messages WHERE kind='proactivity-delivery' AND user_id=? AND id=?"
+                    )
+                    .bind(userId, question.question_id)
+                    .first()
+                )
+              ).toEqual({ control_message_id: null, control_choice: null });
+              yield* Effect.tryPromise(() =>
+                db.prepare("DROP TRIGGER refuse_reminder_control_schedule").run()
+              );
               expect(
                 yield* controlManualReminders({ db, proof, now: afterTime.epochMilliseconds })
               ).toBe(true);
+              expect(
+                yield* controlManualReminders({ db, proof, now: afterTime.epochMilliseconds })
+              ).toBe(true);
+              expect(
+                yield* Effect.tryPromise(() =>
+                  db
+                    .prepare(
+                      "SELECT control_message_id,control_choice FROM proactive_messages WHERE kind='proactivity-delivery' AND user_id=? AND id=?"
+                    )
+                    .bind(userId, question.question_id)
+                    .first()
+                )
+              ).toEqual({ control_message_id: proof.messageId, control_choice: proof.text });
+              yield* Effect.tryPromise(() =>
+                db
+                  .prepare(
+                    "UPDATE proactive_messages SET text=NULL WHERE kind='proactivity-delivery' AND user_id=? AND id=?"
+                  )
+                  .bind(userId, question.question_id)
+                  .run()
+              );
               expect(
                 yield* controlManualReminders({ db, proof, now: afterTime.epochMilliseconds })
               ).toBe(true);

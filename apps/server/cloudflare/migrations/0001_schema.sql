@@ -55,7 +55,6 @@ CREATE TABLE "audit_entries" (
  FOREIGN KEY(hosted_turn_id) REFERENCES hosted_turns(id),
  FOREIGN KEY(attempt_id) REFERENCES billing_attempts(id),
  CHECK(
-  (record_type='reminder_control' AND id IS NOT NULL AND json_valid(id) AND json_array_length(id)=2 AND json_extract(id,'$[0]')=user_id AND json_type(id,'$[1]')='text' AND user_id IS NOT NULL AND outcome IS NOT NULL AND session_id IS NULL AND operation IS NULL AND occurred_at_ms IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL AND oauth_credential_id IS NULL AND hosted_turn_id IS NULL AND attempt_id IS NULL AND transition IS NULL AND accepted_at_ms IS NULL) OR
   (record_type='session_call' AND id IS NOT NULL AND user_id IS NOT NULL AND session_id IS NOT NULL AND operation IS NOT NULL AND outcome IS NOT NULL AND occurred_at_ms IS NOT NULL AND ((operation IN ('transactions.createTransaction','transactions.listTransactions','transactions.getTransaction','transactions.updateTransaction','transactions.deleteTransaction','transactions.searchTransactions','transactions.linkTransactions','transactions.unlinkTransactions','operations.executeAtomicBatch') AND outcome IN ('success','not_found','validation_failed','resource_limit'))
  OR (operation IN ('categories.listCategories','categories.listKeywordRules','categories.createKeywordRule','categories.updateKeywordRule','categories.deleteKeywordRule') AND outcome IN ('success','validation_failed'))
  OR (operation IN ('memory.remember','memory.recall','memory.revise','memory.forget') AND outcome IN ('success','not_found','validation_failed','resource_limit'))
@@ -881,6 +880,9 @@ CREATE TABLE proactive_messages (
  consent_grant_id TEXT,
  offer_id TEXT,
  text TEXT,
+ control_message_id TEXT,
+ control_choice TEXT,
+ control_audit_sequence INTEGER CHECK(control_audit_sequence IS NULL OR (control_audit_sequence>0 AND control_message_id IS NOT NULL)),
  scheduled_at_ms INTEGER NOT NULL,
  expires_at_ms INTEGER NOT NULL,
  time_zone TEXT NOT NULL,
@@ -892,6 +894,8 @@ CREATE TABLE proactive_messages (
  reminder_governor_counted INTEGER CHECK(reminder_governor_counted IS NULL OR (reminder_governor_counted=1 AND kind='proactivity-delivery')),
  report_kind TEXT GENERATED ALWAYS AS(CASE role WHEN 'weekly-summary' THEN 'weekly-summary' WHEN 'new-recurring-series' THEN 'recurring-digest' END) VIRTUAL,
  grant_history_type TEXT GENERATED ALWAYS AS(CASE WHEN role='weekly-summary' THEN 'weekly_grant' ELSE 'proactivity_grant' END) VIRTUAL,
+ CHECK((control_message_id IS NULL)=(control_choice IS NULL)),
+ CHECK(control_message_id IS NULL OR (kind='proactivity-delivery' AND role='reminder-question' AND control_choice IN ('reminder:'||id||':continue','reminder:'||id||':stop'))),
  PRIMARY KEY(user_id,kind,id),
  UNIQUE(user_id,kind,role,id),
  FOREIGN KEY(user_id,report_kind,report_event_id,consent_grant_id) REFERENCES insight_reports(user_id,kind,insight_event_id,consent_grant_id),
@@ -2783,7 +2787,6 @@ WHEN OLD.record_type IN ('session_call','credential_call','insight_call','public
  WHEN 'request_admission' THEN 'canonical_request_acceptances'
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
- WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
 BEGIN SELECT RAISE(ABORT,'audit_append_only'); END;
@@ -3588,7 +3591,6 @@ WHEN EXISTS (
  WHEN 'request_admission' THEN 'canonical_request_acceptances'
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
- WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
 )
@@ -3613,7 +3615,6 @@ WHEN EXISTS (
  WHEN 'request_admission' THEN 'canonical_request_acceptances'
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
- WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
 )
@@ -3638,7 +3639,6 @@ WHEN EXISTS (
  WHEN 'request_admission' THEN 'canonical_request_acceptances'
  WHEN 'identity_read' THEN 'canonical_user_reads'
  WHEN 'security_mutation' THEN 'canonical_security_mutations'
- WHEN 'reminder_control' THEN 'reminder_control_receipts'
  END
  )
 )
@@ -5280,19 +5280,6 @@ BEGIN
   FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
     AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000;
-END;
---> statement-breakpoint
-
-CREATE TRIGGER erasure_preserve_audit_entries_reminder_control BEFORE DELETE ON audit_entries
-WHEN OLD.record_type='reminder_control' AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
-  AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
-  AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000)
-BEGIN
-  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
-  SELECT q.id,'reminder_control_receipts','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD."user_id",'message_id',json_extract(OLD.id,'$[1]'),'choice',OLD.outcome)
-  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
-    AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
-    AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
 --> statement-breakpoint
 
@@ -8560,3 +8547,39 @@ WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=
 BEGIN SELECT RAISE(ABORT,'insight_report_immutable'); END;
 --> statement-breakpoint
 CREATE TRIGGER weekly_question_request_identity_immutable BEFORE UPDATE ON weekly_question_requests WHEN NEW.user_id IS NOT OLD.user_id OR NEW.id IS NOT OLD.id BEGIN SELECT RAISE(ABORT,'insight_work_identity_immutable'); END;
+
+--> statement-breakpoint
+CREATE UNIQUE INDEX reminder_control_message_identity ON proactive_messages(user_id,control_message_id) WHERE control_message_id IS NOT NULL;
+--> statement-breakpoint
+CREATE TRIGGER reminder_control_immutable BEFORE UPDATE ON proactive_messages
+WHEN OLD.control_message_id IS NOT NULL AND (NEW.control_message_id IS NOT OLD.control_message_id OR NEW.control_choice IS NOT OLD.control_choice OR NEW.control_audit_sequence IS NOT OLD.control_audit_sequence)
+ AND NOT(NEW.control_message_id IS NULL AND NEW.control_choice IS NULL AND NEW.control_audit_sequence IS NULL AND EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE p.store_id='reminder_control_receipts' AND p.user_id=OLD.user_id AND q.user_id=p.user_id AND q.state='Erasing'))
+BEGIN SELECT RAISE(ABORT,'reminder_control_immutable'); END;
+
+--> statement-breakpoint
+CREATE TRIGGER reminder_control_fence_insert BEFORE INSERT ON proactive_messages WHEN NEW.control_message_id IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND q.user_id=NEW.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_control_receipts')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+
+--> statement-breakpoint
+CREATE TRIGGER reminder_control_fence_delete BEFORE DELETE ON proactive_messages WHEN OLD.control_message_id IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND q.user_id=OLD.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_control_receipts')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+
+--> statement-breakpoint
+CREATE TRIGGER reminder_control_fence_update BEFORE UPDATE ON proactive_messages WHEN (NEW.control_message_id IS NOT OLD.control_message_id OR NEW.control_choice IS NOT OLD.control_choice OR NEW.control_audit_sequence IS NOT OLD.control_audit_sequence) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND q.user_id=NEW.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_control_receipts')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND q.user_id=OLD.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_control_receipts'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+
+--> statement-breakpoint
+CREATE TRIGGER reminder_control_preserve_delete BEFORE DELETE ON proactive_messages
+WHEN OLD.control_message_id IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND q.user_id=OLD.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000)
+BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
+ SELECT q.id,'reminder_control_receipts','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.user_id,'message_id',OLD.control_message_id,'choice',OLD.control_choice)
+ FROM erasure_requests q WHERE q.state='Draining' AND q.user_id=OLD.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
+END;
+
+--> statement-breakpoint
+CREATE TRIGGER reminder_control_preserve_update BEFORE UPDATE ON proactive_messages
+WHEN OLD.control_message_id IS NOT NULL AND NEW.control_message_id IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND q.user_id=OLD.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000)
+BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
+ SELECT q.id,'reminder_control_receipts','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.user_id,'message_id',OLD.control_message_id,'choice',OLD.control_choice)
+ FROM erasure_requests q WHERE q.state='Draining' AND q.user_id=OLD.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
+END;
+
+--> statement-breakpoint
+CREATE UNIQUE INDEX reminder_control_original_sequence ON proactive_messages(control_audit_sequence) WHERE control_audit_sequence IS NOT NULL;

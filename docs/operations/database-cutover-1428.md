@@ -4019,3 +4019,102 @@ UPDATE cutover_insight_events AS e SET report_delivery_id=(SELECT message_id FRO
 ```
 
 <!-- insight-content-rollback-copy:end -->
+
+## Reminder reply receipts on their question (#1473)
+
+A reminder-question message owns its optional `control_message_id` and exact `control_choice`
+(command text including the question ID). Both are installed atomically with the original
+Reminder governor/schedule decision after rechecking authenticated channel proof, current grant,
+and the current question. Replay still requires the original message and command. The receipt is
+immutable, survives text expiry, and has the existing independent `reminder_control_receipts`
+erasure purpose. It adds no timestamp, TTL, message, or financial event.
+
+Fence writers and pause erasure, then bind original control-receipt count and message count to
+this guard. A receipt must map to exactly one retained same-User reminder question; no question
+may have two receipts. Orphaned, malformed, conflicting or otherwise unrepresentable receipts
+stop the cutover. Preserve the source and investigate; never discard exceptions or fabricate a
+parent. Block affected retained archives because their receipt row references change from an
+Audit sequence to the owning message. Migrated receipts retain their original sequence as
+`control_audit_sequence`; their logical receipt row references and `initial:<sequence>` archive
+addresses remain unchanged. New replies leave this preservation field absent and use a distinct
+`message:<rowid>` receipt address. Unrelated archives retain their exact addresses.
+
+Create the current Audit and Message table definitions as `cutover_` scratch stores, rewriting
+mutual foreign-key targets only when present. Execute the guard, copy, removal of affected
+non-table objects, store swap and reinstatement of current definitions in one native D1 batch,
+starting with `PRAGMA defer_foreign_keys=ON`. Incoming Event links validate at commit. Save the
+preceding definitions from `insights/control-cutover.test-fixture.json` for rollback. Do not turn
+foreign keys off. Interruption must roll back the whole batch.
+
+All retained Audit records keep their original sequence and values; preserve the Audit allocator
+high-water mark even when its highest record moves or was deleted. Receipt identity, original sequence and
+User/message/exact command survive both directions. The optional source sequence is immutable
+with the receipt and is cleared only by its independent erasure purpose. It is preservation
+evidence for migrated history, never a runtime counter. Rollback restores those original
+sequences explicitly; only replies created after cutover allocate new Audit sequences above the
+retained allocator. No receipt archive may exist during either conversion.
+
+<!-- reminder-control-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'reminder_control_cutover',CASE WHEN
+ (SELECT count(*) FROM audit_entries WHERE record_type='reminder_control')=? AND
+ (SELECT count(*) FROM proactive_messages)=? AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN ('reminder_control_receipts','proactive_messages')) AND
+ NOT EXISTS(SELECT 1 FROM audit_entries a WHERE a.record_type='reminder_control' AND
+  (a.sequence<1 OR json_extract(a.id,'$[0]') IS NOT a.user_id OR json_type(a.id,'$[1]') IS NOT 'text' OR length(json_extract(a.id,'$[1]'))=0 OR
+   (SELECT count(*) FROM proactive_messages m WHERE a.record_type='reminder_control' AND a.user_id=m.user_id AND m.kind='proactivity-delivery' AND m.role='reminder-question' AND a.outcome IN ('reminder:'||m.id||':continue','reminder:'||m.id||':stop'))<>1)) AND
+ NOT EXISTS(SELECT 1 FROM proactive_messages m WHERE
+  (SELECT count(*) FROM audit_entries a WHERE a.record_type='reminder_control' AND a.user_id=m.user_id AND m.kind='proactivity-delivery' AND m.role='reminder-question' AND a.outcome IN ('reminder:'||m.id||':continue','reminder:'||m.id||':stop'))>1)
+ THEN 1 ELSE 0 END
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- reminder-control-guard:end -->
+
+<!-- reminder-control-copy:start -->
+
+```sql
+INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries WHERE record_type<>'reminder_control';
+
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)) WHERE name='cutover_audit_entries';
+
+INSERT INTO cutover_proactive_messages(rowid,kind,id,user_id,role,report_event_id,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts,reminder_governor_counted,control_message_id,control_choice,control_audit_sequence)
+ SELECT m.rowid,m.kind,m.id,m.user_id,m.role,m.report_event_id,m.consent_grant_id,m.offer_id,m.text,m.scheduled_at_ms,m.expires_at_ms,m.time_zone,m.created_at_ms,m.dispatch_state,m.dispatch_created_at_ms,m.dispatch_last_attempt_at_ms,m.dispatch_restart_attempts,m.reminder_governor_counted,json_extract(a.id,'$[1]'),a.outcome,a.sequence
+ FROM proactive_messages m LEFT JOIN audit_entries a ON a.record_type='reminder_control' AND a.user_id=m.user_id AND m.kind='proactivity-delivery' AND m.role='reminder-question' AND a.outcome IN ('reminder:'||m.id||':continue','reminder:'||m.id||':stop');
+```
+
+<!-- reminder-control-copy:end -->
+
+<!-- reminder-control-rollback-guard:start -->
+
+```sql
+INSERT INTO sql_assertions(scope,accepted)
+SELECT 'reminder_control_rollback',CASE WHEN NOT EXISTS(SELECT 1 FROM proactive_messages m JOIN audit_entries a ON a.sequence=m.control_audit_sequence) AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Complete') AND NOT EXISTS(SELECT 1 FROM erasure_archives WHERE store_id IN ('reminder_control_receipts','proactive_messages')) AND
+ NOT EXISTS(SELECT 1 FROM proactive_messages WHERE control_message_id IS NOT NULL AND
+  (role<>'reminder-question' OR kind<>'proactivity-delivery' OR control_choice NOT IN ('reminder:'||id||':continue','reminder:'||id||':stop')))
+ THEN 1 ELSE 0 END
+ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted;
+```
+
+<!-- reminder-control-rollback-guard:end -->
+
+<!-- reminder-control-rollback-copy:start -->
+
+```sql
+INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms) SELECT sequence,record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id,hosted_turn_id,attempt_id,transition,accepted_at_ms FROM audit_entries;
+
+UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name='audit_entries'),0)) WHERE name='cutover_audit_entries';
+
+INSERT INTO cutover_audit_entries(sequence,record_type,id,user_id,outcome)
+ SELECT control_audit_sequence,'reminder_control',json_array(user_id,control_message_id),user_id,control_choice
+ FROM proactive_messages WHERE control_audit_sequence IS NOT NULL ORDER BY control_audit_sequence;
+
+INSERT INTO cutover_audit_entries(record_type,id,user_id,outcome)
+ SELECT 'reminder_control',json_array(user_id,control_message_id),user_id,control_choice
+ FROM proactive_messages WHERE control_message_id IS NOT NULL AND control_audit_sequence IS NULL ORDER BY user_id,control_message_id;
+
+INSERT INTO cutover_proactive_messages(rowid,kind,id,user_id,role,report_event_id,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts,reminder_governor_counted) SELECT rowid,kind,id,user_id,role,report_event_id,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts,reminder_governor_counted FROM proactive_messages;
+```
+
+<!-- reminder-control-rollback-copy:end -->

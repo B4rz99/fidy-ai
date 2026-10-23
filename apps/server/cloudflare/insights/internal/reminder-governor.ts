@@ -1,7 +1,3 @@
-import {
-  prepareReminderControlReceipt,
-  reminderControlReceiptQuery,
-} from "../../../src/shell/audit/operations";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { type Cause, Effect, Option, Schema } from "effect";
 import { ReminderStanding } from "../../../src/core/insights/contract";
@@ -102,17 +98,14 @@ const hasControlReceipt = (
   input: Readonly<{ db: D1Database; proof: WhatsAppTurnAdmission }>,
   association: OwnedStatement
 ): Effect.Effect<boolean, Cause.UnknownError> =>
-  Effect.tryPromise(() => {
-    const receipt = reminderControlReceiptQuery({
-      userId: input.proof.userId,
-      messageId: input.proof.messageId,
-      choice: input.proof.text,
-    });
-    return input.db
-      .prepare(`SELECT 1 FROM (${receipt.sql}) WHERE EXISTS (${association.sql})`)
-      .bind(...receipt.params, ...association.params)
-      .first();
-  }).pipe(Effect.map((row) => row !== null));
+  Effect.tryPromise(() =>
+    input.db
+      .prepare(
+        `SELECT 1 FROM proactive_messages WHERE kind='proactivity-delivery' AND role='reminder-question' AND user_id=? AND control_message_id=? AND control_choice=? AND EXISTS (${association.sql})`
+      )
+      .bind(input.proof.userId, input.proof.messageId, input.proof.text, ...association.params)
+      .first()
+  ).pipe(Effect.map((row) => row !== null));
 
 export const controlReminder = (
   input: Readonly<{ db: D1Database; proof: WhatsAppTurnAdmission; now: number }>
@@ -145,16 +138,20 @@ export const controlReminder = (
     if (accepted === null) return false;
     yield* Effect.tryPromise(() =>
       input.db.batch([
-        prepareReminderControlReceipt({
-          db: input.db,
-          userId: proof.userId,
-          messageId: proof.messageId,
-          choice: proof.text,
-          proof: {
-            sql: `SELECT 1 WHERE EXISTS (${association.sql}) AND EXISTS (SELECT 1 FROM proactivity_governors WHERE kind='reminder' AND user_id=? AND question_id=?) AND EXISTS (${liveControl.sql})`,
-            params: [...association.params, proof.userId, choice.value[1], ...liveControl.params],
-          },
-        }),
+        input.db
+          .prepare(
+            `UPDATE proactive_messages SET control_message_id=?,control_choice=? WHERE kind='proactivity-delivery' AND role='reminder-question' AND user_id=? AND id=? AND control_message_id IS NULL AND EXISTS (${association.sql}) AND EXISTS (SELECT 1 FROM proactivity_governors WHERE kind='reminder' AND user_id=? AND question_id=?) AND EXISTS (${liveControl.sql})`
+          )
+          .bind(
+            proof.messageId,
+            proof.text,
+            proof.userId,
+            choice.value[1],
+            ...association.params,
+            proof.userId,
+            choice.value[1],
+            ...liveControl.params
+          ),
         prepareChangedRowAssertion({ db: input.db, scope: "proactivity_message" }),
         input.db
           .prepare(

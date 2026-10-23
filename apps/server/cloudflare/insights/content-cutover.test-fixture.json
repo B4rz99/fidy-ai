@@ -104,6 +104,14 @@
     "erasure_fence_financial_reports_update",
     "financial_reports_immutable",
     "financial_reports_no_delete",
-    "weekly_question_request_identity_immutable"
+    "weekly_question_request_identity_immutable",
+    "reminder_control_message_identity",
+    "reminder_control_immutable",
+    "reminder_control_fence_insert",
+    "reminder_control_fence_delete",
+    "reminder_control_fence_update",
+    "reminder_control_preserve_delete",
+    "reminder_control_preserve_update",
+    "reminder_control_original_sequence"
   ]
 }

@@ -88,6 +88,7 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
     dependencies: [
       "proactivity_message_events",
       "reminder_delivery_receipts",
+      "reminder_control_receipts",
       "proactivity_offer_requests",
     ],
   },
@@ -289,8 +290,35 @@ const recordProjections: ReadonlyArray<ErasureProjection> = [
   };
 });
 
+const controlReceiptRef =
+  "CASE WHEN r.control_audit_sequence IS NOT NULL THEN CAST(r.control_audit_sequence AS TEXT) ELSE 'message:'||r.rowid END";
+
 export const projections: ReadonlyArray<ErasureProjection> = [
   ...recordProjections,
+  {
+    id: "reminder_control_receipts",
+    dataClass: "schedules",
+    dependencies: [],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: `SELECT ${controlReceiptRef} AS rowRef,json_object('user_id',r.user_id,'message_id',r.control_message_id,'choice',r.control_choice) AS body FROM proactive_messages r WHERE r.control_message_id IS NOT NULL AND r.user_id=?`,
+      params: [userId],
+    }),
+    candidates: (userId) => ({
+      sql: `SELECT ${controlReceiptRef} AS rowRef FROM proactive_messages r WHERE r.control_message_id IS NOT NULL AND r.user_id=?`,
+      params: [userId],
+    }),
+    remaining: (userId) => ({
+      sql: "SELECT 1 FROM proactive_messages WHERE control_message_id IS NOT NULL AND user_id=?",
+      params: [userId],
+    }),
+    remove: (scope) => [
+      {
+        sql: `UPDATE proactive_messages AS r SET control_message_id=NULL,control_choice=NULL,control_audit_sequence=NULL WHERE r.control_message_id IS NOT NULL AND r.user_id=? AND (${controlReceiptRef}) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
+        params: [scope.userId, scope.reference],
+      },
+    ],
+  },
 
   {
     id: "budget_alert_occurrences",

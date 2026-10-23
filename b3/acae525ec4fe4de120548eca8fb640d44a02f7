@@ -1,0 +1,25 @@
+apps/server/cloudflare/subscription/weekly-renewal.test.ts
+  s_fb8e6f8c22d2d1::t_d7117c805cc581 1587-1588,1613-1614,1619,1623-1625,1664-1667
+apps/server/cloudflare/subscription/billing-collection.test.ts
+  s_fb8e6f8c22d2d1::t_d7117c805cc581 744,750-756,770-772
+apps/server/cloudflare/subscription/internal/billing-observation.ts
+  s_fb8e6f8c22d2d1::t_687073264ea17c 198,208
+  s_fb8e6f8c22d2d1::t_00083fc95c7f8a 135,160-174,178,183-184,211,215-218,224
+  s_fb8e6f8c22d2d1::t_d7117c805cc581 185,188,194-197,199-207,209-210,220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b3acae525ec4fe4de120548eca8fb640d44a02f7",
+  "prompts": {},
+  "sessions": {
+    "s_fb8e6f8c22d2d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a168ab-6d1f-73c2-9768-504ba124f3aa",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -327,7 +327,6 @@ export const receiveForwardedEmail = Effect.fn(function* (
           bucket: "email",
           objectKey,
           current: now,
-          expiresAtMs: now + storingInterruptionMs,
         }),
         environment.DB.prepare(
           `INSERT INTO forwarded_email_receipts

@@ -295,9 +295,7 @@ const verifyNativeErasure = Effect.gen(function* () {
     objectKey: delayedKey,
   };
   yield* Effect.tryPromise(() =>
-    db.batch(
-      prepareOriginalWrite({ ...writer, current: current - 1000, expiresAtMs: current - 1 }).slice()
-    )
+    db.batch(prepareOriginalWrite({ ...writer, current: current - 86400000 }).slice())
   );
   const pendingWrite = yield* trackOriginalWrite({
     ...writer,

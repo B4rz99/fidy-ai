@@ -692,8 +692,7 @@ CREATE TABLE erasure_writers (
   user_id TEXT NOT NULL,
   bucket TEXT NOT NULL CHECK(bucket IN ('email','statement')),
   object_key TEXT NOT NULL,
-  started_at_ms INTEGER NOT NULL,
-  expires_at_ms INTEGER NOT NULL
+  started_at_ms INTEGER NOT NULL
 ) STRICT;
 --> statement-breakpoint
 

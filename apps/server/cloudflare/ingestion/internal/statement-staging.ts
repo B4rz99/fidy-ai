@@ -429,7 +429,6 @@ const insertPendingStagingRow = (
       bucket: "statement",
       objectKey: input.objectKey,
       current: input.createdAtEpochMs,
-      expiresAtMs: input.expiresAtEpochMs,
     }),
     config.database
       .prepare(

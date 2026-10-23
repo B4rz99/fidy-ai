@@ -251,7 +251,7 @@ its applicable deletion/expiry. No general retention shortening is authorized by
 Do not drop `erasure_archives`, clear archive-reference fields, delete recovery registry objects or
 remove hold-aware triggers as an incidental feature cleanup. Their final removal belongs to
 [#1489](https://github.com/B4rz99/fidy-ai/issues/1489) and
-[#1490](https://github.com/B4rz99/fidy-ai/issues/1490), after prefix/write-bound proofs in #1486/#1487
+[#1490](https://github.com/B4rz99/fidy-ai/issues/1490), after canonical-prefix and confirmed-upload-drain validation in #1486/#1487
 and bounded deletion in #1488. The accepted end state has no retained-content archive reader/writer.
 
 ### Conversion of retained erasure data
@@ -281,8 +281,9 @@ rolled back by SQL; the conversion must be resumable across a crash between R2 a
    retain independently enumerated expected membership. A marker must recreate deletion even when
    that request is absent from a restored D1. Publish before purging old cases or content; never
    reset the registry to `initial` or replace a missing checkpoint with an empty registry.
-4. **Drain and delete under the new authority.** Establish a proven `writes_quiescent_after_ms`
-   independently of scheduler continuation time, including restored/previously completed cases.
+4. **Drain and delete under the new authority.** Fence new admissions and retain every unresolved
+   same-User upload attempt until its full write outcome is confirmed, including restored/previously
+   completed cases. Unknown outcomes keep deletion pending; elapsed time cannot clear tracking.
    Delete source records and all User prefixes in every configured bucket. Use existing object
    locators to delete legacy objects outside those prefixes before removing their inventory.
    Retry ambiguous deletions and re-list after quiescence; an empty pre-drain listing is not proof.
@@ -339,7 +340,7 @@ archive-address-only physical column remains merely to preserve the superseded m
 | #1464–#1466 | Measure direct financial reads and select projection design; deleting projection state must retain a Transaction-owned fact revision, original first-capture instant and zone for Recurring |
 | #1467–#1476 | Planning bounds, Budgets and fair User clock, weekly Recurring detection, Insights/report/message split and Audit evidence finalization; shared document counted once                       |
 | #1477–#1485 | Memory, hosted enforcement/Transcript, WhatsApp proof/window/delivery/approved recipient route, Connections and final Identity cleanup                                                      |
-| #1486–#1490 | Prefix discovery and enforced upload completion bounds, fixed bounded SQL selection, archive transition/full deletion and independent restore replay                                        |
+| #1486–#1490 | Prefix discovery and confirmed tracked-upload drain, fixed bounded SQL selection, archive transition/full deletion and independent restore replay                                           |
 | #1491–#1493 | Demonstrated platform alert/metric/dashboard coverage and exact-revision deployment verification before deleting custom operational state                                                   |
 | #1494       | Final populated migration, meaningful integrated behavior, native atomic rollback/restore, dependency/publication/format/lint/typecheck and measured cost gates before release              |
 
@@ -5000,30 +5001,50 @@ verified email, recovery, PAT, forwarding, billing and current-User seams, plus 
 cutovers. No field-count or table-inventory tests are introduced. This is local integration evidence;
 remote data/schema reconciliation and deployment verification remain final release gates.
 
-## Upload completion gate (#1487)
+## Confirmed upload drain (#1487)
 
-The strict completion-bound prerequisite is unresolved. Workers HTTP duration is not a hard
-wall-clock bound while a client remains connected; credential expiry, a local timeout and an R2
-negative read do not establish that an already-started write cannot later commit. R2 documents
-that conditional PUT preconditions are checked atomically at commit, but this is distinct from a
-maximum upload lifetime. No invented writes_quiescent_after_ms deadline is installed.
+On 2026-10-23 the User approved retaining unresolved-upload tracking instead of promising a fixed
+upload-completion deadline. The authoritative design and affected tickets are updated in place:
+[#1425](https://github.com/B4rz99/fidy-ai/issues/1425) now targets seven tables, including
+`erasure_writers`. No `writes_quiescent_after_ms` is introduced. Retry scheduling is independent of
+whether a write is safe to forget.
 
-The existing native erasure journey reproduced a concrete unsafe transition: an admitted writer
-whose lease clock had expired still held unfinished work, yet continuation advanced from Draining
-to Sealing. Drain now requires all same-User writer records to settle, regardless of lease expiry.
-Successful tracked publication releases its writer; unknown, failed or interrupted outcomes remain
-unresolved and require reconciliation. This can keep deletion pending; elapsed time is not evidence
-for forcing completion. The native journey checks that pending state, delayed R2 publication and
-subsequent complete deletion, original User isolation and restoration-safe progress.
+Every personal-content producer is currently server-mediated: statement staging and forwarded
+email commit the exact writer in the same native batch as their owner reservation. Each attempt
+gets a fresh identity. Both enclose placeholder PUT, conditional payload publication and owner
+publication/cleanup in `trackOriginalWrite`. Successful completion releases only that attempt and
+User. Failure, interruption or an ambiguous native result leaves the writer unresolved. There is no
+presigned/direct upload path or operator force-release shortcut. Any future producer must join this
+protocol before enablement. Held-record archives still exist under #1489's removal gate; they are
+part of erasure after drain, not an independent admitted personal-upload path.
 
-Keep erasure_writers, erasure_objects and the existing original-byte capture/restore protections.
-#1487 is a partial safety correction, not completion of its deadline/removal target; #1489/#1490
-remain blocked. No archive or inventory deletion is authorized by these local checks. Existing
-private-object conditional writes additionally prevent stale payload replacement after ETag
-invalidation, but late placeholder/control writes and all producer paths still require an explicit
-target-design resolution before claiming quiescence without the writer ledger.
+Draining advances only when every same-User writer has settled and every participating owner
+agrees its durable work is drained. An old admission instant, expired owner credential, local timeout,
+cancellation or negative R2 read cannot establish settlement. The existing native erasure journey
+holds an upload admitted a day earlier, checks Draining, then allows its real R2 PUT and owner
+publication to finish. A later continuation can seal and complete cleanup while preserving the other
+User. Unknown outcomes may keep deletion pending indefinitely, including after restoration; do not
+manufacture completion to clear a backlog.
+
+The writer ledger retains id, user_id, bucket, object_key and started_at_ms. The unused
+`expires_at_ms` is removed from the fresh-install baseline and both producers. For a populated
+database, stop old writers and take a verified backup, then run native
+`ALTER TABLE erasure_writers DROP COLUMN expires_at_ms;` in the synchronized cutover. This preserves
+all unresolved attempt identities, User ownership, exact locations and original admission instants.
+Do not delete writer rows. If rollback is required, keep writers stopped, restore the original schema
+and expiry values from the verified backup, and overlay current unresolved rows by exact id/User/key
+rather than discarding attempts admitted since the backup. An expiry value must never authorize
+completion in either direction. The disposable native D1 check preserved the original pending attempts, locations, admission instants
+and other User through this column drop. Its inverse restored original expiry values and preserved an
+additional unresolved attempt admitted after conversion. The legacy-only expiry on that new attempt
+was its admission instant, without any settlement authority. This is local migration/rollback evidence,
+not a live database operation.
+
+#1489 still must replace per-file inventory with bounded User-prefix deletion and remove selective
+retention; #1490 must rebuild/fence restored requests before cleanup. Retain `erasure_objects` and
+original-byte protections until those synchronized changes pass their own native checks. Retaining
+writer tracking resolves the former fixed-deadline design blocker, not the remaining implementations.
 
 Sources: [Workers duration limits](https://developers.cloudflare.com/workers/platform/limits/),
-[R2 consistency](https://developers.cloudflare.com/r2/reference/consistency/),
-[atomic conditional PUT](https://developers.cloudflare.com/r2/api/s3/api/), and
-[unknown write outcomes](https://developers.cloudflare.com/r2/api/s3/extensions/).
+[R2 consistency](https://developers.cloudflare.com/r2/reference/consistency/), and
+[atomic conditional PUT](https://developers.cloudflare.com/r2/api/s3/extensions/).

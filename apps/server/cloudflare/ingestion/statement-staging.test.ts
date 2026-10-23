@@ -404,6 +404,14 @@ const verifyDelayedUpload = (
       };
       expect(yield* fromTestPromise(() => restarted.bucket.head(row.object_key))).toBeNull();
       expect(
+        yield* fromTestPromise(() =>
+          restarted.database
+            .prepare("SELECT user_id,bucket,object_key FROM erasure_writers WHERE id=?")
+            .bind(row.id)
+            .first()
+        )
+      ).toEqual({ user_id: userA, bucket: "statement", object_key: row.object_key });
+      expect(
         Option.isNone(yield* fromTestPromise(() => stagingRow(restarted.database, row.id)))
       ).toBe(true);
       expect(reasonOf(yield* fromTestPromise(() => read(restarted, userA, row.id)))).toBe(

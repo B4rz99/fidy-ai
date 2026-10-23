@@ -1,11 +1,11 @@
 # Schema integration inventory (#1494)
 
 Local fresh-install snapshot of [the single baseline](../../apps/server/cloudflare/migrations/0001_schema.sql).
-Schema Git blob: `586c95b7541e011749540b26f2c62f929cb51c2f`. This is not a live database inspection or a completed release.
+Schema Git blob: `97c1d2d7556af70670a8f0f84f3ecea7369116a2`. This is not a live database inspection or a completed release.
 
 The baseline creates **113 application tables**. The original 102-name inventory predates the
 approved four-table relational Planning replacement and the retained compact Recovery admission
-exception. Including those outcomes gives **107 target tables**. Six additional stores remain
+exception, plus the approved retained upload-writer safeguard. Including those outcomes gives **108 target tables**. Five additional stores remain
 behind explicit Erasure and Operational Health gates; their presence is intentional until the
 replacement is proven. The four Transaction projections remain after the direct-read benchmark
 failed its cost gate. Counts describe these decisions; they are not test assertions or success criteria.
@@ -16,7 +16,7 @@ failed its cost gate. Counts describe these decisions; they are not test asserti
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | Planning             | Shared root plus four ordered relational stores; the full aggregate exceeded the native row limit                      | [#1467](https://github.com/B4rz99/fidy-ai/issues/1467), [size evidence](../research/recurring-planning-storage-gate.md)      |
 | Recovery admission   | Retain compact specialized accounting; generic conversion failed the accepted cost gate                                | [#1434](https://github.com/B4rz99/fidy-ai/issues/1434), [comparison](recovery-admission-1434.md)                             |
-| Erasure              | Retain archives, object inventory and unresolved writers; no enforceable all-producer completion bound established     | [#1487](https://github.com/B4rz99/fidy-ai/issues/1487), [cutover gate](database-cutover-1428.md#upload-completion-gate-1487) |
+| Erasure              | Retain unresolved writers in the approved seven-table target; archives and object inventory await #1489                | [#1487](https://github.com/B4rz99/fidy-ai/issues/1487), [cutover gate](database-cutover-1428.md#confirmed-upload-drain-1487) |
 | Operational Health   | Retain alert/event/health stores until platform query coverage and actual notification/dashboard behavior are verified | [#1491](https://github.com/B4rz99/fidy-ai/issues/1491), [#1492](https://github.com/B4rz99/fidy-ai/issues/1492)               |
 | Release verification | Native release-owned execution replaces the synthetic D1 ledger locally; remote rollout remains separate evidence      | [#1493](https://github.com/B4rz99/fidy-ai/issues/1493)                                                                       |
 
@@ -274,7 +274,7 @@ Views, indexes and provider-managed storage are excluded.
 | `erasure_requests`        | 26 + 0                     | —                                                                                                                                               |
 | `erasure_restore_members` | 3 + 0                      | —                                                                                                                                               |
 | `erasure_steps`           | 5 + 0                      | `(request_id) → erasure_requests(id)`                                                                                                           |
-| `erasure_writers`         | 6 + 0                      | —                                                                                                                                               |
+| `erasure_writers`         | 5 + 0                      | —                                                                                                                                               |
 
 ### SQL Assertions (`src/shell/sql-assertions`)
 

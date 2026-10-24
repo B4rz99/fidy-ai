@@ -1,0 +1,162 @@
+.oxlintrc.ui.json
+  h_c6d49c804e0ad2 95-150
+DESIGN.md
+  h_c6d49c804e0ad2 682,685-692
+SECURITY_STANDARDS.md
+  h_c6d49c804e0ad2 165,192-203,207-211
+apps/server/ARCHITECTURE.md
+  h_c6d49c804e0ad2 91-98
+apps/server/cloudflare/browser-acceptance-whatsapp.ts
+  h_c6d49c804e0ad2 157-173,184,198-199
+apps/server/cloudflare/browser-login/internal/erasure.ts
+  h_c6d49c804e0ad2 13
+apps/server/cloudflare/identity/operations.ts
+  h_c6d49c804e0ad2 6-11,110-125
+apps/server/cloudflare/migrations/0002_whatsapp_signup_invitations.sql
+  h_c6d49c804e0ad2 1-105
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  h_c6d49c804e0ad2 1-4,50,133-139,148-190,192-222
+apps/server/cloudflare/provider-authentication/internal/completion.ts
+  h_c6d49c804e0ad2 4-7,10-11,15-19,34,43-46,49,53,80-131,147,172,234-235,240,244-245,254-303,318,331,337-350
+apps/server/cloudflare/provider-authentication/internal/erasure.ts
+  h_c6d49c804e0ad2 67-87
+apps/server/cloudflare/provider-authentication/internal/start.ts
+  h_c6d49c804e0ad2 120,126,136-138,144-150,152-153,164-165,170-194,218-224,226,241
+apps/server/cloudflare/provider-authentication/internal/status.ts
+  h_c6d49c804e0ad2 1,14,17,20-144,178-185,188,222
+apps/server/cloudflare/provider-authentication/internal/whatsapp-handoff.ts
+  h_c6d49c804e0ad2 190,202,204-213,215,217-219,223,225-244,246,248-249,258-265,288-337,343-344,352-360,362
+apps/server/cloudflare/provider-authentication/invitation-migration.test.ts
+  h_c6d49c804e0ad2 1-74
+apps/server/cloudflare/provider-authentication/journey.test-fixture.ts
+  h_c6d49c804e0ad2 12,21-29,118
+apps/server/cloudflare/provider-authentication/legacy-disclosure.test-fixture.ts
+  h_c6d49c804e0ad2 1-198
+apps/server/cloudflare/provider-authentication/runtime.ts
+  h_c6d49c804e0ad2 44-48
+apps/server/cloudflare/provider-authentication/whatsapp-association.test.ts
+  h_c6d49c804e0ad2 1-2,12,108-109,113,169,174,378,425-440,443-446,697,716-725
+apps/server/cloudflare/provider-authentication/whatsapp-link-signup.test.ts
+  h_c6d49c804e0ad2 1-853
+apps/server/cloudflare/provider-authentication/whatsapp-provider.test-fixture.ts
+  h_c6d49c804e0ad2 1-74
+apps/server/cloudflare/provider-authentication/whatsapp-sent-history.test.ts
+  h_c6d49c804e0ad2 1,7,52
+apps/server/cloudflare/provider-authentication/whatsapp.test.ts
+  h_c6d49c804e0ad2 1,9,169-171,173,245-247,330-332,334,408-410,483-485,520
+apps/server/cloudflare/runtime/internal/scheduled-health.ts
+  h_c6d49c804e0ad2 12,212,217-244
+apps/server/cloudflare/runtime/runtime.test.ts
+  h_c6d49c804e0ad2 4,141-149,355-356,373-377,380-391
+apps/server/cloudflare/runtime/telemetry.test.ts
+  h_c6d49c804e0ad2 29-33,197,203-206,213-222
+apps/server/cloudflare/runtime/telemetry/operations.ts
+  h_c6d49c804e0ad2 31,52,54,57
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  h_c6d49c804e0ad2 291-295
+apps/server/src/shell/provider-authentication/contract.ts
+  h_c6d49c804e0ad2 34-45,47,64-68,103,130
+apps/web/ARCHITECTURE.md
+  h_c6d49c804e0ad2 133-135,298-312
+apps/web/e2e/00-google-authentication.spec.ts
+  h_c6d49c804e0ad2 13,80-85
+apps/web/e2e/browser-pairing.spec.ts
+  h_c6d49c804e0ad2 459,574
+apps/web/e2e/dashboard-branding.spec.ts
+  h_c6d49c804e0ad2 1-323
+apps/web/e2e/dashboard-live-title.spec.ts
+  h_c6d49c804e0ad2 19-25,33,44,48
+apps/web/e2e/dashboard-pointer-resize.spec.ts
+  h_c6d49c804e0ad2 1-74
+apps/web/e2e/financial-journeys.spec.ts
+  h_c6d49c804e0ad2 95-97
+apps/web/e2e/microsoft-authentication.spec.ts
+  h_c6d49c804e0ad2 7,39-44
+apps/web/e2e/provider-authentication.journeys.ts
+  h_c6d49c804e0ad2 12,39,522-527,545,553-554,556,564,566-567,570-587,601,603-606,630-641,1001-1006,1105-1231
+apps/web/e2e/real-core-fixture.ts
+  h_c6d49c804e0ad2 1,19,158-189,204,207
+apps/web/e2e/session-binding.spec.ts
+  h_c6d49c804e0ad2 103-105
+apps/web/e2e/transactions-approved.spec.ts
+  h_c6d49c804e0ad2 115,147,152,235-240,320-385
+apps/web/src/features/dashboard/money-presentation.test.ts
+  h_c6d49c804e0ad2 10,76-85
+apps/web/src/features/dashboard/money-presentation.ts
+  h_c6d49c804e0ad2 59-71
+apps/web/src/features/dashboard/view.tsx
+  h_c6d49c804e0ad2 1,4,23-35,49,90,96,100-108,111-122,145,147-159,168-216,240-242,275-287,302,314-333,347,349-354,356,382-387,822,907-912,949,1061-1062,1074,1079,1081
+apps/web/src/features/provider-authentication/FEATURE.md
+  h_c6d49c804e0ad2 3-72
+apps/web/src/features/provider-authentication/controller.ts
+  h_c6d49c804e0ad2 4,12-18,28-29,50-71,76-81,85-92,111-116,122,130-131,138,147-149,151-168,171-173,206-208,228,232,234,238-239,242-267,271-276,280-304,319,323,326-329,331,337-342,357-359,364-373,376-381,384,400,424-455,470,472-474,478-479,498,502,507-512
+apps/web/src/features/provider-authentication/feature.tsx
+  h_c6d49c804e0ad2 76,81,154-175,187-190,200,217-239
+apps/web/src/features/signed-in/compact-navigation.tsx
+  h_c6d49c804e0ad2 4,17-18,33,36-38
+apps/web/src/features/signed-in/feature.tsx
+  h_c6d49c804e0ad2 7,67-68,71,87,91
+apps/web/src/features/signed-in/navigation-viewport.ts
+  h_c6d49c804e0ad2 3
+apps/web/src/features/signed-in/navigation.tsx
+  h_c6d49c804e0ad2 7,15-19,52,59-60,62,68,74-75,78-97
+apps/web/src/features/signed-in/settings-navigation.tsx
+  h_c6d49c804e0ad2 19-20,23,30-31
+apps/web/src/features/transactions/bulk-correction.tsx
+  h_c6d49c804e0ad2 325
+apps/web/src/features/transactions/manual-capture.tsx
+  h_c6d49c804e0ad2 287
+apps/web/src/ui/components/access.tsx
+  h_c6d49c804e0ad2 16,181
+apps/web/src/ui/components/application.css
+  h_c6d49c804e0ad2 1-294
+apps/web/src/ui/components/application.tsx
+  h_c6d49c804e0ad2 1-67
+apps/web/src/ui/components/chat.tsx
+  h_c6d49c804e0ad2 25
+apps/web/src/ui/components/dashboard.css
+  h_c6d49c804e0ad2 1-430
+apps/web/src/ui/components/dashboard.tsx
+  h_c6d49c804e0ad2 1-221
+apps/web/src/ui/components/theme.ts
+  h_c6d49c804e0ad2 27
+apps/web/src/ui/components/transactions.css
+  h_c6d49c804e0ad2 1-8,265-272,492-494,748,751
+apps/web/src/ui/dashboard-reference.tsx
+  h_c6d49c804e0ad2 1-53
+apps/web/src/ui/reference.tsx
+  h_c6d49c804e0ad2 19,267-288,318,321
+apps/web/src/ui/transactions-reference.tsx
+  h_c6d49c804e0ad2 2,12,32-38,47
+docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.md
+  h_c6d49c804e0ad2 5,11-12,24-34
+docs/adr/0020-mandatory-verified-email-authentication-and-recovery.md
+  h_c6d49c804e0ad2 5,121-132
+docs/operations/cloudflare-background-work.md
+  h_c6d49c804e0ad2 299-330,511-584
+infra/cloudflare/production-release.test.ts
+  h_c6d49c804e0ad2 6,180,201,209,223,225-243,245-254
+infra/cloudflare/production-release.ts
+  h_c6d49c804e0ad2 402,413,434,454,1020
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+infra/cloudflare/worker-observability.test.ts
+  h_c6d49c804e0ad2 14,37
+infra/cloudflare/worker-observability.ts
+  h_c6d49c804e0ad2 6
+patches/@distilled.cloud%2Fcloudflare@1.0.0-rc.13.patch
+  h_c6d49c804e0ad2 2,5,9,15,18,22,28,31,34,43
+tools/depcruise/boundaries.mjs
+  h_c6d49c804e0ad2 65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "61f62fa86976d0bc5a341d3d565aaddeb285add4",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

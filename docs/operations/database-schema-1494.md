@@ -40,7 +40,7 @@ D1 retains domain intent, current authority, exact outcomes and external-effect 
 
 ## Physical relationships
 
-Column counts include stored columns. References list declared foreign keys; composite keys are
+Column counts include generated columns. References list declared foreign keys; composite keys are
 shown column by column. Indexes and triggers stay with the owning table in `0001_schema.sql`.
 
 | Table                                  | Owner                              | Columns | Foreign-key references                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |

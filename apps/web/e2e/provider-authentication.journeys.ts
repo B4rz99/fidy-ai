@@ -36,6 +36,7 @@ const openSignup = (page: Page): Promise<void> =>
     .goto("/login")
     .then(() => page.getByRole("button", { name: "Crea tu cuenta", exact: true }).click());
 const redirectStatus = 302;
+const providerReturnStatus = 303;
 const pendingStatus = 202;
 const noContentStatus = 204;
 const unauthorizedStatus = 401;
@@ -1127,8 +1128,16 @@ const enterWhatsAppSignup = ({
     yield* Effect.tryPromise(() =>
       page.getByLabel("Acepto el tratamiento de datos descrito").check()
     );
+    // Provider exchange is network work; observe its real callback before asserting the review UI.
     yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
+      Promise.all([
+        page.context().waitForEvent("response", {
+          predicate: (response) =>
+            new URL(response.url()).pathname === `/providers/${configuration.provider}/callback` &&
+            response.status() === providerReturnStatus,
+        }),
+        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click(),
+      ])
     );
   });
 const nativeTimestampPrecisionMs = 1000;

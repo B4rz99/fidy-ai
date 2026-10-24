@@ -18,6 +18,15 @@ export type Journey = Readonly<{
   ) => Promise<Response>;
   pairing: typeof Pairing.Type;
 }>;
+/** Keep real public/Core routing while a test controls native D1 completion ordering. */
+export const withJourneyDatabase = ({
+  journey,
+  db,
+}: Readonly<{ journey: Journey; db: D1Database }>): Journey => ({
+  ...journey,
+  db,
+  send: sendThroughWorkers(db, journey.sandboxPhoneNumberId, Option.none()),
+});
 const gitRevisionLength = 40;
 const admissionKeyLength = 43;
 const contractDigestLength = 64;

@@ -39,6 +39,30 @@ controlled Google/Microsoft callbacks, intercepts the fixed WhatsApp return URL 
 message through authenticated native Ingress/Core/local D1 before expecting recovery or a session. Real provider
 login, mobile/browser return behavior and live delivery still need the deployed journey.
 
+PR #1534's first CI run `40104061817` passed all four native adapter shards, infrastructure,
+unit/artifact, static, packaging and security jobs. Browser shard 1 exposed a new phase-transition
+poll burst and an existing Dashboard `Network.getResponseBody` failure; shard 2 passed. A local
+concurrent Google/Microsoft reproduction captured a real provider-status 429 after retry/chat
+transitions. One mounted poll owner now retains the existing one-second cadence across provider retries and
+chat-confirmation phases, preserving the five-per-five-seconds server guard without automatic
+mutation retry or delaying the first poll of a new controller. The Dashboard failure was also reproduced locally. Its trace showed a completed 200 pairing response
+and the application's subsequent email-start request, with no intervening navigation, while Chromium's
+separate response-body read failed. The fixture now captures the genuine upstream response through
+`route.fetch()` and fulfills the same bytes to the browser; no domain result is fabricated. It also
+uses the selected loopback topology for email delivery. Five fresh parallel runs then passed all 15
+Google/Microsoft linking and Dashboard cases. The full 20-provider suite passed with the shared
+poll owner. The final review also exposed a native decision/status race: a genuine chat confirmation could
+settle after the first real D1 read, then disappear from a pending-only second read and incorrectly
+produce HTTP 400. A controlled D1 scheduling regression reproduced that refusal. The final read now
+retains the exact current attempt's confirmed/denied decision and classifies absence deliberately;
+completion still independently enforces atomic native authority. Confirmation and denial during
+that read are covered through public Ingress → Core and real local D1; all 28 focused checks pass.
+One subsequent parallel browser run under concurrent static verification reached a valid Microsoft
+review only after its five-second DOM assertion expired; the trace retained the review and no
+provider refusal. The journey now observes the genuine provider callback before asserting that
+review. Assertion/request timeouts, server limits and production provider behavior are unchanged.
+Final CI and deployed evidence remain pending.
+
 Production baseline `a08d02a2c256a25e8837771d112b1458f81e9158` passed deployment `40093477574`
 and signed full inspection `40093977215` on 2026-10-24, including D1, Queue and Workflow proof.
 Those checks precede this change. The live old handoff reached verified Google authentication and

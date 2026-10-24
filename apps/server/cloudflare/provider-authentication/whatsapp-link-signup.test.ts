@@ -2,7 +2,7 @@ import { makeProviderAuthenticationErasureStores, sweepProviderAuthentication } 
 import { authenticateChatProvider } from "./whatsapp-provider.test-fixture";
 import { Clock, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { disposeJourneys, setupWhatsApp } from "./journey.test-fixture";
+import { disposeJourneys, setupWhatsApp, withJourneyDatabase } from "./journey.test-fixture";
 import { whatsappMessages } from "./whatsapp-messages.test-fixture";
 
 afterAll(disposeJourneys);
@@ -218,6 +218,81 @@ const reviewedInvitation = Effect.fn(function* (confirm: boolean = true) {
     confirmationText: review.confirmationText,
   };
 });
+
+/** Schedule a real native delivery after the real D1 read, preserving its earlier snapshot. */
+const settleAfterInvitationRead = (db: D1Database, settle: () => Promise<void>): D1Database => {
+  let scheduled = false;
+  const wrap = (statement: D1PreparedStatement): D1PreparedStatement =>
+    new Proxy(statement, {
+      get(native, method): unknown {
+        if (method === "bind") {
+          return (...values: unknown[]): D1PreparedStatement => wrap(native.bind(...values));
+        }
+        if (method === "first" || method === "all") {
+          return (): Promise<unknown> => native[method]().then((row) => settle().then(() => row));
+        }
+        const value: unknown = Reflect.get(native, method, native);
+        return typeof value === "function" ? value.bind(native) : value;
+      },
+    });
+  return new Proxy(db, {
+    get(native, method): unknown {
+      if (method === "prepare") {
+        return (sql: string): D1PreparedStatement => {
+          const statement = native.prepare(sql);
+          if (scheduled || !sql.startsWith("SELECT i.review_code,")) return statement;
+          scheduled = true;
+          return wrap(statement);
+        };
+      }
+      const value: unknown = Reflect.get(native, method, native);
+      return typeof value === "function" ? value.bind(native) : value;
+    },
+  });
+};
+
+const expectNativeDelivery = (response: Response): void => {
+  expect(response.status).toBe(200);
+};
+
+it.each([
+  { decision: "confirmed", status: "verified", completion: 200, redemption: 200 },
+  { decision: "denied", status: "rejected", completion: 400, redemption: 202 },
+])("preserves a $decision native decision settling during the browser status read", (scenario) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { journey, proof, confirmationText } = yield* reviewedInvitation(false);
+      yield* whatsappMessages.advanceClock(2000);
+      const context = yield* Effect.context<never>();
+      const database = settleAfterInvitationRead(journey.db, () =>
+        Effect.runPromiseWith(context)(
+          whatsappMessages
+            .sendChat(
+              journey,
+              scenario.decision === "confirmed"
+                ? confirmationText
+                : confirmationText.replace(/^Vincular /u, "No vincular ")
+            )
+            .pipe(Effect.map(expectNativeDelivery))
+        )
+      );
+      const controlled = withJourneyDatabase({ journey, db: database });
+      const response = yield* Effect.tryPromise(() =>
+        controlled.send("/web/providers/google/status", journey.pairing)
+      );
+      expect(response.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({ status: scenario.status });
+      expect(
+        (yield* Effect.tryPromise(() => journey.send("/web/providers/google/complete", proof)))
+          .status
+      ).toBe(scenario.completion);
+      expect(
+        (yield* Effect.tryPromise(() => journey.send("/web/pairings/redeem", journey.pairing)))
+          .status
+      ).toBe(scenario.redemption);
+    })
+  )
+);
 
 it.each(["foreign browser", "wrong provider", "expired"])(
   "refuses %s invitation completion without partial onboarding",

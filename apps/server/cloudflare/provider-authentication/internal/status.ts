@@ -28,6 +28,11 @@ const InvitationReview = Schema.Struct({
   contact_email: Schema.NullOr(Schema.String),
   subject: Schema.String,
 });
+const RetainedReview = Schema.Struct({
+  review_code: Schema.String,
+  review_text: Schema.String,
+  decision: Schema.NullOr(Schema.Literals(["confirmed", "denied"])),
+});
 type InvitationReviewInput = Readonly<{
   environment: ProviderEnvironment;
   pairingId: string;
@@ -39,7 +44,7 @@ const issueInvitationReview = (
   review: typeof InvitationReview.Type,
   accountLabel: string
 ): Effect.Effect<
-  Readonly<{ review_code: string; review_text: string }>,
+  Option.Option<typeof RetainedReview.Type>,
   Cause.UnknownError | Schema.SchemaError
 > =>
   Effect.gen(function* () {
@@ -67,15 +72,25 @@ const issueInvitationReview = (
     }
     const issued = yield* Effect.tryPromise(() =>
       environment.DB.prepare(
-        "SELECT review_code,review_text FROM whatsapp_signup_invitations WHERE id=? AND review_attempt_id=? AND decision IS NULL"
+        `SELECT review_code,review_text,decision FROM whatsapp_signup_invitations
+        WHERE id=? AND pairing_id=? AND review_attempt_id=? AND consumed_at_ms IS NULL
+        AND approved_at_ms IS NULL AND expires_at_ms>?
+        AND EXISTS(SELECT 1 FROM provider_authentication_attempts a WHERE a.id=? AND a.invitation_id=whatsapp_signup_invitations.id AND a.pairing_id=? AND a.state='verified' AND a.expires_at_ms>?)`
       )
-        .bind(invitationId, review.attempt_id)
+        .bind(
+          invitationId,
+          pairingId,
+          review.attempt_id,
+          current,
+          review.attempt_id,
+          pairingId,
+          current
+        )
         .first()
     );
-    const retained = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ review_code: Schema.String, review_text: Schema.String })
-    )(issued);
-    return retained;
+    return Option.fromNullishOr(
+      yield* Schema.decodeUnknownEffect(Schema.NullOr(RetainedReview))(issued)
+    );
   });
 const invitationReview = ({
   environment,
@@ -109,11 +124,17 @@ const invitationReview = ({
       review,
       accountLabel
     );
+    if (Option.isNone(retained) || retained.value.decision === "denied") {
+      return providerJson({ body: { status: "rejected" } });
+    }
+    if (retained.value.decision === "confirmed") {
+      return providerJson({ body: { status: "verified" } });
+    }
     return providerJson({
       body: {
         status: "awaiting_association",
-        associationCode: retained.review_code,
-        confirmationText: retained.review_text,
+        associationCode: retained.value.review_code,
+        confirmationText: retained.value.review_text,
         accountLabel,
         whatsappPhone: review.source_phone,
       },

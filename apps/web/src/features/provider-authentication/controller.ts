@@ -1,7 +1,7 @@
 import { destinationAfterLogin } from "@/session/login-destination";
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Cause, type Context, Effect, Option, Redacted } from "effect";
+import { Cause, Clock, type Context, Effect, Option, Redacted } from "effect";
 import { Atom } from "effect/reactivity";
 import { type RefCallback, useCallback, useState } from "react";
 import { useSession } from "@/session/session-context";
@@ -47,25 +47,47 @@ const providerClient = (
     ? api
     : { start: api.startMicrosoft, status: api.statusMicrosoft, complete: api.completeMicrosoft };
 };
+type ProviderPoll = (
+  client: Client,
+  provider: AuthenticationProvider,
+  pairing: Pairing
+) => Effect.Effect<
+  WebAuthSuccess<"providerAuthentication", "status">,
+  Effect.Error<ReturnType<Client["providerAuthentication"]["status"]>>
+>;
+/** One mounted owner preserves the server's five-per-five-seconds cadence across retries/phases. */
+const makeProviderPoller = (): ProviderPoll => {
+  const intervalMilliseconds = 1_000;
+  let readyAt = 0;
+  return (client, provider, pairing): ReturnType<ProviderPoll> =>
+    Effect.gen(function* () {
+      const current = yield* Clock.currentTimeMillis;
+      if (readyAt > current) yield* Effect.sleep(readyAt - current);
+      readyAt = (yield* Clock.currentTimeMillis) + intervalMilliseconds;
+      const result = yield* providerClient(client, provider).status({ payload: proof(pairing) });
+      readyAt = (yield* Clock.currentTimeMillis) + intervalMilliseconds;
+      return result;
+    });
+};
 const awaitProviderVerification = (
   client: Client,
   pairing: Pairing,
   input: Pick<ControllerInput, "setState"> &
-    Readonly<{ popup: Window; provider: AuthenticationProvider }>
+    Readonly<{
+      popup: Window;
+      provider: AuthenticationProvider;
+      poll: ProviderPoll;
+    }>
 ): Effect.Effect<Option.Option<AssociationReview>, "rejected" | "cancelled"> =>
   Effect.gen(function* () {
     for (;;) {
       const popupClosed = input.popup.closed;
-      const result = yield* providerClient(client, input.provider)
-        .status({
-          payload: proof(pairing),
-        })
-        .pipe(
-          Effect.catchCauseIf(
-            (cause) => !Cause.hasInterruptsOnly(cause),
-            () => Effect.fail(input.popup.closed ? ("cancelled" as const) : ("rejected" as const))
-          )
-        );
+      const result = yield* input.poll(client, input.provider, pairing).pipe(
+        Effect.catchCauseIf(
+          (cause) => !Cause.hasInterruptsOnly(cause),
+          () => Effect.fail(input.popup.closed ? ("cancelled" as const) : ("rejected" as const))
+        )
+      );
       if (result.status === "verified") return Option.none();
       if (result.status === "awaiting_association") return Option.some(result);
       if (result.status === "awaiting_confirmation") {
@@ -73,7 +95,6 @@ const awaitProviderVerification = (
       }
       if (result.status === "rejected") return yield* Effect.fail("rejected");
       if (result.status === "pending" && popupClosed) return yield* Effect.fail("cancelled");
-      yield* Effect.sleep("1 second");
     }
   }).pipe(
     Effect.timeout("10 minutes"),
@@ -125,6 +146,7 @@ type ActiveAttempt = {
   completionRequested: boolean;
   destination: Option.Option<WhatsAppReturn>;
   provider: AuthenticationProvider;
+  poll: ProviderPoll;
 };
 /** Isolated external provider windows must close themselves or be closed by the User. */
 const closeProviderPopup = (popup: Window): void => {
@@ -207,6 +229,7 @@ const executeStart = (
       ...input,
       provider: staged.value.provider,
       popup: staged.value.popup,
+      poll: active.poll,
     });
     closeProviderPopup(staged.value.popup);
     if (active.generation !== current) {
@@ -265,14 +288,13 @@ const awaitChatApproval = (
     input.setState({ status: "awaiting_chat" });
     const client = yield* input.webAuthClient;
     for (;;) {
-      const result = yield* providerClient(client, active.provider)
-        .status({ payload: proof(pairing.value) })
+      const result = yield* active
+        .poll(client, active.provider, pairing.value)
         .pipe(Effect.mapError(() => "rejected" as const));
       if (result.status === "verified") break;
       if (result.status !== "awaiting_association" || result.associationCode !== code) {
         return yield* Effect.fail("rejected" as const);
       }
-      yield* Effect.sleep("1 second");
     }
     yield* executeCompletion(input, active, Option.some(code));
   }).pipe(
@@ -334,6 +356,7 @@ const makeProviderController = (input: ControllerInput): ProviderController => {
     completionRequested: false,
     destination: Option.none(),
     provider: "google",
+    poll: makeProviderPoller(),
   };
   return {
     start: guardedCommand(input, active, () => executeStart(input, active)),

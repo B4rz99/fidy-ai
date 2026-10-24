@@ -1,0 +1,118 @@
+DESIGN.md
+  h_c6d49c804e0ad2 693-700
+apps/server/cloudflare/core-http/runtime.test.ts
+  h_c6d49c804e0ad2 2,6,13-17,43,71-74,83,111,117-119
+apps/server/cloudflare/email-authentication/runtime.ts
+  h_c6d49c804e0ad2 59-72,98-111
+apps/server/cloudflare/ingestion/runtime.ts
+  h_c6d49c804e0ad2 91-104
+apps/server/cloudflare/insights/operational-health.test.ts
+  h_c6d49c804e0ad2 15,144-149
+apps/server/cloudflare/insights/runtime.ts
+  h_c6d49c804e0ad2 422-436
+apps/server/cloudflare/maintenance/idle-budget.test.ts
+  h_c6d49c804e0ad2 41,79
+apps/server/cloudflare/maintenance/monitoring-isolation.test.ts
+  h_c6d49c804e0ad2 6,8,54,240,311,318-319,321-328,331
+apps/server/cloudflare/maintenance/performance.test.ts
+  h_c6d49c804e0ad2 52-68,72-74,76-79,158
+apps/server/cloudflare/migrations/0001_schema.sql
+  h_c6d49c804e0ad2 1098,1227,1234,7094-7193
+apps/server/cloudflare/oauth-agents/oauth-native-residency.test.ts
+  h_c6d49c804e0ad2 821-825,912,923-925
+apps/server/cloudflare/operational-canary-workflow.ts
+  h_c6d49c804e0ad2 4-5,13,15,19-32
+apps/server/cloudflare/queue/internal/dispatch.ts
+  h_c6d49c804e0ad2 183
+apps/server/cloudflare/queue/runtime.test.ts
+  h_c6d49c804e0ad2 24,47,56-59,92-94
+apps/server/cloudflare/runtime/internal/scheduled-health.ts
+  h_c6d49c804e0ad2 1,13,109,114,123,168,170,176-183
+apps/server/cloudflare/runtime/operational-health/alerts.test.ts
+  h_c6d49c804e0ad2 2-6,26,29,34-38,43,53,58,67,72,82,86-88
+apps/server/cloudflare/runtime/operational-health/canary.test.ts
+  h_c6d49c804e0ad2 2,4,6-42
+apps/server/cloudflare/runtime/operational-health/contract.ts
+  h_c6d49c804e0ad2 88,90
+apps/server/cloudflare/runtime/operational-health/core-rejection.test.ts
+  h_c6d49c804e0ad2 1,3,12-13,16-46,50,53-58,60-71,74,78,82,85,88,92,94-95,99-115
+apps/server/cloudflare/runtime/operational-health/internal/canary.ts
+  h_c6d49c804e0ad2 1
+apps/server/cloudflare/runtime/operational-health/operations.ts
+  h_c6d49c804e0ad2 7,9,21,26-35,50-51,53,73,77-78,202-208,210-212,214-265
+apps/server/cloudflare/runtime/operational-health/runtime.ts
+  h_c6d49c804e0ad2 1-2,23,34,46
+apps/server/cloudflare/runtime/runtime.test.ts
+  h_c6d49c804e0ad2 4,6,97-114,116-123,127,129,131-199,201-262
+apps/server/cloudflare/runtime/runtime.ts
+  h_c6d49c804e0ad2 8
+apps/server/cloudflare/subscription/runtime.ts
+  h_c6d49c804e0ad2 152-165,207-221
+apps/server/cloudflare/weekly-workflow.test.ts
+  h_c6d49c804e0ad2 705,716
+apps/web/e2e/browser-pairing.spec.ts
+  h_c6d49c804e0ad2 457,459,572,574
+apps/web/e2e/financial-journeys.spec.ts
+  h_c6d49c804e0ad2 93,96
+apps/web/e2e/session-binding.spec.ts
+  h_c6d49c804e0ad2 84,104
+apps/web/e2e/transaction-deletion.spec.ts
+  h_c6d49c804e0ad2 96,102,138,154
+apps/web/e2e/transaction-native-pagination.spec.ts
+  h_c6d49c804e0ad2 35,37,48,61
+apps/web/e2e/transaction-pagination.spec.ts
+  h_c6d49c804e0ad2 10,160,162,314-320,395-397,404-407,418-420
+apps/web/e2e/transactions-approved.spec.ts
+  h_c6d49c804e0ad2 1-4,6-29,31-36,38,40-49,51-57,59-78,80-81,83-87,89-102,104-133,135-141,143-167,169-173,175-198,200-232,234-264,266-269,271-273,275-308,310-319,321,323-350,352,354-385
+apps/web/src/features/provider-authentication/FEATURE.md
+  h_c6d49c804e0ad2 18
+apps/web/src/features/transactions/bulk-correction.tsx
+  h_c6d49c804e0ad2 142-147,165,170-172,174-183,251,254,276-281,324-325,330,335
+apps/web/src/features/transactions/correction.tsx
+  h_c6d49c804e0ad2 95,100,105,146,167,181,203,205-206,251,256,291,294-300
+apps/web/src/features/transactions/deletion.tsx
+  h_c6d49c804e0ad2 88,101,106-107,111
+apps/web/src/features/transactions/detail.tsx
+  h_c6d49c804e0ad2 4,77-78,81-84,89-107,114,130-131,133-134
+apps/web/src/features/transactions/ledger.tsx
+  h_c6d49c804e0ad2 31,61,338,404-423,460
+apps/web/src/features/transactions/manual-capture.tsx
+  h_c6d49c804e0ad2 2,13,23-24,36-38,55-56,99,112-113,152-219,221-222,231-294,296-303,306-307,309-313,315-317,319-320,323-324
+apps/web/src/features/transactions/summary.tsx
+  h_c6d49c804e0ad2 82-117,120,123-134,136,138
+apps/web/src/features/transactions/workspace.tsx
+  h_c6d49c804e0ad2 10-14,124,174-175,186,188,266-285,302,367,370,373-374,380,382-473,487-513,515,552,555,557-572,581-592,595-620,626,628-629,716,718-719,725,736
+apps/web/src/ui/components/review-workspace.css
+  h_c6d49c804e0ad2 1-4
+apps/web/src/ui/components/transactions.css
+  h_c6d49c804e0ad2 1-808
+apps/web/src/ui/components/transactions.tsx
+  h_c6d49c804e0ad2 1-106
+apps/web/src/ui/reference.tsx
+  h_c6d49c804e0ad2 21,319
+apps/web/src/ui/transactions-reference.tsx
+  h_c6d49c804e0ad2 1-9,11-56
+docs/adr/0035-d1-independent-operator-alerts.md
+  h_c6d49c804e0ad2 3
+docs/operations/cloudflare-background-work.md
+  h_c6d49c804e0ad2 48-49,57,80-171,175-180,195-200,217
+docs/operations/database-cutover-1428.md
+  h_c6d49c804e0ad2 5625-5742
+docs/operations/database-schema-1494.md
+  h_c6d49c804e0ad2 1-173
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+infra/cloudflare/workers.test.ts
+  h_c6d49c804e0ad2 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "50acb573719d44a73e14fcb1734404a9cd7e5d4e",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

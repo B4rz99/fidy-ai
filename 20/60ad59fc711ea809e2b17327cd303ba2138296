@@ -1,0 +1,18 @@
+DESIGN.md
+  h_c6d49c804e0ad2 337-338,697,701
+apps/web/e2e/transactions-approved.spec.ts
+  h_c6d49c804e0ad2 386-464
+apps/web/src/ui/components/transactions.css
+  h_c6d49c804e0ad2 809-1095
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2060ad59fc711ea809e2b17327cd303ba2138296",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

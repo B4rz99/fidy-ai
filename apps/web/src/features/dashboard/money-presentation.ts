@@ -56,3 +56,16 @@ export const moneySeriesGeometry = (
   );
   return amounts.map((amount) => boundedRatio(amount, maximum));
 };
+
+/** Labels the unbounded exact ratio; a zero cap has no defined utilization percentage. */
+export const moneyUtilizationLabel = ({
+  spent,
+  cap,
+}: Readonly<{ spent: PresentableMoney; cap: PresentableMoney }>): Option.Option<string> => {
+  if (BigDecimal.isZero(cap.amount)) return Option.none();
+  const percent = BigDecimal.multiply(
+    BigDecimal.divideUnsafe(spent.amount, cap.amount),
+    BigDecimal.make(100n, 0)
+  );
+  return Option.some(`${BigDecimal.format(BigDecimal.round(percent, { scale: 0 }))} % utilizado`);
+};

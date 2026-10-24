@@ -16,7 +16,6 @@ import type { CanonicalMutationRefusal } from "../../canonical-operations/contra
 type Work = Readonly<{ db: D1Database; subject: QueryCaller; current: number }>;
 type Operation =
   | "ingestion.getReviewWorkspace"
-  | "ingestion.getReviewSuggestions"
   | "ingestion.getReviewMaterial"
   | "ingestion.getReviewItem"
   | "ingestion.applyReviewEdit";

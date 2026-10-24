@@ -1,15 +1,24 @@
+import { ReviewDraftFooter, ReviewNotice } from "@/ui/components/review-workspace";
 import { useReviewExpired } from "./expiry";
-import { RefreshButton } from "@/ui/components/refresh-button";
 import type { DraftBarrier } from "./draft-barrier";
-import { RetryExtraction } from "./retry";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { File01Icon, Image01Icon, Mail01Icon } from "@hugeicons/core-free-icons";
+import {
+  CheckmarkCircle02Icon,
+  Clock01Icon,
+  File01Icon,
+  Image01Icon,
+  InformationCircleIcon,
+  Loading03Icon,
+  Mail01Icon,
+  PauseCircleIcon,
+  Tick02Icon,
+} from "@hugeicons/core-free-icons";
 import { Badge } from "@/ui/components/badge";
 import { reviewExpiry, reviewReason, reviewTitle } from "./presentation";
-import { type JSX, useState } from "react";
+import { type JSX, type ReactNode, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { ReviewFields } from "./fields";
@@ -35,17 +44,23 @@ export const ReviewEditor = (props: Props): JSX.Element => {
   );
 };
 const ExpiredReviewItem = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
-  <div className="p-5">
-    <h2 className="text-xl font-semibold">
-      {item.status === "created" ? "Transacción creada" : "Este elemento venció"}
-    </h2>
-    <p className="mt-3 text-sm text-muted-foreground">
-      {item.status === "created"
-        ? "La transacción sigue guardada. El material original venció."
-        : "El original venció. Envía el material de nuevo para revisarlo."}
-    </p>
-  </div>
+  <section data-review="expired">
+    <ReviewItemHeading item={item} />
+    <div data-review="history" data-status={item.status}>
+      <HugeiconsIcon
+        icon={item.status === "created" ? CheckmarkCircle02Icon : Clock01Icon}
+        aria-hidden="true"
+      />
+      <h2>{item.status === "created" ? "Transacción creada" : "Este elemento venció"}</h2>
+      <p>
+        {item.status === "created"
+          ? "La transacción sigue guardada. El material original venció."
+          : "El original venció. Envía el material de nuevo para revisarlo."}
+      </p>
+    </div>
+  </section>
 );
+
 const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
   const [query] = useState(() =>
@@ -71,17 +86,20 @@ const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Ele
     setRecovery((value) => value + 1);
   };
   if (detail._tag === "Initial" || categories._tag === "Initial") {
-    return <p className="p-6 text-sm text-muted-foreground">Cargando elemento…</p>;
+    return <ReviewItemUnavailable item={item} recover={recover} loading />;
   }
   if (detail._tag !== "Ready" || categories._tag !== "Ready") {
-    return <ReviewItemFailure recover={recover} />;
+    return <ReviewItemUnavailable item={item} recover={recover} loading={false} />;
   }
   if (Option.isSome(previous) && previous.value === detail.value.data) {
-    return <RecoveringReviewItem recover={recover} />;
+    return (
+      <ReviewItemFrame item={item}>
+        <RecoveringReviewItem recover={recover} />
+      </ReviewItemFrame>
+    );
   }
   return (
-    <section className="flex min-h-0 min-w-0 flex-col p-5 lg:p-4">
-      <ReviewItemHeading item={detail.value.data.item} />
+    <ReviewItemFrame item={detail.value.data.item}>
       {[detail, categories].some((state) => Option.isSome(state.refreshFailure)) ? (
         <ReviewItemFailure recover={recover} />
       ) : null}
@@ -99,9 +117,39 @@ const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Ele
         finished={finished}
         recover={recover}
       />
-    </section>
+    </ReviewItemFrame>
   );
 };
+const ReviewItemUnavailable = ({
+  item,
+  recover,
+  loading,
+}: Readonly<{
+  item: Item;
+  recover: () => void;
+  loading: boolean;
+}>): JSX.Element => (
+  <ReviewItemFrame item={item}>
+    {loading ? (
+      <output data-review="detail-loading">
+        <HugeiconsIcon icon={Loading03Icon} aria-hidden="true" />
+        Cargando elemento…
+      </output>
+    ) : (
+      <ReviewItemFailure recover={recover} />
+    )}
+  </ReviewItemFrame>
+);
+
+const ReviewItemFrame = ({
+  item,
+  children,
+}: Readonly<{ item: Item; children: ReactNode }>): JSX.Element => (
+  <section data-review="detail">
+    <ReviewItemHeading item={item} />
+    {children}
+  </section>
+);
 const RecoveringReviewItem = ({ recover }: Readonly<{ recover: () => void }>): JSX.Element => (
   <output className="block p-5">
     <p>Actualizando la versión guardada…</p>
@@ -111,12 +159,11 @@ const RecoveringReviewItem = ({ recover }: Readonly<{ recover: () => void }>): J
   </output>
 );
 const ReviewItemFailure = ({ recover }: Readonly<{ recover: () => void }>): JSX.Element => (
-  <div className="p-5">
-    <p>No pudimos cargar todos los datos del elemento.</p>
+  <ReviewNotice text="No pudimos cargar todos los datos del elemento." error>
     <Button variant="outline" onClick={recover}>
       Reintentar
     </Button>
-  </div>
+  </ReviewNotice>
 );
 const ReadyEditor = ({
   detail,
@@ -139,18 +186,21 @@ const ReadyEditor = ({
   if (detail.item.status !== "pending") {
     return <HistoryDetail detail={detail} />;
   }
+  const failed = editor.feedback === "uncertain" || editor.feedback === "failed";
   return (
     <>
-      <div className="mt-4 grid min-h-0 min-w-0 flex-1 items-start gap-6 lg:overflow-auto xl:grid-cols-2">
+      <div data-review="columns">
         <div className="min-w-0">
           <OriginalMaterial item={detail.item} />
-          <RetryExtraction item={detail.item} suggested={editor.suggested} disabled={locked} />
         </div>
-        <div className="min-w-0">
+        <div data-review="form">
           <h2 className="sr-only">Completa la transacción</h2>
-          <p className="mb-3 rounded-xl bg-warning/35 px-4 py-2 text-sm font-medium">
-            {reviewReason(detail.item)}
-          </p>
+          <ReviewEditorNotice
+            feedback={editor.feedback}
+            creationRequired={Option.isNone(editor.creation)}
+            reason={reviewReason(detail.item)}
+            recover={recover}
+          />
           <ReviewFields
             draft={editor.draft}
             change={editor.change}
@@ -158,23 +208,38 @@ const ReadyEditor = ({
             categories={categories}
             timeZone={detail.item.timeZone}
           />
-          <EditorFeedback feedback={editor.feedback} recover={recover} />
         </div>
       </div>
-      <div className="mt-4 flex shrink-0 flex-wrap items-center justify-between gap-4 border-t pt-3 pr-16">
-        <Button variant="ghost" onClick={() => editor.act("Skip")} disabled={locked}>
-          Omitir
-        </Button>
-        <Button
-          onClick={() => editor.act("Create")}
-          disabled={locked || Option.isNone(editor.creation)}
-        >
-          Crear transacción
-        </Button>
-      </div>
+      <ReviewDraftFooter
+        feedback={
+          <>
+            <HugeiconsIcon icon={failed ? InformationCircleIcon : Tick02Icon} aria-hidden="true" />
+            <output>{failed ? "Revisión necesaria" : feedbackCopy[editor.feedback]}</output>
+          </>
+        }
+        actions={<ReviewEditorActions editor={editor} locked={locked} />}
+      />
     </>
   );
 };
+
+const ReviewEditorActions = ({
+  editor,
+  locked,
+}: Readonly<{ editor: ReturnType<typeof useReviewEditor>; locked: boolean }>): JSX.Element => (
+  <>
+    <Button variant="ghost" onClick={() => editor.act("Skip")} disabled={locked}>
+      Omitir
+    </Button>
+    <Button
+      onClick={() => editor.act("Create")}
+      disabled={locked || Option.isNone(editor.creation)}
+    >
+      Confirmar
+    </Button>
+  </>
+);
+
 const feedbackCopy = {
   saved: "Borrador guardado",
   saving: "Guardando borrador…",
@@ -191,9 +256,13 @@ const historyTitles = {
 };
 
 const HistoryDetail = ({ detail }: Readonly<{ detail: Detail }>): JSX.Element => (
-  <div className="mt-4 grid min-h-0 min-w-0 flex-1 items-start gap-6 lg:overflow-auto xl:grid-cols-2">
+  <div data-review="columns">
     <OriginalMaterial item={detail.item} />
-    <div className="rounded-2xl border p-6">
+    <div data-review="history" data-status={detail.item.status}>
+      <HugeiconsIcon
+        icon={detail.item.status === "created" ? CheckmarkCircle02Icon : PauseCircleIcon}
+        aria-hidden="true"
+      />
       <h2 className="text-xl font-medium">{historyTitles[detail.item.status]}</h2>
       <p className="mt-3 text-sm text-muted-foreground">{historyDescription(detail.item)}</p>
     </div>
@@ -202,38 +271,20 @@ const HistoryDetail = ({ detail }: Readonly<{ detail: Detail }>): JSX.Element =>
 
 const sourceIcons = { statement: File01Icon, media: Image01Icon, email: Mail01Icon };
 const ReviewItemHeading = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
-  <header className="flex shrink-0 flex-wrap items-start gap-3">
-    <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-information/60">
-      <HugeiconsIcon icon={sourceIcons[item.source]} size={22} aria-hidden="true" />
-    </span>
-    <div className="min-w-0 flex-1">
-      <h2 className="text-xl font-semibold tracking-tight">{reviewTitle(item)}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{sources[item.source]}</p>
+  <header data-review="detail-heading">
+    <div data-review="item-heading">
+      <span data-review="source-icon" data-source={item.source}>
+        <HugeiconsIcon icon={sourceIcons[item.source]} size={22} aria-hidden="true" />
+      </span>
+      <div className="min-w-0">
+        <h2>{reviewTitle(item)}</h2>
+        <p>{sources[item.source]}</p>
+      </div>
     </div>
-    <Badge variant="secondary" title={deadline(item)}>
+    <Badge variant="secondary" data-review="deadline" title={deadline(item)}>
       {reviewExpiry(item)}
     </Badge>
   </header>
-);
-
-const EditorFeedback = ({
-  feedback,
-  recover,
-}: Readonly<{ feedback: keyof typeof feedbackCopy; recover: () => void }>): JSX.Element => (
-  <>
-    <output className="mt-2 block text-xs text-muted-foreground">{feedbackCopy[feedback]}</output>
-    <p className="mt-1 text-xs text-muted-foreground">
-      Los datos que completes se registrarán como proporcionados por ti.
-    </p>
-    {feedback === "uncertain" || feedback === "failed" ? (
-      <RefreshButton
-        className="mt-4"
-        variant="outline"
-        onClick={recover}
-        label="Actualizar elemento"
-      />
-    ) : null}
-  </>
 );
 
 const historyDescription = (item: Item): string => {
@@ -242,4 +293,34 @@ const historyDescription = (item: Item): string => {
     return "La transacción ya está guardada.";
   }
   return "Selecciona este elemento y pulsa Restaurar para volver a editarlo. Su vencimiento original se conserva.";
+};
+
+const ReviewEditorNotice = ({
+  feedback,
+  creationRequired,
+  reason,
+  recover,
+}: Readonly<{
+  feedback: keyof typeof feedbackCopy;
+  creationRequired: boolean;
+  reason: string;
+  recover: () => void;
+}>): JSX.Element => {
+  if (feedback === "failed" || feedback === "uncertain") {
+    return (
+      <ReviewNotice text={feedbackCopy[feedback]} error>
+        <Button variant="outline" onClick={recover}>
+          Actualizar elemento
+        </Button>
+      </ReviewNotice>
+    );
+  }
+  if (creationRequired) {
+    return (
+      <ReviewNotice text={reason} error={false}>
+        {null}
+      </ReviewNotice>
+    );
+  }
+  return <></>;
 };

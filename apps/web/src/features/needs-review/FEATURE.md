@@ -5,7 +5,7 @@ The original is escaped text beside the form on desktop, in an expandable sectio
 phones. Media admission retains a locator/caption, not guaranteed image bytes; an unavailable
 original permits explicit manual completion only before its original deadline.
 
-Canonical query atoms own inbox, item, taxonomy and browser-only original/suggestion reads.
+Canonical query atoms own inbox, item, taxonomy and browser-only original reads.
 The authentication registry owns their lifetime. Navigation polls the complete pending count and
 refreshes on window focus. Local selection and form drafts are presentation state; a mounted,
 serialized draft queue debounces saves and flushes before individual creation or omission. Bulk skip
@@ -28,9 +28,7 @@ locator/caption 30 days. Drafts and suggestions share the immutable evidence dea
 retention erases them. Conversation routing cannot shorten or extend that purpose. Expired items
 require resubmission. Metadata remains within the existing one-year history purpose.
 
-Retry reads the installed deterministic parser and returns suggestions only. The draft owner merges
-only facts the User has not edited and autosaves the result. A missing parser or missing material
-remains an honest processing failure; it neither reports successful extraction nor drops edits.
+Initial ingestion suggestions remain available when opening a draft. There is no manual reprocessing capability.
 Reviewed captures retain the captured context and a manual SourceAttestation referencing the item.
 No receipt or email is split into multiple Transactions.
 
@@ -53,3 +51,5 @@ query state. Deadline-owned timers remove the editor and original subscriptions 
 expiry, and row previews stop displaying the expired facts. The shared time popover uses the same
 button, popover and choice controls as the calendar; it edits exact hours and minutes in 24-hour
 local time. Browser acceptance measures a warmed tab switch below 100 ms with delayed requests.
+
+The approved v4 presentation uses Confirmar for individual Transaction creation. The manual reprocessing operation and its browser control are removed; original reads, workspace refresh and uncertain-write recovery remain explicit reads.

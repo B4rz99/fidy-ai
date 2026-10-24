@@ -11,7 +11,6 @@ import {
   type ParsedStatementRow,
   ReviewCommand,
   ReviewDetail,
-  ReviewDraft,
   ReviewEditResult,
   ReviewWorkspace,
   ReviewWorkspaceQuery,
@@ -86,25 +85,6 @@ export const ReviewMaterial = Schema.Union([
 ]);
 
 export const IngestionGroup = HttpApiGroup.make("ingestion")
-  .add(
-    HttpApiEndpoint.get("getReviewSuggestions", "/ingestion/review-workspace/:id/suggestions", {
-      params: Schema.Struct({ id: NeedsReviewItemId }),
-      success: OperationResponse(ReviewDraft),
-      error: NotFound,
-    })
-      .annotate(
-        OpenApi.Description,
-        "Explicitly rerun available deterministic extraction against this browser owner's unexpired retained material. Returns suggestions only; never changes drafts or creates a Transaction. Unavailable processing remains retryable."
-      )
-      .annotateMerge(
-        operationPolicy({
-          access: webSessionOnly,
-          requiredTier: "free",
-          agentConfirmation: "not-required",
-          kind: "query",
-        })
-      )
-  )
   .add(
     HttpApiEndpoint.get("getReviewMaterial", "/ingestion/review-workspace/:id/material", {
       params: Schema.Struct({ id: NeedsReviewItemId }),

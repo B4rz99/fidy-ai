@@ -18,6 +18,7 @@ import { FinancialReference } from "./financial-reference";
 import { PatternReference } from "./pattern-reference";
 import { AccessReference } from "./access-reference";
 import { WorkspaceReference } from "./workspace-reference";
+import { ReviewReference } from "./review-reference";
 import "./reference.css";
 
 const themes = ["light", "dark", "system"] as const;
@@ -290,6 +291,7 @@ export const UIReference = (): JSX.Element => {
           <FieldReference />
         </div>
         <WorkspaceReference />
+        <ReviewReference />
         <CompactTableReference />
         <FinancialReference />
         <section

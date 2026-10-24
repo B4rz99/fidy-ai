@@ -16,7 +16,7 @@ type DateFieldProps = Readonly<{
   timeZone: string;
   disabled: boolean;
   required: boolean;
-  appearance: "field" | "filter";
+  appearance: "field" | "filter" | "review";
   onChange: (value: string) => void;
 }>;
 const localDate = (value: string, timeZone: string): Option.Option<Date> =>
@@ -32,9 +32,25 @@ const selectedDate = (date: Option.Option<Date>, timeZone: string): string =>
 const dateLabel = (value: string): string =>
   value === "" ? "Selecciona una fecha" : value.split("-").toReversed().join("-");
 
+const calendarLabel = ({
+  appearance,
+  value,
+}: Pick<DateFieldProps, "appearance" | "value">): string => {
+  if (appearance === "filter") return "Fecha";
+  if (appearance === "review" && value !== "") {
+    return new Intl.DateTimeFormat("es-CO", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(`${value}T12:00:00Z`));
+  }
+  return dateLabel(value);
+};
+
 export const CalendarField = (props: DateFieldProps): JSX.Element => {
   const [open, setOpen] = useState(false);
-  const visibleLabel = props.appearance === "filter" ? "Fecha" : dateLabel(props.value);
+  const visibleLabel = calendarLabel(props);
   const selected = Option.getOrUndefined(localDate(props.value, props.timeZone));
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -48,7 +64,7 @@ export const CalendarField = (props: DateFieldProps): JSX.Element => {
             variant="outline"
             focusAppearance="subtle"
             disabled={props.disabled}
-            className={cn(props.appearance === "field" && "w-full")}
+            className={cn(props.appearance !== "filter" && "w-full")}
           />
         }
       >

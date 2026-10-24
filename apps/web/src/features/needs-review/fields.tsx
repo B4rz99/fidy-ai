@@ -40,7 +40,7 @@ export const ReviewFields = (props: Props): JSX.Element => {
 };
 
 const ReviewFieldControls = memo((props: Props): JSX.Element => (
-  <div className="grid gap-3">
+  <div data-review="fields">
     <ReviewCounterparty {...props} />
     <div className="grid grid-cols-2 items-start gap-3">
       <div className="grid content-start gap-2.5">
@@ -79,7 +79,7 @@ const ReviewFieldControls = memo((props: Props): JSX.Element => (
       </div>
     </div>
     <ReviewOccurrence {...props} />
-    <div className="grid grid-cols-2 items-start gap-3">
+    <div data-review="classification" className="grid grid-cols-2 items-start gap-3">
       <ReviewDirection {...props} />
       <ReviewCategory {...props} />
     </div>
@@ -168,7 +168,7 @@ const ReviewOccurrence = (props: Props): JSX.Element => {
     );
   return (
     <div className="grid content-start gap-2.5">
-      <div className="grid grid-cols-[minmax(0,1fr)_9rem] gap-3">
+      <div data-review="occurrence" className="grid grid-cols-2 gap-3">
         <div className="grid content-start gap-2.5">
           <Label htmlFor="review-date">Fecha{date === "" ? " · Por confirmar" : ""}</Label>
           <CalendarField
@@ -178,7 +178,7 @@ const ReviewOccurrence = (props: Props): JSX.Element => {
             timeZone={props.timeZone}
             disabled={props.locked}
             required
-            appearance="field"
+            appearance="review"
             onChange={(next) => change(`${next}T${time || "00:00"}`)}
           />
         </div>
@@ -193,7 +193,9 @@ const ReviewOccurrence = (props: Props): JSX.Element => {
           />
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">Hora de {props.timeZone}.</p>
+      <p data-review="zone" className="text-xs text-muted-foreground">
+        Hora de {props.timeZone}.
+      </p>
     </div>
   );
 };

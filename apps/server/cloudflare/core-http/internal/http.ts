@@ -1380,7 +1380,7 @@ const reviewQueryBucket = (
   operation: string
 ): Option.Option<R2Bucket> =>
   Option.fromUndefinedOr(
-    ["ingestion.getReviewMaterial", "ingestion.getReviewSuggestions"].includes(operation)
+    operation === "ingestion.getReviewMaterial"
       ? environment.EMAIL_BUCKET
       : environment.STATEMENT_STAGING_BUCKET
   );

@@ -1,5 +1,6 @@
+import { ReviewFullState, ReviewWorkspaceLayout } from "@/ui/components/review-workspace";
+import { Button } from "@/ui/components/button";
 import { type AsyncResult, Atom } from "effect/reactivity";
-import { cn } from "@/ui/class-names";
 import { type InboxControl, useInboxControl } from "./inbox-controller";
 import { reviewTitle } from "./presentation";
 import { ReviewToolbar } from "./toolbar";
@@ -12,7 +13,7 @@ import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { ReviewEditor } from "./editor";
-import { Inbox } from "./inbox";
+import { Inbox, ReviewPagination } from "./inbox";
 import type { Workspace } from "./model";
 
 import { type Filter, ReviewNavigation } from "./view-navigation";
@@ -70,15 +71,8 @@ export const NeedsReviewFeature = ({
     router.navigate({ to: "/app/needs-review", search: { status, offset } }).catch(() => {});
   };
   return (
-    <div className="flex min-w-0 flex-col lg:h-dvh lg:overflow-hidden">
-      <WorkspaceHeader
-        title="Por revisar"
-        context={
-          <p className="mt-1 text-sm text-muted-foreground">
-            Completa lo que falta para crear tus transacciones.
-          </p>
-        }
-      >
+    <ReviewWorkspaceLayout>
+      <WorkspaceHeader title="Por revisar" context={null}>
         {null}
       </WorkspaceHeader>
       <ReviewPanel
@@ -93,7 +87,7 @@ export const NeedsReviewFeature = ({
         page={filter === "pending" ? 0 : page}
         select={select}
       />
-    </div>
+    </ReviewWorkspaceLayout>
   );
 };
 const ReviewPanel = ({
@@ -107,7 +101,7 @@ const ReviewPanel = ({
   page: number;
   select: (status: Filter, offset: number) => void;
 }>): JSX.Element => (
-  <div hidden={!active} className={cn("min-h-0 flex-1 flex-col", active ? "flex" : "hidden")}>
+  <div hidden={!active} data-review="panel">
     <ReviewResources
       key={`${filter}:${page}`}
       active={active}
@@ -140,11 +134,15 @@ const ReviewResources = ({
   );
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
-  if (state._tag === "Failure") {
-    return <ReviewReadFailure refresh={refresh} waiting={state.waiting} />;
-  }
   if (state._tag !== "Ready") {
-    return <p className="p-5 text-muted-foreground">Cargando elementos…</p>;
+    return (
+      <ReviewUnavailable
+        filter={filter}
+        select={select}
+        refresh={refresh}
+        loading={state._tag !== "Failure"}
+      />
+    );
   }
   return (
     <ReadyInbox
@@ -161,6 +159,42 @@ const ReviewResources = ({
       filter={filter}
       select={select}
     />
+  );
+};
+const ReviewUnavailable = ({
+  filter,
+  select,
+  refresh,
+  loading,
+}: Readonly<{
+  filter: Filter;
+  select: (status: Filter, offset: number) => void;
+  refresh: () => void;
+  loading: boolean;
+}>): JSX.Element => {
+  const [source, setSource] = useState("all");
+  const [search, setSearch] = useState("");
+  return (
+    <>
+      <ReviewNavigation
+        filter={filter}
+        select={select}
+        refresh={refresh}
+        count={Option.none()}
+        unavailable
+        source={source}
+        setSource={setSource}
+        search={search}
+        setSearch={setSearch}
+      />
+      <ReviewFullState
+        state={loading ? "loading" : "error"}
+        title={loading ? "Cargando elementos…" : "No pudimos cargar los elementos"}
+        description={loading ? "" : "Intenta cargar la bandeja de nuevo."}
+      >
+        {loading ? null : <Button onClick={refresh}>Reintentar</Button>}
+      </ReviewFullState>
+    </>
   );
 };
 const ReviewReadFailure = ({
@@ -202,27 +236,32 @@ const ReadyInbox = ({
   const visible = filterReviewPage({ view, source, search });
   const inbox = useInboxControl({ view, visibleItems: visible.items, refresh });
   const control = { ...inbox, locked: inbox.locked || disabled };
+  const checked = control.checked.filter((id) => visible.items.some((entry) => entry.id === id));
   return (
     <>
       {notice}
       <ReviewNavigation
+        unavailable={false}
         filter={filter}
         select={select}
-        count={view.pendingCount}
+        count={Option.some(view.pendingCount)}
         refresh={control.recover}
         source={source}
-        setSource={setSource}
+        setSource={(value) => {
+          control.clearChecked();
+          setSource(value);
+        }}
         search={search}
-        setSearch={setSearch}
-      />
-      <ReviewToolbar
-        view={visible}
-        control={{
-          ...control,
-          checked: control.checked.filter((id) => visible.items.some((entry) => entry.id === id)),
+        setSearch={(value) => {
+          control.clearChecked();
+          setSearch(value);
         }}
       />
+      <ReviewToolbar view={visible} control={{ ...control, checked }} />
       <InboxWorkspace
+        caughtUp={
+          filter === "pending" && source === "all" && search === "" && view.pendingCount === 0
+        }
         view={visible}
         control={control}
         page={page}
@@ -233,24 +272,29 @@ const ReadyInbox = ({
   );
 };
 
-const EmptyInbox = ({ pendingCount }: Readonly<{ pendingCount: number }>): JSX.Element => (
-  <div className="p-10">
-    <h2 className="text-xl font-medium">
-      {pendingCount === 0 ? "Todo al día" : "Sin elementos en esta vista"}
-    </h2>
-    <p className="mt-2 text-sm text-muted-foreground">
-      Los próximos elementos que necesiten tu ayuda aparecerán aquí.
-    </p>
-  </div>
+const EmptyInbox = ({ caughtUp }: Readonly<{ caughtUp: boolean }>): JSX.Element => (
+  <ReviewFullState
+    state="empty"
+    title={caughtUp ? "Todo al día" : "Sin elementos en esta vista"}
+    description={
+      caughtUp
+        ? "Cuando haya material por completar, aparecerá aquí."
+        : "Prueba con otros filtros para encontrar elementos en esta página."
+    }
+  >
+    {null}
+  </ReviewFullState>
 );
 
 const InboxWorkspace = ({
+  caughtUp,
   view,
   control,
   page,
   move,
   pageLength,
 }: Readonly<{
+  caughtUp: boolean;
   view: Workspace;
   control: InboxControl;
   page: number;
@@ -260,11 +304,21 @@ const InboxWorkspace = ({
   const item =
     view.items.find((candidate) => Option.contains(control.selected, candidate.id)) ??
     view.items[0];
+  if (item === undefined) {
+    return (
+      <>
+        <EmptyInbox caughtUp={caughtUp} />
+        {view.total > 0 ? (
+          <ReviewPagination page={page} pageLength={pageLength} total={view.total} move={move} />
+        ) : null}
+      </>
+    );
+  }
   return (
-    <div className="grid min-h-0 min-w-0 flex-1 lg:grid-cols-[minmax(16rem,0.75fr)_minmax(0,2fr)]">
+    <div data-review="grid">
       <Inbox
         view={view}
-        selected={Option.fromUndefinedOr(item?.id)}
+        selected={Option.some(item.id)}
         checked={control.checked}
         choose={control.choose}
         toggle={control.toggle}
@@ -272,17 +326,13 @@ const InboxWorkspace = ({
         pageLength={pageLength}
         move={move}
       />
-      {item === undefined ? (
-        <EmptyInbox pendingCount={view.pendingCount} />
-      ) : (
-        <ReviewEditor
-          key={item.id}
-          item={item}
-          finished={control.finished}
-          barrier={control.barrier}
-          disabled={control.locked}
-        />
-      )}
+      <ReviewEditor
+        key={item.id}
+        item={item}
+        finished={control.finished}
+        barrier={control.barrier}
+        disabled={control.locked}
+      />
     </div>
   );
 };

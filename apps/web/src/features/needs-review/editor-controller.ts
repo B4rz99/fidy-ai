@@ -4,14 +4,7 @@ import { Option } from "effect";
 import { useState } from "react";
 import type { FidyClient } from "@/transport/client";
 import { type ReviewWrite, makeReviewWrite } from "./command";
-import {
-  type Command,
-  type Detail,
-  type Draft,
-  creation,
-  emptyDraft,
-  mergeSuggestions,
-} from "./model";
+import { type Command, type Detail, type Draft, creation, emptyDraft } from "./model";
 
 const { toast } = await import("sonner");
 
@@ -84,7 +77,6 @@ const makeQueue = (detail: Detail, barrier: DraftBarrier): Queue => {
 type EditorController = Readonly<{
   draft: Draft;
   change: (draft: Draft) => void;
-  suggested: (draft: Draft) => void;
   act: (kind: "Create" | "Skip") => void;
   feedback: Feedback;
   locked: boolean;
@@ -176,7 +168,6 @@ export const useReviewEditor = ({
   return {
     draft,
     change,
-    suggested: (next) => change(mergeSuggestions({ draft: owner.draft, suggested: next })),
     act,
     feedback: superseded ? "failed" : feedback,
     locked: [superseded, feedback === "failed", feedback === "uncertain", acting].some(Boolean),

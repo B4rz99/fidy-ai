@@ -272,8 +272,11 @@ The real Cloudflare Queue alert received at 20:01 reports `Trigger: 0 == 0` and 
 `2026-10-24T00:57:59Z`, inside the deliberate pause. Native Workflow instances
 `operational-canary-5976010` and `operational-canary-5976011` both completed after delivery resumed;
 `operational-canary-5976012` then completed on the ordinary publication cadence. This establishes
-controlled Queue absence detection, actual alert delivery and downstream execution recovery;
-verify the corresponding delivered platform resolution separately.
+controlled Queue absence detection, actual alert delivery and downstream execution recovery.
+A subsequent real Queue Resolved email arrived at 20:11 America/Bogota, reporting
+`Trigger: 0.1 == 0` and an “Alert started” field of `2026-10-24T01:07:59Z`. This verifies
+delivered recovery after resumption. That field differs from the triggering email; treat it as
+reported message metadata, not a stable incident identifier or proof of exact incident matching.
 
 Native Workflow instance `operational-canary-5976007` completed its D1 step at
 `2026-10-24 00:35:33 UTC` (827ms wall time, Completed). The delivered missing-Workflow alert reports
@@ -283,7 +286,14 @@ be corrected before retirement. These timestamps predate the controlled pause. D
 this contradiction to sampling alone without isolating sampling, ingestion delay and evaluation-window
 behavior. A subsequent unsaved Workflow SQL draft with
 `timestamp >= CURRENT_TIMESTAMP() - INTERVAL '10' MINUTE` also failed preview with
-`RecursionLimitExceeded` (HTTP422); it was cancelled. Existing saved monitors remain enabled.
+`RecursionLimitExceeded` (HTTP422). Reducing that draft to only the Workflow dataset and
+`timestamp >= NOW() - INTERVAL '10' MINUTE` exposed a more specific HTTP422:
+`query already contains time predicates on timestamp; remove them to use time_range`.
+The dashboard editor inspected here supplies an automatic request time range but exposes no
+manual-range selector in either its SQL or builder tab. Both drafts were cancelled; no broken
+query was saved. Current API-token metadata also has no Notifications scope (the expired login's
+read returned HTTP401), so direct policy inspection/configuration needs an appropriately authorized
+Notifications credential rather than browser-session extraction. Existing saved monitors remain enabled.
 Missing/stale-owner coverage and independent owner cooldowns remain unresolved.
 
 | Signal                                                      | Interpretation                                                                          | Action                                                                            |

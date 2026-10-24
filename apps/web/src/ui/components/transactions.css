@@ -1,5 +1,7 @@
-.application-workspace:has([data-transaction-slot~="transaction-workspace"]) {
-  padding-top: 0;
+@media (min-width: 901px) {
+  .application-workspace [data-transaction-slot~="transaction-workspace"] {
+    margin-top: -90px;
+  }
 }
 @media (min-width: 1024px) {
   [data-transaction-slot~="transaction-page-header"] {

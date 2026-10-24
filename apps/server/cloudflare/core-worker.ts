@@ -72,7 +72,6 @@ type CoreEnvironment = ProviderEnvironment &
       OPERATIONAL_CANARY_QUEUE: Queue;
       OPERATIONAL_CANARY_QUEUE_NAME: string;
       OPERATIONAL_CANARY_WORKFLOW: Workflow;
-      OPERATOR_ALERT_EMAIL: string;
     }>
   > &
   Partial<SmokeEnvironment> &
@@ -179,7 +178,6 @@ const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput =>
   EMAIL_REPLACEMENT_WORKFLOW: Option.fromUndefinedOr(environment.EMAIL_REPLACEMENT_WORKFLOW),
   BILLING_COLLECTION_WORKFLOW: Option.fromUndefinedOr(environment.BILLING_COLLECTION_WORKFLOW),
   STATEMENT_EXTRACTION_WORKFLOW: Option.fromUndefinedOr(environment.STATEMENT_EXTRACTION_WORKFLOW),
-  OPERATOR_ALERT_EMAIL: Option.fromUndefinedOr(environment.OPERATOR_ALERT_EMAIL),
   RESEND_API_KEY: Option.fromUndefinedOr(environment.RESEND_API_KEY),
   WOMPI_EVENT_SECRET: Option.fromUndefinedOr(environment.WOMPI_EVENT_SECRET),
 });

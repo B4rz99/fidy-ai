@@ -1,22 +1,20 @@
 import { registeredConnectionInstitutionIds } from "../../src/shell/connections/contract";
-import { type Cause, Effect } from "effect";
+import { type Cause, Effect, Schema } from "effect";
 import { type CoreHttpEnvironment } from "./contract";
 import { it } from "@effect/vitest";
 import { afterAll, expect, vi } from "vitest";
-import { installCurrentTestObjects, isolatedTestDatabases } from "../d1-test-fixture";
+import { isolatedTestDatabases } from "../d1-test-fixture";
 import { makeCoreHttp } from "./runtime";
 import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 const database = (): Effect.Effect<D1Database, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const db = yield* Effect.tryPromise(() => databases.acquire());
-    yield* Effect.tryPromise(() =>
-      installCurrentTestObjects({ db, tables: ["operational_event_buckets"] })
-    );
-    return db;
-  });
+  Effect.tryPromise(() => databases.acquire());
+const burstLogs = (logs: ReadonlyArray<ReadonlyArray<unknown>>): ReadonlyArray<string> =>
+  logs
+    .map((call) => Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(call))
+    .filter((call) => call.includes("component=core-rejections"));
 const environment = (db: D1Database): CoreHttpEnvironment => ({
   DB: db,
   RELEASE_GIT_SHA: "0".repeat(40),
@@ -42,6 +40,7 @@ const environment = (db: D1Database): CoreHttpEnvironment => ({
 it.live("preserves actual Core callback refusals and never stores attacker request content", () =>
   Effect.gen(function* () {
     const db = yield* database();
+    const logs = vi.spyOn(console, "log").mockImplementation(() => undefined);
     yield* Effect.acquireRelease(
       Effect.sync(() => vi.spyOn(Date, "now").mockReturnValue(1_800_000)),
       (clock) => Effect.sync(() => clock.mockRestore())
@@ -69,43 +68,10 @@ it.live("preserves actual Core callback refusals and never stores attacker reque
       if (count === 0) original = body;
       expect(body).toBe(original);
     }
-    const rows = yield* Effect.tryPromise(() =>
-      db
-        .prepare(
-          "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
-        )
-        .all()
-    );
-    expect(rows.results).toHaveLength(1);
-    expect(Object.keys(rows.results[0] ?? {}).sort()).toEqual(["id", "observed_at_ms"]);
-    expect(rows.results[0]).toEqual({ id: 1, observed_at_ms: 1_800_000 });
-    yield* Effect.tryPromise(() => db.prepare("DROP TABLE operational_event_buckets").run());
-    let failedWrites = 0;
-    const failed = new Proxy(db, {
-      get(target, key, receiver): unknown {
-        if (key !== "prepare") return Reflect.get(target, key, receiver);
-        return (sql: string) => {
-          if (
-            sql.startsWith(
-              "INSERT INTO operational_event_buckets(kind,bucket_ms,count,observed_at_ms)"
-            )
-          ) {
-            failedWrites += 1;
-          }
-          return db.prepare(sql);
-        };
-      },
-    });
-    const failingCore = makeCoreHttp({
-      telemetry: cloudflareWorkerTelemetry,
-      institutions: registeredConnectionInstitutionIds,
-    });
-    for (let count = 0; count < 100; count += 1) {
-      const response = yield* Effect.tryPromise(() => failingCore(request(), environment(failed)));
-      expect(response.status).toBe(401);
-      expect(yield* Effect.tryPromise(() => response.text())).toBe(original);
-    }
-    expect(failedWrites).toBe(1);
+    const warnings = burstLogs(logs.mock.calls);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("severity=warning");
+    expect(warnings[0]).not.toContain("private-");
   })
 );
 
@@ -114,6 +80,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const db = yield* database();
+      const logs = vi.spyOn(console, "log").mockImplementation(() => undefined);
       yield* Effect.acquireRelease(
         Effect.sync(() => vi.spyOn(Date, "now").mockReturnValue(1_800_000)),
         (clock) => Effect.sync(() => clock.mockRestore())
@@ -141,28 +108,14 @@ it.live(
         expect(response.status).toBe(404);
         yield* Effect.tryPromise(() => response.text());
       }
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
-            )
-            .all()
-        )).results
-      ).toEqual([]);
+      expect(burstLogs(logs.mock.calls)).toEqual([]);
       for (let index = 0; index < 100; index += 1) {
         const response = yield* Effect.tryPromise(() => send("/providers/kapso/callback"));
         expect(response.status).toBe(422);
         yield* Effect.tryPromise(() => response.text());
       }
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
-            )
-            .all()
-        )).results
-      ).toEqual([{ id: 1, observed_at_ms: 1_800_000 }]);
+      const warnings = burstLogs(logs.mock.calls);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).not.toContain("private-");
     })
 );

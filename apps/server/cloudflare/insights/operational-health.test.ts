@@ -11,8 +11,8 @@ import {
   weeklySummaryTestUser,
 } from "../weekly-summary.test-fixture";
 import {
-  decideOperationalAlerts,
   observeOperationalHealth,
+  operationalSeverity,
 } from "../runtime/operational-health/operations";
 import { materializeWeeklySummary, observeProactivityWork } from "./operations";
 import { prepareProactivityWorkObservation } from "./internal/operational-observation";
@@ -141,16 +141,12 @@ it("observes only enabled Proactivity work and its real Workflow identities with
         failedWorkflows: 3,
         expiredUndelivered: 1,
       });
-      expect(decideOperationalAlerts(signals)).toContainEqual({
-        kind: "workflow_failure",
-        owner: "proactivity",
-        severity: "critical",
-      });
-      expect(decideOperationalAlerts(signals)).toContainEqual({
-        kind: "queue_backlog",
-        owner: "proactivityQueue",
-        severity: "warning",
-      });
+      expect(
+        signals.filter((signal) => signal.operation === "proactivity").map(operationalSeverity)
+      ).toEqual(["critical"]);
+      expect(
+        signals.filter((signal) => signal.operation === "proactivityQueue").map(operationalSeverity)
+      ).toEqual(["warning"]);
       const exported = encode(signals);
       for (const value of [
         userId,

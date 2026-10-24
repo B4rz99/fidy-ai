@@ -61,7 +61,6 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
       yield* observeRejections({
         status: response.status,
         boundary: rejectionBoundary(request),
-        db: environment.DB,
         now: yield* Clock.currentTimeMillis,
       });
       return response;

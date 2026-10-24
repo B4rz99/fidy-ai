@@ -71,11 +71,6 @@ it.skipIf(!enabled)(
                 .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<4096)
           INSERT INTO resource_admission_grants SELECT 'workers-ai-expired-'||i,?,1 FROM n`)
                 .bind(now - 90_000_000),
-              db
-                .prepare(
-                  "INSERT INTO operational_health_view(operation,state,observed_at_ms,last_succeeded_ms) VALUES ('queueExecution','healthy',?1,?1),('workflowExecution','healthy',?2,?2)"
-                )
-                .bind(now, now),
             ])
           );
           const maintenance = observeRetentionCost(db);

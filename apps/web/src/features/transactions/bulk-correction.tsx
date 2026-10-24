@@ -139,7 +139,12 @@ const BulkAmount = ({
     new Set(props.transactions.map((record) => record.money.currency)).size > 1;
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor="bulk-amount">Monto ($)</Label>
+      <Label htmlFor="bulk-amount">
+        Monto ·{" "}
+        {new Set(props.transactions.map((record) => record.money.currency)).size === 1
+          ? props.transactions[0].money.currency
+          : "Varias monedas"}
+      </Label>
       <Input
         id="bulk-amount"
         placeholder="Sin cambiar"
@@ -157,19 +162,25 @@ const BulkAmount = ({
     </div>
   );
 };
-const BulkFields = ({
-  draft,
-  onChange,
-  props,
-  locked,
-}: Readonly<{
+type BulkFieldProps = Readonly<{
   draft: BulkDraft;
   onChange: (draft: BulkDraft) => void;
   props: BulkProps;
   locked: boolean;
-}>): JSX.Element => (
-  <fieldset disabled={locked} className="flex min-w-0 flex-col gap-5">
+}>;
+const BulkFields = ({ draft, onChange, props, locked }: BulkFieldProps): JSX.Element => (
+  <fieldset disabled={locked} data-transaction-slot="transaction-bulk-fields">
     <legend className="sr-only">Cambios para las transacciones seleccionadas</legend>
+    <div className="flex flex-col gap-2">
+      <Label htmlFor="bulk-counterparty">Contraparte</Label>
+      <Input
+        id="bulk-counterparty"
+        placeholder="Sin cambiar"
+        maxLength={120}
+        value={draft.counterparty}
+        onChange={(event) => onChange({ ...draft, counterparty: event.target.value })}
+      />
+    </div>
     <div className="flex flex-col gap-2">
       <Label htmlFor="bulk-category">Categoría</Label>
       <ChoiceDropdown
@@ -218,16 +229,6 @@ const BulkTextFields = ({
   props: BulkProps;
 }>): JSX.Element => (
   <>
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="bulk-counterparty">Contraparte</Label>
-      <Input
-        id="bulk-counterparty"
-        placeholder="Sin cambiar"
-        maxLength={200}
-        value={draft.counterparty}
-        onChange={(event) => onChange({ ...draft, counterparty: event.target.value })}
-      />
-    </div>
     <BulkAmount draft={draft} onChange={onChange} props={props} />
     <div className="flex flex-col gap-2">
       <Label htmlFor="bulk-date">Fecha</Label>
@@ -247,10 +248,10 @@ const BulkTextFields = ({
     </div>
     <div className="flex flex-col gap-2">
       <Label htmlFor="bulk-notes">Notas</Label>
-      <Input
+      <textarea
         id="bulk-notes"
         placeholder="Sin cambiar"
-        maxLength={2000}
+        maxLength={500}
         value={draft.notes}
         onChange={(event) => onChange({ ...draft, notes: event.target.value })}
       />
@@ -271,6 +272,12 @@ const BulkFeedback = ({ props }: Readonly<{ props: BulkProps }>): JSX.Element =>
       </div>
     ) : null}
   </>
+);
+const BulkHeading = ({ count }: Readonly<{ count: number }>): JSX.Element => (
+  <header>
+    <h2>Editar transacciones</h2>
+    <p data-transaction-slot="transaction-panel-note">{count} transacciones seleccionadas</p>
+  </header>
 );
 /** Sends one revision-checked atomic correction and never replays an uncertain save. */
 export const BulkTransactionCorrection = (props: BulkProps): JSX.Element => {
@@ -314,18 +321,18 @@ export const BulkTransactionCorrection = (props: BulkProps): JSX.Element => {
       onSubmit={onSubmit}
       className="flex flex-col gap-5"
     >
-      <h2 className="text-xl font-semibold">Editar {observedRevisions.length} transacciones</h2>
+      <BulkHeading count={observedRevisions.length} />
+      <BulkFields draft={draft} onChange={setDraft} props={props} locked={locked} />
       <p className="text-sm text-muted-foreground">
         Los campos vacíos o sin cambiar conservan su valor en cada transacción.
       </p>
-      <BulkFields draft={draft} onChange={setDraft} props={props} locked={locked} />
       <BulkFeedback props={props} />
-      <div className="grid grid-cols-2 gap-3">
+      <div data-transaction-slot="transaction-form-actions">
         <Button variant="outline" disabled={props.status === "saving"} onClick={props.onCancel}>
           Cancelar
         </Button>
         <Button type="submit" disabled={locked}>
-          {props.status === "saving" ? "Guardando…" : "Guardar cambios"}
+          {props.status === "saving" ? "Guardando…" : "Guardar"}
         </Button>
       </div>
     </form>

@@ -90,10 +90,10 @@ test("captures a Transaction by canonical mutation and displays the confirmed re
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "+ Registrar", exact: true }).click()
       );
-      yield* Effect.tryPromise(() => page.getByLabel("Monto ($)").fill("12500"));
+      yield* Effect.tryPromise(() => page.getByLabel("Monto · COP").fill("12500"));
       yield* Effect.tryPromise(() => page.getByLabel("Contraparte (opcional)").fill("La Cocina"));
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Registrar transacción" }).click()
+        page.getByRole("button", { name: "Registrar", exact: true }).click()
       );
       yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toHaveCount(0));
       yield* Effect.tryPromise(() =>

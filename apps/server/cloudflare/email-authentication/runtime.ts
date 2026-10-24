@@ -19,7 +19,6 @@ import {
   workTraceParent,
   workerRelease,
 } from "../runtime/telemetry/operations";
-import { captureWorkflowFailure } from "../runtime/operational-health/operations";
 import {
   dispatchBrowserPairingEmail as dispatchPairing,
   receiveBrowserPairingEmail as receivePairing,
@@ -57,23 +56,20 @@ export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure({
-      work: observeWorkerPromise(
-        () =>
-          runPairing({
-            environment: withErasureRecovery(this.env),
-            payload: event.payload,
-            activity: (name, options, activity) => step.do(name, options, activity),
-          }),
-        {
-          environment: workerRelease(this.env),
-          telemetry: cloudflareWorkerTelemetry,
-          operation: "workflow.browserPairingEmail",
-          parent: workTraceParent(event.payload),
-        }
-      ),
-      db: withErasureRecovery(this.env).DB,
-    });
+    return observeWorkerPromise(
+      () =>
+        runPairing({
+          environment: withErasureRecovery(this.env),
+          payload: event.payload,
+          activity: (name, options, activity) => step.do(name, options, activity),
+        }),
+      {
+        environment: workerRelease(this.env),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.browserPairingEmail",
+        parent: workTraceParent(event.payload),
+      }
+    );
   }
 }
 /** Offer bounded EmailReplacement intents; a missed Queue offer remains durably recoverable. */
@@ -99,23 +95,20 @@ export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure({
-      work: observeWorkerPromise(
-        () =>
-          runReplacement({
-            environment: withErasureRecovery(this.env),
-            payload: event.payload,
-            activity: (name, options, activity) => step.do(name, options, activity),
-          }),
-        {
-          environment: workerRelease(this.env),
-          telemetry: cloudflareWorkerTelemetry,
-          operation: "workflow.emailReplacement",
-          parent: workTraceParent(event.payload),
-        }
-      ),
-      db: withErasureRecovery(this.env).DB,
-    });
+    return observeWorkerPromise(
+      () =>
+        runReplacement({
+          environment: withErasureRecovery(this.env),
+          payload: event.payload,
+          activity: (name, options, activity) => step.do(name, options, activity),
+        }),
+      {
+        environment: workerRelease(this.env),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.emailReplacement",
+        parent: workTraceParent(event.payload),
+      }
+    );
   }
 }
 

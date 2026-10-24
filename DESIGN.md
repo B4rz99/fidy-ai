@@ -690,6 +690,14 @@ Provider waiting, consent loading/refusal, one-time recovery and WhatsApp associ
 remain real additional states using the same access surface, pending separate visual review if
 further composition changes are requested.
 
+### Approved Transactions composition (24 October 2026)
+
+Library `libfile_a81df1bfa6788191b330de877fc0bbb7` v4 owns the approved Transactions composition. `ui/components/transactions.tsx` and its scoped CSS own the card layout, controls, contextual rail and type toggle; `/ui-reference.html` includes these controls. The feature retains canonical queries, local filters, continuation, revision-checked corrections and atomic batches. Category and Type keep the original ledger-wide grid/subgrid and 600/481/400px thresholds.
+
+The rail replaces the summary while editing. Below 1050px the active panel takes the content area, preserving application navigation. It has nonmodal dialog semantics, focus entry/return and Escape dismissal unless a write is locked. Manual capture offers optional Category (automatic assignment by default) and Notes; Counterparty is bounded to 120 characters and Notes to 500. COP, local-day semantics, per-Currency Money and uncertain-write recovery remain owned by the existing contracts. Manual creation says “Registrar”; editing save actions say “Guardar”; deletion confirms “Eliminar” and retains irreversibility and source-retention disclosure. Shell and theme remain owned by the coordinated Dashboard change.
+
+The approved v4 Transactions `.danger` treatment is an explicit exception to the generic destructive-fill rule above: both the action opening deletion review and its final “Eliminar” confirmation use transparent fill, the approved neutral line border and readable red text in light/Grafito, with the existing visible keyboard focus. This exception is scoped to `ui/components/transactions.css`; other destructive flows keep the shared destructive variant.
+
 ## Approved Dashboard and application navigation
 
 The separately approved Dashboard reference is Library `libfile_3810ef5dde2481918fb3b0700d74cf8e` version 5. Its fictitious amounts are composition examples, never application data. The application shell uses the original wordmark, supplied tití and pastel ceiba PNG in the sidebar, Hugeicons outline navigation, and `Logout02Icon` for functional logout. Mobile retains the assistant in the header beside theme and hides its trigger while the compact menu is open. The shared `theme.ts` adapter follows the system until a schema-validated manual `fidy-theme-v1` choice; access and authenticated views use the same preference.

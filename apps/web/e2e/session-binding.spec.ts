@@ -81,7 +81,7 @@ test("rejects stale cross-tab drafts and logout", ({ page, context, request }) =
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "+ Registrar", exact: true }).click()
       );
-      yield* Effect.tryPromise(() => page.getByLabel("Monto ($)").fill("12345"));
+      yield* Effect.tryPromise(() => page.getByLabel("Monto · COP").fill("12345"));
       yield* Effect.tryPromise(() =>
         page.getByLabel("Contraparte (opcional)").fill("Old session private draft")
       );
@@ -101,7 +101,7 @@ test("rejects stale cross-tab drafts and logout", ({ page, context, request }) =
           response.url() === `${apiOrigin}/transactions` && response.request().method() === "POST"
       );
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Registrar transacción" }).click()
+        page.getByRole("button", { name: "Registrar", exact: true }).click()
       );
       expect((yield* Effect.tryPromise(() => mutation)).status()).toBe(unauthorizedStatus);
       yield* Effect.tryPromise(() =>

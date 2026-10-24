@@ -28,7 +28,7 @@ import {
 } from "@/ui/components/table";
 import { cn } from "@/ui/class-names";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowDown01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, ArrowRight01Icon, PencilIcon } from "@hugeicons/core-free-icons";
 import { RecordToolbar } from "@/ui/components/workspace-layout";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { CategoryVisual } from "@/ui/components/category-visual";
@@ -58,6 +58,7 @@ type LedgerProps = Readonly<{
     active: boolean;
     ids: ReadonlyArray<string>;
     onToggle: (id: string) => void;
+    onContinue: () => void;
     limit: number;
   }>;
 }>;
@@ -334,6 +335,7 @@ const LedgerControls = ({
     <div className="ledger-actions contents">
       {readOnly ? null : (
         <Button variant="outline" disabled={disabled || empty} onClick={onEdit}>
+          <HugeiconsIcon icon={PencilIcon} size={16} strokeWidth={1.5} aria-hidden="true" />
           {selecting ? "Cancelar selección" : "Editar varias"}
         </Button>
       )}
@@ -399,6 +401,26 @@ const EmptyLedger = ({
     <p className="mt-2 text-sm text-muted-foreground">{emptyDescription(partial, readOnly)}</p>
   </div>
 );
+const SelectionBar = ({
+  selection,
+  disabled,
+}: Pick<LedgerProps, "selection" | "disabled">): JSX.Element => (
+  <>
+    {selection.active ? (
+      <div data-transaction-slot="transaction-selection-bar">
+        <span aria-live="polite">{selection.ids.length} seleccionadas</span>
+        <Button
+          variant="outline"
+          aria-label="Editar selección de transacciones"
+          disabled={disabled || selection.ids.length === 0}
+          onClick={selection.onContinue}
+        >
+          Editar selección
+        </Button>
+      </div>
+    ) : null}
+  </>
+);
 /** A date-grouped ledger; sorting preserves dates as the primary grouping key. */
 export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element => {
   const [visibility, setVisibility] = useState({});
@@ -435,6 +457,7 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
         selecting={props.selection.active}
         readOnly={props.readOnly}
       />
+      <SelectionBar selection={props.selection} disabled={props.disabled} />
       {rows.length === 0 ? (
         <EmptyLedger partial={props.partial} readOnly={props.readOnly} />
       ) : (

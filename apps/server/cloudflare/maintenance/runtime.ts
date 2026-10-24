@@ -298,7 +298,6 @@ export const runCoreMaintenance = (
           "audit.retention",
           makeAuditRetention({ database: environment.DB }).sweep(nowEpochMs)
         ),
-        activity("operational.events.retention", platform.retainEventBuckets(nowEpochMs)),
         activity("recovery.retention", sweepRecoveryEvidence({ db: environment.DB, nowEpochMs })),
         activity("operational.canary.publish", platform.publishCanary(nowEpochMs)),
         ...emailActivities(environment),

@@ -1,7 +1,7 @@
 import { Option } from "effect";
 import type { JSX } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon, Delete02Icon } from "@hugeicons/core-free-icons";
 import { CategoryVisual } from "@/ui/components/category-visual";
 import { Button } from "@/ui/components/button";
 import type { FidyClient } from "@/transport/client";
@@ -74,23 +74,44 @@ const DetailIdentity = ({
 }: DetailProps): JSX.Element => {
   const row = detailRow({ transaction, categories, locale, timeZone });
   return (
-    <div className="flex items-start gap-5 border-b pb-8">
-      <CategoryVisual label={row.categoryLabel} bubble large />
+    <div data-transaction-slot="transaction-detail-identity">
+      <CategoryVisual label={row.categoryLabel} bubble large={false} />
       <div className="min-w-0">
         <p className="text-lg font-semibold">{row.counterpartyLabel}</p>
-        <p className="mt-1 text-3xl font-semibold tabular-nums">{row.moneyText}</p>
-        <p className="mt-1 text-sm text-muted-foreground">{row.dateLabel}</p>
+
+        <p className="text-sm text-muted-foreground">
+          {row.dateLabel} · {transaction.money.currency}
+        </p>
       </div>
     </div>
   );
 };
+const DetailDeleteAction = ({ props }: Readonly<{ props: DetailProps }>): JSX.Element => (
+  <>
+    {props.editable && props.mode._tag !== "Deleting" ? (
+      <Button
+        variant="outline"
+        data-transaction-slot="transaction-danger"
+        disabled={
+          props.mode._tag === "Editing" &&
+          props.mode.status !== "idle" &&
+          props.mode.status !== "invalid"
+        }
+        onClick={() => props.onMode({ _tag: "Deleting", status: "idle" })}
+      >
+        <HugeiconsIcon icon={Delete02Icon} size={20} aria-hidden="true" />
+        Eliminar transacción
+      </Button>
+    ) : null}
+  </>
+);
 const DetailFrame = ({
   props,
   children,
 }: Readonly<{ props: DetailProps; children: JSX.Element }>): JSX.Element => (
   <section aria-label="Detalle de transacción" className="flex flex-col gap-6">
     <header className="flex items-center justify-between gap-3">
-      <h2 className="text-lg font-semibold">Detalle de la transacción</h2>
+      <h2>{props.mode._tag === "Deleting" ? "Eliminar transacción" : "Detalle de transacción"}</h2>
       <Button
         size="sm"
         variant="ghost"
@@ -106,20 +127,11 @@ const DetailFrame = ({
       </Button>
     </header>
     <DetailIdentity {...props} />
-    {children}
-    {props.editable && props.mode._tag !== "Deleting" ? (
-      <Button
-        variant="destructive"
-        disabled={
-          props.mode._tag === "Editing" &&
-          props.mode.status !== "idle" &&
-          props.mode.status !== "invalid"
-        }
-        onClick={() => props.onMode({ _tag: "Deleting", status: "idle" })}
-      >
-        Eliminar transacción
-      </Button>
+    {props.mode._tag === "Deleting" || props.mode._tag === "Viewing" ? (
+      <p data-transaction-slot="transaction-detail-value">{detailRow(props).moneyText}</p>
     ) : null}
+    {children}
+    <DetailDeleteAction props={props} />
   </section>
 );
 export const TransactionDetail = (props: DetailProps): JSX.Element => {

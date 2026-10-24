@@ -18,6 +18,7 @@ import { FinancialReference } from "./financial-reference";
 import { PatternReference } from "./pattern-reference";
 import { DashboardReference } from "./dashboard-reference";
 import { AccessReference } from "./access-reference";
+import { TransactionsReference } from "./transactions-reference";
 import { WorkspaceReference } from "./workspace-reference";
 import { ReviewReference } from "./review-reference";
 import "./reference.css";
@@ -315,6 +316,7 @@ export const UIReference = (): JSX.Element => {
         </div>
         <WorkspaceReference />
         <ReviewReference />
+        <TransactionsReference />
         <DashboardReference />
         <CompactTableReference />
         <FinancialReference />

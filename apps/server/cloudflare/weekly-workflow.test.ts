@@ -702,7 +702,7 @@ it("four unavailable due Users do not starve a healthy fifth User's generation",
     })
   ));
 
-it("an exhausted Proactivity Workflow step records one metadata-only failure and preserves rejection", () =>
+it("an exhausted Proactivity Workflow step reports a metadata-only failure and preserves rejection", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* weeklySummaryDatabaseAt(weeklySummaryTestNow);
@@ -713,7 +713,7 @@ it("an exhausted Proactivity Workflow step records one metadata-only failure and
         unavailableUserIds: [],
       });
       const original = new Error("private-financial-failure-sentinel");
-      const logs = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
       const step: WorkflowStep = {
         do: () => Promise.reject(original),
         sleep: unexpected,
@@ -732,13 +732,6 @@ it("an exhausted Proactivity Workflow step records one metadata-only failure and
           )
       );
       expect(outcome).toHaveProperty("cause", original);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT kind,count FROM operational_event_buckets").all()
-        )
-      ).toMatchObject({
-        results: [{ kind: "workflow_failure", count: 1 }],
-      });
       const exported = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
         logs.mock.calls
       );

@@ -35,7 +35,6 @@ const cadenceMinutes: Partial<Record<ScheduledOperation, number>> = {
   "ingestion.reviewDraftExpiry": 60,
   "ingestion.statementReconcile": 5,
   "ingestion.statementDispatch": 5,
-  "operational.events.retention": 60,
   "audit.retention": 1_440,
   "recovery.retention": 1_440,
   "forwarded-email.sweep": 60,

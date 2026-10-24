@@ -1,5 +1,4 @@
 import { sweepReviewDrafts as sweepDrafts } from "./internal/review-retention";
-import { withErasureRecovery } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
@@ -17,7 +16,6 @@ import {
   workTraceParent,
   workerRelease,
 } from "../runtime/telemetry/operations";
-import { captureWorkflowFailure } from "../runtime/operational-health/operations";
 import {
   dispatchForwardedEmail as dispatchEmail,
   emailCrypto,
@@ -90,23 +88,20 @@ export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure({
-      work: observeWorkerPromise(
-        () =>
-          runStatementExtractionWorkflow({
-            payload: event.payload,
-            coordinator: this.env.USER_TRANSACTION_COORDINATOR,
-            activity: (name, options, run) => step.do(name, options, run),
-          }),
-        {
-          environment: workerRelease(this.env),
-          telemetry: cloudflareWorkerTelemetry,
-          operation: "workflow.statementExtraction",
-          parent: workTraceParent(event.payload),
-        }
-      ),
-      db: withErasureRecovery(this.env).DB,
-    });
+    return observeWorkerPromise(
+      () =>
+        runStatementExtractionWorkflow({
+          payload: event.payload,
+          coordinator: this.env.USER_TRANSACTION_COORDINATOR,
+          activity: (name, options, run) => step.do(name, options, run),
+        }),
+      {
+        environment: workerRelease(this.env),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.statementExtraction",
+        parent: workTraceParent(event.payload),
+      }
+    );
   }
 }
 

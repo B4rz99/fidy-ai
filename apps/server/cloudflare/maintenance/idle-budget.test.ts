@@ -30,14 +30,6 @@ it(
           monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
           sleep: (duration) => live.sleep(duration),
         };
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "INSERT INTO operational_health_view(operation,state,observed_at_ms,last_succeeded_ms) VALUES ('queueExecution','healthy',?1,?1),('workflowExecution','healthy',?2,?2)"
-            )
-            .bind(current, current)
-            .run()
-        );
         const measured = observeRetentionCost(db);
         const guarded = maintenancePerformanceDatabase({ db: measured.database, bucket });
         let queueOffers = 0;
@@ -46,13 +38,7 @@ it(
         const queue: Queue = {
           send: () => {
             queueOffers++;
-            return db
-              .prepare(
-                "UPDATE operational_health_view SET last_succeeded_ms=? WHERE last_succeeded_ms IS NOT NULL"
-              )
-              .bind(current)
-              .run()
-              .then(() => ({ metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } }));
+            return Promise.resolve({ metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } });
           },
           sendBatch: unexpected,
           metrics: () => Promise.resolve({ backlogCount: 0, backlogBytes: 0 }),
@@ -90,10 +76,7 @@ it(
           yield* tick;
         }
         const total = measured.cost();
-        // Account for two downstream canary executions (up to four indexed writes each).
-        const canaryWrites = (queueOffers - warmOffers) * 8;
-        const dailyWrites =
-          (total.rowsWritten - warm.rowsWritten + canaryWrites) * 24 + warm.rowsWritten;
+        const dailyWrites = (total.rowsWritten - warm.rowsWritten) * 24 + warm.rowsWritten;
         expect(dailyWrites).toBeLessThan(10_000);
         expect((total.rowsRead - warm.rowsRead) * 24 + warm.rowsRead).toBeLessThan(750_000);
         expect(queueOffers - warmOffers).toBe(12);

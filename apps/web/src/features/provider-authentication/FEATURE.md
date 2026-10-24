@@ -15,7 +15,7 @@ lifetime. Private browser proof, verified OIDC and exact originating-chat approv
 completion unit. An unfinished attempt may restart only in the same private browser and original
 lifetime; uncertainty cannot replay completion. Expired protocol metadata has a one-day retention
 limit and associated invitations participate in credential erasure. Migration
-`0002_whatsapp_signup_invitations.sql` expands the existing baseline without rebuilding data tables.
+The single `0001_schema.sql` baseline includes invitation constraints and erasure fences. Existing databases retain the applied invitation migration receipt; baseline consolidation does not replay it.
 
 Current evidence is local, not a deployed claim. The revised candidate passed all 172 native
 authentication/Consent checks (including 26 focused native linking checks), 256 web unit checks and

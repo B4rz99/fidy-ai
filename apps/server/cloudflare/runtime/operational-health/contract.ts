@@ -5,15 +5,6 @@ export const CanaryPayload = Schema.Struct({
   sentAtMs: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 export type CanaryPayload = typeof CanaryPayload.Type;
-export type CanaryHealth = Readonly<{
-  component: "capability";
-  operation: "queueExecution" | "workflowExecution";
-}> &
-  (
-    | Readonly<{ state: "unavailable" }>
-    | Readonly<{ state: "healthy" | "attention"; lastSucceededMs: number }>
-  );
-
 export const WorkKind = Schema.Literals([
   "browserPairing",
   "emailReplacement",
@@ -94,154 +85,9 @@ export type OperationalHealthEnvironment = Readonly<{
   workQueues: Partial<Record<QueueKind, Pick<Queue, "metrics">>>;
 }>;
 
-export type AlertSignal =
-  | OperationalSignal
-  | EventMetricSignal
-  | CanaryHealth
-  | CapabilityProbe
-  | CoreRejectionSignal;
+export type AlertSignal = OperationalSignal | CapabilityProbe;
 
-/** Alert coordinates are finite kind/owner pairs; invalid cross-products cannot be delivered. */
-const anyOwner = Schema.Literals([
-  "browserPairing",
-  "emailReplacement",
-  "billing",
-  "statement",
-  "forwardedEmail",
-  "proactivity",
-  "whatsapp",
-  "deadLetters",
-  "retention",
-  "browserPairingQueue",
-  "emailReplacementQueue",
-  "billingQueue",
-  "statementQueue",
-  "forwardedEmailQueue",
-  "whatsappQueue",
-  "proactivityQueue",
-  "workerExceptions",
-  "resourceLimits",
-  "callbackRejections",
-  "workflowFailures",
-  "coreRejectionBursts",
-  "queueExecution",
-  "workflowExecution",
-  "d1",
-  "requiredBindings",
-  "coordination",
-  "providerConfig",
-]);
-const severity = Schema.Literals(["warning", "critical"]);
-const workOwner = Schema.Literals([
-  "browserPairing",
-  "emailReplacement",
-  "billing",
-  "statement",
-  "forwardedEmail",
-  "proactivity",
-]);
-const emailProofOwner = Schema.Literals(["browserPairing", "emailReplacement"]);
-const workflowOwner = Schema.Literals([
-  "browserPairing",
-  "emailReplacement",
-  "billing",
-  "statement",
-  "workflowFailures",
-  "proactivity",
-]);
-const queueOwner = Schema.Literals([
-  "browserPairingQueue",
-  "emailReplacementQueue",
-  "billingQueue",
-  "statementQueue",
-  "forwardedEmailQueue",
-  "whatsappQueue",
-  "proactivityQueue",
-]);
-export const OperationalAlert = Schema.Union([
-  Schema.Struct({
-    kind: Schema.Literal("core_rejection_burst"),
-    owner: Schema.Literal("coreRejectionBursts"),
-    severity: Schema.Literal("warning"),
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("pending_work"),
-    owner: Schema.Union([workOwner, Schema.Literal("whatsapp")]),
-    severity,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("dead_letters"),
-    owner: Schema.Literal("deadLetters"),
-    severity,
-  }),
-  Schema.Struct({ kind: Schema.Literal("workflow_failure"), owner: workflowOwner, severity }),
-  Schema.Struct({ kind: Schema.Literal("rejected_email_work"), owner: emailProofOwner, severity }),
-  Schema.Struct({
-    kind: Schema.Literal("whatsapp_delivery"),
-    owner: Schema.Literal("whatsapp"),
-    severity,
-  }),
-  Schema.Struct({ kind: Schema.Literal("inspection_unavailable"), owner: anyOwner, severity }),
-  Schema.Struct({
-    kind: Schema.Literal("retention_lag"),
-    owner: Schema.Literal("retention"),
-    severity,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("worker_exception"),
-    owner: Schema.Literal("workerExceptions"),
-    severity,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("resource_limit"),
-    owner: Schema.Literal("resourceLimits"),
-    severity,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("callback_rejection"),
-    owner: Schema.Literal("callbackRejections"),
-    severity,
-  }),
-  Schema.Struct({ kind: Schema.Literal("queue_backlog"), owner: queueOwner, severity }),
-  Schema.Struct({
-    kind: Schema.Literal("capability_unusable"),
-    owner: Schema.Literals(["queueExecution", "workflowExecution"]),
-    severity,
-  }),
-]);
-export type OperationalAlert = typeof OperationalAlert.Type;
-
-export type OperationalAlertDelivery = Readonly<{
-  outage: Option.Option<
-    Readonly<{
-      bucket: R2Bucket;
-      release: string;
-      inspection: "healthy" | "unavailable" | "unknown";
-    }>
-  >;
-  db: D1Database;
-  now: number;
-  alerts: ReadonlyArray<OperationalAlert>;
-  signal: AbortSignal;
-  send: (
-    alert: OperationalAlert,
-    idempotencyKey: string,
-    delivery: Readonly<{
-      signal: AbortSignal;
-      phase: "firing" | "resolved";
-      release: Option.Option<string>;
-    }>
-  ) => Promise<void>;
-}>;
-
-export type EventMetricSignal = Readonly<{
-  component: "workflow-execution";
-  operation: "workflowFailures";
-}> &
-  (
-    | Readonly<{ state: "unavailable" }>
-    | Readonly<{ state: "healthy" | "attention"; recentCount: number; fiveMinuteCount: number }>
-  );
+export type OperationalSeverity = "none" | "warning" | "critical";
 
 export const coordinatorProbeName = "operational-health-probe";
 
@@ -249,13 +95,6 @@ export type CapabilityProbe = Readonly<{
   component: "capability";
   operation: "d1" | "requiredBindings" | "coordination" | "providerConfig";
   state: "healthy" | "unavailable";
-}>;
-
-/** Recorded concentrated bursts only; healthy does not establish complete attack detection. */
-export type CoreRejectionSignal = Readonly<{
-  component: "core-rejections";
-  operation: "coreRejectionBursts";
-  state: "healthy" | "attention" | "unavailable";
 }>;
 
 /** Selected by the owning adapter, never accepted from request headers or tool arguments. */

@@ -22,7 +22,6 @@ import {
   type OutboundHttpService,
   makeKapsoOutboundHttp,
 } from "../../src/shell/outbound-http/operations";
-import { captureWorkflowFailure } from "../runtime/operational-health/operations";
 import {
   captureTraceHeaders,
   captureWorkTrace,
@@ -420,24 +419,21 @@ export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
   ProactivityDeliveryWork
 > {
   run(event: WorkflowEvent<ProactivityDeliveryWork>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure({
-      db: withErasureRecovery(this.env).DB,
-      work: observeWorkerPromise(
-        () =>
-          runProactivityWorkflow({
-            coordinator: this.env.USER_TRANSACTION_COORDINATOR,
-            payload: event.payload,
-            step,
-            environment: withErasureRecovery(this.env),
-          }),
-        {
-          environment: workerRelease(this.env),
-          telemetry: cloudflareWorkerTelemetry,
-          operation: "workflow.proactivityDelivery",
-          parent: workTraceParent(event.payload),
-        }
-      ),
-    });
+    return observeWorkerPromise(
+      () =>
+        runProactivityWorkflow({
+          coordinator: this.env.USER_TRANSACTION_COORDINATOR,
+          payload: event.payload,
+          step,
+          environment: withErasureRecovery(this.env),
+        }),
+      {
+        environment: workerRelease(this.env),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.proactivityDelivery",
+        parent: workTraceParent(event.payload),
+      }
+    );
   }
 }
 

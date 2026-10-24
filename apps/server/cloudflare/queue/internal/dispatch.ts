@@ -180,9 +180,7 @@ const receiveCanaryBatch = ({
       return yield* deliveryFailure(new Error("Operational canary unavailable"));
     }
     const now = yield* Clock.currentTimeMillis;
-    return yield* nativeDelivery(() =>
-      receiveCanary({ DB: environment.DB, workflow, payload: message.body, now })
-    );
+    return yield* nativeDelivery(() => receiveCanary({ workflow, payload: message.body, now }));
   });
 
 const receiveBillingQueue = ({

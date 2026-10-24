@@ -818,6 +818,11 @@ describe("native2025 residency integration", () => {
       Effect.runPromise(
         Effect.gen(function* () {
           const harness = yield* fixture(["read"]);
+          const logs = vi.spyOn(console, "log").mockImplementation(() => undefined);
+          const warnings = (): ReadonlyArray<string> =>
+            logs.mock.calls
+              .map((call) => Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(call))
+              .filter((call) => call.includes("component=core-rejections"));
           vi.spyOn(Date, "now").mockReturnValue(harness.current);
           let calls = 0;
           const refusal = yield* Schema.encodeEffect(Schema.fromJsonString(UserActionRequired))(
@@ -904,15 +909,7 @@ describe("native2025 residency integration", () => {
             );
             expect(listing.status).toBe(200);
             yield* wait(() => listing.text());
-            expect(
-              (yield* wait(() =>
-                harness.db
-                  .prepare(
-                    "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
-                  )
-                  .all()
-              )).results
-            ).toEqual([]);
+            expect(warnings()).toEqual([]);
             const final = yield* native(tool("refused-last", "budgets.listBudgets"), session);
             expect(final.status).toBe(200);
             const reply = yield* wait(() => decodeResponseJson(final));
@@ -923,15 +920,9 @@ describe("native2025 residency integration", () => {
             expect(codes).toEqual(new Set(["user_action_required", "rate_limited"]));
             expect(calls).toBeGreaterThan(0);
             expect(calls).toBeLessThan(100);
-            expect(
-              (yield* wait(() =>
-                harness.db
-                  .prepare(
-                    "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
-                  )
-                  .all()
-              )).results
-            ).toEqual([{ id: 1, observed_at_ms: Math.floor(harness.current / 60000) * 60000 }]);
+            expect(warnings()).toHaveLength(1);
+            expect(warnings()[0]).not.toContain(userId);
+            expect(warnings()[0]).not.toContain(credentialId);
           } finally {
             yield* module.dispose();
           }

@@ -1,0 +1,14 @@
+apps/web/src/ui/components/calendar-field.tsx
+  h_c6d49c804e0ad2 35-46,48-52,71-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9f6d66726f7ad28918f06e88fea995cd7345cdb3",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

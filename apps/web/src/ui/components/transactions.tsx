@@ -42,6 +42,8 @@ export const TransactionTypeToggle = ({
   </fieldset>
 );
 
+const noRestoreFocus = Option.none<HTMLElement>();
+
 export const TransactionContextPanel = ({
   children,
   active,
@@ -57,7 +59,7 @@ export const TransactionContextPanel = ({
   onClose: () => void;
   title: string;
 }>): JSX.Element => {
-  const restoreFocus = useRef(Option.none<HTMLElement>());
+  const restoreFocus = useRef(noRestoreFocus);
   const focusPanel = useCallback<RefCallback<HTMLDivElement>>(
     (node): void => {
       if (node === null) return;
@@ -68,7 +70,7 @@ export const TransactionContextPanel = ({
         node.focus({ preventScroll: true });
       } else {
         Option.map(restoreFocus.current, (element) => element.focus({ preventScroll: true }));
-        restoreFocus.current = Option.none();
+        restoreFocus.current = noRestoreFocus;
       }
     },
     [active]

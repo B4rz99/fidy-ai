@@ -486,27 +486,31 @@ const bulkSelection = (
   panel: TransactionPanel,
   onPanel: (panel: TransactionPanel) => void,
   transactions: ReadonlyArray<Transaction>
-): React.ComponentProps<typeof TransactionLedger>["selection"] => ({
-  active: panel._tag === "Bulk",
-  ids: bulkIds(panel),
-  limit: maximumAtomicBatchCalls,
-  onContinue: () => {
-    if (panel._tag === "Bulk" && panel.stage === "selecting") {
-      beginBulkEditing(
-        transactions.filter((record) => panel.ids.includes(record.id)),
-        onPanel
-      );
-    }
-  },
-  onToggle: (id) => {
-    if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
-    if (panel.ids.includes(id)) {
-      onPanel({ ...panel, ids: panel.ids.filter((item) => item !== id) });
-    } else if (panel.ids.length < maximumAtomicBatchCalls) {
-      onPanel({ ...panel, ids: [...panel.ids, id] });
-    }
-  },
-});
+): React.ComponentProps<typeof TransactionLedger>["selection"] => {
+  const ids = bulkIds(panel);
+  const selected = new Set(ids);
+  return {
+    active: panel._tag === "Bulk",
+    ids,
+    limit: maximumAtomicBatchCalls,
+    onContinue: () => {
+      if (panel._tag === "Bulk" && panel.stage === "selecting") {
+        beginBulkEditing(
+          transactions.filter((record) => selected.has(record.id)),
+          onPanel
+        );
+      }
+    },
+    onToggle: (id) => {
+      if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
+      if (selected.has(id)) {
+        onPanel({ ...panel, ids: panel.ids.filter((item) => item !== id) });
+      } else if (panel.ids.length < maximumAtomicBatchCalls) {
+        onPanel({ ...panel, ids: [...panel.ids, id] });
+      }
+    },
+  };
+};
 const panelTitle = (panel: TransactionPanel): string => {
   if (panel._tag === "Summary") return "Resumen";
   if (panel._tag === "Capture") return "Registrar transacción";

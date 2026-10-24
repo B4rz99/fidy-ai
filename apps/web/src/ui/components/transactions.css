@@ -1060,9 +1060,34 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
 }
 
 [data-transaction-slot~="transaction-search-toolbar"] input:not(:disabled),
-[data-transaction-slot~="transaction-search-toolbar"] button:not(:disabled),
-[data-transaction-slot~="transaction-workspace"] .ledger-actions button:not(:disabled),
-[data-transaction-slot~="transaction-workspace"] #transaction-type-filter:not(:disabled) {
+[data-transaction-slot~="transaction-search-toolbar"]
+  button:not(
+    :disabled,
+    :hover,
+    :active,
+    :focus-visible,
+    [aria-expanded="true"],
+    [aria-pressed="true"]
+  ),
+[data-transaction-slot~="transaction-workspace"]
+  .ledger-actions
+  button:not(
+    :disabled,
+    :hover,
+    :active,
+    :focus-visible,
+    [aria-expanded="true"],
+    [aria-pressed="true"]
+  ),
+[data-transaction-slot~="transaction-workspace"]
+  #transaction-type-filter:not(
+    :disabled,
+    :hover,
+    :active,
+    :focus-visible,
+    [aria-expanded="true"],
+    [aria-pressed="true"]
+  ) {
   background: light-dark(var(--fidy-background-surface), #202020);
 }
 [data-transaction-slot~="transaction-workspace"] .transaction-ledger > div:first-child {

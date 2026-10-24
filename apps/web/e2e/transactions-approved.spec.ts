@@ -462,3 +462,39 @@ for (const dark of [false, true]) {
   test(`flat workspace preserves disabled controls in ${dark ? "dark" : "light"}`, ({ page }) =>
     Effect.runPromise(flatDisabledJourney(page, dark)));
 }
+
+const flatInteractionJourney = (page: Page, dark: boolean): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.emulateMedia({ colorScheme: dark ? "dark" : "light" }));
+    yield* installWorkspace(page);
+    yield* wait(() => page.goto("/app/transactions"));
+    const edit = page.getByRole("button", { name: "Editar varias", exact: true });
+    yield* wait(() => edit.hover());
+    yield* wait(() =>
+      expect(edit).toHaveCSS("background-color", dark ? "rgb(46, 46, 46)" : "rgb(242, 236, 230)")
+    );
+    yield* wait(() => page.mouse.down());
+    yield* wait(() =>
+      expect(edit).toHaveCSS("background-color", dark ? "rgb(56, 56, 56)" : "rgb(232, 222, 213)")
+    );
+    yield* wait(() => page.mouse.move(0, 0));
+    yield* wait(() => page.mouse.up());
+    const sort = page.getByRole("button", { name: "Ordenar transacciones: Ordenar", exact: true });
+    yield* wait(() => sort.click());
+    yield* wait(() => page.mouse.move(0, 0));
+    yield* wait(() => expect(sort).toHaveAttribute("aria-expanded", "true"));
+    yield* wait(() =>
+      expect(sort).toHaveCSS("background-color", dark ? "rgb(56, 56, 56)" : "rgb(232, 222, 213)")
+    );
+    yield* wait(() => page.keyboard.press("Escape"));
+    yield* wait(() => page.keyboard.press("Tab"));
+    yield* wait(() => sort.focus());
+    yield* wait(() =>
+      expect(sort).toHaveCSS("background-color", dark ? "rgb(46, 46, 46)" : "rgb(250, 227, 217)")
+    );
+  });
+for (const dark of [false, true]) {
+  test(`flat workspace preserves control hover, pressed, expanded and keyboard focus in ${dark ? "dark" : "light"}`, ({
+    page,
+  }) => Effect.runPromise(flatInteractionJourney(page, dark)));
+}

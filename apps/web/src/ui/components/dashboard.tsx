@@ -152,12 +152,8 @@ export const DashboardRecentList = ({
 }: Readonly<{ groups: ReadonlyArray<DashboardRecentGroup> }>): JSX.Element => (
   <div className="dashboard-recent-scroll" aria-label="Transacciones del Widget">
     <div className="dashboard-recent-grid">
-      {groups.map((group, index) => (
-        <section
-          key={`${group.date}-${index}`}
-          className="dashboard-recent-group"
-          aria-label={group.date}
-        >
+      {groups.map((group) => (
+        <section key={group.date} className="dashboard-recent-group" aria-label={group.date}>
           <div className="dashboard-recent-date">{group.date}</div>
           {group.rows.map((row) => (
             <RecentRow row={row} key={row.id} />

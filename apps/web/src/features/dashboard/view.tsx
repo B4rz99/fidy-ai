@@ -142,22 +142,22 @@ const currencyChartData = (
   currency: string
 ): ReadonlyArray<CurrencyChartDatum> => {
   const zero = BigDecimal.make(0n, 0);
-  const values = data.buckets
-    .filter(
-      (bucket) =>
-        bucket.key.kind !== "category" ||
-        bucket.moneyGroups.some(
-          (group) => group.currency === currency && BigDecimal.isPositive(group.outflow.amount)
-        )
-    )
-    .map((bucket) => {
-      const group = bucket.moneyGroups.find((candidate) => candidate.currency === currency);
-      return {
+  const values = data.buckets.flatMap((bucket) => {
+    const group = bucket.moneyGroups.find((candidate) => candidate.currency === currency);
+    if (
+      bucket.key.kind === "category" &&
+      (group === undefined || !BigDecimal.isPositive(group.outflow.amount))
+    ) {
+      return [];
+    }
+    return [
+      {
         label: bucketLabel(bucket.key),
         outflowExact: group === undefined ? "0" : moneyDecimalText(group.outflow),
         outflowAmount: group?.outflow.amount ?? zero,
-      };
-    });
+      },
+    ];
+  });
   const geometry = moneySeriesGeometry(values.map(({ outflowAmount }) => outflowAmount));
   return values.map(({ outflowAmount: _outflow, ...value }, index) => ({
     ...value,

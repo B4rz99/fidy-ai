@@ -17,6 +17,7 @@ import { BudgetBalance, BudgetMeter } from "@/ui/components/budget-meter";
 import { FinancialReference } from "./financial-reference";
 import { PatternReference } from "./pattern-reference";
 import { AccessReference } from "./access-reference";
+import { TransactionsReference } from "./transactions-reference";
 import { WorkspaceReference } from "./workspace-reference";
 import "./reference.css";
 
@@ -290,6 +291,7 @@ export const UIReference = (): JSX.Element => {
           <FieldReference />
         </div>
         <WorkspaceReference />
+        <TransactionsReference />
         <CompactTableReference />
         <FinancialReference />
         <section

@@ -1,5 +1,4 @@
 import { RefreshButton } from "@/ui/components/refresh-button";
-import { Disclosure } from "@/ui/components/disclosure";
 import { useAtomSet } from "@effect/atom-react";
 import { BigDecimal, DateTime, Option } from "effect";
 import { useState } from "react";
@@ -14,8 +13,6 @@ import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import type { Category, Transaction } from "./presentation";
 
 import { CalendarField } from "@/ui/components/calendar-field";
-import { CategoryVisual } from "@/ui/components/category-visual";
-import { DirectionIndicator } from "@/ui/components/icon-indicator";
 import type { CorrectionStatus } from "./panel-state";
 
 type CorrectionDraft = Readonly<{
@@ -95,15 +92,17 @@ const correctionChanges = (
 const DraftInputs = ({
   draft,
   timeZone,
+  currency,
   onChange,
 }: Readonly<{
   draft: CorrectionDraft;
   timeZone: string;
+  currency: Transaction["money"]["currency"];
   onChange: (draft: CorrectionDraft) => void;
 }>): JSX.Element => (
   <>
     <div className="flex flex-col gap-2">
-      <Label htmlFor="correction-amount">Monto ($)</Label>
+      <Label htmlFor="correction-amount">Monto · {currency}</Label>
       <Input
         id="correction-amount"
         required
@@ -144,15 +143,7 @@ const DraftCategory = ({
       label="Categoría"
       width="full"
       disabled={false}
-      leading={
-        <span className="transaction-dropdown-visual" aria-hidden="true">
-          <CategoryVisual
-            label={categories.find((category) => category.id === draft.categoryId)?.label ?? ""}
-            bubble
-            large={false}
-          />
-        </span>
-      }
+      leading={null}
       value={draft.categoryId}
       options={categories.map((category) => ({ value: category.id, label: category.label }))}
       onChange={(categoryId) => onChange({ ...draft, categoryId })}
@@ -173,7 +164,7 @@ const DraftDescription = ({
       <Label htmlFor="correction-counterparty">Contraparte</Label>
       <Input
         id="correction-counterparty"
-        maxLength={200}
+        maxLength={120}
         value={draft.counterparty}
         onChange={(event) => onChange({ ...draft, counterparty: event.target.value })}
       />
@@ -187,11 +178,7 @@ const DraftDescription = ({
         label="Tipo"
         width="full"
         disabled={false}
-        leading={
-          <span className="transaction-dropdown-visual" aria-hidden="true">
-            <DirectionIndicator inflow={draft.direction === "inflow"} />
-          </span>
-        }
+        leading={null}
         value={draft.direction}
         options={[
           { value: "outflow", label: "Gasto" },
@@ -213,9 +200,10 @@ const DraftNotes = ({
 }>): JSX.Element => (
   <div className="flex flex-col gap-2">
     <Label htmlFor="correction-notes">Notas (opcional)</Label>
-    <Input
+    <textarea
       id="correction-notes"
-      maxLength={2000}
+      placeholder="Añadir una nota"
+      maxLength={500}
       value={draft.notes}
       onChange={(event) => onChange({ ...draft, notes: event.target.value })}
     />
@@ -251,19 +239,6 @@ const CorrectionFeedback = ({
     ) : null}
   </>
 );
-const OptionalNotes = ({
-  draft,
-  onChange,
-}: Readonly<{
-  draft: CorrectionDraft;
-  onChange: (draft: CorrectionDraft) => void;
-}>): JSX.Element => (
-  <Disclosure title="Notas (opcional)">
-    <div className="pt-2">
-      <DraftNotes draft={draft} onChange={onChange} />
-    </div>
-  </Disclosure>
-);
 const CorrectionActions = ({
   status,
   locked,
@@ -273,12 +248,12 @@ const CorrectionActions = ({
   locked: boolean;
   onCancel: () => void;
 }>): JSX.Element => (
-  <div className="grid grid-cols-2 gap-3">
+  <div data-transaction-slot="transaction-form-actions">
     <Button type="button" variant="outline" disabled={status === "saving"} onClick={onCancel}>
       Cancelar
     </Button>
     <Button type="submit" disabled={locked}>
-      {status === "saving" ? "Guardando…" : "Guardar cambios"}
+      {status === "saving" ? "Guardando…" : "Guardar"}
     </Button>
   </div>
 );
@@ -313,17 +288,16 @@ export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
   };
   return props.renderForm(
     <form aria-label="Corregir transacción" onSubmit={onSubmit} className="flex flex-col gap-5">
-      <div>
-        <h3 className="text-xl font-semibold">Corregir transacción</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Corrige esta transacción sin crear otra.
-        </p>
-      </div>
-      <fieldset disabled={locked} className="flex min-w-0 flex-col gap-5">
+      <fieldset disabled={locked} data-transaction-slot="transaction-correction-fields">
         <legend className="sr-only">Datos de la transacción</legend>
         <DraftDescription draft={draft} categories={props.categories} onChange={setDraft} />
-        <DraftInputs draft={draft} timeZone={props.timeZone} onChange={setDraft} />
-        <OptionalNotes draft={draft} onChange={setDraft} />
+        <DraftInputs
+          draft={draft}
+          timeZone={props.timeZone}
+          currency={props.transaction.money.currency}
+          onChange={setDraft}
+        />
+        <DraftNotes draft={draft} onChange={setDraft} />
       </fieldset>
       <CorrectionFeedback status={status} onRefresh={props.onRefresh} />
       <CorrectionActions status={status} locked={locked} onCancel={props.onCancel} />

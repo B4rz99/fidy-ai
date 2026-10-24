@@ -93,15 +93,13 @@ test("mobile deletion waits for confirmation and locks the selected Transaction 
         page.getByRole("button", { name: "Eliminar transacción", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Eliminar definitivamente", exact: true }).click()
+        page.getByRole("button", { name: "Eliminar", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Eliminando transacción…", { exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(
-          page.getByRole("button", { name: "Eliminar definitivamente", exact: true })
-        ).toBeDisabled()
+        expect(page.getByRole("button", { name: "Eliminar", exact: true })).toBeDisabled()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Cerrar detalle", exact: true })).toBeDisabled()
@@ -137,7 +135,7 @@ for (const outcome of ["rejected", "uncertain"] as const) {
       Effect.gen(function* () {
         const { fixture } = yield* installDeletion(page, outcome);
         yield* Effect.tryPromise(() =>
-          page.getByRole("button", { name: "Eliminar definitivamente", exact: true }).click()
+          page.getByRole("button", { name: "Eliminar", exact: true }).click()
         );
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("alert")).toContainText(
@@ -153,9 +151,7 @@ for (const outcome of ["rejected", "uncertain"] as const) {
           expect(page.getByText("private-provider-detail")).toHaveCount(0)
         );
         yield* Effect.tryPromise(() =>
-          expect(
-            page.getByRole("button", { name: "Eliminar definitivamente", exact: true })
-          ).toHaveCount(0)
+          expect(page.getByRole("button", { name: "Eliminar", exact: true })).toHaveCount(0)
         );
         yield* Effect.tryPromise(() =>
           page.getByRole("button", { name: "Actualizar transacciones", exact: true }).last().click()

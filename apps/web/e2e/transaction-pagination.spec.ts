@@ -7,6 +7,7 @@ const { expect, test } = playwright;
 test.describe.configure({ mode: "parallel" });
 const category = { id: "24000000-0000-4000-8000-000000000242", label: "Restaurantes" };
 const pageSize = 100;
+const scrollToEnd = 100_000;
 const unauthorized = 401;
 const multiplePages = pageSize * 2 + 1;
 const wait = Effect.tryPromise;
@@ -156,12 +157,11 @@ test("pauses automatic continuation while a capture draft is open", ({ page }) =
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       yield* wait(() => page.goto("/app/transactions"));
       yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
-      yield* wait(() => page.getByLabel("Monto ($)", { exact: true }).fill("123"));
+      yield* wait(() => page.getByLabel("Monto · COP", { exact: true }).fill("123"));
       yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
-      yield* wait(() => expect(page.getByLabel("Monto ($)", { exact: true })).toHaveValue("123"));
+      yield* wait(() => expect(page.getByLabel("Monto · COP", { exact: true })).toHaveValue("123"));
       expect(fixture.requests).toHaveLength(1);
       yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
-      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
           beyondPage
@@ -182,9 +182,6 @@ test("browses beyond 100 Transactions and discloses loaded filter and summary sc
         expect(
           page.getByText("Filtros y resumen aplican a las transacciones cargadas.")
         ).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Buscar", exact: true }).click()
       );
       yield* Effect.tryPromise(() => page.getByLabel("Buscar transacciones").fill("Registro 101"));
       yield* Effect.tryPromise(() =>
@@ -314,7 +311,13 @@ test("refresh clears selection and ignores the old pending continuation", ({ pag
       yield* wait(() =>
         page.getByRole("checkbox", { name: "Seleccionar Registro 1", exact: true }).click()
       );
-      yield* wait(() => expect(page.getByText("1 seleccionadas", { exact: true })).toBeVisible());
+      yield* wait(() =>
+        expect(
+          page
+            .getByRole("region", { name: "Selección de transacciones" })
+            .getByText("1 seleccionadas", { exact: true })
+        ).toBeVisible()
+      );
       yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
       yield* wait(() => expect.poll(pendingReceived(fixture)).toBe(true));
       yield* wait(() =>
@@ -389,15 +392,19 @@ test("saving a later Transaction resets pages and reloads its correction without
           .getByRole("button", { name: `Ver transacción ${last.counterparty}`, exact: true })
           .click()
       );
-      yield* wait(() => page.getByLabel("Monto ($)", { exact: true }).fill("0.02"));
-      yield* wait(() => page.getByRole("button", { name: "Guardar cambios", exact: true }).click());
+      yield* wait(() => page.getByLabel("Monto · USD", { exact: true }).fill("0.02"));
+      fixture.mode = "hold";
+      yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
       yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
           pageSize
         )
       );
-      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => page.mouse.wheel(0, scrollToEnd));
+      yield* wait(() => expect.poll(pendingReceived(fixture)).toBe(true));
+      fixture.mode = "ready";
+      yield* wait(() => completePending(fixture));
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
           beyondPage
@@ -408,7 +415,9 @@ test("saving a later Transaction resets pages and reloads its correction without
           .getByRole("button", { name: `Ver transacción ${last.counterparty}`, exact: true })
           .click()
       );
-      yield* wait(() => expect(page.getByLabel("Monto ($)", { exact: true })).toHaveValue("0.02"));
+      yield* wait(() =>
+        expect(page.getByLabel("Monto · USD", { exact: true })).toHaveValue("0.02")
+      );
     })
   ));
 

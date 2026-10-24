@@ -239,33 +239,78 @@ test("recent Transactions retain ten canonical entries grouped by local date wit
     })
   ));
 
+const personalizedBudgetTitle = "Mi presupuesto personal de gastos mensuales";
+const personalizedBudgetView = {
+  title: "Tablero de prueba",
+  context: {
+    serviceMarket: "CO",
+    locale: "es-CO",
+    timeZone: "America/Bogota",
+    calculatedAt: "2026-10-24T12:00:00Z",
+  },
+  layout: {
+    kind: "leaf",
+    widget: {
+      widget: {
+        id: "24000000-0000-4000-8000-000000000698",
+        type: "budget-bar",
+        title: personalizedBudgetTitle,
+        categoryId: "10000000-0000-4000-8000-000000000001",
+        currency: "COP",
+      },
+      result: {
+        availability: "available",
+        appliedPeriod: {
+          requested: "this-month",
+          from: "2026-10-01T05:00:00Z",
+          toExclusive: "2026-11-01T05:00:00Z",
+          timeZone: "America/Bogota",
+        },
+        category: { id: "10000000-0000-4000-8000-000000000001", label: "Restaurantes" },
+        currency: "COP",
+        cap: { amount: "100", currency: "COP" },
+        spent: { amount: "25", currency: "COP" },
+        status: { type: "under", remaining: { amount: "75", currency: "COP" } },
+      },
+    },
+  },
+};
+const installPersonalizedBudget = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise(() => installUser(page));
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/dashboard/view`, (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: response(personalizedBudgetView),
+      })
+    )
+  );
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/dashboard/catalog`, (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: response([]),
+      })
+    )
+  );
+});
+
 test("long personalized Widget titles remain clear of the currency badge and edit controls on mobile", ({
   page,
-  request,
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() =>
-        request.post("http://127.0.0.1:4175/dashboard/reset?dashboard=true")
-      );
+      const title = personalizedBudgetTitle;
       yield* Effect.tryPromise(() => page.setViewportSize(mobileViewport));
-      yield* Effect.tryPromise(() => signInDashboardThroughCore({ page, request }));
-      yield* Effect.tryPromise(() => page.clock.resume());
+      yield* installPersonalizedBudget(page);
       yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Personalizar", exact: true }).click()
-      );
-      yield* Effect.tryPromise(() =>
-        page
-          .getByRole("button", { name: "Renombrar Presupuesto de restaurantes", exact: true })
-          .click()
-      );
-      const title = "Mi presupuesto personal de gastos mensuales";
-      yield* Effect.tryPromise(() => page.getByLabel("Nuevo nombre del Widget").fill(title));
-      yield* Effect.tryPromise(() => page.getByLabel("Guardar nombre del Widget").click());
       const heading = page.getByRole("heading", { name: title, exact: true });
       const card = page.locator("[data-slot=card]").filter({ has: heading });
       const currency = card.getByText("COP", { exact: true });
+      yield* expectSeparateControls([heading, currency]);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Personalizar", exact: true }).click()
+      );
       const remove = page.getByRole("button", { name: `Eliminar ${title}`, exact: true });
       yield* expectSeparateControls([heading, currency, remove]);
       yield* Effect.tryPromise(() =>

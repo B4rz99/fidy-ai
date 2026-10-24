@@ -147,6 +147,11 @@
 .application-workspace:not(:has(.dashboard-surface)) {
   padding-top: 90px;
 }
+@media (min-width: 1024px) {
+  .application-workspace:not(:has(.dashboard-surface)) .lg\:h-dvh {
+    height: calc(100dvh - 90px);
+  }
+}
 .application-theme-control {
   position: absolute;
   z-index: 40;

@@ -1,7 +1,7 @@
 import { type PlatformMaintenanceInput, PlatformMaintenanceUnavailable } from "./contract";
 import { deepStrictEqual } from "node:assert";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Exit, FileSystem, Logger, Option } from "effect";
+import { Clock, Effect, Exit, FileSystem, Logger, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, expect, vi } from "vitest";
 import { Miniflare } from "miniflare";
@@ -138,6 +138,15 @@ it.effect(
       );
       expect(logs).toEqual(
         expect.arrayContaining([
+          [
+            {
+              component: "inspection-coverage",
+              operation: "ownerInspections",
+              state: "complete",
+              message:
+                "fidy.operational component=inspection-coverage operation=ownerInspections state=complete",
+            },
+          ],
           [
             {
               component: "capability",
@@ -343,6 +352,8 @@ it.effect(
         dump: unavailable,
       };
       const bodies: string[] = [];
+      const logs: Array<unknown> = [];
+      const loggers = new Set([Logger.make<unknown, void>(({ message }) => logs.push(message))]);
       const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((request, init) =>
         new Request(request, init).text().then((body) => {
           bodies.push(body);
@@ -359,9 +370,25 @@ it.effect(
           })
         )
           .inspectHealth()
-          .pipe(Effect.andThen(TestClock.adjust("1 millis")), Effect.ignore);
+          .pipe(
+            Effect.provideService(Logger.CurrentLoggers, loggers),
+            Effect.andThen(TestClock.adjust("1 millis")),
+            Effect.ignore
+          );
       try {
         yield* inspect(unavailableDb);
+        expect(logs).toContainEqual([
+          {
+            component: "inspection-coverage",
+            operation: "ownerInspections",
+            state: "incomplete",
+            message:
+              "fidy.operational component=inspection-coverage operation=ownerInspections state=incomplete",
+          },
+        ]);
+        expect(
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(logs)
+        ).not.toContain("private platform diagnostic");
         yield* inspect(db);
         expect(bodies.filter((body) => body.includes(" / d1 "))).toHaveLength(1);
 

@@ -1,0 +1,33 @@
+apps/web/e2e/budgets.spec.ts
+  h_c6d49c804e0ad2 104-106,114,282,370,384,405,506-573
+DESIGN.md
+  h_c6d49c804e0ad2 708-717
+apps/web/src/features/budgets/editor.tsx
+  h_c6d49c804e0ad2 1-7,22,35,166,182,185-186,188,203-212,220,223,225-236,239-265
+apps/web/src/ui/budgets-reference.tsx
+  h_c6d49c804e0ad2 1-135
+apps/web/src/features/budgets/row.tsx
+  h_c6d49c804e0ad2 2,7-8,39-40,56,77,114,116,128,136-137
+apps/web/src/features/budgets/workspace.tsx
+  h_c6d49c804e0ad2 3,9,16-23,57-85,90-95,143,155,167,170,180-209,230,246,256-258,275-276,286,333,372-375,378-379,382,404,406,430
+apps/web/src/features/budgets/summary.tsx
+  h_c6d49c804e0ad2 26-27,36-41,45,64,90,92,97-99,106,108,110-112,115
+apps/web/src/ui/components/budgets.css
+  h_c6d49c804e0ad2 1-519
+  h_c6d49c804e0ad2 520-526
+apps/web/src/ui/components/budgets.tsx
+  h_c6d49c804e0ad2 1-140
+apps/web/src/ui/reference.tsx
+  h_c6d49c804e0ad2 23,320
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2a8275d203c5d6797d575cf6f8ceb0a68c351235",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

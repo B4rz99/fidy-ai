@@ -1,0 +1,83 @@
+SECURITY_STANDARDS.md
+  s_6d017cc65783af::t_795163ac6431e2 165,192-203,207-211
+apps/server/ARCHITECTURE.md
+  s_6d017cc65783af::t_5204b290024816 91-98
+apps/server/cloudflare/browser-acceptance-whatsapp.ts
+  s_6d017cc65783af::t_205858e4b5b69b 157-173,184,198-199
+apps/server/cloudflare/browser-login/internal/erasure.ts
+  s_6d017cc65783af::t_2bce269e6c998f 13
+apps/server/cloudflare/identity/operations.ts
+  s_6d017cc65783af::t_604f2816a046f8 6-11,110-125
+apps/server/cloudflare/migrations/0002_whatsapp_signup_invitations.sql
+  s_6d017cc65783af::t_6d7717286ae737 1-105
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_6d017cc65783af::t_0b3b4d0a8b7049 1-4,50,133-139,148-190,192-222
+apps/server/cloudflare/provider-authentication/internal/completion.ts
+  s_6d017cc65783af::t_8d844fae9c4442 4-7,10-11,15-19,34,43-46,49,53,80-131,147,172,234-235,240,244-245,254-303,318,331,337-350
+apps/server/cloudflare/provider-authentication/internal/erasure.ts
+  s_6d017cc65783af::t_894624dda3e277 67-87
+apps/server/cloudflare/provider-authentication/internal/start.ts
+  s_6d017cc65783af::t_87cdf96318f9ce 120,126,136-138,144-150,152-153,164-165,170-194,218-224,226,241
+apps/server/cloudflare/provider-authentication/internal/status.ts
+  s_6d017cc65783af::t_39cb036d15880a 1,14,17,20-123,157-164,167,201
+apps/server/cloudflare/provider-authentication/internal/whatsapp-handoff.ts
+  s_6d017cc65783af::t_0075d1d677d9ef 190,202,204-213,215,217-219,223,225-244,246,248-249,258-265,288-337,343-344,352-360,362
+apps/server/cloudflare/provider-authentication/invitation-migration.test.ts
+  s_6d017cc65783af::t_71d6984c2d69f2 1-74
+apps/server/cloudflare/provider-authentication/journey.test-fixture.ts
+  s_6d017cc65783af::t_9521f1f94b6751 12,109
+apps/server/cloudflare/provider-authentication/legacy-disclosure.test-fixture.ts
+  s_6d017cc65783af::t_4bdea0d9272946 1-198
+apps/server/cloudflare/provider-authentication/runtime.ts
+  s_6d017cc65783af::t_9c55af49a78be6 44-48
+apps/server/cloudflare/provider-authentication/whatsapp-association.test.ts
+  s_6d017cc65783af::t_b23cf5d69b9d00 1-2,12,108-109,113,169,174,378,425-440,443-446,697,716-725
+apps/server/cloudflare/provider-authentication/whatsapp-link-signup.test.ts
+  s_6d017cc65783af::t_63f0cbe9a92ed7 1-778
+apps/server/cloudflare/provider-authentication/whatsapp-provider.test-fixture.ts
+  s_6d017cc65783af::t_81b4c09dd930e4 1-74
+apps/server/cloudflare/provider-authentication/whatsapp-sent-history.test.ts
+  s_6d017cc65783af::t_9bbdef98c94ecc 1,7,52
+apps/server/cloudflare/provider-authentication/whatsapp.test.ts
+  s_6d017cc65783af::t_026ffc8a0c5f92 1,9,169-171,173,245-247,330-332,334,408-410,483-485,520
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  s_6d017cc65783af::t_09bc92f6760a2b 291-295
+apps/server/src/shell/provider-authentication/contract.ts
+  s_6d017cc65783af::t_2cef7ef3e1fc69 34-45,47,64-68,103,130
+apps/web/ARCHITECTURE.md
+  s_6d017cc65783af::t_e282cd5a7352b2 133-135,298-312
+apps/web/e2e/00-google-authentication.spec.ts
+  s_6d017cc65783af::t_850a2be84c835a 13,80-85
+apps/web/e2e/microsoft-authentication.spec.ts
+  s_6d017cc65783af::t_0bd02fc0e3fa3a 7,39-44
+apps/web/e2e/provider-authentication.journeys.ts
+  s_6d017cc65783af::t_0d4eb28214732a 12,521-526,544,552-553,555,563,565-566,569-586,600,602-605,629-640,1000-1005,1104-1222
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_6d017cc65783af::t_267e8d8b32db98 3-48
+apps/web/src/features/provider-authentication/controller.ts
+  s_6d017cc65783af::t_1af30f10ee5e19 12-18,28-29,55,69-70,90-95,101,109-110,117,126-141,143-146,149-151,184-186,206,211,215-216,219-244,248-253,257-282,297,301,304-307,309,315-320,335-336,341-350,353-358,361,377,401-432,447,449-451,455-456,475,479,484-489
+apps/web/src/features/provider-authentication/feature.tsx
+  s_6d017cc65783af::t_c3569d9e2d6f3a 76,81,154-175,187-190,200,217-239
+docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.md
+  s_6d017cc65783af::t_4ed38ef0a90bf7 5,11-12,24-34
+docs/adr/0020-mandatory-verified-email-authentication-and-recovery.md
+  s_6d017cc65783af::t_2202f825f307f5 5,121-132
+tools/depcruise/boundaries.mjs
+  s_6d017cc65783af::t_621d04380199a4 65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "47462302ce06b7c712cf2147965b33d0a7561b69",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

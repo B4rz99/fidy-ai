@@ -5,7 +5,13 @@ import { useRouter } from "@tanstack/react-router";
 import { AsyncResult } from "effect/reactivity";
 import { type JSX, type ReactNode, useState } from "react";
 import { Button } from "@/ui/components/button";
-import { AccessAction, AccessBack, AccessHeading, AccessMethodIcon } from "@/ui/components/access";
+import {
+  AccessAction,
+  AccessBack,
+  AccessConsent,
+  AccessHeading,
+  AccessMethodIcon,
+} from "@/ui/components/access";
 import { closeProviderReturn, useProviderAuthentication } from "./controller";
 
 const canContinue = (intent: "signup" | "login", accepted: boolean, ready: boolean): boolean =>
@@ -24,7 +30,7 @@ const ConsentNotice = ({
   const disclosure = useAtomValue(query);
   const refresh = useAtomRefresh(query);
   return (
-    <>
+    <div data-access-consent="">
       {AsyncResult.match(disclosure, {
         onInitial: () => <p>Cargando información de Consentimiento…</p>,
         onFailure: () => (
@@ -36,31 +42,14 @@ const ConsentNotice = ({
           </>
         ),
         onSuccess: ({ value }) => (
-          <>
-            <p className="text-sm">
-              {value.text}
-              <br />
-              <a
-                className="underline"
-                href={value.policy.publicUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Política de privacidad
-              </a>
-            </p>
-            <label className="flex gap-2">
-              <input
-                type="checkbox"
-                checked={accepted}
-                onChange={(event) => setAccepted(event.target.checked)}
-              />
-              Acepto el tratamiento de datos descrito
-            </label>
-          </>
+          <AccessConsent
+            accepted={accepted}
+            onAcceptedChange={setAccepted}
+            policyUrl={value.policy.publicUrl}
+          />
         ),
       })}
-    </>
+    </div>
   );
 };
 type EditingFormProps = Readonly<{
@@ -225,6 +214,40 @@ const ProviderBack = ({
     <AccessBack onClick={authentication.restart} />
   );
 
+const ProviderIntroduction = ({
+  intent,
+  webSignup,
+  status,
+}: Readonly<{
+  intent: "signup" | "login";
+  webSignup: boolean;
+  status: Authentication["state"]["status"];
+}>): JSX.Element => {
+  const router = useRouter();
+  const confirmingIdentity = router.state.location.search.resume !== undefined;
+  const confirmingToken = router.state.location.search.resume === "pat";
+  return (
+    <>
+      <AccessHeading key={status}>
+        {confirmingIdentity ? "Confirma tu identidad" : headingForIntent(intent)}
+      </AccessHeading>
+      <p data-access-intro="">
+        {webSignup ? "Elige cómo crear tu cuenta." : "Elige cómo iniciar sesión."}
+      </p>
+      {confirmingToken && (
+        <p>
+          Usa la misma cuenta para volver a crear el token con el formulario que ya completaste.
+        </p>
+      )}
+      {confirmingToken && (
+        <a href="/settings/access?resume=pat" className="underline">
+          Volver al token
+        </a>
+      )}
+    </>
+  );
+};
+
 const ProviderAuthenticationView = ({
   handoffReference,
   children,
@@ -236,27 +259,18 @@ const ProviderAuthenticationView = ({
 }>): JSX.Element => {
   const router = useRouter();
   const confirmingIdentity = router.state.location.search.resume !== undefined;
-  const confirmingToken = router.state.location.search.resume === "pat";
   const [intent, setIntent] = useState<"signup" | "login">(
     Option.isSome(handoffReference) && !confirmingIdentity ? "signup" : "login"
   );
+  const webSignup = intent === "signup" && Option.isNone(handoffReference);
   return (
-    <div data-access-principal="">
+    <div data-access-principal="" data-access-signup={webSignup ? "" : undefined}>
       <ProviderBack authentication={authentication} />
-      <AccessHeading key={authentication.state.status}>
-        {confirmingIdentity ? "Confirma tu identidad" : headingForIntent(intent)}
-      </AccessHeading>
-      <p data-access-intro="">Elige cómo iniciar sesión.</p>
-      {confirmingToken && (
-        <p>
-          Usa la misma cuenta para volver a crear el token con el formulario que ya completaste.
-        </p>
-      )}
-      {confirmingToken && (
-        <a href="/settings/access?resume=pat" className="underline">
-          Volver al token
-        </a>
-      )}
+      <ProviderIntroduction
+        intent={intent}
+        webSignup={webSignup}
+        status={authentication.state.status}
+      />
       {authentication.state.status === "editing" ? (
         <EditingForm
           handoffReference={handoffReference}

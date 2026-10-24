@@ -386,8 +386,8 @@ const staleRecoverySessionJourney = Effect.fn(function* (
 const expectSignupNotice = Effect.fn(function* (page: Page) {
   yield* Effect.tryPromise(() =>
     expect(
-      page.getByText("Fidy usa tus datos para proteger tu cuenta y organizar tus finanzas.", {
-        exact: false,
+      page.getByRole("checkbox", {
+        name: "Acepto el tratamiento de datos descrito en la Política de privacidad.",
       })
     ).toBeVisible()
   );

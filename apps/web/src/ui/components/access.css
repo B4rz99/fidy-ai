@@ -9,6 +9,7 @@
   font-family: var(--fidy-font-family);
   --access-muted: var(--fidy-text-muted);
   --access-line: var(--fidy-border-decorative-divider);
+  --access-provider-border: light-dark(#c0b7ae, #5b5b55);
 }
 [data-access-root].dark {
   color-scheme: dark;
@@ -153,7 +154,7 @@
   display: flex;
   width: 100%;
   min-height: 56px;
-  border: 1px solid light-dark(#c0b7ae, #5b5b55);
+  border: 1px solid var(--access-provider-border);
   border-radius: 12px;
   background: light-dark(#ffffffc7, #202020a8);
   box-shadow: 0 3px 0 #14141406;
@@ -500,6 +501,81 @@
   color: var(--fidy-button-disabled-foreground);
   border-color: var(--fidy-button-disabled-border);
   opacity: 1;
+}
+
+[data-access-signup] [data-access-intro] {
+  margin-bottom: 0;
+}
+[data-access-consent] {
+  margin: 26px 0 24px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--access-muted);
+}
+[data-access-root] [data-access-consent-check] {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+}
+[data-access-consent-check] input {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  margin: 2px 0 0;
+  border: 1.5px solid light-dark(#8b8278, #8a8a80);
+  border-radius: 6px;
+  background: var(--fidy-background-surface);
+  cursor: pointer;
+  position: relative;
+}
+[data-access-consent-check] input:checked {
+  background: var(--fidy-lime);
+  border-color: var(--fidy-lime);
+}
+[data-access-consent-check] input:checked::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 4px;
+  border-left: 2px solid var(--fidy-ink);
+  border-bottom: 2px solid var(--fidy-ink);
+  transform: rotate(-45deg);
+  top: 5px;
+  left: 4px;
+}
+[data-access-consent-check] a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: inherit;
+}
+[data-access-consent-check] :focus-visible {
+  outline: 2px solid var(--fidy-focus-ring-color);
+  outline-offset: 4px;
+}
+[data-access-root] [data-access-signup] [data-access-action="provider"]:disabled {
+  opacity: 0.58;
+  background: transparent;
+  color: inherit;
+  border-color: var(--access-provider-border);
+  box-shadow: none;
+}
+[data-access-signup] [data-access-join] {
+  margin-top: 28px;
+  font-size: 13px;
+  line-height: normal;
+}
+[data-access-root] [data-access-signup] [data-access-join] [data-access-action="link"] {
+  font-size: 13px;
+  font-weight: 400;
+  padding: 12.25px 0;
+  margin: -12.25px 0;
 }
 
 [data-access-code][data-expired="true"] {

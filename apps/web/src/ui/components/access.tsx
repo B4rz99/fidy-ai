@@ -39,6 +39,30 @@ export const AccessAction = ({
   Readonly<{
     kind: "primary" | "provider" | "alternative" | "icon" | "back" | "link" | "theme" | "outline";
   }>): JSX.Element => <Button variant="ghost" data-access-action={kind} {...props} />;
+export const AccessConsent = ({
+  accepted,
+  onAcceptedChange,
+  policyUrl,
+}: Readonly<{
+  accepted: boolean;
+  onAcceptedChange: (accepted: boolean) => void;
+  policyUrl: string;
+}>): JSX.Element => (
+  <label data-access-consent-check="">
+    <input
+      type="checkbox"
+      checked={accepted}
+      onChange={(event) => onAcceptedChange(event.target.checked)}
+    />
+    <span>
+      Acepto el tratamiento de datos descrito en la{" "}
+      <a href={policyUrl} target="_blank" rel="noopener noreferrer">
+        Política de privacidad
+      </a>
+      .
+    </span>
+  </label>
+);
 export const AccessInput = (props: ComponentProps<typeof Input>): JSX.Element => (
   <Input data-access-input="" {...props} />
 );

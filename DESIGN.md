@@ -659,6 +659,18 @@ mailbox resend availability derive from server responses. The eight-consonant pu
 is distinct from the 24-character mailbox proof; private verifier, drafts and proof consumption
 remain with their existing mounted authentication owner. Changing methods discards that attempt.
 A generic server refusal cannot be described as a confirmed WhatsApp rejection; the terminal view
-therefore retains the generic explanation. Provider waiting, consent loading/refusal, signup,
-one-time recovery and WhatsApp association review remain real additional states using the same
-access surface, pending separate visual review if further composition changes are requested.
+therefore retains the generic explanation.
+
+Web signup uses the separately approved composition on the same canvas: “Crea tu cuenta”,
+“Elige cómo crear tu cuenta.”, one treatment-acceptance checkbox with the inline public privacy
+policy link, Google/Microsoft actions and the return to login. It omits the explanatory data-use
+paragraph. The checkbox starts unchecked; both providers wait for loaded, current Consent and
+explicit acceptance. The native checkbox keeps visible focus, a readable label and the approved
+20px shape. `AccessConsent` and the access reference share the same controlled checkbox;
+the reference toggles signup providers locally without sending acceptance or creating an account.
+Disabled signup providers use the approved subdued outline treatment. Removing the
+UI paragraph does not change the server disclosure or historical Consent evidence.
+
+Provider waiting, consent loading/refusal, one-time recovery and WhatsApp association review
+remain real additional states using the same access surface, pending separate visual review if
+further composition changes are requested.

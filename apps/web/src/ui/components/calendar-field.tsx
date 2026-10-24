@@ -32,16 +32,24 @@ const selectedDate = (date: Option.Option<Date>, timeZone: string): string =>
 const dateLabel = (value: string): string =>
   value === "" ? "Selecciona una fecha" : value.split("-").toReversed().join("-");
 
+const compactDateFormat = new Intl.DateTimeFormat("es-CO", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const accessibleDateFormat = new Intl.DateTimeFormat("es-CO", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
 const compactDateLabel = (value: string): string =>
-  new Intl.DateTimeFormat("es-CO", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  })
-    .formatToParts(new Date(`${value}T12:00:00Z`))
-    .filter((part) => ["day", "month", "year"].includes(part.type))
-    .map((part) => part.value.replace(/\.$/u, ""))
+  compactDateFormat
+    .formatToParts(DateTime.toEpochMillis(DateTime.makeUnsafe(`${value}T12:00:00Z`)))
+    .flatMap((part) =>
+      ["day", "month", "year"].includes(part.type) ? [part.value.replace(/\.$/u, "")] : []
+    )
     .join(" ");
 
 const calendarLabel = ({
@@ -60,12 +68,9 @@ const calendarAccessibleLabel = (props: DateFieldProps): string => {
   if (props.appearance !== "review" || props.value === "") {
     return `${props.label}: ${calendarLabel(props)}`;
   }
-  const date = new Intl.DateTimeFormat("es-CO", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${props.value}T12:00:00Z`));
+  const date = accessibleDateFormat.format(
+    DateTime.toEpochMillis(DateTime.makeUnsafe(`${props.value}T12:00:00Z`))
+  );
   return `${props.label}: ${date}`;
 };
 

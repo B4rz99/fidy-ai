@@ -1,0 +1,19 @@
+apps/web/e2e/provider-authentication.journeys.ts
+  s_44f2ba0ce6fd0c::t_b36c681f2fb1ca 389-390
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7e80405b0c286e2579a1776b5d70c339b7c9e10b",
+  "prompts": {},
+  "sessions": {
+    "s_44f2ba0ce6fd0c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a165af-fe9e-7c92-8720-b7758e20aab6",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

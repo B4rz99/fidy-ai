@@ -14,7 +14,3 @@ sca:
   exclude:
     - glob(.repos/**)
     - glob(**/node_modules/**)
-  exclusions:
-    - CVE: CVE-2026-93687
-      paths:
-        - bun.lock

@@ -7,7 +7,7 @@ import {
   AccessHeading,
   AccessInput,
   type AccessMethod,
-} from "./components/access";
+} from "@/ui/components/access";
 
 export const AccessReference = ({ dark }: Readonly<{ dark: boolean }>): JSX.Element => {
   const [method, setMethod] = useState<AccessMethod>("email");

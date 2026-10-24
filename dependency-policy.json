@@ -1,34 +1,31 @@
 {
   "$comment": [
     "Updates this repo has decided not to take yet. Read by scripts/check-dependency-updates.ts,",
-    "which fails on any compatible update — patch, minor, or prerelease-to-stable — that a pin has",
+    "which fails on any compatible update \u2014 patch, minor, or prerelease-to-stable \u2014 that a pin has",
     "not taken. An entry here downgrades that failure to a warning until its date; it never hides it.",
     "`until` is exclusive: a deferral dated 2026-09-01 stops applying on 2026-09-01. Give a reason a",
-    "reader in three months can act on — what breaks, and what has to happen first.",
+    "reader in three months can act on \u2014 what breaks, and what has to happen first.",
     "`manifest` scopes an entry to one manifest; omit it and the entry speaks for every pin of that",
     "name, which is wrong whenever the same package is pinned twice for different reasons.",
     "",
     "`acceptedVulnerabilities` is the other half: a vulnerability this repo ships with, because the",
-    "install delay in bunfig.toml is never punctured — not even to reach a fix. A release published",
+    "install delay in bunfig.toml is never punctured \u2014 not even to reach a fix. A release published",
     "days ago is how a compromised package arrives, so the delay outranks a known CVE, and when the",
     "only fix is too young the vulnerability is carried instead. Each entry pairs one advisory with",
     "one lockfile, matching an `sca.exclusions` entry in .fluidattacks/sca.yaml, which is where the",
     "scanner is told to stop counting it. The reason and the expiry live here because that config",
     "has nowhere to put them. An exclusion with no entry fails, an expired entry fails, and so does",
-    "an entry whose exclusion is gone."
+    "an entry whose exclusion is gone.",
+    "",
+    "CVE-2026-93687 and its scanner exclusion were removed on 2026-10-24 after upstream withdrew",
+    "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm on 2026-10-23 as not practically exploitable."
   ],
   "deferredUpdates": [
     {
-      "name": "@hugeicons/core-free-icons",
-      "manifest": "apps/web/package.json",
-      "reason": "4.3.4 publishes dist/esm/index.js exports for Grid2x2 and Grid3x2 icons with lowercase x, but its Linux tarball contains only uppercase X filenames. Vite production builds and browser acceptance fail on case-sensitive runners. Keep 4.3.3 until the publisher fixes the export paths; verify the package tarball and Linux build before updating.",
-      "until": "2026-10-24T00:00:00Z"
-    },
-    {
       "name": "jsdom",
       "manifest": "apps/web/package.json",
-      "reason": "jsdom 30.1.0 breaks the Vitest 5.0.1 jsdom worker environment: its Window addEventListener rejects Vitest's Window proxy as an invalid EventTarget, so all browser unit tests fail before execution. Keep 30.0.1 until the Vitest/jsdom integration supports this release; rerun web and browser tests before updating.",
-      "until": "2026-10-24T00:00:00Z"
+      "reason": "jsdom 30.1.3 still breaks the Vitest 5.0.5 jsdom worker environment: its Window addEventListener rejects Vitest's Window proxy as an invalid EventTarget. Reproduced on 2026-10-24 UTC with the pinned Bun runtime and the normal web unit command: 197 tests passed but six jsdom workers failed before executing, exiting with status 1. Keep 30.0.1 until the integration is fixed; rerun the normal web unit and browser checks before updating. Trial evidence: /tmp/fidy-dep-web-unit.log.",
+      "until": "2026-10-31T00:00:00Z"
     },
     {
       "name": "typescript",
@@ -51,16 +48,9 @@
     {
       "name": "@effect/tsgo",
       "manifest": "package.json",
-      "reason": "0.51.1 introduces 3,278 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the warning-failing project-reference build exits with status 2. Reproduced by normal installation and bun run typecheck on 2026-10-17 UTC. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification.",
-      "until": "2026-10-24T00:00:00Z"
+      "reason": "0.53.3 introduces 3,417 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the normal warning-failing project-reference build exits with status 2 and no TypeScript errors. Reproduced by normal installation and bun run typecheck with the pinned Bun runtime on 2026-10-24 UTC. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification. Trial evidence: /tmp/fidy-dep-tsgo-trial.log.",
+      "until": "2026-10-31T00:00:00Z"
     }
   ],
-  "acceptedVulnerabilities": [
-    {
-      "cve": "CVE-2026-93687",
-      "path": "bun.lock",
-      "reason": "Temporarily retain the required shadcn 4.21.4 development CLI, whose fast-glob and ts-morph dependencies bring in braces 3.0.3. GitHub advisory GHSA-vfj7-8cjw-p6xm still lists no patched version, rechecked on 2026-10-17 UTC. The User explicitly approved renewing this existing development-only exception through 2026-10-24 UTC. This is risk acceptance, not remediation: the vulnerable package remains installed. Limit CLI use to reviewed component names, local paths and trusted registry inputs. Recheck upstream before expiry; upgrade or replace the affected chain only after releases meet the unchanged seven-day minimumReleaseAge. Rerun CLI/application verification and SCA, and remove this record and its matching scanner exclusion when resolved.",
-      "until": "2026-10-24T00:00:00Z"
-    }
-  ]
+  "acceptedVulnerabilities": []
 }

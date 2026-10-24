@@ -6,11 +6,11 @@ import { AsyncResult } from "effect/reactivity";
 import { type JSX, type ReactNode, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { AccessAction, AccessBack, AccessHeading, AccessMethodIcon } from "@/ui/components/access";
-import { closeProviderReturn, type useProviderAuthentication } from "./controller";
+import { closeProviderReturn, useProviderAuthentication } from "./controller";
 
 const canContinue = (intent: "signup" | "login", accepted: boolean, ready: boolean): boolean =>
   intent === "login" || (accepted && ready);
-type Authentication = ReturnType<typeof useProviderAuthentication>;
+type Authentication = Omit<ReturnType<typeof useProviderAuthentication>, "mounted">;
 const ConsentNotice = ({
   accepted,
   setAccepted,
@@ -225,7 +225,7 @@ const ProviderBack = ({
     <AccessBack onClick={authentication.restart} />
   );
 
-export const ProviderAuthenticationFeature = ({
+const ProviderAuthenticationView = ({
   handoffReference,
   children,
   authentication,
@@ -273,6 +273,39 @@ export const ProviderAuthenticationFeature = ({
           setIntent={setIntent}
         />
       )}
+    </div>
+  );
+};
+
+export type ProviderAuthenticationPresentation = Readonly<{
+  restart: () => void;
+  startLogin: (provider: AuthenticationProvider) => void;
+  render: (children: ReactNode) => JSX.Element;
+}>;
+
+/** Keeps controller authority and lifetime behind this feature's public composition boundary. */
+export const ProviderAuthenticationFeature = ({
+  handoffReference,
+  children,
+}: Readonly<{
+  handoffReference: Option.Option<string>;
+  children: (presentation: ProviderAuthenticationPresentation) => ReactNode;
+}>): JSX.Element => {
+  const { mounted, ...authentication } = useProviderAuthentication({ handoffReference });
+  return (
+    <div ref={mounted}>
+      {children({
+        restart: authentication.restart,
+        startLogin: (provider) => authentication.start(provider, "login", ""),
+        render: (content) => (
+          <ProviderAuthenticationView
+            handoffReference={handoffReference}
+            authentication={authentication}
+          >
+            {content}
+          </ProviderAuthenticationView>
+        ),
+      })}
     </div>
   );
 };

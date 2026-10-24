@@ -1,6 +1,6 @@
 import { EmailAddress, EmailVerificationCode } from "@/transport/client";
 import { Clock, Effect, Option, Schema } from "effect";
-import { type FormEvent, type JSX, useSyncExternalStore } from "react";
+import { type FormEvent, type JSX, type ReactNode, useSyncExternalStore } from "react";
 import {
   AccessAction,
   AccessAlternatives,
@@ -11,8 +11,14 @@ import {
   type AccessMethod,
 } from "@/ui/components/access";
 import { Spinner } from "@/ui/components/spinner";
-import { type BrowserLoginPairing, invalidPairingMessage } from "./pairing-controller";
+import {
+  type BrowserLoginPairing as PairingController,
+  invalidPairingMessage,
+  useBrowserLoginPairing,
+} from "./pairing-controller";
 import { browserLoginPairingWhatsAppUrl } from "./whatsapp-link";
+
+type BrowserLoginPairing = Omit<PairingController, "mounted">;
 
 const millisecondsPerSecond = 1000;
 const secondsPerMinute = 60;
@@ -227,10 +233,39 @@ const PairingContent = (props: PairingViewProps): JSX.Element => {
   }
   return <EmailForm pairing={pairing} />;
 };
-export const BrowserLoginPairingFeature = (props: PairingViewProps): JSX.Element => (
+const PairingView = (props: PairingViewProps): JSX.Element => (
   <div data-access-flow="">
     <AccessBack onClick={() => props.choose("principal")} />
     <PairingContent {...props} />
     <AccessAlternatives exclude={props.method} choose={props.choose} />
   </div>
 );
+
+export type BrowserLoginPresentation = Readonly<{
+  start: () => void;
+  cancel: () => void;
+  render: (
+    method: "email" | "whatsapp",
+    choose: (method: AccessMethod | "principal") => void
+  ) => JSX.Element;
+}>;
+
+/** Owns controller lifetime; publishes presentation and user commands, never private proof. */
+export const BrowserLoginPairingFeature = ({
+  children,
+}: Readonly<{
+  children: (presentation: BrowserLoginPresentation) => ReactNode;
+}>): JSX.Element => {
+  const { mounted, ...pairing } = useBrowserLoginPairing();
+  return (
+    <div ref={mounted}>
+      {children({
+        start: pairing.start,
+        cancel: pairing.cancel,
+        render: (method, choose) => (
+          <PairingView key={method} method={method} choose={choose} pairing={pairing} />
+        ),
+      })}
+    </div>
+  );
+};

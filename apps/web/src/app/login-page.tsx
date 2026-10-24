@@ -1,10 +1,14 @@
 import { useSearch } from "@tanstack/react-router";
 import { Option } from "effect";
-import { type JSX, type RefCallback, useCallback, useState } from "react";
-import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";
-import { useBrowserLoginPairing } from "@/features/browser-login/pairing-controller";
-import { ProviderAuthenticationFeature } from "@/features/provider-authentication/feature";
-import { useProviderAuthentication } from "@/features/provider-authentication/controller";
+import { type JSX, useState } from "react";
+import {
+  BrowserLoginPairingFeature,
+  type BrowserLoginPresentation,
+} from "@/features/browser-login/feature";
+import {
+  ProviderAuthenticationFeature,
+  type ProviderAuthenticationPresentation,
+} from "@/features/provider-authentication/feature";
 import {
   AccessAction,
   AccessLayout,
@@ -29,57 +33,48 @@ const LoginMethods = ({
     </div>
   </>
 );
-
-export const LoginPage = (): JSX.Element => {
-  const search = useSearch({ from: "/login" });
+const AccessMethods = ({
+  pairing,
+  provider,
+  hasHandoff,
+}: Readonly<{
+  pairing: BrowserLoginPresentation;
+  provider: ProviderAuthenticationPresentation;
+  hasHandoff: boolean;
+}>): JSX.Element => {
   const [method, setMethod] = useState<"principal" | "email" | "whatsapp">("principal");
-  const pairing = useBrowserLoginPairing();
-  const provider = useProviderAuthentication({
-    handoffReference: Option.fromUndefinedOr(search.handoff),
-  });
-  const { mounted: mountPairing } = pairing;
-  const { mounted: mountProvider } = provider;
-  const mounted = useCallback<RefCallback<HTMLDivElement>>(
-    (node) => {
-      const disposePairing = mountPairing(node);
-      const disposeProvider = mountProvider(node);
-      return (): void => {
-        disposePairing?.();
-        disposeProvider?.();
-      };
-    },
-    [mountPairing, mountProvider]
-  );
   const choose = (next: AccessMethod | "principal"): void => {
     pairing.cancel();
     provider.restart();
     if (next === "google" || next === "microsoft") {
       setMethod("principal");
-      provider.start(next, "login", "");
+      provider.startLogin(next);
     } else {
       setMethod(next);
       if (next === "whatsapp") pairing.start();
     }
   };
+  return method === "principal"
+    ? provider.render(hasHandoff ? null : <LoginMethods choose={choose} />)
+    : pairing.render(method, choose);
+};
+export const LoginPage = (): JSX.Element => {
+  const search = useSearch({ from: "/login" });
   return (
     <AccessLayout>
-      <div ref={mounted}>
-        {method === "principal" ? (
-          <ProviderAuthenticationFeature
-            handoffReference={Option.fromUndefinedOr(search.handoff)}
-            authentication={provider}
-          >
-            {search.handoff === undefined ? <LoginMethods choose={choose} /> : null}
+      <BrowserLoginPairingFeature>
+        {(pairing) => (
+          <ProviderAuthenticationFeature handoffReference={Option.fromUndefinedOr(search.handoff)}>
+            {(provider) => (
+              <AccessMethods
+                pairing={pairing}
+                provider={provider}
+                hasHandoff={search.handoff !== undefined}
+              />
+            )}
           </ProviderAuthenticationFeature>
-        ) : (
-          <BrowserLoginPairingFeature
-            key={method}
-            method={method}
-            pairing={pairing}
-            choose={choose}
-          />
         )}
-      </div>
+      </BrowserLoginPairingFeature>
     </AccessLayout>
   );
 };

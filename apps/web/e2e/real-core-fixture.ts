@@ -169,12 +169,17 @@ export const signInWithVerifiedEmailThroughCore = ({
         page.getByRole("button", { name: "Correo verificado", exact: true }).click()
       );
       yield* Effect.tryPromise(() => page.getByLabel("Correo verificado").fill(email));
-      const started = page.waitForResponse("**/web/pairings");
+      const started = page
+        .waitForResponse(
+          (response) =>
+            response.url().endsWith("/web/pairings") && response.request().method() === "POST"
+        )
+        .then((response) => response.json());
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Enviar código" }).click());
-      yield* Effect.tryPromise(() => expect(page.getByLabel("Código del correo")).toBeVisible());
       const { publicCode: code } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ publicCode: Schema.String })
-      )(yield* Effect.tryPromise(() => started.then((response) => response.json())));
+      )(yield* Effect.tryPromise(() => started));
+      yield* Effect.tryPromise(() => expect(page.getByLabel("Código del correo")).toBeVisible());
       const delivered = yield* Effect.tryPromise(() =>
         request.post(`http://127.0.0.1:4175/email/login/deliver?code=${code}`)
       );

@@ -52,5 +52,84 @@
       "until": "2026-10-31T00:00:00Z"
     }
   ],
-  "acceptedVulnerabilities": []
+  "acceptedVulnerabilities": [
+    {
+      "cve": "CVE-2026-110180",
+      "path": "bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until the corrected versions reach seven days. fast-uri 3.1.8 remains vulnerable: host canonicalization can change a destination relative to a checked input; application reachability is not asserted. Fixed 3.1.9 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-26T23:05:26.357Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep URL/input validation and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-wjr9-j795-jxcr",
+      "until": "2026-10-26T23:05:26.357Z"
+    },
+    {
+      "cve": "CVE-2026-110180",
+      "path": "tools/astro/bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until the corrected versions reach seven days. fast-uri 3.1.8 remains vulnerable: host canonicalization can change a destination relative to a checked input; application reachability is not asserted. Fixed 3.1.9 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-26T23:05:26.357Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep URL/input validation and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-wjr9-j795-jxcr",
+      "until": "2026-10-26T23:05:26.357Z"
+    },
+    {
+      "cve": "CVE-2026-110180",
+      "path": "tools/mutation/bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until the corrected versions reach seven days. fast-uri 4.2.1 remains vulnerable: host canonicalization can change a destination relative to a checked input; application reachability is not asserted. Fixed 4.2.3 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-26T22:51:36.634Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep URL/input validation and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-wjr9-j795-jxcr",
+      "until": "2026-10-26T22:51:36.634Z"
+    },
+    {
+      "cve": "CVE-2026-110306",
+      "path": "bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until the corrected versions reach seven days. fast-uri 3.1.8 remains vulnerable: percent-encoded schemes can become active schemes in consumers; application reachability is not asserted. Fixed 3.1.9 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-26T23:05:26.357Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep URL/input validation and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-w74x-v6f9-j3xg",
+      "until": "2026-10-26T23:05:26.357Z"
+    },
+    {
+      "cve": "CVE-2026-110306",
+      "path": "tools/astro/bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until the corrected versions reach seven days. fast-uri 3.1.8 remains vulnerable: percent-encoded schemes can become active schemes in consumers; application reachability is not asserted. Fixed 3.1.9 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-26T23:05:26.357Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep URL/input validation and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-w74x-v6f9-j3xg",
+      "until": "2026-10-26T23:05:26.357Z"
+    },
+    {
+      "cve": "CVE-2026-110306",
+      "path": "tools/mutation/bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until the corrected versions reach seven days. fast-uri 4.2.1 remains vulnerable: percent-encoded schemes can become active schemes in consumers; application reachability is not asserted. Fixed 4.2.3 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-26T22:51:36.634Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep URL/input validation and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-w74x-v6f9-j3xg",
+      "until": "2026-10-26T22:51:36.634Z"
+    },
+    {
+      "cve": "CVE-2026-110095",
+      "path": "bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until the corrected versions reach seven days. fast-uri 3.1.8 remains vulnerable: relative-path normalization can change the addressed resource; application reachability is not asserted. Fixed 3.1.9 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-26T23:05:26.357Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep URL/input validation and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-xhq7-xmqj-769h",
+      "until": "2026-10-26T23:05:26.357Z"
+    },
+    {
+      "cve": "CVE-2026-110095",
+      "path": "tools/astro/bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until the corrected versions reach seven days. fast-uri 3.1.8 remains vulnerable: relative-path normalization can change the addressed resource; application reachability is not asserted. Fixed 3.1.9 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-26T23:05:26.357Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep URL/input validation and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-xhq7-xmqj-769h",
+      "until": "2026-10-26T23:05:26.357Z"
+    },
+    {
+      "cve": "CVE-2026-110095",
+      "path": "tools/mutation/bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until the corrected versions reach seven days. fast-uri 4.2.1 remains vulnerable: relative-path normalization can change the addressed resource; application reachability is not asserted. Fixed 4.2.3 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-26T22:51:36.634Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep URL/input validation and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-xhq7-xmqj-769h",
+      "until": "2026-10-26T22:51:36.634Z"
+    },
+    {
+      "cve": "CVE-2026-110725",
+      "path": "bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until the corrected versions reach seven days. fast-uri 3.1.8 remains vulnerable: a preserved first-segment colon can enable scheme confusion in consumers; application reachability is not asserted. Fixed 3.1.9 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-26T23:05:26.357Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep URL/input validation and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-333x-w4r6-6crp",
+      "until": "2026-10-26T23:05:26.357Z"
+    },
+    {
+      "cve": "CVE-2026-110725",
+      "path": "tools/astro/bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until the corrected versions reach seven days. fast-uri 3.1.8 remains vulnerable: a preserved first-segment colon can enable scheme confusion in consumers; application reachability is not asserted. Fixed 3.1.9 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-26T23:05:26.357Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep URL/input validation and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-333x-w4r6-6crp",
+      "until": "2026-10-26T23:05:26.357Z"
+    },
+    {
+      "cve": "CVE-2026-110725",
+      "path": "tools/mutation/bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until the corrected versions reach seven days. fast-uri 4.2.1 remains vulnerable: a preserved first-segment colon can enable scheme confusion in consumers; application reachability is not asserted. Fixed 4.2.3 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-26T22:51:36.634Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep URL/input validation and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-333x-w4r6-6crp",
+      "until": "2026-10-26T22:51:36.634Z"
+    },
+    {
+      "cve": "CVE-2026-111181",
+      "path": "bun.lock",
+      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until corrected versions reach seven days. body-parser 2.3.0 remains vulnerable: a crafted compressed request with trailing bytes can trigger an uncaught decoder error and process crash; application reachability is not asserted. Fixed 2.4.0 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-29T11:39:38.614Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep request bounds and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-27r3-jxmh-p828",
+      "until": "2026-10-29T11:39:38.614Z"
+    }
+  ]
 }

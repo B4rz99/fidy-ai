@@ -334,6 +334,8 @@ landing's oversized headings and section spacing do not transfer to data screens
 Use background changes, spacing, and thin borders for most hierarchy. Reserve layered
 surfaces and shadows for product demonstrations and genuinely floating UI.
 
+Ordinary data and form screens use a continuous base canvas and adjacent section planes, with visual grouping established through whitespace, aligned edges, typography and subtle dividers. Do not wrap sections or page panels in card containers, rounded perimeter borders or shadows; reserve elevation for genuine overlays such as menus and dialogs, not contextual page panels. Functional controls may retain rounded shapes. This change does not alter the separately approved Dashboard geometry. Illustrative product compositions are not a precedent for ordinary application data or form surfaces.
+
 The phone uses a soft `0 28px 60px #312E251F` shadow; the floating budget card uses
 `0 12px 30px #0000000C`. These establish a foreground object without making every
 section a raised card. The slight phone tilt and overlapping card belong to the hero
@@ -692,11 +694,11 @@ further composition changes are requested.
 
 ### Approved Transactions composition (24 October 2026)
 
-Library `libfile_a81df1bfa6788191b330de877fc0bbb7` v4 owns the approved Transactions composition. `ui/components/transactions.tsx` and its scoped CSS own the card layout, controls, contextual rail and type toggle; `/ui-reference.html` includes these controls. The feature retains canonical queries, local filters, continuation, revision-checked corrections and atomic batches. Category and Type keep the original ledger-wide grid/subgrid and 600/481/400px thresholds.
+Library `libfile_a81df1bfa6788191b330de877fc0bbb7` v5 owns the approved Transactions composition. `ui/components/transactions.tsx` and its scoped CSS own the continuous workspace planes, controls, contextual rail and type toggle; `/ui-reference.html` includes these controls. The feature retains canonical queries, local filters, continuation, revision-checked corrections and atomic batches. Category and Type keep the original ledger-wide grid/subgrid and 600/481/400px thresholds.
 
 The rail replaces the summary while editing. Below 1050px the active panel takes the content area, preserving application navigation. It has nonmodal dialog semantics, focus entry/return and Escape dismissal unless a write is locked. Manual capture offers optional Category (automatic assignment by default) and Notes; Counterparty is bounded to 120 characters and Notes to 500. COP, local-day semantics, per-Currency Money and uncertain-write recovery remain owned by the existing contracts. Manual creation says “Registrar”; editing save actions say “Guardar”; deletion confirms “Eliminar” and retains irreversibility and source-retention disclosure. Shell and theme remain owned by the coordinated Dashboard change.
 
-The approved v4 Transactions `.danger` treatment is an explicit exception to the generic destructive-fill rule above: both the action opening deletion review and its final “Eliminar” confirmation use transparent fill, the approved neutral line border and readable red text in light/Grafito, with the existing visible keyboard focus. This exception is scoped to `ui/components/transactions.css`; other destructive flows keep the shared destructive variant.
+The approved v5 Transactions `.danger` treatment is an explicit exception to the generic destructive-fill rule above: both the action opening deletion review and its final “Eliminar” confirmation use transparent fill, the approved neutral line border and readable red text in light/Grafito, with the existing visible keyboard focus. This exception is scoped to `ui/components/transactions.css`; other destructive flows keep the shared destructive variant.
 
 ## Approved Dashboard and application navigation
 

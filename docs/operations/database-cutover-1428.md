@@ -5707,3 +5707,36 @@ rollback baseline. An uncertain API result requires fresh state inspection, not 
 
 Keep implementation and parent issues open until both the live transition and ordinary release
 verification complete. Record the actual release IDs and live result below before closure.
+
+### Live retirement verified — 2026-10-24 UTC
+
+PR #1541 merged as `4499e37c1215af1ca4b36959844b12f730b39816` after full green CI
+(run `40124917423`, including four native adapter shards and both browser/accessibility shards).
+Ordinary Production run `40125326442` succeeded through candidate and intermediate smoke,
+promotion, normal traffic, public topology, unauthorized edge probes and drift verification.
+Native canary `operational-canary-5976234` completed the new `verify-operational-canary-v1-1` step
+at 19:30:29 UTC, without a stored health snapshot.
+
+A fresh private backup verified both original receipts, the exact three source definitions and
+zero FK violations before mutation. The guarded twelve-statement native batch then succeeded:
+
+- **109 application tables**, with all **1,055** normalized application schema objects matching the
+  final fresh baseline. Normalization ignores whitespace and optional identifier quoting, not
+  constraint or field differences. SQLite and Alchemy bookkeeping are excluded.
+- Identical before/after counts for every surviving table; zero FK violations. No feature-table
+  DML, rebuild or User-data copy was issued. Both historical receipt rows retain their original
+  IDs, names, creation/application instants; only the baseline hash changed.
+- **78,490 rows read and 11 rows written** for the complete guarded transition, including catalog,
+  FK and surviving-count verification. No D1 quota error occurred.
+- Final baseline SHA-256:
+  `04a031beb5600a2152ee17354e17618e4283c827ff6430a041e66ece842572f0`.
+
+The 19:14 UTC dashboard reading before rollout showed approximately 2 million rows read and
+14,000 rows written over its rolling last-24-hours view; that view is not a UTC-day quota counter.
+Private backups, prepared restoration requests and native API results remain outside the repository.
+The existing real dead-letter backlog was not purged or replayed to manufacture healthy monitoring.
+
+The ordinary Production release triggered by merging this evidence must also pass before issue
+closure. That second release demonstrates idempotent deployment against the physically retired
+schema and supplies a compatible rollback baseline. Its final run ID and closure evidence belong
+in #1494 and the linked parent completion records.

@@ -24,14 +24,43 @@ outcomes. All four Transaction projections remain after measurement. The local b
 contains **111** tables: the seven-table Erasure design is implemented locally, while three
 Operational Health stores still await platform-coverage proofs. The
 [physical owner/relationship inventory](database-schema-inventory-1494.md) records that snapshot.
-These counts are not a live database inspection or a claim about Production.
+The live transition below now verifies the same 111 application tables in Production; the separate
+Alchemy migration ledger makes 112 tables including migration bookkeeping.
 
-Work stays on `fix/live-schema-cutover` for the current coupled schema/code integration. Independent,
-green slices may commit there; mechanically incomplete steps must not be released. The final
+The coupled implementation was merged through PR #1526, followed by the maintenance-release fix in
+PR #1527. Mechanically incomplete steps must not be released. The final
 blocking verification ticket is [#1494](https://github.com/B4rz99/fidy-ai/issues/1494). Apply schema
 changes with all affected owner implementations, triggers, readers, erasure adapters and fixtures.
 No temporary extraction release, legacy-client compatibility layer, or destructive fresh-start of a
 populated database is part of this contract.
+
+### Verified live transition — 2026-10-23
+
+The transition used trunk revision `66ae1f476b28e491f498cb49c0cc08fb0d142c21`.
+The [controlled maintenance release](https://github.com/B4rz99/fidy-ai/actions/runs/40037925064)
+and subsequent [ordinary Production release](https://github.com/B4rz99/fidy-ai/actions/runs/40038939507)
+both completed successfully. Public traffic is restored, native maintenance write fences are removed,
+the schema hold is false, and ordinary deployment is enabled again.
+
+The populated transformation ran as one native atomic D1 batch, after a fenced backup and populated
+native rehearsal. It did not replay `0001_schema.sql` or reset the Alchemy migration ledger. The
+independent R2 recovery generation remained unchanged. Post-transform verification compared all
+111 application tables' named stored/generated fields with the independent transformed reference;
+catalog, allocator watermarks and migration ledger matched, with zero foreign-key violations.
+
+SQL export/reimport does not preserve implicit hidden rowids, so restored-export rowids were not
+treated as an equality oracle. The in-place batch instead asserted source/copy rowid equality before
+dropping each rebuilt source table. Named primary keys were included in the data comparison.
+
+Recorded D1 costs were 316 writes for installing the source fences, 51,598 writes for the populated
+cutover, and one write for releasing the final fences: **51,915 writes total**. The release guard was
+reworked before live execution to reduce its measured reads from about 2.13 million to 475,143;
+live cutover reads were 2,219,874. The transition and ordinary deployment completed without quota
+exhaustion. These are one-time transition costs, not the expected cost of an ordinary deployment.
+Backups, request receipts and populated-data proofs remain private off-repository artifacts.
+
+This completes the live schema transition, not the full #1494 gate. The three Operational Health
+tables remain installed until #1491/#1492 prove replacement alert and dashboard coverage.
 
 ## Target ownership
 

@@ -1,0 +1,76 @@
+apps/server/cloudflare/core-http/runtime.test.ts
+  h_c6d49c804e0ad2 2,6,13-17,43,71-74,83,111,117-119
+apps/server/cloudflare/email-authentication/runtime.ts
+  h_c6d49c804e0ad2 59-72,98-111
+apps/server/cloudflare/ingestion/runtime.ts
+  h_c6d49c804e0ad2 91-104
+apps/server/cloudflare/insights/operational-health.test.ts
+  h_c6d49c804e0ad2 15,144-149
+apps/server/cloudflare/insights/runtime.ts
+  h_c6d49c804e0ad2 422-436
+apps/server/cloudflare/maintenance/idle-budget.test.ts
+  h_c6d49c804e0ad2 41,79
+apps/server/cloudflare/maintenance/monitoring-isolation.test.ts
+  h_c6d49c804e0ad2 6,8,54,240,311,318-319,321-328,331
+apps/server/cloudflare/maintenance/performance.test.ts
+  h_c6d49c804e0ad2 52-68,72-74,76-79,158
+apps/server/cloudflare/migrations/0001_schema.sql
+  h_c6d49c804e0ad2 1098,1227,1234,7094-7193
+apps/server/cloudflare/oauth-agents/oauth-native-residency.test.ts
+  h_c6d49c804e0ad2 821-825,912,923-925
+apps/server/cloudflare/operational-canary-workflow.ts
+  h_c6d49c804e0ad2 4-5,13,15,19-32
+apps/server/cloudflare/queue/internal/dispatch.ts
+  h_c6d49c804e0ad2 183
+apps/server/cloudflare/queue/runtime.test.ts
+  h_c6d49c804e0ad2 24,47,56-59,92-94
+apps/server/cloudflare/runtime/internal/scheduled-health.ts
+  h_c6d49c804e0ad2 1,13,109,114,123,168,170,176-183
+apps/server/cloudflare/runtime/operational-health/alerts.test.ts
+  h_c6d49c804e0ad2 2-6,26,29,34-38,43,53,58,67,72,82,86-88
+apps/server/cloudflare/runtime/operational-health/canary.test.ts
+  h_c6d49c804e0ad2 2,4,6-42
+apps/server/cloudflare/runtime/operational-health/contract.ts
+  h_c6d49c804e0ad2 88,90
+apps/server/cloudflare/runtime/operational-health/core-rejection.test.ts
+  h_c6d49c804e0ad2 1,3,12-13,16-46,50,53-58,60-71,74,78,82,85,88,92,94-95,99-115
+apps/server/cloudflare/runtime/operational-health/internal/canary.ts
+  h_c6d49c804e0ad2 1
+apps/server/cloudflare/runtime/operational-health/operations.ts
+  h_c6d49c804e0ad2 7,9,21,26-35,50-51,53,73,77-78,202-208,210-212,214-265
+apps/server/cloudflare/runtime/operational-health/runtime.ts
+  h_c6d49c804e0ad2 1-2,23,34,46
+apps/server/cloudflare/runtime/runtime.test.ts
+  h_c6d49c804e0ad2 4,6,97-114,116-123,127,129,131-199,201-262
+apps/server/cloudflare/runtime/runtime.ts
+  h_c6d49c804e0ad2 8
+apps/server/cloudflare/subscription/runtime.ts
+  h_c6d49c804e0ad2 152-165,207-221
+apps/server/cloudflare/weekly-workflow.test.ts
+  h_c6d49c804e0ad2 705,716
+apps/web/src/features/provider-authentication/FEATURE.md
+  h_c6d49c804e0ad2 18
+docs/adr/0035-d1-independent-operator-alerts.md
+  h_c6d49c804e0ad2 3
+docs/operations/cloudflare-background-work.md
+  h_c6d49c804e0ad2 48-49,57,80-171,175-180,195-200,217
+docs/operations/database-cutover-1428.md
+  h_c6d49c804e0ad2 5625-5742
+docs/operations/database-schema-1494.md
+  h_c6d49c804e0ad2 1-173
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+infra/cloudflare/workers.test.ts
+  h_c6d49c804e0ad2 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f3e0f21206ca5f189e33db94eddd2aa5486aa643",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

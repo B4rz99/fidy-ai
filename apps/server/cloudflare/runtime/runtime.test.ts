@@ -97,13 +97,6 @@ it.effect("publishes a period-bounded canary and closes Queue rejection details"
 it.effect("reports bounded measurements and readiness through closed platform observations", () =>
   Effect.gen(function* () {
     const { db } = yield* Effect.tryPromise(() => storage.acquire());
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(
-          "CREATE TABLE operational_health_view (operation TEXT PRIMARY KEY, state TEXT, observed_at_ms INTEGER)"
-        )
-        .run()
-    );
     let backlogCount = 1000;
     const logs: Array<unknown> = [];
     const logger = Logger.make<unknown, void>(({ message }) => logs.push(message));
@@ -170,23 +163,6 @@ it.effect("reports bounded measurements and readiness through closed platform ob
         ],
       ])
     );
-    expect(
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT operation, state FROM operational_health_view WHERE operation IN ('d1', 'coordination', 'providerConfig', 'requiredBindings', 'queueExecution') ORDER BY operation"
-          )
-          .all()
-      )
-    ).toMatchObject({
-      results: [
-        { operation: "coordination", state: "healthy" },
-        { operation: "d1", state: "healthy" },
-        { operation: "providerConfig", state: "healthy" },
-        { operation: "queueExecution", state: "unavailable" },
-        { operation: "requiredBindings", state: "unavailable" },
-      ],
-    });
     logs.length = 0;
     backlogCount = 99;
     yield* Effect.exit(
@@ -209,13 +185,16 @@ it.effect("reports bounded measurements and readiness through closed platform ob
           "fidy.operational component=async-health operation=billingQueue state=attention severity=none",
       },
     ]);
-    expect(
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("SELECT state FROM operational_health_view WHERE operation = 'providerConfig'")
-          .first()
-      )
-    ).toEqual({ state: "unavailable" });
+    expect(logs).toContainEqual([
+      {
+        component: "capability",
+        operation: "providerConfig",
+        state: "unavailable",
+        severity: "warning",
+        message:
+          "fidy.operational component=capability operation=providerConfig state=unavailable severity=warning",
+      },
+    ]);
   })
 );
 

@@ -61,7 +61,7 @@ const retentionSeverity = (age: number): OperationalSeverity => {
 /** Classify bounded observations without retaining alert coordinates or delivery state. */
 export const signalSeverity = (signal: AlertSignal): OperationalSeverity => {
   if (signal.state === "unavailable") return "warning";
-  if (signal.component === "capability") return signal.state === "attention" ? "critical" : "none";
+  if (signal.component === "capability") return "none";
   if ("backlogCount" in signal) return queueSeverity(signal);
   if (signal.operation === "retention") {
     return retentionSeverity(signal.oldestOverdueAgeMilliseconds);

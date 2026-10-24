@@ -1,11 +1,9 @@
-import { Clock, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 import type { PlatformMaintenanceInput } from "../contract";
 import {
   type AlertSignal,
-  type CanaryHealth,
   type CapabilityProbe,
   type OperationalHealthEnvironment,
-  type OperationalSignal,
   QueueKind,
   WorkKind,
 } from "../operational-health/contract";
@@ -13,8 +11,6 @@ import {
   inspectOperationalCapabilities,
   observeOperationalHealth,
   operationalSeverity,
-  readCanaryHealth,
-  recordOperationalHealth,
 } from "../operational-health/operations";
 
 const operationalWorkQueues = (
@@ -108,22 +104,6 @@ const operationalWorkflows = (
 
 const d1Unavailable = (signals: ReadonlyArray<AlertSignal>): boolean =>
   signals.some((signal) => signal.operation === "d1" && signal.state === "unavailable");
-const retainOperationalSignals = (
-  environment: PlatformMaintenanceInput,
-  signals: ReadonlyArray<AlertSignal>
-): Effect.Effect<void> =>
-  d1Unavailable(signals)
-    ? Effect.void
-    : Effect.flatMap(Clock.currentTimeMillis, (observedAtMs) =>
-        Effect.tryPromise({
-          try: () => recordOperationalHealth({ db: environment.DB, signals, observedAtMs }),
-          catch: () => undefined,
-        }).pipe(
-          Effect.timeout("2 seconds"),
-          Effect.orElseSucceed(() => undefined)
-        )
-      );
-
 const reportOperationalSignals = (
   environment: PlatformMaintenanceInput,
   signals: ReadonlyArray<AlertSignal>
@@ -140,10 +120,7 @@ const reportOperationalSignals = (
       return severity === "none" ? Effect.logInfo(observation) : Effect.logWarning(observation);
     },
     { discard: true }
-  ).pipe(
-    Effect.andThen(reportInspectionCoverage(environment, signals)),
-    Effect.andThen(retainOperationalSignals(environment, signals))
-  );
+  ).pipe(Effect.andThen(reportInspectionCoverage(environment, signals)));
 
 const reportInspectionCoverage = (
   environment: PlatformMaintenanceInput,
@@ -173,17 +150,6 @@ const reportInspectionCoverage = (
   });
 };
 
-const observeAdditionalSignals = (
-  environment: PlatformMaintenanceInput,
-  signals: ReadonlyArray<OperationalSignal>
-): Effect.Effect<ReadonlyArray<OperationalSignal | CanaryHealth>, void> =>
-  Effect.flatMap(Clock.currentTimeMillis, (now) =>
-    Effect.tryPromise({
-      try: () => readCanaryHealth({ db: environment.DB, now }),
-      catch: () => undefined,
-    }).pipe(Effect.map((canaries) => [...signals, ...canaries]))
-  );
-
 const scheduledSignals = (
   environment: PlatformMaintenanceInput,
   capabilities: ReadonlyArray<CapabilityProbe>
@@ -199,23 +165,7 @@ const scheduledSignals = (
         deadLetters: environment.ASYNC_DEAD_LETTERS,
         workQueues: operationalWorkQueues(environment),
         workflows: operationalWorkflows(environment),
-      }).pipe(
-        Effect.flatMap((signals) =>
-          observeAdditionalSignals(environment, signals).pipe(
-            Effect.timeout("2 seconds"),
-            Effect.orElseSucceed((): ReadonlyArray<OperationalSignal | CanaryHealth> => [
-              ...signals,
-              {
-                component: "capability",
-                operation: "queueExecution",
-                state: "unavailable",
-              },
-              { component: "capability", operation: "workflowExecution", state: "unavailable" },
-            ])
-          )
-        ),
-        Effect.map((signals): ReadonlyArray<AlertSignal> => [...signals, ...capabilities])
-      );
+      }).pipe(Effect.map((signals): ReadonlyArray<AlertSignal> => [...signals, ...capabilities]));
 
 /** Probe independent capabilities before D1-backed inspection; outages still emit independent closed platform observations. */
 export const inspectScheduledHealth = (

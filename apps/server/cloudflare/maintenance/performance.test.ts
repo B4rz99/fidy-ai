@@ -49,30 +49,34 @@ it.skipIf(!enabled)(
           const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
           yield* Effect.tryPromise(() => installTestSchema({ db }));
           yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
-          const now = yield* Clock.currentTimeMillis;
-          yield* Effect.tryPromise(() =>
-            db.batch([
-              db
-                .prepare(
-                  "INSERT INTO operational_health_view(operation,state,observed_at_ms,last_succeeded_ms) VALUES ('queueExecution','healthy',?1,?1),('workflowExecution','healthy',?2,?2)"
-                )
-                .bind(now, now),
-              ...(retainedAdmissions === 0
-                ? []
-                : [
-                    db
-                      .prepare(`WITH RECURSIVE n(i) AS (
+          const observed = yield* Clock.currentTimeMillis;
+          const now = Math.floor(observed / 86_400_000) * 86_400_000;
+          const liveClock = yield* Clock.Clock;
+          const benchmarkClock: Clock.Clock = {
+            currentTimeNanos: liveClock.currentTimeNanos,
+            currentTimeNanosUnsafe: () => liveClock.currentTimeNanosUnsafe(),
+            monotonicTimeNanos: liveClock.monotonicTimeNanos,
+            monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
+            sleep: (duration) => liveClock.sleep(duration),
+            currentTimeMillis: Effect.succeed(now),
+            currentTimeMillisUnsafe: () => now,
+          };
+          if (retainedAdmissions > 0) {
+            yield* Effect.tryPromise(() =>
+              db.batch([
+                db
+                  .prepare(`WITH RECURSIVE n(i) AS (
           SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
           INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms) SELECT 'retained-' || i, 'workers-ai', 'operation',
             'test', 'rolling_window', 1, ?, ?, ?, NULL FROM n`)
-                      .bind(retainedAdmissions, now, now, now + 3_600_000),
-                    db
-                      .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
+                  .bind(retainedAdmissions, now, now, now + 3_600_000),
+                db
+                  .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
           INSERT INTO resource_admission_grants SELECT 'retained-' || i, ?, 1 FROM n`)
-                      .bind(retainedAdmissions, now),
-                  ]),
-            ])
-          );
+                  .bind(retainedAdmissions, now),
+              ])
+            );
+          }
           if (expiredAdmissions > 0) {
             yield* Effect.tryPromise(() =>
               db.batch([
@@ -151,6 +155,7 @@ it.skipIf(!enabled)(
             const offersBefore = queueOffers;
             const metricsBefore = queueMetricCalls;
             yield* runCoreMaintenance(environment).pipe(
+              Effect.provideService(Clock.Clock, benchmarkClock),
               Effect.withTracer(tracer),
               Effect.provideService(Logger.CurrentLoggers, new Set())
             );

@@ -67,20 +67,6 @@ describe("operator alert decisions", () => {
     ).toEqual(["warning"]);
   });
 
-  it("does not treat a successful send as Queue or Workflow execution", () => {
-    expect(
-      severities([
-        { component: "capability", operation: "queueExecution", state: "unavailable" },
-        {
-          component: "capability",
-          operation: "workflowExecution",
-          state: "attention",
-          lastSucceededMs: 100,
-        },
-      ])
-    ).toEqual(["warning", "critical"]);
-  });
-
   it("alerts on overdue statement-byte retention without exposing object keys", () => {
     expect(
       severities([

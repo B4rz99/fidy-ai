@@ -5,15 +5,6 @@ export const CanaryPayload = Schema.Struct({
   sentAtMs: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 export type CanaryPayload = typeof CanaryPayload.Type;
-export type CanaryHealth = Readonly<{
-  component: "capability";
-  operation: "queueExecution" | "workflowExecution";
-}> &
-  (
-    | Readonly<{ state: "unavailable" }>
-    | Readonly<{ state: "healthy" | "attention"; lastSucceededMs: number }>
-  );
-
 export const WorkKind = Schema.Literals([
   "browserPairing",
   "emailReplacement",
@@ -94,7 +85,7 @@ export type OperationalHealthEnvironment = Readonly<{
   workQueues: Partial<Record<QueueKind, Pick<Queue, "metrics">>>;
 }>;
 
-export type AlertSignal = OperationalSignal | CanaryHealth | CapabilityProbe;
+export type AlertSignal = OperationalSignal | CapabilityProbe;
 
 export type OperationalSeverity = "none" | "warning" | "critical";
 

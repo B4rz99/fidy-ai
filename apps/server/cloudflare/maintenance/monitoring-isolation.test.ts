@@ -3,7 +3,7 @@ import { type CoreMaintenanceInput, ScheduledWorkFailed } from "./contract";
 import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import { coordinatorProbeName } from "../runtime/operational-health/contract";
 import assert from "node:assert/strict";
-import { Clock, Effect, Exit, Option } from "effect";
+import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { afterAll, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { runCoreMaintenance } from "./runtime";
@@ -51,7 +51,7 @@ const environment = (
   ...overrides,
 });
 
-it("a stalled canary offer cannot skip later Core retention or manufacture execution success", () =>
+it("a stalled canary offer cannot skip later Core retention", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
@@ -97,29 +97,9 @@ it("a stalled canary offer cannot skip later Core retention or manufacture execu
             db.prepare("SELECT count(*) AS count FROM resource_admission_grants").first()
           )
         ).toEqual({ count: 0 });
-        expect(
-          yield* Effect.tryPromise(() =>
-            db
-              .prepare(
-                "SELECT operation AS kind,last_succeeded_ms FROM operational_health_view WHERE last_succeeded_ms IS NOT NULL"
-              )
-              .all()
-          )
-        ).toMatchObject({
-          results: [],
-        });
       } finally {
         held.resolve({ metadata: { metrics: { backlogCount: 1, backlogBytes: 34 } } });
       }
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT operation AS kind,last_succeeded_ms FROM operational_health_view WHERE last_succeeded_ms IS NOT NULL"
-            )
-            .all()
-        )
-      ).toMatchObject({ results: [] });
       expect(send).toHaveBeenCalledOnce();
     })
   ));
@@ -257,6 +237,7 @@ it.each([
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
+      const logs = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
       yield* Effect.tryPromise(() => installTestSchema({ db }));
       const now = yield* Clock.currentTimeMillis;
@@ -334,22 +315,18 @@ it.each([
       };
       expect(inspected).toEqual(scenario.expectedKinds.map((kind) => identities[kind]));
       expect(metrics).toHaveBeenCalledTimes(scenario.expectedMetrics);
-      const observed = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT operation,state FROM operational_health_view WHERE operation IN ('proactivity','proactivityQueue','requiredBindings') ORDER BY operation"
-          )
-          .all()
+      const exported = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+        logs.mock.calls
       );
-      expect(observed.results).toEqual([
-        ...(scenario.expectedPending === "omitted"
-          ? []
-          : [{ operation: "proactivity", state: scenario.expectedPending }]),
-        ...(scenario.expectedQueue === "omitted"
-          ? []
-          : [{ operation: "proactivityQueue", state: scenario.expectedQueue }]),
-        { operation: "requiredBindings", state: scenario.expectedBindings },
-      ]);
+      for (const [owner, state] of [
+        ["proactivity", scenario.expectedPending],
+        ["proactivityQueue", scenario.expectedQueue],
+        ["requiredBindings", scenario.expectedBindings],
+      ] as const) {
+        const operation = `operation=${owner} state=`;
+        if (state === "omitted") expect(exported).not.toContain(operation);
+        else expect(exported).toContain(`${operation}${state}`);
+      }
     })
   )
 );

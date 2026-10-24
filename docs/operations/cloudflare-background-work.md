@@ -45,8 +45,8 @@ The idle budget below is not evidence of production backlog capacity.
 
 ## Idle D1 budget
 
-Core inspects operational health every minute. Unchanged health snapshots refresh every
-five minutes; state changes persist immediately, and older observations cannot replace newer ones.
+Core inspects operational health every minute and emits closed native log observations without
+writing a health snapshot or alert ledger.
 The Queue→Workflow canary publishes in the first minute of each five-minute period, with the existing
 ten-minute stale threshold. A missed publication window is detected by that threshold rather than
 replayed on every subsequent minute. Repeated empty/final-page control-object sweeps do not rewrite
@@ -54,8 +54,7 @@ a cursor; multi-page cursors still advance durably and lawful-hold checks remain
 
 `maintenance/idle-budget.test.ts` installs every migration in native D1, applies the production
 recovery wrapper, and runs Core, Email and all control-bucket sweeps over a complete hourly
-cycle, adding the midnight tick's cost to the daily projection. It budgets downstream canary writes
-and asserts fewer than 10,000 projected daily
+cycle, adding the midnight tick's cost to the daily projection. The native execution canary writes no D1 state. The test asserts fewer than 10,000 projected daily
 idle writes (10% of the Free allowance) and 750,000 reads. This protects idle overhead, not total
 account usage: real work, incidents and other databases still consume the account-wide allowance.
 The opt-in performance benchmark also includes the recovery guard.
@@ -173,17 +172,8 @@ stale observations as health. Monitoring does not authorize replay, deletion or 
 
 ## Private operational view and account usage alerts
 
-Use Cloudflare's authenticated D1 console (never a public endpoint) to query the latest
-metadata-only inspection. **Stale observations are unavailable**, not healthy; compare
-`observed_at_ms` with the present time. This is an inspection snapshot, not a work ledger:
-
-```sql
-SELECT operation, state, datetime(observed_at_ms / 1000, 'unixepoch') AS observed_utc
-FROM operational_health_view ORDER BY operation;
-```
-
-This remaining snapshot is scheduled for retirement in #1492. The replacement authenticated Logs
-saved search is **Fidy owner health — timestamped observations**, dataset Workers, query
+Use Cloudflare's authenticated Logs view. The configured
+saved search **Fidy owner health — timestamped observations**, dataset Workers, query
 `contains(message, "fidy.operational")`. It displays newest observations with UTC timestamps.
 Older than ten minutes is stale; a missing owner is unknown; complete means inspected, not healthy.
 Native Queue/Workflow Monitors establish execution absence independently of this search. Use the

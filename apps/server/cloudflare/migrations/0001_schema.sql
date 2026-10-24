@@ -945,13 +945,6 @@ CREATE TABLE oauth_review_requests (
 );
 --> statement-breakpoint
 
-CREATE TABLE operational_health_view (
-  operation TEXT PRIMARY KEY NOT NULL,
-  state TEXT NOT NULL CHECK (state IN ('healthy', 'attention', 'unavailable')),
-  observed_at_ms INTEGER NOT NULL CHECK (observed_at_ms >= 0)
-, last_succeeded_ms INTEGER CHECK(last_succeeded_ms IS NULL OR (last_succeeded_ms>=0 AND operation IN ('queueExecution','workflowExecution')))) STRICT;
---> statement-breakpoint
-
 CREATE TABLE pat_pairings (
   id TEXT PRIMARY KEY NOT NULL,
   public_code TEXT NOT NULL UNIQUE,

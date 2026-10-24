@@ -21,17 +21,10 @@ const workflowInstance: WorkflowInstance = {
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 
-it("inherits the Queue owner's Clock when validating and retaining canary execution", () =>
+it("inherits the Queue owner's Clock when validating a native canary handoff", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "CREATE TABLE operational_health_view (operation TEXT PRIMARY KEY,state TEXT NOT NULL,observed_at_ms INTEGER NOT NULL,last_succeeded_ms INTEGER)"
-          )
-          .run()
-      );
       const now = 100_000;
       const base = makeWorkerTelemetry(() => undefined);
       const queue = makeCoreQueue({
@@ -51,6 +44,7 @@ it("inherits the Queue owner's Clock when validating and retaining canary execut
             )
           ),
       });
+      const created: unknown[] = [];
       const environment: CoreQueueEnvironment = {
         DB: db,
         RELEASE_GIT_SHA: "test",
@@ -59,7 +53,10 @@ it("inherits the Queue owner's Clock when validating and retaining canary execut
         },
         OPERATIONAL_CANARY_QUEUE_NAME: "canary",
         OPERATIONAL_CANARY_WORKFLOW: {
-          create: () => Promise.resolve(workflowInstance),
+          create: (input) => {
+            created.push(input);
+            return Promise.resolve(workflowInstance);
+          },
           get: () => Promise.resolve(workflowInstance),
           createBatch: unusedWorkflowOperation,
           deleteBatch: unusedWorkflowOperation,
@@ -92,16 +89,8 @@ it("inherits the Queue owner's Clock when validating and retaining canary execut
           environment
         )
       );
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT operation AS kind,last_succeeded_ms FROM operational_health_view WHERE last_succeeded_ms IS NOT NULL"
-            )
-            .all()
-        )
-      ).toMatchObject({
-        results: [{ kind: "queueExecution", last_succeeded_ms: now }],
-      });
+      expect(created).toEqual([
+        { id: "operational-canary-0", params: { version: 1, sentAtMs: now } },
+      ]);
     })
   ));

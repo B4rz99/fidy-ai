@@ -705,13 +705,6 @@ describe("Cloudflare Worker topology", () => {
 it.live("routes the private canary Queue to a real Workflow handoff, not to application work", () =>
   withIsolatedD1("canary-queue-test", (db) =>
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "CREATE TABLE operational_health_view (operation TEXT PRIMARY KEY,state TEXT NOT NULL,observed_at_ms INTEGER NOT NULL,last_succeeded_ms INTEGER)"
-          )
-          .run()
-      );
       let created = false;
       const done = (): Promise<void> => Promise.resolve();
       const canaryInstance: WorkflowInstance = {
@@ -753,17 +746,6 @@ it.live("routes the private canary Queue to a real Workflow handoff, not to appl
         })
       );
       expect(created).toBe(true);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT operation AS kind FROM operational_health_view WHERE last_succeeded_ms IS NOT NULL"
-            )
-            .all()
-        )
-      ).toMatchObject({
-        results: [{ kind: "queueExecution" }],
-      });
     })
   )
 );

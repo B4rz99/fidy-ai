@@ -73,17 +73,12 @@ const EditingForm = ({
   const [accepted, setAccepted] = useState(false);
   return (
     <>
-      {intent === "signup" && Option.isNone(handoffReference) && (
-        <ConsentNotice accepted={accepted} setAccepted={setAccepted} />
-      )}
+      {intent === "signup" && <ConsentNotice accepted={accepted} setAccepted={setAccepted} />}
       {(["google", "microsoft"] as const).map((provider) => (
         <AccessAction
           kind="provider"
           key={provider}
-          disabled={
-            Option.isNone(handoffReference) &&
-            !canContinue(intent, accepted, AsyncResult.isSuccess(disclosure))
-          }
+          disabled={!canContinue(intent, accepted, AsyncResult.isSuccess(disclosure))}
           onClick={() =>
             start(
               provider,
@@ -156,6 +151,28 @@ const RecoveryStatus = ({
     )}
   </>
 );
+const AssociationStatus = ({
+  authentication,
+}: Readonly<{ authentication: Authentication }>): JSX.Element => (
+  <>
+    {authentication.state.status === "associating" && (
+      <>
+        <p>
+          Vincula {authentication.state.review.accountLabel} con tu WhatsApp
+          {authentication.state.review.whatsappPhone === null
+            ? ""
+            : ` ${authentication.state.review.whatsappPhone}`}
+          .
+        </p>
+        <p>Este chat podrá acceder a tu cuenta. En WhatsApp, solo pulsa Enviar para confirmar.</p>
+        <Button onClick={authentication.approve}>Vincular y volver a WhatsApp</Button>
+        <Button variant="outline" onClick={authentication.cancel}>
+          Cancelar
+        </Button>
+      </>
+    )}
+  </>
+);
 const AttemptStatus = ({
   authentication,
   setIntent,
@@ -167,6 +184,10 @@ const AttemptStatus = ({
 }>): JSX.Element => (
   <>
     <ConfirmingStatus authentication={authentication} />
+    <AssociationStatus authentication={authentication} />
+    {authentication.state.status === "awaiting_chat" && (
+      <p>En WhatsApp, envía el mensaje preparado. Mantén esta página abierta para terminar.</p>
+    )}
     <RecoveryStatus authentication={authentication} />
     {authentication.state.status === "waiting" && (
       <>
@@ -176,16 +197,7 @@ const AttemptStatus = ({
         </Button>
       </>
     )}
-    {(authentication.state.status === "refused" || authentication.state.status === "cancelled") && (
-      <>
-        <p role="alert">
-          {authentication.state.status === "cancelled"
-            ? "Cancelaste el acceso."
-            : "No se completó el acceso. Puedes iniciar un nuevo intento."}
-        </p>
-        <Button onClick={authentication.retry}>Volver a intentar</Button>
-      </>
-    )}
+    <RetryStatus authentication={authentication} provider={provider} />
     {authentication.state.status === "uncertain" && (
       <>
         <p role="alert">
@@ -201,6 +213,29 @@ const AttemptStatus = ({
         >
           Ir a iniciar sesión
         </Button>
+      </>
+    )}
+  </>
+);
+const RetryStatus = ({
+  authentication,
+  provider,
+}: Readonly<{
+  authentication: Authentication;
+  provider: AuthenticationProvider;
+}>): JSX.Element => (
+  <>
+    {(authentication.state.status === "refused" || authentication.state.status === "cancelled") && (
+      <>
+        <p role="alert">
+          {authentication.state.status === "cancelled"
+            ? "Cancelaste el acceso."
+            : "No se completó el acceso. Puedes iniciar un nuevo intento."}
+        </p>
+        <p>
+          Si sigue abierta, cierra la ventana de {provider === "google" ? "Google" : "Microsoft"}.
+        </p>
+        <Button onClick={authentication.retry}>Volver a intentar</Button>
       </>
     )}
   </>

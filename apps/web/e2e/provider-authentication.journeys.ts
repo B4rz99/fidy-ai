@@ -9,7 +9,7 @@ import {
 } from "./real-core-fixture";
 import { invokeRecoveryOperator } from "../../cli/test/recovery-operator.test-fixture";
 import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
-import { type Cause, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Option, Schema } from "effect";
 
 export type ProviderJourneyConfiguration = Readonly<{
   provider: "google" | "microsoft";
@@ -36,6 +36,7 @@ const openSignup = (page: Page): Promise<void> =>
     .goto("/login")
     .then(() => page.getByRole("button", { name: "Crea tu cuenta", exact: true }).click());
 const redirectStatus = 302;
+const providerReturnStatus = 303;
 const pendingStatus = 202;
 const noContentStatus = 204;
 const unauthorizedStatus = 401;
@@ -518,6 +519,12 @@ export const denialAndCancellationJourney = ({
   }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const unsafeNavigation: boolean[] = [];
+      page.on("console", (message) => {
+        if (message.text().includes("Unsafe attempt to initiate navigation")) {
+          unsafeNavigation.push(true);
+        }
+      });
       yield* Effect.tryPromise(() => installAcceptanceClock(page));
       yield* Effect.tryPromise(() =>
         context.route(configuration.authorizationPattern, (route: Route) =>
@@ -535,11 +542,7 @@ export const denialAndCancellationJourney = ({
         );
       }
       yield* expectProviderDenial(page, configuration);
-      expect(
-        (yield* Effect.tryPromise(() => context.cookies())).some(
-          (cookie) => cookie.name === "__Host-fidy_session"
-        )
-      ).toBe(false);
+      yield* expectNoProviderSession(context);
       yield* Effect.tryPromise(() => context.unroute(configuration.authorizationPattern));
       yield* Effect.tryPromise(() =>
         context.route(configuration.authorizationPattern, pendingProvider)
@@ -547,11 +550,10 @@ export const denialAndCancellationJourney = ({
       const closedPopup = yield* retryPendingProvider(page);
       yield* Effect.tryPromise(() => closedPopup.close());
       yield* Effect.tryPromise(() => expect(page.getByText("Cancelaste el acceso.")).toBeVisible());
-      yield* retryPendingProvider(page);
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
-      yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());
+      const cancelledPopup = yield* retryPendingProvider(page);
+      yield* cancelExternalProvider(page, cancelledPopup, configuration);
       expect(page.url()).toContain("/login");
-      yield* retryPendingProvider(page);
+      const retriedPopup = yield* retryPendingProvider(page);
       yield* Effect.tryPromise(() =>
         expect(
           page.getByRole("heading", {
@@ -559,10 +561,30 @@ export const denialAndCancellationJourney = ({
           })
         ).toBeVisible()
       );
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
+      yield* cancelExternalProvider(page, retriedPopup, configuration);
       yield* verifyReturnToProviderOptions(page, configuration, intent);
+      expect(unsafeNavigation).toEqual([]);
+      yield* expectNoProviderSession(context);
     })
   );
+const expectNoProviderSession = Effect.fn(function* (context: BrowserContext) {
+  const cookies = yield* Effect.tryPromise(() => context.cookies());
+  expect(cookies.some((cookie) => cookie.name === "__Host-fidy_session")).toBe(false);
+});
+const cancelExternalProvider = Effect.fn(function* (
+  page: Page,
+  popup: Page,
+  configuration: ProviderJourneyConfiguration
+) {
+  yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
+  yield* Effect.tryPromise(() => expect(page.getByText("Cancelaste el acceso.")).toBeVisible());
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByText(`Si sigue abierta, cierra la ventana de ${configuration.label}.`)
+    ).toBeVisible()
+  );
+  yield* Effect.tryPromise(() => popup.close());
+});
 const verifyReturnToProviderOptions = (
   page: Page,
   configuration: ProviderJourneyConfiguration,
@@ -576,8 +598,12 @@ const verifyReturnToProviderOptions = (
       );
     }
     const pending = yield* retryFromProviderOptions(page, configuration);
+    expect(pending.isClosed()).toBe(false);
     yield* returnToProviderOptions(page, configuration);
-    expect(pending.isClosed()).toBe(true);
+    expect(yield* Effect.tryPromise(() => pending.evaluate(() => window.opener === null))).toBe(
+      true
+    );
+    yield* Effect.tryPromise(() => pending.close());
   });
 const returnToProviderOptions = (
   page: Page,
@@ -601,12 +627,18 @@ const retryFromProviderOptions = (
   page: Page,
   configuration: ProviderJourneyConfiguration
 ): Effect.Effect<Page, Cause.UnknownError> =>
-  Effect.tryPromise(() =>
-    Promise.all([
-      page.waitForEvent("popup"),
-      page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click(),
-    ]).then(([popup]) => popup)
-  );
+  Effect.gen(function* () {
+    const popup = yield* Effect.tryPromise(() =>
+      Promise.all([
+        page.waitForEvent("popup"),
+        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click(),
+      ]).then(([opened]) => opened)
+    );
+    yield* Effect.tryPromise(() =>
+      expect(popup.getByText("Pending provider decision")).toBeVisible()
+    );
+    return popup;
+  });
 const denyProvider = (configuration: ProviderJourneyConfiguration, route: Route): Promise<void> => {
   const query = new URL(route.request().url()).searchParams;
   const callback = new URL(`${api}/providers/${configuration.provider}/callback`);
@@ -966,11 +998,12 @@ const verifyHandoffEntry = ({
   handoffReference: string;
 }>): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    expect(
-      yield* Effect.tryPromise(() =>
-        page.getByLabel("Acepto el tratamiento de datos descrito").count()
-      )
-    ).toBe(0);
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Acepto el tratamiento de datos descrito")).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByLabel("Acepto el tratamiento de datos descrito").check()
+    );
     expect(page.url()).toContain(`handoff=${handoffReference}`);
     yield* Effect.tryPromise(() =>
       expect(
@@ -1069,3 +1102,130 @@ const completePATReviewJourney = Effect.fn(function* ({
   yield* Effect.tryPromise(() => expect(row).toHaveCount(0));
   yield* Effect.tryPromise(() => openTransactionsThroughCore(page));
 });
+
+const enterWhatsAppSignup = ({
+  page,
+  request,
+  configuration,
+}: Pick<ProviderJourney, "page" | "request"> &
+  Readonly<{ configuration: ProviderJourneyConfiguration }>): Effect.Effect<
+  void,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const started = yield* Effect.tryPromise(() =>
+      request.post(`${operator}/whatsapp/start?caller=CO.Link${configuration.provider}&browser=1`)
+    );
+    const invitation = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ handoffReference: Schema.String })
+    )(yield* Effect.tryPromise(() => started.json()));
+    yield* Effect.tryPromise(() => page.goto(`/login?handoff=${invitation.handoffReference}`));
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("button", { name: `Continuar con ${configuration.label}` })
+      ).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByLabel("Acepto el tratamiento de datos descrito").check()
+    );
+    // Provider exchange is network work; observe its real callback before asserting the review UI.
+    yield* Effect.tryPromise(() =>
+      Promise.all([
+        page.context().waitForEvent("response", {
+          predicate: (response) =>
+            new URL(response.url()).pathname === `/providers/${configuration.provider}/callback` &&
+            response.status() === providerReturnStatus,
+        }),
+        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click(),
+      ])
+    );
+  });
+const nativeTimestampPrecisionMs = 1000;
+const nativeConfirmationSuccess = 200;
+const sendPreparedConfirmation = ({
+  page,
+  context,
+  request,
+  configuration,
+}: ProviderJourney & Readonly<{ configuration: ProviderJourneyConfiguration }>): Effect.Effect<
+  void,
+  Cause.UnknownError
+> =>
+  Effect.gen(function* () {
+    const reviewVisibleAt = yield* Clock.currentTimeMillis;
+    const clockContext = yield* Effect.context();
+    const elapsed = (): Promise<number> =>
+      Effect.runPromiseWith(clockContext)(
+        Clock.currentTimeMillis.pipe(Effect.map((now) => now - reviewVisibleAt))
+      );
+    const returned = context.waitForEvent("page");
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Vincular y volver a WhatsApp" }).click()
+    );
+    const whatsapp = yield* Effect.tryPromise(() => returned);
+    yield* Effect.tryPromise(() => whatsapp.waitForURL("https://wa.me/12056871742?**"));
+    const preparedText = new URL(whatsapp.url()).searchParams.get("text") ?? "";
+    expect(preparedText).toContain(`Vincular ${configuration.label}:`);
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("Guarda tu código de recuperación")).toHaveCount(0)
+    );
+    // Native WhatsApp timestamps have one-second precision; cross the review boundary honestly.
+    yield* Effect.tryPromise(() =>
+      expect.poll(elapsed).toBeGreaterThan(nativeTimestampPrecisionMs)
+    );
+    const confirmation = yield* Effect.tryPromise(() =>
+      request.post(
+        `${operator}/whatsapp/confirm?caller=CO.Link${configuration.provider}&text=${encodeURIComponent(preparedText)}`
+      )
+    );
+    expect(confirmation.status()).toBe(nativeConfirmationSuccess);
+  });
+export const whatsappLinkSignupJourney = ({
+  configuration,
+  page,
+  context,
+  request,
+}: ProviderJourney & Readonly<{ configuration: ProviderJourneyConfiguration }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        context.route(configuration.authorizationPattern, (route) =>
+          redirectSubject(configuration, `whatsapp-link-${configuration.provider}`, route)
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        context.route("https://wa.me/12056871742**", (route) =>
+          route.fulfill({ status: 200, contentType: "text/html", body: "<h1>Fidy WhatsApp</h1>" })
+        )
+      );
+      yield* enterWhatsAppSignup({ page, request, configuration });
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Vincular y volver a WhatsApp" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("+573001234567", { exact: false })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Cancelar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByText("Cancelaste el acceso.")).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Volver a intentar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Vincular y volver a WhatsApp" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByText(/escribe.*Estado/u)).toHaveCount(0));
+      yield* sendPreparedConfirmation({ page, context, request, configuration });
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Lo guardé" }).click());
+      yield* Effect.tryPromise(() => expect(page).toHaveURL("https://wa.me/12056871742"));
+      expect(
+        (yield* Effect.tryPromise(() => context.cookies())).some(
+          (cookie) => cookie.name === "__Host-fidy_session"
+        )
+      ).toBe(true);
+    })
+  );

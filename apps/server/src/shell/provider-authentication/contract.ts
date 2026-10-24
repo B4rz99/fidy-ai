@@ -31,7 +31,20 @@ export const ProviderHandoffReference = Schema.String.check(
 export const ProviderHandoffSearch = Schema.Struct({
   handoff: Schema.optionalKey(ProviderHandoffReference),
 });
+export const fidyWhatsAppUrl = "https://wa.me/12056871742";
+export const ProviderAssociationReview = Schema.Struct({
+  confirmationText: Schema.String,
+  status: Schema.Literal("awaiting_association"),
+  associationCode: ProviderHandoffReference,
+  accountLabel: Schema.String,
+  whatsappPhone: Schema.NullOr(Schema.String),
+});
+export const ProviderCompletionProof = Schema.Struct({
+  ...ProviderBrowserProof.fields,
+  associationCode: Schema.optionalKey(ProviderHandoffReference),
+});
 export const ProviderAuthenticationStatus = Schema.Union([
+  ProviderAssociationReview,
   Schema.Struct({ status: Schema.Literals(["pending", "verified", "rejected"]) }),
   Schema.Struct({
     status: Schema.Literal("awaiting_confirmation"),
@@ -48,8 +61,12 @@ export const ProviderCompletion = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("created"),
     backupRecoveryCode: Schema.RedactedFromValue(BackupRecoveryCode),
+    whatsappReturnUrl: Schema.optionalKey(Schema.Literal(fidyWhatsAppUrl)),
   }),
-  Schema.Struct({ status: Schema.Literal("approved") }),
+  Schema.Struct({
+    status: Schema.Literal("approved"),
+    whatsappReturnUrl: Schema.optionalKey(Schema.Literal(fidyWhatsAppUrl)),
+  }),
 ]);
 export const WebSignupDisclosure = Schema.Struct({
   revision: Schema.String,
@@ -83,7 +100,7 @@ export const ProviderAuthenticationGroup = HttpApiGroup.make("providerAuthentica
   )
   .add(
     HttpApiEndpoint.post("complete", providerPaths.complete, {
-      payload: ProviderBrowserProof,
+      payload: ProviderCompletionProof,
       success: ProviderCompletion,
       error: [
         HttpApiSchema.status(invalidStatus)(Refusal),
@@ -110,7 +127,7 @@ export const ProviderAuthenticationGroup = HttpApiGroup.make("providerAuthentica
   )
   .add(
     HttpApiEndpoint.post("completeMicrosoft", microsoftProviderPaths.complete, {
-      payload: ProviderBrowserProof,
+      payload: ProviderCompletionProof,
       success: ProviderCompletion,
       error: [
         HttpApiSchema.status(invalidStatus)(Refusal),

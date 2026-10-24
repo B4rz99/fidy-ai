@@ -154,6 +154,23 @@ const review = (caller: string): Effect.Effect<Response, Cause.UnknownError | Sc
     const code = /asociación ([0-9a-f-]{36})/u.exec(sent.text)?.[1];
     return Response.json({ associationCode: code, reviewMessageId: sent.id });
   });
+const seedInvitation = (caller: string): Effect.Effect<Response, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const id = newId();
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(`INSERT INTO whatsapp_signup_invitations(id,source_portfolio_id,source_bsuid,source_phone_number_id,source_message_id,source_phone,created_at_ms,expires_at_ms)
+        VALUES(?,'portfolio',?,'123456789012345',?,'+573001234567',?,?)`)
+        .bind(id, caller, id, now, now + handoffMs)
+        .run()
+    );
+    return Response.json({ handoffReference: id });
+  });
+const startWhatsAppOperator = (caller: string, url: URL): Promise<Response> =>
+  Effect.runPromise(
+    url.searchParams.get("browser") === "1" ? seedInvitation(caller) : seedHandoff(caller)
+  );
 /** Loopback-only browser driver exchanges public association review material; never browser verifiers or recovery. */
 export const whatsappOperator = (request: Request): Option.Option<Promise<Response>> => {
   const url = new URL(request.url);
@@ -164,7 +181,7 @@ export const whatsappOperator = (request: Request): Option.Option<Promise<Respon
     return Option.some(Promise.resolve(new Response(null, { status: 400 })));
   }
   if (url.pathname === "/whatsapp/start") {
-    return Option.some(Effect.runPromise(seedHandoff(caller)));
+    return Option.some(startWhatsAppOperator(caller, url));
   }
   if (url.pathname === "/whatsapp/review") return Option.some(Effect.runPromise(review(caller)));
   if (url.pathname === "/whatsapp/confirm") return Option.some(confirmReview({ caller, url }));
@@ -178,7 +195,8 @@ const confirmReview = ({
   Effect.runPromise(
     sendText({
       caller,
-      text: `Confirmo asociación ${url.searchParams.get("code") ?? ""}`,
+      text:
+        url.searchParams.get("text") ?? `Confirmo asociación ${url.searchParams.get("code") ?? ""}`,
       reply: Option.fromNullOr(url.searchParams.get("reply")),
     })
   );

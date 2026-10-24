@@ -1,5 +1,75 @@
 # Provider Authentication
 
+## WhatsApp link-first onboarding — #1531 (local work, 2026-10-24)
+
+Intended journey: message Fidy, open one short signup link, accept the browser disclosure and use
+Google or Microsoft, review the account/chat association, then open Fidy WhatsApp with its confirmation
+message prepared. The caller presses Send; Fidy links only after that exact message arrives from the
+original authenticated chat. The initiating browser stays open with its private proof. Providers
+remain required. New Users save the one-time recovery code on the original Fidy page before closing that page; existing Users retain
+identity, Consent, TrialPeriod and recovery. No “Estado” command or copied association code is
+required for new invitations. Existing channel links are never replaced by this flow.
+
+The invitation is a public locator with immutable authenticated source metadata and a ten-minute
+lifetime. Private browser proof, verified OIDC and exact originating-chat approval are checked again in the atomic
+completion unit. An unfinished attempt may restart only in the same private browser and original
+lifetime; uncertainty cannot replay completion. Expired protocol metadata has a one-day retention
+limit and associated invitations participate in credential erasure. Migration
+`0002_whatsapp_signup_invitations.sql` expands the existing baseline without rebuilding data tables.
+
+Current evidence is local, not a deployed claim. The revised candidate passed all 172 native
+authentication/Consent checks (including 26 focused native linking checks), 256 web unit checks and
+20 Google/Microsoft built-browser journeys after synchronizing signup branding, plus 12 repeated
+Google/Microsoft signup/login cancellation journeys. The earlier full native run hit local socket exhaustion;
+all 12 affected files then passed in a bounded rerun: 271 checks passed, two intentionally skipped.
+The full static verification group passed. Review identified and corrected a vacuous conflict test:
+the second chat now sends its exact native approval before completion is refused. A controlled local
+mutation removing only the initial-association guard made that test fail (completion returned 200);
+the guard was restored and the focused 26-check suite passed.
+That rerun exposed an external-popup cancellation assumption: Fidy had cleared `window.opener`
+for isolation, but still tried to close the provider-origin window from its parent. A focused browser
+regression reproduced Chromium's navigation refusal with Google as well as the earlier Microsoft
+failure. Cancellation now closes only blank/first-party windows, discards local authority and tells
+the User to close any remaining external provider window. Successful/denied first-party callback
+pages still close themselves; no opener or isolation policy was relaxed. The focused native public/Core/D1 checks cover
+first-contact non-authority, current Consent, first-claim forwarded links, wrong/missing native
+approval, wrong caller/endpoint/account, pre-review messages, denial, replaced provider attempts, wrong provider/browser,
+expiry, concurrency, atomic rollback, existing-User preservation and retry. The built browser uses
+controlled Google/Microsoft callbacks, intercepts the fixed WhatsApp return URL and submits the prepared
+message through authenticated native Ingress/Core/local D1 before expecting recovery or a session. Real provider
+login, mobile/browser return behavior and live delivery still need the deployed journey.
+
+PR #1534's first CI run `40104061817` passed all four native adapter shards, infrastructure,
+unit/artifact, static, packaging and security jobs. Browser shard 1 exposed a new phase-transition
+poll burst and an existing Dashboard `Network.getResponseBody` failure; shard 2 passed. A local
+concurrent Google/Microsoft reproduction captured a real provider-status 429 after retry/chat
+transitions. One mounted poll owner now retains the existing one-second cadence across provider retries and
+chat-confirmation phases, preserving the five-per-five-seconds server guard without automatic
+mutation retry or delaying the first poll of a new controller. The Dashboard failure was also reproduced locally. Its trace showed a completed 200 pairing response
+and the application's subsequent email-start request, with no intervening navigation, while Chromium's
+separate response-body read failed. The fixture now captures the genuine upstream response through
+`route.fetch()` and fulfills the same bytes to the browser; no domain result is fabricated. It also
+uses the selected loopback topology for email delivery. Five fresh parallel runs then passed all 15
+Google/Microsoft linking and Dashboard cases. The full 20-provider suite passed with the shared
+poll owner. The final review also exposed a native decision/status race: a genuine chat confirmation could
+settle after the first real D1 read, then disappear from a pending-only second read and incorrectly
+produce HTTP 400. A controlled D1 scheduling regression reproduced that refusal. The final read now
+retains the exact current attempt's confirmed/denied decision and classifies absence deliberately;
+completion still independently enforces atomic native authority. Confirmation and denial during
+that read are covered through public Ingress → Core and real local D1; all 28 focused checks pass.
+One subsequent parallel browser run under concurrent static verification reached a valid Microsoft
+review only after its five-second DOM assertion expired; the trace retained the review and no
+provider refusal. The journey now observes the genuine provider callback before asserting that
+review. Assertion/request timeouts, server limits and production provider behavior are unchanged.
+Final CI and deployed evidence remain pending.
+
+Production baseline `a08d02a2c256a25e8837771d112b1458f81e9158` passed deployment `40093477574`
+and signed full inspection `40093977215` on 2026-10-24, including D1, Queue and Workflow proof.
+Those checks precede this change. The live old handoff reached verified Google authentication and
+explicit chat confirmation, then safely refused an already-associated User. The User authorized a
+single exact QA unlink; provider credentials, Transactions and Consent history were verified intact.
+No new association is claimed complete, and the new flow has not yet been deployed or live-tested.
+
 The unified `/login` view offers Google and Microsoft buttons in the same form. A mounted attempt captures the explicitly selected provider; cancellation, retry and completion use that same provider. The application composes channel/mailbox pairing as another step at the same URL. Fixed continuation decoding is shared by both authentication methods.
 
 Broad non-AI audit, 2026-10-12: all 99 ordinary built-browser checks passed, including the controlled Google/Microsoft callbacks and real local pairing/session journeys. The additional onboarding/PAT/OAuth Worker/D1 run passed 303 checks. All three opt-in browser-cost checks also passed on synchronized trunk `6863b80f2a`, including provider cancellation, pairing cadence, hidden-document continuation and route-unmount cleanup. The 60-second clock-driven observations after cancellation/unmount or authentication replacement recorded no further requests. These are isolated local checks with controlled provider callbacks and clock advancement, not 60-second production wall-clock observations or real provider availability.

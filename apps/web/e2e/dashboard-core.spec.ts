@@ -123,6 +123,11 @@ const dragWidget = Effect.fnUntraced(function* ({
   destination,
   announcement,
 }: Readonly<{ page: Page; source: Locator; destination: Locator; announcement: string }>) {
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByRole("button", { name: "Arrastrar Gastos del mes", exact: true })
+    ).toBeEnabled()
+  );
   yield* Effect.tryPromise(() => source.scrollIntoViewIfNeeded());
   const sourceBox = yield* Effect.fromOption(
     Option.fromNullOr(yield* Effect.tryPromise(() => source.boundingBox()))

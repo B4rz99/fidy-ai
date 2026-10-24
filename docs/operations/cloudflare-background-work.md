@@ -147,7 +147,7 @@ remains #1262.
 
 On 2026-10-23, the account dashboard saved and enabled **Fidy production: Core rejection bursts**
 (`fc9c5304807746699773a58bb8287594`), scoped to the deployed Core Worker. It reports a one-minute
-check interval, threshold `>= 1`, one-minute averaging and four-hour notification repeats. Its email
+check interval, threshold `> 0`, five-minute averaging and four-hour notification repeats. Its email
 destination matches the existing deployed `OPERATOR_ALERT_EMAIL`. The saved query is:
 
 ```sql
@@ -169,12 +169,12 @@ Dashboard inspection of Workers Logs on 2026-10-23 returned the closed operation
 capabilities, Workflows, owner work and Queues. This establishes ingestion and the dashboard query
 match; it does not establish historical monitor evaluations or notification delivery.
 
-The fixed five-minute window for direct detections remains unverified: the documented
-`timestamp >= NOW() - INTERVAL '5' MINUTE` expression failed account preview with
-`RecursionLimitExceeded` (HTTP422). The saved query still uses the automatic interval; validate
-an account-supported five-minute window before retiring scheduled presence. Cloudflare's
-sample-notification action was submitted once to the configured operator. Submission and an enabled
-monitor are not evidence of actual threshold firing, mailbox receipt, resolution or absence handling.
+Both manual timestamp expressions, `NOW() - INTERVAL '5' MINUTE` and
+`NOW() - toIntervalMinute(5)`, failed account preview with `RecursionLimitExceeded` (HTTP422).
+The saved and reopened monitor instead retains the automatic one-minute query interval and averages
+its nonnegative counts over five minutes, triggering above zero. This verifies persisted configuration;
+it does not establish actual rolling-window evaluation semantics. Cloudflare's sample-notification
+action was submitted once; a sample is not actual threshold-firing evidence.
 
 Additional saved, enabled monitors use that same operator recipient and report one-minute checks:
 
@@ -249,10 +249,42 @@ The dashboard's monitor actions expose a sample-notification test, not an actual
 The Platform Notifications view also did not expose delivery history in this inspection.
 [Cloudflare documents alert history through its API](https://developers.cloudflare.com/notifications/notification-history/);
 the existing Wrangler login received HTTP403 for that read. Dashboard access remains usable for
-configuration, preview, log queries and native resource inspection. Actual notification delivery,
-recovery, missing/stale-owner behavior and independent owner cooldowns remain unproven.
-The saved critical monitor's last-hour query preview also matched the deployed critical observations;
-its positive preview values do not prove actual evaluations or notification delivery.
+configuration, preview, log queries and native resource inspection. Subsequent operator-mailbox
+inspection verified real Cloudflare threshold-triggered and resolved emails for critical health,
+warning health and both canary monitors, distinct from sample notifications. The critical thread
+included `Trigger: 1 >= 1` and a new alert start at `2026-10-24T00:16:02Z`; the Queue recovery
+thread included `Trigger: 0.1 == 0`, demonstrating a nonzero recovery value, with an alert start
+at `2026-10-24T00:42:59Z`. This establishes actual mail delivery and platform-reported transitions,
+not correct business health: numerous preceding canary alert/recovery cycles still need correlation
+with native executions, sampling and observation gaps. Cloudflare documents that event datasets may
+be [adaptively sampled](https://developers.cloudflare.com/analytics/sql-api/datasets/); weighted counts cannot recover an omitted event. The aggregate Queue baseline
+showed 283 ingested and acknowledged messages, zero retries and zero realtime backlog over the last day.
+Neither that aggregate nor a resolved email proves uninterrupted execution.
+
+A controlled absence check began on October 23 at approximately 19:48 America/Bogota: only delivery
+on the dedicated operational canary Queue was paused, through its Messages tab. Business Queues,
+consumers, schedules and monitor definitions were unchanged. Producer publication remains every
+five minutes; resume before the oldest retained probe exceeds its existing ten-minute payload-age
+limit. Correlate new alert start times with this interval, then verify consumption and Workflow
+completion plus delivered resolution after resuming. Historical emails are not controlled-test proof.
+The Queue was resumed and visibly returned to Active at approximately 19:58 America/Bogota.
+The real Cloudflare Queue alert received at 20:01 reports `Trigger: 0 == 0` and alert start
+`2026-10-24T00:57:59Z`, inside the deliberate pause. Native Workflow instances
+`operational-canary-5976010` and `operational-canary-5976011` both completed after delivery resumed;
+`operational-canary-5976012` then completed on the ordinary publication cadence. This establishes
+controlled Queue absence detection, actual alert delivery and downstream execution recovery;
+verify the corresponding delivered platform resolution separately.
+
+Native Workflow instance `operational-canary-5976007` completed its D1 step at
+`2026-10-24 00:35:33 UTC` (827ms wall time, Completed). The delivered missing-Workflow alert reports
+`Trigger: 0 == 0`, alert started `2026-10-24T00:37:57Z`. The supposed ten-minute absence therefore
+fired less than three minutes after a real completion. The detector is not verified coverage and must
+be corrected before retirement. These timestamps predate the controlled pause. Do not attribute
+this contradiction to sampling alone without isolating sampling, ingestion delay and evaluation-window
+behavior. A subsequent unsaved Workflow SQL draft with
+`timestamp >= CURRENT_TIMESTAMP() - INTERVAL '10' MINUTE` also failed preview with
+`RecursionLimitExceeded` (HTTP422); it was cancelled. Existing saved monitors remain enabled.
+Missing/stale-owner coverage and independent owner cooldowns remain unresolved.
 
 | Signal                                                      | Interpretation                                                                          | Action                                                                            |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |

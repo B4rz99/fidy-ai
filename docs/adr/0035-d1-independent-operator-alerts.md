@@ -1,6 +1,6 @@
 # D1-independent operator alerts
 
-- **Status:** Accepted (independent architecture review completed before implementation)
+- **Status:** Superseded by the accepted platform monitoring design (#1426/#1491). Historical decision; the current runbook owns platform delivery and absence detection.
 - **Date:** 2026-10-10
 - **Issue:** #1160
 

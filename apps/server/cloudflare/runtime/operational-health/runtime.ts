@@ -1,53 +1,5 @@
-import {
-  ResendAccepted,
-  makeOperatorEmailClient,
-  operatorEmailBody,
-  redirectStatus,
-  successStatus,
-} from "./internal/operator-email";
-import { Effect, Result, Schema } from "effect";
-import type { CoreRejectionBoundary, OperationalAlert } from "./contract";
-
-/** Sends only closed operator metadata over the existing bounded Resend transport. */
-export const sendOperatorEmail = (
-  input: Readonly<{
-    alert: OperationalAlert;
-    idempotencyKey: string;
-    to: string;
-    apiKey: string;
-    release: string;
-    phase: "firing" | "resolved";
-    signal: AbortSignal;
-  }>
-): Promise<void> =>
-  Effect.runPromiseExit(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const outbound = yield* makeOperatorEmailClient(input);
-        const body = yield* operatorEmailBody(input);
-        return yield* outbound.execute({
-          _tag: "ResendEmailDelivery",
-          idempotencyKey: input.idempotencyKey,
-          body,
-        });
-      })
-    ),
-    { signal: input.signal }
-  ).then((result): void => {
-    if (result._tag === "Failure") throw new Error("Operator email delivery unavailable");
-    const response = result.value;
-    if (
-      response.status < successStatus ||
-      response.status >= redirectStatus ||
-      Result.isFailure(
-        Schema.decodeResult(Schema.fromJsonString(ResendAccepted))(
-          new TextDecoder().decode(response.body)
-        )
-      )
-    ) {
-      throw new Error("Operator email delivery unavailable");
-    }
-  });
+import { Effect } from "effect";
+import type { CoreRejectionBoundary } from "./contract";
 
 const minuteMs = 60_000;
 const burstThreshold = 100;
@@ -68,20 +20,18 @@ const observedRefusal = (boundary: CoreRejectionBoundary, status: number): boole
  * Records concentrated refusal bursts without retaining request metadata. One observer belongs to
  * one Core HTTP assembly or MCP residency. It is deliberately lossy across restarts and
  * distributed traffic. Each detected burst emits closed platform metadata independently of D1;
- * all observers also share one metadata-only presence row.
+ * no counter or presence row is retained.
  */
 export const makeCoreRejectionObserver = (): ((
   input: Readonly<{
     status: number;
     boundary: CoreRejectionBoundary;
-    db: D1Database;
     now: number;
   }>
 ) => Effect.Effect<void>) => {
   let minute = -1;
   let refusals = 0;
-  let pending = false;
-  return ({ status, boundary, db, now }) =>
+  return ({ status, boundary, now }) =>
     Effect.suspend(() => {
       if (!observedRefusal(boundary, status)) return Effect.void;
       const observedAtMs = Math.floor(now / minuteMs) * minuteMs;
@@ -93,36 +43,12 @@ export const makeCoreRejectionObserver = (): ((
       if (refusals >= burstThreshold) return Effect.void;
       refusals += 1;
       if (refusals < burstThreshold) return Effect.void;
-      const report = Effect.logWarning({
+      return Effect.logWarning({
         component: "core-rejections",
         operation: "coreRejectionBursts",
         state: "attention",
         message:
           "fidy.operational component=core-rejections operation=coreRejectionBursts state=attention severity=warning",
       }).pipe(Effect.catchDefect(() => Effect.void));
-      if (pending) return report;
-      pending = true;
-      return report.pipe(
-        Effect.andThen(
-          Effect.tryPromise(() =>
-            Promise.resolve()
-              .then(() =>
-                db
-                  .prepare(`INSERT INTO operational_event_buckets(kind,bucket_ms,count,observed_at_ms)
-          VALUES ('core_rejection',0,1,?) ON CONFLICT(kind,bucket_ms) DO UPDATE SET observed_at_ms = excluded.observed_at_ms
-          WHERE excluded.observed_at_ms > observed_at_ms`)
-                  .bind(observedAtMs)
-                  .run()
-              )
-              .finally(() => {
-                // D1 has no cancellation API: retain this guard until the actual promise settles.
-                pending = false;
-              })
-          ).pipe(
-            Effect.timeout("250 millis"),
-            Effect.orElseSucceed(() => undefined)
-          )
-        )
-      );
     });
 };

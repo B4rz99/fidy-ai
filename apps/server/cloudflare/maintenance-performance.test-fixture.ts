@@ -52,7 +52,6 @@ export const maintenancePerformanceEnvironment = ({
   EMAIL_REPLACEMENT_WORKFLOW: Option.some(workflow),
   BILLING_COLLECTION_WORKFLOW: Option.some(workflow),
   STATEMENT_EXTRACTION_WORKFLOW: Option.some(workflow),
-  OPERATOR_ALERT_EMAIL: Option.some("performance@example.invalid"),
   RESEND_API_KEY: Option.some("configured"),
   WOMPI_EVENT_SECRET: Option.some("configured"),
 });

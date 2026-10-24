@@ -40,7 +40,6 @@ export type PlatformMaintenanceInput = Readonly<{
   EMAIL_REPLACEMENT_WORKFLOW: Option.Option<Workflow>;
   BILLING_COLLECTION_WORKFLOW: Option.Option<Workflow>;
   STATEMENT_EXTRACTION_WORKFLOW: Option.Option<Workflow>;
-  OPERATOR_ALERT_EMAIL: Option.Option<string>;
   RESEND_API_KEY: Option.Option<string>;
   WOMPI_EVENT_SECRET: Option.Option<string>;
 }> &
@@ -55,7 +54,6 @@ export type PlatformMaintenanceInput = Readonly<{
 /** Fixed-policy platform maintenance; actions are independent. Decision instants are Unix epoch milliseconds. */
 export type PlatformMaintenance = Readonly<{
   inspectHealth: () => Effect.Effect<void, PlatformMaintenanceUnavailable>;
-  retainEventBuckets: (nowEpochMs: number) => Effect.Effect<void, PlatformMaintenanceUnavailable>;
   publishCanary: (nowEpochMs: number) => Effect.Effect<void, PlatformMaintenanceUnavailable>;
 }>;
 

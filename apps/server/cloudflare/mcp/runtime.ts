@@ -164,7 +164,6 @@ const decodeToolResponse = (
       isError: !response.ok,
     });
     yield* input.observeRejections({
-      db: input.db,
       now: yield* Clock.currentTimeMillis,
       boundary: "mcp",
       status: response.status,

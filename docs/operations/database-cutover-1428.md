@@ -5622,3 +5622,121 @@ probes, promotion, normal-traffic checks and guarded rollback now use a schema-c
 stable pair. A failed release therefore returns to compatible isolation. Keep #1494 open until
 this live release completes; keep #1491/#1492 and all three Operational tables until replacement
 alert delivery/resolution and dashboard coverage are proven.
+
+## Final operational-only retirement checkpoint (#1494)
+
+This checkpoint supersedes the isolation instructions above for this final release. The previous
+populated feature-schema transition is complete; the source is no longer the pre-#1526 schema.
+Native D1 catalog inspection on 2026-10-24 found 112 application tables. Comparing every surviving
+schema object with the final fresh baseline found only the three retired Operational stores:
+`operational_alerts`, `operational_event_buckets`, and `operational_health_view`. There are no inbound
+foreign keys to these stores. The equivalent inline Resource Admission CHECK is retained exactly
+as installed. No feature table requires rebuilding, copying, rekeying or a public write fence.
+
+The [final owner/relationship inventory](database-schema-1494.md) covers all 109 surviving
+application tables and 258 declared foreign-key column references. The accepted confirmed-upload
+writer store and the independently added WhatsApp signup invitation account for the difference
+from the older 107-table design total. This is a measured inventory, not a count-based test gate.
+
+### Replacement evidence and coverage boundaries
+
+PR #1535 deployed the final owner-inspection coverage marker. PR #1536 enabled native Issues and
+verified privacy settings before promotion; Production run `40121537002` succeeded. The background
+work runbook records the five saved native monitor queries, actual alert and resolution emails,
+constant-query Workflow recovery, dedicated Queue pause/resume recovery, and the saved timestamped
+owner-health Logs query. The isolated binding-free privacy probe Worker has been removed.
+
+Five custom monitor slots require a combined owner-attention stream. Per-owner acknowledgments,
+independent email cooldowns and custom delivery retries are intentionally retired, not claimed as
+an equivalent platform feature. A complete sweep means inspected, not healthy; missing, stale and
+unavailable observations cannot become zero/healthy. A real retained dead-letter backlog remains
+visible and actionable; do not purge or replay business work to make monitoring appear healthy.
+
+### Single baseline and retained receipts
+
+`0001_schema.sql` is the only fresh-install migration. It includes all former signup invitation
+CREATE statements, constraints, triggers, indexes and the provider-attempt invitation reference.
+The former expansion-only migration test is obsolete; the existing clean-install/populated-redeploy
+native checks and the existing signup/association journeys cover the consolidated behavior.
+
+The installed Alchemy source (`SQL/Migrations/AlchemyFormat.ts`, `appliedNames` and
+`applyAlchemyFormat`) detects applied migrations by name. An existing `0001_schema.sql` receipt
+therefore prevents replay of the fresh baseline. Keep both historical receipt rows, including their
+IDs, names and original creation/application instants. After the guarded physical retirement,
+update only the existing baseline hash to the final raw-file SHA-256; retain the historical
+`0002_whatsapp_signup_invitations.sql` receipt. Never delete/reset bookkeeping or apply the fresh
+baseline over Production.
+
+### Native rehearsal and release sequence
+
+Before review, the final single baseline passed the existing clean-install and populated-redeploy
+native tests. The existing WhatsApp signup/association/provider journey tests passed (69 tests).
+An isolated native D1 rehearsal populated User/provider evidence, all three Operational stores and
+both original migration receipts. It proved that a changed source definition is refused, and a
+forced failure after the drops and receipt update rolls back schema, all rows and receipts. The
+successful batch preserved all surviving table counts and had no foreign-key violations. D1's
+[batch transaction contract](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch)
+backs this behavior; it was also executed against the native local binding.
+
+1. Merge only after final review and full PR CI pass. Let the ordinary Production workflow deploy
+   and verify the exact new revision while the old three tables remain as an unused schema superset.
+   There are no mixed feature-schema readers or new compatibility paths in this release.
+2. Confirm the deployed Core and canary Workflow revision, ordinary Queue/Workflow completion,
+   saved native monitors and observation timestamps. Let old canary executions settle. Retain a
+   private backup of the three retired stores, their exact DDL, original migration receipts and
+   a fresh catalog. Do not publish row contents or credentials in GitHub evidence.
+3. Use one source-bound native D1 batch. Assert the exact three source definitions and both
+   original receipt IDs/names/hashes, zero inbound foreign keys and zero existing FK violations
+   through `sql_assertions`. Capture every surviving table's count within the batch. Drop only the
+   three named Operational tables. Conditionally update only the original baseline receipt hash;
+   require exactly one affected row and no FK violations. Remove the temporary assertion, capture
+   all surviving counts again, and return the final catalog, original receipts and FK check.
+4. Require identical before/after surviving counts and exact normalized fresh/live application
+   catalog convergence. The operation cannot cascade into feature tables because the precondition
+   refuses inbound foreign keys; no surviving-table DML is issued. Counts supplement this structural
+   preservation proof rather than claiming a content hash comparison of all live User data.
+5. Dispatch the ordinary Production workflow again. Its successful idempotent run proves that the
+   consolidated baseline does not replay and establishes a schema-compatible rollback version.
+   Record actual D1 reads/writes and inspect quota telemetry. No full-table rebuild or 50,000-row
+   data-copy transition is part of this release.
+
+Before the physical retirement, ordinary code rollback is safe against the schema superset.
+After retirement, do not route an older snapshot-writing revision without restoring the privately
+backed-up three Operational stores first. Prefer the final schema-compatible verified release as
+rollback baseline. An uncertain API result requires fresh state inspection, not blind retry.
+
+Keep implementation and parent issues open until both the live transition and ordinary release
+verification complete. Record the actual release IDs and live result below before closure.
+
+### Live retirement verified — 2026-10-24 UTC
+
+PR #1541 merged as `4499e37c1215af1ca4b36959844b12f730b39816` after full green CI
+(run `40124917423`, including four native adapter shards and both browser/accessibility shards).
+Ordinary Production run `40125326442` succeeded through candidate and intermediate smoke,
+promotion, normal traffic, public topology, unauthorized edge probes and drift verification.
+Native canary `operational-canary-5976234` completed the new `verify-operational-canary-v1-1` step
+at 19:30:29 UTC, without a stored health snapshot.
+
+A fresh private backup verified both original receipts, the exact three source definitions and
+zero FK violations before mutation. The guarded twelve-statement native batch then succeeded:
+
+- **109 application tables**, with all **1,055** normalized application schema objects matching the
+  final fresh baseline. Normalization ignores whitespace and optional identifier quoting, not
+  constraint or field differences. SQLite and Alchemy bookkeeping are excluded.
+- Identical before/after counts for every surviving table; zero FK violations. No feature-table
+  DML, rebuild or User-data copy was issued. Both historical receipt rows retain their original
+  IDs, names, creation/application instants; only the baseline hash changed.
+- **78,490 rows read and 11 rows written** for the complete guarded transition, including catalog,
+  FK and surviving-count verification. No D1 quota error occurred.
+- Final baseline SHA-256:
+  `04a031beb5600a2152ee17354e17618e4283c827ff6430a041e66ece842572f0`.
+
+The 19:14 UTC dashboard reading before rollout showed approximately 2 million rows read and
+14,000 rows written over its rolling last-24-hours view; that view is not a UTC-day quota counter.
+Private backups, prepared restoration requests and native API results remain outside the repository.
+The existing real dead-letter backlog was not purged or replayed to manufacture healthy monitoring.
+
+The ordinary Production release triggered by merging this evidence must also pass before issue
+closure. That second release demonstrates idempotent deployment against the physically retired
+schema and supplies a compatible rollback baseline. Its final run ID and closure evidence belong
+in #1494 and the linked parent completion records.

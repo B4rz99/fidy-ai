@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { decideOperationalAlerts } from "./operations";
-import type { PendingSignal } from "./contract";
+import { operationalSeverity } from "./operations";
+import type { AlertSignal, PendingSignal } from "./contract";
+
+const severities = (signals: ReadonlyArray<AlertSignal>): ReadonlyArray<string> =>
+  signals.map(operationalSeverity);
 
 const pending = (overrides: Partial<PendingSignal> = {}): PendingSignal => ({
   component: "async-health" as const,
@@ -20,23 +23,24 @@ const pending = (overrides: Partial<PendingSignal> = {}): PendingSignal => ({
 describe("operator alert decisions", () => {
   it("escalates stalled accepted work without interpreting its bounded sample as a total", () => {
     expect(
-      decideOperationalAlerts([
+      severities([
         pending({ sampledPending: 8, sampleLimited: true, oldestPendingAgeMilliseconds: 600_000 }),
       ])
-    ).toEqual([{ kind: "pending_work", owner: "billing", severity: "critical" }]);
+    ).toEqual(["critical"]);
   });
 
   it("treats an unreadable measurement as unavailable rather than healthy", () => {
     expect(
-      decideOperationalAlerts([
-        { component: "async-health", operation: "billing", state: "unavailable" },
-      ])
-    ).toEqual([{ kind: "inspection_unavailable", owner: "billing", severity: "warning" }]);
+      severities([{ component: "async-health", operation: "billing", state: "unavailable" }])
+    ).toEqual(["warning"]);
+    expect(operationalSeverity(pending({ state: "attention", unavailableWorkflows: 1 }))).toBe(
+      "warning"
+    );
   });
 
   it("reports dead letters and confirmed failed Workflows immediately", () => {
     expect(
-      decideOperationalAlerts([
+      severities([
         {
           component: "async-health",
           operation: "deadLetters",
@@ -46,15 +50,12 @@ describe("operator alert decisions", () => {
         },
         pending({ state: "attention", failedWorkflows: 1 }),
       ])
-    ).toEqual([
-      { kind: "dead_letters", owner: "deadLetters", severity: "critical" },
-      { kind: "workflow_failure", owner: "billing", severity: "critical" },
-    ]);
+    ).toEqual(["critical", "critical"]);
   });
 
   it("alerts when a primary Queue accumulates work even before a D1 outbox ages", () => {
     expect(
-      decideOperationalAlerts([
+      severities([
         {
           component: "async-health",
           operation: "billingQueue",
@@ -63,29 +64,12 @@ describe("operator alert decisions", () => {
           backlogBytes: 3_000,
         },
       ])
-    ).toEqual([{ kind: "queue_backlog", owner: "billingQueue", severity: "warning" }]);
-  });
-
-  it("does not treat a successful send as Queue or Workflow execution", () => {
-    expect(
-      decideOperationalAlerts([
-        { component: "capability", operation: "queueExecution", state: "unavailable" },
-        {
-          component: "capability",
-          operation: "workflowExecution",
-          state: "attention",
-          lastSucceededMs: 100,
-        },
-      ])
-    ).toEqual([
-      { kind: "inspection_unavailable", owner: "queueExecution", severity: "warning" },
-      { kind: "capability_unusable", owner: "workflowExecution", severity: "critical" },
-    ]);
+    ).toEqual(["warning"]);
   });
 
   it("alerts on overdue statement-byte retention without exposing object keys", () => {
     expect(
-      decideOperationalAlerts([
+      severities([
         {
           component: "async-health",
           operation: "retention",
@@ -95,30 +79,12 @@ describe("operator alert decisions", () => {
           oldestOverdueAgeMilliseconds: 86_400_000,
         },
       ])
-    ).toEqual([{ kind: "retention_lag", owner: "retention", severity: "critical" }]);
-  });
-
-  it("alerts on Workflow failures without relying on Tail Worker measurements", () => {
-    expect(
-      decideOperationalAlerts([
-        {
-          component: "workflow-execution",
-          operation: "workflowFailures",
-          state: "attention",
-          recentCount: 1,
-          fiveMinuteCount: 1,
-        },
-        { component: "workflow-execution", operation: "workflowFailures", state: "unavailable" },
-      ])
-    ).toEqual([
-      { kind: "workflow_failure", owner: "workflowFailures", severity: "critical" },
-      { kind: "inspection_unavailable", owner: "workflowFailures", severity: "warning" },
-    ]);
+    ).toEqual(["critical"]);
   });
 
   it("does not call a single rejected email proof a callback rejection spike", () => {
-    expect(
-      decideOperationalAlerts([pending({ state: "attention", sampledRejectedEmailWork: 1 })])
-    ).toEqual([]);
+    expect(severities([pending({ state: "attention", sampledRejectedEmailWork: 1 })])).toEqual([
+      "none",
+    ]);
   });
 });

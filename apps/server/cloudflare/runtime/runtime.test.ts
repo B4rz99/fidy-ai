@@ -1,11 +1,9 @@
 import { type PlatformMaintenanceInput, PlatformMaintenanceUnavailable } from "./contract";
 import { deepStrictEqual } from "node:assert";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Exit, FileSystem, Logger, Option, Schema } from "effect";
+import { Effect, Exit, Logger, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
-import { afterAll, expect, vi } from "vitest";
-import { Miniflare } from "miniflare";
-import { NodeFileSystem } from "@effect/platform-node";
+import { afterAll, expect } from "vitest";
 import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import { makePlatformMaintenance } from "./runtime";
 
@@ -48,7 +46,6 @@ const input = (
   EMAIL_REPLACEMENT_WORKFLOW: Option.none(),
   BILLING_COLLECTION_WORKFLOW: Option.none(),
   STATEMENT_EXTRACTION_WORKFLOW: Option.none(),
-  OPERATOR_ALERT_EMAIL: Option.none(),
   RESEND_API_KEY: Option.none(),
   WOMPI_EVENT_SECRET: Option.none(),
   ...overrides,
@@ -59,7 +56,6 @@ it.effect("keeps disabled operational work inert but refuses an enabled missing 
     const { db } = yield* Effect.tryPromise(() => storage.acquire());
     const disabled = makePlatformMaintenance(input(db));
     yield* disabled.inspectHealth();
-    yield* disabled.retainEventBuckets(600_000);
     yield* disabled.publishCanary(600_000);
     const enabled = makePlatformMaintenance(
       input(db, { ASYNC_HEALTH_ENABLED: Option.some("enabled") })
@@ -98,310 +94,191 @@ it.effect("publishes a period-bounded canary and closes Queue rejection details"
   })
 );
 
-it.effect(
-  "records unavailable measurements and readiness even when alert configuration is absent",
-  () =>
-    Effect.gen(function* () {
-      const { db } = yield* Effect.tryPromise(() => storage.acquire());
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "CREATE TABLE operational_health_view (operation TEXT PRIMARY KEY, state TEXT, observed_at_ms INTEGER)"
-          )
-          .run()
-      );
-      let backlogCount = 1000;
-      const logs: Array<unknown> = [];
-      const logger = Logger.make<unknown, void>(({ message }) => logs.push(message));
-      const loggers = new Set([logger]);
-      const configured = input(db, {
-        ASYNC_HEALTH_ENABLED: Option.some("enabled"),
-        RESEND_API_KEY: Option.some("configured"),
-        WOMPI_EVENT_SECRET: Option.some("configured"),
-        BILLING_COLLECTION_QUEUE: Option.some({
-          ...queue,
-          metrics: () => Promise.resolve({ backlogCount, backlogBytes: 1000 }),
+it.effect("reports bounded measurements and readiness through closed platform observations", () =>
+  Effect.gen(function* () {
+    const { db } = yield* Effect.tryPromise(() => storage.acquire());
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "CREATE TABLE operational_health_view (operation TEXT PRIMARY KEY, state TEXT, observed_at_ms INTEGER)"
+        )
+        .run()
+    );
+    let backlogCount = 1000;
+    const logs: Array<unknown> = [];
+    const logger = Logger.make<unknown, void>(({ message }) => logs.push(message));
+    const loggers = new Set([logger]);
+    const configured = input(db, {
+      ASYNC_HEALTH_ENABLED: Option.some("enabled"),
+      RESEND_API_KEY: Option.some("configured"),
+      WOMPI_EVENT_SECRET: Option.some("configured"),
+      BILLING_COLLECTION_QUEUE: Option.some({
+        ...queue,
+        metrics: () => Promise.resolve({ backlogCount, backlogBytes: 1000 }),
+      }),
+      USER_TRANSACTION_COORDINATOR: {
+        getByName: () => ({
+          fetch: (): Promise<Response> => Promise.resolve(new Response(null, { status: 204 })),
         }),
-        USER_TRANSACTION_COORDINATOR: {
-          getByName: () => ({
-            fetch: (): Promise<Response> => Promise.resolve(new Response(null, { status: 204 })),
-          }),
-        },
-      });
-      deepStrictEqual(
-        yield* Effect.exit(
-          makePlatformMaintenance(configured)
-            .inspectHealth()
-            .pipe(Effect.provideService(Logger.CurrentLoggers, loggers))
-        ),
-        Exit.fail(new PlatformMaintenanceUnavailable())
-      );
-      expect(logs).toEqual(
-        expect.arrayContaining([
-          [
-            {
-              component: "inspection-coverage",
-              operation: "ownerInspections",
-              state: "complete",
-              message:
-                "fidy.operational component=inspection-coverage operation=ownerInspections state=complete",
-            },
-          ],
-          [
-            {
-              component: "capability",
-              operation: "d1",
-              state: "healthy",
-              severity: "none",
-              message:
-                "fidy.operational component=capability operation=d1 state=healthy severity=none",
-            },
-          ],
-          [
-            {
-              component: "capability",
-              operation: "requiredBindings",
-              state: "unavailable",
-              severity: "warning",
-              message:
-                "fidy.operational component=capability operation=requiredBindings state=unavailable severity=warning",
-            },
-          ],
-          [
-            {
-              component: "async-health",
-              operation: "billingQueue",
-              state: "attention",
-              backlogCount: 1000,
-              backlogBytes: 1000,
-              severity: "critical",
-              message:
-                "fidy.operational component=async-health operation=billingQueue state=attention severity=critical",
-            },
-          ],
-        ])
-      );
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT operation, state FROM operational_health_view WHERE operation IN ('d1', 'coordination', 'providerConfig', 'requiredBindings', 'queueExecution', 'workflowFailures') ORDER BY operation"
-            )
-            .all()
-        )
-      ).toMatchObject({
-        results: [
-          { operation: "coordination", state: "healthy" },
-          { operation: "d1", state: "healthy" },
-          { operation: "providerConfig", state: "healthy" },
-          { operation: "queueExecution", state: "unavailable" },
-          { operation: "requiredBindings", state: "unavailable" },
-          { operation: "workflowFailures", state: "unavailable" },
-        ],
-      });
-      logs.length = 0;
-      backlogCount = 99;
-      yield* Effect.exit(
-        makePlatformMaintenance({
-          ...configured,
-          RESEND_API_KEY: Option.some("  "),
-        })
-          .inspectHealth()
-          .pipe(Effect.provideService(Logger.CurrentLoggers, loggers))
-      );
-      expect(logs).toContainEqual([
-        {
-          component: "async-health",
-          operation: "billingQueue",
-          state: "attention",
-          backlogCount: 99,
-          backlogBytes: 1000,
-          severity: "none",
-          message:
-            "fidy.operational component=async-health operation=billingQueue state=attention severity=none",
-        },
-      ]);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT state FROM operational_health_view WHERE operation = 'providerConfig'")
-            .first()
-        )
-      ).toEqual({ state: "unavailable" });
-    })
-);
-
-it.layer(NodeFileSystem.layer)((it) =>
-  it.effect(
-    "preserves unavailable-D1 email claims across real platform restart and concurrent inspection",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* fs.makeTempDirectory({ prefix: "fidy-1160-" }).pipe(Effect.orDie);
-        const create = (): Miniflare =>
-          new Miniflare({
-            resourcePersistencePath: path,
-            workers: [
-              {
-                config: {
-                  name: "outage-restart",
-                  type: "worker",
-                  compatibilityDate: "2026-09-08",
-                  env: { BUCKET: { type: "r2", name: "outage-restart" } },
-                  manifest: {
-                    mainModule: "index.mjs",
-                    modules: {
-                      "index.mjs": {
-                        type: "esm",
-                        contents: "export default {fetch() {return new Response('ok')}}",
-                      },
-                    },
-                  },
-                },
-              },
-            ],
-          });
-        let runtime = create();
-        const unavailableDb: D1Database = {
-          prepare: unavailable,
-          batch: unavailable,
-          exec: unavailable,
-          withSession: unavailable,
-          dump: unavailable,
-        };
-        const requests: Request[] = [];
-        const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((request, init) => {
-          requests.push(new Request(request, init));
-          return requests.length === 1
-            ? Promise.reject(new Error("lost response after acceptance"))
-            : Promise.resolve(new Response('{"id":"accepted-id"}', { status: 200 }));
-        });
-        const inspect = (bucket: R2Bucket): Effect.Effect<void> =>
-          makePlatformMaintenance(
-            input(unavailableDb, {
-              ASYNC_HEALTH_ENABLED: Option.some("enabled"),
-              STATEMENT_STAGING_BUCKET: Option.some(bucket),
-              OPERATOR_ALERT_EMAIL: Option.some("operator@example.com"),
-              RESEND_API_KEY: Option.some("test-only-key"),
-            })
-          )
-            .inspectHealth()
-            .pipe(Effect.ignore);
-        const clock = yield* Clock.Clock;
-        const at = <A, E>(now: number, work: Effect.Effect<A, E>): Effect.Effect<A, E> =>
-          work.pipe(
-            Effect.provideService(Clock.Clock, {
-              currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
-              currentTimeNanos: clock.currentTimeNanos,
-              monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
-              monotonicTimeNanos: clock.monotonicTimeNanos,
-              sleep: (duration) => clock.sleep(duration),
-              currentTimeMillisUnsafe: () => now,
-              currentTimeMillis: Effect.succeed(now),
-            })
-          );
-        try {
-          const first = yield* Effect.tryPromise(() => runtime.getBindings<{ BUCKET: R2Bucket }>());
-          yield* at(1_000_000, inspect(first.BUCKET));
-          expect(requests).toHaveLength(1);
-          yield* Effect.tryPromise(() => runtime.dispose());
-          runtime = create();
-          const restarted = yield* Effect.tryPromise(() =>
-            runtime.getBindings<{ BUCKET: R2Bucket }>()
-          );
-          yield* at(1_060_000, inspect(restarted.BUCKET));
-          expect(requests).toHaveLength(1);
-          yield* at(
-            1_300_000,
-            Effect.forEach(Array.from({ length: 8 }), () => inspect(restarted.BUCKET), {
-              concurrency: 8,
-              discard: true,
-            })
-          );
-          expect(requests).toHaveLength(2);
-          expect(requests[1]?.headers.get("idempotency-key")).toBe(
-            requests[0]?.headers.get("idempotency-key")
-          );
-          expect(requests[0]?.headers.get("idempotency-key")).toBeTruthy();
-          expect(requests[1]?.headers.get("authorization")).toBe("Bearer test-only-key");
-          const body = yield* Effect.tryPromise(() => requests[1]?.text() ?? Promise.resolve(""));
-          expect(body).toContain("inspection_unavailable / d1 (warning)");
-          expect(body).toContain("operator@example.com");
-          expect(body).not.toContain("lost response");
-          yield* at(2_800_000, inspect(restarted.BUCKET));
-          expect(requests).toHaveLength(2);
-        } finally {
-          fetch.mockRestore();
-          yield* Effect.tryPromise(() => runtime.dispose());
-          yield* fs.remove(path, { recursive: true, force: true }).pipe(Effect.orDie);
-        }
-      })
-  )
-);
-
-it.effect(
-  "resolves the D1 outage only after the operational entrypoint confirms available owner inspection",
-  () =>
-    Effect.gen(function* () {
-      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
-      const unavailableDb: D1Database = {
-        prepare: unavailable,
-        batch: unavailable,
-        exec: unavailable,
-        withSession: unavailable,
-        dump: unavailable,
-      };
-      const bodies: string[] = [];
-      const logs: Array<unknown> = [];
-      const loggers = new Set([Logger.make<unknown, void>(({ message }) => logs.push(message))]);
-      const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((request, init) =>
-        new Request(request, init).text().then((body) => {
-          bodies.push(body);
-          return new Response('{"id":"accepted-id"}', { status: 200 });
-        })
-      );
-      const inspect = (database: D1Database): Effect.Effect<void> =>
-        makePlatformMaintenance(
-          input(database, {
-            ASYNC_HEALTH_ENABLED: Option.some("enabled"),
-            STATEMENT_STAGING_BUCKET: Option.some(bucket),
-            OPERATOR_ALERT_EMAIL: Option.some("operator@example.com"),
-            RESEND_API_KEY: Option.some("test-only-key"),
-          })
-        )
-          .inspectHealth()
-          .pipe(
-            Effect.provideService(Logger.CurrentLoggers, loggers),
-            Effect.andThen(TestClock.adjust("1 millis")),
-            Effect.ignore
-          );
-      try {
-        yield* inspect(unavailableDb);
-        expect(logs).toContainEqual([
+      },
+    });
+    yield* makePlatformMaintenance(configured)
+      .inspectHealth()
+      .pipe(Effect.provideService(Logger.CurrentLoggers, loggers));
+    expect(logs).toEqual(
+      expect.arrayContaining([
+        [
           {
             component: "inspection-coverage",
             operation: "ownerInspections",
-            state: "incomplete",
+            state: "complete",
             message:
-              "fidy.operational component=inspection-coverage operation=ownerInspections state=incomplete",
+              "fidy.operational component=inspection-coverage operation=ownerInspections state=complete",
           },
-        ]);
-        expect(
-          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(logs)
-        ).not.toContain("private platform diagnostic");
-        yield* inspect(db);
-        expect(bodies.filter((body) => body.includes(" / d1 "))).toHaveLength(1);
+        ],
+        [
+          {
+            component: "capability",
+            operation: "d1",
+            state: "healthy",
+            severity: "none",
+            message:
+              "fidy.operational component=capability operation=d1 state=healthy severity=none",
+          },
+        ],
+        [
+          {
+            component: "capability",
+            operation: "requiredBindings",
+            state: "unavailable",
+            severity: "warning",
+            message:
+              "fidy.operational component=capability operation=requiredBindings state=unavailable severity=warning",
+          },
+        ],
+        [
+          {
+            component: "async-health",
+            operation: "billingQueue",
+            state: "attention",
+            backlogCount: 1000,
+            backlogBytes: 1000,
+            severity: "critical",
+            message:
+              "fidy.operational component=async-health operation=billingQueue state=attention severity=critical",
+          },
+        ],
+      ])
+    );
+    expect(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT operation, state FROM operational_health_view WHERE operation IN ('d1', 'coordination', 'providerConfig', 'requiredBindings', 'queueExecution') ORDER BY operation"
+          )
+          .all()
+      )
+    ).toMatchObject({
+      results: [
+        { operation: "coordination", state: "healthy" },
+        { operation: "d1", state: "healthy" },
+        { operation: "providerConfig", state: "healthy" },
+        { operation: "queueExecution", state: "unavailable" },
+        { operation: "requiredBindings", state: "unavailable" },
+      ],
+    });
+    logs.length = 0;
+    backlogCount = 99;
+    yield* Effect.exit(
+      makePlatformMaintenance({
+        ...configured,
+        RESEND_API_KEY: Option.some("  "),
+      })
+        .inspectHealth()
+        .pipe(Effect.provideService(Logger.CurrentLoggers, loggers))
+    );
+    expect(logs).toContainEqual([
+      {
+        component: "async-health",
+        operation: "billingQueue",
+        state: "attention",
+        backlogCount: 99,
+        backlogBytes: 1000,
+        severity: "none",
+        message:
+          "fidy.operational component=async-health operation=billingQueue state=attention severity=none",
+      },
+    ]);
+    expect(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT state FROM operational_health_view WHERE operation = 'providerConfig'")
+          .first()
+      )
+    ).toEqual({ state: "unavailable" });
+  })
+);
 
-        yield* Effect.tryPromise(() => installTestSchema({ db }));
-        yield* inspect(db);
-        yield* inspect(db);
-        expect(
-          bodies
-            .filter((body) => body.includes(" / d1 "))
-            .map((body) => body.includes("alert resolved:"))
-        ).toEqual([false, true]);
-      } finally {
-        fetch.mockRestore();
-      }
-    })
+it.effect("reports D1 unavailability and complete owner inspection after recovery", () =>
+  Effect.gen(function* () {
+    const { db } = yield* Effect.tryPromise(() => storage.acquire());
+    const unavailableDb: D1Database = {
+      prepare: unavailable,
+      batch: unavailable,
+      exec: unavailable,
+      withSession: unavailable,
+      dump: unavailable,
+    };
+    const logs: Array<unknown> = [];
+    const loggers = new Set([Logger.make<unknown, void>(({ message }) => logs.push(message))]);
+    const inspect = (database: D1Database): Effect.Effect<void> =>
+      makePlatformMaintenance(
+        input(database, {
+          ASYNC_HEALTH_ENABLED: Option.some("enabled"),
+          RESEND_API_KEY: Option.some("test-only-key"),
+        })
+      )
+        .inspectHealth()
+        .pipe(
+          Effect.provideService(Logger.CurrentLoggers, loggers),
+          Effect.andThen(TestClock.adjust("1 millis")),
+          Effect.ignore
+        );
+    yield* inspect(unavailableDb);
+    expect(logs).toContainEqual([
+      {
+        component: "inspection-coverage",
+        operation: "ownerInspections",
+        state: "incomplete",
+        message:
+          "fidy.operational component=inspection-coverage operation=ownerInspections state=incomplete",
+      },
+    ]);
+    expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(logs)).not.toContain(
+      "private platform diagnostic"
+    );
+    yield* inspect(db);
+
+    yield* Effect.tryPromise(() => installTestSchema({ db }));
+    yield* inspect(db);
+    yield* inspect(db);
+    expect(logs).toContainEqual([
+      {
+        component: "capability",
+        operation: "d1",
+        state: "healthy",
+        severity: "none",
+        message: "fidy.operational component=capability operation=d1 state=healthy severity=none",
+      },
+    ]);
+    expect(logs).toContainEqual([
+      {
+        component: "inspection-coverage",
+        operation: "ownerInspections",
+        state: "complete",
+        message:
+          "fidy.operational component=inspection-coverage operation=ownerInspections state=complete",
+      },
+    ]);
+  })
 );

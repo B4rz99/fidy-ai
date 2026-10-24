@@ -58,7 +58,6 @@ import {
   workTraceParent,
   workerRelease,
 } from "../runtime/telemetry/operations";
-import { captureWorkflowFailure } from "../runtime/operational-health/operations";
 import {
   receiveWompiBillingEvent as acceptEvent,
   dispatchBillingCollection as dispatch,
@@ -150,23 +149,20 @@ export const runRefundWorkflow = (input: RefundWorkflowExecution): Promise<void>
 
 export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure({
-      db: withErasureRecovery(this.env).DB,
-      work: observeWorkerPromise(
-        () =>
-          runRefundWorkflow({
-            environment: withErasureRecovery(this.env),
-            payload: event.payload,
-            activity: (name, options, activity) => step.do(name, options, activity),
-          }),
-        {
-          environment: workerRelease(this.env),
-          telemetry: cloudflareWorkerTelemetry,
-          operation: "workflow.billingRefund",
-          parent: workTraceParent(event.payload),
-        }
-      ),
-    });
+    return observeWorkerPromise(
+      () =>
+        runRefundWorkflow({
+          environment: withErasureRecovery(this.env),
+          payload: event.payload,
+          activity: (name, options, activity) => step.do(name, options, activity),
+        }),
+      {
+        environment: workerRelease(this.env),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.billingRefund",
+        parent: workTraceParent(event.payload),
+      }
+    );
   }
 }
 
@@ -208,24 +204,21 @@ export const sweepExpiredEnrollmentAdmission = (
 
 export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure({
-      work: observeWorkerPromise(
-        () =>
-          runBillingCollectionWorkflow({
-            environment: withErasureRecovery(this.env),
-            payload: event.payload,
-            activity: (name, options, activity) => step.do(name, options, activity),
-            sleep: (name, duration) => step.sleep(name, duration),
-          }),
-        {
-          environment: workerRelease(this.env),
-          telemetry: cloudflareWorkerTelemetry,
-          operation: "workflow.billingCollection",
-          parent: workTraceParent(event.payload),
-        }
-      ),
-      db: withErasureRecovery(this.env).DB,
-    });
+    return observeWorkerPromise(
+      () =>
+        runBillingCollectionWorkflow({
+          environment: withErasureRecovery(this.env),
+          payload: event.payload,
+          activity: (name, options, activity) => step.do(name, options, activity),
+          sleep: (name, duration) => step.sleep(name, duration),
+        }),
+      {
+        environment: workerRelease(this.env),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.billingCollection",
+        parent: workTraceParent(event.payload),
+      }
+    );
   }
 }
 

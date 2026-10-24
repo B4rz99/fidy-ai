@@ -4,10 +4,6 @@ import {
   type CanaryHealth,
   CanaryPayload,
   type CapabilityProbe,
-  type CoreRejectionSignal,
-  type EventMetricSignal,
-  type OperationalAlert,
-  type OperationalAlertDelivery,
   type OperationalHealthEnvironment,
   type OperationalSignal,
   QueueKind,
@@ -20,24 +16,13 @@ import {
   inspectRetention,
   unavailableSignal,
 } from "./internal/health-inspection";
-import { asyncAlerts } from "./internal/alert-policy";
-import { deliverD1Outage } from "./internal/d1-outage-alert";
-import { claimResolutions, deliverFiring, deliverResolution } from "./internal/alert-delivery";
-import {
-  WorkflowFailureCounts,
-  bucketRetentionMs,
-  fiveMinuteWindowMs,
-  maximumSweepRows,
-  recentWindowMs,
-  unavailableMetrics,
-} from "./internal/event-metrics";
+import { signalSeverity } from "./internal/alert-policy";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { Check, WorkflowStatus, periodMs, recordCanary, staleMs } from "./internal/canary";
 
 const Available = Schema.Struct({ usable: Schema.Literal(1) });
 const probeUrl = "https://internal.invalid/operational/probe";
 const probeSuccessStatus = 204;
-const alertDeliveryConcurrency = 2;
 const healthHeartbeatMs = 300_000;
 
 /** An actual Queue consumer, not queue.send(), proves Queue execution. */
@@ -229,130 +214,8 @@ export const observeOperationalHealth = (
     return [...signals, whatsapp, deadLetters, ...workQueues, retention];
   });
 
-/** Classifies already-bounded inspection results; unavailable is never interpreted as zero. */
-export const decideOperationalAlerts = (
-  signals: ReadonlyArray<AlertSignal>
-): ReadonlyArray<OperationalAlert> =>
-  signals.flatMap((signal): ReadonlyArray<OperationalAlert> => {
-    if (signal.state === "unavailable") {
-      return [{ kind: "inspection_unavailable", owner: signal.operation, severity: "warning" }];
-    }
-    if (signal.component === "core-rejections") {
-      return signal.state === "attention"
-        ? [{ kind: "core_rejection_burst", owner: signal.operation, severity: "warning" }]
-        : [];
-    }
-    if (signal.component === "workflow-execution") {
-      return signal.recentCount > 0
-        ? [{ kind: "workflow_failure", owner: signal.operation, severity: "critical" }]
-        : [];
-    }
-    if (signal.component === "capability") {
-      return signal.state === "attention"
-        ? [{ kind: "capability_unusable", owner: signal.operation, severity: "critical" }]
-        : [];
-    }
-    return asyncAlerts(signal);
-  });
-
-const isD1Outage = (alert: OperationalAlert): boolean =>
-  alert.kind === "inspection_unavailable" && alert.owner === "d1";
-
-const d1Severity = (alert: Option.Option<OperationalAlert>): OperationalAlert["severity"] =>
-  Option.match(alert, { onNone: () => "warning", onSome: (value) => value.severity });
-
-/** Claims metadata-only email attempts atomically. Failed sends remain unconfirmed. */
-export const runOperationalAlerts = (input: OperationalAlertDelivery): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const outageAlert = Option.fromUndefinedOr(input.alerts.find(isD1Outage));
-      const unavailable = Option.isSome(outageAlert);
-      if (Option.isSome(input.outage)) {
-        const outageWork = deliverD1Outage({
-          ...input,
-          outageBucket: input.outage.value.bucket,
-          release: input.outage.value.release,
-          inspection: unavailable ? "unavailable" : input.outage.value.inspection,
-          severity: d1Severity(outageAlert),
-        });
-        yield* unavailable ? outageWork : outageWork.pipe(Effect.orElseSucceed(() => undefined));
-        if (unavailable) return;
-      }
-      const attempts = yield* Effect.forEach(
-        input.alerts,
-        (alert) => deliverFiring({ input, alert }),
-        {
-          concurrency: alertDeliveryConcurrency,
-        }
-      );
-      const rows = yield* claimResolutions(input);
-      const resolutions = yield* Effect.forEach(rows, (row) => deliverResolution({ input, row }), {
-        concurrency: alertDeliveryConcurrency,
-      });
-      if (attempts.includes(false) || resolutions.includes(false)) {
-        return yield* Effect.die(new Error("Operator alert email unavailable"));
-      }
-    }),
-    { signal: input.signal }
-  );
-
-/** Bounded expiry prevents operational event buckets from growing indefinitely. */
-export const sweepOperationalEventBuckets = ({
-  db,
-  now,
-}: Readonly<{
-  db: D1Database;
-  now: number;
-}>): Effect.Effect<void, void> =>
-  Effect.tryPromise(() =>
-    db
-      .prepare(`DELETE FROM operational_event_buckets
-  WHERE rowid IN (SELECT rowid FROM operational_event_buckets WHERE kind <> 'core_rejection' AND bucket_ms < ?1
-    UNION ALL SELECT rowid FROM operational_event_buckets WHERE kind = 'core_rejection' AND observed_at_ms <= ?1 LIMIT ?2)`)
-      .bind(now - bucketRetentionMs, maximumSweepRows)
-      .run()
-  ).pipe(
-    Effect.timeout("2 seconds"),
-    Effect.asVoid,
-    Effect.mapError(() => undefined)
-  );
-
-/** Inspects directly recorded Workflow failures; an unreadable D1 measurement is unavailable. */
-export const observeOperationalEventMetrics = ({
-  db,
-  now,
-}: Readonly<{
-  db: D1Database;
-  now: number;
-}>): Effect.Effect<ReadonlyArray<EventMetricSignal>> =>
-  Effect.gen(function* () {
-    const result = yield* Effect.exit(
-      Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT
-        COALESCE(SUM(count), 0) AS recentCount,
-        COALESCE(SUM(CASE WHEN bucket_ms >= ? THEN count ELSE 0 END), 0) AS fiveMinuteCount
-        FROM operational_event_buckets
-        WHERE kind = 'workflow_failure' AND bucket_ms >= ? AND bucket_ms <= ?`)
-          .bind(now - fiveMinuteWindowMs, now - recentWindowMs, now)
-          .first()
-      ).pipe(
-        Effect.timeout("2 seconds"),
-        Effect.flatMap((row) => Schema.decodeUnknownEffect(WorkflowFailureCounts)(row))
-      )
-    );
-    if (Exit.isFailure(result)) return unavailableMetrics();
-    const { recentCount, fiveMinuteCount } = result.value;
-    return [
-      {
-        component: "workflow-execution",
-        operation: "workflowFailures",
-        state: recentCount > 0 ? "attention" : "healthy",
-        recentCount,
-        fiveMinuteCount,
-      },
-    ];
-  });
+/** Unavailable measurements and failed work never become healthy zeroes. */
+export const operationalSeverity = signalSeverity;
 
 /** Latest private, metadata-only inspection; timestamps make stale observations visible. */
 export const recordOperationalHealth = ({
@@ -429,64 +292,3 @@ export const inspectOperationalCapabilities = (
   });
 
 const minuteMs = 60_000;
-const maximumBucketCount = 1_000;
-
-/** Best-effort failure evidence never replaces a Workflow's original success or rejection. */
-export const captureWorkflowFailure = <A>({
-  work,
-  db,
-}: Readonly<{
-  work: Promise<A>;
-  db: D1Database;
-}>): Promise<A> =>
-  work.catch((original: unknown) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const bucket = Math.floor((yield* Clock.currentTimeMillis) / minuteMs) * minuteMs;
-        yield* Effect.exit(
-          Effect.tryPromise(() =>
-            db
-              .prepare(`INSERT INTO operational_event_buckets (kind, bucket_ms, count)
-        VALUES ('workflow_failure', ?, 1)
-        ON CONFLICT(kind, bucket_ms) DO UPDATE SET count = MIN(count + 1, ?)`)
-              .bind(bucket, maximumBucketCount)
-              .run()
-          ).pipe(Effect.timeout("250 millis"))
-        );
-      })
-    ).then(() => Promise.reject(original))
-  );
-
-const Observation = Schema.Struct({
-  observedAtMs: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-});
-
-/** Lossy telemetry only: a quiet result means no recorded burst, never absence of an attack. */
-export const observeCoreRejections = ({
-  db,
-  now,
-}: Readonly<{ db: D1Database; now: number }>): Effect.Effect<CoreRejectionSignal> =>
-  Effect.tryPromise(() =>
-    db
-      .prepare(
-        "SELECT observed_at_ms AS observedAtMs FROM operational_event_buckets WHERE kind='core_rejection' AND bucket_ms=0"
-      )
-      .all()
-  ).pipe(
-    Effect.timeout("2 seconds"),
-    Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(Observation))(rows.results)),
-    Effect.map((rows): CoreRejectionSignal => {
-      const state = (): CoreRejectionSignal["state"] => {
-        if (rows.some((row) => row.observedAtMs > now)) return "unavailable";
-        return rows.some((row) => row.observedAtMs > now - fiveMinuteWindowMs)
-          ? "attention"
-          : "healthy";
-      };
-      return { component: "core-rejections", operation: "coreRejectionBursts", state: state() };
-    }),
-    Effect.orElseSucceed((): CoreRejectionSignal => ({
-      component: "core-rejections",
-      operation: "coreRejectionBursts",
-      state: "unavailable",
-    }))
-  );

@@ -17,7 +17,7 @@ import {
   telemetryTraceHeader,
 } from "@fidy/server/telemetry-contract";
 import { type Cause, Clock, DateTime, Effect, Result, Schema } from "effect";
-import { afterAll, describe, expect, vi } from "vitest";
+import { afterAll, describe, expect } from "vitest";
 import { Miniflare } from "miniflare";
 import {
   fixtureWorker as coreWorker,
@@ -797,138 +797,6 @@ describe("Cloudflare Worker topology (scheduled)", () => {
     })
   );
 });
-
-it.live(
-  "expires retired Tail-event buckets without deleting current Workflow-failure evidence",
-  () =>
-    withIsolatedD1("event-retention-test", (db) =>
-      Effect.gen(function* () {
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "CREATE TABLE operational_event_buckets (kind TEXT NOT NULL, bucket_ms INTEGER NOT NULL, count INTEGER NOT NULL, observed_at_ms INTEGER, PRIMARY KEY (kind, bucket_ms))"
-            )
-            .run()
-        );
-        const minuteMs = 60_000;
-        const current = Math.floor((yield* Clock.currentTimeMillis) / minuteMs) * minuteMs;
-        const oldBuckets = Array.from({ length: 200 }, (_, index) =>
-          db
-            .prepare(
-              "INSERT INTO operational_event_buckets(kind,bucket_ms,count) VALUES ('worker_exception', ?, 1)"
-            )
-            .bind(current - 172_800_000 - index * minuteMs)
-        );
-        yield* Effect.tryPromise(() => db.batch(oldBuckets.slice(0, 100)));
-        yield* Effect.tryPromise(() => db.batch(oldBuckets.slice(100)));
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "INSERT INTO operational_event_buckets(kind,bucket_ms,count) VALUES ('workflow_failure', ?, 1)"
-            )
-            .bind(current)
-            .run()
-        );
-        const worker = makeCoreWorker(collectingTelemetry([]));
-        const environment: Parameters<typeof coreWorker.scheduled>[1] = {
-          ...coreEnvironment,
-          DB: db,
-          ASYNC_HEALTH_ENABLED: "enabled",
-        };
-        yield* Effect.tryPromise(() =>
-          expect(worker.scheduled(scheduledController, environment)).rejects.toThrow()
-        );
-        const exceptionCount = (): Promise<unknown> =>
-          db
-            .prepare(
-              "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'worker_exception'"
-            )
-            .first();
-        expect(yield* Effect.tryPromise(exceptionCount)).toEqual({ count: 72 });
-        yield* Effect.tryPromise(() =>
-          expect(worker.scheduled(scheduledController, environment)).rejects.toThrow()
-        );
-        expect(yield* Effect.tryPromise(exceptionCount)).toEqual({ count: 0 });
-        expect(
-          yield* Effect.tryPromise(() =>
-            db
-              .prepare(
-                "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'workflow_failure'"
-              )
-              .first()
-          )
-        ).toEqual({ count: 1 });
-      })
-    )
-);
-
-const rejectedOperatorFetch = (): Promise<Response> =>
-  Promise.resolve(new Response('{"message":"rejected"}', { status: 400 }));
-
-const inspectRejectedAlert = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(`CREATE TABLE operational_alerts (
-          kind TEXT NOT NULL, owner TEXT NOT NULL, severity TEXT NOT NULL, state TEXT NOT NULL,
-          first_seen_ms INTEGER NOT NULL, last_seen_ms INTEGER NOT NULL, last_attempt_ms INTEGER,
-          attempt_started_ms INTEGER, delivery_confirmed INTEGER NOT NULL DEFAULT 0,
-          next_attempt_ms INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
-          acknowledged_ms INTEGER, PRIMARY KEY (kind, owner)
-        )`)
-        .run()
-    );
-    const worker = makeCoreWorker(collectingTelemetry([]));
-    yield* Effect.tryPromise(() =>
-      expect(
-        worker.scheduled(scheduledController, {
-          ...coreEnvironment,
-          DB: db,
-          ASYNC_HEALTH_ENABLED: "enabled",
-          ASYNC_DEAD_LETTERS: {
-            metrics: () => Promise.resolve({ backlogCount: 1, backlogBytes: 20 }),
-          },
-          OPERATOR_ALERT_EMAIL: "operator@example.com",
-          RESEND_API_KEY: "fake-test-key",
-        })
-      ).rejects.toThrow()
-    );
-    const states = yield* Effect.tryPromise(() =>
-      db
-        .prepare(
-          "SELECT kind, state, delivery_confirmed, acknowledged_ms FROM operational_alerts WHERE kind = 'dead_letters'"
-        )
-        .all()
-    );
-    expect(states.results).toEqual([
-      {
-        kind: "dead_letters",
-        state: "firing",
-        delivery_confirmed: 0,
-        acknowledged_ms: null,
-      },
-    ]);
-    expect(
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("SELECT COUNT(*) AS count FROM operational_alerts WHERE delivery_confirmed = 1")
-          .first()
-      )
-    ).toEqual({ count: 0 });
-  });
-
-it.effect(
-  "keeps alerts unconfirmed after a rejected provider response at the scheduled Worker boundary",
-  () =>
-    Effect.scoped(
-      Effect.acquireUseRelease(
-        Effect.sync(() => vi.spyOn(globalThis, "fetch").mockImplementation(rejectedOperatorFetch)),
-        () => withIsolatedD1("operator-alert-worker", inspectRejectedAlert),
-        (fetch) => Effect.sync(() => fetch.mockRestore())
-      )
-    ),
-  { timeout: 15_000 }
-);
 
 describe("Cloudflare Worker topology (continued)", () => {
   it.effect("retains one owning span when runtime release metadata is malformed", () =>

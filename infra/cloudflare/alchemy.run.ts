@@ -82,7 +82,6 @@ const microsoftClientSecret = Config.Redacted("MICROSOFT_CLIENT_SECRET");
 const googleClientId = Config.String("GOOGLE_CLIENT_ID");
 const googleClientSecret = Config.Redacted("GOOGLE_CLIENT_SECRET");
 const resendApiKey = Config.Redacted("RESEND_API_KEY");
-const operatorAlertEmail = Config.schema(EmailAddress, "OPERATOR_ALERT_EMAIL");
 const wompiEnvironment = Config.String("WOMPI_ENVIRONMENT");
 const wompiPublicKey = Config.String("WOMPI_PUBLIC_KEY");
 const wompiPrivateKey = Config.Redacted("WOMPI_PRIVATE_KEY");
@@ -444,9 +443,6 @@ export default Alchemy.Stack(
         OPERATIONAL_CANARY_QUEUE_NAME: operationalCanaryQueue.queueName,
         OPERATIONAL_CANARY_WORKFLOW: operationalCanaryWorkflow,
         FORWARDED_EMAIL_QUEUE: emailQueue,
-        OPERATOR_ALERT_EMAIL: yield* development
-          ? Config.String("OPERATOR_ALERT_EMAIL").pipe(Config.withDefault(""))
-          : operatorAlertEmail,
         BILLING_COLLECTION_QUEUE: billingCollectionQueue,
         BILLING_COLLECTION_WORKFLOW: billingCollectionWorkflow,
         BILLING_REFUND_WORKFLOW: billingRefundWorkflow,

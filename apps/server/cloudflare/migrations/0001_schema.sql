@@ -945,32 +945,6 @@ CREATE TABLE oauth_review_requests (
 );
 --> statement-breakpoint
 
-CREATE TABLE operational_alerts (
-  kind TEXT NOT NULL,
-  owner TEXT NOT NULL,
-  severity TEXT NOT NULL CHECK (severity IN ('warning', 'critical')),
-  state TEXT NOT NULL CHECK (state IN ('firing', 'resolved')),
-  first_seen_ms INTEGER NOT NULL,
-  last_seen_ms INTEGER NOT NULL,
-  last_attempt_ms INTEGER,
-  attempt_started_ms INTEGER,
-  delivery_confirmed INTEGER NOT NULL DEFAULT 0 CHECK (delivery_confirmed IN (0, 1)),
-  next_attempt_ms INTEGER NOT NULL,
-  attempts INTEGER NOT NULL DEFAULT 0,
-  acknowledged_ms INTEGER,
-  PRIMARY KEY (kind, owner)
-);
---> statement-breakpoint
-
-CREATE TABLE "operational_event_buckets" (
-  kind TEXT NOT NULL CHECK (kind IN ('heartbeat', 'tail_overflow', 'worker_exception', 'resource_limit', 'callback_rejection', 'workflow_failure', 'core_rejection')),
-  bucket_ms INTEGER NOT NULL CHECK (bucket_ms >= 0 AND bucket_ms % 60000 = 0),
-  observed_at_ms INTEGER CHECK(observed_at_ms IS NULL OR(observed_at_ms>=0 AND observed_at_ms%60000=0)),
-  count INTEGER NOT NULL CHECK (count BETWEEN 1 AND 1000),
-  CHECK((kind='core_rejection' AND bucket_ms=0 AND count=1 AND observed_at_ms IS NOT NULL) OR(kind<>'core_rejection' AND observed_at_ms IS NULL)),PRIMARY KEY (kind, bucket_ms)
-) STRICT;
---> statement-breakpoint
-
 CREATE TABLE operational_health_view (
   operation TEXT PRIMARY KEY NOT NULL,
   state TEXT NOT NULL CHECK (state IN ('healthy', 'attention', 'unavailable')),

@@ -11,7 +11,6 @@ export type ScheduledOperation =
   | "oauth.confirmationRetention"
   | "connections.attemptRetention"
   | "quota.consumptionRetention"
-  | "operational.events.retention"
   | "operational.canary.publish"
   | "browserPairing.email.dispatch"
   | "browserPairing.email.reconcile"

@@ -1,4 +1,9 @@
-import type { OperationalAlert, OperationalSignal, PendingSignal } from "../contract";
+import type {
+  AlertSignal,
+  OperationalSeverity,
+  OperationalSignal,
+  PendingSignal,
+} from "../contract";
 
 const warningAgeMs = 120_000;
 const criticalAgeMs = 600_000;
@@ -8,91 +13,59 @@ const retentionCriticalAgeMs = 86_400_000;
 const queueWarningCount = 100;
 const queueCriticalCount = 1_000;
 
-const isEmailProofOwner = (
-  owner: PendingSignal["operation"]
-): owner is "browserPairing" | "emailReplacement" =>
-  owner === "browserPairing" || owner === "emailReplacement";
+const rejectedEmailWarning = (signal: PendingSignal): boolean =>
+  (signal.operation === "browserPairing" || signal.operation === "emailReplacement") &&
+  signal.sampledRejectedEmailWork >= rejectedEmailWarningCount;
 
-const pendingWorkflowAlerts = (signal: PendingSignal): ReadonlyArray<OperationalAlert> =>
-  signal.operation !== "forwardedEmail" && signal.failedWorkflows > 0
-    ? [{ kind: "workflow_failure", owner: signal.operation, severity: "critical" }]
-    : [];
-
-const pendingAlerts = (signal: PendingSignal): ReadonlyArray<OperationalAlert> => {
-  const owner = signal.operation;
-  const alerts: OperationalAlert[] = [...pendingWorkflowAlerts(signal)];
-  if (isEmailProofOwner(owner) && signal.sampledRejectedEmailWork >= rejectedEmailWarningCount) {
-    alerts.push({ kind: "rejected_email_work", owner, severity: "warning" });
+const pendingSeverity = (signal: PendingSignal): OperationalSeverity => {
+  if (
+    signal.oldestPendingAgeMilliseconds >= criticalAgeMs ||
+    signal.expiredUndelivered > 0 ||
+    (signal.operation !== "forwardedEmail" && signal.failedWorkflows > 0)
+  ) {
+    return "critical";
   }
-  if (signal.oldestPendingAgeMilliseconds >= warningAgeMs || signal.expiredUndelivered > 0) {
-    alerts.push({
-      kind: "pending_work",
-      owner,
-      severity:
-        signal.oldestPendingAgeMilliseconds >= criticalAgeMs || signal.expiredUndelivered > 0
-          ? "critical"
-          : "warning",
-    });
-  }
-  return alerts;
+  return signal.oldestPendingAgeMilliseconds >= warningAgeMs ||
+    signal.unavailableWorkflows > 0 ||
+    rejectedEmailWarning(signal)
+    ? "warning"
+    : "none";
 };
 
-const whatsappAlerts = (
+const whatsappSeverity = (
   signal: Extract<OperationalSignal, { operation: "whatsapp"; state: "healthy" | "attention" }>
-): ReadonlyArray<OperationalAlert> => {
-  const owner = signal.operation;
-  if (signal.sampledFailed > 0 || signal.overdueCleanup > 0) {
-    return [{ kind: "whatsapp_delivery", owner, severity: "critical" }];
+): OperationalSeverity => {
+  if (
+    signal.sampledFailed > 0 ||
+    signal.overdueCleanup > 0 ||
+    signal.oldestPendingAgeMilliseconds >= criticalAgeMs
+  ) {
+    return "critical";
   }
-  if (signal.oldestPendingAgeMilliseconds >= warningAgeMs) {
-    return [
-      {
-        kind: "pending_work",
-        owner,
-        severity: signal.oldestPendingAgeMilliseconds >= criticalAgeMs ? "critical" : "warning",
-      },
-    ];
-  }
-  return [];
+  return signal.oldestPendingAgeMilliseconds >= warningAgeMs ? "warning" : "none";
 };
 
-const queueAlerts = (
+const queueSeverity = (
   signal: Extract<OperationalSignal, { backlogCount: number }>
-): ReadonlyArray<OperationalAlert> => {
-  if (signal.operation === "deadLetters") {
-    return signal.backlogCount > 0
-      ? [{ kind: "dead_letters", owner: signal.operation, severity: "critical" }]
-      : [];
-  }
-  return signal.backlogCount >= queueWarningCount
-    ? [
-        {
-          kind: "queue_backlog",
-          owner: signal.operation,
-          severity: signal.backlogCount >= queueCriticalCount ? "critical" : "warning",
-        },
-      ]
-    : [];
+): OperationalSeverity => {
+  if (signal.operation === "deadLetters") return signal.backlogCount > 0 ? "critical" : "none";
+  if (signal.backlogCount >= queueCriticalCount) return "critical";
+  return signal.backlogCount >= queueWarningCount ? "warning" : "none";
 };
 
-export const asyncAlerts = (
-  signal: Extract<OperationalSignal, { state: "healthy" | "attention" }>
-): ReadonlyArray<OperationalAlert> => {
-  if ("backlogCount" in signal) return queueAlerts(signal);
-  if (signal.operation === "whatsapp") return whatsappAlerts(signal);
+const retentionSeverity = (age: number): OperationalSeverity => {
+  if (age >= retentionCriticalAgeMs) return "critical";
+  return age >= retentionWarningAgeMs ? "warning" : "none";
+};
+
+/** Classify bounded observations without retaining alert coordinates or delivery state. */
+export const signalSeverity = (signal: AlertSignal): OperationalSeverity => {
+  if (signal.state === "unavailable") return "warning";
+  if (signal.component === "capability") return signal.state === "attention" ? "critical" : "none";
+  if ("backlogCount" in signal) return queueSeverity(signal);
   if (signal.operation === "retention") {
-    return signal.oldestOverdueAgeMilliseconds >= retentionWarningAgeMs
-      ? [
-          {
-            kind: "retention_lag",
-            owner: signal.operation,
-            severity:
-              signal.oldestOverdueAgeMilliseconds >= retentionCriticalAgeMs
-                ? "critical"
-                : "warning",
-          },
-        ]
-      : [];
+    return retentionSeverity(signal.oldestOverdueAgeMilliseconds);
   }
-  return pendingAlerts(signal);
+  if (signal.operation === "whatsapp") return whatsappSeverity(signal);
+  return pendingSeverity(signal);
 };

@@ -78,337 +78,98 @@ retries and bounded evaluation steps can delay completion. No Transaction write 
 
 ## Operational signals
 
-The Production stack enables Core's `ASYNC_HEALTH_ENABLED` inspection and binds `AsyncDeadLetters`.
-The Core, Ingress, ForwardedEmail, and web asset Workers use Cloudflare Workers Logs with persistence
-enabled and automatic invocation logs disabled. On Workers Free, Cloudflare documents an allowance
-of 200,000 log events per day and three-day retention; check the current
-[Workers Logs limits](https://developers.cloudflare.com/workers/observability/logs/workers-logs/).
-In Cloudflare Workers Logs, select Core and filter `component` to `async-health`. Fidy-emitted log
-records are closed metadata; request URLs, bodies, identifiers, and raw exception text are not logged.
-These logs are for diagnosis, not an email-alert source.
+Core runs bounded owner inspections under `ASYNC_HEALTH_ENABLED`. Workers Logs retain closed
+metadata: owner operation, state, finite severity, sampled backlog/age and observation timestamps.
+Unavailable observations never carry invented healthy zeroes. Queue totals are distinct from D1
+oldest-work samples. Configuration checks establish presence, not provider availability or delivery.
+No request bodies, User identifiers, financial values, credentials or raw private causes belong here.
 
-The paid-only Tail Worker has been removed. Worker exception, CPU/memory-limit, and rejected
-callback counters are no longer aggregated into D1 or delivered as operational email alerts; inspect
-native Worker metrics and Workers Logs manually for those conditions. The `workflow_failure` D1
-counter remains independent: each application Workflow records rejected executions at its entrypoint,
-and the scheduled Core health sweep continues to alert on them. Core sweeps event buckets after 24
-hours with a bounded hourly deletion, including historical Tail-only counters. The private
-Queue→Workflow canary distinguishes real consumer execution from a successful Queue send or
-Workflow instance creation. A delayed/missing canary completion is critical; an unavailable inspection
-is a warning, never proof of execution. These probes do not change any application Work outcome.
+Each enabled owner emits its observation. The final closed marker
+`fidy.operational component=inspection-coverage operation=ownerInspections state=complete`
+means every expected Work/Queue owner, WhatsApp, dead letters, retention and capability probe was
+inspected, including unavailable outcomes; it does **not** mean healthy. An unavailable D1 probe
+emits its warning and makes coverage incomplete. Proactivity owners are required only when enabled.
 
-Core additionally records a **lossy concentrated-refusal signal**. Its HTTP assembly counts
-completed 401/403 responses, 400/422 responses from the exact Kapso/Wompi callback paths, and
-4xx transport responses from the exact `/mcp` path. MCP also observes decoded canonical 4xx tool
-results (including rate limiting) before the protocol carries them inside HTTP 200. Discovery,
-successful calls and provider/server 5xx failures do not count. The boundary is selected by the
-owning adapter; headers, callback-like path prefixes and tool arguments cannot supply it.
+Severity retains the existing thresholds: accepted work warns at two minutes and becomes critical
+at ten minutes or an expired undelivered deadline; confirmed failed Workflows are critical. WhatsApp
+failed delivery/overdue cleanup and any dead letters are critical. Primary Queue backlog warns at 100
+and becomes critical at 1,000. Retention warns at one hour and becomes critical at 24 hours. Five rejected
+email proofs warn; one does not. An unreadable native Workflow sample now explicitly warns rather
+than disappearing beneath a healthy age threshold. These are observations, not admission policy.
 
-Each Core HTTP assembly and each User coordinator's MCP residency owns one counter. Creating or
-evicting a protocol session does not reset its coordinator's counter. At 100 refusals within one UTC
-minute, that observer admits one best-effort D1 presence write. Later refusals in that minute do not
-write, failed writes are not retried, and at most one native write remains outstanding per observer
-even after the 250 ms wait expires. The count saturates at 100. A new minute can admit another attempt
-only after 100 new refusals; a backward clock cannot reopen an old minute. The bound is per observer,
-not a deployment-wide write cap: different isolates or User coordinators can each admit a write.
-This is telemetry, never authorization or request admission.
+The Core refusal observer remains deliberately lossy: 100 qualifying refusals per UTC minute per
+HTTP assembly or MCP residency emit one closed warning. HTTP 401/403, exact provider-callback 400/422,
+and canonical MCP 4xx results qualify; discovery and forged boundary labels do not. Saturation and
+backward-clock protection bound emission. Isolate restarts/distributed traffic can hide bursts.
+No D1 presence write, counter, retry, acknowledgement or email delivery state is retained.
 
-Scheduled health logs include `severity: none | warning | critical`, selected by the existing
-alert policy for that observation. An `attention` sample below its alert threshold has `none`;
-an unavailable inspection has `warning`. Any critical alert for an owner takes precedence over
-its warnings. This field augments the same bounded observation, without another emission or
-retained state. Queries must distinguish missing observations from observations with `none`.
+### Platform monitors (#1491)
 
-Each detected burst also emits the closed `core-rejections / coreRejectionBursts / attention`
-warning directly to platform logs. Database failures or a previous unresolved native write do not
-suppress this observation; the existing threshold and one observation per observer per minute still
-apply. The record contains no request or error details. This emission is preparation for #1491,
-not evidence that platform alert queries and delivery are configured or verified.
+Cloudflare enforces five custom analytics policies on this account. The deployed policies use the
+existing operator email destination and simple count queries with no grouping. All execute every
+ten minutes, average over ten minutes and repeat after thirty minutes. The query lookback follows
+execution interval; Workers Logs queries require at least ten minutes. These settings replace the
+former critical thirty-minute/warning four-hour and per-owner acknowledgement policies. There is
+one combined account health stream: another owner can become unhealthy during an active incident
+without starting a separate email. Inspect the timestamped owner observations; platform silence is
+never proof that every owner is healthy. These explicit coverage differences avoid a custom ledger.
 
-The single `operational_event_buckets` presence row with `kind = 'core_rejection'` and `bucket_ms = 0`
-stores the most recent minute timestamp; monotonic writes cannot replace it with older evidence. The scheduled health sweep
-emits `core_rejection_burst / coreRejectionBursts` as a warning while that minute is less than five
-minutes old. Missing evidence means no recorded burst, not absence of attacks. Failed reads or a
-future timestamp are unavailable, not healthy. The ordinary warning delivery/acknowledgement policy
-applies. Retention deletes the row at 24 hours; it remains at most one row even if cleanup stops.
+| Monitor                            | Account-supported query condition                                                                                                       | Fires    |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Operational health attention       | `logs.workersLogs`, production Core, `message LIKE '%fidy.operational component=% severity=%'` and `message NOT LIKE '%severity=none%'` | count>0  |
+| Missing complete owner inspections | `logs.workersLogs`, production Core, exact complete-sweep marker above                                                                  | count==0 |
+| Native Worker failures             | `logs.issues`, account-wide occurrence count                                                                                            | count>0  |
+| Missing Queue canary execution     | `events.queuesMessages`, dedicated canary Queue, `DeleteMessage` and successful outcome                                                 | count==0 |
+| Missing completed Workflow canary  | `events.workflows`, dedicated canary Workflow, `WORKFLOW_SUCCESS`                                                                       | count==0 |
 
-Restarts and low-rate or distributed traffic can lose this signal. Stalled writes and scheduling
-outages can also lose its D1-backed scheduled observation; the direct log emission is independent.
-It excludes edge refusals, OAuth provider refusals represented by redirects, and MCP SDK protocol
-errors carried in HTTP 200 before canonical dispatch. Native-confirmation failures projected as
-unavailable are not counted as client 4xx refusals. A warning is evidence of refusals, not proof of
-malicious activity; ordinary invalid inputs, absent records and legitimate rate limiting can trigger it.
-No request path, IP, User, credential, body, error detail or caller-supplied dimension is retained.
-The native MCP observation test substitutes canonical dispatch and proves protocol detection;
-existing canonical suites remain the authorization evidence. Live receipt and response evidence
-remains #1262.
+Do not add a `consumerType='worker'` filter: this account's successful native canary acknowledgements
+were excluded by it. Do not add explicit timestamp predicates to dashboard SQL: the supplied time
+range conflicts with them. Deep sums, UNION and adaptive DISTINCT were rejected by this account;
+a successful preview of another function is not evidence it supports a saved monitor.
 
-### Platform migration verification (#1491)
+The isolated Queue→Workflow probe runs every five minutes. Publication is not success: Queue
+acknowledgement and Workflow completion have independent native monitors. Messages older than ten
+minutes are rejected. Do not pause business Queues, purge retained messages or manufacture User work
+for a monitoring test. Cloudflare ingestion/evaluation/delivery adds delay; these are not instant or
+globally independent outage detectors. A Cloudflare-wide failure can affect logs and notifications.
 
-On 2026-10-23, the account dashboard saved and enabled **Fidy production: Core rejection bursts**
-(`fc9c5304807746699773a58bb8287594`), scoped to the deployed Core Worker. It reports a one-minute
-check interval, threshold `> 0`, five-minute averaging and four-hour notification repeats. Its email
-destination matches the existing deployed `OPERATOR_ALERT_EMAIL`. The saved query is:
+### Verified platform behavior — October 24, 2026
 
-```sql
-SELECT count() AS "value"
-FROM "logs"."workersLogs"
-WHERE "scriptName" = 'fidycloudflare-core-production-hdv5cspnk7fai6vg'
-  AND "message" LIKE '%fidy.operational component=core-rejections operation=coreRejectionBursts state=attention severity=warning%'
-```
+The five-monitor limit was observed in the account dashboard. Coverage marker PR #1535 deployed
+successfully in run `40118710940`. Production native issue detection is explicitly enabled by
+PR #1536, including provider serialization and release settings read-back; query redaction, disabled
+automatic invocation logs and disabled tracing remain required. Failed Work exports use
+`console.error` with the same closed metadata envelope, preserving original failures and swallowing
+exporter faults. Success, rejection and interruption retain their existing projections.
 
-The original message-word query was not coverage: live inspection showed that Cloudflare extracts
-Effect's object arguments into structured attributes while the message contains only the log prefix.
-The account's monitor SQL rejects custom columns (`component`) and filtering the JSON `attributes`
-column (HTTP422). The health records now supply an explicit closed `message` containing component,
-operation, state and policy severity, alongside their existing bounded fields. Match complete
-`state=unavailable` / `severity=warning` tokens, never the word `unavailable`, which also occurs in
-the healthy `unavailableWorkflows: 0` field. The direct burst uses the same fixed message format.
-These changes are deployed through trunk `66ae1f476b28e491f498cb49c0cc08fb0d142c21`.
-Dashboard inspection of Workers Logs on 2026-10-23 returned the closed operational messages for
-capabilities, Workflows, owner work and Queues. This establishes ingestion and the dashboard query
-match; it does not establish historical monitor evaluations or notification delivery.
+An isolated binding-free Worker exercised handled and uncaught/nested failures with fake query,
+Authorization, custom-header, body and private-cause markers. Full rendered native issue events
+retained the closed outer message, source stack, method/path and a header allowlist, without those
+fake private markers. This does not sanitize arbitrary private text deliberately placed in an outer
+error message; entrypoints must continue to produce closed outer errors. No resource-limit fault was
+injected. Native Issues documents CPU/memory failures; this account's actual privacy and delivery
+probes exercised handled/uncaught errors. Private proof is retained outside the repository.
 
-Both manual timestamp expressions, `NOW() - INTERVAL '5' MINUTE` and
-`NOW() - toIntervalMinute(5)`, failed account preview with `RecursionLimitExceeded` (HTTP422).
-The saved and reopened monitor instead retains the automatic one-minute query interval and averages
-its nonnegative counts over five minutes, triggering above zero. This verifies persisted configuration;
-it does not establish actual rolling-window evaluation semantics. Cloudflare's sample-notification
-action was submitted once; a sample is not actual threshold-firing evidence.
+The actual Issues SQL monitor fired at 18:14:02 UTC; its alert email arrived at 18:17:19 UTC with count 1.
+After the probe stopped, it returned to zero at 18:24:02 UTC and the actual Resolved email arrived at
+18:27:20 UTC. Both were read in the configured mailbox. This is real event-driven evaluation and
+recovery delivery, not the sample notification button. Emails carry counts/policy metadata rather
+than issue diagnostic payloads. Native Issues itself retains issues until resolved manually; that
+lifecycle is distinct from the SQL monitor's recovery when its recent occurrence count returns zero.
 
-Additional saved, enabled monitors use that same operator recipient and report one-minute checks:
+A dedicated Queue delivery pause on October 23, 19:48–19:58 Bogota produced a real missing-execution
+alert, then successful consumption and completed native Workflow instances after resumption, and a
+real recovery email at 20:11. A later data-only missing-Workflow test held its query constant on one
+closed test instance. Zero-count firing at 18:16:57 UTC produced an email at 18:20:13 UTC; the valid
+`operational-recovery-proof-20261024` instance completed after creation around 18:28 UTC. The unchanged query observed recovery at 18:36:57 UTC; its actual Resolved email arrived at
+18:40:14 UTC with count 1 and was read in the configured mailbox. The original production canary
+success query was then restored. Ordinary canary/business execution was
+not stopped. The earlier test that changed a query proves absence firing only, not recovery.
 
-| Monitor                                            | Saved identifier                   | Query / detection                                                                                                                                                                       | Repeat |
-| -------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Fidy production: Critical operational health       | `ad301e0eac8b4f99b375b07b909ace5a` | Core Workers Logs message `LIKE '%fidy.operational component=% severity=critical%'`; count >=1, average1m                                                                               | 30m    |
-| Fidy production: Operational health warnings       | `0735ba4d6f53402c976a3ad4ae6c16c1` | Core message `LIKE '%fidy.operational component=% severity=warning%'`, excluding `LIKE '% operation=coreRejectionBursts state=attention %'` already covered above; count >=1, average1m | 4h     |
-| Fidy production: Missing Queue canary execution    | `80833aeb00654828b52123b940170f1e` | Native `events.queuesMessages` successful `DeleteMessage` observations for the canary Queue; count ==0, average10m                                                                      | 30m    |
-| Fidy production: Missing completed Workflow canary | `db498d28ab1447b0acdd80ea6ce6ead8` | Native `events.workflows`, exact canary name and `eventType='WORKFLOW_SUCCESS'`; count ==0, average10m                                                                                  | 30m    |
-
-The canary queries have no grouping, so absence can produce numeric zero. Their ten-minute
-averaging setting and one-minute execution interval are independent; the average is zero only
-when the contributing nonnegative counts are all zero. Saved settings are not proof of the
-platform's initial-window, stale-data, sampling or evaluation semantics. Queue concurrency does
-not prove completion and is not used for this detection. Queue acknowledgment does not prove
-Workflow completion; the second query checks actual native Workflow success separately.
-
-The deployed canary Queue is `a0a2a566d54f4566905c769738b61078`; the Workflow is
-`fidycloudflare-core-production-hdv5cspnk7fai6vg-operati-a29777df`. Read-only Wrangler listing
-identified these resources. The Workflow success preview showed about one completion every five
-minutes, consistent with its deployed instance listing. The Queue acknowledgment preview showed
-a stable ten-minute average around 0.2, consistent with one success every five minutes, after removing `consumerType='worker'`: that filter incorrectly
-produced zero in this account's SQL dataset. Wrangler reports exactly one producer and one consumer,
-both the deployed Core Worker. The saved query therefore filters exact Queue identity,
-`actionType='DeleteMessage'` and `outcome='success'` without the consumer-type restriction. Neither
-preview establishes actual alert firing, notification receipt, controlled absence or recovery. Do not treat a missing Queue row as proof
-of zero backlog, or a successful Queue acknowledgment as successful business delivery.
-
-Completed Work and caught-failure exports also supply fixed platform-query messages, on the
-same records as before. `fidy.work` contains only the closed operation, outcome and HTTP status
-class (or `none`); `fidy.failure` contains only component, operation, safe error code and failure
-classification. Span events and the portable telemetry contracts are unchanged. Native tests
-exercise the production console exporter, preserve the original rejected Promise/success result
-when logging throws, and check the full captured output for private failure/prompt/credential
-sentinels. These exports are deployed. Workers Logs search for `fidy.work` returned the closed
-messages for scheduled work, Maintenance, Queue execution, the canary Workflow and Email scheduling.
-A last-hour `fidy.failure` search returned zero records, so live caught-failure ingestion remains
-unverified. Neither export establishes native runtime-limit coverage when execution cannot emit a
-record.
-
-The policy monitors currently combine owners by severity, whereas the old Fidy alert state
-has independent kind/owner cooldowns and acknowledgment. A new failing owner can therefore share
-an already-firing platform monitor and wait for its repeat; these definitions do not prove equivalent
-per-owner notification timing. Verify or resolve that difference, owner-specific stale/missing
-observations, platform initial-window behavior and independent outage delivery before retirement.
-
-The full #1491 coverage gate remains open. Required next evidence includes monitor policy-severity queries,
-native Queue and completed Workflow observations, missing/stale inspections, actual firing and
-resolution, delivery results, account-supported execution cadence, privacy and independent outage
-behavior. Keep the operational tables and existing notification machinery until these pass.
-
-#### Dashboard verification checkpoint — 2026-10-23
-
-The private account dashboard
-[Fidy production: operational signals](https://dash.cloudflare.com/a32350b6918ad7e78bc589b6630af1c2/dashboards/2223e9f9-2898-40aa-8f19-5157711ed0ac)
-contains two saved Workers Observability Logs timeseries. Both filter `$metadata.message` with
-the prefix `fidy.operational component=`. One groups observation counts by `operation`; the other
-groups them by `severity`. Both rendered live records after saving. They show historical observation
-counts, not latest owner status; group selection and time-range aggregation can hide an owner.
-No observations means unknown, never healthy. This dashboard alone does not satisfy #1492's current
-health and stale-owner gate.
-
-For timestamped owner inspection, use the account's Workers Logs search for `fidy.operational`, then
-restrict the closed component/operation and inspect the newest observation and its bounded fields.
-The live records included `deadLetters state=attention severity=critical`. Native Queue inspection
-showed a realtime backlog of 449 messages; the six-message preview included October 18–20 messages,
-and the first expanded body had the operational canary's `version`/`sentAtMs` shape. This is a partial
-preview, not a classification of all 449 messages or proof that replay is safe. No messages were
-replayed, acknowledged or purged during this verification.
-
-The dashboard's monitor actions expose a sample-notification test, not an actual evaluation history.
-The Platform Notifications view also did not expose delivery history in this inspection.
-[Cloudflare documents alert history through its API](https://developers.cloudflare.com/notifications/notification-history/);
-the existing Wrangler login received HTTP403 for that read. Dashboard access remains usable for
-configuration, preview, log queries and native resource inspection. Subsequent operator-mailbox
-inspection verified real Cloudflare threshold-triggered and resolved emails for critical health,
-warning health and both canary monitors, distinct from sample notifications. The critical thread
-included `Trigger: 1 >= 1` and a new alert start at `2026-10-24T00:16:02Z`; the Queue recovery
-thread included `Trigger: 0.1 == 0`, demonstrating a nonzero recovery value, with an alert start
-at `2026-10-24T00:42:59Z`. This establishes actual mail delivery and platform-reported transitions,
-not correct business health: numerous preceding canary alert/recovery cycles still need correlation
-with native executions, sampling and observation gaps. Cloudflare documents that event datasets may
-be [adaptively sampled](https://developers.cloudflare.com/analytics/sql-api/datasets/); weighted counts cannot recover an omitted event. The aggregate Queue baseline
-showed 283 ingested and acknowledged messages, zero retries and zero realtime backlog over the last day.
-Neither that aggregate nor a resolved email proves uninterrupted execution.
-
-A controlled absence check began on October 23 at approximately 19:48 America/Bogota: only delivery
-on the dedicated operational canary Queue was paused, through its Messages tab. Business Queues,
-consumers, schedules and monitor definitions were unchanged. Producer publication remains every
-five minutes; resume before the oldest retained probe exceeds its existing ten-minute payload-age
-limit. Correlate new alert start times with this interval, then verify consumption and Workflow
-completion plus delivered resolution after resuming. Historical emails are not controlled-test proof.
-The Queue was resumed and visibly returned to Active at approximately 19:58 America/Bogota.
-The real Cloudflare Queue alert received at 20:01 reports `Trigger: 0 == 0` and alert start
-`2026-10-24T00:57:59Z`, inside the deliberate pause. Native Workflow instances
-`operational-canary-5976010` and `operational-canary-5976011` both completed after delivery resumed;
-`operational-canary-5976012` then completed on the ordinary publication cadence. This establishes
-controlled Queue absence detection, actual alert delivery and downstream execution recovery.
-A subsequent real Queue Resolved email arrived at 20:11 America/Bogota, reporting
-`Trigger: 0.1 == 0` and an “Alert started” field of `2026-10-24T01:07:59Z`. This verifies
-delivered recovery after resumption. That field differs from the triggering email; treat it as
-reported message metadata, not a stable incident identifier or proof of exact incident matching.
-
-Native Workflow instance `operational-canary-5976007` completed its D1 step at
-`2026-10-24 00:35:33 UTC` (827ms wall time, Completed). The delivered missing-Workflow alert reports
-`Trigger: 0 == 0`, alert started `2026-10-24T00:37:57Z`. The supposed ten-minute absence therefore
-fired less than three minutes after a real completion. The detector is not verified coverage and must
-be corrected before retirement. These timestamps predate the controlled pause. Do not attribute
-this contradiction to sampling alone without isolating sampling, ingestion delay and evaluation-window
-behavior. A subsequent unsaved Workflow SQL draft with
-`timestamp >= CURRENT_TIMESTAMP() - INTERVAL '10' MINUTE` also failed preview with
-`RecursionLimitExceeded` (HTTP422). Reducing that draft to only the Workflow dataset and
-`timestamp >= NOW() - INTERVAL '10' MINUTE` exposed a more specific HTTP422:
-`query already contains time predicates on timestamp; remove them to use time_range`.
-The dashboard editor inspected here supplies an automatic request time range but exposes no
-manual-range selector in either its SQL or builder tab. Both drafts were cancelled; no broken
-query was saved. Current API-token metadata also has no Notifications scope (the expired login's
-read returned HTTP401), so direct policy inspection/configuration needs an appropriately authorized
-Notifications credential rather than browser-session extraction. Existing saved monitors remain enabled.
-Missing/stale-owner coverage and independent owner cooldowns remain unresolved.
-
-#### Account verification checkpoint — 2026-10-24
-
-PR #1530 merged and its Production deployment succeeded (run `40093477574`). The latest
-trunk deployment's earlier capture timeout also succeeded on one retry without changing the
-release deadline. No additional schema transition or table removal ran in this checkpoint.
-
-After explicit User approval, a temporary account-scoped Notifications Edit token allowed policy
-and delivery-history reads. The two existing canary monitors now retain a `10m` execution interval,
-verified through the policy API after dashboard saves. In automatic mode this expands the actual
-query range to ten minutes; a ten-minute averaging setting alone did not do so. This changes the
-possible absence-notification delay to twenty minutes plus provider delivery latency. Live
-false-absence and controlled recovery verification remain required before retirement.
-
-The account's available-alert metadata includes `workers_observability_real_time_issue`. Native
-policy `5b351c3174e142a8b52b8ad883f8c85e` was created and enabled for the existing private operator
-destination. A dedicated instance `operational-alert-verification-20261024` used only
-`{"version":2,"sentAtMs":0}`; native status reports Errored at `2026-10-24 12:34:28 UTC` with the
-closed error `Invalid operational canary`. This verifies the controlled failure, not native issue
-notification delivery or runtime-limit coverage. No User work was replayed or changed.
-
-Notifications permission alone cannot configure SQL-backed policies: the API returned HTTP400,
-code `17203`, `requesting user cannot access this query`. Cloudflare's
-[SQL API prerequisites](https://developers.cloudflare.com/analytics/sql-api/get-started/)
-require Account Analytics Read, with possible product-specific permissions for particular datasets.
-The dashboard also returned to its final creation form without creating either a native-issue SQL
-monitor or a simple per-owner healthy-heartbeat monitor; its console exposed only `Object`.
-Those drafts were cancelled. Do not attribute this to a plan limit without evidence.
-A combined eighteen-owner conditional query hit the account's SQL recursion limit (HTTP422);
-prefer independent, simple owner queries when configuration access works. The native built-in
-issue policy is saved, but owner freshness, independent owner response and live issue delivery
-remain unresolved. The three operational tables and fallback machinery remain installed.
-
-| Signal                                                      | Interpretation                                                                          | Action                                                                            |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `state=attention`, `oldestPendingAgeMilliseconds >= 120000` | Accepted work has waited at least two minutes.                                          | Check the owner Queue and Workflow alongside authoritative D1 state.              |
-| `expiredUndelivered > 0`                                    | A sampled delivery or statement deadline has elapsed.                                   | Check cleanup and the owner's terminal state; do not revive an expired proof.     |
-| `failedWorkflows > 0`                                       | A sampled Workflow is errored, terminated, or paused.                                   | Inspect its safe platform status and D1 outcome before considering recovery.      |
-| `unavailableWorkflows > 0`                                  | Stalled instance status could not be verified, including an absent binding or instance. | Check deployment wiring and platform availability; this is not proof of delivery. |
-| `operation=deadLetters`, `backlogCount > 0`                 | Queue messages exhausted delivery retries.                                              | Investigate and replay only eligible durable identities.                          |
-| `state=unavailable`                                         | A measurement failed or its binding is absent.                                          | Restore monitoring; no zero or healthy result is implied.                         |
-
-Rejected email work is measured separately through `sampledRejectedEmailWork` and
-`rejectionSampleLimited`: at most eight retained rejected records whose acceptance/request is within
-the last 24 hours per email owner. Any such record produces `attention` even if its Workflow completed
-successfully. This is a current-state sample, not a historical rejection rate; superseded or deleted
-records leave it. Rejection can mean provider refusal or exhausted proof attempts, so inspect the
-owning lifecycle before attributing a cause. It never authorizes a resend.
-
-D1 pending figures describe the oldest **eight-record sample per owner**, including incomplete
-forwarded-email receipts without a terminal outcome, not global totals. `sampleLimited`
-means more work may exist. Ages, sampled counts, status counts, Queue counts, and Queue bytes are the
-only exported values. User ids, work ids, mailboxes, financial content, and Workflow errors/outputs
-never enter these signals. Each owner inspection has a three-second budget; at most two run together.
-Queue metrics have a separate two-second budget. Canary publication stops waiting after two seconds
-without retrying the uncertain offer, so a stalled monitoring Queue cannot hold later Maintenance
-activities. Queue acceptance, including a late result after timeout, is never execution proof.
-Failure of one measurement preserves the others.
-
-The shared Proactivity delivery Queue reports `proactivityQueue` when weekly summaries or category
-proactivity are enabled. `proactivity` samples at most eight oldest unfinished identities across only
-the enabled categories (weekly summaries/questions and category messages). Index-backed per-source
-limits keep terminal history out of this read. Its Workflow identities are inspected without exposing
-User IDs, recipient data, report content, or platform error messages. Missing bindings and failed
-measurements remain unavailable. Neither observation nor migration 0076 enables a feature or sends
-product messages. `workflow.proactivityDelivery` records one safe Work outcome, and terminal failures
-join the existing bounded `workflow_failure` buckets without replacing their original rejection.
-The dead-letter Queue's count and byte figures are platform backlog measurements, not D1 samples.
-
-`component=scheduled-work`, `outcome=failed` identifies an activity failure. The scheduler still tries
-all other activities and then reports a closed invocation failure. `component=outbox-publication`
-identifies failed prompt publication; check subsequent cron recovery before treating it as lost work.
-
-The Core minute schedule classifies these bounded signals and stores notification attempts in
-`operational_alerts` (metadata only: fixed alert kind and owner, severity, timestamps, acknowledgement,
-and attempt count). A critical condition emails the operator immediately and repeats no more often
-than every 30 minutes; warnings repeat no more often than every four hours. Resolved conditions send one resolution email and stop
-repeats. A failed send remains firing and unacknowledged; the scheduled activity reports a closed
-failure while other activities continue. An ambiguous send reuses the same idempotency key within
-the provider window; afterward a new operator-only email attempt uses a fresh key rather than
-falling permanently silent. This may produce a duplicate alert email, never duplicate application
-Work. A measurement failure is `inspection_unavailable`, never
-zero; until all measurements recover the alert sweep does not resolve an existing firing condition.
-These records represent **notification state**, not the authoritative status of background work.
-Unchanged firing observations refresh `last_seen_ms` at most every five minutes. New conditions,
-severity changes, and recovery still persist immediately. Resolution excludes the current sweep's
-active `(kind, owner)` pairs rather than treating an unchanged heartbeat timestamp as recovery.
-This bounds observation writes without changing notification cooldowns or acknowledgement policy.
-
-Configure `OPERATOR_ALERT_EMAIL` as a Production GitHub environment variable, alongside the existing
-`RESEND_API_KEY` secret. GitHub Actions sends deployment-failure email independently of the newly
-released Worker. To verify delivery, manually run **Test operator alert email** in GitHub Actions
-and confirm that the configured inbox actually received it; provider acceptance alone is not receipt.
-No public health or admin endpoint exposes these records. The sole operator acknowledges a firing
-alert in private operational state only after reading it, recording UTC `acknowledged_ms` for the
-specific `(kind, owner)` row; acknowledgement suppresses repeats but does not change domain state.
-Investigate critical alerts within 30 minutes and warnings within one Bogota working day. An
-unacknowledged critical alert continues to repeat every 30 minutes; if unavailable, pause risky
-operations or disable new ingress by reviewed release changes rather than manufacturing a second
-on-call owner. Confirm resolution against D1/Queue/Workflow before deleting or replaying any work.
-
-The `retention` signal inspects expired unpublished statement staging rows, published statement
-bytes awaiting deletion beyond their submission retention deadline, forwarded-email receipts
-whose bytes are overdue for deletion, and statement NeedsReviewItem evidence that remains past its
-evidence deadline: one hour overdue is a warning and 24 hours overdue is critical.
-This is an eight-row sample, not an R2 inventory; byte deletion and durable receipt/submission state
-remain authoritative. The existing pending measurements are capped eight-record samples; `sampleLimited`
-is not a global backlog count. Current email-proof rejection samples are neither a historical callback-rejection
-rate nor an institutional webhook spike. Monitor native Workflow failures separately from Queue
-retries: Queue acknowledgment happens after instance creation, so a later Workflow failure never
-reaches the Queue dead-letter destination. Previous Tail-only alert rows are retired by the normal
-alert sweep when this source is removed; that reflects discontinued monitoring, not proof that a
-Worker condition was corrected. Set Cloudflare's account-wide billing budget emails
-at 50% and 80% of the approved monthly spend; they are informational, not hard caps.
+The combined health policy sent a real alert at 18:30:05 UTC. Native owner observations identify an
+actual dead-letter backlog; retain/investigate it rather than clearing it to produce green evidence.
+The saved complete-sweep query has a positive baseline in native Logs. Never interpret missing or
+stale observations as health. Monitoring does not authorize replay, deletion or domain changes.
 
 ## Private operational view and account usage alerts
 
@@ -419,22 +180,14 @@ metadata-only inspection. **Stale observations are unavailable**, not healthy; c
 ```sql
 SELECT operation, state, datetime(observed_at_ms / 1000, 'unixepoch') AS observed_utc
 FROM operational_health_view ORDER BY operation;
-SELECT kind, owner, severity, state, delivery_confirmed, acknowledged_ms,
-       datetime(last_seen_ms / 1000, 'unixepoch') AS last_seen_utc
-FROM operational_alerts ORDER BY severity, kind, owner;
-SELECT kind, datetime(last_succeeded_ms / 1000, 'unixepoch') AS last_succeeded_utc
-FROM operational_canary ORDER BY kind;
-SELECT SUM(count) AS workflow_failures_last_hour FROM operational_event_buckets
-WHERE kind = 'workflow_failure' AND bucket_ms >= (unixepoch() - 3600) * 1000;
 ```
 
-The view is a last-known observation, not an authoritative Queue total; use D1 owner records,
-Queue metrics and Workflow instances to confirm unfinished work. If snapshot writes fail, the
-alert delivery still runs independently and the stale timestamp stays visible. D1 down means the
-view and Worker-backed email may both fail; check the Cloudflare console and the independent
-GitHub deployment-failure email. Neither a dashboard query nor missing telemetry rewrites domain
-state or marks incomplete work successful. Provider configuration checks only presence of required
-Kapso, Resend, Wompi and AI settings; they do not prove provider availability or receipt.
+This remaining snapshot is scheduled for retirement in #1492. The replacement authenticated Logs
+saved search is **Fidy owner health — timestamped observations**, dataset Workers, query
+`contains(message, "fidy.operational")`. It displays newest observations with UTC timestamps.
+Older than ten minutes is stale; a missing owner is unknown; complete means inspected, not healthy.
+Native Queue/Workflow Monitors establish execution absence independently of this search. Use the
+owner's actual state, Queue metrics and Workflow instances before considering recovery actions.
 
 **Account setup required before #717 can be closed:** in Cloudflare **Manage Account → Billing →
 Billable Usage → Create budget alert**, create two account-wide USD alerts at 50% and 80% of the
@@ -449,45 +202,12 @@ been verified on the Production account. Record the approved USD budget and Work
 the operator's private release checklist, not in alert dimensions or logs. [Budget alert
 instructions](https://developers.cloudflare.com/billing/manage/budget-alerts/).
 
-## D1-independent outage alerts (#1160)
+## D1-independent outage alert ownership
 
-Operational Health owns a single metadata-only R2 ledger at `operational/alerts/d1-v1` in the
-existing private statement staging bucket. See [ADR 0035](../adr/0035-d1-independent-operator-alerts.md).
-The Core minute inspection probes D1 before attempting database-backed telemetry. Unavailable D1
-reaches this independent ledger and the existing approved `OPERATOR_ALERT_EMAIL` / `RESEND_API_KEY`
-boundary. Other alert coordinates continue to use `operational_alerts` in D1.
-
-R2 ETag conditions admit each attempt before sending. Concurrent ticks and Worker restarts share
-one durable ledger. The D1 inspection alert preserves its warning severity and four-hour repeat;
-critical delivery repeats after 30 minutes. A failed or lost response retries after five minutes,
-at most six times under the same email identity and original release. That identity remains fixed
-for the 23-hour safe provider idempotency window, including after retry exhaustion. After the window,
-another eligible attempt starts a fresh identity. Provider acceptance is not inbox receipt; a duplicate
-operator email remains possible after the provider window or provider ambiguity.
-
-For acknowledgement, use authenticated private R2 access to read this exact object and its ETag.
-Check that `phase` is `firing` and its `started` timestamp identifies the notification you read.
-Conditionally replace that same JSON with only `acknowledged` changed to `true`, using `If-Match`
-with the read ETag. If the condition fails, reread and recheck the notification before retrying;
-do not overwrite a newer claim. This suppresses firing repeats and retries, without declaring
-recovery. Preserve every other field, never delete the object, and do not update D1 to acknowledge
-this R2-owned coordinate. No public administrative endpoint exists.
-
-Only a healthy D1 capability probe with available D1-backed owner inspection starts resolution.
-Missing or failed measurements cannot resolve. A resolution clears acknowledgement and sends once,
-using the same bounded retry policy if its response is lost. The firing cooldown survives resolution
-to bound rapid flapping; older observations cannot regress newer state. Retention overwrites one
-object of at most 1 KiB, including its resolved tombstone; no per-tick history accumulates. Staging
-cleanup operates on its own statement prefix and must not delete the operational ledger.
-
-Verified local tests exercise actual R2 conditional writes, persistent runtime recreation, Core
-maintenance/operational inspection, unavailable D1, concurrent ticks, failed and ambiguous provider
-transport, cooldown, acknowledgement and recovery. These tests do not prove production inbox receipt.
-Delivery requires Core execution and its minute trigger, R2 and Resend to remain available. This
-owner cannot independently establish Core cron liveness or detect a Cloudflare-wide outage. An
-external independently scheduled monitor is required for cron liveness. GitHub deployment-failure
-email observes release failures, not runtime D1 availability. No new credentials, recipient changes,
-or production infrastructure enablement follow from this implementation.
+Platform health and missing-complete-sweep monitors replace the R2 email claim ledger as well as D1
+alert/counter stores. Core's D1 probe still emits closed unavailability metadata without attempting
+owner reads; a stopped Core sweep is independently observable through absence. No application email
+retry/acknowledgement ledger remains. Historical ADR0035 records the superseded design.
 
 ## Telemetry ownership (#716)
 
@@ -504,83 +224,9 @@ response is not proof that a provider delivery or durable Work succeeded. Separa
 compared against authoritative D1 outcomes; no unapproved trace context is carried across them.
 
 Native Effect spans are not connected to a second exporter. The explicit Work projector is the
-Cloudflare export path, so an Effect error is not also reported as a separate native issue. Production
+Cloudflare export path. Failed Work exports feed native Issues through a closed error envelope. Production
 Cloudflare code and deployment have no Sentry runtime, preload, secret, source-map upload, or build
 step. Alert delivery and test notification to an operator are owned by #717, not by these records.
-
-### Account monitor capacity and inspection coverage — October 24
-
-A further dashboard creation attempt exposed the concrete rejection: **“an account can have at most
-5 custom analytics policies.”** All five custom slots are occupied. The unsaved billing-owner draft
-was cancelled; no sixth custom policy exists. Additional API permissions do not resolve this limit.
-A balanced sum of owner-presence aggregates still failed with HTTP422 `RecursionLimitExceeded`
-(limit 10). `COUNT(DISTINCT message)` failed with HTTP422 because this account rejects distinct
-aggregates on adaptive datasets. Do not treat a successful simple preview as permission to save an
-additional monitor, or assume the generic Log Explorer function list overrides this observed error.
-
-The existing health entrypoint now emits one additional closed inspection-coverage observation per
-completed sweep. It checks the expected Work and Queue owners under the deployed Proactivity flags,
-WhatsApp, dead letters, retention and the four capability inspections. `state=complete` means all
-expected inspections returned an observation, **including unavailable observations**; it does not
-mean healthy. When unavailable D1 prevents the owner sweep, coverage is incomplete. Existing owner
-observations and policy severity remain unchanged. The summary contains no owner identities,
-exceptions, financial data or new retained state. This prepares a single count-based absence query
-without an expression per owner or sampled distinct counting; deployment and live verification are
-still required before using it to retire storage.
-
-The native Worker Issues sample-notification action was submitted at 16:59 UTC. Notification history
-records that test dispatch, and the configured operator mailbox received the sample “Workers
-real-time issue detected” email. Its example `checkout-worker` is sample data, not evidence of a
-Fidy failure. This proves the notification destination works, not actual exception/resource-limit
-coverage or safe contents of future real issue notifications.
-
-Current notification history also records repeated warning start/end pairs about one minute apart.
-These are real delivered alerts, not proof of stable owner health or valid per-owner resolution.
-Keep the old monitoring stores until the replacement policy, owner freshness, native failure
-coverage and actual absence/recovery behavior have been verified.
-
-### Native issue activation and controlled missing-signal test
-
-The deployed Core Issues page still displayed **Enable issue detection** after the native
-notification policy had been enabled. A sample notification does not activate Worker detection.
-The stack now requests `observability.issues.enabled=true`, preserving query redaction, disabled
-automatic invocation logs and disabled release tracing. The selected provider serializer previously
-omitted the Issues field; its existing narrow Worker metadata patch now retains that field. The
-production release script-settings request and read-back require native detection and query privacy
-before staging, including gradual releases. These source changes still require deployment and live
-verification. See [Issues activation](https://developers.cloudflare.com/workers/observability/issues/)
-and [detected failures](https://developers.cloudflare.com/workers/observability/issues/investigate/).
-
-Failed Work exports now use the error console level with the same closed metadata envelope; the
-private cause is not added, and success/rejection/interruption retain their existing projection.
-The selected Effect default logger normally uses `console.log` even for an error log level; the
-failed export explicitly selects its stderr console reference. Export failure still cannot change
-the original Work result. This supplies the native detector with caught failures without another
-application counter. Verify the resulting live issue context and notification contain no private
-content before removing existing coverage; source configuration alone does not prove that.
-
-An isolated, binding-free verification Worker exercised handled and uncaught failures with fake
-query, Authorization, custom-header and body markers on October 24. The actual native handled
-occurrence at **17:45:52 UTC** retained the closed error envelope, a request-header allowlist and
-method/path metadata. The uncaught nested-error occurrence at **17:54:48 UTC** retained the closed
-outer message and source stack, without traversing the fake private `Error.cause`. Neither full
-rendered issue event contained the fake query, authorization, custom header, body or private-cause
-markers. Invocation logs and tracing were disabled. These are native boundary observations, not a
-promise that arbitrary text deliberately placed in an outer error message will be removed; owning
-entrypoints must continue producing closed outer errors. Private event evidence is retained outside
-the repository. No production Issues activation was needed for these probes.
-
-The issue screen's external-destination setup did not offer email. The enabled account notification
-policy's sample email therefore remains insufficient evidence of actual Issue delivery. Investigate
-the account-supported native Issues SQL dataset with the existing email-capable monitors before
-adding any custom delivery bridge. Existing alerts remain enabled until that replacement is proven.
-
-At 17:13:40 UTC, the missing-Workflow monitor was temporarily pointed at a nonexistent closed test
-name, leaving the actual canary and all business work running. Cloudflare recorded a real zero-count
-firing at **17:22:57 UTC** (correlation `2114045810818682880`); its operator email arrived at
-**17:26:14 UTC**. The original actual-canary success query was restored and read back at
-**17:30:03 UTC**, retaining the ten-minute interval and thirty-minute repeat. This verifies the
-zero-signal detector and delivery, not a real Workflow outage. Recovery receipt is still pending.
 
 ## Safe recovery
 

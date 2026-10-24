@@ -1,7 +1,7 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Menu01Icon } from "@hugeicons/core-free-icons";
 import type { JSX, ReactNode } from "react";
-import { Button } from "@/ui/components/button";
+import { ApplicationMenuAction, ApplicationWordmark } from "@/ui/components/application";
 import { SignedInNavigation } from "./navigation";
 
 export const CompactNavigation = ({
@@ -14,13 +14,8 @@ export const CompactNavigation = ({
   reviewPendingCount: ReactNode;
 }>): JSX.Element => (
   <>
-    <div className="px-2 md:hidden">
-      <Button
-        variant="outline"
-        size="icon"
-        popoverTarget="signed-in-navigation"
-        aria-label="Menú de navegación"
-      >
+    <div className="application-menu-control">
+      <ApplicationMenuAction popoverTarget="signed-in-navigation" aria-label="Menú de navegación">
         <HugeiconsIcon
           className="signed-in-menu-bars"
           icon={Menu01Icon}
@@ -35,9 +30,12 @@ export const CompactNavigation = ({
           strokeWidth={1.5}
           aria-hidden="true"
         />
-      </Button>
+      </ApplicationMenuAction>
     </div>
     <div id="signed-in-navigation" className="signed-in-compact-navigation" popover="auto">
+      <div className="application-menu-brand">
+        <ApplicationWordmark />
+      </div>
       <SignedInNavigation
         loggingOut={loggingOut}
         onLogout={onLogout}

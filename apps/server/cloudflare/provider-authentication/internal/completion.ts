@@ -1,14 +1,22 @@
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { admitProviderRequest } from "./admission";
 import { PendingConsentExchangeId } from "../../../src/shell/consent/contract";
-import { prepareOnboardingWhatsAppAssociation } from "../../identity/operations";
+import {
+  prepareOnboardingWhatsAppAssociation,
+  prepareProviderWhatsAppAssociation,
+} from "../../identity/operations";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import {
-  ProviderBrowserProof,
+  ProviderCompletionProof,
+  fidyWhatsAppUrl,
   microsoftProviderPaths,
   providerPaths,
 } from "../../../src/shell/provider-authentication/contract";
-import { UserId } from "../../../src/core/identity/contract";
+import {
+  UserId,
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+} from "../../../src/core/identity/contract";
 import { DisclosureSnapshot } from "../../../src/core/consent/contract";
 import { boundedJsonBody } from "../../http/operations";
 import {
@@ -23,6 +31,7 @@ const invalidStatus = 400;
 const Attempt = Schema.Struct({
   id: Schema.String,
   handoff_id: Schema.NullOr(Schema.String),
+  invitation_id: Schema.NullOr(Schema.String),
   issuer: Schema.String,
   subject: Schema.String,
   contact_email: Schema.NullOr(Schema.String),
@@ -31,12 +40,17 @@ const Attempt = Schema.Struct({
   consent_at_ms: Schema.NullOr(Schema.Int),
 });
 const Credential = Schema.Struct({ user_id: UserId });
+const InvitationCaller = Schema.Struct({
+  source_portfolio_id: WhatsAppBusinessPortfolioId,
+  source_bsuid: WhatsAppBusinessScopedUserId,
+});
 type CompletionContext = Readonly<{
   input: ProviderCompletionRequest;
-  proof: typeof ProviderBrowserProof.Type;
+  proof: typeof ProviderCompletionProof.Type;
   attempt: typeof Attempt.Type;
   current: number;
   exchangeId: Option.Option<PendingConsentExchangeId>;
+  invitationCaller: Option.Option<typeof InvitationCaller.Type>;
 }>;
 const prepareHandoffConsumption = (
   context: CompletionContext,
@@ -63,6 +77,58 @@ const prepareHandoffConsumption = (
           ),
         prepareChangedRowAssertion({ db: context.input.db, scope: "provider_completion" }),
       ];
+const prepareInvitationAssociation = (
+  context: CompletionContext,
+  userId: UserId
+): ReadonlyArray<D1PreparedStatement> =>
+  Option.match(context.invitationCaller, {
+    onNone: () => [],
+    onSome: (caller) => [
+      context.input.db
+        .prepare(`UPDATE whatsapp_signup_invitations SET approved_at_ms=?
+              WHERE id=? AND pairing_id=? AND review_code=? AND approved_at_ms IS NULL AND consumed_at_ms IS NULL AND expires_at_ms>? AND decision='confirmed' AND review_attempt_id=?`)
+        .bind(
+          context.current,
+          context.attempt.invitation_id,
+          context.proof.pairingId,
+          context.proof.associationCode ?? "",
+          context.current,
+          context.attempt.id
+        ),
+      prepareChangedRowAssertion({ db: context.input.db, scope: "provider_completion" }),
+      prepareProviderWhatsAppAssociation({
+        db: context.input.db,
+        userId,
+        portfolioId: caller.source_portfolio_id,
+        bsuid: caller.source_bsuid,
+        current: context.current,
+      }),
+      prepareChangedRowAssertion({ db: context.input.db, scope: "provider_completion" }),
+    ],
+  });
+const prepareInvitationConsumption = (
+  context: CompletionContext,
+  userId: UserId
+): ReadonlyArray<D1PreparedStatement> =>
+  context.attempt.invitation_id === null
+    ? []
+    : [
+        context.input.db
+          .prepare(`UPDATE whatsapp_signup_invitations SET consumed_at_ms=?
+          WHERE id=? AND pairing_id=? AND approved_at_ms=? AND consumed_at_ms IS NULL AND expires_at_ms>?
+          AND EXISTS(SELECT 1 FROM provider_authentication_attempts a WHERE a.id=? AND a.invitation_id=whatsapp_signup_invitations.id AND a.user_id=? AND a.state='completed' AND a.completed_at_ms=?)`)
+          .bind(
+            context.current,
+            context.attempt.invitation_id,
+            context.proof.pairingId,
+            context.current,
+            context.current,
+            context.attempt.id,
+            userId,
+            context.current
+          ),
+        prepareChangedRowAssertion({ db: context.input.db, scope: "provider_completion" }),
+      ];
 const commit =
   (context: CompletionContext) =>
   ({
@@ -78,6 +144,7 @@ const commit =
     return context.input.db
       .batch([
         ...statements,
+        ...prepareInvitationAssociation(context, userId),
         ...Option.match(context.exchangeId, {
           onNone: () => [],
           onSome: (exchangeId) => [
@@ -102,6 +169,7 @@ const commit =
           .bind(userId, context.current, created ? 1 : 0, context.attempt.id),
         prepareChangedRowAssertion({ db: context.input.db, scope: "provider_completion" }),
         ...prepareHandoffConsumption(context, userId),
+        ...prepareInvitationConsumption(context, userId),
       ])
       .then(() => undefined);
   };
@@ -163,18 +231,18 @@ const confirmedExchange = ({
   attempt,
   proof,
   current,
-}: Omit<CompletionContext, "exchangeId">): Effect.Effect<
-  Option.Option<PendingConsentExchangeId>,
+}: Omit<CompletionContext, "exchangeId" | "invitationCaller">): Effect.Effect<
+  Pick<CompletionContext, "exchangeId" | "invitationCaller">,
   Cause.UnknownError | Schema.SchemaError
 > =>
   Effect.gen(function* () {
     let exchangeId = Option.none<PendingConsentExchangeId>();
+    let invitationCaller = Option.none<typeof InvitationCaller.Type>();
     if (attempt.handoff_id !== null) {
       const raw = yield* Effect.tryPromise(() =>
         input.db
-          .prepare(
-            "SELECT exchange_id FROM whatsapp_provider_handoffs WHERE id=? AND pairing_id=? AND decision='confirmed' AND review_message_id IS NOT NULL AND consumed_at_ms IS NULL AND expires_at_ms>?"
-          )
+          .prepare(`SELECT exchange_id FROM whatsapp_provider_handoffs
+        WHERE id=? AND pairing_id=? AND consumed_at_ms IS NULL AND expires_at_ms>? AND decision='confirmed' AND review_message_id IS NOT NULL`)
           .bind(attempt.handoff_id, proof.pairingId, current)
           .first()
       );
@@ -183,7 +251,56 @@ const confirmedExchange = ({
       )(raw);
       exchangeId = Option.some(handoff.exchange_id);
     }
-    return exchangeId;
+    if (attempt.invitation_id !== null) {
+      const raw = yield* Effect.tryPromise(() =>
+        input.db
+          .prepare(`SELECT source_portfolio_id,source_bsuid FROM whatsapp_signup_invitations
+        WHERE id=? AND pairing_id=? AND consumed_at_ms IS NULL AND approved_at_ms IS NULL AND expires_at_ms>? AND review_code=? AND decision='confirmed' AND review_attempt_id=?`)
+          .bind(
+            attempt.invitation_id,
+            proof.pairingId,
+            current,
+            proof.associationCode ?? "",
+            attempt.id
+          )
+          .first()
+      );
+      invitationCaller = Option.some(yield* Schema.decodeUnknownEffect(InvitationCaller)(raw));
+    }
+    return { exchangeId, invitationCaller };
+  });
+const completeAttempt = (
+  context: CompletionContext
+): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const rawCredential = yield* Effect.tryPromise(() =>
+      context.input.db
+        .prepare("SELECT user_id FROM provider_credentials WHERE issuer=? AND subject=?")
+        .bind(context.attempt.issuer, context.attempt.subject)
+        .first()
+    );
+    const commitAttempt = commit(context);
+    if (rawCredential !== null) {
+      const credential = yield* Schema.decodeUnknownEffect(Credential)(rawCredential);
+      yield* Effect.tryPromise(() =>
+        commitAttempt({ userId: credential.user_id, statements: [], created: false })
+      );
+      return providerJson({
+        body: {
+          status: "approved",
+          ...(Option.isSome(context.invitationCaller)
+            ? { whatsappReturnUrl: fidyWhatsAppUrl }
+            : {}),
+        },
+      });
+    }
+    const completed = yield* completeSignup(context);
+    if (Option.isNone(context.invitationCaller) || !completed.ok) return completed;
+    const result = yield* Effect.tryPromise(() => completed.json());
+    const signup = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ status: Schema.Literal("created"), backupRecoveryCode: Schema.String })
+    )(result);
+    return providerJson({ body: { ...signup, whatsappReturnUrl: fidyWhatsAppUrl } });
   });
 export const completeProvider = (input: ProviderCompletionRequest): Promise<Response> =>
   Effect.runPromise(
@@ -198,7 +315,7 @@ export const completeProvider = (input: ProviderCompletionRequest): Promise<Resp
       const proof = yield* boundedJsonBody({
         request: input.request,
         policy: providerBodyPolicy,
-        schema: ProviderBrowserProof,
+        schema: ProviderCompletionProof,
       });
       if (Option.isNone(proof)) {
         return providerJson({ body: { status: "invalid" }, status: invalidStatus });
@@ -211,28 +328,26 @@ export const completeProvider = (input: ProviderCompletionRequest): Promise<Resp
       const row = yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            `SELECT id,handoff_id,issuer,subject,contact_email,intent,disclosure_json,consent_at_ms FROM provider_authentication_attempts WHERE pairing_id=? AND provider=? AND state='verified' AND expires_at_ms>?`
+            `SELECT id,handoff_id,invitation_id,issuer,subject,contact_email,intent,disclosure_json,consent_at_ms FROM provider_authentication_attempts WHERE pairing_id=? AND provider=? AND state='verified' AND expires_at_ms>?`
           )
           .bind(proof.value.pairingId, provider, current)
           .first()
       );
       const attempt = yield* Schema.decodeUnknownEffect(Attempt)(row);
-      const exchangeId = yield* confirmedExchange({ input, attempt, proof: proof.value, current });
-      const rawCredential = yield* Effect.tryPromise(() =>
-        input.db
-          .prepare("SELECT user_id FROM provider_credentials WHERE issuer=? AND subject=?")
-          .bind(attempt.issuer, attempt.subject)
-          .first()
-      );
-      const commitAttempt = commit({ input, proof: proof.value, attempt, current, exchangeId });
-      if (rawCredential !== null) {
-        const credential = yield* Schema.decodeUnknownEffect(Credential)(rawCredential);
-        yield* Effect.tryPromise(() =>
-          commitAttempt({ userId: credential.user_id, statements: [], created: false })
-        );
-        return providerJson({ body: { status: "approved" } });
-      }
-      return yield* completeSignup({ input, proof: proof.value, attempt, current, exchangeId });
+      const { exchangeId, invitationCaller } = yield* confirmedExchange({
+        input,
+        attempt,
+        proof: proof.value,
+        current,
+      });
+      return yield* completeAttempt({
+        input,
+        proof: proof.value,
+        attempt,
+        current,
+        exchangeId,
+        invitationCaller,
+      });
     }).pipe(
       Effect.orElseSucceed(() =>
         providerJson({ body: { status: "invalid" }, status: invalidStatus })

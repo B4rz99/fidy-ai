@@ -1,3 +1,11 @@
+.application-workspace:has([data-transaction-slot~="transaction-workspace"]) {
+  padding-top: 0;
+}
+@media (min-width: 1024px) {
+  [data-transaction-slot~="transaction-page-header"] {
+    padding-right: 58px;
+  }
+}
 [data-transaction-slot~="transaction-workspace"] {
   width: 100%;
   max-width: 1800px;
@@ -254,6 +262,14 @@
   order: 2;
   grid-column: 1;
 }
+[data-transaction-slot~="transaction-context-panel"] #bulk-direction {
+  padding-inline: 10px;
+  font-size: 12px;
+}
+[data-transaction-slot~="transaction-context-panel"] #bulk-direction svg {
+  width: 16px;
+  height: 16px;
+}
 [data-transaction-slot~="transaction-correction-fields"] > div:has(#correction-amount),
 [data-transaction-slot~="transaction-bulk-fields"] > div:has(#bulk-amount) {
   order: 2;
@@ -472,6 +488,9 @@
     bottom: 10px;
     padding: 10px 0;
     background: var(--card);
+  }
+  [aria-label="Registrar transacción"] [data-transaction-slot~="transaction-form-actions"] {
+    position: static;
   }
   [data-transaction-slot~="transaction-summary-totals"] dd {
     font-size: 20px;
@@ -726,10 +745,10 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
 }
 @media (max-width: 600px) {
   [data-transaction-slot~="transaction-workspace"] {
-    padding-top: 18px;
+    padding-top: 5px;
   }
   [data-transaction-slot~="transaction-page-header"] {
-    min-height: 42px;
+    min-height: 36px;
   }
 }
 @container ledger (width < 400px) {

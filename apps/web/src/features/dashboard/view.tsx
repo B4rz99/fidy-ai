@@ -1,6 +1,7 @@
+import { formatMoneyWithCode } from "@/transport/money";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import type { DashboardEditorError } from "./editing";
-import { PencilIcon, Tick02Icon, XIcon } from "@hugeicons/core-free-icons";
+import { PencilIcon, Settings01Icon, Tick02Icon, XIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BigDecimal, Option } from "effect";
 import type { AsyncResult } from "effect/reactivity";
@@ -18,25 +19,26 @@ import {
 // react-doctor-disable-next-line prefer-dynamic-import
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
-import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
-import { type ChartConfig, ChartContainer, ChartTooltip } from "@/ui/components/chart";
+import {
+  DashboardAxisTick,
+  DashboardBudget,
+  DashboardCard,
+  DashboardChart,
+  DashboardCurrency,
+  DashboardCustomizeAction,
+  DashboardFigures,
+  DashboardPeriod,
+  type DashboardRecentGroup,
+  DashboardRecentList,
+  DashboardTooltip,
+} from "@/ui/components/dashboard";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import { Input } from "@/ui/components/input";
-import { Progress, ProgressLabel } from "@/ui/components/progress";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { maximumSplitWeight, minimumSplitWeight } from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/ui/components/table";
 import {
   exactChartAmount,
   formatCurrencyAmount,
@@ -44,6 +46,7 @@ import {
   moneyDecimalText,
   moneyProgressGeometry,
   moneySeriesGeometry,
+  moneyUtilizationLabel,
 } from "./money-presentation";
 import { DashboardDragHandle, DashboardDragProvider, DashboardDropZone } from "./drag-adapter";
 import { type DashboardCatalogEntry, type DashboardGesture } from "./editor-model";
@@ -84,25 +87,38 @@ const titleFor = (widget: DashboardWidget): string => {
 const WidgetFrame = ({
   children,
   editing,
+  kind,
   title,
   titleEditor,
 }: Readonly<{
   children: JSX.Element;
   editing: boolean;
+  kind: DashboardWidget["type"];
   title: string;
   titleEditor: Option.Option<JSX.Element>;
 }>): JSX.Element => (
-  <Card className="min-h-72 flex-1">
-    <CardHeader className={editing ? "px-14 pr-28" : undefined}>
-      <CardTitle>
-        {Option.getOrElse(titleEditor, () => (
-          <h2>{title}</h2>
-        ))}
-      </CardTitle>
-    </CardHeader>
-    <CardContent className="min-w-0 flex-1">{children}</CardContent>
-  </Card>
+  <DashboardCard
+    editing={editing}
+    kind={kind}
+    title={Option.getOrElse(titleEditor, () => (
+      <h2>{title}</h2>
+    ))}
+  >
+    {children}
+  </DashboardCard>
 );
+
+const periodLabel = (period: SpendingResult["appliedPeriod"], locale: string): string => {
+  const month = period.requested === "this-month" || period.requested === "last-month";
+  const format = new Intl.DateTimeFormat(locale, {
+    month: month ? "long" : "short",
+    year: "numeric",
+    ...(month ? {} : { day: "numeric" }),
+    timeZone: period.timeZone,
+  });
+  const start = format.format(period.from.epochMilliseconds);
+  return month ? start : `${start} – ${format.format(period.toExclusive.epochMilliseconds - 1)}`;
+};
 
 const bucketLabel = (key: SpendingResult["buckets"][number]["key"]): string => {
   switch (key.kind) {
@@ -115,10 +131,6 @@ const bucketLabel = (key: SpendingResult["buckets"][number]["key"]): string => {
   }
 };
 
-const chartConfig = {
-  outflow: { label: "Gastos", color: "var(--chart-4)" },
-} satisfies ChartConfig;
-
 type CurrencyChartDatum = Readonly<{
   label: string;
   outflowExact: string;
@@ -130,19 +142,76 @@ const currencyChartData = (
   currency: string
 ): ReadonlyArray<CurrencyChartDatum> => {
   const zero = BigDecimal.make(0n, 0);
-  const values = data.buckets.map((bucket) => {
+  const values = data.buckets.flatMap((bucket) => {
     const group = bucket.moneyGroups.find((candidate) => candidate.currency === currency);
-    return {
-      label: bucketLabel(bucket.key),
-      outflowExact: group === undefined ? "0" : moneyDecimalText(group.outflow),
-      outflowAmount: group?.outflow.amount ?? zero,
-    };
+    if (
+      bucket.key.kind === "category" &&
+      (group === undefined || !BigDecimal.isPositive(group.outflow.amount))
+    ) {
+      return [];
+    }
+    return [
+      {
+        label: bucketLabel(bucket.key),
+        outflowExact: group === undefined ? "0" : moneyDecimalText(group.outflow),
+        outflowAmount: group?.outflow.amount ?? zero,
+      },
+    ];
   });
   const geometry = moneySeriesGeometry(values.map(({ outflowAmount }) => outflowAmount));
   return values.map(({ outflowAmount: _outflow, ...value }, index) => ({
     ...value,
     outflow: geometry[index] ?? 0,
   }));
+};
+
+const CurrencySpendingChart = ({
+  data,
+  currency,
+  locale,
+}: Readonly<{
+  data: SpendingResult;
+  currency: SpendingCurrency;
+  locale: DashboardLocale;
+}>): JSX.Element => {
+  const chartData = currencyChartData(data, currency);
+  return (
+    <section className="dashboard-chart-series" key={currency} aria-label={`Serie ${currency}`}>
+      <span className="dashboard-chart-currency">
+        <DashboardCurrency>{currency}</DashboardCurrency>
+      </span>
+      <span className="dashboard-chart-legend">Gastos</span>
+      <DashboardChart>
+        <BarChart responsive width="100%" height="100%" accessibilityLayer data={chartData}>
+          <CartesianGrid vertical={false} stroke="var(--application-line)" />
+          <XAxis
+            dataKey="label"
+            interval={0}
+            axisLine={false}
+            tickLine={false}
+            tickMargin={16}
+            tick={<DashboardAxisTick />}
+          />
+          <DashboardTooltip
+            formatter={(_value: unknown, _name: unknown, item) => {
+              const amount = exactChartAmount({
+                payload: item.payload,
+                series: "outflow",
+              }).pipe(
+                Option.map((exact) => formatCurrencyAmount({ amount: exact, currency, locale })),
+                Option.getOrElse(() => "No disponible")
+              );
+              return [amount, "Gastos"];
+            }}
+          />
+          <Bar dataKey="outflow" fill="var(--dashboard-chart-fill)" radius={4} maxBarSize={52} />
+        </BarChart>
+      </DashboardChart>
+      <div className="dashboard-chart-footer">
+        {periodLabel(data.appliedPeriod, locale)} · {currency}
+      </div>
+    </section>
+  );
 };
 
 const SpendingChart = ({
@@ -168,38 +237,9 @@ const SpendingChart = ({
   }
   return (
     <div className="flex flex-col gap-5">
-      {currencies.map((currency) => {
-        const chartData = currencyChartData(data, currency);
-        return (
-          <section className="flex flex-col gap-2" key={currency} aria-label={`Serie ${currency}`}>
-            <div className="flex items-center justify-between gap-3">
-              <Badge variant="outline">{currency}</Badge>
-              <span className="text-xs text-muted-foreground">Gastos</span>
-            </div>
-            <ChartContainer config={chartConfig} className="h-48 min-h-48 w-full">
-              <BarChart accessibilityLayer data={chartData}>
-                <CartesianGrid vertical={false} />
-                <XAxis dataKey="label" axisLine={false} tickLine={false} tickMargin={8} />
-                <ChartTooltip
-                  formatter={(_value: unknown, _name: unknown, item) => {
-                    const amount = exactChartAmount({
-                      payload: item.payload,
-                      series: "outflow",
-                    }).pipe(
-                      Option.map((exact) =>
-                        formatCurrencyAmount({ amount: exact, currency, locale })
-                      ),
-                      Option.getOrElse(() => "No disponible")
-                    );
-                    return [amount, "Gastos"];
-                  }}
-                />
-                <Bar dataKey="outflow" fill="var(--color-outflow)" radius={4} />
-              </BarChart>
-            </ChartContainer>
-          </section>
-        );
-      })}
+      {currencies.map((currency) => (
+        <CurrencySpendingChart key={currency} data={data} currency={currency} locale={locale} />
+      ))}
     </div>
   );
 };
@@ -232,19 +272,19 @@ const BudgetBar = ({
     );
   }
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <span className="font-medium">{data.category.label}</span>
-        <Badge variant="outline">{data.currency}</Badge>
-      </div>
-      <Progress value={moneyProgressGeometry({ spent: data.spent, cap: data.cap })}>
-        <ProgressLabel>{formatMoney({ money: data.spent, locale })}</ProgressLabel>
-        <span className="ml-auto text-sm text-muted-foreground tabular-nums">
-          {formatMoney({ money: data.cap, locale })}
-        </span>
-      </Progress>
-      <p className="text-sm text-muted-foreground">{budgetStatusText(data, locale)}</p>
-    </div>
+    <>
+      <DashboardBudget
+        category={data.category.label}
+        currency={data.currency}
+        spent={formatMoney({ money: data.spent, locale })}
+        cap={formatMoney({ money: data.cap, locale })}
+        progress={moneyProgressGeometry({ spent: data.spent, cap: data.cap })}
+        utilization={moneyUtilizationLabel({ spent: data.spent, cap: data.cap })}
+        status={budgetStatusText(data, locale)}
+        over={data.status.type === "over"}
+      />
+      <DashboardPeriod>{periodLabel(data.appliedPeriod, locale)}</DashboardPeriod>
+    </>
   );
 };
 
@@ -259,11 +299,7 @@ const TransactionList = ({
 }>): JSX.Element => {
   const dateFormatter = useMemo(
     () =>
-      new Intl.DateTimeFormat(locale, {
-        day: "2-digit",
-        month: "short",
-        timeZone,
-      }),
+      new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone }),
     [locale, timeZone]
   );
   if (data.transactions.length === 0) {
@@ -275,36 +311,26 @@ const TransactionList = ({
       </Empty>
     );
   }
-  return (
-    <Table aria-label="Transacciones del Widget">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Contraparte</TableHead>
-          <TableHead>Tipo</TableHead>
-          <TableHead className="text-right">Monto</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {data.transactions.map((transaction) => (
-          <TableRow key={transaction.id}>
-            <TableCell>
-              <span className="font-medium">
-                {Option.getOrElse(transaction.counterparty, () => "Sin contraparte")}
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                {transaction.category.label} ·{" "}
-                {dateFormatter.format(transaction.occurredAt.epochMilliseconds)}
-              </span>
-            </TableCell>
-            <TableCell>{transaction.direction === "inflow" ? "Ingreso" : "Gasto"}</TableCell>
-            <TableCell className="text-right font-medium tabular-nums">
-              {formatMoney({ money: transaction.money, locale })}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
+  const formatRecentMoney =
+    new Set(data.transactions.map((transaction) => transaction.money.currency)).size > 1
+      ? formatMoneyWithCode
+      : formatMoney;
+  const groups: Array<{ date: string; rows: Array<DashboardRecentGroup["rows"][number]> }> = [];
+  for (const transaction of data.transactions) {
+    const date = dateFormatter.format(transaction.occurredAt.epochMilliseconds);
+    const row = {
+      id: transaction.id,
+      counterparty: Option.getOrElse(transaction.counterparty, () => "Sin contraparte"),
+      category: transaction.category.label,
+      inflow: transaction.direction === "inflow",
+      money: formatRecentMoney({ money: transaction.money, locale }),
+      currency: transaction.money.currency,
+    };
+    const previous = groups.at(-1);
+    if (previous?.date === date) previous.rows.push(row);
+    else groups.push({ date, rows: [row] });
+  }
+  return <DashboardRecentList groups={groups} />;
 };
 
 const CustomMetric = ({
@@ -318,26 +344,16 @@ const CustomMetric = ({
       </EmptyHeader>
     </Empty>
   ) : (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-4">
+    <div className="flex flex-col gap-4">
       {data.moneyGroups.map((group) => (
-        <section className="min-w-0 rounded-lg border p-4" key={group.currency}>
-          <Badge variant="outline">{group.currency}</Badge>
-          <dl className="mt-4 grid gap-3">
-            <div>
-              <dt className="text-xs text-muted-foreground">Ingresos</dt>
-              <dd className="font-heading text-xl font-semibold break-words tabular-nums [overflow-wrap:anywhere]">
-                {formatMoney({ money: group.inflow, locale })}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Gastos</dt>
-              <dd className="font-heading text-xl font-semibold break-words tabular-nums [overflow-wrap:anywhere]">
-                {formatMoney({ money: group.outflow, locale })}
-              </dd>
-            </div>
-          </dl>
-        </section>
+        <DashboardFigures
+          key={group.currency}
+          currency={group.currency}
+          inflow={formatMoney({ money: group.inflow, locale })}
+          outflow={formatMoney({ money: group.outflow, locale })}
+        />
       ))}
+      <DashboardPeriod>{periodLabel(data.appliedPeriod, locale)}</DashboardPeriod>
     </div>
   );
 
@@ -363,7 +379,12 @@ const RenderWidget = ({
     content = <CustomMetric data={result} locale={context.locale} />;
   }
   return (
-    <WidgetFrame editing={editing} title={titleFor(widget)} titleEditor={titleEditor}>
+    <WidgetFrame
+      editing={editing}
+      kind={widget.type}
+      title={titleFor(widget)}
+      titleEditor={titleEditor}
+    >
       {content}
     </WidgetFrame>
   );
@@ -798,7 +819,7 @@ const ResponsiveLayout = ({
       <EditableLeaf context={context} depth={depth} editor={editor.value} layout={layout} />
     );
   }
-  const gapClassName = Option.isNone(editor) ? "gap-4" : "gap-0";
+  const gapClassName = Option.isNone(editor) ? "gap-5.5" : "gap-0";
   return (
     <div
       className={`flex min-h-0 min-w-0 flex-1 ${gapClassName} ${responsiveSplitClass(layout.axis)}`}
@@ -883,7 +904,12 @@ const PlacementPreview = ({
 }: Readonly<{ layout: PlacementLayout; context: DashboardView["context"] }>): JSX.Element => {
   if (layout.kind === "leaf") {
     return "kind" in layout.widget ? (
-      <WidgetFrame editing title={titleFor(layout.widget.widget)} titleEditor={Option.none()}>
+      <WidgetFrame
+        editing
+        kind={layout.widget.widget.type}
+        title={titleFor(layout.widget.widget)}
+        titleEditor={Option.none()}
+      >
         <p className="text-muted-foreground">Los datos se calculan al guardar.</p>
       </WidgetFrame>
     ) : (
@@ -920,7 +946,7 @@ const DashboardCanvas = ({
 }>): JSX.Element => (
   <section
     aria-label="Diseño responsivo del tablero"
-    className="relative flex min-h-[calc(100svh-9rem)] flex-col"
+    className="relative flex min-h-[calc(100svh-11.25rem)] flex-col"
   >
     {Option.isNone(editor) ? null : (
       <DashboardDropZone
@@ -1032,8 +1058,8 @@ export const DashboardViewComponent = ({
   const pending = Option.flatMap(activeEditor, (current) => current.pendingPlacement);
   const editorError = Option.flatMap(editor, (current) => current.error);
   const content = (
-    <main className="flex w-full flex-col gap-5 p-4 sm:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-4">
+    <main className="dashboard-surface">
+      <header className="dashboard-header">
         <div className="min-w-0 max-w-full">
           {Option.match(activeEditor, {
             onSome: (current) => <EditableDashboardTitle editor={current} title={view.title} />,
@@ -1043,17 +1069,16 @@ export const DashboardViewComponent = ({
               </h1>
             ),
           })}
-          <p className="text-muted-foreground">Lectura actual de tus finanzas.</p>
         </div>
         {Option.isNone(editor) ? null : (
-          <Button
+          <DashboardCustomizeAction
             disabled={editor.value.disabled}
             onClick={() => setEditing((current) => !current)}
             type="button"
-            variant={editing ? "outline" : "default"}
           >
+            <HugeiconsIcon icon={Settings01Icon} size={20} strokeWidth={1.5} aria-hidden="true" />
             {editing ? "Guardar" : "Personalizar"}
-          </Button>
+          </DashboardCustomizeAction>
         )}
       </header>
       {Option.isNone(editorError) ? null : <DashboardEditorNotice error={editorError.value} />}

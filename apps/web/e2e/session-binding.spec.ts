@@ -100,7 +100,9 @@ test("rejects stale cross-tab drafts and logout", ({ page, context, request }) =
         (response) =>
           response.url() === `${apiOrigin}/transactions` && response.request().method() === "POST"
       );
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Guardar" }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Registrar", exact: true }).click()
+      );
       expect((yield* Effect.tryPromise(() => mutation)).status()).toBe(unauthorizedStatus);
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Contraparte (opcional)")).not.toBeVisible()

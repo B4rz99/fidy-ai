@@ -456,7 +456,7 @@ const finishRealPairing = ({
       yield* wait(page.getByRole("button", { name: "+ Registrar", exact: true }).click());
       yield* wait(page.getByLabel("Monto · COP").fill("12500"));
       yield* wait(page.getByLabel("Contraparte (opcional)").fill("La Cocina"));
-      yield* wait(page.getByRole("button", { name: "Guardar" }).click());
+      yield* wait(page.getByRole("button", { name: "Registrar", exact: true }).click());
       yield* wait(expect(page.locator("[data-sonner-toast]")).toContainText("La Cocina"));
       yield* wait(editAndCheckDashboard(page));
       yield* wait(openUpgradeThroughCore(page));
@@ -571,7 +571,7 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
       yield* wait(page.getByRole("button", { name: "+ Registrar", exact: true }).click());
       yield* wait(page.getByLabel("Monto · COP").fill("12345"));
       yield* wait(page.getByLabel("Contraparte (opcional)").fill("Recuperación Fidy"));
-      yield* wait(page.getByRole("button", { name: "Guardar" }).click());
+      yield* wait(page.getByRole("button", { name: "Registrar", exact: true }).click());
       yield* wait(expect(page.locator("[data-sonner-toast]")).toContainText("Recuperación Fidy"));
       yield* wait(reloadTransactionsThroughCore(page));
       yield* wait(expect(page.getByText("Recuperación Fidy").first()).toBeVisible());

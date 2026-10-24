@@ -9,6 +9,7 @@ const databases = isolatedTestDatabases();
 const Json = Schema.fromJsonString(Schema.Unknown);
 const Pairing = Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String });
 export type Journey = Readonly<{
+  sandboxPhoneNumberId: string;
   db: D1Database;
   send: (
     path: string,
@@ -17,6 +18,15 @@ export type Journey = Readonly<{
   ) => Promise<Response>;
   pairing: typeof Pairing.Type;
 }>;
+/** Keep real public/Core routing while a test controls native D1 completion ordering. */
+export const withJourneyDatabase = ({
+  journey,
+  db,
+}: Readonly<{ journey: Journey; db: D1Database }>): Journey => ({
+  ...journey,
+  db,
+  send: sendThroughWorkers(db, journey.sandboxPhoneNumberId, Option.none()),
+});
 const gitRevisionLength = 40;
 const admissionKeyLength = 43;
 const contractDigestLength = 64;
@@ -105,7 +115,7 @@ const setupJourney = (
       const pairing = yield* Schema.decodeUnknownEffect(Pairing)(
         yield* Effect.tryPromise(() => response.json())
       );
-      return { db, send, pairing };
+      return { db, send, pairing, sandboxPhoneNumberId: options.sandboxPhoneNumberId };
     })
   );
 export const disposeJourneys = (): Promise<void> => databases.dispose();

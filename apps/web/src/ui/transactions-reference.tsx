@@ -1,5 +1,5 @@
 import { type JSX, useState } from "react";
-import { Input } from "@/ui/components/input";
+import { AmountInput } from "@/ui/components/amount-input";
 import { Label } from "@/ui/components/label";
 import { Button } from "@/ui/components/button";
 import {
@@ -9,6 +9,7 @@ import {
 } from "@/ui/components/transactions";
 
 export const TransactionsReference = (): JSX.Element => {
+  const [amount, setAmount] = useState("");
   const [type, onType] = useState<"inflow" | "outflow">("outflow");
   return (
     <section aria-label="Composición aprobada de transacciones">
@@ -28,7 +29,13 @@ export const TransactionsReference = (): JSX.Element => {
           <form className="mt-5 flex flex-col gap-4" onSubmit={(event) => event.preventDefault()}>
             <TransactionTypeToggle value={type} onChange={onType} />
             <Label htmlFor="reference-transaction-amount">Monto · COP</Label>
-            <Input id="reference-transaction-amount" inputMode="decimal" placeholder="0,00" />
+            <AmountInput
+              id="reference-transaction-amount"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              width="full"
+              placeholder="0,00"
+            />
             <Label htmlFor="reference-transaction-notes">Notas (opcional)</Label>
             <textarea
               id="reference-transaction-notes"
@@ -37,7 +44,7 @@ export const TransactionsReference = (): JSX.Element => {
             />
             <div data-transaction-slot="transaction-form-actions">
               <Button variant="outline">Cancelar</Button>
-              <Button>Guardar</Button>
+              <Button>Registrar</Button>
             </div>
           </form>
           <Button variant="outline" data-transaction-slot="transaction-danger">

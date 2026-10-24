@@ -3,7 +3,12 @@ import type { CurrentUserResponse } from "../../src/shell/identity/contract";
 import { IdentityUnavailable } from "./contract";
 import { onboardingWhatsAppStatement, userCreationStatements } from "./internal/bootstrap";
 import { Effect, type Option, Schema } from "effect";
-import { UserId, UserPreferences } from "../../src/core/identity/contract";
+import {
+  UserId,
+  UserPreferences,
+  type WhatsAppBusinessPortfolioId,
+  type WhatsAppBusinessScopedUserId,
+} from "../../src/core/identity/contract";
 import type {
   IdentityStatement,
   OnboardingWhatsAppAssociation,
@@ -102,3 +107,19 @@ export const readCurrentUser = ({
     });
     return yield* read.decode(result.results);
   }).pipe(Effect.mapError(() => new IdentityUnavailable()));
+
+/** Establish only an empty initial channel association inside the exact verified provider and originating-chat approval unit. The caller must consume its same-caller invitation and current private proof atomically; these values alone grant no authority. */
+export const prepareProviderWhatsAppAssociation = (
+  input: Readonly<{
+    db: D1Database;
+    userId: UserId;
+    portfolioId: WhatsAppBusinessPortfolioId;
+    bsuid: WhatsAppBusinessScopedUserId;
+    current: number;
+  }>
+): D1PreparedStatement =>
+  input.db
+    .prepare(
+      "UPDATE users SET whatsapp_portfolio_id=?,whatsapp_bsuid=?,whatsapp_verified_at_ms=? WHERE id=? AND whatsapp_portfolio_id IS NULL"
+    )
+    .bind(input.portfolioId, input.bsuid, input.current, input.userId);

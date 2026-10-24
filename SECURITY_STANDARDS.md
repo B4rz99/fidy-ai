@@ -162,7 +162,7 @@ URLs, browser state, arguments and diagnostics are not bearer-storage channels. 
 saved access without asserting server revocation.
 
 Google and Microsoft signup, on the web or through WhatsApp, require a ProviderCredential keyed by the validated canonical issuer
-and subject. WhatsApp-led signup additionally requires accepted originating-chat Consent and explicit confirmation of the exact reviewed association from that authenticated caller. Contact email never establishes identity, merges Users, creates a VerifiedEmailCredential,
+and subject. WhatsApp-led signup additionally requires current versioned Consent and explicit confirmation of the exact reviewed association from that authenticated caller. Contact email never establishes identity, merges Users, creates a VerifiedEmailCredential,
 or substitutes mailbox ownership proof. Missing/changed email claims preserve the same User.
 A VerifiedEmailCredential is globally unique after
 trim-and-lowercase normalization; provider-specific dot or plus-address folding is not proof of
@@ -189,18 +189,26 @@ Lost recovery responses cannot be redisclosed or recreated through completion re
 login can prove established ownership after an ambiguous signup, while ordinary work retains live
 Consent checks. Expired provider protocol state is removed after one day.
 
-WhatsApp handoff references and review identifiers are public correlation, never credential or session authority.
-Bind one ten-minute attempt to the authenticated Business Portfolio/BSUID, business phone endpoint and one
-browser-private pairing. An originating chat must receive the selected provider account and matching
-browser review identifier, then reply to that exact native review message with an explicit confirm/deny.
-Opening or forwarding a reference cannot confirm an association. Recheck the accepted exchange, exact
-pairing, live confirmation and initial-association uniqueness in the completion batch; consume once.
+WhatsApp invitation references and review identifiers are public correlation, never credential or session authority.
+A signed first message permits only a short first-party signup link and bounded source metadata, not
+Consent, a User or financial processing. Bind one ten-minute invitation to the authenticated Business
+Portfolio/BSUID, business phone endpoint and one browser-private pairing. The browser accepts the
+current versioned disclosure and verifies Google/Microsoft. Its private status supplies the selected
+provider account and a per-attempt prepared confirmation. Opening the fixed WhatsApp destination
+or clicking the browser button grants no authority. Only sending the exact prepared confirmation
+from the authenticated originating chat settles that review. Match the retained text/code, exact
+provider attempt, original caller/endpoint and post-review native timestamp; a provider retry must
+invalidate every earlier review. Keep browser-private proof in the mounted first-party controller,
+never in the return URL or WhatsApp. Recheck native confirmation, provider verification, private
+pairing, expiry and initial-association uniqueness in the completion batch; consume once.
 Existing provider Users retain their UserId, Consent, TrialPeriod and recovery credential. Initial linking
 refuses any established channel association, never replaces it. Chat sends claim once before provider I/O;
 ambiguous results never resend. Charge each send against the bounded native spend policy before egress.
-Required negative evidence covers forwarded browser substitution, caller/reply mismatch, denial, expiry,
-replay/concurrency, conflicts, rollback and ambiguous delivery, through authenticated ingress/Core/D1.
-Pre-User handoff state is erased with its expiring Consent exchange; durable legal evidence remains.
+Required negative evidence covers first-claim forwarded invitations, caller/endpoint/text mismatch,
+pre-review messages, replaced attempts, denial, expiry, replay/concurrency, conflicts, rollback and
+ambiguous delivery, through authenticated ingress/Core/D1. Remove expired invitation metadata after
+one day and include associated invitations in credential erasure. Original accepted-chat handoffs
+retain their exact native reply and accepted exchange requirement until expiry; durable legal evidence remains.
 
 Microsoft accepts personal and work/school accounts from all public-cloud Entra tenants by explicit
 User decision in #1090. The common v2 authority is initiation policy, never a wildcard issuer.

@@ -13,7 +13,7 @@ import { writeClipboardText } from "@/browser/clipboard";
 import { fidyLogoUrl } from "@/ui/brand";
 import { Button } from "./button";
 import { Input } from "./input";
-import { useAccessTheme } from "./access-theme";
+import { useTheme } from "./theme";
 import "./access.css";
 
 const mascot = new URL("../assets/access/mascot.png", import.meta.url).href;
@@ -178,7 +178,7 @@ const AccessBackground = (): JSX.Element => (
 );
 
 export const AccessLayout = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => {
-  const { theme, toggle, mounted } = useAccessTheme();
+  const { theme, toggle, mounted } = useTheme();
   return (
     <div ref={mounted} data-access-root="" className={theme === "dark" ? "dark" : ""}>
       <AccessBackground />

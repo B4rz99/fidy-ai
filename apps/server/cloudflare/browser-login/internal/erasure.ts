@@ -10,6 +10,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "support_recovery_cases",
       "web_sessions",
       "whatsapp_provider_handoffs",
+      "whatsapp_signup_invitations",
     ],
     quiescence: { _tag: "Synchronous" },
 

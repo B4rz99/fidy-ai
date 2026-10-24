@@ -4,6 +4,7 @@ import { Cause, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ComponentProps, type JSX, type ReactNode, useState } from "react";
 import { useSession } from "@/session/session-context";
+import { ApplicationSurface } from "@/ui/components/application";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
 import { SignedInBrand, SignedInNavigation } from "./navigation";
@@ -63,11 +64,11 @@ export const ApplicationShell = ({
   };
 
   return (
-    <div className="signed-in-theme min-h-svh bg-background md:flex">
-      <aside className="signed-in-sidebar flex items-center justify-between border-b bg-muted/30 md:sticky md:top-0 md:h-svh md:w-60 md:flex-none md:flex-col md:items-stretch md:border-r md:border-b-0">
+    <ApplicationSurface>
+      <aside className="signed-in-sidebar application-sidebar">
         <SignedInBrand />
         {desktop ? (
-          <div className="hidden min-h-0 flex-1 md:flex">
+          <div className="application-desktop-navigation">
             <SignedInNavigation
               loggingOut={status.waiting}
               onLogout={onLogout}
@@ -83,11 +84,11 @@ export const ApplicationShell = ({
         )}
         {failed ? <LogoutFailure /> : null}
       </aside>
-      <div className="min-w-0 flex-1">
+      <div className="application-workspace">
         <Outlet />
         {children}
       </div>
-    </div>
+    </ApplicationSurface>
   );
 };
 

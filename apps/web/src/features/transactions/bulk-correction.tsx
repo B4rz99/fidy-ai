@@ -322,10 +322,10 @@ export const BulkTransactionCorrection = (props: BulkProps): JSX.Element => {
       className="flex flex-col gap-5"
     >
       <BulkHeading count={observedRevisions.length} />
+      <BulkFields draft={draft} onChange={setDraft} props={props} locked={locked} />
       <p className="text-sm text-muted-foreground">
         Los campos vacíos o sin cambiar conservan su valor en cada transacción.
       </p>
-      <BulkFields draft={draft} onChange={setDraft} props={props} locked={locked} />
       <BulkFeedback props={props} />
       <div data-transaction-slot="transaction-form-actions">
         <Button variant="outline" disabled={props.status === "saving"} onClick={props.onCancel}>

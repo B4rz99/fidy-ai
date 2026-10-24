@@ -1,4 +1,4 @@
-import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
+import type { APIRequestContext, APIResponse, Page, Route } from "@playwright/test";
 import type { Cause } from "effect";
 import { Clock, Effect, Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
@@ -16,7 +16,7 @@ const resourceLimitedStatus = 429;
 const noContentStatus = 204;
 const pairingTimeoutMilliseconds = 15_000;
 const firstPollMilliseconds = 5_000;
-const operatorOrigin = browserAcceptanceTopology().operator;
+const { api: apiOrigin, operator: operatorOrigin } = browserAcceptanceTopology();
 
 /** The browser obtains a WebSession only from real Core redemption, never from a route mock. */
 export const visiblePairingCode = (page: Page): Promise<string> =>
@@ -155,6 +155,38 @@ const signInWithIdentity = ({
         .then(() => confirmConsentRead({ page, first: consent }))
     );
 
+const PairingPublicCode = Schema.Struct({ publicCode: Schema.String });
+/** Capture the real upstream body independently of Chromium's document-scoped response cache. */
+const retainPairingCode = (route: Route, pending: PromiseWithResolvers<string>): Promise<void> =>
+  route
+    .fetch()
+    .then((response) =>
+      response
+        .json()
+        .then(Schema.decodeUnknownPromise(PairingPublicCode))
+        .then((pairing) =>
+          route.fulfill({ response }).then(() => pending.resolve(pairing.publicCode))
+        )
+    )
+    .then(undefined, (cause: unknown) => pending.reject(cause));
+const beginVerifiedEmailPairing = (page: Page): Effect.Effect<string, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const pending = Promise.withResolvers<string>();
+    const path = `${apiOrigin}/web/pairings`;
+    const capture = (route: Route): Promise<void> =>
+      route.request().method() === "POST" ? retainPairingCode(route, pending) : route.continue();
+    yield* Effect.acquireRelease(
+      Effect.tryPromise(() => page.route(path, capture)),
+      () => Effect.tryPromise(() => page.unroute(path, capture)).pipe(Effect.orDie)
+    );
+    return yield* Effect.tryPromise(() =>
+      Promise.all([
+        pending.promise,
+        page.getByRole("button", { name: "Enviar código" }).click(),
+      ]).then(([code]) => code)
+    );
+  }).pipe(Effect.scoped);
+
 /** Real public email pairing; the loopback fixture only delivers the synthetic proof. */
 export const signInWithVerifiedEmailThroughCore = ({
   page,
@@ -169,19 +201,10 @@ export const signInWithVerifiedEmailThroughCore = ({
         page.getByRole("button", { name: "Correo verificado", exact: true }).click()
       );
       yield* Effect.tryPromise(() => page.getByLabel("Correo verificado").fill(email));
-      const started = page
-        .waitForResponse(
-          (response) =>
-            response.url().endsWith("/web/pairings") && response.request().method() === "POST"
-        )
-        .then((response) => response.json());
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Enviar código" }).click());
-      const { publicCode: code } = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ publicCode: Schema.String })
-      )(yield* Effect.tryPromise(() => started));
+      const code = yield* beginVerifiedEmailPairing(page);
       yield* Effect.tryPromise(() => expect(page.getByLabel("Código del correo")).toBeVisible());
       const delivered = yield* Effect.tryPromise(() =>
-        request.post(`http://127.0.0.1:4175/email/login/deliver?code=${code}`)
+        request.post(`${operatorOrigin}/email/login/deliver?code=${code}`)
       );
       expect(delivered.status()).toBe(noContentStatus);
       const proof = `${code}-JKLM-NPQR-STUV-WXYZ`;

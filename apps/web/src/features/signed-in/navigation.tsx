@@ -4,6 +4,7 @@ import {
   Calendar03Icon,
   CreditCardIcon,
   Home01Icon,
+  Logout02Icon,
   Wallet01Icon,
 } from "@hugeicons/core-free-icons";
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
@@ -11,8 +12,11 @@ import { Option } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type JSX, type ReactNode, useState } from "react";
 import { useSession } from "@/session/session-context";
-import { FidyWordmark } from "@/ui/components/wordmark";
-import { Button } from "@/ui/components/button";
+import {
+  ApplicationHabitat,
+  ApplicationLogoutAction,
+  ApplicationWordmark,
+} from "@/ui/components/application";
 import { SettingsNavigation } from "./settings-navigation";
 import { dismissCompactNavigation } from "./dismiss-navigation";
 
@@ -45,48 +49,49 @@ export const SignedInNavigation = ({
     AsyncResult.isSuccess(session) &&
     Option.isSome(Option.fromNullishOr(session.value.binding));
   return (
-    <nav aria-label="Aplicación" className="flex min-w-0 flex-1 flex-col gap-2 px-3 pb-3">
+    <nav aria-label="Aplicación" className="application-navigation">
       {navigationLinks.map((link) => (
         <Link
           key={link.to}
           to={link.to}
           search={{}}
           onClick={dismissCompactNavigation}
-          className="flex min-h-12 shrink-0 items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted"
-          activeProps={{ className: "bg-secondary text-secondary-foreground font-medium" }}
+          className="application-navigation-link"
+          activeProps={{ className: "application-navigation-active" }}
         >
-          <HugeiconsIcon icon={link.icon} size={24} strokeWidth={1.5} aria-hidden="true" />
+          <HugeiconsIcon icon={link.icon} size={22} strokeWidth={1.5} aria-hidden="true" />
           {link.label}
           {link.to === "/app/needs-review" && signedIn && !privacy ? reviewPendingCount : null}
         </Link>
       ))}
       <SettingsNavigation />
-      {signedIn ? (
-        <Button
-          className="justify-start md:mt-auto"
-          disabled={loggingOut}
-          onClick={onLogout}
-          type="button"
-          variant="ghost"
-        >
-          {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
-        </Button>
-      ) : (
-        <Button
-          className="justify-start md:mt-auto"
-          variant="ghost"
-          render={<Link to="/login" reloadDocument />}
-        >
-          Iniciar sesión
-        </Button>
-      )}
+      <NavigationFooter signedIn={signedIn} loggingOut={loggingOut} onLogout={onLogout} />
     </nav>
   );
 };
 
 export const SignedInBrand = (): JSX.Element => (
-  <Link className="flex shrink-0 flex-col items-start gap-2 px-3 py-4 md:px-6" to="/app/dashboard">
-    <FidyWordmark />
-    <span className="hidden text-xs text-muted-foreground md:block">Tu dinero, más claro</span>
+  <Link className="application-brand" to="/app/dashboard">
+    <ApplicationWordmark />
   </Link>
+);
+
+const NavigationFooter = ({
+  signedIn,
+  loggingOut,
+  onLogout,
+}: Readonly<{ signedIn: boolean; loggingOut: boolean; onLogout: () => void }>): JSX.Element => (
+  <div className="application-navigation-bottom">
+    <ApplicationHabitat />
+    {signedIn ? (
+      <ApplicationLogoutAction disabled={loggingOut} onClick={onLogout} type="button">
+        <HugeiconsIcon icon={Logout02Icon} size={22} strokeWidth={1.5} aria-hidden="true" />
+        {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
+      </ApplicationLogoutAction>
+    ) : (
+      <ApplicationLogoutAction nativeButton={false} render={<Link to="/login" reloadDocument />}>
+        Iniciar sesión
+      </ApplicationLogoutAction>
+    )}
+  </div>
 );

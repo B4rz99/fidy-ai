@@ -7,6 +7,7 @@ import {
   moneyDecimalText,
   moneyProgressGeometry,
   moneySeriesGeometry,
+  moneyUtilizationLabel,
 } from "./money-presentation";
 
 const money = (
@@ -69,6 +70,16 @@ describe("Dashboard exact Money presentation", () => {
     );
     expect(exactChartAmount({ payload: { outflowExact: 10 }, series: "outflow" })).toEqual(
       Option.none()
+    );
+  });
+
+  it("keeps budget utilization truthful beyond bar bounds and omits undefined zero-cap ratios", () => {
+    expect(moneyUtilizationLabel({ spent: money("150"), cap: money("100") })).toEqual(
+      Option.some("150 % utilizado")
+    );
+    expect(moneyUtilizationLabel({ spent: money("1"), cap: money("0") })).toEqual(Option.none());
+    expect(moneyUtilizationLabel({ spent: money("105000"), cap: money("1000000") })).toEqual(
+      Option.some("11 % utilizado")
     );
   });
 

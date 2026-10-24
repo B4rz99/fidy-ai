@@ -112,7 +112,7 @@ const captureJourney = (page: Page, explicit: boolean): Journey =>
       expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("a".repeat(maximumCounterparty))
     );
     if (explicit) yield* captureCategoryNotes(page);
-    yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
+    yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
     yield* wait(() =>
       expect(page.getByText("Transacción registrada", { exact: true })).toBeVisible()
     );
@@ -144,12 +144,12 @@ const uncertainCaptureJourney = (page: Page): Journey =>
     const requests: Array<unknown> = [];
     yield* recordMutation(page, "/transactions", { requests, outcome: "uncertain" });
     yield* openCapture(page);
-    yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
+    yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
     yield* wait(() =>
       expect(page.getByRole("alert")).toContainText("No pudimos confirmar el registro")
     );
     yield* wait(() =>
-      expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeDisabled()
+      expect(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()
     );
     yield* wait(() => expect(page.getByLabel("Monto · COP", { exact: true })).toBeDisabled());
     expect(requests).toHaveLength(1);
@@ -232,6 +232,12 @@ const bulkJourney = (page: Page): Journey =>
       outcome: "uncertain",
     });
     yield* selectTwelve(page);
+    const directionLabelHeight = yield* wait(() =>
+      page
+        .locator("#bulk-direction span")
+        .evaluate((element) => element.getBoundingClientRect().height)
+    );
+    expect(directionLabelHeight).toBeLessThanOrEqual(maximumSingleLineHeight);
     yield* wait(() => expect(page.getByLabel(/^Monto · Varias monedas/u)).toBeDisabled());
     yield* wait(() =>
       page
@@ -311,3 +317,69 @@ const responsiveJourney = (page: Page): Journey =>
 test("mobile keeps income and expense figures side by side and returns keyboard focus after Escape", ({
   page,
 }) => Effect.runPromise(responsiveJourney(page)));
+
+const captureLayoutJourney = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.setViewportSize({ width: 390, height: 844 }));
+    yield* installWorkspace(page);
+    yield* openCapture(page);
+    const notes = page.getByLabel("Notas (opcional)", { exact: true });
+    yield* wait(() => notes.fill("Primera línea\nSegunda línea\nTercera línea\nCuarta línea"));
+    yield* wait(() => notes.focus());
+    yield* wait(() => notes.scrollIntoViewIfNeeded());
+    const textarea = yield* wait(() => notes.boundingBox());
+    const actions = yield* wait(() =>
+      page
+        .locator(
+          '[aria-label="Registrar transacción"] [data-transaction-slot="transaction-form-actions"]'
+        )
+        .boundingBox()
+    );
+    expect(textarea).not.toBeNull();
+    expect(actions).not.toBeNull();
+    if (textarea !== null && actions !== null) {
+      expect(textarea.y + textarea.height).toBeLessThanOrEqual(actions.y);
+    }
+    yield* wait(() => expect(notes).toBeFocused());
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Registrar", exact: true })).toBeEnabled()
+    );
+  });
+test("mobile capture keeps multiline Notes above its actions while focused and scrolled", ({
+  page,
+}) => Effect.runPromise(captureLayoutJourney(page)));
+
+const integratedThemeJourney = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.setViewportSize({ width: 1440, height: 1000 }));
+    yield* wait(() => page.emulateMedia({ colorScheme: "light" }));
+    yield* installWorkspace(page);
+    yield* wait(() => page.goto("/app/transactions"));
+    const theme = page.getByRole("button", { name: "Activar tema oscuro", exact: true });
+    yield* wait(() => expect(theme).toBeVisible());
+    const header = yield* wait(() =>
+      page.locator('[data-transaction-slot="transaction-page-header"]').boundingBox()
+    );
+    const themeBounds = yield* wait(() => theme.boundingBox());
+    const register = yield* wait(() =>
+      page.getByRole("button", { name: "+ Registrar", exact: true }).boundingBox()
+    );
+    expect(header).not.toBeNull();
+    expect(themeBounds).not.toBeNull();
+    expect(register).not.toBeNull();
+    if (header !== null && themeBounds !== null && register !== null) {
+      expect(header.y).toBeLessThanOrEqual(themeBounds.y + themeBounds.height);
+      expect(register.x + register.width).toBeLessThanOrEqual(themeBounds.x);
+    }
+    yield* wait(() => theme.click());
+    yield* wait(() => expect(page.locator("html")).toHaveClass(/dark/u));
+    yield* wait(() => page.reload());
+    yield* wait(() => expect(page.locator("html")).toHaveClass(/dark/u));
+    yield* wait(() =>
+      page.getByRole("button", { name: "Activar tema claro", exact: true }).click()
+    );
+    yield* wait(() => expect(page.locator("html")).not.toHaveClass(/dark/u));
+  });
+test("integrated shell aligns Transactions header with theme and retains manual theme after reload", ({
+  page,
+}) => Effect.runPromise(integratedThemeJourney(page)));

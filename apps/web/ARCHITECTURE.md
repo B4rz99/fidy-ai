@@ -130,6 +130,9 @@ the popup at a parameter-free URL. Only the login document uses
 `same-origin-allow-popups` so the parent can observe a manually closed cross-origin popup.
 The blank popup's opener is cleared before provider navigation. Pending verification with a
 closed popup shows cancellation; verified status and native association confirmation take precedence.
+Cancellation closes only a still-blank or same-origin provider window. An isolated external window
+may remain open: the controller discards its proof and stops polling, and the view asks the User to
+close that provider window. Successful/denied callbacks return to a first-party page that closes itself.
 Successful authentication loads a new Transactions document to restore strict `same-origin` isolation. Logout and every application link into `/login` load a new document so the login opener policy is installed before opening a provider; an SPA route change retains the previous document’s policy and can falsely report an open provider popup as closed.
 Cancellation, timeout
 and uncertain completion discard private proof and explain fresh sign-in; no mutation auto-retry or
@@ -292,13 +295,21 @@ exact Money/Currency formatting and captured date/zone context. Canonical loadin
 failure states use the existing session registry and query presentation; the URL carries only the
 opaque report identity and supplies no authorization.
 
-The public `handoff` search value on `/login` identifies one WhatsApp-led
-attempt and survives provider selection. It contains no browser proof. The feature uses accepted chat
-Consent, authenticates the selected provider, then polls with its private pairing verifier. Awaiting
-confirmation shows a public association identifier and directs the caller to compare the native chat
-review and reply to that exact message. New Users save recovery before Browser Login redemption;
-existing Users proceed directly through the same redemption. Initial linking never exposes new recovery.
-The built static browser checks cover both paths against real public/Core/D1 with external-edge fixtures.
+The public `handoff` search value on `/login` locates a WhatsApp-led invitation and survives provider
+selection. It contains no browser proof. New invitations require the current browser Consent notice
+and Google/Microsoft authentication. The private pairing status supplies a review of the selected
+account and observed WhatsApp phone. “Vincular y volver a WhatsApp” opens the fixed chat separately
+with an explicit account confirmation prefilled; the caller must press Send. The initiating first-party
+controller remains mounted with its private proof and polls until the originating authenticated chat
+confirms the exact current provider attempt. Browser clicks and forwarded references cannot approve
+anything. No Estado command or manual code copying is needed. New Users save their one-time
+recovery code before Browser Login redemption; existing Users redeem without new recovery. The
+server's closed completion contract permits only Fidy's fixed WhatsApp chat destination, used after
+redemption. The unfinished private pairing survives an explicit retry within the mounted controller;
+unmount or uncertain completion discards it. Old accepted-chat handoffs retain their exact native
+confirmation requirement until expiry. Neither path can replace an existing WhatsAppIdentity.
+Built-browser checks use real public/Core/local D1 and controlled external provider edges; they do
+not establish availability of Google, Microsoft or the installed WhatsApp application.
 
 ### CLI connection approval
 

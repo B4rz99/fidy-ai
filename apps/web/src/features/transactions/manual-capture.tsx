@@ -284,7 +284,7 @@ const CaptureForm = ({
           Cancelar
         </Button>
         <Button type="submit" disabled={locked}>
-          {props.status === "saving" ? "Guardando…" : "Guardar"}
+          {props.status === "saving" ? "Guardando…" : "Registrar"}
         </Button>
       </div>
     </form>

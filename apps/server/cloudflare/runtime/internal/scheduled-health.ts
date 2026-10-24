@@ -9,6 +9,7 @@ import {
   type EventMetricSignal,
   type OperationalHealthEnvironment,
   type OperationalSignal,
+  QueueKind,
   WorkKind,
 } from "../operational-health/contract";
 import {
@@ -208,9 +209,38 @@ const reportOperationalSignals = (
     },
     { discard: true }
   ).pipe(
+    Effect.andThen(reportInspectionCoverage(environment, signals)),
     Effect.andThen(retainOperationalSignals(environment, signals)),
     Effect.andThen(deliverOperationalSignals(environment, signals, observedAtMs))
   );
+
+const reportInspectionCoverage = (
+  environment: PlatformMaintenanceInput,
+  signals: ReadonlyArray<AlertSignal>
+): Effect.Effect<void> => {
+  const proactivityEnabled =
+    environment.WEEKLY_SUMMARY_ENABLED === "enabled" ||
+    environment.PROACTIVITY_ENABLED === "enabled";
+  const expected: ReadonlyArray<AlertSignal["operation"]> = [
+    ...WorkKind.literals.filter((owner) => owner !== "proactivity" || proactivityEnabled),
+    ...QueueKind.literals.filter((owner) => owner !== "proactivityQueue" || proactivityEnabled),
+    "whatsapp",
+    "deadLetters",
+    "retention",
+    "d1",
+    "requiredBindings",
+    "coordination",
+    "providerConfig",
+  ];
+  const observed = new Set(signals.map((signal) => signal.operation));
+  const state = expected.every((owner) => observed.has(owner)) ? "complete" : "incomplete";
+  return Effect.logInfo({
+    component: "inspection-coverage",
+    operation: "ownerInspections",
+    state,
+    message: `fidy.operational component=inspection-coverage operation=ownerInspections state=${state}`,
+  });
+};
 
 const observeAdditionalSignals = (
   environment: PlatformMaintenanceInput,

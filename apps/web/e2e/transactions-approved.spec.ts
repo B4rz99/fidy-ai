@@ -384,6 +384,21 @@ test("integrated shell aligns Transactions header with theme and retains manual 
   page,
 }) => Effect.runPromise(integratedThemeJourney(page)));
 
+const verifyMobileRegisterPosition = (page: Page): Journey =>
+  Effect.gen(function* () {
+    const registerBounds = yield* wait(() =>
+      page.getByRole("button", { name: "+ Registrar", exact: true }).boundingBox()
+    );
+    const searchBounds = yield* wait(() =>
+      page.getByRole("searchbox", { name: "Buscar transacciones", exact: true }).boundingBox()
+    );
+    expect(registerBounds).not.toBeNull();
+    expect(searchBounds).not.toBeNull();
+    if (registerBounds !== null && searchBounds !== null) {
+      expect(registerBounds.y + registerBounds.height).toBeLessThanOrEqual(searchBounds.y);
+    }
+  });
+
 const flatWorkspaceJourney = (page: Page, mobile: boolean, dark: boolean): Journey =>
   Effect.gen(function* () {
     yield* wait(() =>
@@ -405,6 +420,7 @@ const flatWorkspaceJourney = (page: Page, mobile: boolean, dark: boolean): Journ
         "0px"
       )
     );
+    if (mobile) yield* verifyMobileRegisterPosition(page);
     const ledgerBounds = yield* wait(() => records.boundingBox());
     const panelBounds = yield* wait(() => panel.boundingBox());
     expect(ledgerBounds).not.toBeNull();

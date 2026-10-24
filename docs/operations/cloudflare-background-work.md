@@ -296,6 +296,38 @@ read returned HTTP401), so direct policy inspection/configuration needs an appro
 Notifications credential rather than browser-session extraction. Existing saved monitors remain enabled.
 Missing/stale-owner coverage and independent owner cooldowns remain unresolved.
 
+#### Account verification checkpoint — 2026-10-24
+
+PR #1530 merged and its Production deployment succeeded (run `40093477574`). The latest
+trunk deployment's earlier capture timeout also succeeded on one retry without changing the
+release deadline. No additional schema transition or table removal ran in this checkpoint.
+
+After explicit User approval, a temporary account-scoped Notifications Edit token allowed policy
+and delivery-history reads. The two existing canary monitors now retain a `10m` execution interval,
+verified through the policy API after dashboard saves. In automatic mode this expands the actual
+query range to ten minutes; a ten-minute averaging setting alone did not do so. This changes the
+possible absence-notification delay to twenty minutes plus provider delivery latency. Live
+false-absence and controlled recovery verification remain required before retirement.
+
+The account's available-alert metadata includes `workers_observability_real_time_issue`. Native
+policy `5b351c3174e142a8b52b8ad883f8c85e` was created and enabled for the existing private operator
+destination. A dedicated instance `operational-alert-verification-20261024` used only
+`{"version":2,"sentAtMs":0}`; native status reports Errored at `2026-10-24 12:34:28 UTC` with the
+closed error `Invalid operational canary`. This verifies the controlled failure, not native issue
+notification delivery or runtime-limit coverage. No User work was replayed or changed.
+
+Notifications permission alone cannot configure SQL-backed policies: the API returned HTTP400,
+code `17203`, `requesting user cannot access this query`. Cloudflare's
+[SQL API prerequisites](https://developers.cloudflare.com/analytics/sql-api/get-started/)
+require Account Analytics Read, with possible product-specific permissions for particular datasets.
+The dashboard also returned to its final creation form without creating either a native-issue SQL
+monitor or a simple per-owner healthy-heartbeat monitor; its console exposed only `Object`.
+Those drafts were cancelled. Do not attribute this to a plan limit without evidence.
+A combined eighteen-owner conditional query hit the account's SQL recursion limit (HTTP422);
+prefer independent, simple owner queries when configuration access works. The native built-in
+issue policy is saved, but owner freshness, independent owner response and live issue delivery
+remain unresolved. The three operational tables and fallback machinery remain installed.
+
 | Signal                                                      | Interpretation                                                                          | Action                                                                            |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `state=attention`, `oldestPendingAgeMilliseconds >= 120000` | Accepted work has waited at least two minutes.                                          | Check the owner Queue and Workflow alongside authoritative D1 state.              |
@@ -475,6 +507,37 @@ Native Effect spans are not connected to a second exporter. The explicit Work pr
 Cloudflare export path, so an Effect error is not also reported as a separate native issue. Production
 Cloudflare code and deployment have no Sentry runtime, preload, secret, source-map upload, or build
 step. Alert delivery and test notification to an operator are owned by #717, not by these records.
+
+### Account monitor capacity and inspection coverage — October 24
+
+A further dashboard creation attempt exposed the concrete rejection: **“an account can have at most
+5 custom analytics policies.”** All five custom slots are occupied. The unsaved billing-owner draft
+was cancelled; no sixth custom policy exists. Additional API permissions do not resolve this limit.
+A balanced sum of owner-presence aggregates still failed with HTTP422 `RecursionLimitExceeded`
+(limit 10). `COUNT(DISTINCT message)` failed with HTTP422 because this account rejects distinct
+aggregates on adaptive datasets. Do not treat a successful simple preview as permission to save an
+additional monitor, or assume the generic Log Explorer function list overrides this observed error.
+
+The existing health entrypoint now emits one additional closed inspection-coverage observation per
+completed sweep. It checks the expected Work and Queue owners under the deployed Proactivity flags,
+WhatsApp, dead letters, retention and the four capability inspections. `state=complete` means all
+expected inspections returned an observation, **including unavailable observations**; it does not
+mean healthy. When unavailable D1 prevents the owner sweep, coverage is incomplete. Existing owner
+observations and policy severity remain unchanged. The summary contains no owner identities,
+exceptions, financial data or new retained state. This prepares a single count-based absence query
+without an expression per owner or sampled distinct counting; deployment and live verification are
+still required before using it to retire storage.
+
+The native Worker Issues sample-notification action was submitted at 16:59 UTC. Notification history
+records that test dispatch, and the configured operator mailbox received the sample “Workers
+real-time issue detected” email. Its example `checkout-worker` is sample data, not evidence of a
+Fidy failure. This proves the notification destination works, not actual exception/resource-limit
+coverage or safe contents of future real issue notifications.
+
+Current notification history also records repeated warning start/end pairs about one minute apart.
+These are real delivered alerts, not proof of stable owner health or valid per-owner resolution.
+Keep the old monitoring stores until the replacement policy, owner freshness, native failure
+coverage and actual absence/recovery behavior have been verified.
 
 ## Safe recovery
 

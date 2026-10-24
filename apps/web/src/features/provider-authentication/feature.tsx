@@ -5,12 +5,12 @@ import { useRouter } from "@tanstack/react-router";
 import { AsyncResult } from "effect/reactivity";
 import { type JSX, type ReactNode, useState } from "react";
 import { Button } from "@/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
+import { AccessAction, AccessBack, AccessHeading, AccessMethodIcon } from "@/ui/components/access";
 import { closeProviderReturn, useProviderAuthentication } from "./controller";
 
 const canContinue = (intent: "signup" | "login", accepted: boolean, ready: boolean): boolean =>
   intent === "login" || (accepted && ready);
-type Authentication = ReturnType<typeof useProviderAuthentication>;
+type Authentication = Omit<ReturnType<typeof useProviderAuthentication>, "mounted">;
 const ConsentNotice = ({
   accepted,
   setAccepted,
@@ -63,17 +63,20 @@ const ConsentNotice = ({
     </>
   );
 };
+type EditingFormProps = Readonly<{
+  children: ReactNode;
+  intent: "signup" | "login";
+  setIntent: (intent: "signup" | "login") => void;
+  start: Authentication["start"];
+  handoffReference: Option.Option<string>;
+}>;
 const EditingForm = ({
   intent,
   setIntent,
   start,
   handoffReference,
-}: Readonly<{
-  intent: "signup" | "login";
-  setIntent: (intent: "signup" | "login") => void;
-  start: Authentication["start"];
-  handoffReference: Option.Option<string>;
-}>): JSX.Element => {
+  children,
+}: EditingFormProps): JSX.Element => {
   const router = useRouter();
   const disclosure = useAtomValue(
     router.options.context.webAuthClient.query("providerAuthentication", "disclosure", {})
@@ -85,7 +88,8 @@ const EditingForm = ({
         <ConsentNotice accepted={accepted} setAccepted={setAccepted} />
       )}
       {(["google", "microsoft"] as const).map((provider) => (
-        <Button
+        <AccessAction
+          kind="provider"
           key={provider}
           disabled={
             Option.isNone(handoffReference) &&
@@ -99,19 +103,24 @@ const EditingForm = ({
             )
           }
         >
+          <AccessMethodIcon method={provider} />
           Continuar con {provider === "google" ? "Google" : "Microsoft"}
-        </Button>
+        </AccessAction>
       ))}
+      {intent === "login" ? children : null}
       {Option.isNone(handoffReference) && router.state.location.search.resume === undefined && (
-        <Button
-          variant="ghost"
-          onClick={() => {
-            setIntent(intent === "signup" ? "login" : "signup");
-            setAccepted(false);
-          }}
-        >
-          {intent === "signup" ? "Ya tengo cuenta · Iniciar sesión" : "Crear una cuenta"}
-        </Button>
+        <p data-access-join="">
+          {intent === "login" ? "¿Es tu primera vez? " : "¿Ya tienes cuenta? "}
+          <AccessAction
+            kind="link"
+            onClick={() => {
+              setIntent(intent === "signup" ? "login" : "signup");
+              setAccepted(false);
+            }}
+          >
+            {intent === "signup" ? "Iniciar sesión" : "Crea tu cuenta"}
+          </AccessAction>
+        </p>
       )}
     </>
   );
@@ -207,55 +216,97 @@ const AttemptStatus = ({
     )}
   </>
 );
+const ProviderBack = ({
+  authentication,
+}: Readonly<{ authentication: Authentication }>): JSX.Element =>
+  authentication.state.status === "editing" || authentication.state.status === "recovery" ? (
+    <></>
+  ) : (
+    <AccessBack onClick={authentication.restart} />
+  );
+
+const ProviderAuthenticationView = ({
+  handoffReference,
+  children,
+  authentication,
+}: Readonly<{
+  handoffReference: Option.Option<string>;
+  children: ReactNode;
+  authentication: Authentication;
+}>): JSX.Element => {
+  const router = useRouter();
+  const confirmingIdentity = router.state.location.search.resume !== undefined;
+  const confirmingToken = router.state.location.search.resume === "pat";
+  const [intent, setIntent] = useState<"signup" | "login">(
+    Option.isSome(handoffReference) && !confirmingIdentity ? "signup" : "login"
+  );
+  return (
+    <div data-access-principal="">
+      <ProviderBack authentication={authentication} />
+      <AccessHeading key={authentication.state.status}>
+        {confirmingIdentity ? "Confirma tu identidad" : headingForIntent(intent)}
+      </AccessHeading>
+      <p data-access-intro="">Elige cómo iniciar sesión.</p>
+      {confirmingToken && (
+        <p>
+          Usa la misma cuenta para volver a crear el token con el formulario que ya completaste.
+        </p>
+      )}
+      {confirmingToken && (
+        <a href="/settings/access?resume=pat" className="underline">
+          Volver al token
+        </a>
+      )}
+      {authentication.state.status === "editing" ? (
+        <EditingForm
+          handoffReference={handoffReference}
+          intent={intent}
+          setIntent={setIntent}
+          start={authentication.start}
+        >
+          {children}
+        </EditingForm>
+      ) : (
+        <AttemptStatus
+          provider={authentication.provider}
+          authentication={authentication}
+          setIntent={setIntent}
+        />
+      )}
+    </div>
+  );
+};
+
+export type ProviderAuthenticationPresentation = Readonly<{
+  restart: () => void;
+  startLogin: (provider: AuthenticationProvider) => void;
+  render: (children: ReactNode) => JSX.Element;
+}>;
+
+/** Keeps controller authority and lifetime behind this feature's public composition boundary. */
 export const ProviderAuthenticationFeature = ({
   handoffReference,
   children,
 }: Readonly<{
   handoffReference: Option.Option<string>;
-  children: ReactNode;
+  children: (presentation: ProviderAuthenticationPresentation) => ReactNode;
 }>): JSX.Element => {
-  const router = useRouter();
-  const confirmingIdentity = router.state.location.search.resume !== undefined;
-  const confirmingToken = router.state.location.search.resume === "pat";
-  const [intent, setIntent] = useState<"signup" | "login">(confirmingIdentity ? "login" : "signup");
   const { mounted, ...authentication } = useProviderAuthentication({ handoffReference });
   return (
-    <main ref={mounted} className="flex min-h-svh items-center justify-center px-4 py-12">
-      <Card className="w-full max-w-lg">
-        <CardHeader>
-          <CardTitle>
-            <h1>{confirmingIdentity ? "Confirma tu identidad" : headingForIntent(intent)}</h1>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {confirmingToken && (
-            <p>
-              Usa la misma cuenta para volver a crear el token con el formulario que ya completaste.
-            </p>
-          )}
-          {confirmingToken && (
-            <a href="/settings/access?resume=pat" className="underline">
-              Volver al token
-            </a>
-          )}
-          {authentication.state.status === "editing" ? (
-            <EditingForm
-              handoffReference={handoffReference}
-              intent={intent}
-              setIntent={setIntent}
-              start={authentication.start}
-            />
-          ) : (
-            <AttemptStatus
-              provider={authentication.provider}
-              authentication={{ ...authentication, mounted }}
-              setIntent={setIntent}
-            />
-          )}
-          {authentication.state.status === "editing" ? children : null}
-        </CardContent>
-      </Card>
-    </main>
+    <div ref={mounted}>
+      {children({
+        restart: authentication.restart,
+        startLogin: (provider) => authentication.start(provider, "login", ""),
+        render: (content) => (
+          <ProviderAuthenticationView
+            handoffReference={handoffReference}
+            authentication={authentication}
+          >
+            {content}
+          </ProviderAuthenticationView>
+        ),
+      })}
+    </div>
   );
 };
 
@@ -268,4 +319,4 @@ export const ProviderReturnFeature = (): JSX.Element => (
 );
 
 const headingForIntent = (intent: "signup" | "login"): string =>
-  intent === "signup" ? "Crea tu cuenta" : "Inicia sesión";
+  intent === "signup" ? "Crea tu cuenta" : "Entra a tu Fidy";

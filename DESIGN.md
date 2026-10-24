@@ -632,3 +632,33 @@ Use `FinancialSummaryCard` for a formatted top amount, label, positive/negative 
 `WorkspaceColumns variant="container"` switches between stacked content and the 24rem rail at 75rem of available workspace width, measured at the current root text size. `WorkspacePanel` shares that measurement for the rail/sheet decision. The default viewport variant remains for existing Transactions layouts. Features own table geometry; they do not override shared rail positioning or summary typography. Category pencil icons beside labels follow the approved Dashboard customization stroke of 2px; ordinary icons remain 1.5px.
 
 The UI reference includes editable, disabled, and invalid amounts, searchable choices, both financial card treatments, and spending meters. Verify keyboard behavior, light and Grafito palettes, narrow width, and enlarged text when changing these owners.
+
+### Approved browser access composition
+
+The login composition was approved separately from the landing. `/login` uses the supplied coin-i
+wordmark, cotton-top tamarin artwork and approved pastel Ceiba PNG, with one continuous canvas.
+The desktop slogan and mascot sit beside the access form; phones retain the logo, theme control
+and form. The supplied slogan remains brand green without a backing band; it is a display-only
+approved treatment, never a contrast exception for functional labels. The application accessibility
+checks must continue to report this contrast debt rather than suppressing unrelated failures.
+
+`ui/components/access.tsx` and `access.css` own these approved access controls and layout. The
+principal offers Google and Microsoft with their original multicolor artwork and 400-weight
+Poppins labels, plus verified email and WhatsApp. Detail steps place a neutral Hugeicons icon
+beside their title, a top back action without underlining, and three accessible icon-only
+alternative methods below; there are no visible names beneath those icons. Primary actions and
+inputs use the approved 12px shape and comfortable hit areas. Other application controls retain
+their existing variants. `/ui-reference.html#access` demonstrates the actual shared controls.
+
+Access follows system appearance until a manual choice, stored only as the schema-validated
+`fidy-theme-v1` preference. Both themes preserve the exact brand green. Reduced motion removes
+entrance and mascot motion. Functional text uses the shared readable foreground tokens.
+
+The view never supplies example credentials, countdowns or approval decisions. Pairing expiry and
+mailbox resend availability derive from server responses. The eight-consonant public pairing code
+is distinct from the 24-character mailbox proof; private verifier, drafts and proof consumption
+remain with their existing mounted authentication owner. Changing methods discards that attempt.
+A generic server refusal cannot be described as a confirmed WhatsApp rejection; the terminal view
+therefore retains the generic explanation. Provider waiting, consent loading/refusal, signup,
+one-time recovery and WhatsApp association review remain real additional states using the same
+access surface, pending separate visual review if further composition changes are requested.

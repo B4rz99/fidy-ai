@@ -21,18 +21,15 @@ const operatorOrigin = browserAcceptanceTopology().operator;
 /** The browser obtains a WebSession only from real Core redemption, never from a route mock. */
 export const visiblePairingCode = (page: Page): Promise<string> =>
   page
-    .locator('[aria-label^="Código de vinculación "]')
-    .getAttribute("aria-label")
-    .then((label) => {
-      const code = label?.replace("Código de vinculación ", "") ?? "";
+    .getByText(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u)
+    .innerText()
+    .then((code) => {
       expect(code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u);
       return code;
     });
 
 export const openBrowserLogin = (page: Page): Promise<void> =>
-  page
-    .goto("/login")
-    .then(() => page.getByRole("button", { name: "WhatsApp o correo verificado" }).click());
+  page.goto("/login").then(() => undefined);
 
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
 type ConsentRead = Readonly<{ status: number }>;
@@ -136,7 +133,7 @@ const signInWithIdentity = ({
         ? installAcceptanceClock(page)
         : installAcceptanceClockWithNativePerformance(page)
     )
-    .then(() => page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click())
+    .then(() => page.getByRole("button", { name: "WhatsApp" }).click())
     .then(() => visiblePairingCode(page))
     .then((code) => request.post(`${operatorOrigin}/approve?code=${code}&${identity}=true`))
     .then((approval) => {
@@ -169,26 +166,28 @@ export const signInWithVerifiedEmailThroughCore = ({
       yield* Effect.tryPromise(() => installAcceptanceClock(page));
       yield* Effect.tryPromise(() => openBrowserLogin(page));
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
+        page.getByRole("button", { name: "Correo verificado", exact: true }).click()
       );
-      const code = yield* Effect.tryPromise(() => visiblePairingCode(page));
-      yield* Effect.tryPromise(() =>
-        page.getByLabel("O accede con tu correo verificado").fill(email)
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Enviar código por correo" }).click()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByLabel("Código recibido por correo")).toBeVisible()
-      );
+      yield* Effect.tryPromise(() => page.getByLabel("Correo verificado").fill(email));
+      const started = page
+        .waitForResponse(
+          (response) =>
+            response.url().endsWith("/web/pairings") && response.request().method() === "POST"
+        )
+        .then((response) => response.json());
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Enviar código" }).click());
+      const { publicCode: code } = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ publicCode: Schema.String })
+      )(yield* Effect.tryPromise(() => started));
+      yield* Effect.tryPromise(() => expect(page.getByLabel("Código del correo")).toBeVisible());
       const delivered = yield* Effect.tryPromise(() =>
         request.post(`http://127.0.0.1:4175/email/login/deliver?code=${code}`)
       );
       expect(delivered.status()).toBe(noContentStatus);
       const proof = `${code}-JKLM-NPQR-STUV-WXYZ`;
-      yield* Effect.tryPromise(() => page.getByLabel("Código recibido por correo").fill(proof));
+      yield* Effect.tryPromise(() => page.getByLabel("Código del correo").fill(proof));
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Aprobar este navegador" }).click()
+        page.getByRole("button", { name: "Confirmar y entrar" }).click()
       );
       yield* Effect.tryPromise(() =>
         expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: pairingTimeoutMilliseconds })

@@ -145,24 +145,20 @@ test("measures advertised pairing cadence and route unmount", ({ page, request }
       yield* wait(openBrowserLogin(page));
       const observed = observeRequests(page);
       const before = yield* snapshot(request);
-      yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
+      yield* wait(page.getByRole("button", { name: "WhatsApp" }).click());
       yield* wait(visiblePairingCode(page));
       for (let index = 0; index < 2; index += 1) {
         const reply = yield* wait(page.waitForResponse("**/web/pairings/redeem"));
         expect(reply.status()).toBe(pendingStatus);
       }
       observed.report("ordinary-start-and-two-pending-polls", before, yield* snapshot(request));
-      yield* wait(page.getByRole("button", { name: "Google o Microsoft" }).click());
+      yield* wait(page.getByRole("button", { name: "Opciones de inicio de sesión" }).click());
       const switchedBefore = yield* snapshot(request);
       yield* wait(page.clock.install());
       yield* wait(page.clock.runFor(cancelledWindowMilliseconds));
       expect(observed.count("/web/pairings")).toBe(0);
       observed.report("ordinary-after-method-switch", switchedBefore, yield* snapshot(request));
-      yield* wait(page.getByRole("button", { name: "WhatsApp o correo verificado" }).click());
-      yield* wait(
-        expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible()
-      );
-      yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
+      yield* wait(page.getByRole("button", { name: "WhatsApp" }).click());
       yield* wait(visiblePairingCode(page));
       observed.report("ordinary-restarted", switchedBefore, yield* snapshot(request));
       yield* wait(page.goto("/"));

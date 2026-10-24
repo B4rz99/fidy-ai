@@ -31,6 +31,10 @@ export const isolateProviderSource = (context: BrowserContext): Promise<void> =>
     "x-acceptance-source": `${info.testId}-${info.repeatEachIndex}`,
   });
 };
+const openSignup = (page: Page): Promise<void> =>
+  page
+    .goto("/login")
+    .then(() => page.getByRole("button", { name: "Crea tu cuenta", exact: true }).click());
 const redirectStatus = 302;
 const pendingStatus = 202;
 const noContentStatus = 204;
@@ -124,7 +128,7 @@ export const unavailablePairingJourney = ({
           return deliverUnavailable(route, false);
         })
       );
-      yield* Effect.tryPromise(() => page.goto("/login"));
+      yield* Effect.tryPromise(() => openSignup(page));
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()
       );
@@ -172,7 +176,7 @@ export const disclosureRetryJourney = ({
           redirectSubject(configuration, `disclosure-retry-${configuration.provider}`, route)
         )
       );
-      yield* Effect.tryPromise(() => page.goto("/login"));
+      yield* Effect.tryPromise(() => openSignup(page));
       yield* Effect.tryPromise(() =>
         expect(
           page.getByText("No pudimos cargar el Consentimiento.", { exact: false })
@@ -225,7 +229,7 @@ export const stalledProviderJourney = ({
         context.route(configuration.authorizationPattern, pendingProvider)
       );
       const held = yield* holdProviderStatus(page, configuration.provider);
-      yield* Effect.tryPromise(() => page.goto("/login"));
+      yield* Effect.tryPromise(() => openSignup(page));
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()
       );
@@ -305,9 +309,6 @@ const returningSessionPolicies = (
     );
     yield* Effect.tryPromise(() => page.goto("/login"));
     yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Ya tengo cuenta · Iniciar sesión" }).click()
-    );
-    yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
     );
     yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
@@ -318,9 +319,6 @@ const returningSessionPolicies = (
     );
     expect(revocation.status()).toBe(noContentStatus);
     yield* Effect.tryPromise(() => page.goto("/login"));
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Ya tengo cuenta · Iniciar sesión" }).click()
-    );
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
     );
@@ -343,14 +341,14 @@ const signupHistoryJourney = Effect.fn(function* (
     expect(page.getByLabel("Código de recuperación", { exact: true })).toHaveCount(0)
   );
   yield* Effect.tryPromise(() =>
-    expect(page.getByLabel("Acepto el tratamiento de datos descrito")).toBeVisible()
+    expect(page.getByRole("heading", { name: "Entra a tu Fidy" })).toBeVisible()
   );
   yield* Effect.tryPromise(() => page.reload());
   yield* Effect.tryPromise(() =>
     expect(page.getByLabel("Código de recuperación", { exact: true })).toHaveCount(0)
   );
   yield* Effect.tryPromise(() =>
-    expect(page.getByLabel("Acepto el tratamiento de datos descrito")).toBeVisible()
+    expect(page.getByRole("heading", { name: "Entra a tu Fidy" })).toBeVisible()
   );
   yield* Effect.tryPromise(() => openTransactionsThroughCore(page));
   yield* Effect.tryPromise(() =>
@@ -430,7 +428,7 @@ export const signupJourney = ({
           redirectSubject(configuration, `browser-${configuration.provider}-signup`, route)
         )
       );
-      yield* Effect.tryPromise(() => page.goto("/login"));
+      yield* Effect.tryPromise(() => openSignup(page));
       yield* expectSignupNotice(page);
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()
@@ -527,14 +525,13 @@ export const denialAndCancellationJourney = ({
         )
       );
       yield* openProviderEntry(page);
-      yield* expectSignupNotice(page);
       if (intent === "signup") {
         yield* Effect.tryPromise(() =>
-          page.getByLabel("Acepto el tratamiento de datos descrito").check()
+          page.getByRole("button", { name: "Crea tu cuenta", exact: true }).click()
         );
-      } else {
+        yield* expectSignupNotice(page);
         yield* Effect.tryPromise(() =>
-          page.getByRole("button", { name: "Ya tengo cuenta · Iniciar sesión" }).click()
+          page.getByLabel("Acepto el tratamiento de datos descrito").check()
         );
       }
       yield* expectProviderDenial(page, configuration);
@@ -558,12 +555,57 @@ export const denialAndCancellationJourney = ({
       yield* Effect.tryPromise(() =>
         expect(
           page.getByRole("heading", {
-            name: intent === "login" ? "Inicia sesión" : "Crea tu cuenta",
+            name: intent === "login" ? "Entra a tu Fidy" : "Crea tu cuenta",
           })
         ).toBeVisible()
       );
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
+      yield* verifyReturnToProviderOptions(page, configuration, intent);
     })
+  );
+const verifyReturnToProviderOptions = (
+  page: Page,
+  configuration: ProviderJourneyConfiguration,
+  intent: "signup" | "login"
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* returnToProviderOptions(page, configuration);
+    if (intent === "signup") {
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Acepto el tratamiento de datos descrito").check()
+      );
+    }
+    const pending = yield* retryFromProviderOptions(page, configuration);
+    yield* returnToProviderOptions(page, configuration);
+    expect(pending.isClosed()).toBe(true);
+  });
+const returnToProviderOptions = (
+  page: Page,
+  configuration: ProviderJourneyConfiguration
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Opciones de inicio de sesión" }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("button", { name: `Continuar con ${configuration.label}` })
+      ).toBeVisible()
+    );
+    yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toHaveCount(0));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Opciones de inicio de sesión" })).toHaveCount(0)
+    );
+  });
+const retryFromProviderOptions = (
+  page: Page,
+  configuration: ProviderJourneyConfiguration
+): Effect.Effect<Page, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    Promise.all([
+      page.waitForEvent("popup"),
+      page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click(),
+    ]).then(([popup]) => popup)
   );
 const denyProvider = (configuration: ProviderJourneyConfiguration, route: Route): Promise<void> => {
   const query = new URL(route.request().url()).searchParams;
@@ -600,7 +642,7 @@ export const lostCompletionJourney = ({
       yield* Effect.tryPromise(() =>
         page.route(`**/web/providers/${configuration.provider}/complete`, loseCompletion)
       );
-      yield* Effect.tryPromise(() => page.goto("/login"));
+      yield* Effect.tryPromise(() => openSignup(page));
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()
       );
@@ -646,7 +688,7 @@ export const pendingRedemptionJourney = ({
         )
       );
       yield* Effect.tryPromise(() => page.route("**/web/pairings/redeem", pendingRedemption));
-      yield* Effect.tryPromise(() => page.goto("/login"));
+      yield* Effect.tryPromise(() => openSignup(page));
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()
       );
@@ -695,7 +737,7 @@ export const blockedPopupJourney = ({
           redirectSubject(configuration, `blocked-popup-${configuration.provider}`, route)
         )
       );
-      yield* Effect.tryPromise(() => page.goto("/login"));
+      yield* Effect.tryPromise(() => openSignup(page));
       yield* Effect.tryPromise(() => page.evaluate(blockNextPopup));
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()
@@ -726,7 +768,7 @@ const createWebUserForAssociation = (
   }>
 ): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise(() => input.page.goto("/login"));
+    yield* Effect.tryPromise(() => openSignup(input.page));
     yield* Effect.tryPromise(() =>
       input.page.getByLabel("Acepto el tratamiento de datos descrito").check()
     );
@@ -863,12 +905,7 @@ const providerRecoveryJourney = Effect.fn(function* ({
     (response) =>
       response.url().endsWith("/web/pairings/redeem") && response.status() === pendingStatus
   );
-  yield* Effect.tryPromise(() =>
-    page.getByRole("button", { name: "WhatsApp o correo verificado" }).click()
-  );
-  yield* Effect.tryPromise(() =>
-    page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
-  );
+  yield* Effect.tryPromise(() => page.getByRole("button", { name: "WhatsApp" }).click());
   const pairingCode = yield* Effect.tryPromise(() => visiblePairingCode(page));
   const pairingPollMilliseconds = 5_000;
   yield* Effect.tryPromise(() =>
@@ -913,9 +950,6 @@ const returningProviderLogin = ({
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
     yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/login$/u));
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Ya tengo cuenta · Iniciar sesión" }).click()
-    );
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
     );

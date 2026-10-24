@@ -1,0 +1,80 @@
+.oxlintrc.ui.json
+  h_c6d49c804e0ad2 95-150
+DESIGN.md
+  h_c6d49c804e0ad2 692-699
+apps/server/cloudflare/runtime/telemetry.test.ts
+  h_c6d49c804e0ad2 29-33,197,203-206,213-222
+apps/server/cloudflare/runtime/telemetry/operations.ts
+  h_c6d49c804e0ad2 31,52,54,57
+apps/web/e2e/dashboard-branding.spec.ts
+  h_c6d49c804e0ad2 1-323
+apps/web/e2e/dashboard-live-title.spec.ts
+  h_c6d49c804e0ad2 19-25,33,44,48
+apps/web/e2e/dashboard-pointer-resize.spec.ts
+  h_c6d49c804e0ad2 1-74
+apps/web/e2e/needs-review.spec.ts
+  h_c6d49c804e0ad2 1276-1322
+apps/web/src/features/dashboard/money-presentation.test.ts
+  h_c6d49c804e0ad2 10,76-85
+apps/web/src/features/dashboard/money-presentation.ts
+  h_c6d49c804e0ad2 59-71
+apps/web/src/features/dashboard/view.tsx
+  h_c6d49c804e0ad2 1,4,23-35,49,90,96,100-108,111-122,145,147-159,168-216,240-242,275-287,302,314-333,347,349-354,356,382-387,822,907-912,949,1061-1062,1074,1079,1081
+apps/web/src/features/signed-in/compact-navigation.tsx
+  h_c6d49c804e0ad2 4,17-18,33,36-38
+apps/web/src/features/signed-in/feature.tsx
+  h_c6d49c804e0ad2 7,67-68,71,87,91
+apps/web/src/features/signed-in/navigation-viewport.ts
+  h_c6d49c804e0ad2 3
+apps/web/src/features/signed-in/navigation.tsx
+  h_c6d49c804e0ad2 7,15-19,52,59-60,62,68,74-75,78-97
+apps/web/src/features/signed-in/settings-navigation.tsx
+  h_c6d49c804e0ad2 19-20,23,30-31
+apps/web/src/ui/components/access.tsx
+  h_c6d49c804e0ad2 16,181
+apps/web/src/ui/components/application.css
+  h_c6d49c804e0ad2 1-294
+apps/web/src/ui/components/application.tsx
+  h_c6d49c804e0ad2 1-67
+apps/web/src/ui/components/calendar-field.tsx
+  h_c6d49c804e0ad2 35-46,53,58-71,80
+apps/web/src/ui/components/chat.tsx
+  h_c6d49c804e0ad2 25
+apps/web/src/ui/components/dashboard.css
+  h_c6d49c804e0ad2 1-430
+apps/web/src/ui/components/dashboard.tsx
+  h_c6d49c804e0ad2 1-221
+apps/web/src/ui/components/review-workspace.css
+  h_c6d49c804e0ad2 1-3,5-11,15-21,121,124-127
+apps/web/src/ui/components/theme.ts
+  h_c6d49c804e0ad2 27
+apps/web/src/ui/dashboard-reference.tsx
+  h_c6d49c804e0ad2 1-53
+apps/web/src/ui/reference.tsx
+  h_c6d49c804e0ad2 19,267-288,318,321
+docs/operations/cloudflare-background-work.md
+  h_c6d49c804e0ad2 542-584
+infra/cloudflare/production-release.test.ts
+  h_c6d49c804e0ad2 6,180,201,209,223,225-243,245-254
+infra/cloudflare/production-release.ts
+  h_c6d49c804e0ad2 402,413,434,454,1020
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+infra/cloudflare/worker-observability.test.ts
+  h_c6d49c804e0ad2 14,37
+infra/cloudflare/worker-observability.ts
+  h_c6d49c804e0ad2 6
+patches/@distilled.cloud%2Fcloudflare@1.0.0-rc.13.patch
+  h_c6d49c804e0ad2 2,5,9,15,18,22,28,31,34,43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2b5c4a3a2d81e7193d163bda7ab5344182f9db13",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

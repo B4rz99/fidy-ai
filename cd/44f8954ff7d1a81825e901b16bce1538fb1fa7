@@ -1,0 +1,54 @@
+DESIGN.md
+  h_c6d49c804e0ad2 636-650
+apps/server/cloudflare/core-http/internal/http.ts
+  h_c6d49c804e0ad2 1383
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  h_c6d49c804e0ad2 4278,4283,4339,4371
+apps/server/contracts/openapi.json
+  h_c6d49c804e0ad2 4460-4461,4463-4464,4466-4469,4471-4472,4476-4477,4500-4502,4504-4506,4508-4509,4513-4514,4525-4527,4534-4554,4558,4560-4561,4588,11596,11648,11742,18061
+apps/web/e2e/needs-review.spec.ts
+  h_c6d49c804e0ad2 41,180,244,271,292,341,379,403,476,488,509,521,558,585,590,595,604-612,621,646-648,1077-1275
+apps/web/src/features/needs-review/FEATURE.md
+  h_c6d49c804e0ad2 8,31,54-55
+apps/web/src/features/needs-review/editor-controller.ts
+  h_c6d49c804e0ad2 7
+apps/web/src/features/needs-review/editor.tsx
+  h_c6d49c804e0ad2 1,8-18,21,47-61,63,89,92,95-99,102,120,123-152,162,166,189,192,196,198-203,213-221,225-242,259,261-265,274-282,284,297-326
+apps/web/src/features/needs-review/feature.tsx
+  h_c6d49c804e0ad2 1-2,16,74-75,90,104,138-145,164-199,239,244,247,250-253,255-257,260,262-264,275-286,290,297,307-316,318,321,329-335
+apps/web/src/features/needs-review/fields.tsx
+  h_c6d49c804e0ad2 43,82,171,181,196-198
+apps/web/src/features/needs-review/inbox-controller.ts
+  h_c6d49c804e0ad2 18,60
+apps/web/src/features/needs-review/inbox.tsx
+  h_c6d49c804e0ad2 1-3,24-25,28-29,32,37-42,46-73,77-78,89,93-98,102-104,106
+apps/web/src/features/needs-review/original.tsx
+  h_c6d49c804e0ad2 45-48,50-62,64-68
+apps/web/src/features/needs-review/presentation.ts
+  h_c6d49c804e0ad2 16,38
+apps/web/src/features/needs-review/toolbar.tsx
+  h_c6d49c804e0ad2 7-9,18,21-22,33
+apps/web/src/features/needs-review/view-navigation.tsx
+  h_c6d49c804e0ad2 1,13-14,29-46,52,59,79,85,90
+apps/web/src/ui/components/calendar-field.tsx
+  h_c6d49c804e0ad2 19,35-50,53,67
+apps/web/src/ui/components/review-workspace.css
+  h_c6d49c804e0ad2 1-582
+apps/web/src/ui/components/review-workspace.tsx
+  h_c6d49c804e0ad2 1-2,4-10,12-40,42-70,72-74,76-86
+apps/web/src/ui/reference.tsx
+  h_c6d49c804e0ad2 21,294
+apps/web/src/ui/review-reference.tsx
+  h_c6d49c804e0ad2 3-9,11-12,14-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cd44f8954ff7d1a81825e901b16bce1538fb1fa7",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

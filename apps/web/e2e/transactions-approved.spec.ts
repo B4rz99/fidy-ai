@@ -383,3 +383,134 @@ const integratedThemeJourney = (page: Page): Journey =>
 test("integrated shell aligns Transactions header with theme and retains manual theme after reload", ({
   page,
 }) => Effect.runPromise(integratedThemeJourney(page)));
+
+const verifyMobileRegisterPosition = (page: Page): Journey =>
+  Effect.gen(function* () {
+    const registerBounds = yield* wait(() =>
+      page.getByRole("button", { name: "+ Registrar", exact: true }).boundingBox()
+    );
+    const searchBounds = yield* wait(() =>
+      page.getByRole("searchbox", { name: "Buscar transacciones", exact: true }).boundingBox()
+    );
+    expect(registerBounds).not.toBeNull();
+    expect(searchBounds).not.toBeNull();
+    if (registerBounds !== null && searchBounds !== null) {
+      expect(registerBounds.y + registerBounds.height).toBeLessThanOrEqual(searchBounds.y);
+    }
+  });
+
+const flatWorkspaceJourney = (page: Page, mobile: boolean, dark: boolean): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() =>
+      page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 })
+    );
+    yield* wait(() => page.emulateMedia({ colorScheme: dark ? "dark" : "light" }));
+    yield* installWorkspace(page);
+    yield* wait(() => page.goto("/app/transactions"));
+    const records = page.locator('[data-transaction-slot="transaction-records"]');
+    const panel = page.getByRole("complementary", { name: "Resumen", exact: true });
+    yield* wait(() => expect(panel).toBeVisible());
+    for (const surface of [records, panel]) {
+      yield* wait(() => expect(surface).toHaveCSS("border-radius", "0px"));
+      yield* wait(() => expect(surface).toHaveCSS("box-shadow", "none"));
+    }
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "+ Registrar", exact: true })).not.toHaveCSS(
+        "border-radius",
+        "0px"
+      )
+    );
+    if (mobile) yield* verifyMobileRegisterPosition(page);
+    const ledgerBounds = yield* wait(() => records.boundingBox());
+    const panelBounds = yield* wait(() => panel.boundingBox());
+    expect(ledgerBounds).not.toBeNull();
+    expect(panelBounds).not.toBeNull();
+    if (ledgerBounds !== null && panelBounds !== null) {
+      if (mobile) expect(ledgerBounds.y + ledgerBounds.height).toBe(panelBounds.y);
+      else expect(ledgerBounds.x + ledgerBounds.width).toBe(panelBounds.x);
+    }
+    expect(
+      yield* wait(() => page.evaluate(() => document.documentElement.scrollWidth > innerWidth))
+    ).toBe(false);
+    yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
+    yield* wait(() =>
+      page.getByRole("checkbox", { name: "Seleccionar Prueba 1", exact: true }).check()
+    );
+    yield* wait(() =>
+      expect(page.locator('[data-transaction-slot="transaction-selection-bar"]')).toHaveCSS(
+        "border-radius",
+        "0px"
+      )
+    );
+    yield* wait(() =>
+      expect(page.locator('[data-slot="table-row"][data-state="selected"]')).toHaveCSS(
+        "clip-path",
+        "none"
+      )
+    );
+    const selectedCells = yield* wait(() =>
+      page.locator('[data-slot="table-row"][data-state="selected"] [data-slot="table-cell"]').all()
+    );
+    for (const cell of selectedCells) {
+      yield* wait(() => expect(cell).toHaveCSS("border-radius", "0px"));
+    }
+  });
+for (const mobile of [false, true]) {
+  for (const dark of [false, true]) {
+    test(`flat workspace uses adjacent section planes and rounded controls on ${mobile ? "mobile" : "desktop"} in ${dark ? "dark" : "light"}`, ({
+      page,
+    }) => Effect.runPromise(flatWorkspaceJourney(page, mobile, dark)));
+  }
+}
+
+const flatDisabledJourney = (page: Page, dark: boolean): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.emulateMedia({ colorScheme: dark ? "dark" : "light" }));
+    yield* installWorkspace(page, []);
+    yield* wait(() => page.goto("/app/transactions"));
+    const edit = page.getByRole("button", { name: "Editar varias", exact: true });
+    yield* wait(() => expect(edit).toBeDisabled());
+    yield* wait(() =>
+      expect(edit).toHaveCSS("background-color", dark ? "rgb(54, 54, 54)" : "rgb(231, 226, 221)")
+    );
+  });
+for (const dark of [false, true]) {
+  test(`flat workspace preserves disabled controls in ${dark ? "dark" : "light"}`, ({ page }) =>
+    Effect.runPromise(flatDisabledJourney(page, dark)));
+}
+
+const flatInteractionJourney = (page: Page, dark: boolean): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.emulateMedia({ colorScheme: dark ? "dark" : "light" }));
+    yield* installWorkspace(page);
+    yield* wait(() => page.goto("/app/transactions"));
+    const edit = page.getByRole("button", { name: "Editar varias", exact: true });
+    yield* wait(() => edit.hover());
+    yield* wait(() =>
+      expect(edit).toHaveCSS("background-color", dark ? "rgb(46, 46, 46)" : "rgb(242, 236, 230)")
+    );
+    yield* wait(() => page.mouse.down());
+    yield* wait(() =>
+      expect(edit).toHaveCSS("background-color", dark ? "rgb(56, 56, 56)" : "rgb(232, 222, 213)")
+    );
+    yield* wait(() => page.mouse.move(0, 0));
+    yield* wait(() => page.mouse.up());
+    const sort = page.getByRole("button", { name: "Ordenar transacciones: Ordenar", exact: true });
+    yield* wait(() => sort.click());
+    yield* wait(() => page.mouse.move(0, 0));
+    yield* wait(() => expect(sort).toHaveAttribute("aria-expanded", "true"));
+    yield* wait(() =>
+      expect(sort).toHaveCSS("background-color", dark ? "rgb(56, 56, 56)" : "rgb(232, 222, 213)")
+    );
+    yield* wait(() => page.keyboard.press("Escape"));
+    yield* wait(() => page.keyboard.press("Tab"));
+    yield* wait(() => sort.focus());
+    yield* wait(() =>
+      expect(sort).toHaveCSS("background-color", dark ? "rgb(46, 46, 46)" : "rgb(250, 227, 217)")
+    );
+  });
+for (const dark of [false, true]) {
+  test(`flat workspace preserves control hover, pressed, expanded and keyboard focus in ${dark ? "dark" : "light"}`, ({
+    page,
+  }) => Effect.runPromise(flatInteractionJourney(page, dark)));
+}

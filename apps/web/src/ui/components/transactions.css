@@ -1,5 +1,6 @@
 @media (min-width: 901px) {
   .application-workspace [data-transaction-slot~="transaction-workspace"] {
+    contain: layout;
     margin-top: -90px;
   }
 }
@@ -10,8 +11,6 @@
 }
 [data-transaction-slot~="transaction-workspace"] {
   width: 100%;
-  max-width: 1800px;
-  padding: 34px 42px 35px;
   font-size: 13px;
 }
 [data-transaction-slot~="transaction-page-header"] {
@@ -29,27 +28,16 @@
 }
 [data-transaction-slot~="transaction-columns"] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  align-items: start;
-  gap: 22px;
 }
 [data-transaction-slot~="transaction-records"],
 [data-transaction-slot~="transaction-context-panel"] {
-  border: 1px solid var(--transaction-line);
   background: var(--card);
-  border-radius: 22px;
   min-width: 0;
 }
-[data-transaction-slot~="transaction-records"] {
-  padding: 22px;
-}
 [data-transaction-slot~="transaction-context-panel"] {
-  padding: 24px;
   position: sticky;
-  top: 24px;
 }
 [data-transaction-slot~="transaction-context-panel"] h2 {
-  font-size: 18px;
   font-weight: 600;
   line-height: 1.5;
   letter-spacing: -0.4px;
@@ -103,7 +91,6 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  margin-bottom: 22px;
 }
 [data-transaction-slot~="transaction-search-toolbar"] input {
   flex: 1;
@@ -117,9 +104,6 @@
   align-items: end;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 16px;
-  background: var(--transaction-soft);
-  border-radius: 14px;
   margin-bottom: 20px;
 }
 [data-transaction-slot~="transaction-filter-expansion"] > div {
@@ -132,7 +116,6 @@
   display: flex;
   justify-content: space-between;
   gap: 9px;
-  margin-bottom: 18px;
 }
 [data-transaction-slot~="transaction-workspace"] .transaction-ledger .ledger-actions {
   display: flex;
@@ -146,7 +129,6 @@
 }
 [data-transaction-slot~="transaction-workspace"] .transaction-ledger [data-slot="table-cell"] {
   font-size: 14px;
-  padding: 14px 8px;
 }
 [data-transaction-slot~="transaction-workspace"] .transaction-ledger [data-slot="table-row"] {
   min-height: 72px;
@@ -315,7 +297,6 @@
 [data-transaction-slot~="transaction-form-actions"] {
   display: flex;
   gap: 10px;
-  margin-top: 3px;
 }
 [data-transaction-slot~="transaction-form-actions"] > * {
   flex: 1;
@@ -326,7 +307,6 @@
   flex-direction: column;
 }
 [data-transaction-slot~="transaction-workspace"] [data-transaction-slot~="transaction-danger"] {
-  color: var(--destructive);
   width: 100%;
 }
 [data-transaction-slot~="transaction-panel-note"] {
@@ -346,16 +326,12 @@
   width: 32px;
   height: 32px;
 }
-[data-transaction-slot~="transaction-summary"] h2 {
-  margin-bottom: 20px;
-}
 [data-transaction-slot~="transaction-summary-currency"] {
   display: block;
   margin-bottom: 20px;
 }
 [data-transaction-slot~="transaction-summary-totals"] {
   display: grid;
-  gap: 12px;
 }
 [data-transaction-slot~="transaction-summary-totals"] > div {
   padding: 17px;
@@ -379,7 +355,6 @@
   overflow-wrap: anywhere;
 }
 [data-transaction-slot~="transaction-summary-count"] {
-  font-size: 13px;
   margin-block: 20px;
   color: var(--muted-foreground);
 }
@@ -407,7 +382,6 @@
   [data-transaction-slot~="transaction-workspace"]
     .transaction-ledger
     [data-slot="table-row"]:not([data-date-group]):not([data-state="selected"]):hover {
-    border-radius: 10px;
     background: var(--transaction-soft);
   }
 }
@@ -418,23 +392,13 @@
 }
 @media (max-width: 1200px) {
   [data-transaction-slot~="transaction-columns"] {
-    grid-template-columns: minmax(0, 1fr) 300px;
     gap: 16px;
-  }
-  [data-transaction-slot~="transaction-records"] {
-    padding: 18px;
-  }
-  [data-transaction-slot~="transaction-context-panel"] {
-    padding: 20px;
   }
   [data-transaction-slot~="transaction-search-toolbar"] input {
     flex-basis: 100%;
   }
 }
 @media (max-width: 1050px) {
-  [data-transaction-slot~="transaction-columns"] {
-    grid-template-columns: minmax(0, 1fr);
-  }
   [data-transaction-slot~="transaction-context-panel"] {
     position: static;
   }
@@ -445,7 +409,6 @@
   [data-transaction-slot~="transaction-workspace"][data-panel-open="true"]
     [data-transaction-slot~="transaction-context-panel"] {
     width: 100%;
-    max-width: 650px;
     margin-inline: auto;
   }
 }
@@ -453,16 +416,8 @@
   [data-transaction-slot~="transaction-workspace"] {
     padding: 24px 18px 35px;
   }
-  [data-transaction-slot~="transaction-page-header"] h1 {
-    font-size: 24px;
-  }
   [data-transaction-slot~="transaction-page-header"] [data-slot="button"] {
     font-size: 12px;
-    min-height: 40px;
-    padding: 9px 12px;
-  }
-  [data-transaction-slot~="transaction-records"] {
-    padding: 16px 12px;
   }
   [data-transaction-slot~="transaction-search-toolbar"] {
     gap: 8px;
@@ -474,9 +429,6 @@
   }
   [data-transaction-slot~="transaction-search-toolbar"] [data-slot="button"] {
     font-size: 12px;
-  }
-  [data-transaction-slot~="transaction-context-panel"] {
-    padding: 22px 18px;
   }
   [data-transaction-slot~="transaction-workspace"] .ledger-actions {
     gap: 5px;
@@ -596,13 +548,11 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
 [data-transaction-slot~="transaction-workspace"]
   [data-transaction-slot~="transaction-summary-totals"]
   dt {
-  font-size: 12px;
   font-weight: 400;
 }
 [data-transaction-slot~="transaction-workspace"]
   [data-transaction-slot~="transaction-summary-totals"]
   dd {
-  font-size: 24px;
   font-weight: 600;
 }
 [data-transaction-slot~="transaction-workspace"] .transaction-ledger [data-slot="table-body"] {
@@ -646,11 +596,6 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
   background: var(--transaction-soft);
 }
 @media (max-width: 600px) {
-  [data-transaction-slot~="transaction-workspace"]
-    [data-transaction-slot~="transaction-summary-totals"]
-    dd {
-    font-size: 20px;
-  }
 }
 @container ledger (width < 400px) {
   [data-transaction-slot~="transaction-workspace"]
@@ -693,11 +638,6 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
 }
 [data-transaction-slot~="transaction-workspace"]
   [data-transaction-slot~="transaction-summary-currency"] {
-  display: table;
-  padding: 4px 8px;
-  background: var(--transaction-soft);
-  border-radius: 6px;
-  font-size: 12px;
   line-height: 17px;
 }
 [data-transaction-slot~="transaction-workspace"] [aria-label="Detalle de transacción"] {
@@ -705,10 +645,6 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
 }
 [data-transaction-slot~="transaction-workspace"] [aria-label="Detalle de transacción"] > header {
   margin-bottom: 22px;
-}
-[data-transaction-slot~="transaction-workspace"]
-  [data-transaction-slot~="transaction-detail-identity"] {
-  margin-bottom: 20px;
 }
 [data-transaction-slot~="transaction-workspace"] button[aria-label="Cerrar detalle"],
 [data-transaction-slot~="transaction-workspace"] button[aria-label="Cerrar registro"] {
@@ -746,9 +682,6 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
   }
 }
 @media (max-width: 600px) {
-  [data-transaction-slot~="transaction-workspace"] {
-    padding-top: 5px;
-  }
   [data-transaction-slot~="transaction-page-header"] {
     min-height: 36px;
   }
@@ -805,4 +738,316 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
   background: var(--fidy-button-disabled-background);
   color: var(--fidy-button-disabled-foreground);
   border-color: var(--fidy-button-disabled-border);
+}
+
+[data-transaction-slot~="transaction-workspace"] {
+  max-width: none;
+  min-height: 100svh;
+  padding: 34px 0 0;
+}
+[data-transaction-slot~="transaction-page-header"] {
+  margin: 0;
+  padding: 0 100px 28px 42px;
+  border-bottom: 1px solid var(--transaction-line);
+}
+[data-transaction-slot~="transaction-page-header"] [data-slot="button"] {
+  min-height: 46px;
+  padding: 12px 16px;
+}
+[data-transaction-slot~="transaction-columns"] {
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 0;
+  align-items: stretch;
+}
+[data-transaction-slot~="transaction-records"],
+[data-transaction-slot~="transaction-context-panel"] {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+[data-transaction-slot~="transaction-records"] {
+  background: transparent;
+  padding: 25px 28px 40px 42px;
+  min-height: calc(100svh - 109px);
+}
+[data-transaction-slot~="transaction-context-panel"] {
+  background: light-dark(var(--fidy-background-surface), #191a18);
+  border-left: 1px solid var(--transaction-line);
+  padding: 28px 28px 40px;
+  top: 0;
+  min-height: calc(100svh - 109px);
+  align-self: start;
+}
+[data-transaction-slot~="transaction-context-panel"] h2 {
+  font-size: 19px;
+}
+[data-transaction-slot~="transaction-summary"] h2 {
+  margin-bottom: 23px;
+}
+[data-transaction-slot~="transaction-workspace"]
+  [data-transaction-slot~="transaction-summary-currency"] {
+  display: block;
+  padding: 0;
+  margin-bottom: 27px;
+  border-radius: 0;
+  background: none;
+  font-size: 12px;
+}
+[data-transaction-slot~="transaction-summary-totals"] {
+  gap: 0;
+}
+[data-transaction-slot~="transaction-summary-totals"] > div,
+[data-transaction-slot~="transaction-summary-totals"] > div:nth-child(2) {
+  padding: 0 0 23px;
+  margin: 0 0 23px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--transaction-line);
+  background: none;
+}
+[data-transaction-slot~="transaction-workspace"]
+  [data-transaction-slot~="transaction-summary-totals"]
+  dt {
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+[data-transaction-slot~="transaction-workspace"]
+  [data-transaction-slot~="transaction-summary-totals"]
+  dd {
+  font-size: 26px;
+}
+[data-transaction-slot~="transaction-summary-count"] {
+  margin: 3px 0 21px;
+  font-size: 12px;
+}
+[data-transaction-slot~="transaction-summary-facts"] > div {
+  border: 0;
+}
+[data-transaction-slot~="transaction-summary"]
+  > [data-transaction-slot~="transaction-summary-facts"]
+  > div:first-child {
+  border-top: 1px solid var(--transaction-line);
+  margin-top: 15px;
+  padding-top: 23px;
+}
+[data-transaction-slot~="transaction-search-toolbar"] {
+  margin-bottom: 20px;
+}
+[data-transaction-slot~="transaction-workspace"] .ledger-actions {
+  margin-bottom: 25px;
+}
+[data-transaction-slot~="transaction-workspace"] .transaction-ledger [data-date-group] {
+  border-radius: 7px;
+}
+[data-transaction-slot~="transaction-workspace"] .transaction-ledger [data-state="selected"],
+[data-transaction-slot~="transaction-workspace"] .transaction-ledger [data-state="selected"]:hover,
+[data-transaction-slot~="transaction-workspace"]
+  [data-transaction-slot~="transaction-selection-bar"] {
+  border-radius: 0;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-transaction-slot~="transaction-workspace"]
+    .transaction-ledger
+    [data-slot="table-row"]:not([data-date-group]):not([data-state="selected"]):hover {
+    border-radius: 0;
+  }
+}
+[data-transaction-slot~="transaction-filter-expansion"] {
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--transaction-line);
+  border-radius: 0;
+  background: transparent;
+}
+[data-transaction-slot~="transaction-form-actions"] {
+  position: static;
+  padding: 0;
+  margin-top: 4px;
+  background: none;
+}
+[data-transaction-slot~="transaction-form-actions"] [data-slot="button"] {
+  min-height: 46px;
+}
+[data-transaction-slot~="transaction-workspace"]
+  [data-transaction-slot~="transaction-detail-identity"] {
+  margin-bottom: 25px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--transaction-line);
+}
+@media (min-width: 1550px) {
+  [data-transaction-slot~="transaction-page-header"] {
+    padding-left: 60px;
+  }
+  [data-transaction-slot~="transaction-records"] {
+    padding-left: 60px;
+  }
+  [data-transaction-slot~="transaction-columns"] {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+}
+@media (max-width: 1200px) {
+  [data-transaction-slot~="transaction-workspace"] {
+    padding-top: 30px;
+  }
+  [data-transaction-slot~="transaction-page-header"] {
+    padding-left: 26px;
+  }
+  [data-transaction-slot~="transaction-columns"] {
+    grid-template-columns: minmax(0, 1fr) 310px;
+  }
+  [data-transaction-slot~="transaction-records"] {
+    padding: 24px 24px 35px 26px;
+  }
+  [data-transaction-slot~="transaction-context-panel"] {
+    padding: 26px 23px;
+  }
+  [data-transaction-slot~="transaction-workspace"]
+    [data-transaction-slot~="transaction-summary-totals"]
+    dd {
+    font-size: 23px;
+  }
+}
+@media (max-width: 1050px) {
+  [data-transaction-slot~="transaction-columns"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-transaction-slot~="transaction-records"] {
+    min-height: 0;
+  }
+  [data-transaction-slot~="transaction-context-panel"] {
+    border-left: 0;
+    border-top: 1px solid var(--transaction-line);
+    min-height: 0;
+    padding: 28px 26px;
+  }
+  [data-transaction-slot~="transaction-workspace"][data-panel-open="true"]
+    [data-transaction-slot~="transaction-context-panel"] {
+    max-width: none;
+    min-height: calc(100svh - 109px);
+    border-top: 0;
+    margin: 0;
+  }
+  [data-transaction-slot~="transaction-workspace"][data-panel-open="true"]
+    [data-transaction-slot~="transaction-context-panel"]
+    > div {
+    max-width: 520px;
+    margin-inline: auto;
+  }
+  [data-transaction-slot~="transaction-summary-totals"] {
+    gap: 12px;
+  }
+}
+@media (max-width: 900px) {
+  [data-transaction-slot~="transaction-workspace"] {
+    min-height: calc(100svh - 84px);
+    padding-top: 24px;
+  }
+  [data-transaction-slot~="transaction-page-header"] {
+    padding: 0 24px 23px;
+  }
+  [data-transaction-slot~="transaction-records"] {
+    padding: 24px;
+  }
+  [data-transaction-slot~="transaction-context-panel"] {
+    padding: 27px 24px;
+  }
+}
+@media (max-width: 600px) {
+  [data-transaction-slot~="transaction-workspace"] {
+    padding-top: 5px;
+  }
+  [data-transaction-slot~="transaction-page-header"] {
+    padding: 0 18px 21px;
+  }
+  [data-transaction-slot~="transaction-page-header"] h1 {
+    font-size: 25px;
+  }
+  [data-transaction-slot~="transaction-page-header"] [data-slot="button"] {
+    position: absolute;
+    top: 89px;
+    right: 18px;
+    min-height: 40px;
+    padding: 9px 12px;
+  }
+  [data-transaction-slot~="transaction-records"] {
+    padding: 22px 18px 30px;
+  }
+  [data-transaction-slot~="transaction-context-panel"] {
+    padding: 25px 18px 35px;
+  }
+  [data-transaction-slot~="transaction-workspace"][data-panel-open="true"]
+    [data-transaction-slot~="transaction-context-panel"] {
+    min-height: calc(100svh - 145px);
+  }
+  [data-transaction-slot~="transaction-workspace"]
+    [data-transaction-slot~="transaction-summary-totals"]
+    dd {
+    font-size: 20px;
+  }
+  [data-transaction-slot~="transaction-workspace"]
+    [data-transaction-slot~="transaction-summary-totals"]
+    dt {
+    font-size: 11px;
+  }
+  [data-transaction-slot~="transaction-detail-identity"] {
+    margin-top: 24px;
+  }
+}
+
+[data-transaction-slot~="transaction-search-toolbar"] input:not(:disabled),
+[data-transaction-slot~="transaction-search-toolbar"]
+  button:not(
+    :disabled,
+    :hover,
+    :active,
+    :focus-visible,
+    [aria-expanded="true"],
+    [aria-pressed="true"]
+  ),
+[data-transaction-slot~="transaction-workspace"]
+  .ledger-actions
+  button:not(
+    :disabled,
+    :hover,
+    :active,
+    :focus-visible,
+    [aria-expanded="true"],
+    [aria-pressed="true"]
+  ),
+[data-transaction-slot~="transaction-workspace"]
+  #transaction-type-filter:not(
+    :disabled,
+    :hover,
+    :active,
+    :focus-visible,
+    [aria-expanded="true"],
+    [aria-pressed="true"]
+  ) {
+  background: light-dark(var(--fidy-background-surface), #202020);
+}
+[data-transaction-slot~="transaction-workspace"] .transaction-ledger > div:first-child {
+  margin-bottom: 25px;
+  align-items: center;
+}
+[data-transaction-slot~="transaction-workspace"] .transaction-ledger .ledger-actions {
+  margin-bottom: 0;
+}
+
+[data-transaction-slot~="transaction-workspace"]
+  .transaction-ledger
+  [data-slot="table-row"][data-state="selected"],
+[data-transaction-slot~="transaction-workspace"]
+  .transaction-ledger
+  [data-slot="table-row"][data-state="selected"]:hover {
+  border-radius: 0;
+}
+
+[data-transaction-slot~="transaction-workspace"]
+  .transaction-ledger
+  [data-slot="table-row"][data-state="selected"]
+  [data-slot="table-cell"]:is(:first-child, :last-child) {
+  border-radius: 0;
+}
+[data-transaction-slot~="transaction-workspace"]
+  .transaction-ledger
+  [data-slot="table-row"][data-state] {
+  clip-path: none;
 }

@@ -1,0 +1,16 @@
+apps/web/e2e/transactions-approved.spec.ts
+  h_c6d49c804e0ad2 387-401,423
+apps/web/src/ui/components/transactions.css
+  h_c6d49c804e0ad2 3,743-851,853-875,877,880,882-883,885-888,890-891,893-894,896-897,899-900,902-905,907-910,912-913,915-916,918-919,921-926,928-932,934-935,937-941,943-944,946-947,949-950,952-955,957-958,960-961,963-968,970-971,973-974,976,978,980-983,985-988,990-991,993,995-1032,1034-1052
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f5e48f6daeda7a0de02357b182cdf511ead557a3",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

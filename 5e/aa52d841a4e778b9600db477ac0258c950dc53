@@ -1,0 +1,31 @@
+apps/server/cloudflare/provider-authentication/internal/status.ts
+  s_6d017cc65783af::t_92c181932eacc1 31-35,47,75-78,80-88,91-93,127-132,136-137
+apps/server/cloudflare/provider-authentication/journey.test-fixture.ts
+  s_6d017cc65783af::t_533f03ac6f8c81 21-29
+apps/server/cloudflare/provider-authentication/whatsapp-link-signup.test.ts
+  s_6d017cc65783af::t_13ac9ac2719eef 5,222-296
+apps/web/e2e/provider-authentication.journeys.ts
+  s_6d017cc65783af::t_1763d3092c974c 39,1131,1133-1140
+apps/web/e2e/real-core-fixture.ts
+  s_6d017cc65783af::t_a05f422063501d 1,19,158-189,204,207
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_6d017cc65783af::t_cb94701a1f3bab 42-65
+apps/web/src/features/provider-authentication/controller.ts
+  s_6d017cc65783af::t_c511c767d29022 4,50-71,76-80,85-90,149,232,291-292,359
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5eaa52d841a4e778b9600db477ac0258c950dc53",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

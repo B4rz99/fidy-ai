@@ -1,0 +1,16 @@
+apps/web/e2e/dashboard-branding.spec.ts
+  h_c6d49c804e0ad2 242-297,303,305,310-313
+apps/web/src/ui/components/application.css
+  h_c6d49c804e0ad2 150-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae6f755626bc9e0c87a72ef8680d65ad89f5a530",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

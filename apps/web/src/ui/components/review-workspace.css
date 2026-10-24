@@ -1,6 +1,23 @@
+.application-workspace:has(> div:not([hidden]) [data-review="workspace"]) {
+  padding-top: 0;
+}
 [data-review="workspace"] {
+  --review-soft: #f5f2ee;
+  --review-line: #e9e2da;
+  --muted: var(--review-soft);
+  --border: var(--review-line);
+  --control-border: var(--review-line);
+  --disabled-border: var(--review-line);
+  --primary-border: var(--primary);
   min-width: 0;
   padding: 34px 42px 48px;
+}
+[data-review="workspace"] [data-slot="input"] {
+  --input: var(--review-line);
+}
+.dark [data-review="workspace"] {
+  --review-soft: #292a25;
+  --review-line: #373831;
 }
 [data-review="workspace"] > .workspace-page-header {
   min-height: 46px;
@@ -101,11 +118,13 @@
   overflow: hidden;
 }
 @media (min-width: 1251px) {
-  [data-review="workspace"]:has([data-review="bulk"]) {
+  [data-review="workspace"]:has([data-review="panel"]:not([hidden]) [data-review="bulk"]) {
     padding-bottom: 20px;
   }
-  [data-review="workspace"]:has([data-review="bulk"]) [data-review="inbox"],
-  [data-review="workspace"]:has([data-review="bulk"]) [data-review="detail"] {
+  [data-review="workspace"]:has([data-review="panel"]:not([hidden]) [data-review="bulk"])
+    [data-review="inbox"],
+  [data-review="workspace"]:has([data-review="panel"]:not([hidden]) [data-review="bulk"])
+    [data-review="detail"] {
     min-height: min(660px, calc(100dvh - 365px));
   }
 }

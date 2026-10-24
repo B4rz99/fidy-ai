@@ -539,6 +539,49 @@ These are real delivered alerts, not proof of stable owner health or valid per-o
 Keep the old monitoring stores until the replacement policy, owner freshness, native failure
 coverage and actual absence/recovery behavior have been verified.
 
+### Native issue activation and controlled missing-signal test
+
+The deployed Core Issues page still displayed **Enable issue detection** after the native
+notification policy had been enabled. A sample notification does not activate Worker detection.
+The stack now requests `observability.issues.enabled=true`, preserving query redaction, disabled
+automatic invocation logs and disabled release tracing. The selected provider serializer previously
+omitted the Issues field; its existing narrow Worker metadata patch now retains that field. The
+production release script-settings request and read-back require native detection and query privacy
+before staging, including gradual releases. These source changes still require deployment and live
+verification. See [Issues activation](https://developers.cloudflare.com/workers/observability/issues/)
+and [detected failures](https://developers.cloudflare.com/workers/observability/issues/investigate/).
+
+Failed Work exports now use the error console level with the same closed metadata envelope; the
+private cause is not added, and success/rejection/interruption retain their existing projection.
+The selected Effect default logger normally uses `console.log` even for an error log level; the
+failed export explicitly selects its stderr console reference. Export failure still cannot change
+the original Work result. This supplies the native detector with caught failures without another
+application counter. Verify the resulting live issue context and notification contain no private
+content before removing existing coverage; source configuration alone does not prove that.
+
+An isolated, binding-free verification Worker exercised handled and uncaught failures with fake
+query, Authorization, custom-header and body markers on October 24. The actual native handled
+occurrence at **17:45:52 UTC** retained the closed error envelope, a request-header allowlist and
+method/path metadata. The uncaught nested-error occurrence at **17:54:48 UTC** retained the closed
+outer message and source stack, without traversing the fake private `Error.cause`. Neither full
+rendered issue event contained the fake query, authorization, custom header, body or private-cause
+markers. Invocation logs and tracing were disabled. These are native boundary observations, not a
+promise that arbitrary text deliberately placed in an outer error message will be removed; owning
+entrypoints must continue producing closed outer errors. Private event evidence is retained outside
+the repository. No production Issues activation was needed for these probes.
+
+The issue screen's external-destination setup did not offer email. The enabled account notification
+policy's sample email therefore remains insufficient evidence of actual Issue delivery. Investigate
+the account-supported native Issues SQL dataset with the existing email-capable monitors before
+adding any custom delivery bridge. Existing alerts remain enabled until that replacement is proven.
+
+At 17:13:40 UTC, the missing-Workflow monitor was temporarily pointed at a nonexistent closed test
+name, leaving the actual canary and all business work running. Cloudflare recorded a real zero-count
+firing at **17:22:57 UTC** (correlation `2114045810818682880`); its operator email arrived at
+**17:26:14 UTC**. The original actual-canary success query was restored and read back at
+**17:30:03 UTC**, retaining the ten-minute interval and thirty-minute repeat. This verifies the
+zero-signal detector and delivery, not a real Workflow outage. Recovery receipt is still pending.
+
 ## Safe recovery
 
 1. Find the owner using the closed operation name, then inspect the private Queue/Workflow and its

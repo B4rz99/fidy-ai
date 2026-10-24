@@ -1273,3 +1273,50 @@ test("distinguishes filtered history from an empty pending inbox when nothing is
       );
     })
   ));
+
+const reviewCardHeight = (element: Element): number => element.getBoundingClientRect().height;
+
+test("keeps history geometry independent of selection retained in the hidden pending panel", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [
+        { id, revision: 0, status: "pending", draft: calendarDraft },
+        { id: secondId, revision: 0, status: "skipped", draft: calendarDraft },
+      ];
+      yield* Effect.tryPromise(() => page.setViewportSize({ width: 1654, height: 978 }));
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Historial", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Elemento omitido", exact: true })).toBeVisible()
+      );
+      const before = yield* Effect.tryPromise(() =>
+        page.locator('[data-review="detail"]').filter({ visible: true }).evaluate(reviewCardHeight)
+      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: /Pendientes/u }).click());
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").first().check());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Omitir 1 seleccionado", exact: true })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Historial", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Elemento omitido", exact: true })).toBeVisible()
+      );
+      const after = yield* Effect.tryPromise(() =>
+        page.locator('[data-review="detail"]').filter({ visible: true }).evaluate(reviewCardHeight)
+      );
+      expect(after).toBe(before);
+    })
+  ));

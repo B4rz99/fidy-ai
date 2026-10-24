@@ -32,20 +32,41 @@ const selectedDate = (date: Option.Option<Date>, timeZone: string): string =>
 const dateLabel = (value: string): string =>
   value === "" ? "Selecciona una fecha" : value.split("-").toReversed().join("-");
 
+const compactDateLabel = (value: string): string =>
+  new Intl.DateTimeFormat("es-CO", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  })
+    .formatToParts(new Date(`${value}T12:00:00Z`))
+    .filter((part) => ["day", "month", "year"].includes(part.type))
+    .map((part) => part.value.replace(/\.$/u, ""))
+    .join(" ");
+
 const calendarLabel = ({
   appearance,
   value,
 }: Pick<DateFieldProps, "appearance" | "value">): string => {
   if (appearance === "filter") return "Fecha";
   if (appearance === "review" && value !== "") {
-    return new Intl.DateTimeFormat("es-CO", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      timeZone: "UTC",
-    }).format(new Date(`${value}T12:00:00Z`));
+    return compactDateLabel(value);
   }
   return dateLabel(value);
+};
+
+const calendarAccessibleLabel = (props: DateFieldProps): string => {
+  if (props.appearance === "filter") return props.label;
+  if (props.appearance !== "review" || props.value === "") {
+    return `${props.label}: ${calendarLabel(props)}`;
+  }
+  const date = new Intl.DateTimeFormat("es-CO", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${props.value}T12:00:00Z`));
+  return `${props.label}: ${date}`;
 };
 
 export const CalendarField = (props: DateFieldProps): JSX.Element => {
@@ -56,7 +77,7 @@ export const CalendarField = (props: DateFieldProps): JSX.Element => {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         id={props.id}
-        aria-label={props.appearance === "filter" ? props.label : `${props.label}: ${visibleLabel}`}
+        aria-label={calendarAccessibleLabel(props)}
         render={
           <Button
             contentLayout="wrap"

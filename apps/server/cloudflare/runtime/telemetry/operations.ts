@@ -28,7 +28,7 @@ import {
   type TelemetryWorkDescriptor as WorkDescriptor,
   maximumTelemetryDurationMilliseconds,
 } from "../../../src/shell/observability/contract";
-import { Clock, Data, Effect, Option, Schema } from "effect";
+import { Clock, Data, Effect, Logger, Option, Schema } from "effect";
 import { dual } from "effect/Function";
 
 /** Constructs active Worker spans around closed synchronous export boundaries. */
@@ -49,11 +49,12 @@ export const makeWorkerTelemetry = (
 /** Cloudflare-native metadata-only structured logging for production Worker entrypoints. */
 export const cloudflareWorkerTelemetry = makeWorkerTelemetry({
   exportWork: (record) => {
+    const write = record.outcome === "failed" ? Effect.logError : Effect.log;
     Effect.runSync(
-      Effect.log({
+      write({
         ...record,
         message: `fidy.work operation=${record.operation} outcome=${record.outcome} statusClass=${record.statusClass ?? "none"}`,
-      })
+      }).pipe(Effect.provideService(Logger.LogToStderr, record.outcome === "failed"))
     );
   },
   exportEvent: (event) => {

@@ -399,7 +399,7 @@ export const verifyRecoveryAccess = Effect.fn(
 );
 
 /** Script settings are independent of gradual code uploads; verify privacy before staging. */
-export const redactReleaseQueries = Effect.fn(function* (
+export const configureReleaseObservability = Effect.fn(function* (
   env: Pick<Config, "account" | "token">,
   names: ReadonlyArray<string>,
   client: HttpClient.HttpClient
@@ -410,6 +410,7 @@ export const redactReleaseQueries = Effect.fn(function* (
       observability: Schema.Struct({
         enabled: Schema.Literal(true),
         redact_query_string: Schema.Literal(true),
+        issues: Schema.Struct({ enabled: Schema.Literal(true) }),
         logs: Schema.Struct({
           enabled: Schema.Literal(true),
           invocation_logs: Schema.Literal(false),
@@ -430,6 +431,7 @@ export const redactReleaseQueries = Effect.fn(function* (
               enabled: freeTierWorkerObservability.enabled,
               head_sampling_rate: freeTierWorkerObservability.headSamplingRate,
               redact_query_string: freeTierWorkerObservability.redactQueryString,
+              issues: freeTierWorkerObservability.issues,
               logs: {
                 enabled: freeTierWorkerObservability.logs.enabled,
                 head_sampling_rate: freeTierWorkerObservability.logs.headSamplingRate,
@@ -449,7 +451,7 @@ export const redactReleaseQueries = Effect.fn(function* (
       Effect.mapError(
         () =>
           new ReleaseFailure({
-            message: "Release staging refused: request query redaction is unverified",
+            message: "Release staging refused: private operational observability is unverified",
           })
       )
     );
@@ -1015,7 +1017,7 @@ const stage = Effect.fn(function* (port: ReleasePort, env: Config, client: HttpC
   ) {
     return yield* Effect.fail(Error("Alchemy candidate receipts are incomplete"));
   }
-  yield* redactReleaseQueries(env, [snapshot.public.name, snapshot.core.name], client);
+  yield* configureReleaseObservability(env, [snapshot.public.name, snapshot.core.name], client);
   const recovery = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       CLOUDFLARE_ACCESS_ISSUER: Schema.String.check(

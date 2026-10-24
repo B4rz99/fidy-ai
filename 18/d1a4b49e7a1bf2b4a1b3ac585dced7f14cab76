@@ -1,0 +1,16 @@
+apps/web/src/features/needs-review/FEATURE.md
+  h_c6d49c804e0ad2 38-39,55
+apps/web/src/ui/components/review-workspace.css
+  h_c6d49c804e0ad2 2,11,21-24,43-45,49-52,56-58,62,65,67,71-74,102-104,112-114,117,120,122,127,142,202,215-216,225,248-249,263,272,287-290,305,323,332-335,339-340,352-353,362,366-367,373-374,411-415,418,437,447,449-451,474-477,486-502,505,514,519-531,535,544,560-580,584,587,600-601,614,625,649-706
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "18d1a4b49e7a1bf2b4a1b3ac585dced7f14cab76",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

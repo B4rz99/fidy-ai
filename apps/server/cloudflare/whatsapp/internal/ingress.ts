@@ -288,7 +288,11 @@ const routeTextInbound = (
         },
       });
     }
-    if (/^(Confirmo|Rechazo) asociación /u.test(input.event.content.text.trim())) {
+    if (
+      /^(?:(Confirmo|Rechazo) asociación |(?:Vincular|No vincular) (?:Google|Microsoft): )/u.test(
+        input.event.content.text.trim()
+      )
+    ) {
       const confirmation = yield* receiveWhatsAppProviderHandoff({ environment, inbound: input });
       return Option.getOrElse(confirmation, () => answer(HTTP_CONFLICT));
     }

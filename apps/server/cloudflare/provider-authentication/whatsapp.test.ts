@@ -1,3 +1,4 @@
+import { discloseLegacyChat, disposeLegacyConsent } from "./legacy-disclosure.test-fixture";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { whatsappMessages } from "./whatsapp-messages.test-fixture";
 import { Clock, Effect, Option, Schema } from "effect";
@@ -5,7 +6,7 @@ import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { recoverPendingDisclosures } from "../consent/ingress/runtime";
 import { disposeJourneys, setup, setupWhatsApp } from "./journey.test-fixture";
 
-afterAll(disposeJourneys);
+afterAll(() => Promise.all([disposeJourneys(), disposeLegacyConsent()]));
 afterEach(() => vi.restoreAllMocks());
 
 const consentCooldownMilliseconds = 3_100;
@@ -165,11 +166,11 @@ it("isolates sandbox receipt lookup to the originating caller and bounds repeate
           });
         });
       });
+      expect((yield* discloseLegacyChat(journey, "Hola", { phone: "573001234567" })).status).toBe(
+        200
+      );
       expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", { phone: "573001234567" })).status
-      ).toBe(200);
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Acepto", {
+        (yield* discloseLegacyChat(journey, "Acepto", {
           caller: "CO.Person2",
           phone: "573009876543",
         })).status
@@ -241,9 +242,9 @@ it.each([
         if (fault === "oversized") return Promise.resolve(new Response("x".repeat(65_537)));
         return Promise.resolve(lifecycleHistory(fault, correlation, now));
       });
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", { phone: "573001234567" })).status
-      ).toBe(200);
+      expect((yield* discloseLegacyChat(journey, "Hola", { phone: "573001234567" })).status).toBe(
+        200
+      );
       const sent = yield* Schema.decodeEffect(
         Schema.fromJsonString(
           Schema.Struct({
@@ -326,11 +327,11 @@ it("cannot open A's Consent decision with B's delivered provider correlation", (
           });
         });
       });
+      expect((yield* discloseLegacyChat(journey, "Hola", { phone: "573001234567" })).status).toBe(
+        200
+      );
       expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", { phone: "573001234567" })).status
-      ).toBe(200);
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", {
+        (yield* discloseLegacyChat(journey, "Hola", {
           caller: "CO.Person2",
           phone: "573009876543",
         })).status
@@ -404,9 +405,9 @@ it.each(["callback", "missing_callback"])(
             });
           });
         });
-        expect(
-          (yield* whatsappMessages.sendChat(journey, "Hola", { phone: "573001234567" })).status
-        ).toBe(200);
+        expect((yield* discloseLegacyChat(journey, "Hola", { phone: "573001234567" })).status).toBe(
+          200
+        );
         const sent = yield* Schema.decodeEffect(
           Schema.fromJsonString(
             Schema.Struct({
@@ -479,9 +480,9 @@ it("delivers signup disclosure to the provider-observed phone for the configured
           });
         })
       );
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", { phone: "573001234567" })).status
-      ).toBe(200);
+      expect((yield* discloseLegacyChat(journey, "Hola", { phone: "573001234567" })).status).toBe(
+        200
+      );
       const message = yield* Schema.decodeEffect(
         Schema.fromJsonString(
           Schema.Struct({
@@ -516,8 +517,7 @@ it.each([
           })
         );
         expect(
-          (yield* whatsappMessages.sendChat(journey, "Hola", phone === undefined ? {} : { phone }))
-            .status
+          (yield* discloseLegacyChat(journey, "Hola", phone === undefined ? {} : { phone })).status
         ).toBe(200);
         expect(outbound).toHaveLength(expectedSends);
         if (expectedSends === 1) {

@@ -1,9 +1,10 @@
+import { discloseLegacyChat, disposeLegacyConsent } from "./legacy-disclosure.test-fixture";
 import { Clock, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { disposeJourneys, setupWhatsApp } from "./journey.test-fixture";
 import { whatsappMessages } from "./whatsapp-messages.test-fixture";
 
-afterAll(disposeJourneys);
+afterAll(() => Promise.all([disposeJourneys(), disposeLegacyConsent()]));
 afterEach(() => vi.restoreAllMocks());
 
 it.each([
@@ -48,7 +49,7 @@ it.each([
           });
         });
       });
-      expect((yield* whatsappMessages.sendChat(journey, "Hola")).status).toBe(200);
+      expect((yield* discloseLegacyChat(journey, "Hola")).status).toBe(200);
       let status: "sent" | "delivered" | "failed" = "sent";
       if (fault === "delivered_hint") status = "delivered";
       if (fault === "failed_hint") status = "failed";

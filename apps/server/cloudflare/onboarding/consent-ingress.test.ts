@@ -1,3 +1,7 @@
+import {
+  disposeLegacyConsent,
+  receiveLegacyConsent,
+} from "../provider-authentication/legacy-disclosure.test-fixture";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { DisclosureSnapshot, maxWhatsAppWebhookBytes } from "../../src/shell/consent/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
@@ -43,7 +47,7 @@ const bsuid = "CO.13491208655302741918";
 
 const nowSeconds = Math.floor(Effect.runSync(Clock.currentTimeMillis) / 1000);
 const databases = isolatedTestDatabases();
-afterAll(() => databases.dispose());
+afterAll(() => Promise.all([databases.dispose(), disposeLegacyConsent()]));
 
 const runSweep = (db: D1Database): Promise<void> => Effect.runPromise(sweepExpiredConsent(db)());
 
@@ -126,6 +130,13 @@ const setup = (
           ])
         );
       }
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TABLE IF NOT EXISTS whatsapp_signup_invitations(id TEXT PRIMARY KEY,source_portfolio_id TEXT,source_bsuid TEXT,source_phone_number_id TEXT,source_message_id TEXT,source_phone TEXT,created_at_ms INTEGER,expires_at_ms INTEGER)"
+          )
+          .run()
+      );
       const send = (
         body: string,
         signature?: string,
@@ -134,57 +145,81 @@ const setup = (
         const bytes = new TextEncoder().encode(body);
         return (
           signature === undefined ? signWebhook(secret, bytes) : Promise.resolve(signature)
-        ).then((proof) =>
-          publicWorker.fetch(
-            new Request("https://api.fidyapp.com/providers/kapso/callback", {
-              method: "POST",
-              headers: {
-                "x-webhook-signature": proof,
-                "x-webhook-event": eventName,
-                "x-idempotency-key": "delivery-1",
-              },
-              body: bytes,
-            }),
-            {
-              BROWSER_ORIGIN: "https://app.fidyapp.com",
-              LOCAL_CANONICAL_READ_BEARER: "local",
-              PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
-              RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-              CORE: {
-                fetch: (request) =>
-                  coreWorker.fetch(new Request(request), {
-                    AI: { run: () => Promise.reject(new Error("unused")) },
-                    CONTRACT_DIGEST:
-                      "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-                    DB: db,
-                    HOSTED_AI_MODEL: approvedWorkersAiModel,
-                    BROWSER_ORIGIN: "https://app.fidyapp.com",
-                    WOMPI_ENVIRONMENT: "",
-                    WOMPI_PUBLIC_KEY: "",
-                    WOMPI_PRIVATE_KEY: "",
-                    WOMPI_INTEGRITY_SECRET: "",
-                    USER_TRANSACTION_COORDINATOR: {
-                      getByName: (name: string) => ({
-                        fetch: (request: Request) =>
-                          Option.isSome(coordinator)
-                            ? coordinator.value(name, request)
-                            : Promise.reject(new Error("unused")),
-                      }),
-                    },
-                    KAPSO_WEBHOOK_SECRET: secret,
-                    CLOUDFLARE_ACCESS_ISSUER: "",
-                    CLOUDFLARE_ACCESS_AUDIENCE: "",
-                    KAPSO_API_KEY: "fake-provider-key",
-                    WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
+        ).then((proof) => {
+          const native = (): Promise<Response> =>
+            publicWorker.fetch(
+              new Request("https://api.fidyapp.com/providers/kapso/callback", {
+                method: "POST",
+                headers: {
+                  "x-webhook-signature": proof,
+                  "x-webhook-event": eventName,
+                  "x-idempotency-key": "delivery-1",
+                },
+                body: bytes,
+              }),
+              {
+                BROWSER_ORIGIN: "https://app.fidyapp.com",
+                LOCAL_CANONICAL_READ_BEARER: "local",
+                PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+                RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+                CORE: {
+                  fetch: (request) =>
+                    coreWorker.fetch(new Request(request), {
+                      AI: { run: () => Promise.reject(new Error("unused")) },
+                      CONTRACT_DIGEST:
+                        "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+                      DB: db,
+                      HOSTED_AI_MODEL: approvedWorkersAiModel,
+                      BROWSER_ORIGIN: "https://app.fidyapp.com",
+                      WOMPI_ENVIRONMENT: "",
+                      WOMPI_PUBLIC_KEY: "",
+                      WOMPI_PRIVATE_KEY: "",
+                      WOMPI_INTEGRITY_SECRET: "",
+                      USER_TRANSACTION_COORDINATOR: {
+                        getByName: (name: string) => ({
+                          fetch: (request: Request) =>
+                            Option.isSome(coordinator)
+                              ? coordinator.value(name, request)
+                              : Promise.reject(new Error("unused")),
+                        }),
+                      },
+                      KAPSO_WEBHOOK_SECRET: secret,
+                      CLOUDFLARE_ACCESS_ISSUER: "",
+                      CLOUDFLARE_ACCESS_AUDIENCE: "",
+                      KAPSO_API_KEY: "fake-provider-key",
+                      WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
 
-                    WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio,
-                    RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-                    ...canaryBindings,
-                  }),
-              },
-            }
-          )
-        );
+                      WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio,
+                      RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+                      ...canaryBindings,
+                    }),
+                },
+              }
+            );
+          const parsed = Schema.decodeOption(
+            Schema.fromJsonString(
+              Schema.Struct({
+                message: Schema.optionalKey(
+                  Schema.Struct({ type: Schema.optionalKey(Schema.String) })
+                ),
+              })
+            )
+          )(body);
+          return eventName === "whatsapp.message.received" &&
+            Option.isSome(parsed) &&
+            parsed.value.message?.type === "text"
+            ? receiveLegacyConsent({
+                db,
+                rawBody: bytes,
+                signature: proof,
+                secret,
+                portfolio,
+                sandboxPhoneNumberId: "",
+                deliveryKey: "delivery-1",
+                native,
+              })
+            : native();
+        });
       };
       return {
         db,

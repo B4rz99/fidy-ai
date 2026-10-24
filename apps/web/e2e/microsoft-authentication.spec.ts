@@ -4,6 +4,7 @@ import {
   isolateProviderSource,
   signupJourney,
   whatsappAssociationJourney,
+  whatsappLinkSignupJourney,
 } from "./provider-authentication.journeys";
 
 playwright.test.describe.configure({ mode: "parallel" });
@@ -35,3 +36,9 @@ for (const existing of [false, true]) {
       whatsappAssociationJourney({ configuration, page, context, request, existing })
   );
 }
+
+playwright.test(
+  "WhatsApp link signup accepts Consent in the browser and returns directly to the chat",
+  ({ page, context, request }) =>
+    whatsappLinkSignupJourney({ configuration, page, context, request })
+);

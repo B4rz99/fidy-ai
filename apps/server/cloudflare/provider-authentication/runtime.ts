@@ -41,6 +41,11 @@ export const sweepProviderAuthentication = ({
           "DELETE FROM provider_authentication_attempts WHERE id IN (SELECT id FROM provider_authentication_attempts WHERE expires_at_ms<? ORDER BY expires_at_ms,id LIMIT ?)"
         )
         .bind(current - retainedAttemptMilliseconds, maximumSweepRows),
+      db
+        .prepare(
+          "DELETE FROM whatsapp_signup_invitations WHERE id IN(SELECT id FROM whatsapp_signup_invitations WHERE expires_at_ms<? ORDER BY expires_at_ms,id LIMIT ?)"
+        )
+        .bind(current - retainedAttemptMilliseconds, maximumSweepRows),
     ])
   ).pipe(
     Effect.asVoid,

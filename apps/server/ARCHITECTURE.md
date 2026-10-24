@@ -88,6 +88,14 @@ boundary. Provider identifiers, queue messages, object references and coordinati
 context rather than reusable permission. Identity's caller association is distinct from channel
 routing; provider contact email is distinct from an independently verified mailbox credential.
 
+Provider Authentication owns ten-minute WhatsApp signup invitations separately from accepted-chat
+Consent exchanges: the invitation carries only immutable source metadata and has its own expiry and
+erasure lifecycle. A first signed message creates a link, not a User or Consent. Current browser
+Consent, verified Google/Microsoft identity and exact originating-chat confirmation of the reviewed
+provider account compose initial association and invitation consumption in the onboarding D1 unit. Public references
+cannot approve anything. A prepared WhatsApp message removes manual code copying; only authenticated
+native receipt can settle its per-provider-attempt review. Original accepted-chat handoffs retain their native confirmation proof.
+
 Onboarding composes owner preparations in one D1 unit with exact originating proof consumption.
 Returning authentication preserves established User identity and creation facts. Browser Login alone
 establishes a WebSession with the browser's private verifier.

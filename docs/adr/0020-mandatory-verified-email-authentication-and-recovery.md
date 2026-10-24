@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-23
-- **Amended:** 2026-10-07
+- **Amended:** 2026-10-24
 - **Implementation issue:** [Complete signup and browser login](https://github.com/B4rz99/fidy-ai/issues/1086)
 - **Historical implementation:** [Verified email authentication and backup recovery](https://github.com/B4rz99/fidy-ai/issues/14)
 - **Amends:** [ADR 0015](./0015-browser-paired-web-authentication.md) for provider approval and [ADR 0011](./0011-bsuid-authority-for-whatsapp-identity.md) for explicit initial association of an existing User; their session ownership and BSUID authority remain.
@@ -118,3 +118,15 @@ browser journeys prove backup recovery and rotation without WhatsApp or mailbox 
 authenticated operator CLI and its deployed evidence remain tracked in #1092.
 See the [authentication feature map](../operations/authentication-feature-map.md) for current local
 evidence and remaining prelaunch checks.
+
+## Link-first interaction amendment (#1531)
+
+The current browser Consent notice may replace the earlier separate chat acceptance exchange.
+Google/Microsoft remains mandatory. A short first message supplies the signup link; after provider
+verification, the browser opens Fidy WhatsApp with the exact reviewed account confirmation already
+filled in. The caller presses Send rather than requesting Estado, copying a review identifier and
+replying manually. Native confirmation is still required from the original authenticated Business
+Portfolio/BSUID and business endpoint, after review issuance and for the exact current provider
+attempt. A forwarded link or browser action alone cannot establish WhatsAppIdentity. The initiating
+page keeps the independent private verifier in memory until completion and session redemption.
+New Users still receive their one-time recovery disclosure only on the first-party page.

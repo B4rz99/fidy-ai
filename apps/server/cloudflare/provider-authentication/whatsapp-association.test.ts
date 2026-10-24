@@ -1,3 +1,5 @@
+import { discloseLegacyChat, disposeLegacyConsent } from "./legacy-disclosure.test-fixture";
+import { authenticateChatProvider } from "./whatsapp-provider.test-fixture";
 import { verifyHandoffCutover } from "./handoff-cutover.test-fixture";
 import { whatsappMessages } from "./whatsapp-messages.test-fixture";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
@@ -7,7 +9,7 @@ import { sweepExpiredConsent } from "../consent/ingress/runtime";
 import { newId } from "../secret-material/operations";
 import { disposeJourneys, setup, setupHostedWhatsApp, setupWhatsApp } from "./journey.test-fixture";
 
-afterAll(disposeJourneys);
+afterAll(() => Promise.all([disposeJourneys(), disposeLegacyConsent()]));
 afterEach(() => vi.restoreAllMocks());
 
 const providerSecondMilliseconds = 1_100;
@@ -103,17 +105,12 @@ it("permits a fresh greeting after definite provider rejection without retrying 
       const now = yield* Clock.currentTimeMillis;
       const message = "wamid.rejected-greeting";
       const timestamp = Math.floor(now / 1000);
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", { message, timestamp })).status
-      ).toBe(200);
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", { message, timestamp })).status
-      ).toBe(409);
+      expect((yield* discloseLegacyChat(journey, "Hola", { message, timestamp })).status).toBe(200);
+      expect((yield* discloseLegacyChat(journey, "Hola", { message, timestamp })).status).toBe(409);
       expect(provider).toHaveBeenCalledTimes(1);
       const replacementTimestamp = Math.floor((yield* Clock.currentTimeMillis) / 1000) + 1;
       expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", { timestamp: replacementTimestamp }))
-          .status
+        (yield* discloseLegacyChat(journey, "Hola", { timestamp: replacementTimestamp })).status
       ).toBe(200);
       expect(provider).toHaveBeenCalledTimes(2);
     })
@@ -169,13 +166,12 @@ it("refuses late delivery for a rejected disclosure without changing its replace
           },
           { signature: Option.none(), event: "whatsapp.message.delivered" }
         );
-      expect((yield* whatsappMessages.sendChat(journey, "Hola")).status).toBe(200);
+      expect((yield* discloseLegacyChat(journey, "Hola")).status).toBe(200);
       const rejectedToken = yield* token(outbound[0] ?? "");
       expect((yield* deliver(rejectedToken, "wamid.rejected")).status).toBe(409);
       const replacementTimestamp = Math.floor((yield* Clock.currentTimeMillis) / 1000) + 1;
       expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", { timestamp: replacementTimestamp }))
-          .status
+        (yield* discloseLegacyChat(journey, "Hola", { timestamp: replacementTimestamp })).status
       ).toBe(200);
       const replacementToken = yield* token(outbound[1] ?? "");
       expect(replacementToken).not.toBe(rejectedToken);
@@ -190,71 +186,6 @@ it("refuses late delivery for a rejected disclosure without changing its replace
     })
   ));
 
-const authenticateChatProvider = (
-  journey: Awaited<ReturnType<typeof setup>>,
-  reference: string
-): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    const disclosureResponse = yield* Effect.tryPromise(() =>
-      journey.send("/web/providers/disclosure")
-    );
-    const disclosure = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ revision: Schema.String })
-    )(yield* Effect.tryPromise(() => disclosureResponse.json()));
-    const start = yield* Effect.tryPromise(() =>
-      journey.send("/web/providers/google/start", {
-        ...journey.pairing,
-        intent: "signup",
-        consentRevision: disclosure.revision,
-        ...(reference === "" ? {} : { handoffReference: reference }),
-      })
-    );
-    expect(start.status).toBe(200);
-    const result = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ authorizationUrl: Schema.String })
-    )(yield* Effect.tryPromise(() => start.json()));
-    const authorization = new URL(result.authorizationUrl);
-    const { generateKeyPair, exportJWK, SignJWT } = yield* Effect.tryPromise(() => import("jose"));
-    const keys = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
-    const jwk = yield* Effect.tryPromise(() => exportJWK(keys.publicKey));
-    const token = yield* Effect.tryPromise(() =>
-      new SignJWT({ nonce: authorization.searchParams.get("nonce"), email: "person@example.test" })
-        .setProtectedHeader({ alg: "RS256", kid: "chat" })
-        .setIssuer("https://accounts.google.com")
-        .setSubject("chat-provider-user")
-        .setAudience("test-client")
-        .setIssuedAt()
-        .setExpirationTime("5m")
-        .sign(keys.privateKey)
-    );
-    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = input instanceof Request ? input.url : input.toString();
-      if (url === "https://oauth2.googleapis.com/token") {
-        return Promise.resolve(Response.json({ id_token: token }));
-      }
-      if (url === "https://www.googleapis.com/oauth2/v3/certs") {
-        return Promise.resolve(Response.json({ keys: [{ ...jwk, kid: "chat", alg: "RS256" }] }));
-      }
-      if (url.startsWith("https://api.kapso.ai/")) {
-        return Promise.resolve(
-          Response.json({
-            messaging_product: "whatsapp",
-            messages: [{ id: "wamid.association-review" }],
-          })
-        );
-      }
-      return Promise.reject(new Error("Unexpected external destination"));
-    });
-    expect(
-      (yield* Effect.tryPromise(() =>
-        journey.send(
-          `/providers/google/callback?state=${authorization.searchParams.get("state")}&code=fixture`,
-          undefined,
-          { cookie: start.headers.get("set-cookie")?.split(";")[0] ?? "" }
-        )
-      )).status
-    ).toBe(303);
-  });
 const requestReview = (
   journey: Awaited<ReturnType<typeof setup>>
 ): Effect.Effect<string, Cause.UnknownError | Schema.SchemaError> =>
@@ -444,7 +375,7 @@ it("starts in authenticated WhatsApp with provider instructions and creates no m
           });
         })
       );
-      expect((yield* whatsappMessages.sendChat(journey, "Hola")).status).toBe(200);
+      expect((yield* discloseLegacyChat(journey, "Hola")).status).toBe(200);
       const message = yield* Schema.decodeUnknownEffect(
         Schema.Struct({
           text: Schema.Struct({ body: Schema.String }),
@@ -491,16 +422,28 @@ it("starts in authenticated WhatsApp with provider instructions and creates no m
       expect(handoffText.text.body).toContain("Google o Microsoft");
       const reference = /handoff=([0-9a-f-]{36})/u.exec(handoffText.text.body)?.[1] ?? "";
       yield* authenticateChatProvider(journey, reference);
-      const code = yield* requestReview(journey);
-      yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
-      expect(
-        (yield* whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
-          reply: "wamid.association-review",
-        })).status
-      ).toBe(200);
+      const review = yield* Effect.tryPromise(() =>
+        journey
+          .send("/web/providers/google/status", journey.pairing)
+          .then((response) => response.json())
+          .then(
+            Schema.decodeUnknownPromise(
+              Schema.Struct({
+                status: Schema.Literal("awaiting_association"),
+                associationCode: Schema.String,
+                confirmationText: Schema.String,
+              })
+            )
+          )
+      );
+      yield* whatsappMessages.advanceClock(2000);
+      expect((yield* whatsappMessages.sendChat(journey, review.confirmationText)).status).toBe(200);
       expect(
         (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/google/complete", journey.pairing)
+          journey.send("/web/providers/google/complete", {
+            ...journey.pairing,
+            associationCode: review.associationCode,
+          })
         )).status
       ).toBe(200);
 
@@ -751,7 +694,7 @@ it("allows an explicit new handoff after expiry without reusing the consumed pub
       expect(
         (yield* Effect.tryPromise(() =>
           journey.db
-            .prepare("SELECT id FROM whatsapp_provider_handoffs WHERE id<>?")
+            .prepare("SELECT id FROM whatsapp_signup_invitations WHERE id<>?")
             .bind(reference)
             .all()
         )).results
@@ -770,13 +713,16 @@ it("allows an explicit new handoff after expiry without reusing the consumed pub
   ));
 
 const expireHandoffs = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.tryPromise(() =>
-    db
-      .prepare(
-        "UPDATE whatsapp_provider_handoffs SET created_at_ms=created_at_ms-1000,expires_at_ms=created_at_ms-1000"
-      )
-      .run()
-  ).pipe(Effect.asVoid);
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "UPDATE whatsapp_provider_handoffs SET created_at_ms=created_at_ms-1000,expires_at_ms=created_at_ms-1000"
+        )
+        .run()
+    );
+    yield* whatsappMessages.advanceClock(600001);
+  });
 
 it.each(["source", "spend", "storage"] as const)(
   "refuses native sends when %s admission fails",

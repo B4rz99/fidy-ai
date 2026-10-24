@@ -1,6 +1,5 @@
 import { BigDecimal, Option } from "effect";
 import type { JSX } from "react";
-import { useMemo } from "react";
 import { formatMoney } from "@/transport/money";
 import { type Transaction, formatOccurrence } from "./presentation";
 
@@ -80,59 +79,63 @@ const dateRange = ({
     last: format(Option.fromNullishOr(dates.at(-1))),
   };
 };
+const SummaryCount = ({ transactions }: Pick<SummaryProps, "transactions">): JSX.Element => (
+  <p data-transaction-slot="transaction-summary-count">
+    {transactions.length} transacciones ·{" "}
+    {transactions.filter((record) => record.direction === "inflow").length} ingresos ·{" "}
+    {transactions.filter((record) => record.direction === "outflow").length} gastos
+  </p>
+);
+const CurrencySummary = ({
+  currency,
+  props,
+}: Readonly<{
+  currency: Transaction["money"]["currency"];
+  props: SummaryProps;
+}>): JSX.Element => {
+  const transactions = props.transactions.filter((record) => record.money.currency === currency);
+  const figures = currencyFigures(transactions, props.locale);
+  return (
+    <div>
+      <span data-transaction-slot="transaction-summary-currency">{currency}</span>
+      <dl data-transaction-slot="transaction-summary-totals">
+        {figures.slice(0, 2).map((figure) => (
+          <div key={figure.label}>
+            <dt>{figure.label}</dt>
+            <dd>{figure.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <SummaryCount transactions={transactions} />
+      <dl data-transaction-slot="transaction-summary-facts">
+        {figures.slice(2).map((figure) => (
+          <SummaryLine key={figure.label} label={figure.label} value={figure.value} />
+        ))}
+      </dl>
+    </div>
+  );
+};
 /** Summarizes only the displayed FinancialRecord coverage; Money is aggregated within each Currency. */
 export const TransactionSummary = (props: SummaryProps): JSX.Element => {
-  const currencies = Array.from(
-    new Set(props.transactions.map((transaction) => transaction.money.currency))
-  );
+  const currencies = Array.from(new Set(props.transactions.map((record) => record.money.currency)));
   const range = dateRange(props);
-  const currencyNames = useMemo(
-    () => new Intl.DisplayNames(props.locale, { type: "currency" }),
-    [props.locale]
-  );
   return (
-    <section aria-label="Resumen de transacciones" className="flex flex-col gap-5">
-      <div>
-        <h2 className="text-xl font-semibold">Resumen</h2>
-        {props.partial ? (
-          <p className="text-sm text-muted-foreground">
-            Solo transacciones cargadas que coinciden con los filtros.
-          </p>
-        ) : null}
-      </div>
-      <dl>
-        <SummaryLine label="Total de transacciones" value={String(props.transactions.length)} />
-        <SummaryLine
-          label="Ingresos"
-          value={String(
-            props.transactions.filter((record) => record.direction === "inflow").length
-          )}
-        />
-        <SummaryLine
-          label="Gastos"
-          value={String(
-            props.transactions.filter((record) => record.direction === "outflow").length
-          )}
-        />
-      </dl>
+    <section aria-label="Resumen de transacciones" data-transaction-slot="transaction-summary">
+      <h2>Resumen</h2>
+      {props.partial ? (
+        <p className="text-sm text-muted-foreground">
+          Solo transacciones cargadas que coinciden con los filtros.
+        </p>
+      ) : null}
+      {currencies.length !== 1 ? (
+        <p className="text-sm text-muted-foreground">
+          {props.transactions.length} transacciones en total
+        </p>
+      ) : null}
       {currencies.map((currency) => (
-        <div key={currency} className="border-t pt-4">
-          {currencies.length > 1 ? (
-            <h3 className="text-xs font-semibold tracking-wider text-muted-foreground">
-              {currencyNames.of(currency)}
-            </h3>
-          ) : null}
-          <dl>
-            {currencyFigures(
-              props.transactions.filter((record) => record.money.currency === currency),
-              props.locale
-            ).map((figure) => (
-              <SummaryLine key={figure.label} label={figure.label} value={figure.value} />
-            ))}
-          </dl>
-        </div>
+        <CurrencySummary key={currency} currency={currency} props={props} />
       ))}
-      <dl className="border-t pt-4">
+      <dl data-transaction-slot="transaction-summary-facts">
         <SummaryLine label="Primera transacción" value={range.first} />
         <SummaryLine label="Última transacción" value={range.last} />
       </dl>

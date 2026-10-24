@@ -18,6 +18,7 @@ import { FinancialReference } from "./financial-reference";
 import { PatternReference } from "./pattern-reference";
 import { DashboardReference } from "./dashboard-reference";
 import { AccessReference } from "./access-reference";
+import { TransactionsReference } from "./transactions-reference";
 import { WorkspaceReference } from "./workspace-reference";
 import "./reference.css";
 
@@ -263,6 +264,28 @@ const densityNotice = (
   </p>
 );
 
+const BudgetReference = (): JSX.Element => (
+  <section
+    aria-label="Indicadores de presupuestos"
+    className="flex flex-col gap-4 rounded-lg border bg-card p-5"
+  >
+    <h2 className="text-lg font-semibold">Presupuestos</h2>
+    <div>
+      <BudgetBalance over={false}>$ 120.000,00 disponibles</BudgetBalance>
+      <BudgetMeter
+        variant="default"
+        value={60}
+        over={false}
+        label="Presupuesto con saldo disponible"
+      />
+    </div>
+    <div>
+      <BudgetBalance over>$ 30.000,00 excedidos</BudgetBalance>
+      <BudgetMeter variant="default" value={100} over label="Presupuesto excedido" />
+    </div>
+  </section>
+);
+
 export const UIReference = (): JSX.Element => {
   const [theme, setTheme] = useState<Theme>("dark");
   const prefersDark = useSyncExternalStore(subscribeToTheme, systemDark);
@@ -291,28 +314,11 @@ export const UIReference = (): JSX.Element => {
           <FieldReference />
         </div>
         <WorkspaceReference />
+        <TransactionsReference />
         <DashboardReference />
         <CompactTableReference />
         <FinancialReference />
-        <section
-          aria-label="Indicadores de presupuestos"
-          className="flex flex-col gap-4 rounded-lg border bg-card p-5"
-        >
-          <h2 className="text-lg font-semibold">Presupuestos</h2>
-          <div>
-            <BudgetBalance over={false}>$ 120.000,00 disponibles</BudgetBalance>
-            <BudgetMeter
-              variant="default"
-              value={60}
-              over={false}
-              label="Presupuesto con saldo disponible"
-            />
-          </div>
-          <div>
-            <BudgetBalance over>$ 30.000,00 excedidos</BudgetBalance>
-            <BudgetMeter variant="default" value={100} over label="Presupuesto excedido" />
-          </div>
-        </section>
+        <BudgetReference />
         <FeedbackReference />
         <div className="grid gap-6 lg:grid-cols-2">
           <TransactionReference />

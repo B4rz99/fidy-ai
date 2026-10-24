@@ -85,7 +85,7 @@ export const TransactionDeletion = (
   };
   return (
     <section aria-label="Eliminar transacción" className="flex flex-col gap-4">
-      <h3 className="text-xl font-semibold">¿Eliminar esta transacción?</h3>
+      <h3 className="sr-only">¿Eliminar esta transacción?</h3>
       <p className="text-sm text-muted-foreground">
         Dejará de aparecer en tu historial y en los cálculos. No puedes deshacer esta acción.
         Conservamos los registros de dónde se obtuvo.
@@ -98,16 +98,17 @@ export const TransactionDeletion = (
           label="Actualizar transacciones"
         />
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <div data-transaction-slot="transaction-form-actions transaction-delete-actions">
           <Button variant="outline" disabled={props.status === "saving"} onClick={props.onCancel}>
             Cancelar
           </Button>
           <Button
-            variant="destructive"
+            variant="outline"
+            data-transaction-slot="transaction-danger"
             disabled={props.status !== "idle" || !props.editable}
             onClick={confirm}
           >
-            Eliminar definitivamente
+            Eliminar
           </Button>
         </div>
       )}

@@ -1,0 +1,16 @@
+apps/web/src/features/transactions/workspace.tsx
+  h_c6d49c804e0ad2 489-513
+apps/web/src/ui/components/transactions.tsx
+  h_c6d49c804e0ad2 45-46,62,73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "39d9fbab7f8ffe3a46fe8cc776654c4dd6df58fe",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

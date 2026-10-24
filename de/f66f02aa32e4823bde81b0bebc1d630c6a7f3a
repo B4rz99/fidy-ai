@@ -1,0 +1,18 @@
+DESIGN.md
+  h_c6d49c804e0ad2 717,722-723
+apps/web/e2e/budgets.spec.ts
+  h_c6d49c804e0ad2 162,188,247,325,646-701
+apps/web/src/features/budgets/workspace.tsx
+  h_c6d49c804e0ad2 83,90-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "def66f02aa32e4823bde81b0bebc1d630c6a7f3a",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

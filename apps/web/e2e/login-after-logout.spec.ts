@@ -31,9 +31,6 @@ for (const provider of [
         yield* Effect.tryPromise(() =>
           page.getByRole("button", { name: "Cerrar sesión", exact: true }).click()
         );
-        yield* Effect.tryPromise(() =>
-          page.getByRole("button", { name: "Ya tengo cuenta · Iniciar sesión" }).click()
-        );
         yield* Effect.tryPromise(() => context.route(provider.authorization, pendingProvider));
         const popup = yield* Effect.tryPromise(() => openProvider(page, provider.label));
         yield* Effect.tryPromise(() =>

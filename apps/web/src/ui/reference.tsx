@@ -16,6 +16,7 @@ import { cn } from "./class-names";
 import { BudgetBalance, BudgetMeter } from "@/ui/components/budget-meter";
 import { FinancialReference } from "./financial-reference";
 import { PatternReference } from "./pattern-reference";
+import { AccessReference } from "./access-reference";
 import { WorkspaceReference } from "./workspace-reference";
 import "./reference.css";
 
@@ -255,6 +256,12 @@ const EmptyReference = (): JSX.Element => (
   </Card>
 );
 
+const densityNotice = (
+  <p className="border-t pt-6 text-sm text-muted-foreground">
+    Poppins · Texto de lectura de 16 px · Controles principales de 44–48 px
+  </p>
+);
+
 export const UIReference = (): JSX.Element => {
   const [theme, setTheme] = useState<Theme>("dark");
   const prefersDark = useSyncExternalStore(subscribeToTheme, systemDark);
@@ -276,6 +283,7 @@ export const UIReference = (): JSX.Element => {
       <main className="mx-auto flex max-w-6xl flex-col gap-10 px-5 py-8 sm:px-6 lg:px-12">
         <ReferenceHeader theme={theme} onTheme={setTheme} />
         <PatternReference />
+        <AccessReference dark={dark} />
         <PaletteReference />
         <div className="grid gap-6 lg:grid-cols-2">
           <ActionReference />
@@ -308,9 +316,7 @@ export const UIReference = (): JSX.Element => {
           <TransactionReference />
           <EmptyReference />
         </div>
-        <p className="border-t pt-6 text-sm text-muted-foreground">
-          Poppins · Texto de lectura de 16 px · Controles principales de 44–48 px
-        </p>
+        {densityNotice}
       </main>
     </div>
   );

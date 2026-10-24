@@ -280,6 +280,11 @@ retain failed-run traces for seven days in the repository CI artifacts while dia
 Ubuntu pointer-drop failure. Other journeys capture no traces; separate screenshot and video artifacts
 stay disabled.
 
+Approved login visual review has a separate, opt-in local harness:
+`bun --bun playwright test --config playwright.capture.config.ts` from `apps/web`. It writes
+synthetic-fixture PNGs and unfiltered Axe reports to `/tmp/fidy-login-captures`, or to
+`FIDY_LOGIN_CAPTURE_DIRECTORY` when set. Its `.capture.ts` cases are outside normal CI discovery.
+
 The authenticated `/insights/recurring/$id` route reads the complete frozen recurring-charge report
 through `insights.getRecurringDigestReport`. Its server-owned report/path schemas cross the single
 browser client publication. The feature renders every historical item as escaped React text with

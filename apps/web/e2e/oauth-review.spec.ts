@@ -102,12 +102,7 @@ const loginFromReview = ({
     yield* Effect.tryPromise(() =>
       page.getByRole("link", { name: "Iniciar sesión", exact: true }).click()
     );
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "WhatsApp o correo verificado" }).click()
-    );
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
-    );
+    yield* Effect.tryPromise(() => page.getByRole("button", { name: "WhatsApp" }).click());
     const code = yield* Effect.tryPromise(() => visiblePairingCode(page));
     const approval = yield* Effect.tryPromise(() =>
       request.post(

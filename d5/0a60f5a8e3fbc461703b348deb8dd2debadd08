@@ -1,0 +1,59 @@
+apps/web/src/ui/access-reference.tsx
+  h_c6d49c804e0ad2 1-35
+.oxlintrc.json
+  h_c6d49c804e0ad2 265,276
+apps/web/e2e/oauth-review.spec.ts
+  h_c6d49c804e0ad2 105
+apps/web/playwright.capture.config.ts
+  h_c6d49c804e0ad2 1-8
+apps/web/ARCHITECTURE.md
+  h_c6d49c804e0ad2 283-287
+apps/web/src/features/provider-authentication/feature.tsx
+  h_c6d49c804e0ad2 8-9,66-72,78-79,91-92,106,108,110,112-123,219-227,231,235,240-242,244-276,289
+apps/web/e2e/login.spec.ts
+  h_c6d49c804e0ad2 7,14,17,20,26
+apps/web/e2e/browser-cost.spec.ts
+  h_c6d49c804e0ad2 148,155,161
+DESIGN.md
+  h_c6d49c804e0ad2 635-664
+apps/web/e2e/real-core-fixture.ts
+  h_c6d49c804e0ad2 24-26,32,136,169,171-177,183,185
+apps/web/src/ui/components/access-theme.ts
+  h_c6d49c804e0ad2 1-57
+apps/web/src/ui/components/access.tsx
+  h_c6d49c804e0ad2 1-199
+apps/web/e2e/login-branding.spec.ts
+  h_c6d49c804e0ad2 1-126
+apps/web/src/features/browser-login/feature.tsx
+  h_c6d49c804e0ad2 2-3,5-14,17-40,46,49-70,73-99,108,111-132,134-144,147-171,174-175,177-188,190-213,216-236
+apps/web/e2e/login-visual.capture.ts
+  h_c6d49c804e0ad2 1-270,272-275,277-282,284-303,305-327,329-337,339-347
+  h_c6d49c804e0ad2 271,276,283,304,328,338
+apps/web/src/ui/reference.tsx
+  h_c6d49c804e0ad2 19,259-264,286,319
+apps/web/e2e/browser-pairing.spec.ts
+  h_c6d49c804e0ad2 216,218,365-371,374,377,383,493,546,622,663-667,707,713,718-883
+apps/web/src/ui/components/access.css
+  h_c6d49c804e0ad2 1-537
+apps/web/src/app/login-page.tsx
+  h_c6d49c804e0ad2 3,5,7-31,35-83
+apps/web/src/ui/assets/access/google.svg
+  h_c6d49c804e0ad2 1-67
+apps/web/e2e/provider-authentication.journeys.ts
+  h_c6d49c804e0ad2 34-37,131,179,232,344,351,431,530,532,534,558,563,566-609,645,691,740,771,908
+apps/web/src/ui/assets/access/microsoft.svg
+  h_c6d49c804e0ad2 1
+apps/web/src/features/browser-login/pairing-controller.ts
+  h_c6d49c804e0ad2 4,6,25-26,30-31,34,114,120,159-160,169,202,206-209,238-239,242,271-272,276,284,286-291,295,297,318-319,336-337,392,399-407,423-525,529-530,532,537,540,546,550-558,560-571
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d50a60f5a8e3fbc461703b348deb8dd2debadd08",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

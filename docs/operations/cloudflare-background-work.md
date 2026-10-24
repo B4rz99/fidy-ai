@@ -559,6 +559,22 @@ the original Work result. This supplies the native detector with caught failures
 application counter. Verify the resulting live issue context and notification contain no private
 content before removing existing coverage; source configuration alone does not prove that.
 
+An isolated, binding-free verification Worker exercised handled and uncaught failures with fake
+query, Authorization, custom-header and body markers on October 24. The actual native handled
+occurrence at **17:45:52 UTC** retained the closed error envelope, a request-header allowlist and
+method/path metadata. The uncaught nested-error occurrence at **17:54:48 UTC** retained the closed
+outer message and source stack, without traversing the fake private `Error.cause`. Neither full
+rendered issue event contained the fake query, authorization, custom header, body or private-cause
+markers. Invocation logs and tracing were disabled. These are native boundary observations, not a
+promise that arbitrary text deliberately placed in an outer error message will be removed; owning
+entrypoints must continue producing closed outer errors. Private event evidence is retained outside
+the repository. No production Issues activation was needed for these probes.
+
+The issue screen's external-destination setup did not offer email. The enabled account notification
+policy's sample email therefore remains insufficient evidence of actual Issue delivery. Investigate
+the account-supported native Issues SQL dataset with the existing email-capable monitors before
+adding any custom delivery bridge. Existing alerts remain enabled until that replacement is proven.
+
 At 17:13:40 UTC, the missing-Workflow monitor was temporarily pointed at a nonexistent closed test
 name, leaving the actual canary and all business work running. Cloudflare recorded a real zero-count
 firing at **17:22:57 UTC** (correlation `2114045810818682880`); its operator email arrived at

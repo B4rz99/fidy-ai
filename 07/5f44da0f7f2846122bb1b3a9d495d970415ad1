@@ -1,0 +1,14 @@
+apps/web/src/ui/components/transactions.css
+  h_c6d49c804e0ad2 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "075f44da0f7f2846122bb1b3a9d495d970415ad1",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

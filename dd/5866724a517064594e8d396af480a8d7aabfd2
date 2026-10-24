@@ -1,0 +1,43 @@
+apps/web/src/features/transactions/detail.tsx
+  s_6d017cc65783af::t_f966ff066ee1f5 4,77-78,81-84,89-107,114,130-131,133-134
+apps/web/src/ui/reference.tsx
+  s_6d017cc65783af::t_ea6c36428e114e 20,294
+apps/web/e2e/browser-pairing.spec.ts
+  s_44f2ba0ce6fd0c::t_0a9bad77359185 457,459,572,574
+apps/web/e2e/financial-journeys.spec.ts
+  s_44f2ba0ce6fd0c::t_a3409d74fcb53a 93,95
+apps/web/e2e/session-binding.spec.ts
+  s_44f2ba0ce6fd0c::t_e8311fd5d3adb5 84,103
+apps/web/e2e/transaction-deletion.spec.ts
+  s_44f2ba0ce6fd0c::t_b73e4e08a4e5f4 96,102,138,154
+apps/web/src/features/transactions/manual-capture.tsx
+  s_44f2ba0ce6fd0c::t_e3555867405670 2,13,23-24,36-38,55-56,99,112-113,152-219,221-222,231-294,296-303,306-307,309-313,315-317,319-320,323-324
+apps/web/src/features/transactions/summary.tsx
+  s_44f2ba0ce6fd0c::t_139e401a8ff25c 82-117,120,123-134,136,138
+apps/web/src/ui/components/transactions.tsx
+  s_44f2ba0ce6fd0c::t_4fa803e2032eb7 1-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dd5866724a517064594e8d396af480a8d7aabfd2",
+  "prompts": {},
+  "sessions": {
+    "s_44f2ba0ce6fd0c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a165af-fe9e-7c92-8720-b7758e20aab6",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

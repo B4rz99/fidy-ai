@@ -209,9 +209,11 @@ class (or `none`); `fidy.failure` contains only component, operation, safe error
 classification. Span events and the portable telemetry contracts are unchanged. Native tests
 exercise the production console exporter, preserve the original rejected Promise/success result
 when logging throws, and check the full captured output for private failure/prompt/credential
-sentinels. These exports are deployed; `fidy.work` and `fidy.failure` still require their own actual
-platform ingestion/query evidence;
-they do not establish native runtime-limit coverage when execution cannot emit a record.
+sentinels. These exports are deployed. Workers Logs search for `fidy.work` returned the closed
+messages for scheduled work, Maintenance, Queue execution, the canary Workflow and Email scheduling.
+A last-hour `fidy.failure` search returned zero records, so live caught-failure ingestion remains
+unverified. Neither export establishes native runtime-limit coverage when execution cannot emit a
+record.
 
 The policy monitors currently combine owners by severity, whereas the old Fidy alert state
 has independent kind/owner cooldowns and acknowledgment. A new failing owner can therefore share
@@ -249,6 +251,8 @@ The Platform Notifications view also did not expose delivery history in this ins
 the existing Wrangler login received HTTP403 for that read. Dashboard access remains usable for
 configuration, preview, log queries and native resource inspection. Actual notification delivery,
 recovery, missing/stale-owner behavior and independent owner cooldowns remain unproven.
+The saved critical monitor's last-hour query preview also matched the deployed critical observations;
+its positive preview values do not prove actual evaluations or notification delivery.
 
 | Signal                                                      | Interpretation                                                                          | Action                                                                            |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |

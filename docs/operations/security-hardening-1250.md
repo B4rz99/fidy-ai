@@ -27,13 +27,11 @@ the digest in `.github/workflows/ci.yml` in a dependency-review PR, and run all 
 scanner jobs before merging. Retain the digest in the diff as the reviewable executable identity.
 The existing npm minimumReleaseAge policy is unchanged.
 
-## Unresolved accepted dependency risk
+## Withdrawn dependency advisory
 
-Rechecked October 12, 2026: the
-[GitHub advisory GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
-still lists braces <=3.0.3 with no patched version; npm's latest release is 3.0.3. The required
-shadcn development CLI still pulls this dependency. The existing exception expires exclusively
-at 2026-10-17T00:00:00Z. This PR neither extends that exception nor removes its matching SCA
-exclusion, and does not claim to fix the vulnerability. Continue to use only reviewed component
-names, local paths and trusted registries. Resolve the chain once a fixed release meets the
-seven-day cooldown, or explicitly reassess before expiry; do not bypass that cooldown.
+GitHub withdrew [GHSA-vfj7-8cjw-p6xm / CVE-2026-93687](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+on October 23, 2026, describing it as not practically exploitable. The development CLI still brings
+in braces 3.0.3; this is an upstream advisory withdrawal, not a package remediation. The
+expired acceptance and its matching SCA exclusion were removed together so scanners resume reporting
+this package normally. The seven-day npm release delay remains unchanged, and this does not authorize
+untrusted CLI inputs or future vulnerability exceptions.

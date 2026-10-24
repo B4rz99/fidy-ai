@@ -1,0 +1,16 @@
+apps/web/src/features/dashboard/view.tsx
+  h_c6d49c804e0ad2 145-154,158-160
+apps/web/src/ui/components/dashboard.tsx
+  h_c6d49c804e0ad2 155-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cc2399e08e1a05ba5081a21caa801a6f9e59b288",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

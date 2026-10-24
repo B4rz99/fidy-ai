@@ -1,0 +1,32 @@
+apps/web/package.json
+  h_c6d49c804e0ad2 28
+apps/web/src/app/login-page.tsx
+  h_c6d49c804e0ad2 3-11,36-44,51,57-62,65-74,77
+apps/web/src/features/browser-login/feature.tsx
+  h_c6d49c804e0ad2 3,14-18,21-22,236,243-271
+apps/web/src/features/provider-authentication/feature.tsx
+  h_c6d49c804e0ad2 9,13,228,280-312
+apps/web/src/ui/access-reference.tsx
+  h_c6d49c804e0ad2 10
+bun.lock
+  h_c6d49c804e0ad2 101,181-184,536,1988,2186,2208,2274,2304,2596
+dependency-policy.json
+  h_c6d49c804e0ad2 4,7,12,18-21,27-28,51-52,55
+package.json
+  h_c6d49c804e0ad2 94-95
+tools/mcp-inspector/bun.lock
+  h_c6d49c804e0ad2 10,299
+tools/mcp-inspector/package.json
+  h_c6d49c804e0ad2 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c4ccf5c1cceecda58348838e55282ac09b71812d",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

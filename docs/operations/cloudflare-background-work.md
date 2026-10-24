@@ -164,8 +164,10 @@ column (HTTP422). The health records now supply an explicit closed `message` con
 operation, state and policy severity, alongside their existing bounded fields. Match complete
 `state=unavailable` / `severity=warning` tokens, never the word `unavailable`, which also occurs in
 the healthy `unavailableWorkflows: 0` field. The direct burst uses the same fixed message format.
-These local changes still require deployment and verification of actual platform ingestion/query
-matches; saving the revised query does not establish runtime coverage.
+These changes are deployed through trunk `66ae1f476b28e491f498cb49c0cc08fb0d142c21`.
+Dashboard inspection of Workers Logs on 2026-10-23 returned the closed operational messages for
+capabilities, Workflows, owner work and Queues. This establishes ingestion and the dashboard query
+match; it does not establish historical monitor evaluations or notification delivery.
 
 The fixed five-minute window for direct detections remains unverified: the documented
 `timestamp >= NOW() - INTERVAL '5' MINUTE` expression failed account preview with
@@ -207,7 +209,8 @@ class (or `none`); `fidy.failure` contains only component, operation, safe error
 classification. Span events and the portable telemetry contracts are unchanged. Native tests
 exercise the production console exporter, preserve the original rejected Promise/success result
 when logging throws, and check the full captured output for private failure/prompt/credential
-sentinels. These exports still require deployment and actual platform ingestion/query evidence;
+sentinels. These exports are deployed; `fidy.work` and `fidy.failure` still require their own actual
+platform ingestion/query evidence;
 they do not establish native runtime-limit coverage when execution cannot emit a record.
 
 The policy monitors currently combine owners by severity, whereas the old Fidy alert state
@@ -216,10 +219,36 @@ an already-firing platform monitor and wait for its repeat; these definitions do
 per-owner notification timing. Verify or resolve that difference, owner-specific stale/missing
 observations, platform initial-window behavior and independent outage delivery before retirement.
 
-The full #1491 coverage gate remains open. Required next evidence includes policy-severity queries,
+The full #1491 coverage gate remains open. Required next evidence includes monitor policy-severity queries,
 native Queue and completed Workflow observations, missing/stale inspections, actual firing and
 resolution, delivery results, account-supported execution cadence, privacy and independent outage
 behavior. Keep the operational tables and existing notification machinery until these pass.
+
+#### Dashboard verification checkpoint — 2026-10-23
+
+The private account dashboard
+[Fidy production: operational signals](https://dash.cloudflare.com/a32350b6918ad7e78bc589b6630af1c2/dashboards/2223e9f9-2898-40aa-8f19-5157711ed0ac)
+contains two saved Workers Observability Logs timeseries. Both filter `$metadata.message` with
+the prefix `fidy.operational component=`. One groups observation counts by `operation`; the other
+groups them by `severity`. Both rendered live records after saving. They show historical observation
+counts, not latest owner status; group selection and time-range aggregation can hide an owner.
+No observations means unknown, never healthy. This dashboard alone does not satisfy #1492's current
+health and stale-owner gate.
+
+For timestamped owner inspection, use the account's Workers Logs search for `fidy.operational`, then
+restrict the closed component/operation and inspect the newest observation and its bounded fields.
+The live records included `deadLetters state=attention severity=critical`. Native Queue inspection
+showed a realtime backlog of 449 messages; the six-message preview included October 18–20 messages,
+and the first expanded body had the operational canary's `version`/`sentAtMs` shape. This is a partial
+preview, not a classification of all 449 messages or proof that replay is safe. No messages were
+replayed, acknowledged or purged during this verification.
+
+The dashboard's monitor actions expose a sample-notification test, not an actual evaluation history.
+The Platform Notifications view also did not expose delivery history in this inspection.
+[Cloudflare documents alert history through its API](https://developers.cloudflare.com/notifications/notification-history/);
+the existing Wrangler login received HTTP403 for that read. Dashboard access remains usable for
+configuration, preview, log queries and native resource inspection. Actual notification delivery,
+recovery, missing/stale-owner behavior and independent owner cooldowns remain unproven.
 
 | Signal                                                      | Interpretation                                                                          | Action                                                                            |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |

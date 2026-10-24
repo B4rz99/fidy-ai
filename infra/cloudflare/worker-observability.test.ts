@@ -11,6 +11,7 @@ const UploadMetadata = Schema.fromJsonString(
     observability: Schema.Struct({
       enabled: Schema.Boolean,
       redact_query_string: Schema.Boolean,
+      issues: Schema.Struct({ enabled: Schema.Boolean }),
       logs: Schema.Struct({
         enabled: Schema.Boolean,
         invocation_logs: Schema.Boolean,
@@ -33,6 +34,7 @@ it.effect("uploads query-redacted custom logs without automatic request invocati
         expect(metadata.observability).toEqual({
           enabled: true,
           redact_query_string: true,
+          issues: { enabled: true },
           logs: { enabled: true, invocation_logs: false, persist: true },
         });
         captured = true;

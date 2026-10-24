@@ -3,9 +3,9 @@ import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { it } from "@effect/vitest";
 import { describe, expect } from "vitest";
 import {
+  configureReleaseObservability,
   decodeCaptureWorkerReceipts,
   decodeWorkerReceipts,
-  redactReleaseQueries,
   releaseCommand,
   releaseFailureMessage,
   releasePort,
@@ -177,6 +177,7 @@ it.effect(
                 enabled: true,
                 head_sampling_rate: 1,
                 redact_query_string: true,
+                issues: { enabled: true },
                 logs: {
                   enabled: true,
                   head_sampling_rate: 1,
@@ -197,6 +198,7 @@ it.effect(
                 observability: {
                   enabled: true,
                   redact_query_string: true,
+                  issues: { enabled: true },
                   logs: { enabled: true, invocation_logs: false, persist: true },
                 },
               },
@@ -204,7 +206,7 @@ it.effect(
           )
         );
       });
-      yield* redactReleaseQueries(
+      yield* configureReleaseObservability(
         { account: "test-account", token: "test-only" },
         ["ingress", "core"],
         client
@@ -218,27 +220,38 @@ it.effect(
     })
 );
 
-it.effect("refuses staging when the provider does not persist query redaction", () =>
+it.effect("refuses staging when query privacy or native issue detection is not persisted", () =>
   Effect.gen(function* () {
-    const client = HttpClient.make((request) =>
-      Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          Response.json({
-            success: true,
-            result: { observability: { enabled: true, redact_query_string: false } },
-          })
+    for (const settings of [
+      { redact_query_string: false, issues: { enabled: true } },
+      { redact_query_string: true, issues: { enabled: false } },
+    ]) {
+      const client = HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              success: true,
+              result: {
+                observability: {
+                  enabled: true,
+                  logs: { enabled: true, invocation_logs: false, persist: true },
+                  ...settings,
+                },
+              },
+            })
+          )
         )
-      )
-    );
-    const result = yield* Effect.exit(
-      redactReleaseQueries(
-        { account: "test-account", token: "test-only" },
-        ["ingress", "core"],
-        client
-      )
-    );
-    expect(Exit.isFailure(result)).toBe(true);
+      );
+      const result = yield* Effect.exit(
+        configureReleaseObservability(
+          { account: "test-account", token: "test-only" },
+          ["ingress", "core"],
+          client
+        )
+      );
+      expect(Exit.isFailure(result)).toBe(true);
+    }
   })
 );
 

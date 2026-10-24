@@ -26,9 +26,11 @@ import {
 it.effect("reports a durable attempt without replacing its rejection or exporting its cause", () =>
   Effect.gen(function* () {
     const captured: unknown[] = [];
-    const log = vi.spyOn(console, "log").mockImplementation((...values: ReadonlyArray<unknown>) => {
-      captured.push(...values);
-    });
+    const log = vi
+      .spyOn(console, "error")
+      .mockImplementation((...values: ReadonlyArray<unknown>) => {
+        captured.push(...values);
+      });
     yield* Effect.addFinalizer(() => Effect.sync(() => log.mockRestore()));
     const failure = new Error("private-financial-payload");
     const result = observeWorkerPromise(() => Promise.reject(failure), {
@@ -192,18 +194,32 @@ it.effect("reports provider transport failure without exporting its destination 
   })
 );
 
-it.effect("does not change successful durable Work when the exporter throws", () =>
+it.effect("does not change durable Work outcomes when the exporter throws", () =>
   Effect.gen(function* () {
     const log = vi.spyOn(console, "log").mockImplementation(() => {
       throw new Error("export unavailable");
     });
     yield* Effect.addFinalizer(() => Effect.sync(() => log.mockRestore()));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {
+      throw new Error("failure export unavailable");
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(() => errors.mockRestore()));
     const result = observeWorkerPromise(() => Promise.resolve("unchanged"), {
       environment: { RELEASE_GIT_SHA: "bad-release" },
       telemetry: cloudflareWorkerTelemetry,
       operation: "workflow.billingCollection",
     });
     expect(yield* Effect.tryPromise(() => result)).toBe("unchanged");
+    const failure = new Error("original private failure");
+    yield* Effect.tryPromise(() =>
+      expect(
+        observeWorkerPromise(() => Promise.reject(failure), {
+          environment: { RELEASE_GIT_SHA: "bad-release" },
+          telemetry: cloudflareWorkerTelemetry,
+          operation: "workflow.billingCollection",
+        })
+      ).rejects.toBe(failure)
+    );
   })
 );
 

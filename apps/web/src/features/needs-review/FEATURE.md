@@ -35,8 +35,8 @@ No receipt or email is split into multiple Transactions.
 The Variant A workspace exposes Pending and History navigation, with created/skipped/expired
 filters inside History. The inbox presents a bounded Counterparty/amount/Currency preview from
 retained drafts or suggestions; this preview is suppressed at the original evidence deadline.
-The original stays inside a bounded card beside the spaced form, with individual actions in a
-separate footer. The desktop workspace fits the viewport, with overflow contained inside its panels.
+The original, inbox and editor use continuous flat surfaces separated by spacing and thin
+dividers. Individual actions stay in a separate footer with desktop clearance for the floating agent. The desktop workspace fits the viewport, with overflow contained inside its panels.
 Row activation opens the item; only its checkbox toggles bulk selection. The shared calendar edits
 the local date while preserving an existing local time; a newly completed date starts at midnight
 and exposes the time for editing. Source and text filters apply to the current server page,
@@ -52,4 +52,4 @@ expiry, and row previews stop displaying the expired facts. The shared time popo
 button, popover and choice controls as the calendar; it edits exact hours and minutes in 24-hour
 local time. Browser acceptance measures a warmed tab switch below 100 ms with delayed requests.
 
-The approved v4 presentation uses Confirmar for individual Transaction creation. The manual reprocessing operation and its browser control are removed; original reads, workspace refresh and uncertain-write recovery remain explicit reads.
+The approved flat v6 presentation uses Confirmar for individual Transaction creation. The manual reprocessing operation and its browser control are removed; original reads, workspace refresh and uncertain-write recovery remain explicit reads.

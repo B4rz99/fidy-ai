@@ -8,7 +8,6 @@ import { useRouter } from "@tanstack/react-router";
 import { type JSX, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
-import { sources } from "./model";
 import type { Item } from "./model";
 
 export const OriginalMaterial = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
@@ -43,43 +42,30 @@ const RetainedMaterial = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   return (
-    <details open className="group min-w-0">
-      <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold [&::-webkit-details-marker]:hidden">
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
-          size={18}
-          aria-hidden="true"
-          className="-rotate-90 group-open:rotate-0"
-        />
-        Material original{" "}
-        <span className="ml-auto text-xs font-normal text-muted-foreground">
-          {sources[item.source]}
-        </span>
+    <details open data-review="original">
+      <summary>
+        Material original
+        <HugeiconsIcon icon={ArrowDown01Icon} size={16} aria-hidden="true" />
       </summary>
-      <div className="mt-5 min-w-0 overflow-hidden rounded-2xl border bg-card">
-        <div className="border-b bg-muted/30 px-5 py-4 text-sm font-medium">
-          {sources[item.source]} original
-        </div>
-        <div className="p-5">
-          {state._tag === "Ready" ? (
-            <MaterialBody material={state.value.data} />
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {state._tag === "Failure" ? "No pudimos cargar el original." : "Cargando original…"}
-            </p>
-          )}
-          {state._tag === "Failure" ? (
-            <Button type="button" variant="outline" onClick={refresh}>
-              Reintentar original
-            </Button>
-          ) : null}
-        </div>
-        <p className="border-t px-5 py-4 text-xs text-muted-foreground">
-          {item.status === "created"
-            ? "Este material dio origen a una transacción."
-            : "Este material aún no es una transacción."}
-        </p>
+      <div data-review="original-body">
+        {state._tag === "Ready" ? (
+          <MaterialBody material={state.value.data} />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {state._tag === "Failure" ? "No pudimos cargar el original." : "Cargando original…"}
+          </p>
+        )}
+        {state._tag === "Failure" ? (
+          <Button type="button" variant="outline" onClick={refresh}>
+            Reintentar original
+          </Button>
+        ) : null}
       </div>
+      <p data-review="original-footer">
+        {item.status === "created"
+          ? "Este material dio origen a una transacción."
+          : "Este material aún no es una transacción."}
+      </p>
     </details>
   );
 };

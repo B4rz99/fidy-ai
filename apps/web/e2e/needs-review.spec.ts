@@ -38,7 +38,7 @@ test("reviews an ingestion item alongside its original and saves a draft", ({ pa
         expect(page.getByRole("status")).toContainText("Borrador guardado")
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Crear transacción", exact: true })).toBeDisabled()
+        expect(page.getByRole("button", { name: "Confirmar", exact: true })).toBeDisabled()
       );
     })
   ));
@@ -122,12 +122,6 @@ const lifecycleRoute =
     const url = new URL(route.request().url());
     const path = url.pathname;
     if (path.endsWith("/material")) return reviewRoute(route);
-    if (path.endsWith("/suggestions")) {
-      return route.fulfill({
-        status: 503,
-        body: '{"error":{"code":"unavailable","message":"Try later"}}',
-      });
-    }
     if (path.endsWith("/edits")) return saveFixture(route, entries);
     const entry = entries.find((candidate) => path.endsWith(candidate.id));
     if (entry !== undefined) {
@@ -183,7 +177,7 @@ const saveFixture = (route: Route, entries: Fixture[]): Promise<void> => {
   });
 };
 
-test("skips and restores in bulk, advances, and preserves edits after a failed retry", ({ page }) =>
+test("skips and restores in bulk, advances, and preserves edited drafts", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const entries: Fixture[] = [id, secondId].map((value) => ({
@@ -199,12 +193,6 @@ test("skips and restores in bulk, advances, and preserves edits after a failed r
       );
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
       yield* Effect.tryPromise(() => page.getByLabel("Valor", { exact: true }).fill("13500"));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Reintentar procesamiento" }).click()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText(/Tus cambios se conservan/)).toBeVisible()
-      );
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Valor", { exact: true })).toHaveValue("13500")
       );
@@ -253,7 +241,7 @@ test("confirms creation with a toast and continues reviewing without leaving the
       );
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Crear transacción", exact: true }).click()
+        page.getByRole("button", { name: "Confirmar", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
         expect(page.locator('[data-sonner-toast][data-type="success"]')).toHaveText(
@@ -280,7 +268,7 @@ test("confirms creation with a toast and continues reviewing without leaving the
       );
       yield* Effect.tryPromise(() => page.getByRole("button", { name: /Pendientes/ }).click());
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Crear transacción", exact: true }).click()
+        page.getByRole("button", { name: "Confirmar", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("heading", { name: "Todo al día", exact: true })).toBeVisible()
@@ -301,7 +289,7 @@ test("does not show creation success when the server cannot confirm the transact
       );
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Crear transacción", exact: true }).click()
+        page.getByRole("button", { name: "Confirmar", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
         expect(
@@ -350,7 +338,7 @@ test("rereads the saved draft after a lost acknowledgement on mobile", ({ page }
         expect(page.getByLabel("Valor", { exact: true })).toHaveValue("42000")
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Crear transacción", exact: true })).toBeDisabled()
+        expect(page.getByRole("button", { name: "Confirmar", exact: true })).toBeDisabled()
       );
       const overflow = yield* Effect.tryPromise(() => page.evaluate(hasHorizontalOverflow));
       expect(overflow).toBe(false);
@@ -388,7 +376,7 @@ test("flushes a just-edited draft before bulk skip and restores it", ({ page }) 
       yield* Effect.tryPromise(() => page.getByRole("checkbox").click());
       yield* Effect.tryPromise(() => page.getByLabel("Valor", { exact: true }).fill("98765"));
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Omitir 1 seleccionados" }).click()
+        page.getByRole("button", { name: "Omitir 1 seleccionado" }).click()
       );
       yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(0));
       yield* Effect.tryPromise(() =>
@@ -412,7 +400,7 @@ test("advances to a populated page and preserves navigation in the URL", ({ page
       yield* Effect.tryPromise(() => page.goto("/app/needs-review?status=pending&offset=50"));
       yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Crear transacción", exact: true }).click()
+        page.getByRole("button", { name: "Confirmar", exact: true }).click()
       );
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/offset=0/));
       yield* Effect.tryPromise(() =>
@@ -485,7 +473,7 @@ test("requires an explicit currency for an ambiguous statement item", ({ page })
         expect(page.getByText("Confirma la moneda de esta transacción")).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Crear transacción", exact: true })).toBeDisabled()
+        expect(page.getByRole("button", { name: "Confirmar", exact: true })).toBeDisabled()
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("combobox", { name: "Moneda", exact: true }).click()
@@ -497,7 +485,7 @@ test("requires an explicit currency for an ambiguous statement item", ({ page })
         page.getByRole("option", { name: "USD", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Crear transacción", exact: true })).toBeEnabled()
+        expect(page.getByRole("button", { name: "Confirmar", exact: true })).toBeEnabled()
       );
     })
   ));
@@ -518,7 +506,7 @@ test("opens rows without bulk selection and keeps history discoverable", ({ page
       );
       yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Omitir 1 seleccionados" }).click()
+        page.getByRole("button", { name: "Omitir 1 seleccionado" }).click()
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Historial", exact: true }).click()
@@ -530,7 +518,7 @@ test("opens rows without bulk selection and keeps history discoverable", ({ page
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Abrir Extracto" }).click());
       yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Restaurar 1 seleccionados" }).click()
+        page.getByRole("button", { name: "Restaurar 1 seleccionado" }).click()
       );
       yield* Effect.tryPromise(() => page.getByRole("button", { name: /Pendientes/ }).click());
       yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
@@ -567,7 +555,7 @@ test("advances from a completed middle row and wraps after the last row", ({ pag
         expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Contraparte 1")
       );
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Crear transacción", exact: true }).click()
+        page.getByRole("button", { name: "Confirmar", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Contraparte 2")
@@ -594,22 +582,17 @@ test("keeps the desktop review controls in the viewport with bulk selection", ({
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
       yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Omitir 1 seleccionados" })).toBeInViewport({
+        expect(page.getByRole("button", { name: "Omitir 1 seleccionado" })).toBeInViewport({
           ratio: 1,
         })
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Crear transacción", exact: true })).toBeInViewport(
-          { ratio: 1 }
-        )
+        expect(page.getByRole("button", { name: "Confirmar", exact: true })).toBeInViewport({
+          ratio: 1,
+        })
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: /^Categoría:/u })).toBeInViewport({
-          ratio: 1,
-        })
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Reintentar procesamiento" })).toBeInViewport({
           ratio: 1,
         })
       );
@@ -617,6 +600,15 @@ test("keeps the desktop review controls in the viewport with bulk selection", ({
       expect(overflow).toBeLessThanOrEqual(1);
     })
   ));
+
+const calendarDraft = {
+  amount: "13500",
+  currency: "COP",
+  direction: "outflow",
+  counterparty: "Café",
+  occurredAt: "2026-01-01T17:30:00Z",
+  userProvidedFields: [],
+};
 
 test("uses the shared calendar and preserves the local time when changing dates", ({ page }) =>
   Effect.runPromise(
@@ -626,14 +618,7 @@ test("uses the shared calendar and preserves the local time when changing dates"
           id,
           revision: 0,
           status: "pending",
-          draft: {
-            amount: "13500",
-            currency: "COP",
-            direction: "outflow",
-            counterparty: "Café",
-            occurredAt: "2026-01-01T17:30:00Z",
-            userProvidedFields: [],
-          },
+          draft: calendarDraft,
         },
       ];
       yield* Effect.tryPromise(() => installUser(page));
@@ -658,7 +643,9 @@ test("uses the shared calendar and preserves the local time when changing dates"
       );
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Fecha del movimiento" })).toHaveText("02-01-2026")
+        expect(page.getByRole("button", { name: "Fecha del movimiento" })).toHaveText(
+          /2.*ene.*2026/u
+        )
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Hora del movimiento", exact: true })).toHaveText(
@@ -1087,3 +1074,249 @@ for (const picker of reviewPickers) {
       })
     ));
 }
+
+test("clears bulk selection when filtering and retains paging after no local matches", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = Array.from({ length: 51 }, (_, index) => ({
+        id: `24000000-0000-4000-8000-${String(fixtureStart + index).padStart(uuidTailLength, "0")}`,
+        revision: 0,
+        status: "pending",
+        draft: undefined,
+      }));
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").first().check());
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("textbox", { name: "Buscar pendientes en esta página" })
+          .fill("Sin coincidencia sintética")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Sin elementos en esta vista" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Siguiente", exact: true })).toBeEnabled()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("textbox", { name: "Buscar pendientes en esta página" }).fill("")
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox").first()).not.toBeChecked());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Filtrar por origen en esta página" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("menuitemradio", { name: "Imágenes", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Sin elementos en esta vista" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Siguiente", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/offset=50/));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Anterior", exact: true })).toBeEnabled()
+      );
+    })
+  ));
+
+const materialRecoveryRoute =
+  (state: Readonly<{ failed: boolean }>) =>
+  (route: Route): Promise<void> =>
+    route.fulfill(
+      state.failed
+        ? {
+            status: 503,
+            body: '{"error":{"code":"service_unavailable","message":"Synthetic read error"}}',
+          }
+        : {
+            status: 200,
+            contentType: "application/json",
+            body: response({
+              available: true,
+              text: '<img src=x onerror="alert(1)"> Café',
+              truncated: false,
+            }),
+          }
+    );
+
+test("recovers original reads without exposing markup or manual reprocessing on mobile", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [{ id, revision: 0, status: "pending", draft: calendarDraft }];
+      const state = { failed: true };
+      yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(
+          `${apiOrigin}/ingestion/review-workspace/${id}/material`,
+          materialRecoveryRoute(state)
+        )
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("No pudimos cargar el original.")).toBeVisible()
+      );
+      state.failed = false;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Reintentar original", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.locator("pre")).toHaveText('<img src=x onerror="alert(1)"> Café')
+      );
+      yield* Effect.tryPromise(() => expect(page.locator("pre img")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: /procesamiento|extracción/iu })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Fecha del movimiento" }).focus()
+      );
+      yield* Effect.tryPromise(() => page.keyboard.press("Enter"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("dialog", { name: "Seleccionar fecha" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.keyboard.press("Escape"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Fecha del movimiento" })).toBeFocused()
+      );
+    })
+  ));
+
+const unavailableStateRoute =
+  (state: string) =>
+  (route: Route): Promise<void> => {
+    const path = new URL(route.request().url()).pathname;
+    const target = state.startsWith("detail-") ? path.endsWith(id) : !path.endsWith("/material");
+    if (!target) return reviewRoute(route);
+    return state.endsWith("loading")
+      ? Promise.resolve()
+      : route.fulfill({
+          status: 503,
+          body: '{"error":{"code":"service_unavailable","message":"Synthetic read error"}}',
+        });
+  };
+for (const [state, copy] of Object.entries({
+  loading: "Cargando elementos…",
+  error: "No pudimos cargar los elementos",
+  "detail-loading": "Cargando elemento…",
+  "detail-error": "No pudimos cargar todos los datos del elemento.",
+})) {
+  test(`preserves the approved review surface during ${state}`, ({ page }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() => installUser(page));
+        yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+        yield* Effect.tryPromise(() =>
+          page.route(`${apiOrigin}/ingestion/review-workspace**`, unavailableStateRoute(state))
+        );
+        yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: /Pendientes/u })).toBeVisible()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: "Historial", exact: true })).toBeVisible()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(
+            page
+              .locator(`[data-review="${state.startsWith("detail-") ? "detail" : "empty"}"]`)
+              .first()
+          ).toBeVisible()
+        );
+        yield* Effect.tryPromise(() => expect(page.getByText(copy).first()).toBeVisible());
+      })
+    ));
+}
+
+test("distinguishes filtered history from an empty pending inbox when nothing is pending", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [{ id, revision: 0, status: "skipped", draft: calendarDraft }];
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review?status=history"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Elemento omitido", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("textbox", { name: "Buscar pendientes en esta página" })
+          .fill("Sin coincidencia sintética")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("heading", { name: "Sin elementos en esta vista", exact: true })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Todo al día", exact: true })).not.toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: /Pendientes/u }).click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Todo al día", exact: true })).toBeVisible()
+      );
+    })
+  ));
+
+const reviewCardHeight = (element: Element): number => element.getBoundingClientRect().height;
+
+test("keeps history geometry independent of selection retained in the hidden pending panel", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [
+        { id, revision: 0, status: "pending", draft: calendarDraft },
+        { id: secondId, revision: 0, status: "skipped", draft: calendarDraft },
+      ];
+      yield* Effect.tryPromise(() => page.setViewportSize({ width: 1654, height: 978 }));
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Historial", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Elemento omitido", exact: true })).toBeVisible()
+      );
+      const before = yield* Effect.tryPromise(() =>
+        page.locator('[data-review="detail"]').filter({ visible: true }).evaluate(reviewCardHeight)
+      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: /Pendientes/u }).click());
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").first().check());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Omitir 1 seleccionado", exact: true })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Historial", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Elemento omitido", exact: true })).toBeVisible()
+      );
+      const after = yield* Effect.tryPromise(() =>
+        page.locator('[data-review="detail"]').filter({ visible: true }).evaluate(reviewCardHeight)
+      );
+      expect(after).toBe(before);
+    })
+  ));

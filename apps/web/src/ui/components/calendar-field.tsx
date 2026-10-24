@@ -16,7 +16,7 @@ type DateFieldProps = Readonly<{
   timeZone: string;
   disabled: boolean;
   required: boolean;
-  appearance: "field" | "filter";
+  appearance: "field" | "filter" | "review";
   onChange: (value: string) => void;
 }>;
 const localDate = (value: string, timeZone: string): Option.Option<Date> =>
@@ -32,15 +32,57 @@ const selectedDate = (date: Option.Option<Date>, timeZone: string): string =>
 const dateLabel = (value: string): string =>
   value === "" ? "Selecciona una fecha" : value.split("-").toReversed().join("-");
 
+const compactDateFormat = new Intl.DateTimeFormat("es-CO", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const accessibleDateFormat = new Intl.DateTimeFormat("es-CO", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const compactDateLabel = (value: string): string =>
+  compactDateFormat
+    .formatToParts(DateTime.toEpochMillis(DateTime.makeUnsafe(`${value}T12:00:00Z`)))
+    .flatMap((part) =>
+      ["day", "month", "year"].includes(part.type) ? [part.value.replace(/\.$/u, "")] : []
+    )
+    .join(" ");
+
+const calendarLabel = ({
+  appearance,
+  value,
+}: Pick<DateFieldProps, "appearance" | "value">): string => {
+  if (appearance === "filter") return "Fecha";
+  if (appearance === "review" && value !== "") {
+    return compactDateLabel(value);
+  }
+  return dateLabel(value);
+};
+
+const calendarAccessibleLabel = (props: DateFieldProps): string => {
+  if (props.appearance === "filter") return props.label;
+  if (props.appearance !== "review" || props.value === "") {
+    return `${props.label}: ${calendarLabel(props)}`;
+  }
+  const date = accessibleDateFormat.format(
+    DateTime.toEpochMillis(DateTime.makeUnsafe(`${props.value}T12:00:00Z`))
+  );
+  return `${props.label}: ${date}`;
+};
+
 export const CalendarField = (props: DateFieldProps): JSX.Element => {
   const [open, setOpen] = useState(false);
-  const visibleLabel = props.appearance === "filter" ? "Fecha" : dateLabel(props.value);
+  const visibleLabel = calendarLabel(props);
   const selected = Option.getOrUndefined(localDate(props.value, props.timeZone));
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         id={props.id}
-        aria-label={props.appearance === "filter" ? props.label : `${props.label}: ${visibleLabel}`}
+        aria-label={calendarAccessibleLabel(props)}
         render={
           <Button
             contentLayout="wrap"
@@ -48,7 +90,7 @@ export const CalendarField = (props: DateFieldProps): JSX.Element => {
             variant="outline"
             focusAppearance="subtle"
             disabled={props.disabled}
-            className={cn(props.appearance === "field" && "w-full")}
+            className={cn(props.appearance !== "filter" && "w-full")}
           />
         }
       >

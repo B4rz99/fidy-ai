@@ -93,33 +93,3 @@ export const canonicalOccurrence = ({
     onNone: () => "",
     onSome: DateTime.formatIso,
   });
-
-export const mergeSuggestions = ({
-  draft,
-  suggested,
-}: Readonly<{ draft: Draft; suggested: Draft }>): Draft => {
-  const provided = new Set(draft.userProvidedFields);
-  return {
-    amount: suggestedText(provided.has("money"), draft.amount, suggested.amount),
-    currency:
-      provided.has("money") && Option.isSome(draft.currency)
-        ? draft.currency
-        : Option.orElse(suggested.currency, () => draft.currency),
-    direction: provided.has("direction")
-      ? draft.direction
-      : Option.orElse(suggested.direction, () => draft.direction),
-    counterparty: suggestedText(
-      provided.has("counterparty"),
-      draft.counterparty,
-      suggested.counterparty
-    ),
-    occurredAt: suggestedText(provided.has("occurredAt"), draft.occurredAt, suggested.occurredAt),
-    categoryId: provided.has("categoryId")
-      ? draft.categoryId
-      : Option.orElse(suggested.categoryId, () => draft.categoryId),
-    userProvidedFields: draft.userProvidedFields,
-  };
-};
-
-const suggestedText = (provided: boolean, current: string, suggested: string): string =>
-  provided || suggested === "" ? current : suggested;

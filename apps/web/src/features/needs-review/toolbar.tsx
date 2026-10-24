@@ -4,6 +4,9 @@ import { Button } from "@/ui/components/button";
 import type { Workspace } from "./model";
 import type { InboxControl } from "./inbox-controller";
 
+const selectedCountLabel = (count: number): string =>
+  `${count} ${count === 1 ? "seleccionado" : "seleccionados"}`;
+
 export const ReviewToolbar = ({
   view,
   control,
@@ -12,12 +15,11 @@ export const ReviewToolbar = ({
     return <></>;
   }
   const checked = new Set(control.checked);
+  const selectedLabel = selectedCountLabel(control.checked.length);
   const pending = view.items.some((item) => item.status === "pending");
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b px-5 py-3">
-      <span className="text-sm text-muted-foreground">
-        {view.pendingCount} pendientes · {control.checked.length} seleccionados
-      </span>
+    <div data-review="bulk">
+      <span className="text-sm text-muted-foreground">{selectedLabel}</span>
       <Button
         variant="outline"
         disabled={control.locked || control.checked.length === 0}
@@ -28,9 +30,7 @@ export const ReviewToolbar = ({
           )
         }
       >
-        {pending
-          ? `Omitir ${control.checked.length} seleccionados`
-          : `Restaurar ${control.checked.length} seleccionados`}
+        {pending ? `Omitir ${selectedLabel}` : `Restaurar ${selectedLabel}`}
       </Button>
       <RefreshButton variant="ghost" onClick={control.recover} label="Actualizar" />
       {control.undo.length > 0 ? (

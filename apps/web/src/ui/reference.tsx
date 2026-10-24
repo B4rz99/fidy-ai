@@ -20,6 +20,7 @@ import { DashboardReference } from "./dashboard-reference";
 import { AccessReference } from "./access-reference";
 import { TransactionsReference } from "./transactions-reference";
 import { WorkspaceReference } from "./workspace-reference";
+import { ReviewReference } from "./review-reference";
 import "./reference.css";
 
 const themes = ["light", "dark", "system"] as const;
@@ -314,6 +315,7 @@ export const UIReference = (): JSX.Element => {
           <FieldReference />
         </div>
         <WorkspaceReference />
+        <ReviewReference />
         <TransactionsReference />
         <DashboardReference />
         <CompactTableReference />

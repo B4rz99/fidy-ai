@@ -1,7 +1,6 @@
 import { browseReviewWorkspace as browseInbox } from "./internal/review-workspace";
 import { browseReviewItem as browseItem } from "./internal/review-detail";
 import { browseReviewMaterial as browseMaterial } from "./internal/review-material";
-import { browseReviewSuggestions as browseSuggestions } from "./internal/review-suggestions";
 import { prepareReviewEdit as prepareEdit } from "./internal/review-edit";
 import { reviewRefusal as refuseReview } from "./internal/review-audit";
 import type { ReviewAuditWork, ReviewEditWork, ReviewQueryWork } from "./contract";
@@ -211,8 +210,6 @@ export const browseReviewItem = (input: ReviewQueryWork): Effect.Effect<Response
   browseItem(input);
 export const browseReviewMaterial = (input: ReviewQueryWork): Effect.Effect<Response> =>
   browseMaterial(input);
-export const browseReviewSuggestions = (input: ReviewQueryWork): Effect.Effect<Response> =>
-  browseSuggestions(input);
 export const prepareReviewEdit = (
   input: ReviewEditWork
 ): Effect.Effect<CanonicalMutationPreparation> => prepareEdit(input);

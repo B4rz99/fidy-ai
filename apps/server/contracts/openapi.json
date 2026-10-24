@@ -4457,6 +4457,67 @@
       "Objects_29": {
         "additionalProperties": false,
         "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/Objects_31"
+          },
+          "item": {
+            "$ref": "#/components/schemas/Union_11"
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "suggestions": {
+            "$ref": "#/components/schemas/Objects_31"
+          }
+        },
+        "required": [
+          "item",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "Objects_3": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/User"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_30": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "counterparty": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          }
+        },
+        "required": [
+          "counterparty",
+          "amount"
+        ],
+        "type": "object"
+      },
+      "Objects_31": {
+        "additionalProperties": false,
+        "properties": {
           "amount": {
             "maxLength": 120,
             "type": "string"
@@ -4501,67 +4562,6 @@
         ],
         "type": "object"
       },
-      "Objects_3": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/User"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_30": {
-        "additionalProperties": false,
-        "properties": {
-          "draft": {
-            "$ref": "#/components/schemas/Objects_29"
-          },
-          "item": {
-            "$ref": "#/components/schemas/Union_11"
-          },
-          "revision": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "suggestions": {
-            "$ref": "#/components/schemas/Objects_29"
-          }
-        },
-        "required": [
-          "item",
-          "revision"
-        ],
-        "type": "object"
-      },
-      "Objects_31": {
-        "additionalProperties": false,
-        "properties": {
-          "amount": {
-            "maxLength": 120,
-            "type": "string"
-          },
-          "counterparty": {
-            "maxLength": 120,
-            "type": "string"
-          },
-          "currency": {
-            "$ref": "#/components/schemas/Currency"
-          }
-        },
-        "required": [
-          "counterparty",
-          "amount"
-        ],
-        "type": "object"
-      },
       "Objects_32": {
         "additionalProperties": false,
         "properties": {
@@ -4585,7 +4585,7 @@
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/Objects_30"
+              "$ref": "#/components/schemas/Objects_29"
             },
             "type": "array"
           },
@@ -11593,7 +11593,7 @@
                 "$ref": "#/components/schemas/NeedsReviewItemId"
               },
               "preview": {
-                "$ref": "#/components/schemas/Objects_31"
+                "$ref": "#/components/schemas/Objects_30"
               },
               "reason": {
                 "type": "string"
@@ -11645,7 +11645,7 @@
                 "$ref": "#/components/schemas/NeedsReviewItemId"
               },
               "preview": {
-                "$ref": "#/components/schemas/Objects_31"
+                "$ref": "#/components/schemas/Objects_30"
               },
               "reason": {
                 "type": "string"
@@ -11739,7 +11739,7 @@
                 "type": "string"
               },
               "draft": {
-                "$ref": "#/components/schemas/Objects_29"
+                "$ref": "#/components/schemas/Objects_31"
               },
               "id": {
                 "$ref": "#/components/schemas/NeedsReviewItemId"
@@ -18058,7 +18058,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Objects_30"
+                      "$ref": "#/components/schemas/Objects_29"
                     },
                     "next": {
                       "$ref": "#/components/schemas/Arrays_"
@@ -18256,151 +18256,6 @@
                           "type": "object"
                         }
                       ]
-                    },
-                    "next": {
-                      "$ref": "#/components/schemas/Arrays_"
-                    }
-                  },
-                  "required": [
-                    "data",
-                    "next"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationFailedEncoded"
-                }
-              }
-            },
-            "description": "ValidationFailed"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
-                }
-              }
-            },
-            "description": "Unauthenticated"
-          },
-          "402": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
-                }
-              }
-            },
-            "description": "PaywallRequired"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ScopeMissingEncoded"
-                    }
-                  ]
-                }
-              }
-            },
-            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundEncoded"
-                }
-              }
-            },
-            "description": "NotFound"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
-                    }
-                  ]
-                }
-              }
-            },
-            "description": "QuotaExhausted | ResourceLimited"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnavailableEncoded"
-                }
-              }
-            },
-            "description": "Unavailable"
-          }
-        },
-        "security": [
-          {
-            "agentBearer": []
-          },
-          {
-            "webSession": []
-          }
-        ],
-        "tags": [
-          "ingestion"
-        ],
-        "x-fidy-access": {
-          "type": "web-session-only"
-        },
-        "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-operation-kind": "query",
-        "x-fidy-required-tier": "free"
-      }
-    },
-    "/ingestion/review-workspace/{id}/suggestions": {
-      "get": {
-        "description": "Explicitly rerun available deterministic extraction against this browser owner's unexpired retained material. Returns suggestions only; never changes drafts or creates a Transaction. Unavailable processing remains retryable.",
-        "operationId": "ingestion.getReviewSuggestions",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/NeedsReviewItemId"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Objects_29"
                     },
                     "next": {
                       "$ref": "#/components/schemas/Arrays_"

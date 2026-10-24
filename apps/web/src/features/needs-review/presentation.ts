@@ -13,7 +13,7 @@ export const reviewReason = (item: Item): string => {
     case "processing-interrupted":
     case "model-unavailable":
     case "extraction-unavailable":
-      return "No pudimos procesar el material. Puedes reintentar o completarlo";
+      return "No pudimos procesar el material. Completa los datos manualmente";
     default:
       return "Revisa y completa los datos antes de crear la transacción";
   }
@@ -35,7 +35,7 @@ const millisecondsPerHour = 3_600_000;
 const hoursPerDay = 24;
 export const reviewExpiry = (item: Item): string => {
   if (item.status === "created") return "Transacción creada";
-  if (item.status === "expired") return "Original vencido";
+  if (reviewHasExpired(item)) return "Original vencido";
   const hours = Math.max(
     0,
     Math.ceil(

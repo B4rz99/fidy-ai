@@ -35,7 +35,6 @@ export type AuditCredentialOperation =
   | "ingestion.getStatementSubmission"
   | "ingestion.listNeedsReviewItems"
   | "ingestion.getReviewWorkspace"
-  | "ingestion.getReviewSuggestions"
   | "ingestion.getReviewMaterial"
   | "ingestion.getReviewItem"
   | "ingestion.applyReviewEdit"
@@ -91,7 +90,6 @@ export type AuditAuthority =
 
 type AcceptedSessionOperation =
   | "ingestion.getReviewWorkspace"
-  | "ingestion.getReviewSuggestions"
   | "ingestion.getReviewMaterial"
   | "ingestion.getReviewItem"
   | "ingestion.applyReviewEdit"

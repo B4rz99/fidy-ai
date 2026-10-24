@@ -4272,24 +4272,15 @@ it("delivers retained original material only to its browser owner", () =>
       });
       const foreign = yield* fromTestPromise(() => read(1));
       expect(foreign.status).toBe(404);
-      const retry = yield* fromTestPromise(() =>
-        send(
-          runtime,
-          new Request(`https://api.fidyapp.com/ingestion/review-workspace/${id}/suggestions`, {
-            headers: sessionHeaders(1),
-          })
-        )
-      );
-      expect(retry.status).toBe(404);
       const audit = yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "SELECT outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id=? AND operation IN ('ingestion.getReviewMaterial','ingestion.getReviewSuggestions')"
+            "SELECT outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id=? AND operation = 'ingestion.getReviewMaterial'"
           )
           .bind(userB)
           .all()
       );
-      expect(audit.results).toEqual([{ outcome: "rejected" }, { outcome: "rejected" }]);
+      expect(audit.results).toEqual([{ outcome: "rejected" }]);
     })
   ));
 
@@ -4345,7 +4336,7 @@ it("expires skipped drafts at the original deadline and refuses restoration or c
     })
   ));
 
-it("preserves an edited draft when extraction retry is temporarily unavailable", () =>
+it("refuses manual reprocessing without altering the retained draft", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const runtime = yield* fromTestPromise(() => setup());
@@ -4377,7 +4368,7 @@ it("preserves an edited draft when extraction retry is temporarily unavailable",
           })
         )
       );
-      expect(retry.status).toBe(503);
+      expect(retry.status).toBe(404);
       const detail = yield* fromTestPromise(() => reviewDetail(runtime, id));
       expect(yield* fromTestPromise(() => detail.json())).toMatchObject({
         data: { revision: 1, draft },

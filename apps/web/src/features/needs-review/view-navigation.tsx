@@ -1,3 +1,4 @@
+import { Badge } from "@/ui/components/badge";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Option } from "effect";
 import type { JSX } from "react";
@@ -9,7 +10,8 @@ export type Filter = "pending" | "history" | "created" | "skipped" | "expired";
 type Props = Readonly<{
   filter: Filter;
   select: (status: Filter, offset: number) => void;
-  count: number;
+  count: Option.Option<number>;
+  unavailable: boolean;
   refresh: () => void;
   source: string;
   setSource: (value: string) => void;
@@ -24,37 +26,37 @@ const filters = [
   { value: "expired", label: "Vencidas" },
 ] as const;
 export const ReviewNavigation = (props: Props): JSX.Element => (
-  <nav
-    aria-label="Vistas de revisión"
-    className="flex flex-wrap items-center gap-3 border-b px-5 py-3"
-  >
-    <Button
-      variant={props.filter === "pending" ? "secondary" : "ghost"}
-      aria-pressed={props.filter === "pending"}
-      onClick={() => props.select("pending", 0)}
-    >
-      Pendientes <span className="ml-2 tabular-nums">{props.count}</span>
-    </Button>
-    <Button
-      variant={props.filter !== "pending" ? "secondary" : "ghost"}
-      aria-pressed={props.filter !== "pending"}
-      onClick={() => props.select("history", 0)}
-    >
-      Historial
-    </Button>
+  <nav aria-label="Vistas de revisión" data-review="navigation">
+    <div data-review="tabs">
+      <Button
+        variant={props.filter === "pending" ? "secondary" : "ghost"}
+        aria-pressed={props.filter === "pending"}
+        onClick={() => props.select("pending", 0)}
+      >
+        Pendientes{" "}
+        {Option.isSome(props.count) ? <Badge variant="secondary">{props.count.value}</Badge> : null}
+      </Button>
+      <Button
+        variant={props.filter !== "pending" ? "secondary" : "ghost"}
+        aria-pressed={props.filter !== "pending"}
+        onClick={() => props.select("history", 0)}
+      >
+        Historial
+      </Button>
+    </div>
     <ReviewFilters {...props} />
     <RefreshButton variant="ghost" onClick={props.refresh} label="Actualizar" />
   </nav>
 );
 const ReviewFilters = (props: Props): JSX.Element => (
-  <div className="ml-auto flex min-w-0 flex-wrap gap-3">
+  <div data-review="filters">
     {props.filter !== "pending" ? (
       <ChoiceDropdown
         id="review-status"
         label="Mostrar historial"
         value={props.filter}
         options={filters.filter((option) => option.value !== "pending")}
-        disabled={false}
+        disabled={props.unavailable}
         leading={null}
         triggerLabel={Option.none()}
         width="auto"
@@ -74,17 +76,18 @@ const ReviewFilters = (props: Props): JSX.Element => (
         { value: "media", label: "Imágenes" },
         { value: "email", label: "Correos" },
       ]}
-      disabled={false}
+      disabled={props.unavailable}
       leading={null}
       triggerLabel={Option.none()}
       width="auto"
       onChange={props.setSource}
     />
-    <div className="w-full sm:w-60">
+    <div data-review="search">
       <Input
         aria-label="Buscar pendientes en esta página"
         placeholder="Buscar pendiente…"
         value={props.search}
+        disabled={props.unavailable}
         onChange={(event) => props.setSearch(event.target.value)}
       />
     </div>

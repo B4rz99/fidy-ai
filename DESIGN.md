@@ -633,6 +633,21 @@ Use `FinancialSummaryCard` for a formatted top amount, label, positive/negative 
 
 The UI reference includes editable, disabled, and invalid amounts, searchable choices, both financial card treatments, and spending meters. Verify keyboard behavior, light and Grafito palettes, narrow width, and enlarged text when changing these owners.
 
+### Approved review workspace
+
+`ui/components/review-workspace.tsx` and its stylesheet own the approved Por revisar
+composition: page-local filters, independent row selection, retained source beside the
+editable draft, deadline notices, save feedback and the individual Confirmar action.
+Features keep command authority, serialized autosave, revisions and expiry suppression.
+The history surface preserves skip, restore and Undo without adding bulk confirmation.
+
+The pattern composes the actual Input, Currency selector, category choices, calendar and
+time controls. `CalendarField appearance="review"` changes only the compact Spanish date
+label; the default calendar appearance and timezone behavior remain shared. Narrow screens
+stack the source and form and give category its full row. `/ui-reference.html` includes the
+review owners in both themes. Manual reprocessing has no UI or callable review endpoint;
+read recovery for original material and uncertain command results remains available.
+
 ### Approved browser access composition
 
 The login composition was approved separately from the landing. `/login` uses the supplied coin-i

@@ -15,6 +15,7 @@ export type InboxControl = Readonly<{
   locked: boolean;
   choose: (item: Item) => void;
   toggle: (item: Item) => void;
+  clearChecked: () => void;
   finished: (items: ReadonlyArray<Detail>, skipped: boolean) => void;
   bulk: (restore: boolean, items: ReadonlyArray<Item>) => void;
   recover: () => void;
@@ -56,6 +57,7 @@ export const useInboxControl = ({
     barrier,
     selected,
     checked,
+    clearChecked: () => setChecked([]),
     undo,
     feedback,
     locked,

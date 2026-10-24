@@ -674,3 +674,11 @@ UI paragraph does not change the server disclosure or historical Consent evidenc
 Provider waiting, consent loading/refusal, one-time recovery and WhatsApp association review
 remain real additional states using the same access surface, pending separate visual review if
 further composition changes are requested.
+
+## Approved Dashboard and application navigation
+
+The separately approved Dashboard reference is Library `libfile_3810ef5dde2481918fb3b0700d74cf8e` version 5. Its fictitious amounts are composition examples, never application data. The application shell uses the original wordmark, supplied tití and pastel ceiba PNG in the sidebar, Hugeicons outline navigation, and `Logout02Icon` for functional logout. Mobile retains the assistant in the header beside theme and hides its trigger while the compact menu is open. The shared `theme.ts` adapter follows the system until a schema-validated manual `fidy-theme-v1` choice; access and authenticated views use the same preference.
+
+Dashboard cards retain canonical Widget configuration and layout. The spending chart remains vertical Recharts bars with exact-money tooltips and separate Currency series. Metrics keep Ingresos and Gastos per Currency, without conversion or net. Budget cards retain spent/cap progress and available/reached/exceeded states. Recent Transactions keep the configured ten latest records, their original order, local-date groups and ledger category/direction visuals; partial groups do not claim daily totals. Mixed currencies use the existing unambiguous Money formatter.
+
+`ui/components/application.tsx`, `application.css`, `dashboard.tsx` and `dashboard.css` own the approved shell and card treatments. `/ui-reference.html#dashboard` renders their synthetic examples. The existing Dashboard editing owner, directional drag targets, keyboard/touch behavior, resize, per-gesture persistence and explicit reread recovery remain authoritative. The static prototype's move-to-end and range demos are not application behavior. Existing saved layouts remain unchanged.

@@ -22,7 +22,7 @@ export const ChatWindow = ({ open, onOpenChange, children }: ChatWindowProps): J
     <PopoverTrigger
       render={<Button size="icon-lg" />}
       aria-label="Abrir agente Fidy"
-      className="fixed right-5 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-40 shadow-md"
+      className="application-agent-trigger"
     >
       <HugeiconsIcon icon={SparklesIcon} size={24} strokeWidth={1.5} aria-hidden="true" />
     </PopoverTrigger>

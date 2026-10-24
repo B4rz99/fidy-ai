@@ -24,7 +24,7 @@ const subscribe = (changed: () => void): (() => void) => {
     window.removeEventListener(preferenceChanged, changed);
   };
 };
-export const useAccessTheme = (): Readonly<{
+export const useTheme = (): Readonly<{
   theme: "light" | "dark";
   mounted: RefCallback<HTMLDivElement>;
   toggle: () => void;

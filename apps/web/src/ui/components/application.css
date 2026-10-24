@@ -1,0 +1,289 @@
+.application-shell {
+  --application-side: light-dark(#f8f0ea, #191a17);
+  --application-line: light-dark(#e9e2da, #373831);
+  --application-soft: light-dark(#f5f2ee, #292a25);
+  --application-active: light-dark(#eaf3d9, #28351b);
+  min-height: 100svh;
+  background: var(--fidy-background-canvas);
+  color: var(--fidy-text-primary);
+  position: relative;
+}
+.application-logo-filter {
+  position: absolute;
+  pointer-events: none;
+}
+.application-sidebar {
+  width: 240px;
+  position: fixed;
+  inset: 0 auto 0 0;
+  background: var(--application-side);
+  border-right: 1px solid var(--application-line);
+  padding: 30px 18px;
+  display: flex;
+  flex-direction: column;
+  z-index: 45;
+  overflow-y: auto;
+}
+.application-brand {
+  display: block;
+  margin: 0 14px 40px;
+  flex-shrink: 0;
+}
+.application-logo {
+  width: 96px;
+  height: 61px;
+  object-fit: cover;
+  border-radius: 15px;
+}
+.dark .application-logo {
+  filter: url(#application-logo-knockout);
+}
+.application-desktop-navigation {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.application-navigation {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+.application-navigation-link {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 15px 17px;
+  border-radius: 14px;
+  font-size: 14px;
+  color: var(--fidy-text-muted);
+  min-height: 52px;
+  flex-shrink: 0;
+  cursor: pointer;
+  list-style: none;
+}
+.application-navigation-link:hover,
+.application-settings-link:hover {
+  background: var(--application-soft);
+  color: var(--fidy-text-primary);
+}
+.application-navigation-active {
+  background: var(--application-active);
+  color: var(--fidy-text-primary);
+  font-weight: 600;
+  box-shadow: inset 3px 0 var(--fidy-lime);
+}
+.application-navigation-active:hover {
+  background: var(--application-active);
+}
+.application-navigation-link :is(output, [aria-label$="pendientes"]) {
+  margin-left: auto;
+  border-radius: 8px;
+  background: var(--secondary);
+  font-size: 11px;
+  padding: 2px 7px;
+}
+.application-settings-links {
+  display: flex;
+  flex-direction: column;
+  padding-left: 40px;
+}
+.application-settings-link {
+  padding: 10px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+.application-navigation-bottom {
+  margin-top: auto;
+  padding-top: 240px;
+  position: relative;
+}
+.application-habitat {
+  position: absolute;
+  pointer-events: none;
+  inset: 0;
+  overflow: hidden;
+}
+.application-habitat-plants {
+  position: absolute;
+  bottom: 50px;
+  left: -20px;
+  width: 280px;
+  height: 240px;
+  object-fit: cover;
+  opacity: 0.23;
+  mask-image: linear-gradient(transparent, black);
+}
+.application-habitat-mascot {
+  position: absolute;
+  width: 175px;
+  height: 175px;
+  object-fit: contain;
+  bottom: 34px;
+  left: 10px;
+}
+.dark .application-habitat-plants {
+  opacity: 0.16;
+}
+.application-logout {
+  display: flex;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  position: relative;
+  padding: 14px 17px;
+  height: auto;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--fidy-text-muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+.application-workspace {
+  margin-left: 240px;
+  min-width: 0;
+}
+.application-workspace:not(:has(.dashboard-surface)) {
+  padding-top: 90px;
+}
+.application-theme-control {
+  position: absolute;
+  z-index: 40;
+  right: 42px;
+  top: 34px;
+}
+.application-theme-button {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid var(--application-line);
+  background: transparent;
+  color: var(--fidy-text-primary);
+}
+.application-menu-control,
+.application-menu-brand {
+  display: none;
+}
+.application-agent-trigger {
+  position: fixed;
+  right: 26px;
+  bottom: 24px;
+  width: 52px;
+  height: 52px;
+  border-radius: 17px;
+  background: var(--fidy-lime);
+  color: var(--fidy-ink);
+  border: 1px solid var(--fidy-button-primary-default-border);
+  z-index: 40;
+  box-shadow: 0 8px 24px #00000012;
+}
+.application-shell :is(a, button):focus-visible {
+  outline: 2px solid var(--fidy-focus-ring-color);
+  outline-offset: 4px;
+}
+@media (max-width: 900px) {
+  .application-sidebar {
+    position: relative;
+    width: 100%;
+    height: 84px;
+    padding: 20px 24px;
+    border-right: 0;
+    background: transparent;
+    display: block;
+    overflow: visible;
+    z-index: 20;
+  }
+  .application-brand {
+    position: absolute;
+    left: 80px;
+    top: 20px;
+    margin: 0;
+  }
+  .application-logo {
+    width: 70px;
+    height: 44px;
+    border-radius: 11px;
+  }
+  .application-workspace {
+    margin-left: 0;
+  }
+  .application-workspace:not(:has(.dashboard-surface)) {
+    padding-top: 0;
+  }
+  .application-menu-control {
+    display: block;
+    position: absolute;
+    left: 18px;
+    top: 21px;
+  }
+  .application-theme-control {
+    right: 18px;
+    top: 21px;
+  }
+  .application-theme-button {
+    width: 42px;
+    height: 42px;
+  }
+  .application-sidebar .signed-in-compact-navigation {
+    position: fixed;
+    inset: 0 auto 0 0;
+    margin: 0;
+    width: 250px;
+    max-width: 85vw;
+    max-height: 100dvh;
+    height: 100dvh;
+    padding: 30px 18px;
+    border: 0;
+    border-right: 1px solid var(--application-line);
+    border-radius: 0;
+    background: var(--application-side);
+    color: var(--fidy-text-primary);
+    overflow-y: auto;
+    box-shadow: none;
+  }
+  .application-sidebar .signed-in-compact-navigation:popover-open {
+    display: flex;
+    flex-direction: column;
+  }
+  .application-sidebar .signed-in-compact-navigation::backdrop {
+    background: #0007;
+  }
+  .application-menu-brand {
+    display: block;
+    margin: 0 14px 40px;
+  }
+  .application-menu-brand .application-logo {
+    width: 96px;
+    height: 61px;
+    border-radius: 15px;
+  }
+  .application-agent-trigger {
+    position: absolute;
+    top: 20px;
+    right: 73px;
+    bottom: auto;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    box-shadow: none;
+  }
+  body:has(.signed-in-compact-navigation:popover-open) .application-agent-trigger {
+    display: none;
+  }
+  .application-habitat-plants {
+    bottom: 50px;
+  }
+  .application-navigation-bottom {
+    padding-top: 180px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .application-shell *,
+  .application-shell *::before,
+  .application-shell *::after {
+    animation: none;
+    transition: none;
+    scroll-behavior: auto;
+  }
+}

@@ -16,19 +16,19 @@ export const SettingsNavigation = (): JSX.Element => {
   });
   return (
     <details className="shrink-0" open={inSettings}>
-      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted">
-        <HugeiconsIcon icon={Settings01Icon} size={24} strokeWidth={1.5} aria-hidden="true" />
+      <summary className="application-navigation-link">
+        <HugeiconsIcon icon={Settings01Icon} size={22} strokeWidth={1.5} aria-hidden="true" />
         Ajustes
       </summary>
-      <div className="flex flex-col gap-1 py-2 pl-4">
+      <div className="application-settings-links">
         {settingsLinks.map((link) => (
           <Link
             key={link.to}
             to={link.to}
             search={{}}
             onClick={dismissCompactNavigation}
-            className="rounded-md px-4 py-2 text-sm hover:bg-muted"
-            activeProps={{ className: "bg-secondary text-secondary-foreground" }}
+            className="application-settings-link"
+            activeProps={{ className: "application-navigation-active" }}
           >
             {link.label}
           </Link>

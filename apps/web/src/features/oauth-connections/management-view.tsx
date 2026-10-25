@@ -17,14 +17,14 @@ import {
 } from "@/ui/components/table";
 
 const dateFormat = new Intl.DateTimeFormat("es-CO", {
-  day: "2-digit",
-  month: "2-digit",
+  day: "numeric",
+  month: "short",
   year: "numeric",
   timeZone: "UTC",
 });
 const Timestamp = ({ value }: Readonly<{ value: DateTime.Utc }>): JSX.Element => (
   <time dateTime={DateTime.formatIso(value)}>
-    {dateFormat.format(DateTime.toDate(value)).replaceAll("/", "-")}
+    {dateFormat.format(DateTime.toDate(value)).replaceAll(" de ", " ")}
   </time>
 );
 const stateVariants = { active: "success", expired: "warning", revoked: "destructive" } as const;
@@ -44,13 +44,9 @@ const ConnectionRow = ({
         <span className="block font-semibold break-words">{connection.claimedClientName}</span>
       </TableCell>
       <TableCell density="compact">
-        <div className="flex flex-wrap gap-1">
-          {connection.permissions.map((permission) => (
-            <Badge key={permission.scope} variant="secondary">
-              {permission.label}
-            </Badge>
-          ))}
-        </div>
+        <span className="text-muted-foreground">
+          {connection.permissions.map((permission) => permission.label).join(" · ")}
+        </span>
       </TableCell>
       <TableCell density="compact">
         <Badge variant={stateVariants[connection.state]}>{states[connection.state]}</Badge>
@@ -62,11 +58,13 @@ const ConnectionRow = ({
         {connection.state === "active" ? (
           <Button
             type="button"
-            variant="destructive"
+            variant="destructive-text"
+            size="label"
+            aria-label="Revocar este agente"
             disabled={busy}
             onClick={() => revoke(connection.connectionId)}
           >
-            Revocar este agente
+            Revocar
           </Button>
         ) : (
           <span className="text-xs text-muted-foreground">
@@ -95,23 +93,26 @@ export const OAuthManagementView = ({
     {list.connections.length === 0 ? (
       <p>No hay conexiones en esta página.</p>
     ) : (
-      <Table aria-label="Conexiones MCP">
-        <TableHeader>
-          <TableRow>
-            {["Nombre", "Permisos", "Estado", "Vence el", "Acciones"].map((label) => (
-              <TableHead key={label} density="compact">
-                {label}
-              </TableHead>
+      <div className="settings-table">
+        <Table aria-label="Conexiones MCP" className="min-w-[36rem]">
+          <TableHeader>
+            <TableRow>
+              {["Nombre", "Permisos", "Estado", "Vence", "Acción"].map((label) => (
+                <TableHead key={label} density="compact">
+                  {label}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {list.connections.map((connection) => (
+              <ConnectionRow key={connection.connectionId} {...{ connection, busy, revoke }} />
             ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {list.connections.map((connection) => (
-            <ConnectionRow key={connection.connectionId} {...{ connection, busy, revoke }} />
-          ))}
-        </TableBody>
-      </Table>
+          </TableBody>
+        </Table>
+      </div>
     )}
+    <p className="text-sm text-muted-foreground">Los nombres son declarados por los agentes.</p>
     {Option.match(list.nextCursor, {
       onNone: () => null,
       onSome: (id) => (
@@ -120,8 +121,17 @@ export const OAuthManagementView = ({
         </Button>
       ),
     })}
-    <Button type="button" variant="destructive" disabled={busy} onClick={revokeAll}>
-      Revocar todos los agentes conectados
-    </Button>
+    <div>
+      <Button
+        type="button"
+        variant="destructive-text"
+        size="label"
+        aria-label="Revocar todos los agentes conectados"
+        disabled={busy}
+        onClick={revokeAll}
+      >
+        Revocar todos los agentes
+      </Button>
+    </div>
   </section>
 );

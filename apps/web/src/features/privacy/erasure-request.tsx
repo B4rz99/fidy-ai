@@ -1,10 +1,29 @@
+import { Delete02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Effect } from "effect";
-import { type JSX, useState } from "react";
+import { type JSX, type ReactNode, useState } from "react";
 import type { WebAuthClient } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
 import { Checkbox } from "@/ui/components/checkbox";
+
+const ErasureSection = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => (
+  <section className="settings-section" aria-label="Solicitud de eliminación">
+    <div className="settings-section-icon">
+      <HugeiconsIcon icon={Delete02Icon} size={32} aria-hidden="true" />
+    </div>
+    <div className="settings-section-body">
+      <h2 className="settings-section-title">Eliminar tus datos</h2>
+      <div className="settings-section-description">
+        <p>Al confirmar se bloquean nuevas operaciones y comienza la eliminación.</p>
+        <p>Las copias de respaldo y los proveedores pueden tardar más.</p>
+        <p>Requiere un inicio de sesión reciente.</p>
+      </div>
+      <div className="settings-section-actions">{children}</div>
+    </div>
+  </section>
+);
 
 export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>): JSX.Element => {
   const [confirmed, confirm] = useState(false);
@@ -21,13 +40,7 @@ export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>):
   const submit = useAtomSet(command);
   const accepted = result._tag === "Success" && result.value;
   return (
-    <section className="flex flex-col gap-4 border-t pt-6" aria-label="Solicitud de eliminación">
-      <h2 className="text-xl font-semibold">Eliminar tus datos</h2>
-      <p>
-        Elimina los datos de tu cuenta. Necesitas un inicio de sesión reciente. Al confirmar,
-        bloquearemos nuevas operaciones y comenzaremos la eliminación. Las copias de respaldo y los
-        datos en proveedores pueden tardar más en eliminarse.
-      </p>
+    <ErasureSection>
       <label htmlFor="erasure-confirmation" className="flex items-center gap-3">
         <Checkbox
           id="erasure-confirmation"
@@ -40,7 +53,7 @@ export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>):
       <div>
         <Button
           type="button"
-          variant="destructive"
+          variant="destructive-outline"
           disabled={!confirmed || result.waiting || accepted}
           onClick={() => submit()}
         >
@@ -48,7 +61,7 @@ export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>):
         </Button>
       </div>
       <ErasureFeedback accepted={accepted} failed={result._tag === "Success" && !result.value} />
-    </section>
+    </ErasureSection>
   );
 };
 

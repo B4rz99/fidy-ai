@@ -31,8 +31,8 @@ const patExpirationFormatter = new Intl.DateTimeFormat("es-CO", {
 
 const scopeDescriptions = {
   read: "Consultar tus datos financieros.",
-  write: "Crear y modificar tus datos financieros.",
-  dashboard: "Consultar y modificar tu tablero financiero.",
+  write: "Crear y modificar tus datos.",
+  dashboard: "Ver y editar tu tablero.",
 } as const;
 
 const scopeOptions = (["read", "write", "dashboard"] as const).map((scope) => ({
@@ -55,7 +55,7 @@ const LifetimeSelector = ({
   state: Extract<PATCreationDisplay, { _tag: "Editing" }>;
   update: (state: Extract<PATCreationDisplay, { _tag: "Editing" }>) => void;
 }>): JSX.Element => (
-  <fieldset className="flex flex-col gap-3">
+  <fieldset className="settings-token-lifetime">
     <legend className="font-medium">Duración</legend>
     <ChoiceDropdown
       id="pat-lifetime"
@@ -87,7 +87,7 @@ const ScopeSelector = ({
       <legend className="mb-2 font-medium">Permisos</legend>
       {scopeOptions.map((option) => (
         <label
-          className="flex cursor-pointer items-start gap-3 border-b py-3 transition-colors hover:bg-muted/50 has-[[data-checked]]:bg-muted/50"
+          className="settings-scope-option"
           htmlFor={`pat-scope-${option.scope}`}
           key={option.scope}
         >
@@ -130,7 +130,7 @@ const GrantEditor = ({
   };
 
   return (
-    <form className="flex flex-col gap-6" onSubmit={submit}>
+    <form className="settings-token-form" onSubmit={submit}>
       <div className="flex flex-col gap-2">
         <Label htmlFor="pat-recipient">Nombre</Label>
         <Input
@@ -138,7 +138,7 @@ const GrantEditor = ({
           onChange={(event) => update({ ...state, recipientLabel: event.target.value })}
           aria-describedby="pat-recipient-hint"
           autoComplete="off"
-          placeholder="Ej. Mi agente personal"
+          placeholder="Mi agente personal"
           value={state.recipientLabel}
         />
         <p id="pat-recipient-hint" className="text-sm text-muted-foreground">
@@ -147,9 +147,12 @@ const GrantEditor = ({
       </div>
       <ScopeSelector state={state} update={update} />
       <LifetimeSelector state={state} update={update} />
-      <Button disabled={!valid} type="submit">
-        Crear token
-      </Button>
+      <div className="settings-token-submit">
+        <Button disabled={!valid} type="submit">
+          Crear token
+        </Button>
+        <p className="text-sm text-muted-foreground">Revisarás el acceso antes de confirmarlo.</p>
+      </div>
     </form>
   );
 };
@@ -328,17 +331,12 @@ export const ManualPATView = ({
   <section
     id="create-pat"
     ref={lifecycleRef}
-    className="flex min-w-0 flex-col gap-6"
+    className="settings-token-creation"
     aria-labelledby="create-pat-title"
   >
-    <header className="flex flex-col gap-1">
-      <h2 id="create-pat-title" className="text-xl font-semibold tracking-tight">
-        Crear token
-      </h2>
-      <p className="text-sm text-muted-foreground">
-        Dale un nombre y elige solo los permisos que necesita tu agente.
-      </p>
-    </header>
+    <h2 id="create-pat-title" className="settings-panel-title">
+      Crear token
+    </h2>
     <CreationContent actions={actions} state={state} />
   </section>
 );

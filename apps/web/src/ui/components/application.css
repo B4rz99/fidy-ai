@@ -87,12 +87,40 @@
 .application-settings-links {
   display: flex;
   flex-direction: column;
-  padding-left: 40px;
+  margin-left: 28px;
+  padding-left: 18px;
+  border-left: 1px solid var(--application-line);
 }
 .application-settings-link {
-  padding: 10px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0;
   font-size: 13px;
   border-radius: 8px;
+}
+.application-settings-link::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--fidy-border-control);
+}
+.application-settings-link::after {
+  content: "";
+  position: absolute;
+  left: -18px;
+  width: 10px;
+  border-top: 1px solid var(--application-line);
+}
+.application-settings-link.application-navigation-active {
+  background: transparent;
+  box-shadow: none;
+}
+.application-settings-link.application-navigation-active::before {
+  background: var(--fidy-lime);
 }
 .application-navigation-bottom {
   margin-top: auto;

@@ -762,9 +762,7 @@ test("removes retained review fields and original material at the evidence deadl
         page.getByRole("link", { name: "Cuenta", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
-        expect(
-          page.getByRole("heading", { name: "Cambiar correo verificado", exact: true })
-        ).toBeVisible()
+        expect(page.getByRole("heading", { name: "Correo verificado", exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() => page.clock.fastForward("01:01"));
       yield* Effect.tryPromise(() => expect(page.getByLabel("Valor")).toHaveCount(0));
@@ -999,9 +997,7 @@ const openReviewSibling = (page: Page): Promise<void> =>
     .click()
     .then(() => page.getByRole("link", { name: "Cuenta", exact: true }).click())
     .then(() =>
-      expect(
-        page.getByRole("heading", { name: "Cambiar correo verificado", exact: true })
-      ).toBeVisible()
+      expect(page.getByRole("heading", { name: "Correo verificado", exact: true })).toBeVisible()
     );
 
 const reviewPickers = [

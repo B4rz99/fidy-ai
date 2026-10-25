@@ -358,7 +358,7 @@ const inspectManagementPage = (
     ).toBe(ok);
     yield* Effect.tryPromise(() => page.goto("/settings/access"));
     yield* Effect.tryPromise(() =>
-      expect(page.getByRole("heading", { name: "Conexiones MCP", exact: true })).toBeVisible()
+      expect(page.getByRole("heading", { name: "Agentes conectados", exact: true })).toBeVisible()
     );
     yield* Effect.tryPromise(() =>
       expect(page.getByText("<img src=x onerror=alert(1)>")).toBeVisible()

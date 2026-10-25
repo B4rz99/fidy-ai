@@ -5,8 +5,8 @@ import type { JSX } from "react";
 import { dismissCompactNavigation } from "./dismiss-navigation";
 
 const settingsLinks = [
-  { to: "/settings/privacy", label: "Privacidad" },
   { to: "/settings/account", label: "Cuenta" },
+  { to: "/settings/privacy", label: "Privacidad" },
   { to: "/settings/access", label: "Accesos" },
 ] as const;
 
@@ -16,7 +16,13 @@ export const SettingsNavigation = (): JSX.Element => {
   });
   return (
     <details className="shrink-0" open={inSettings}>
-      <summary className="application-navigation-link">
+      <summary
+        className={
+          inSettings
+            ? "application-navigation-link application-navigation-active"
+            : "application-navigation-link"
+        }
+      >
         <HugeiconsIcon icon={Settings01Icon} size={22} strokeWidth={1.5} aria-hidden="true" />
         Ajustes
       </summary>

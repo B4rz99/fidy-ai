@@ -1,3 +1,10 @@
+import {
+  ArrowUpRight01Icon,
+  CreditCardIcon,
+  Mail01Icon,
+  Shield01Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { ErasureRequest } from "./erasure-request";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
@@ -9,7 +16,9 @@ import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/can
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Checkbox } from "@/ui/components/checkbox";
-import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
+import { WorkspaceHeader } from "@/ui/components/workspace-layout";
+import { RefreshButton } from "@/ui/components/refresh-button";
+import { Badge } from "@/ui/components/badge";
 import { formatPrivacyTime } from "./presentation";
 import { AuthorizationCopy } from "./authorization-copy";
 import { ConsentRenewal } from "./renewal";
@@ -42,7 +51,7 @@ const WithdrawalChoice = ({
   confirm: (value: boolean) => void;
   withdraw: () => void;
 }>): JSX.Element => (
-  <section className="flex flex-col gap-4">
+  <div className="settings-section-actions">
     <label htmlFor="processing-withdrawal-confirmation" className="flex items-center gap-3">
       <Checkbox
         id="processing-withdrawal-confirmation"
@@ -55,14 +64,14 @@ const WithdrawalChoice = ({
     <div>
       <Button
         type="button"
-        variant="destructive"
+        variant="destructive-outline"
         disabled={disabled || !confirmed}
         onClick={withdraw}
       >
         {waiting ? "Registrando retiro…" : "Retirar autorización"}
       </Button>
     </div>
-  </section>
+  </div>
 );
 
 const ConsentReceipt = ({
@@ -112,41 +121,67 @@ const ConsentContent = ({
   if (status.value.status === "Missing") {
     return <p>No hay una autorización registrada para retirar.</p>;
   }
-  return (
-    <>
-      <output>Tu autorización está vigente.</output>
-      {children}
-    </>
-  );
+  return children;
 };
 
-const PrivacyExplanation = (): JSX.Element => (
+const PrivacyExplanation = ({
+  status,
+}: Readonly<{ status: CanonicalQueryState<ProcessingConsentStatus, unknown> }>): JSX.Element => (
   <>
-    <h2 className="text-xl font-semibold">Retirar autorización</h2>
-    <p>
-      Retirar tu autorización detiene nuevas acciones que dependan de ella, incluido el acceso de
-      tus agentes. Las solicitudes que ya estén en espera o en ejecución pueden terminar después del
-      retiro. Desde ese momento no se aceptarán nuevas solicitudes.
-    </p>
-    <p>
-      Esto no elimina tus datos, cancela la renovación de tu suscripción ni revoca por separado un
-      token.
-    </p>
+    <div className="settings-section-heading">
+      <h2 className="settings-section-title">Autorización de tratamiento</h2>
+      {status._tag === "Ready" &&
+      Option.isNone(status.refreshFailure) &&
+      status.value.status === "Granted" ? (
+        <output aria-label="Tu autorización está vigente.">
+          <Badge variant="success">Vigente</Badge>
+        </output>
+      ) : null}
+    </div>
+    <div className="settings-section-description">
+      <p>
+        Retirarla detiene nuevas solicitudes. Las que ya están en espera o en curso pueden terminar.
+      </p>
+      <p>No elimina tus datos, cancela tu suscripción ni revoca por separado un token.</p>
+    </div>
   </>
 );
 const RightsContact = (): JSX.Element => (
-  <section className="flex flex-col gap-4">
-    <h2 className="text-xl font-semibold">Solicitudes sobre tus datos</h2>
-    <p>
-      Para consultar, corregir o solicitar la eliminación de tus datos, escribe a{" "}
+  <section className="settings-section">
+    <div className="settings-section-icon settings-contact-icon">
+      <HugeiconsIcon icon={Mail01Icon} size={32} aria-hidden="true" />
+    </div>
+    <div className="settings-section-body flex flex-col gap-4">
+      <h2 className="settings-section-title">Solicitudes sobre tus datos</h2>
+      <p className="settings-section-description">
+        Puedes escribirnos incluso sin iniciar sesión ni aceptar de nuevo el tratamiento.
+      </p>
       <a className="underline" href="mailto:obarboza@fidyapp.com">
         obarboza@fidyapp.com
       </a>
-      . Puedes usar este canal sin iniciar sesión ni aceptar de nuevo el tratamiento.
-    </p>
-    <a className="underline" href="https://fidyapp.com/politica">
-      Política de tratamiento de datos
-    </a>
+      <a className="settings-policy-link underline" href="https://fidyapp.com/politica">
+        Política de tratamiento de datos
+        <HugeiconsIcon icon={ArrowUpRight01Icon} size={18} aria-hidden="true" />
+      </a>
+    </div>
+  </section>
+);
+
+const AuthorizationSection = ({
+  status,
+  children,
+}: Readonly<{
+  status: CanonicalQueryState<ProcessingConsentStatus, unknown>;
+  children: ReactNode;
+}>): JSX.Element => (
+  <section className="settings-section" aria-label="Autorización de tratamiento">
+    <div className="settings-section-icon">
+      <HugeiconsIcon icon={Shield01Icon} size={32} aria-hidden="true" />
+    </div>
+    <div className="settings-section-body">
+      <PrivacyExplanation status={status} />
+      {children}
+    </div>
   </section>
 );
 
@@ -155,47 +190,37 @@ const PrivacyWorkspace = ({
   checkStatus,
   children,
 }: Readonly<{ busy: boolean; checkStatus: () => void; children: ReactNode }>): JSX.Element => (
-  <main className="flex min-h-svh min-w-0 flex-col xl:grid xl:grid-rows-[auto_1fr]">
-    <WorkspaceHeader
-      title="Privacidad y tratamiento de datos"
-      context={
-        <p className="mt-1 text-sm text-muted-foreground">
-          Administra tu autorización y las solicitudes sobre tus datos.
-        </p>
-      }
-    >
-      <Button type="button" variant="outline" disabled={busy} onClick={checkStatus}>
-        Verificar autorización
-      </Button>
+  <main className="settings-workspace">
+    <WorkspaceHeader title="Privacidad" context={null}>
+      <RefreshButton label="Verificar autorización" disabled={busy} onClick={checkStatus} />
     </WorkspaceHeader>
-    <WorkspaceColumns
-      variant="default"
-      panel={
-        <aside className="min-w-0 border-t bg-card p-5 xl:border-t-0 xl:border-l">
-          <RightsContact />
-        </aside>
-      }
-    >
-      <section className="flex max-w-2xl flex-col gap-6" aria-label="Autorización de tratamiento">
-        <PrivacyExplanation />
-        {children}
-      </section>
-    </WorkspaceColumns>
+    <div className="settings-columns">
+      <div className="settings-main">{children}</div>
+      <aside className="settings-panel">
+        <RightsContact />
+      </aside>
+    </div>
   </main>
 );
 
 const SavedTransactionsLink = (): JSX.Element => (
-  <section className="flex flex-col gap-4 border-t pt-6">
-    <h2 className="text-xl font-semibold">Tus transacciones guardadas</h2>
-    <p>
-      Puedes consultar tus transacciones después de retirar la autorización. Esta consulta es
-      gratuita. Necesitas un inicio de sesión reciente. La vista será de solo lectura y no
-      reactivará el tratamiento.
-    </p>
-    <div>
-      <Button variant="outline" render={<Link to="/app/transactions" />}>
-        Ver mis transacciones
-      </Button>
+  <section className="settings-section">
+    <div className="settings-section-icon">
+      <HugeiconsIcon icon={CreditCardIcon} size={32} aria-hidden="true" />
+    </div>
+    <div className="settings-section-body">
+      <h2 className="settings-section-title">Tus transacciones guardadas</h2>
+      <div className="settings-section-description">
+        <p>Puedes consultarlas gratis tras retirar la autorización, en modo de solo lectura.</p>
+        <p>Requiere un inicio de sesión reciente. No reactiva el tratamiento.</p>
+      </div>
+      <div className="settings-section-actions">
+        <div>
+          <Button variant="outline" render={<Link to="/app/transactions" />}>
+            Ver mis transacciones
+          </Button>
+        </div>
+      </div>
     </div>
   </section>
 );
@@ -227,28 +252,30 @@ export const PrivacyFeature = (): JSX.Element => {
         refresh();
       }}
     >
-      <ConsentContent status={status} client={client}>
-        <WithdrawalChoice
-          disabled={busy || attempted}
-          waiting={result.waiting}
-          confirmed={confirmed}
-          confirm={setConfirmed}
-          withdraw={() => withdraw()}
-        />
-      </ConsentContent>
-      {result._tag === "Success" && !result.value ? (
-        <Alert variant="destructive" role="alert">
-          <AlertTitle>No pudimos confirmar el resultado</AlertTitle>
-          <AlertDescription>Consulta el estado antes de volver a intentarlo.</AlertDescription>
-        </Alert>
-      ) : null}
-      {status._tag === "Failure" ? (
-        <div>
-          <Button variant="outline" render={<Link to="/login" reloadDocument />}>
-            Iniciar sesión
-          </Button>
-        </div>
-      ) : null}
+      <AuthorizationSection status={status}>
+        <ConsentContent status={status} client={client}>
+          <WithdrawalChoice
+            disabled={busy || attempted}
+            waiting={result.waiting}
+            confirmed={confirmed}
+            confirm={setConfirmed}
+            withdraw={() => withdraw()}
+          />
+        </ConsentContent>
+        {result._tag === "Success" && !result.value ? (
+          <Alert variant="destructive" role="alert">
+            <AlertTitle>No pudimos confirmar el resultado</AlertTitle>
+            <AlertDescription>Consulta el estado antes de volver a intentarlo.</AlertDescription>
+          </Alert>
+        ) : null}
+        {status._tag === "Failure" ? (
+          <div>
+            <Button variant="outline" render={<Link to="/login" reloadDocument />}>
+              Iniciar sesión
+            </Button>
+          </div>
+        ) : null}
+      </AuthorizationSection>
       <AuthorizationCopy client={client} />
       <SavedTransactionsLink />
       <ErasureRequest client={client} />

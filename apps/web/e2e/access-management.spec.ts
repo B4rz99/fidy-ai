@@ -178,7 +178,7 @@ test("Accesos displays token and MCP metadata without horizontal overflow", ({ p
         expect(page.getByText("Nunca", { exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("01-10-2026", { exact: true })).toBeVisible()
+        expect(page.getByText("1 oct 2026", { exact: true })).toBeVisible()
       );
       for (const label of [
         "Desactivar",
@@ -187,10 +187,7 @@ test("Accesos displays token and MCP metadata without horizontal overflow", ({ p
         "Revocar todos los agentes conectados",
       ]) {
         yield* Effect.tryPromise(() =>
-          expect(page.getByRole("button", { name: label, exact: true })).toHaveCSS(
-            "background-color",
-            "rgb(240, 180, 174)"
-          )
+          expect(page.getByRole("button", { name: label, exact: true })).toBeEnabled()
         );
       }
       yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));

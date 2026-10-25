@@ -1,37 +1,22 @@
 import type { JSX } from "react";
 import { OAuthManagementFeature } from "@/features/oauth-connections/feature";
 import { PATManagementFeature } from "@/features/pats/feature";
-import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
+import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 
 export const AccessManagementPage = (): JSX.Element => (
   <PATManagementFeature>
-    {({ tokens, creation }) => (
-      <main className="flex min-h-svh min-w-0 flex-col xl:grid xl:grid-rows-[auto_1fr]">
-        <WorkspaceHeader
-          title="Accesos"
-          context={
-            <p className="mt-1 text-sm text-muted-foreground">
-              Administra los tokens y las conexiones de tus agentes.
-            </p>
-          }
-        >
-          {null}
+    {({ tokens, creation, refresh }) => (
+      <main className="settings-workspace">
+        <WorkspaceHeader title="Accesos" context={null}>
+          {refresh}
         </WorkspaceHeader>
-        <WorkspaceColumns
-          variant="default"
-          panel={
-            <aside className="min-w-0 border-t bg-card p-5 xl:border-t-0 xl:border-l">
-              {creation}
-            </aside>
-          }
-        >
-          <div className="flex min-w-0 flex-col gap-8">
+        <div className="settings-columns">
+          <div className="settings-main settings-access-main">
             {tokens}
-            <div className="min-w-0 border-t pt-6">
-              <OAuthManagementFeature />
-            </div>
+            <OAuthManagementFeature />
           </div>
-        </WorkspaceColumns>
+          <aside className="settings-panel">{creation}</aside>
+        </div>
       </main>
     )}
   </PATManagementFeature>

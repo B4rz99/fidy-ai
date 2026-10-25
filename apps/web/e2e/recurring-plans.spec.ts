@@ -51,6 +51,7 @@ test("recurring plans persist through the real canonical API and share monthly l
       yield* Effect.tryPromise(() =>
         expect(recurringItem(page, /Arriendo de prueba.*Parcial/u).first()).toBeVisible()
       );
+      yield* inspectEditorSelection(page);
       yield* inspectMobile(page);
     })
   ));
@@ -62,6 +63,70 @@ type PlanDraft = Readonly<{
   currency: string;
   amount: string;
 }>;
+const inspectEditorSelection = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.setViewportSize({ width: 1506, height: 900 }));
+    yield* createPlan({
+      page,
+      name: "Segundo plan de prueba",
+      kind: "expense",
+      currency: "COP",
+      amount: "200",
+    });
+    yield* Effect.tryPromise(() =>
+      recurringItem(page, /Arriendo de prueba/u)
+        .first()
+        .click()
+    );
+    yield* Effect.tryPromise(() => page.getByLabel("Importe real", { exact: true }).fill("9"));
+    yield* Effect.tryPromise(() =>
+      recurringItem(page, /Segundo plan de prueba/u)
+        .first()
+        .click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Importe real", { exact: true })).toHaveValue("200")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
+    yield* inspectPlanSelection(page);
+  });
+
+const inspectPlanSelection = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Administrar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Editar Arriendo de prueba", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByLabel("Nombre", { exact: true }).fill("Borrador anterior")
+    );
+    yield* Effect.tryPromise(() => page.getByLabel("Importe", { exact: true }).fill("9"));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Editar Segundo plan de prueba", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Nombre", { exact: true })).toHaveValue("Segundo plan de prueba")
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Importe", { exact: true })).toHaveValue("200")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Guardar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+    yield* Effect.tryPromise(() => page.reload());
+    yield* Effect.tryPromise(() =>
+      expect(recurringItem(page, /Segundo plan de prueba/u)).toContainText("200,00")
+    );
+    yield* Effect.tryPromise(() =>
+      expect(recurringItem(page, /Arriendo de prueba/u)).toContainText("1.000.000,00")
+    );
+  });
+
 const createPlan = ({
   page,
   name,
@@ -85,13 +150,42 @@ const createPlan = ({
       yield* Effect.tryPromise(() => chooseOption(page, "Tipo de importe", "Fijo"));
       yield* Effect.tryPromise(() => page.getByLabel("Importe", { exact: true }).fill(amount));
     }
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Guardar recurrente" }).click()
-    );
+    yield* Effect.tryPromise(() => page.getByRole("button", { name: "Guardar" }).click());
     yield* Effect.tryPromise(() =>
       expect(recurringItem(page, new RegExp(name, "u")).first()).toBeVisible()
     );
   });
+const checkUnknownTotals = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Gastos", exact: true })).toContainText(
+        "1 por confirmar"
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Gastos", exact: true })).not.toContainText(
+        "previstos"
+      )
+    );
+    yield* createPlan({
+      page,
+      name: "Gasto conocido",
+      kind: "expense",
+      currency: "COP",
+      amount: "50",
+    });
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Gastos", exact: true })).toContainText(
+        "1 por confirmar"
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Gastos", exact: true })).not.toContainText(
+        "previstos"
+      )
+    );
+  });
+
 test("keeps income, transfers, unknown expenses and filtered summaries separate", ({
   page,
   request,
@@ -123,11 +217,7 @@ test("keeps income, transfers, unknown expenses and filtered summaries separate"
         currency: "COP",
         amount: "",
       });
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("region", { name: "Gastos", exact: true })).toContainText(
-          "1 por confirmar"
-        )
-      );
+      yield* checkUnknownTotals(page);
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("region", { name: "Transferencias", exact: true })).toContainText(
           "100,00"
@@ -193,9 +283,7 @@ test("keeps an uncertain save blocked across navigation until an explicit reread
       );
       yield* Effect.tryPromise(() => chooseDate(page, "Primera fecha", "2026-10-31"));
       yield* Effect.tryPromise(() => chooseCurrency(page, "USD"));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Guardar recurrente" }).click()
-      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Guardar" }).click());
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toContainText("No pudimos confirmar si se guardó")
       );
@@ -533,7 +621,7 @@ const editExpectedPlan = (
     yield* Effect.tryPromise(() => page.getByLabel("Nombre", { exact: true }).fill(name));
     yield* Effect.tryPromise(() => page.getByLabel("Importe", { exact: true }).fill(amount));
     yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Guardar recurrente", exact: true }).click()
+      page.getByRole("button", { name: "Guardar", exact: true }).click()
     );
     yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
   });

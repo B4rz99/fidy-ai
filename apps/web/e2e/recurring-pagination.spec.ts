@@ -113,7 +113,9 @@ const inspectCrowdedDay = (page: Page): Effect.Effect<void, Cause.UnknownError> 
       page.getByRole("button", { name: "Calendario", exact: true }).click()
     );
     yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Ver 100 recurrentes del 2026-10-31", exact: true }).click()
+      page
+        .getByRole("button", { name: "+97 más · Ver 100 recurrentes del 2026-10-31", exact: true })
+        .click()
     );
     for (let index = 1; index < pageCount; index++) {
       yield* Effect.tryPromise(() =>

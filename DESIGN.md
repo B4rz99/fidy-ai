@@ -707,3 +707,11 @@ The separately approved Dashboard reference is Library `libfile_3810ef5dde248191
 Dashboard cards retain canonical Widget configuration and layout. The spending chart remains vertical Recharts bars with exact-money tooltips and separate Currency series. Metrics keep Ingresos and Gastos per Currency, without conversion or net. Budget cards retain spent/cap progress and available/reached/exceeded states. Recent Transactions keep the configured ten latest records, their original order, local-date groups and ledger category/direction visuals; partial groups do not claim daily totals. Mixed currencies use the existing unambiguous Money formatter.
 
 `ui/components/application.tsx`, `application.css`, `dashboard.tsx` and `dashboard.css` own the approved shell and card treatments. `/ui-reference.html#dashboard` renders their synthetic examples. The existing Dashboard editing owner, directional drag targets, keyboard/touch behavior, resize, per-gesture persistence and explicit reread recovery remain authoritative. The static prototype's move-to-end and range demos are not application behavior. Existing saved layouts remain unchanged.
+
+### Recurrentes: continuous workspace and contextual plane
+
+The recurring workspace uses the same continuous canvas, typography, aligned edges and hairline dividers as Transactions and Review. Monthly totals, occurrence groups, calendar and plan management are not enclosed in cards. Preserve separate currencies and movement kinds, unknown amounts, historical states, and all existing planning actions.
+
+The global header spans the entire workspace and retains the base canvas color, including “Nuevo recurrente” and the theme control. The contrasting right-hand contextual plane begins strictly below that header. On narrow screens the editor becomes a full-width accessible sheet with close and theme controls. Closing restores focus without submitting changes. The monthly navigation shows only the localized month and year with previous/next controls: no “Hoy” or substitute shortcut. Use Hugeicons and the existing Fidy tokens in both themes.
+
+The component ownership is `src/ui/components/recurring.tsx` and `recurring.css`; `src/ui/recurring-reference.tsx` demonstrates the composition. Feature code owns data and interactions, not a separate visual token system.

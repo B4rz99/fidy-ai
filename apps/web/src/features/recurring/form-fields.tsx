@@ -10,7 +10,7 @@ export const Field = ({
   name,
   children,
 }: Readonly<{ label: string; name: string; children: ReactNode }>): JSX.Element => (
-  <div className="grid gap-2">
+  <div data-recurring-slot="field" data-recurring-field={name} className="grid gap-2">
     <Label htmlFor={`recurring-${name}`}>{label}</Label>
     {children}
   </div>
@@ -34,7 +34,7 @@ export const ScheduleFields = ({
           options={frequencies.map(([value, label]) => ({ value, label }))}
         />
       </Field>
-      <div className="grid min-w-0 gap-3">
+      <div data-recurring-slot="date-fields" className="grid min-w-0 gap-3">
         <Field label="Primera fecha" name="firstDate">
           <RecurringDateField
             name="firstDate"
@@ -130,7 +130,7 @@ const MonthDays = ({ initial }: Readonly<{ initial: Partial<PlanInput> }>): JSX.
       Para dos veces al mes, elige dos días. Los meses cortos usan su último día y conservan el día
       original.
     </p>
-    <div className="grid min-w-0 gap-3">
+    <div data-recurring-slot="date-fields" className="grid min-w-0 gap-3">
       <Field label="Primer día del mes" name="day1">
         <Input
           id="recurring-day1"

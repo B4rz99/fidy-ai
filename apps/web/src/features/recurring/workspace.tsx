@@ -5,7 +5,13 @@ import { type JSX, type ReactNode, useState } from "react";
 import { RecurringPlanId } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { Disclosure } from "@/ui/components/disclosure";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/sheet";
+import {
+  RecurringColumns,
+  RecurringContextPanel,
+  RecurringSurface,
+  RecurringThemeControl,
+} from "@/ui/components/recurring";
+import { useTheme } from "@/ui/components/theme";
 import { MonthlyOverview, RecurringToolbar } from "./controls";
 import { OccurrenceDetails } from "./details";
 import { FiltersForm } from "./filters";
@@ -43,7 +49,6 @@ type Props = Readonly<{
   filters: Filters;
   applyFilters: (filters: Filters) => void;
   month: (step: number) => void;
-  today: () => void;
   earlier: (month: string) => void;
   timeZone: PlanInput["timeZone"];
 }>;
@@ -112,7 +117,8 @@ const Matching = ({ view }: Pick<Props, "view">): JSX.Element => (
     {view.matches.map(({ item, fact }) => (
       <div
         key={`${item.planId}:${item.date}`}
-        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+        data-recurring-slot="match"
+        className="flex flex-wrap items-center justify-between gap-3"
       >
         <p className="text-sm">
           Coincidencia exacta: {item.plan.name} · {fact.date}
@@ -168,7 +174,7 @@ const PreviousItems = ({
   disabled,
 }: Pick<Props, "view" | "earlier" | "categories" | "save" | "disabled"> &
   Readonly<{ open: (item: Occurrence) => void }>): JSX.Element => (
-  <details className="group/previous min-w-0 rounded-xl border bg-card px-2 py-3">
+  <details data-recurring-slot="previous" className="group/previous min-w-0">
     <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
       <HugeiconsIcon
         icon={ArrowDown01Icon}
@@ -227,7 +233,7 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
       })
     );
   return (
-    <>
+    <RecurringSurface>
       <RecurringToolbar
         create={create}
         disabled={disabled}
@@ -237,17 +243,22 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
         toggleFilters={() => setFiltersOpen(!filtersOpen)}
         filterCount={Object.keys(filters).length}
       />
-      <WorkspaceBody
-        props={props}
-        tab={tab}
-        calendar={calendar}
-        setCalendar={setCalendar}
-        filtersOpen={filtersOpen}
-        setPanel={setPanel}
-        open={open}
-      />
-      <EditorSheet {...props} panel={panel} setPanel={setPanel} />
-    </>
+      {Option.isNone(panel) ? props.notice : null}
+      <RecurringColumns
+        open={Option.isSome(panel)}
+        panel={<EditorSheet {...props} panel={panel} setPanel={setPanel} />}
+      >
+        <WorkspaceBody
+          props={props}
+          tab={tab}
+          calendar={calendar}
+          setCalendar={setCalendar}
+          filtersOpen={filtersOpen}
+          setPanel={setPanel}
+          open={open}
+        />
+      </RecurringColumns>
+    </RecurringSurface>
   );
 };
 
@@ -270,7 +281,7 @@ const WorkspaceBody = ({
 }>): JSX.Element => {
   const { view, disabled, save, filters, timeZone } = props;
   return (
-    <main className="grid gap-4 p-4 sm:p-5">
+    <main data-recurring-slot="content">
       <WorkspaceSuggestions
         view={view}
         save={save}
@@ -292,7 +303,6 @@ const WorkspaceBody = ({
           calendar={calendar}
           setCalendar={setCalendar}
           month={props.month}
-          today={props.today}
         />
       ) : null}
       <InvalidFulfillments view={view} save={save} disabled={disabled} />
@@ -324,49 +334,46 @@ const EditorSheet = ({
     panel: Option.Option<Panel>;
     setPanel: (panel: Option.Option<Panel>) => void;
   }>): JSX.Element => {
+  const { theme, toggle } = useTheme();
   const active = useRouterState({
     select: (state) => state.location.pathname === "/app/recurring",
   });
+  const title = Option.match(panel, {
+    onNone: () => "Configurar recurrente",
+    onSome: (selected) => {
+      if (selected.kind === "occurrence") {
+        return selectedOccurrence(view, selected).pipe(
+          Option.map((item) => item.plan.name),
+          Option.getOrElse(() => "Recurrente no disponible")
+        );
+      }
+      return selected.kind === "create" ? "Nuevo recurrente" : "Editar recurrente";
+    },
+  });
   return (
-    <>
-      <Sheet
-        open={active && Option.isSome(panel)}
-        onOpenChangeComplete={(opened) => {
-          if (!opened) setPanel(Option.none());
-        }}
-        onOpenChange={(opened) => {
-          if (!opened) setPanel(Option.none());
-        }}
-      >
-        <SheetContent
-          side="right"
-          showCloseButton
-          appearance="application"
-          className="overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-lg"
-        >
-          <SheetHeader>
-            <SheetTitle>
-              {Option.isSome(panel) && panel.value.kind === "occurrence"
-                ? selectedOccurrence(view, panel.value).pipe(
-                    Option.map((item) => item.plan.name),
-                    Option.getOrElse(() => "Recurrente no disponible")
-                  )
-                : "Configurar recurrente"}
-            </SheetTitle>
-          </SheetHeader>
-          {notice}
-          {Option.isSome(panel) ? (
-            <Editor
-              panel={panel.value}
-              view={view}
-              categories={categories}
-              disabled={disabled}
-              save={save}
-            />
-          ) : null}
-        </SheetContent>
-      </Sheet>
-    </>
+    <RecurringContextPanel
+      title={title}
+      themeControl={<RecurringThemeControl theme={theme} toggle={toggle} />}
+      open={active && Option.isSome(panel)}
+      onClose={() => setPanel(Option.none())}
+    >
+      {notice}
+      {Option.isSome(panel) ? (
+        <Editor
+          key={JSON.stringify(panel.value)}
+          panel={panel.value}
+          view={view}
+          categories={categories}
+          disabled={disabled}
+          save={save}
+        />
+      ) : null}
+      {Option.isSome(panel) && panel.value.kind !== "occurrence" ? (
+        <Button variant="ghost" onClick={() => setPanel(Option.none())}>
+          Cancelar
+        </Button>
+      ) : null}
+    </RecurringContextPanel>
   );
 };
 
@@ -391,7 +398,7 @@ const MonthItems = ({
 }>): JSX.Element => {
   if (view.occurrences.length === 0) {
     return (
-      <div className="min-w-0 rounded-xl border border-dashed p-4 text-center [overflow-wrap:anywhere]">
+      <div data-recurring-slot="empty" className="min-w-0 [overflow-wrap:anywhere]">
         <h2 className="font-medium">
           {Object.keys(filters).length > 0
             ? "Sin resultados para estos filtros"
@@ -470,7 +477,7 @@ const CreatePlan = ({
   const [initial, setInitial] = useState(panel.initial);
   return (
     <>
-      <div className="p-5">
+      <div data-recurring-slot="create-source">
         <Disclosure title="Crear desde una transacción">
           <TransactionPicker
             disabled={disabled}

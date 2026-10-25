@@ -142,7 +142,7 @@ export const PlanManagement = ({
 }>): JSX.Element => {
   const [status, setStatus] = useState("all");
   return (
-    <section className="rounded-xl border bg-card">
+    <section data-recurring-slot="plan-management">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
         <h2 className="font-medium">Todos los recurrentes</h2>
         <ChoiceDropdown
@@ -241,7 +241,7 @@ const SuggestionResults = ({
   next: (cursor: string) => void;
   ready: boolean;
 }>): JSX.Element => (
-  <details className="group/review rounded-lg bg-secondary/50 px-4 py-3">
+  <details data-recurring-slot="suggestions" className="group/review">
     <SuggestionBanner data={data} view={view} ready={ready} />
     <div className="mt-3 grid gap-3">
       <ReviewState

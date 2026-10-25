@@ -58,7 +58,7 @@ export const PlanForm = ({
     if (Option.isSome(parsed)) onSubmit(parsed.value);
   };
   return (
-    <form onSubmit={submit} className="grid gap-4 p-5">
+    <form onSubmit={submit} data-recurring-slot="plan-form" className="grid gap-4">
       <fieldset disabled={disabled} className="grid gap-4">
         <IdentityFields initial={initial} />
         <AmountFields initial={initial} amountMode={amountMode} setAmountMode={setAmountMode} />
@@ -69,7 +69,7 @@ export const PlanForm = ({
           </p>
         ) : null}
         <Button contentLayout="wrap" focusAppearance="subtle" type="submit">
-          Guardar recurrente
+          Guardar
         </Button>
       </fieldset>
     </form>

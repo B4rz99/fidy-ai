@@ -142,6 +142,9 @@ export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
     select: (state) => state.location.pathname === "/app/recurring",
   });
   const [selected, setSelected] = useState<Option.Option<string>>(() => Option.none());
+  const changeAgenda = (opened: boolean): void => {
+    if (!opened) setSelected(Option.none());
+  };
   const agenda = (date: string): void => setSelected(Option.some(date));
   const openItem = (item: Occurrence): void => {
     setSelected(Option.none());
@@ -171,9 +174,8 @@ export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
       </div>
       <Sheet
         open={active && Option.isSome(selected)}
-        onOpenChange={(opened) => {
-          if (!opened) setSelected(Option.none());
-        }}
+        onOpenChangeComplete={changeAgenda}
+        onOpenChange={changeAgenda}
       >
         <SheetContent
           aria-hidden={!active || Option.isNone(selected)}

@@ -85,6 +85,9 @@ export const RecurringContextPanel = ({
         open={open}
         modal={!desktop}
         disablePointerDismissal={desktop}
+        onOpenChangeComplete={(opened) => {
+          if (!opened) onClose();
+        }}
         onOpenChange={(value) => {
           if (!value) onClose();
         }}

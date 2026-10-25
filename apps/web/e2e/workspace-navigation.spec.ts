@@ -218,7 +218,7 @@ test("refreshes the retained recurring default month after midnight", ({ page, r
         expect(page.getByRole("heading", { name: /octubre de 2026/iu })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Hoy", exact: true }).click()
+        page.getByRole("button", { name: "Mes siguiente", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("heading", { name: /noviembre de 2026/iu })).toBeVisible()

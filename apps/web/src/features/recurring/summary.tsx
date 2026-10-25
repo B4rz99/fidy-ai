@@ -1,7 +1,15 @@
 import { BigDecimal } from "effect";
 import type { JSX } from "react";
 import { Progress } from "@/ui/components/progress";
+import { ArrowDown01Icon, ArrowUp01Icon, CreditCardIcon } from "@hugeicons/core-free-icons";
+import { IconIndicator } from "@/ui/components/icon-indicator";
 import { type Workspace, kinds, money, transferLabel } from "./model";
+
+const indicators = {
+  income: { icon: ArrowUp01Icon, tone: "sage" },
+  expense: { icon: ArrowDown01Icon, tone: "peach" },
+  transfer: { icon: CreditCardIcon, tone: "lavender" },
+} as const;
 
 type SummaryGroup = Workspace["summary"][number];
 const percentageScale = 100;
@@ -18,14 +26,22 @@ const SummaryAmounts = ({
   group,
   label,
 }: Readonly<{ group: SummaryGroup; label: string }>): JSX.Element => (
-  <div className="grid gap-2">
-    <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-muted-foreground">
+  <div data-recurring-slot="summary-amounts" className="grid gap-2">
+    <div data-recurring-slot="summary-planned">
       <span>{group.currency}</span>
-      <span>
-        {group.unknown > 0
-          ? `${group.unknown} por confirmar`
-          : `${money({ ...group.completed, amount: BigDecimal.sum(group.completed.amount, group.remaining.amount) })} previstos`}
-      </span>
+      {group.unknown > 0 ? (
+        <span data-recurring-slot="unknown-amount">{group.unknown} por confirmar</span>
+      ) : (
+        <>
+          <strong>
+            {money({
+              ...group.completed,
+              amount: BigDecimal.sum(group.completed.amount, group.remaining.amount),
+            })}
+          </strong>
+          <span>previstos</span>
+        </>
+      )}
     </div>
     <Progress value={progress(group)} aria-label={`${label} registrados en ${group.currency}`} />
     <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs tabular-nums">
@@ -35,10 +51,15 @@ const SummaryAmounts = ({
   </div>
 );
 export const Summary = ({ view }: Readonly<{ view: Workspace }>): JSX.Element => (
-  <div className="grid gap-y-2 @min-5xl:grid-cols-3">
+  <div data-recurring-slot="summary">
     {kinds.map(([kind, label]) => (
-      <section key={kind} aria-label={label} className="grid min-w-0 content-start gap-3 px-2 py-4">
-        <h3 className="text-sm font-medium">
+      <section key={kind} aria-label={label} data-recurring-slot="summary-kind">
+        <h3>
+          <IconIndicator
+            icon={indicators[kind].icon}
+            tone={indicators[kind].tone}
+            appearance="category"
+          />
           {kind === "transfer" ? transferLabel(view.occurrences) : label}
         </h3>
         {view.summary.map((group) =>

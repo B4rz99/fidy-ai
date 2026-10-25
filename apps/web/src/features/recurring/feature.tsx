@@ -22,7 +22,6 @@ type Props = Readonly<{
   profileWaiting: boolean;
   refreshProfile: () => void;
   month: string;
-  currentMonth: string;
   timeZone: PlanInput["timeZone"];
   filters: Filters;
   applyFilters: (filters: Filters) => void;
@@ -66,7 +65,6 @@ const Resources = (props: Props): JSX.Element => {
   );
   return (
     <Suspense fallback={<LoadingRecurring />}>
-      {notice}
       <PreviewWorkspace
         key={`${props.month}:${JSON.stringify(props.filters)}:${Option.getOrElse(props.previous, () => "")}:${view.document.revision}`}
         notice={notice}
@@ -77,7 +75,6 @@ const Resources = (props: Props): JSX.Element => {
         filters={props.filters}
         applyFilters={props.applyFilters}
         month={(step) => navigate(shiftMonth({ month: props.month, step }))}
-        today={() => navigate(props.currentMonth)}
         earlier={props.earlier}
         timeZone={props.timeZone}
       />
@@ -127,7 +124,6 @@ export const RecurringFeature = ({
       refreshProfile={refresh}
       key={user.id}
       month={month}
-      currentMonth={currentMonth}
       timeZone={user.timeZone}
       filters={filters}
       applyFilters={setFilters}

@@ -125,7 +125,7 @@ const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element =>
 export const OccurrenceDetails = (props: Props): JSX.Element => {
   const { item, save, disabled } = props;
   return (
-    <div className="grid gap-5 overflow-y-auto p-5">
+    <div data-recurring-slot="occurrence-detail" className="grid gap-5">
       <p>
         {item.expectedDate} · {statuses[item.status]}
       </p>

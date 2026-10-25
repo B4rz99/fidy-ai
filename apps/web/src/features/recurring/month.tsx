@@ -28,7 +28,6 @@ const CalendarItem = ({
     type="button"
     onClick={() => open(item)}
     title={`${item.plan.name} · ${expectedAmount(item)} · ${statuses[item.status]}`}
-    aria-label={`${item.plan.name} ${item.expectedDate} · ${statuses[item.status]} ${expectedAmount(item)}`}
     className={cn(
       "grid w-full min-w-0 gap-1 rounded-md p-2 text-left text-xs outline-none hover:bg-secondary focus-visible:bg-secondary focus-visible:underline",
       item.plan.kind === "income" ? "bg-success/25" : "bg-muted/60"
@@ -36,6 +35,9 @@ const CalendarItem = ({
   >
     <span className="line-clamp-2 font-medium [overflow-wrap:anywhere]">{item.plan.name}</span>
     <span className="tabular-nums">{expectedAmount(item)}</span>
+    <span className="sr-only">
+      {item.expectedDate} · {statuses[item.status]}
+    </span>
     {item.status === "upcoming" ? null : (
       <span className="text-muted-foreground">{statuses[item.status]}</span>
     )}
@@ -52,7 +54,7 @@ const DayItems = ({ date, items, open, agenda }: DayProps): JSX.Element => (
         size="sm"
         variant="ghost"
         focusAppearance="subtle"
-        aria-label={`Ver ${items.length} recurrentes del ${date}`}
+        aria-label={`+${items.length - dayPreviewSize} más · Ver ${items.length} recurrentes del ${date}`}
         onClick={() => agenda(date)}
       >
         +{items.length - dayPreviewSize} más
@@ -140,6 +142,9 @@ export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
     select: (state) => state.location.pathname === "/app/recurring",
   });
   const [selected, setSelected] = useState<Option.Option<string>>(() => Option.none());
+  const changeAgenda = (opened: boolean): void => {
+    if (!opened) setSelected(Option.none());
+  };
   const agenda = (date: string): void => setSelected(Option.some(date));
   const openItem = (item: Occurrence): void => {
     setSelected(Option.none());
@@ -148,7 +153,8 @@ export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
   const dates = [...new Set(view.occurrences.map((item) => item.expectedDate))].sort();
   return (
     <div
-      className="@container min-w-0 rounded-xl border bg-card"
+      data-recurring-slot="calendar"
+      className="@container min-w-0"
       aria-label="Calendario de recurrentes"
     >
       <CalendarGrid view={view} open={open} agenda={agenda} />
@@ -168,14 +174,11 @@ export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
       </div>
       <Sheet
         open={active && Option.isSome(selected)}
-        onOpenChangeComplete={(opened) => {
-          if (!opened) setSelected(Option.none());
-        }}
-        onOpenChange={(opened) => {
-          if (!opened) setSelected(Option.none());
-        }}
+        onOpenChangeComplete={changeAgenda}
+        onOpenChange={changeAgenda}
       >
         <SheetContent
+          aria-hidden={!active || Option.isNone(selected)}
           side="right"
           showCloseButton
           appearance="application"

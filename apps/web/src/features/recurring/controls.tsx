@@ -1,5 +1,6 @@
 import { type JSX } from "react";
 import {
+  Add01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
   Calendar03Icon,
@@ -30,12 +31,12 @@ export const RecurringToolbar = ({
   toggleFilters,
   filterCount,
 }: ToolbarProps): JSX.Element => (
-  <header className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 border-b px-5 py-3">
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+  <header data-recurring-slot="page-header">
+    <div data-recurring-slot="title-tabs">
       <h1 className="text-lg font-semibold tracking-tight">Recurrentes</h1>
       <ToolbarTabs tab={tab} setTab={setTab} />
     </div>
-    <div className="flex flex-wrap items-center gap-2">
+    <div data-recurring-slot="header-actions">
       <Button
         contentLayout="wrap"
         focusAppearance="subtle"
@@ -66,13 +67,14 @@ export const RecurringToolbar = ({
         disabled={disabled}
         onClick={create}
       >
+        <HugeiconsIcon icon={Add01Icon} data-icon="inline-start" />
         Nuevo recurrente
       </Button>
     </div>
   </header>
 );
 const ToolbarTabs = ({ tab, setTab }: Pick<ToolbarProps, "tab" | "setTab">): JSX.Element => (
-  <nav aria-label="Vistas de recurrentes" className="flex min-w-0 flex-wrap items-center gap-1">
+  <nav aria-label="Vistas de recurrentes" data-recurring-slot="tabs">
     <Button
       contentLayout="wrap"
       focusAppearance="subtle"
@@ -100,20 +102,20 @@ type MonthProps = Readonly<{
   calendar: boolean;
   setCalendar: (value: boolean) => void;
   month: (step: number) => void;
-  today: () => void;
 }>;
 export const MonthlyOverview = (props: MonthProps): JSX.Element => (
   <section
     aria-label="Resumen mensual"
-    className="@container min-w-0 overflow-hidden rounded-xl border bg-card"
+    data-recurring-slot="monthly-overview"
+    className="@container min-w-0"
   >
     <MonthControls {...props} />
     <Summary view={props.view} />
   </section>
 );
-const MonthControls = ({ view, calendar, setCalendar, month, today }: MonthProps): JSX.Element => (
-  <div className="flex flex-wrap items-center justify-between gap-3 px-2 py-4">
-    <h2 className="text-xl font-semibold first-letter:uppercase">{monthLabel(view.month)}</h2>
+const MonthControls = ({ view, calendar, setCalendar, month }: MonthProps): JSX.Element => (
+  <div data-recurring-slot="month-controls">
+    <h2>{monthLabel(view.month)}</h2>
     <div className="flex flex-wrap items-center gap-3">
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         <Button
@@ -136,15 +138,6 @@ const MonthControls = ({ view, calendar, setCalendar, month, today }: MonthProps
         >
           <HugeiconsIcon icon={ArrowRight01Icon} />
         </Button>
-        <Button
-          contentLayout="wrap"
-          focusAppearance="subtle"
-          size="sm"
-          variant="outline"
-          onClick={today}
-        >
-          Hoy
-        </Button>
       </div>
       <MonthPresentation calendar={calendar} setCalendar={setCalendar} />
     </div>
@@ -155,11 +148,7 @@ const MonthPresentation = ({
   calendar,
   setCalendar,
 }: Pick<MonthProps, "calendar" | "setCalendar">): JSX.Element => (
-  <div
-    className="flex flex-wrap items-center gap-1 rounded-2xl border p-1"
-    role="toolbar"
-    aria-label="Presentación del mes"
-  >
+  <div data-recurring-slot="presentation-toggle" role="toolbar" aria-label="Presentación del mes">
     <Button
       contentLayout="wrap"
       focusAppearance="subtle"

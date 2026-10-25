@@ -190,7 +190,7 @@ const OccurrenceGroup = ({
   const [expanded, setExpanded] = useState(true);
   const page = useOccurrencePage(props.items);
   return (
-    <section className="@container min-w-0 overflow-hidden rounded-xl border bg-card">
+    <section data-recurring-slot="occurrence-group" className="@container min-w-0">
       <h2>
         <button
           type="button"

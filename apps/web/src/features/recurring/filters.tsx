@@ -81,11 +81,7 @@ export const FiltersForm = ({ filters, categories, apply }: FilterProps): JSX.El
   const [invalid, setInvalid] = useState(false);
   const change = (name: string, value: string): void => setDraft({ ...draft, [name]: value });
   return (
-    <section
-      id="recurring-filters"
-      aria-label="Filtrar recurrentes"
-      className="rounded-xl bg-muted/40 p-4"
-    >
+    <section id="recurring-filters" aria-label="Filtrar recurrentes" data-recurring-slot="filters">
       <form
         className="flex flex-wrap items-center gap-3"
         onSubmit={(event) => {

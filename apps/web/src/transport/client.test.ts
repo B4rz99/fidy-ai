@@ -959,6 +959,66 @@ describe("canonical browser transport", () => {
     })
   );
 
+  it.effect(
+    "recovers an unavailable Consent read only after an explicit fresh successful read",
+    () =>
+      Effect.gen(function* () {
+        const recovery = yield* Deferred.make<HttpClientResponse.HttpClientResponse>();
+        let requests = 0;
+        let pendingRequest = Option.none<HttpClientRequest.HttpClientRequest>();
+        const client = makeWebAuthClient({
+          apiOrigin: policyTestOrigin,
+          httpClient: Layer.succeed(
+            HttpClient.HttpClient,
+            makeHttpClient((request) => {
+              requests++;
+              if (requests === 1) return Effect.succeed(responseJson(request, {}, 503));
+              pendingRequest = Option.some(request);
+              return Deferred.await(recovery);
+            })
+          ),
+        });
+        const atom = client.query("processingConsent", "status", {
+          timeToLive: "0 seconds",
+          reactivityKeys: ["processing-consent"],
+        });
+        const registry = AtomRegistry.make();
+        const unmount = registry.mount(atom);
+        try {
+          yield* Effect.exit(AtomRegistry.getResult(registry, atom));
+          expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+            _tag: "Failure",
+            waiting: false,
+          });
+          expect(requests).toBe(1);
+          registry.refresh(atom);
+          yield* waitForAssertion(() => expect(requests).toBe(2));
+          expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+            _tag: "Failure",
+            waiting: true,
+          });
+          yield* Deferred.succeed(
+            recovery,
+            responseJson(Option.getOrThrow(pendingRequest), { status: "Granted", withdrawal: null })
+          );
+          yield* waitForAssertion(() =>
+            expect(AsyncResult.isSuccess(registry.get(atom))).toBe(true)
+          );
+          yield* AtomRegistry.getResult(registry, atom);
+          expect(presentCanonicalQuery(registry.get(atom))).toEqual({
+            _tag: "Ready",
+            value: { status: "Granted", withdrawal: null },
+            waiting: false,
+            refreshFailure: Option.none(),
+          });
+          expect(requests).toBe(2);
+        } finally {
+          unmount();
+          registry.dispose();
+        }
+      })
+  );
+
   it.effect("classifies a real initial declared failure without previous data", () =>
     Effect.gen(function* () {
       const httpClient = makeHttpClient((request) =>

@@ -594,9 +594,14 @@ permissions, creation, last use, expiration, and action. Use `density="compact"`
 and `TableCell` for 14px text, 8px horizontal padding, and 12px body-cell vertical padding.
 Show localized short Spanish dates without times; retain the full UTC instant in each `time` element’s
 `dateTime` attribute. Use “Nunca” for tokens that have never been used and wrap names readably.
-On narrow screens, scroll
-the table within its container; keep the page width stable. One-token deactivation confirmation
-occupies a full-width row beneath that token. Default table density remains unchanged.
+At 900px and below, matching the compact application shell, replace Settings management tables with
+named native lists of unboxed entries,
+headings, and definition lists. Keep list markers for browser/assistive-technology semantics, and hide
+the inactive representation with `display: none`. Both representations share metadata formatting,
+commands and confirmation state; desktop tables retain their native display. Wrap long names and
+permissions. Expiration and individual actions remain visible without horizontal scrolling. One-token
+deactivation confirmation stays beneath its token, as a full-width table row or inside its mobile
+list item. Default table density remains unchanged.
 
 ### Floating Agent conversation
 

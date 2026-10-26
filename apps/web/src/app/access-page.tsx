@@ -15,7 +15,7 @@ export const AccessManagementPage = (): JSX.Element => (
             {tokens}
             <OAuthManagementFeature />
           </div>
-          <aside className="settings-panel">{creation}</aside>
+          <div className="settings-panel">{creation}</div>
         </div>
       </main>
     )}

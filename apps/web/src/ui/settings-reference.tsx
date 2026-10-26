@@ -5,6 +5,14 @@ import { Button } from "@/ui/components/button";
 import { Checkbox } from "@/ui/components/checkbox";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/ui/components/table";
 import "@/ui/components/application.css";
 import "@/ui/components/settings.css";
 
@@ -77,7 +85,7 @@ const AuthorizationExample = (): JSX.Element => {
 const TokenExample = (): JSX.Element => {
   const [selected, select] = useState(true);
   return (
-    <aside className="settings-panel">
+    <div className="settings-panel">
       <div className="settings-token-creation">
         <h3 className="settings-panel-title">Permisos de ejemplo</h3>
         <label className="settings-scope-option" htmlFor="settings-reference-scope">
@@ -97,9 +105,73 @@ const TokenExample = (): JSX.Element => {
           Desactivar permiso de ejemplo
         </Button>
       </div>
-    </aside>
+    </div>
   );
 };
+
+const managementExampleDetails = [
+  { label: "Permisos", value: "Lectura · Escritura" },
+  { label: "Vence", value: <time dateTime="2026-11-23T00:00:00Z">23 nov 2026</time> },
+];
+const ManagementExampleAction = (): JSX.Element => (
+  <Button type="button" variant="destructive-text" size="label" disabled>
+    Desactivar ejemplo
+  </Button>
+);
+const ManagementExampleTable = (): JSX.Element => (
+  <div className="settings-table" data-settings-desktop>
+    <Table aria-labelledby="settings-reference-table-title">
+      <TableHeader>
+        <TableRow>
+          {["Nombre", "Permisos", "Vence", "Acción"].map((label) => (
+            <TableHead key={label} scope="col" density="compact">
+              {label}
+            </TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow>
+          <TableHead scope="row" density="compact" className="whitespace-normal">
+            Agente de ejemplo
+          </TableHead>
+          {managementExampleDetails.map(({ label, value }) => (
+            <TableCell key={label} density="compact">
+              {value}
+            </TableCell>
+          ))}
+          <TableCell density="compact">
+            <ManagementExampleAction />
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
+  </div>
+);
+const ManagementExample = (): JSX.Element => (
+  <section className="settings-access-section" aria-labelledby="settings-reference-table-title">
+    <h3 id="settings-reference-table-title" className="settings-section-title">
+      Acceso de ejemplo
+    </h3>
+    <ManagementExampleTable />
+    <ul data-settings-mobile-list aria-labelledby="settings-reference-table-title">
+      <li>
+        <h4 className="mb-3 font-semibold">Agente de ejemplo</h4>
+        <dl>
+          {managementExampleDetails.map(({ label, value }) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <div data-settings-item-action>
+          <ManagementExampleAction />
+        </div>
+      </li>
+    </ul>
+  </section>
+);
 
 export const SettingsReference = (): JSX.Element => (
   <section id="settings" aria-labelledby="settings-reference-heading">
@@ -114,6 +186,7 @@ export const SettingsReference = (): JSX.Element => (
         <div className="settings-main">
           <EmailExample />
           <AuthorizationExample />
+          <ManagementExample />
         </div>
         <TokenExample />
       </div>

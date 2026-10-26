@@ -27,6 +27,14 @@
   line-height: 1.2;
   letter-spacing: -1.2px;
 }
+.settings-workspace > .workspace-page-header {
+  flex-wrap: nowrap;
+}
+.settings-workspace > .workspace-page-header > div + div {
+  display: flex;
+  flex-shrink: 0;
+  width: auto;
+}
 .settings-columns {
   display: grid;
   min-width: 0;
@@ -141,11 +149,14 @@
 .settings-account .settings-main {
   padding-right: 42px;
 }
+.settings-account .settings-main > * + * {
+  border-top: 1px solid var(--fidy-border-decorative-divider);
+}
 .settings-account .settings-section {
   gap: 34px;
   padding-bottom: 56px;
 }
-.settings-account .settings-section + .settings-section {
+.settings-account .settings-main > * + * .settings-section {
   padding-top: 54px;
 }
 .settings-account .settings-section-actions {
@@ -229,7 +240,7 @@
     max-width: 100%;
     white-space: normal;
   }
-  .settings-account .settings-section + .settings-section {
+  .settings-account .settings-main > * + * .settings-section {
     padding-top: 30px;
   }
   .settings-panel .settings-section {
@@ -322,5 +333,64 @@
   }
   .settings-access-section + .settings-access-section {
     padding-top: 28px;
+  }
+}
+[data-settings-mobile-list] {
+  display: none;
+}
+@media (max-width: 900px) {
+  [data-settings-desktop] {
+    display: none;
+  }
+  [data-settings-mobile-list] {
+    display: block;
+    margin: 0;
+    padding: 0 0 0 16px;
+    min-width: 0;
+    list-style: disc outside;
+  }
+  [data-settings-mobile-list] > li {
+    padding: 20px 0;
+    border-bottom: 1px solid var(--fidy-border-decorative-divider);
+    overflow-wrap: anywhere;
+  }
+  [data-settings-mobile-list] > li:first-child {
+    padding-top: 0;
+  }
+  [data-settings-mobile-list] > li:last-child {
+    border-bottom: 0;
+  }
+  [data-settings-mobile-list] h3 {
+    margin-bottom: 12px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  [data-settings-mobile-list] dl {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 14px;
+  }
+  [data-settings-mobile-list] dl > div {
+    display: grid;
+    grid-template-columns: 7rem minmax(0, 1fr);
+    align-items: baseline;
+    gap: 12px;
+  }
+  [data-settings-mobile-list] dt {
+    color: var(--fidy-text-muted);
+  }
+  [data-settings-mobile-list] dd {
+    min-width: 0;
+  }
+  [data-settings-mobile-list] [data-settings-item-action] {
+    margin-top: 12px;
+  }
+  [data-settings-mobile-list] [data-slot="button"] {
+    min-height: 44px;
+    max-width: 100%;
+    font-size: 14px;
+    white-space: normal;
+    text-align: left;
   }
 }

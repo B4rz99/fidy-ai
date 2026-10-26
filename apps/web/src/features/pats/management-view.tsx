@@ -1,7 +1,7 @@
 import { Key01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { DateTime, Option } from "effect";
-import { type JSX, useState } from "react";
+import { type JSX, type ReactNode, useState } from "react";
 import {
   type ActivePATList,
   type ActivePATMetadata,
@@ -52,27 +52,40 @@ export type ActivePATManagementState =
 
 type Selection = TokenShortId | "all";
 
-const PATMetadata = ({ pat }: Readonly<{ pat: ActivePATMetadata }>): JSX.Element => (
-  <>
-    <TableCell density="compact">
+const patDetails = (
+  pat: ActivePATMetadata
+): ReadonlyArray<Readonly<{ label: string; value: ReactNode }>> => [
+  {
+    label: "Permisos",
+    value: (
       <span className="text-muted-foreground">
         {pat.scopes.map((scope) => patScopeCopy[scope].label).join(" · ")}
       </span>
-    </TableCell>
-    <TableCell density="compact" className="tabular-nums">
-      <time dateTime={DateTime.formatIso(pat.createdAt)}>{formatPATDate(pat.createdAt)}</time>
-    </TableCell>
-    <TableCell density="compact" className="tabular-nums">
-      {Option.match(pat.lastUsedAt, {
-        onNone: () => "Nunca",
-        onSome: (lastUsedAt) => (
-          <time dateTime={DateTime.formatIso(lastUsedAt)}>{formatPATDate(lastUsedAt)}</time>
-        ),
-      })}
-    </TableCell>
-    <TableCell density="compact" className="tabular-nums">
-      <time dateTime={DateTime.formatIso(pat.expiresAt)}>{formatPATDate(pat.expiresAt)}</time>
-    </TableCell>
+    ),
+  },
+  {
+    label: "Creado",
+    value: <time dateTime={DateTime.formatIso(pat.createdAt)}>{formatPATDate(pat.createdAt)}</time>,
+  },
+  {
+    label: "Último uso",
+    value: Option.match(pat.lastUsedAt, {
+      onNone: () => "Nunca",
+      onSome: (lastUsedAt) => (
+        <time dateTime={DateTime.formatIso(lastUsedAt)}>{formatPATDate(lastUsedAt)}</time>
+      ),
+    }),
+  },
+  {
+    label: "Vence",
+    value: <time dateTime={DateTime.formatIso(pat.expiresAt)}>{formatPATDate(pat.expiresAt)}</time>,
+  },
+];
+
+const PATIdentity = ({ pat }: Readonly<{ pat: ActivePATMetadata }>): JSX.Element => (
+  <>
+    <span className="block break-words font-semibold">{pat.recipientLabel}</span>
+    <code className="mt-1 block text-xs font-normal text-muted-foreground">{pat.shortId}</code>
   </>
 );
 
@@ -163,12 +176,13 @@ const PATRow = (props: Readonly<Parameters<typeof OneRevocationControl>[0]>): JS
   <>
     <TableRow>
       <TableHead scope="row" density="compact" className="whitespace-normal">
-        <span className="block break-words font-semibold">{props.pat.recipientLabel}</span>
-        <code className="mt-1 block text-xs font-normal text-muted-foreground">
-          {props.pat.shortId}
-        </code>
+        <PATIdentity pat={props.pat} />
       </TableHead>
-      <PATMetadata pat={props.pat} />
+      {patDetails(props.pat).map(({ label, value }) => (
+        <TableCell key={label} density="compact" className="tabular-nums">
+          {value}
+        </TableCell>
+      ))}
       <TableCell density="compact" className="text-right">
         {!props.selected ? <OneRevocationControl {...props} /> : null}
       </TableCell>
@@ -181,6 +195,27 @@ const PATRow = (props: Readonly<Parameters<typeof OneRevocationControl>[0]>): JS
       </TableRow>
     ) : null}
   </>
+);
+
+const PATMobileItem = (
+  props: Readonly<Parameters<typeof OneRevocationControl>[0]>
+): JSX.Element => (
+  <li>
+    <h3>
+      <PATIdentity pat={props.pat} />
+    </h3>
+    <dl>
+      {patDetails(props.pat).map(({ label, value }) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+    <div data-settings-item-action>
+      <OneRevocationControl {...props} />
+    </div>
+  </li>
 );
 
 const AllRevocationControl = (props: RevocationActionProps): JSX.Element => (
@@ -298,6 +333,15 @@ const ReadyPATs = ({
   const selected = controller.state._tag === "Idle" ? undefined : controller.state.selection;
   const revoking = controller.state._tag === "Revoking";
   const disabled = revoking || refreshing || refreshFailed;
+  const rows = pats.map((pat) => ({
+    pat,
+    cancel: controller.cancel,
+    disabled,
+    revoke: (): void => controller.revokeOne(pat.shortId),
+    revoking: revoking && selected === pat.shortId,
+    select: (): void => controller.select(pat.shortId),
+    selected: selected === pat.shortId,
+  }));
   return (
     <>
       {pats.length === 0 ? (
@@ -310,25 +354,23 @@ const ReadyPATs = ({
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="settings-table">
-          <Table aria-labelledby="active-pats-title" className="min-w-[42rem]">
-            <PATTableHeader />
-            <TableBody>
-              {pats.map((pat) => (
-                <PATRow
-                  cancel={controller.cancel}
-                  disabled={disabled}
-                  key={pat.shortId}
-                  pat={pat}
-                  revoke={() => controller.revokeOne(pat.shortId)}
-                  revoking={revoking && selected === pat.shortId}
-                  select={() => controller.select(pat.shortId)}
-                  selected={selected === pat.shortId}
-                />
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <>
+          <div className="settings-table" data-settings-desktop>
+            <Table aria-labelledby="active-pats-title" className="min-w-[42rem]">
+              <PATTableHeader />
+              <TableBody>
+                {rows.map((props) => (
+                  <PATRow key={props.pat.shortId} {...props} />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <ul data-settings-mobile-list aria-labelledby="active-pats-title">
+            {rows.map((props) => (
+              <PATMobileItem key={props.pat.shortId} {...props} />
+            ))}
+          </ul>
+        </>
       )}
     </>
   );

@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 import { installSettingsReads } from "./settings-visual-fixture";
@@ -15,6 +15,14 @@ const destinations = [
   { path: "/settings/access", title: "Accesos", filename: "accesos" },
 ] as const;
 type Destination = (typeof destinations)[number];
+const captureViewports = [
+  { viewport: desktop, destinations },
+  { viewport: mobile, destinations },
+  {
+    viewport: { name: "landscape", width: 667, height: 390 },
+    destinations: [destinations[2]],
+  },
+];
 const captureDirectory = "test-results/settings-visual";
 
 test.use({
@@ -56,7 +64,11 @@ const prepareAccessForm = Effect.fnUntraced(function* (page: Page) {
   );
 });
 
-const expectDestination = Effect.fnUntraced(function* (page: Page, destination: Destination) {
+const expectDestination = Effect.fnUntraced(function* (
+  page: Page,
+  destination: Destination,
+  compact: boolean
+) {
   yield* Effect.tryPromise(() =>
     expect(
       page.getByRole("heading", { name: destination.title, level: 1, exact: true })
@@ -72,6 +84,11 @@ const expectDestination = Effect.fnUntraced(function* (page: Page, destination: 
   }
   if (destination.title === "Privacidad") {
     yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("complementary", { name: "Solicitudes sobre tus datos", exact: true })
+      ).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
       expect(page.getByRole("button", { name: "Retirar autorización", exact: true })).toBeDisabled()
     );
     yield* Effect.tryPromise(() =>
@@ -82,10 +99,15 @@ const expectDestination = Effect.fnUntraced(function* (page: Page, destination: 
   }
   if (destination.title === "Accesos") {
     yield* Effect.tryPromise(() =>
-      expect(page.getByRole("table", { name: "Tokens activos" })).toContainText("Automatización")
+      expect(page.getByRole("region", { name: "Crear token", exact: true })).toBeVisible()
     );
     yield* Effect.tryPromise(() =>
-      expect(page.getByRole("table", { name: "Conexiones MCP" })).toContainText(
+      expect(page.getByRole(compact ? "list" : "table", { name: "Tokens activos" })).toContainText(
+        "Automatización"
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole(compact ? "list" : "table", { name: "Conexiones MCP" })).toContainText(
         "Asistente de análisis"
       )
     );
@@ -113,25 +135,70 @@ const capturePage = Effect.fnUntraced(function* (page: Page, filename: string) {
   expect(measured.content).toBeLessThanOrEqual(measured.viewport);
 });
 
-const expectAlignedHeader = Effect.fnUntraced(function* (page: Page, title: string) {
+const expectAlignedHeader = Effect.fnUntraced(function* (
+  page: Page,
+  title: string,
+  controlName: string | RegExp
+) {
   const heading = yield* Effect.tryPromise(() =>
     page.getByRole("heading", { name: title, level: 1, exact: true }).boundingBox()
   );
-  const theme = yield* Effect.tryPromise(() =>
-    page.getByRole("button", { name: /Activar tema (claro|oscuro)/u }).boundingBox()
+  const control = yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: controlName, exact: true }).boundingBox()
   );
   expect(heading).not.toBeNull();
-  expect(theme).not.toBeNull();
-  if (heading === null || theme === null) return;
+  expect(control).not.toBeNull();
+  if (heading === null || control === null) return;
   const alignmentTolerance = 16;
-  expect(Math.abs(heading.y + heading.height / 2 - theme.y - theme.height / 2)).toBeLessThan(
+  expect(Math.abs(heading.y + heading.height / 2 - control.y - control.height / 2)).toBeLessThan(
     alignmentTolerance
   );
 });
 
-for (const viewport of viewports) {
+const expectHorizontalFit = Effect.fnUntraced(function* (elements: Locator, width: number) {
+  const matches = yield* Effect.tryPromise(() => elements.all());
+  expect(matches.length).toBeGreaterThan(0);
+  for (const element of matches) {
+    const bounds = yield* Effect.tryPromise(() => element.boundingBox());
+    expect(bounds).not.toBeNull();
+    if (bounds === null) continue;
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+  }
+});
+
+const expectCompactAccess = Effect.fnUntraced(function* (page: Page, width: number) {
+  const tokenActions = page.getByRole("button", { name: "Desactivar", exact: true });
+  const agentAction = page.getByRole("button", { name: "Revocar este agente", exact: true });
+  yield* Effect.tryPromise(() => expect(tokenActions).toHaveCount(2));
+  yield* Effect.tryPromise(() => expect(agentAction).toHaveCount(1));
+  yield* expectHorizontalFit(tokenActions, width);
+  yield* expectHorizontalFit(agentAction, width);
+  for (const name of ["Tokens activos", "Conexiones MCP"]) {
+    const list = page.getByRole("list", { name, exact: true });
+    yield* Effect.tryPromise(() =>
+      expect(list.getByRole("term").filter({ hasText: /^Vence$/u })).toHaveCount(
+        name === "Tokens activos" ? 2 : 1
+      )
+    );
+    yield* expectHorizontalFit(list.getByRole("heading"), width);
+    yield* expectHorizontalFit(list.getByRole("definition"), width);
+    yield* expectHorizontalFit(list.locator("time"), width);
+  }
+  yield* Effect.tryPromise(() => tokenActions.first().click());
+  const confirmation = page.getByRole("button", { name: "Sí, desactivar", exact: true });
+  yield* Effect.tryPromise(() => expect(confirmation).toBeVisible());
+  yield* expectHorizontalFit(confirmation, width);
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Cancelar", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => expect(tokenActions).toHaveCount(2));
+});
+
+for (const { viewport, destinations: targets } of captureViewports) {
+  const compact = viewport.name !== "desktop";
   for (const theme of themes) {
-    for (const destination of destinations) {
+    for (const destination of targets) {
       test(`${destination.title} remains accessible without overflow in ${theme} ${viewport.name}`, ({
         page,
       }) =>
@@ -146,7 +213,7 @@ for (const viewport of viewports) {
             );
             const observed = yield* installSettingsReads(page);
             yield* Effect.tryPromise(() => page.goto(destination.path));
-            yield* expectDestination(page, destination);
+            yield* expectDestination(page, destination, compact);
             yield* Effect.tryPromise(() =>
               expect(
                 page.getByRole("button", {
@@ -155,7 +222,18 @@ for (const viewport of viewports) {
               ).toBeVisible()
             );
             if (destination.title === "Accesos") yield* prepareAccessForm(page);
-            if (viewport.name === "desktop") yield* expectAlignedHeader(page, destination.title);
+            if (viewport.name === "desktop") {
+              yield* expectAlignedHeader(page, destination.title, /Activar tema (claro|oscuro)/u);
+            } else if (destination.title !== "Cuenta") {
+              yield* expectAlignedHeader(
+                page,
+                destination.title,
+                destination.title === "Privacidad" ? "Verificar autorización" : "Actualizar tokens"
+              );
+            }
+            if (compact && destination.title === "Accesos") {
+              yield* expectCompactAccess(page, viewport.width);
+            }
             yield* capturePage(page, `${destination.filename}-${theme}-${viewport.name}`);
             expect(observed.mutations).toEqual([]);
             expect(observed.missingReads).toEqual([]);

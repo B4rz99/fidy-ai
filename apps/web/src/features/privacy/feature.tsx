@@ -152,7 +152,9 @@ const RightsContact = (): JSX.Element => (
       <HugeiconsIcon icon={Mail01Icon} size={32} aria-hidden="true" />
     </div>
     <div className="settings-section-body flex flex-col gap-4">
-      <h2 className="settings-section-title">Solicitudes sobre tus datos</h2>
+      <h2 id="privacy-rights-contact-title" className="settings-section-title">
+        Solicitudes sobre tus datos
+      </h2>
       <p className="settings-section-description">
         Puedes escribirnos incluso sin iniciar sesión ni aceptar de nuevo el tratamiento.
       </p>
@@ -196,7 +198,7 @@ const PrivacyWorkspace = ({
     </WorkspaceHeader>
     <div className="settings-columns">
       <div className="settings-main">{children}</div>
-      <aside className="settings-panel">
+      <aside className="settings-panel" aria-labelledby="privacy-rights-contact-title">
         <RightsContact />
       </aside>
     </div>

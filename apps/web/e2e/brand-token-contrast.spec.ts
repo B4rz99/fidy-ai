@@ -225,7 +225,8 @@ const reviewRoute = (route: Route, state: ReviewState): Promise<void> => {
 
 const checkReviewWarning = Effect.fnUntraced(function* (page: Page, theme: Theme) {
   const colors = palette[theme];
-  const icon = page.locator('[data-review="source-icon"][data-source="email"]');
+  const panel = page.locator('[data-review="panel"]').filter({ visible: true });
+  const icon = panel.locator('[data-review="source-icon"][data-source="email"]');
   yield* Effect.tryPromise((signal) =>
     expect(icon).toHaveCSS("color", colors.emailForeground, { signal })
   );
@@ -233,7 +234,7 @@ const checkReviewWarning = Effect.fnUntraced(function* (page: Page, theme: Theme
     expect(icon).toHaveCSS("background-color", colors.emailBackground, { signal })
   );
   yield* contrast(icon, "color", minimumTextContrast);
-  const notice = page.getByRole("alert");
+  const notice = panel.getByRole("alert");
   yield* Effect.tryPromise((signal) =>
     expect(notice).toHaveCSS("color", colors.warning, { signal })
   );
@@ -244,12 +245,12 @@ const checkReviewWarning = Effect.fnUntraced(function* (page: Page, theme: Theme
     expect(notice).toHaveCSS("background-color", colors.warningBackground, { signal })
   );
   yield* contrast(notice, "color", minimumTextContrast);
-  const input = page.getByLabel("Contraparte (opcional)");
+  const input = panel.getByLabel("Contraparte (opcional)");
   yield* Effect.tryPromise((signal) =>
     expect(input).toHaveCSS("border-left-color", colors.control, { signal })
   );
   yield* contrast(input, "borderLeftColor", minimumControlContrast);
-  const confirm = page.getByRole("button", { name: "Confirmar", exact: true });
+  const confirm = panel.getByRole("button", { name: "Confirmar", exact: true });
   yield* Effect.tryPromise((signal) => expect(confirm).toBeDisabled({ signal }));
   yield* Effect.tryPromise((signal) =>
     expect(confirm).toHaveCSS("border-left-color", colors.control, { signal })

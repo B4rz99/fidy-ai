@@ -380,3 +380,32 @@ checks. Raw inputs and client names render as text. No bearer enters browser sta
 Approval does not execute the operation: the User returns to the native MCP continuation, whose
 canonical unit consumes it once with all live owner guards. An uncertain POST outcome disables
 further decisions until a fresh read; login resumes only this fixed UUID-selected route.
+
+## Review-return failure evidence
+
+The production browser performance gate retains its untraced capture-click to visible-review
+measurement and 10ms limit. Only a failed return from Transactions triggers one diagnostic
+Transactions → Needs Review replay; its original failure is always restored, including when
+capture fails or times out. A successful or interrupted measurement does not start diagnostics.
+
+The replay uses the existing synthetic fixture and only navigation links. Its scoped API guard
+refuses non-read requests. Authentication is outside the trace. Work has a five-second deadline;
+foreign acquisition and each cleanup request have explicit interruptible one-second budgets,
+with a two-second trace-flush budget. Supported browser actions receive cancellation signals.
+Trace-stop compensation is registered before trace start. The failed Page is closed after capture,
+so its enclosing Playwright fixture also owns late session/handle acquisition; a deadline does not
+claim to cancel an uncancellable protocol command. The guard is never removed from a still-live
+failed Page: it remains until Page/context teardown, including uncertain close. The Chromium trace is capped
+at 1MiB and the uploaded projection at 10,000 events. Only fixed timing-event names, phases and
+numeric fields survive projection: arguments, URLs, arbitrary marks and request data are dropped.
+Completion metadata is schema-decoded before it can enter the report.
+The existing JSON reporter carries attachments in the existing browser-timings artifact; no
+workflow permissions, upload paths or retention change.
+
+This replay is warmer and traced: it can identify scripting, style/layout or task gaps, but cannot
+retrospectively explain the exact untraced failure or replace its gate result. The failed original
+duration is copied into bounded failure evidence before replay; the original assertion still runs
+before any attachment, so attachment failure cannot replace its failure. Original thresholds,
+fixture clock, retry policy and runtime remain unchanged. Sanitization,
+bounded accumulation, mutation refusal, failure preservation, masked acquisition/disposal deadlines
+and interruption are covered through the diagnostic helper's public seams in the web script tests.

@@ -24,9 +24,7 @@ export const FinancialSummaryCard = ({
     <div
       className={cn(
         "mx-4 mt-4 rounded-md px-3 py-6 text-center",
-        tone === "negative"
-          ? "bg-destructive/25 text-destructive-foreground"
-          : "bg-success/25 text-ring"
+        tone === "negative" ? "bg-error-subtle text-error-foreground" : "bg-success/25 text-ring"
       )}
     >
       <p

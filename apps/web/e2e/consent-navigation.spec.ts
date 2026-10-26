@@ -1,5 +1,6 @@
-import type { Page, Route } from "@playwright/test";
+import type { APIRequestContext, Page, Route, TestInfo } from "@playwright/test";
 import { Effect } from "effect";
+import { observeConsentRecovery } from "./consent-recovery-diagnostics";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
 import {
@@ -135,58 +136,64 @@ const openReview = Effect.fnUntraced(function* (page: Page) {
   );
 });
 
+const recheckConsent = Effect.fnUntraced(function* (
+  page: Page,
+  request: APIRequestContext,
+  information: TestInfo
+) {
+  yield* Effect.tryPromise(() =>
+    signInNavigationThroughCore({ page, request, identity: "navigationConsent" })
+  );
+  yield* openReview(page);
+  const diagnostic = yield* observeConsentRecovery({ page, information });
+  const pending = Promise.withResolvers<Route>();
+  const holdConsent = (route: Route): void => pending.resolve(route);
+  const productRequests: string[] = [];
+  page.on("request", (incoming) => {
+    const path = new URL(incoming.url()).pathname;
+    if (path === "/transactions" || path.startsWith("/web/hosted-turns")) {
+      productRequests.push(incoming.method());
+    }
+  });
+  yield* Effect.tryPromise(() => page.route(`${api}/web/consent`, holdConsent));
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("link", { name: "Transacciones", exact: true }).click({ signal })
+  );
+  const consent = yield* Effect.tryPromise(() => pending.promise);
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toHaveCount(0, {
+      signal,
+    })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("button", { name: "Abrir agente Fidy" })).toHaveCount(0, { signal })
+  );
+  const unavailableStatus = 503;
+  yield* Effect.tryPromise(() => consent.fulfill({ status: unavailableStatus }));
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByText("No pudimos verificar tu acceso a las transacciones.")).toBeVisible({
+      signal,
+    })
+  );
+  expect(productRequests).toEqual([]);
+  yield* Effect.tryPromise(() => page.unroute(`${api}/web/consent`));
+  diagnostic.retry();
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("button", { name: "Reintentar", exact: true }).click({ signal })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible({
+      signal,
+    })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("button", { name: "Abrir agente Fidy" })).toBeVisible({ signal })
+  );
+  yield* openReview(page);
+});
+
 test("Transactions rechecks Consent before restoring editing and chat after leaving Review", ({
   page,
   request,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() =>
-        signInNavigationThroughCore({ page, request, identity: "navigationConsent" })
-      );
-      yield* openReview(page);
-      const pending = Promise.withResolvers<Route>();
-      const holdConsent = (route: Route): void => pending.resolve(route);
-      const productRequests: string[] = [];
-      page.on("request", (incoming) => {
-        const path = new URL(incoming.url()).pathname;
-        if (path === "/transactions" || path.startsWith("/web/hosted-turns")) {
-          productRequests.push(incoming.method());
-        }
-      });
-      yield* Effect.tryPromise(() => page.route(`${api}/web/consent`, holdConsent));
-      yield* Effect.tryPromise((signal) =>
-        page.getByRole("link", { name: "Transacciones", exact: true }).click({ signal })
-      );
-      const consent = yield* Effect.tryPromise(() => pending.promise);
-      yield* Effect.tryPromise((signal) =>
-        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toHaveCount(0, {
-          signal,
-        })
-      );
-      yield* Effect.tryPromise((signal) =>
-        expect(page.getByRole("button", { name: "Abrir agente Fidy" })).toHaveCount(0, { signal })
-      );
-      const unavailableStatus = 503;
-      yield* Effect.tryPromise(() => consent.fulfill({ status: unavailableStatus }));
-      yield* Effect.tryPromise((signal) =>
-        expect(page.getByText("No pudimos verificar tu acceso a las transacciones.")).toBeVisible({
-          signal,
-        })
-      );
-      expect(productRequests).toEqual([]);
-      yield* Effect.tryPromise(() => page.unroute(`${api}/web/consent`));
-      yield* Effect.tryPromise((signal) =>
-        page.getByRole("button", { name: "Reintentar", exact: true }).click({ signal })
-      );
-      yield* Effect.tryPromise((signal) =>
-        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible({
-          signal,
-        })
-      );
-      yield* Effect.tryPromise((signal) =>
-        expect(page.getByRole("button", { name: "Abrir agente Fidy" })).toBeVisible({ signal })
-      );
-      yield* openReview(page);
-    })
-  ));
+}, information) =>
+  Effect.runPromise(recheckConsent(page, request, information).pipe(Effect.scoped)));

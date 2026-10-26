@@ -920,8 +920,7 @@ const scalar = <A>(db: D1Database, sql: string, ...bindings: ReadonlyArray<strin
 /** One D1 row decoded through its exact schema; absence is an exception, not a value. */
 const firstRow = <A, E>(
   db: D1Database,
-  schema: Schema.Codec<A, E>,
-  sql: string,
+  { schema, sql }: Readonly<{ schema: Schema.Codec<A, E>; sql: string }>,
   ...bindings: ReadonlyArray<string>
 ): Promise<A> =>
   db
@@ -2850,8 +2849,10 @@ it("marks an accepted unsupported XLSX payload terminal without inventing Transa
       const state = yield* fromTestPromise(() =>
         firstRow(
           runtime.db,
-          submissionStateRow,
-          "SELECT status, failure_reason, completed_at_ms FROM statement_submissions WHERE id = ?",
+          {
+            schema: submissionStateRow,
+            sql: "SELECT status, failure_reason, completed_at_ms FROM statement_submissions WHERE id = ?",
+          },
           submission.id
         )
       );
@@ -2914,8 +2915,10 @@ it("settles an errored Workflow when its final failure-report activity also exha
       const state = yield* fromTestPromise(() =>
         firstRow(
           runtime.db,
-          submissionStateRow,
-          "SELECT status, failure_reason, completed_at_ms FROM statement_submissions WHERE id = ?",
+          {
+            schema: submissionStateRow,
+            sql: "SELECT status, failure_reason, completed_at_ms FROM statement_submissions WHERE id = ?",
+          },
           submission.id
         )
       );
@@ -3353,32 +3356,29 @@ it(
         );
 
         const submissionState = yield* fromTestPromise(() =>
-          firstRow(
-            runtime.db,
-            submissionStateRow,
-            "SELECT status, failure_reason, completed_at_ms FROM statement_submissions"
-          )
+          firstRow(runtime.db, {
+            schema: submissionStateRow,
+            sql: "SELECT status, failure_reason, completed_at_ms FROM statement_submissions",
+          })
         );
         expect(submissionState.status).toBe("failed");
         expect(submissionState.failure_reason).toEqual(Option.some("retention-expired"));
         expect(Option.isSome(submissionState.completed_at_ms)).toBe(true);
         const entitlement = yield* fromTestPromise(() =>
-          firstRow(
-            runtime.db,
-            entitlementRow,
-            "SELECT consumed_at_ms, submission_id FROM statement_backfill_entitlements"
-          )
+          firstRow(runtime.db, {
+            schema: entitlementRow,
+            sql: "SELECT consumed_at_ms, submission_id FROM statement_backfill_entitlements",
+          })
         );
         expect(Option.isNone(entitlement.consumed_at_ms)).toBe(true);
         expect(Option.isNone(entitlement.submission_id)).toBe(true);
         const reclaimed = yield* fromTestPromise(() =>
-          firstRow(
-            runtime.db,
-            reclaimedStagingRow,
-            `SELECT staging.object_key, staging.object_deleted_at_ms, staging.status
+          firstRow(runtime.db, {
+            schema: reclaimedStagingRow,
+            sql: `SELECT staging.object_key, staging.object_deleted_at_ms, staging.status
              FROM statement_staging_objects AS staging
-             JOIN statement_submissions AS submission ON submission.staging_id = staging.id`
-          )
+             JOIN statement_submissions AS submission ON submission.staging_id = staging.id`,
+          })
         );
         expect(reclaimed.status).toBe("deleting");
         expect(Option.isSome(reclaimed.object_deleted_at_ms)).toBe(true);
@@ -3423,8 +3423,10 @@ it(
         const submissionState = yield* fromTestPromise(() =>
           firstRow(
             runtime.db,
-            submissionStateRow,
-            "SELECT status, failure_reason, completed_at_ms FROM statement_submissions WHERE user_id = ?",
+            {
+              schema: submissionStateRow,
+              sql: "SELECT status, failure_reason, completed_at_ms FROM statement_submissions WHERE user_id = ?",
+            },
             userA
           )
         );
@@ -3432,13 +3434,12 @@ it(
         expect(submissionState.failure_reason).toEqual(Option.some("retention-expired"));
         expect(Option.isSome(submissionState.completed_at_ms)).toBe(true);
         const reclaimed = yield* fromTestPromise(() =>
-          firstRow(
-            runtime.db,
-            reclaimedStagingRow,
-            `SELECT staging.object_key, staging.object_deleted_at_ms, staging.status
+          firstRow(runtime.db, {
+            schema: reclaimedStagingRow,
+            sql: `SELECT staging.object_key, staging.object_deleted_at_ms, staging.status
              FROM statement_staging_objects AS staging
-             JOIN statement_submissions AS submission ON submission.staging_id = staging.id`
-          )
+             JOIN statement_submissions AS submission ON submission.staging_id = staging.id`,
+          })
         );
         expect(reclaimed.status).toBe("deleting");
         expect(Option.isSome(reclaimed.object_deleted_at_ms)).toBe(true);

@@ -231,8 +231,8 @@
 
 @media (max-height: 500px) {
   .chat-window {
-    height: calc(100svh - 88px);
-    max-height: var(--available-height);
+    height: calc(100svh - 16px);
+    max-height: calc(100svh - 16px);
   }
   .chat-header {
     min-height: 56px;

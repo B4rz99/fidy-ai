@@ -1,7 +1,9 @@
 import { type JSX, useState } from "react";
 import { Message, MessageContent } from "@/ui/components/ai-elements/message";
-import { ChatComposer } from "@/ui/components/chat";
-import { ChatConfirmation, ChatStart, ChatStatus } from "@/ui/components/chat-content";
+import { Conversation } from "@/ui/components/ai-elements/conversation";
+import { ChatComposer, ChatWindow } from "@/ui/components/chat";
+import { useTheme } from "@/ui/components/theme";
+import { ChatConfirmation, ChatContent, ChatStart, ChatStatus } from "@/ui/components/chat-content";
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
 
 const DraftExample = (): JSX.Element => {
@@ -34,6 +36,38 @@ const DraftExample = (): JSX.Element => {
   );
 };
 
+const FloatingExample = (): JSX.Element => {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const { mounted } = useTheme();
+  return (
+    <ChatWindow open={open} onOpenChange={setOpen}>
+      <div ref={mounted} className="contents">
+        <Conversation className="min-h-0" aria-label="Ejemplo local de conversación">
+          <ChatContent>
+            <Message from="assistant">
+              <MessageContent>
+                Esta ventana es una demostración local. La confirmación no representa una operación
+                pendiente y no puede ejecutarse.
+              </MessageContent>
+              <ChatConfirmation disabled onConfirm={() => undefined} />
+            </Message>
+          </ChatContent>
+        </Conversation>
+        <ChatComposer
+          text={text}
+          disabled={false}
+          onTextChange={setText}
+          onSubmit={(event) => {
+            event.preventDefault();
+            setText("");
+          }}
+        />
+      </div>
+    </ChatWindow>
+  );
+};
+
 export const ChatReference = (): JSX.Element => (
   <section id="chat" aria-labelledby="chat-reference-heading" className="flex flex-col gap-4">
     <h2 id="chat-reference-heading" className="text-2xl font-semibold">
@@ -41,8 +75,15 @@ export const ChatReference = (): JSX.Element => (
     </h2>
     <p className="text-muted-foreground">
       Ejemplo local sin conexión al agente. Las sugerencias solo rellenan el borrador; Enviar
-      muestra el texto aquí, sin enviarlo ni cambiar datos. Prueba Tab, Enter y Shift+Enter.
+      muestra el texto aquí, sin enviarlo ni cambiar datos. Prueba Tab, Enter y Shift+Enter. En la
+      aplicación, la ventana flotante conserva 8px de margen en pantallas de hasta 500px de alto; la
+      explicación, la confirmación y el compositor permanecen accesibles sin reducir la tipografía.
     </p>
+    <p className="text-sm text-muted-foreground">
+      Abre el botón flotante del agente para probar la ventana real. Reduce la altura, navega con
+      Tab y cierra con Escape; el texto del ejemplo no se envía a ningún servicio.
+    </p>
+    <FloatingExample />
     <div className="grid gap-6 lg:grid-cols-2">
       <DraftExample />
       <Card>

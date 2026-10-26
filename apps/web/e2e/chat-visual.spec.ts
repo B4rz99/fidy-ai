@@ -16,6 +16,7 @@ const landscape = { name: "landscape", width: 667, height: 390 };
 const themes = ["light", "dark"] as const;
 const captureDirectory = "test-results/chat-visual";
 const progressIntervalMilliseconds = 5000;
+const compactViewportInset = 8;
 const cases: ReadonlyArray<
   Readonly<{ viewport: typeof desktop; scenarios: ReadonlyArray<ChatScenario> }>
 > = [
@@ -125,13 +126,16 @@ const prepare = Effect.fnUntraced(function* (page: Page, scenario: ChatScenario)
   }
 });
 
-const frameCompactConfirmation = Effect.fnUntraced(function* (page: Page) {
+const frameCompactConfirmation = Effect.fnUntraced(function* (page: Page, filename: string) {
   const summary = page.getByText(recurringReview, { exact: true });
   const pending = page.getByText("Confirmación pendiente", { exact: true });
   const confirm = page.getByRole("button", { name: "Confirmar cambio", exact: true });
+  yield* recordChatLayout(page, filename, "before-framing");
   yield* Effect.tryPromise(() => confirm.scrollIntoViewIfNeeded());
+  yield* recordChatLayout(page, filename, "after-confirm-scroll");
   yield* Effect.tryPromise(() => expect(confirm).toBeInViewport({ ratio: 1 }));
   yield* Effect.tryPromise(() => pending.scrollIntoViewIfNeeded());
+  yield* recordChatLayout(page, filename, "after-pending-scroll");
   yield* Effect.tryPromise(() =>
     summary.evaluate((element) => {
       const scrollport = element.closest(".chat-conversation-scroll");
@@ -143,8 +147,20 @@ const frameCompactConfirmation = Effect.fnUntraced(function* (page: Page) {
         element.getBoundingClientRect().top - scrollport.getBoundingClientRect().top - margin;
     })
   );
+  yield* recordChatLayout(page, filename, "after-summary-scroll");
   yield* Effect.tryPromise(() => expect(summary).toBeInViewport({ ratio: 1 }));
   yield* Effect.tryPromise(() => expect(pending).toBeInViewport({ ratio: 1 }));
+  yield* Effect.tryPromise(() => expect(confirm).toBeInViewport({ ratio: 1 }));
+  const layout = yield* Effect.tryPromise(() => page.evaluate(measureChatLayout));
+  expect(layout.panel.top).toBeGreaterThanOrEqual(compactViewportInset);
+  expect(layout.panel.bottom).toBeLessThanOrEqual(layout.viewport.height - compactViewportInset);
+  for (const locator of [
+    page.getByRole("button", { name: "Cerrar chat", exact: true }),
+    page.getByLabel("Mensaje", { exact: true }),
+    page.getByRole("button", { name: "Enviar", exact: true }),
+  ]) {
+    yield* Effect.tryPromise(() => expect(locator).toBeInViewport({ ratio: 1 }));
+  }
 });
 
 const waitForFonts = (): Promise<void> => document.fonts.ready.then(() => undefined);
@@ -152,8 +168,70 @@ const dimensions = (): Readonly<{ content: number; viewport: number }> => ({
   content: document.documentElement.scrollWidth,
   viewport: document.documentElement.clientWidth,
 });
+type ChatElementLayout = Readonly<{
+  top: number;
+  bottom: number;
+  height: number;
+  scrollTop: number;
+  clientHeight: number;
+  scrollHeight: number;
+  overflowY: string;
+}>;
+type ChatLayout = Readonly<{
+  viewport: Readonly<{ height: number; scrollY: number; documentHeight: number }>;
+  panel: ChatElementLayout;
+  scrollport: ChatElementLayout;
+  close: ChatElementLayout;
+  composer: ChatElementLayout;
+}>;
+const measureChatLayout = (): ChatLayout => {
+  const inspect = (selector: string): ChatElementLayout => {
+    const element = document.querySelector(selector);
+    if (element === null) throw new Error(`Missing Chat layout element: ${selector}`);
+    const bounds = element.getBoundingClientRect();
+    return {
+      top: bounds.top,
+      bottom: bounds.bottom,
+      height: bounds.height,
+      scrollTop: element.scrollTop,
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      overflowY: getComputedStyle(element).overflowY,
+    };
+  };
+  return {
+    viewport: {
+      height: innerHeight,
+      scrollY,
+      documentHeight: document.documentElement.scrollHeight,
+    },
+    panel: inspect(".chat-window"),
+    scrollport: inspect(".chat-conversation-scroll"),
+    close: inspect('[aria-label="Cerrar chat"]'),
+    composer: inspect(".chat-composer"),
+  };
+};
+const recordChatLayout = Effect.fnUntraced(function* (
+  page: Page,
+  filename: string,
+  stage:
+    | "before-framing"
+    | "after-confirm-scroll"
+    | "after-pending-scroll"
+    | "after-summary-scroll"
+    | "before-capture"
+    | "after-capture"
+    | "after-axe"
+) {
+  const layout = yield* Effect.tryPromise(() => page.evaluate(measureChatLayout));
+  const report = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(layout);
+  yield* Effect.tryPromise(() =>
+    Bun.write(`${captureDirectory}/${filename}.${stage}.layout.json`, report)
+  );
+});
 const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
   yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
+  yield* recordChatLayout(page, filename, "before-capture");
   yield* Effect.tryPromise(() =>
     page.screenshot({
       path: `${captureDirectory}/${filename}.png`,
@@ -163,7 +241,9 @@ const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
       scale: "css",
     })
   );
+  yield* recordChatLayout(page, filename, "after-capture");
   const result = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+  yield* recordChatLayout(page, filename, "after-axe");
   const report = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result);
   yield* Effect.tryPromise(() => Bun.write(`${captureDirectory}/${filename}.axe.json`, report));
   expect(result.violations).toEqual([]);
@@ -195,10 +275,11 @@ for (const { viewport, scenarios } of cases) {
             );
             const observed = yield* installChatScenario(page, scenario);
             yield* prepare(page, scenario);
+            const filename = `${scenario}-${theme}-${viewport.name}`;
             if (viewport.name === "landscape" && scenario === "confirmation") {
-              yield* frameCompactConfirmation(page);
+              yield* frameCompactConfirmation(page, filename);
             }
-            yield* capture(page, `${scenario}-${theme}-${viewport.name}`);
+            yield* capture(page, filename);
             expect(observed.mutations).toEqual([]);
             expect(observed.missingReads).toEqual([]);
             if (scenario === "confirmation") {

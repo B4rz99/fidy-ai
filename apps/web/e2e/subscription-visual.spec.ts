@@ -148,6 +148,68 @@ const expectMobileOfferAlignment = Effect.fnUntraced(function* (page: Page) {
     expect(unit.y).toBeGreaterThanOrEqual(price.y + price.height);
   }
 });
+const paymentMethodBounds = (
+  elements: Element[]
+): ReadonlyArray<
+  Readonly<{
+    left: number;
+    right: number;
+    top: number;
+    width: number;
+    height: number;
+    corners: readonly [string, string, string, string];
+    contentFits: boolean;
+  }>
+> =>
+  elements.map((element) => {
+    const bounds = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      left: bounds.left + window.scrollX,
+      right: bounds.right + window.scrollX,
+      top: bounds.top + window.scrollY,
+      width: bounds.width,
+      height: bounds.height,
+      corners: [
+        style.borderTopLeftRadius,
+        style.borderTopRightRadius,
+        style.borderBottomRightRadius,
+        style.borderBottomLeftRadius,
+      ],
+      contentFits: element.scrollWidth <= element.clientWidth,
+    };
+  });
+const expectSeparatePaymentMethods = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
+  const buttons = page.getByRole("button", { name: /^(Tarjeta|Nequi|DaviPlata)$/u });
+  yield* Effect.tryPromise((signal) => expect(buttons).toHaveCount(3, { signal }));
+  const original = yield* Effect.tryPromise(() => buttons.evaluateAll(paymentMethodBounds));
+  for (const [index, bounds] of original.entries()) {
+    const corner = bounds.corners[0];
+    expect(Number.parseFloat(corner)).toBeGreaterThan(0);
+    expect(bounds.corners).toEqual([corner, corner, corner, corner]);
+    expect(bounds.contentFits).toBe(true);
+    const previous = original[index - 1];
+    if (previous !== undefined) {
+      expect(bounds.left).toBeGreaterThan(previous.right);
+      expect(bounds.top).toBe(previous.top);
+      expect(bounds.corners).toEqual(previous.corners);
+    }
+  }
+  for (const method of ["Nequi", "DaviPlata", "Tarjeta"]) {
+    const button = page.getByRole("button", { name: method, exact: true });
+    yield* Effect.tryPromise((signal) => button.focus({ signal }));
+    yield* Effect.tryPromise((signal) => expect(button).toBeFocused({ signal }));
+    yield* Effect.tryPromise((signal) => button.press("Space", { signal }));
+    yield* Effect.tryPromise((signal) =>
+      expect(button).toHaveAttribute("aria-pressed", "true", { signal })
+    );
+    const selected = yield* Effect.tryPromise(() => buttons.evaluateAll(paymentMethodBounds));
+    expect(selected).toEqual(original);
+    const measured = yield* Effect.tryPromise(() => page.evaluate(dimensions));
+    expect(measured.content).toBeLessThanOrEqual(measured.viewport);
+  }
+});
 const continueWith = Effect.fnUntraced(function* (page: Page, method: MethodLabel) {
   if (method !== "tarjeta") {
     yield* Effect.tryPromise((signal) =>
@@ -218,6 +280,7 @@ for (const viewport of [desktop, mobile]) {
           );
           expect(observed.preparations).toEqual([]);
           yield* chooseMonthly(page);
+          yield* expectSeparatePaymentMethods(page);
           expect(observed.preparations).toEqual([]);
           if (viewport.name === "mobile") yield* expectMobileOfferAlignment(page);
           yield* capture(page, `overview-${theme}-${viewport.name}`);

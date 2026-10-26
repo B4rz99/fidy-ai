@@ -14,18 +14,18 @@ const ReviewPendingCount = lazy(() =>
 
 /** One application shell survives navigation across independently authorized product routes. */
 export const ApplicationFrame = (): JSX.Element => {
-  const route = useRouterState({
+  const { authentication } = useSession();
+  const frame = useRouterState({
     select: (state) => {
       if (state.matches.some((match) => match.routeId === "/authenticated")) {
-        return "authenticated";
+        return authentication === "expired" ? "refused" : "application";
       }
       if (state.matches.some((match) => match.routeId === "/independent-application")) {
-        return "independent";
+        return "application";
       }
       return "standalone";
     },
   });
-  const { authentication } = useSession();
   const independentControls = useRouterState({
     select: (state) =>
       state.matches.some(
@@ -34,8 +34,8 @@ export const ApplicationFrame = (): JSX.Element => {
           match.routeId === "/independent-application/upgrade"
       ),
   });
-  if (route === "authenticated" && authentication === "expired") return <AccessRefused />;
-  if (route === "standalone") return <Outlet />;
+  if (frame === "refused") return <AccessRefused />;
+  if (frame === "standalone") return <Outlet />;
   const shell = (
     <ApplicationShell
       reviewPendingCount={

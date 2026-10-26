@@ -749,7 +749,9 @@ subsection uses a lime dot and weight in the nested navigation tree.
 
 The approved #1552 composition uses the application shell, a full-width heading divider and
 a contextual rail beginning below that heading. The overview has unboxed period choices, one
-segmented method choice and an explicit Continue action. No period is selected on entry.
+method choice with separate, equally rounded buttons, small gaps and narrow-width wrapping,
+followed by an explicit Continue action. Selection changes the green border and fill, not the
+button geometry or label weight. No period is selected on entry.
 Period controls stay transparent when selected or hovered, retaining the lime selection underline,
 text hover emphasis and shared keyboard focus. Prices include their canonical Currency code and omit
 only an empty fractional part; nonzero fractional amounts retain their exact currency precision.

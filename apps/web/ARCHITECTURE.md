@@ -54,6 +54,9 @@ and the browser visibility adapter remain with presentation. The feature's mount
 bounded visible conversation through popup dismissal and route navigation. `ApplicationFrame`
 retains one chat provider across independently authorized product routes; each route still gates
 chat visibility. Entering Privacy or ending the authentication lifetime discards that provider.
+The frame subscribes to its rendered access state, not the distinction between independently
+authorized and ordinary product routes. Moving between those routes keeps the shared shell stable;
+the route owners still recheck Consent, and expired ordinary access still renders refusal.
 An accepted processing response starts bounded observation of that exact Turn in the command's
 Effect lifetime, without resubmitting its message. Progress failures or an exhausted observation
 bound retain explicit recovery; unresolved execution still blocks new submissions. Disposal stops

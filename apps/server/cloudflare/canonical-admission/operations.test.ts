@@ -11,7 +11,11 @@ import { Unavailable } from "../../src/shell/public-http/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { executeCanonicalQuery } from "../canonical-operations/operations";
-import { protectCanonicalRequest, protectCanonicalSource } from "./operations";
+import {
+  protectCanonicalPressure,
+  protectCanonicalRequest,
+  protectCanonicalSource,
+} from "./operations";
 import { sweepCanonicalAdmission } from "./runtime";
 import "../../src/shell/api";
 
@@ -654,6 +658,57 @@ it("does not spend commercial quota on malformed input and enforces the ten-requ
       expect(refusal.status).toBe(429);
       expect(refusal.headers.get("retry-after")).toBe("1");
       expect(yield* effects(fixture.db)).toEqual({ total: 0 });
+    })
+  ));
+
+it("isolates recovery pressure between Users without clearing the exhausted User's burst", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, current } = yield* setup;
+      const otherUser = UserId.make("10000000-0000-4000-8000-000000000002");
+      yield* io(() =>
+        db
+          .prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
+          )
+          .bind(otherUser, current)
+          .run()
+      );
+      const live = yield* Clock.Clock;
+      const clock: Clock.Clock = {
+        currentTimeMillis: Effect.succeed(current),
+        currentTimeMillisUnsafe: () => current,
+        currentTimeNanos: live.currentTimeNanos,
+        currentTimeNanosUnsafe: () => live.currentTimeNanosUnsafe(),
+        monotonicTimeNanos: live.monotonicTimeNanos,
+        monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
+        sleep: (duration) => live.sleep(duration),
+      };
+      const recover = (subject: string): Effect.Effect<Response> =>
+        protectCanonicalPressure({
+          db,
+          userId: subject,
+          work: Effect.sync(() => new Response(null, { status: 200 })),
+          refused: Effect.succeed,
+        }).pipe(Effect.provideService(Clock.Clock, clock));
+      for (let index = 0; index < 10; index++) {
+        expect((yield* recover(userId)).status).toBe(200);
+      }
+      const refusal = yield* recover(userId);
+      expect(refusal.status).toBe(429);
+      expect(refusal.headers.get("retry-after")).toBe("1");
+      expect((yield* recover(otherUser)).status).toBe(200);
+      expect((yield* recover(userId)).status).toBe(429);
+      expect(
+        yield* io(() =>
+          db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+        )
+      ).toEqual({ total: 0 });
+      expect(
+        yield* io(() =>
+          db.prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions").first()
+        )
+      ).toEqual({ total: 0 });
     })
   ));
 

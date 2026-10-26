@@ -341,8 +341,47 @@ jobs:
             apps/web/test-results/verify-browser.json
             apps/web/test-results/dashboard-core-*/trace.zip
             apps/web/test-results/settings-visual/**
+            apps/web/test-results/chat-visual/**
             apps/web/test-results/subscription-visual/**
             apps/web/test-results/brand-token-captures/
+          if-no-files-found: error
+          retention-days: 7
+
+  chat-visual-evidence:
+    name: Chat visual evidence only (not merge eligibility)
+    if: ${{ github.event.pull_request.number == 1557 && github.head_ref == 'feat/chat-redesign' && github.event.pull_request.head.repo.full_name == 'B4rz99/fidy-ai' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/bun-install
+        with:
+          save-cache: "false"
+          scope: unit-tests
+      - name: Install Chromium headless shell
+        run: bunx --bun playwright install --only-shell chromium
+      - name: Verify Chromium system dependencies
+        run: |
+          node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();' ||
+            sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
+      - name: Capture synthetic Chat views independently of performance admission
+        run: bun run --cwd apps/web test:browser e2e/chat-visual.spec.ts --project=browser --no-deps
+      - name: Preserve independent visual evidence without replacing required-check reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: chat-independent-visual
+          path: |
+            apps/web/test-results/chat-visual/**
+            apps/web/test-results/browser-timings.json
           if-no-files-found: error
           retention-days: 7
 

@@ -113,15 +113,7 @@ const signInWithIdentity = ({
       | "privacyRenewal"
       | "privacyErasure"
       | RecurringIdentity
-      | "navigationTransactions"
-      | "navigationLoading"
-      | "navigationConsent"
-      | "navigationBudget"
-      | "navigationRecurring"
-      | "navigationReviewBudget"
-      | "navigationReviewTransactions"
-      | "navigationClock"
-      | "navigationDashboard";
+      | NavigationFixture["identity"];
   }>): Promise<void> =>
   openBrowserLogin(page)
     .then(() => (clockMode === "controlled" ? installAcceptanceClock(page) : undefined))
@@ -325,6 +317,8 @@ type NavigationFixture = SignInFixture &
       | "navigationTransactions"
       | "navigationLoading"
       | "navigationConsent"
+      | "navigationConsentRetry"
+      | "navigationConsentRecovery"
       | "navigationBudget"
       | "navigationRecurring"
       | "navigationReviewBudget"

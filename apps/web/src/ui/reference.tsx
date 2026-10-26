@@ -22,6 +22,7 @@ import { TransactionsReference } from "./transactions-reference";
 import { WorkspaceReference } from "./workspace-reference";
 import { ReviewReference } from "./review-reference";
 import { RecurringReference } from "./recurring-reference";
+import { ChatReference } from "./chat-reference";
 import { SettingsReference } from "./settings-reference";
 import { SubscriptionReference } from "./subscription-reference";
 import "./reference.css";
@@ -328,6 +329,7 @@ export const UIReference = (): JSX.Element => {
           <FieldReference />
         </div>
         <SettingsReference />
+        <ChatReference />
         <SubscriptionReference />
         <WorkspaceReference />
         <ReviewReference />

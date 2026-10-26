@@ -271,6 +271,9 @@ test("activates Subscription through reviewed reused-source terms without sendin
       yield* Effect.tryPromise(() => page.goto("/upgrade"));
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Elegir mensual" }).click());
       yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Continuar con tarjeta" }).click()
+      );
+      yield* Effect.tryPromise(() =>
         expect(
           page.getByText("Usaremos de nuevo tu fuente de pago guardada.", { exact: false })
         ).toBeVisible()
@@ -355,6 +358,9 @@ test("a declined card can explicitly switch to a newly reviewed wallet without s
       const submissions = yield* installDeclinedEnrollment(page);
       yield* Effect.tryPromise(() => page.goto("/upgrade"));
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Elegir mensual" }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Continuar con tarjeta" }).click()
+      );
       yield* Effect.tryPromise(() => page.getByLabel(/Acepto el reglamento/iu).check());
       yield* Effect.tryPromise(() => page.getByLabel(/Autorizo el tratamiento/iu).check());
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Activar Pro" }).click());
@@ -381,10 +387,16 @@ test("a declined card can explicitly switch to a newly reviewed wallet without s
         }
       );
       yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Cambiar selección" }).click()
+      );
+      yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Nequi", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Pago con Nequi" })).toBeVisible()
+        page.getByRole("button", { name: "Continuar con Nequi" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Pagar con Nequi" })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel(/Acepto el reglamento/iu)).not.toBeChecked()
@@ -411,6 +423,9 @@ for (const { replaceFailedSource, reload } of [
         yield* Effect.tryPromise(() =>
           page.getByRole("button", { name: "Elegir mensual" }).click()
         );
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Continuar con tarjeta" }).click()
+        );
         yield* Effect.tryPromise(() => page.getByLabel(/Acepto el reglamento/iu).check());
         yield* Effect.tryPromise(() => page.getByLabel(/Autorizo el tratamiento/iu).check());
         yield* Effect.tryPromise(() => page.getByRole("button", { name: "Activar Pro" }).click());
@@ -421,6 +436,9 @@ for (const { replaceFailedSource, reload } of [
           yield* Effect.tryPromise(() => page.reload());
           yield* Effect.tryPromise(() =>
             page.getByRole("button", { name: "Elegir mensual" }).click()
+          );
+          yield* Effect.tryPromise(() =>
+            page.getByRole("button", { name: "Continuar con tarjeta" }).click()
           );
         }
         yield* Effect.tryPromise(() =>

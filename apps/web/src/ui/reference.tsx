@@ -23,6 +23,7 @@ import { WorkspaceReference } from "./workspace-reference";
 import { ReviewReference } from "./review-reference";
 import { RecurringReference } from "./recurring-reference";
 import { SettingsReference } from "./settings-reference";
+import { SubscriptionReference } from "./subscription-reference";
 import "./reference.css";
 
 const themes = ["light", "dark", "system"] as const;
@@ -327,6 +328,7 @@ export const UIReference = (): JSX.Element => {
           <FieldReference />
         </div>
         <SettingsReference />
+        <SubscriptionReference />
         <WorkspaceReference />
         <ReviewReference />
         <RecurringReference dark={dark} toggleTheme={() => setTheme(dark ? "light" : "dark")} />

@@ -744,3 +744,21 @@ variants with the semantic error foreground; final destructive confirmations
 retain their existing treatment. These variants are demonstrated in the UI
 reference. Individual and bulk actions stay distinct. The selected Settings
 subsection uses a lime dot and weight in the nested navigation tree.
+
+## Subscription and payment workspace
+
+The approved #1552 composition uses the application shell, a full-width heading divider and
+a contextual rail beginning below that heading. The overview has unboxed period choices, one
+segmented method choice and an explicit Continue action. No period is selected on entry.
+The payment form replaces the overview rather than appearing beneath it; phones put its chosen
+amount above the fields. Nequi approval, DaviPlata entry/OTP and payment outcomes are alternative
+states, not simultaneous forms. Source availability never presents as payment approval.
+
+`src/ui/components/subscription.css` owns the continuous planes, 50px controls, 52px inputs,
+icon circles, separators and responsive treatment, using existing theme and state tokens.
+`SubscriptionInputDecoration` adds the approved decorative leading field icons only on narrow
+screens, leaving the desktop fields icon-free and keeping the shared Input behavior unchanged.
+`/ui-reference.html#subscription` demonstrates the actual shared controls with local, non-payment
+examples; synthetic browser captures exercise the complete application composition in both themes.
+Canonical offers and status supply every real price, period and billing attempt. There are no
+invented invoices, stored-card details, next-charge dates or subscription cancellation controls.

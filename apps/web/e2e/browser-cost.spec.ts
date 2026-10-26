@@ -303,6 +303,7 @@ test("measures authenticated navigation, pending payment, visibility and settlem
       const paymentSetupBefore = yield* snapshot(request);
       yield* wait(openUpgradeThroughCore(page));
       yield* wait(page.getByRole("button", { name: "Elegir mensual" }).click());
+      yield* wait(page.getByRole("button", { name: "Continuar con tarjeta" }).click());
       yield* wait(page.getByLabel(/Acepto el reglamento/iu).check());
       yield* wait(page.getByLabel(/Autorizo el tratamiento/iu).check());
       const submitting = page.waitForResponse("**/web/subscription/payment-enrollments/submit");

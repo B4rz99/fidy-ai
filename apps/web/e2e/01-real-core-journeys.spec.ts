@@ -558,7 +558,9 @@ const submitReusedCard = Effect.fnUntraced(function* (page: Page, request: APIRe
       })
       .click()
   );
-  yield* fromPlaywright(page.getByRole("button", { name: "Continuar con tarjeta" }).click());
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("button", { name: "Continuar con tarjeta" }).click({ signal })
+  );
   const prepared = yield* fromPlaywright(preparing);
   expect(prepared.status()).toBe(ok);
   yield* fromPlaywright(
@@ -697,7 +699,8 @@ test("tokenizes a first card without an email-login credential through real publ
           })
           .click()
       );
-      yield* fromPlaywright(page.getByRole("button", { name: "Continuar con tarjeta" }).click());
+      const continueButton = page.getByRole("button", { name: "Continuar con tarjeta" });
+      yield* Effect.tryPromise((signal) => continueButton.click({ signal }));
       yield* fromPlaywright(expect(page.getByLabel("Número de tarjeta")).toBeVisible());
       yield* fromPlaywright(expect(page.getByLabel("Correo de facturación")).toHaveValue(""));
       yield* fromPlaywright(page.getByLabel("Correo de facturación").fill("tarjeta@example.com"));
@@ -852,7 +855,9 @@ const submitFirstDaviplata = Effect.fnUntraced(function* (page: Page) {
   yield* fromPlaywright(openUpgradeThroughCore(page));
   yield* fromPlaywright(page.getByRole("button", { name: "DaviPlata" }).click());
   yield* fromPlaywright(page.getByRole("button", { name: /^mensual\b/iu }).click());
-  yield* fromPlaywright(page.getByRole("button", { name: "Continuar con DaviPlata" }).click());
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("button", { name: "Continuar con DaviPlata" }).click({ signal })
+  );
   yield* fromPlaywright(page.getByLabel("Número de cédula").fill("1122233"));
   yield* fromPlaywright(page.getByLabel("Número de DaviPlata").fill("3991111111"));
   yield* fromPlaywright(

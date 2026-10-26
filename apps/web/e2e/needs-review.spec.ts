@@ -3,6 +3,7 @@ import type { Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
+import { captureReviewEntryReplay, withReviewEntryEvidence } from "./review-entry-diagnostics";
 
 const { expect, test } = playwright;
 test.describe.configure({ mode: "parallel" });
@@ -886,7 +887,7 @@ for (const [destination, identity] of [
         yield* Effect.tryPromise(() =>
           expect(page.locator("body")).toHaveAttribute("data-review-entry-milliseconds", /[0-9]/u)
         );
-        yield* Effect.tryPromise(() => recordReviewEntry(page));
+        yield* recordReviewReturn(page, destination);
         if (destination === "Transacciones") {
           yield* Effect.tryPromise(() => verifyPrivacyDisposesReview(page));
         }
@@ -963,6 +964,19 @@ const recordReviewEntry = (page: Page): Promise<void> =>
           });
         });
     });
+
+const recordReviewReturn = Effect.fnUntraced(function* (
+  page: Page,
+  destination: "Presupuestos" | "Transacciones"
+) {
+  const measurement = Effect.tryPromise(() => recordReviewEntry(page));
+  yield* destination === "Transacciones"
+    ? withReviewEntryEvidence(
+        measurement,
+        captureReviewEntryReplay(page, test.info()).pipe(Effect.scoped)
+      )
+    : measurement;
+});
 
 test("refreshes a saved review draft from another device after returning", ({ page }) =>
   Effect.runPromise(

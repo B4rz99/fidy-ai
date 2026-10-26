@@ -23,8 +23,9 @@ test.afterEach(({ page }, information) =>
     Effect.gen(function* () {
       if (information.status === information.expectedStatus) return;
       const filename = information.title.replaceAll(/[^a-z0-9-]+/giu, "-");
-      yield* Effect.tryPromise(() =>
+      yield* Effect.tryPromise((signal) =>
         page.screenshot({
+          signal,
           path: `${captureDirectory}/failed-${filename}.png`,
           fullPage: true,
           animations: "disabled",
@@ -42,8 +43,9 @@ const dimensions = (): Readonly<{ content: number; viewport: number }> => ({
 });
 const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
   yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
-  yield* Effect.tryPromise(() =>
+  yield* Effect.tryPromise((signal) =>
     page.screenshot({
+      signal,
       path: `${captureDirectory}/${filename}.png`,
       fullPage: true,
       animations: "disabled",
@@ -62,33 +64,35 @@ const expectSubscriptionShell = Effect.fnUntraced(function* (
   page: Page,
   display: Readonly<{ viewport: typeof desktop; theme: Theme }>
 ) {
-  yield* Effect.tryPromise(() =>
-    expect(page.getByRole("img", { name: "Fidy", exact: true })).toBeVisible()
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("img", { name: "Fidy", exact: true })).toBeVisible({ signal })
   );
-  yield* Effect.tryPromise(() =>
+  yield* Effect.tryPromise((signal) =>
     expect(
       page.getByRole("button", {
         name: display.theme === "dark" ? "Activar tema claro" : "Activar tema oscuro",
         exact: true,
       })
-    ).toBeVisible()
+    ).toBeVisible({ signal })
   );
-  yield* Effect.tryPromise(() =>
-    expect(page.getByRole("main")).toHaveCSS("color-scheme", display.theme)
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("main")).toHaveCSS("color-scheme", display.theme, { signal })
   );
   const compact = display.viewport.name === "mobile";
   if (compact) {
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Menú de navegación", exact: true }).click()
+    yield* Effect.tryPromise((signal) =>
+      page.getByRole("button", { name: "Menú de navegación", exact: true }).click({ signal })
     );
   }
   const navigation = page.getByRole("navigation", { name: "Aplicación", exact: true });
-  yield* Effect.tryPromise(() => expect(navigation).toBeVisible());
+  yield* Effect.tryPromise((signal) => expect(navigation).toBeVisible({ signal }));
   const current = navigation.getByRole("link", { name: "Suscripción", exact: true });
-  yield* Effect.tryPromise(() => expect(current).toHaveAttribute("aria-current", "page"));
+  yield* Effect.tryPromise((signal) =>
+    expect(current).toHaveAttribute("aria-current", "page", { signal })
+  );
   if (compact) {
-    yield* Effect.tryPromise(() => current.click());
-    yield* Effect.tryPromise(() => expect(navigation).toBeHidden());
+    yield* Effect.tryPromise((signal) => current.click({ signal }));
+    yield* Effect.tryPromise((signal) => expect(navigation).toBeHidden({ signal }));
   }
 });
 const openSubscription = Effect.fnUntraced(function* (
@@ -102,51 +106,63 @@ const openSubscription = Effect.fnUntraced(function* (
     page.clock.setFixedTime(DateTime.toDateUtc(DateTime.makeUnsafe("2026-10-25T15:00:00Z")))
   );
   const observed = yield* installSubscriptionFixture(page, state);
-  yield* Effect.tryPromise(() => page.goto("/upgrade"));
-  yield* Effect.tryPromise(() =>
-    expect(page.getByRole("heading", { name: "Suscripción y pagos", exact: true })).toBeVisible()
+  yield* Effect.tryPromise((signal) => page.goto("/upgrade", { signal }));
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("heading", { name: "Suscripción y pagos", exact: true })).toBeVisible({
+      signal,
+    })
   );
   yield* expectSubscriptionShell(page, display);
   return observed;
 });
 const chooseMonthly = Effect.fnUntraced(function* (page: Page) {
-  yield* Effect.tryPromise(() => page.getByRole("button", { name: /^mensual\b/iu }).click());
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("button", { name: /^mensual\b/iu }).click({ signal })
+  );
 });
 const continueWith = Effect.fnUntraced(function* (page: Page, method: MethodLabel) {
   if (method !== "tarjeta") {
-    yield* Effect.tryPromise(() => page.getByRole("button", { name: method, exact: true }).click());
+    yield* Effect.tryPromise((signal) =>
+      page.getByRole("button", { name: method, exact: true }).click({ signal })
+    );
   }
-  yield* Effect.tryPromise(() =>
-    page.getByRole("button", { name: `Continuar con ${method}`, exact: true }).click()
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("button", { name: `Continuar con ${method}`, exact: true }).click({ signal })
   );
 });
 
 const fillBillingEmail = Effect.fnUntraced(function* (page: Page) {
-  yield* Effect.tryPromise(() =>
-    page.getByLabel("Correo de facturación", { exact: true }).fill("prueba@example.com")
+  yield* Effect.tryPromise((signal) =>
+    page.getByLabel("Correo de facturación", { exact: true }).fill("prueba@example.com", { signal })
   );
 });
 const expectSeparateConsents = Effect.fnUntraced(function* (page: Page) {
-  yield* Effect.tryPromise(() =>
-    expect(page.getByRole("checkbox", { name: /Acepto el reglamento/iu })).not.toBeChecked()
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("checkbox", { name: /Acepto el reglamento/iu })).not.toBeChecked({
+      signal,
+    })
   );
-  yield* Effect.tryPromise(() =>
-    expect(page.getByRole("checkbox", { name: /Autorizo el tratamiento/iu })).not.toBeChecked()
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("checkbox", { name: /Autorizo el tratamiento/iu })).not.toBeChecked({
+      signal,
+    })
   );
-  yield* Effect.tryPromise(() =>
+  yield* Effect.tryPromise((signal) =>
     expect(page.getByRole("link", { name: /reglamento/u })).toHaveAttribute(
       "href",
-      "https://wompi.co/end-user-policy"
+      "https://wompi.co/end-user-policy",
+      { signal }
     )
   );
-  yield* Effect.tryPromise(() =>
+  yield* Effect.tryPromise((signal) =>
     expect(page.getByRole("link", { name: /tratamiento de datos personales/u })).toHaveAttribute(
       "href",
-      "https://wompi.co/personal-data-authorization"
+      "https://wompi.co/personal-data-authorization",
+      { signal }
     )
   );
-  yield* Effect.tryPromise(() =>
-    expect(page.getByText(/Fidy conservará este correo/u)).toHaveCount(0)
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByText(/Fidy conservará este correo/u)).toHaveCount(0, { signal })
   );
 });
 
@@ -159,29 +175,32 @@ for (const viewport of [desktop, mobile]) {
         Effect.gen(function* () {
           const observed = yield* openSubscription(page, { viewport, theme });
           for (const period of [/^semanal\b/iu, /^mensual\b/iu, /^anual\b/iu]) {
-            yield* Effect.tryPromise(() =>
+            yield* Effect.tryPromise((signal) =>
               expect(page.getByRole("button", { name: period })).toHaveAttribute(
                 "aria-pressed",
-                "false"
+                "false",
+                { signal }
               )
             );
           }
-          yield* Effect.tryPromise(() =>
+          yield* Effect.tryPromise((signal) =>
             expect(
               page.getByRole("button", { name: "Continuar con tarjeta", exact: true })
-            ).toBeDisabled()
+            ).toBeDisabled({ signal })
           );
           expect(observed.preparations).toEqual([]);
           yield* chooseMonthly(page);
           expect(observed.preparations).toEqual([]);
           yield* capture(page, `overview-${theme}-${viewport.name}`);
           yield* continueWith(page, "tarjeta");
-          yield* Effect.tryPromise(() =>
-            expect(page.getByLabel("Número de tarjeta", { exact: true })).toBeVisible()
+          yield* Effect.tryPromise((signal) =>
+            expect(page.getByLabel("Número de tarjeta", { exact: true })).toBeVisible({ signal })
           );
           yield* expectSeparateConsents(page);
-          yield* Effect.tryPromise(() =>
-            expect(page.getByRole("button", { name: "Activar Pro", exact: true })).toBeDisabled()
+          yield* Effect.tryPromise((signal) =>
+            expect(page.getByRole("button", { name: "Activar Pro", exact: true })).toBeDisabled({
+              signal,
+            })
           );
           yield* capture(page, `card-${theme}-${viewport.name}`);
           expect(observed.preparations).toEqual(["card"]);
@@ -194,22 +213,22 @@ for (const viewport of [desktop, mobile]) {
 }
 
 const beginDaviplata = Effect.fnUntraced(function* (page: Page) {
-  yield* Effect.tryPromise(() =>
-    page.getByLabel("Número de cédula", { exact: true }).fill("1122233")
+  yield* Effect.tryPromise((signal) =>
+    page.getByLabel("Número de cédula", { exact: true }).fill("1122233", { signal })
   );
-  yield* Effect.tryPromise(() =>
-    page.getByLabel("Número de DaviPlata", { exact: true }).fill("3991111111")
+  yield* Effect.tryPromise((signal) =>
+    page.getByLabel("Número de DaviPlata", { exact: true }).fill("3991111111", { signal })
   );
   yield* fillBillingEmail(page);
   yield* acceptSubscriptionContracts(page);
-  yield* Effect.tryPromise(() =>
-    page.getByRole("button", { name: "Autorizar con DaviPlata", exact: true }).click()
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("button", { name: "Autorizar con DaviPlata", exact: true }).click({ signal })
   );
-  yield* Effect.tryPromise(() =>
-    expect(page.getByLabel("Código de verificación", { exact: true })).toBeVisible()
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByLabel("Código de verificación", { exact: true })).toBeVisible({ signal })
   );
-  yield* Effect.tryPromise(() =>
-    expect(page.getByLabel("Número de cédula", { exact: true })).toHaveCount(0)
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByLabel("Número de cédula", { exact: true })).toHaveCount(0, { signal })
   );
 });
 for (const theme of themes) {
@@ -221,19 +240,19 @@ for (const theme of themes) {
         yield* continueWith(page, "Nequi");
         yield* expectSeparateConsents(page);
         yield* capture(page, `nequi-form-${theme}-desktop`);
-        yield* Effect.tryPromise(() =>
-          page.getByLabel("Número de Nequi", { exact: true }).fill("3991111111")
+        yield* Effect.tryPromise((signal) =>
+          page.getByLabel("Número de Nequi", { exact: true }).fill("3991111111", { signal })
         );
         yield* fillBillingEmail(page);
         yield* acceptSubscriptionContracts(page);
-        yield* Effect.tryPromise(() =>
-          page.getByRole("button", { name: "Autorizar con Nequi", exact: true }).click()
+        yield* Effect.tryPromise((signal) =>
+          page.getByRole("button", { name: "Autorizar con Nequi", exact: true }).click({ signal })
         );
-        yield* Effect.tryPromise(() =>
-          expect(page.getByText(/Aprueba la suscripción en Nequi/u)).toBeVisible()
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByText(/Aprueba la suscripción en Nequi/u)).toBeVisible({ signal })
         );
-        yield* Effect.tryPromise(() =>
-          expect(page.getByLabel("Número de Nequi", { exact: true })).toHaveCount(0)
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByLabel("Número de Nequi", { exact: true })).toHaveCount(0, { signal })
         );
         yield* capture(page, `nequi-waiting-${theme}-desktop`);
         expect(observed.submissions).toEqual([]);
@@ -249,17 +268,19 @@ for (const theme of themes) {
         yield* chooseMonthly(page);
         yield* continueWith(page, "DaviPlata");
         yield* expectSeparateConsents(page);
-        yield* Effect.tryPromise(() =>
-          expect(page.getByText(/Por ahora solo admitimos CC/u)).toHaveCount(0)
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByText(/Por ahora solo admitimos CC/u)).toHaveCount(0, { signal })
         );
         yield* capture(page, `daviplata-form-${theme}-desktop`);
         yield* beginDaviplata(page);
         yield* capture(page, `daviplata-otp-${theme}-desktop`);
-        yield* Effect.tryPromise(() =>
-          page.getByRole("button", { name: "Cancelar autorización", exact: true }).click()
+        yield* Effect.tryPromise((signal) =>
+          page.getByRole("button", { name: "Cancelar autorización", exact: true }).click({ signal })
         );
-        yield* Effect.tryPromise(() =>
-          expect(page.getByLabel("Código de verificación", { exact: true })).toHaveCount(0)
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByLabel("Código de verificación", { exact: true })).toHaveCount(0, {
+            signal,
+          })
         );
         expect(observed.submissions).toEqual([]);
         expect(observed.providerCalls).toEqual(["/v1/tokens/daviplata", "RESEND_OTP"]);
@@ -289,44 +310,44 @@ for (const { state, copy } of paymentStates) {
         yield* continueWith(page, "tarjeta");
         yield* fillBillingEmail(page);
         yield* acceptSubscriptionContracts(page);
-        yield* Effect.tryPromise(() =>
-          page.getByRole("button", { name: "Activar Pro", exact: true }).click()
+        yield* Effect.tryPromise((signal) =>
+          page.getByRole("button", { name: "Activar Pro", exact: true }).click({ signal })
         );
-        yield* Effect.tryPromise(() =>
-          expect(page.getByText(copy, { exact: false })).toBeVisible()
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByText(copy, { exact: false })).toBeVisible({ signal })
         );
         if (state !== "approved") {
-          yield* Effect.tryPromise(() =>
+          yield* Effect.tryPromise((signal) =>
             expect(
               page.getByText("Tu pago fue realizado y tu suscripción está activa.")
-            ).toHaveCount(0)
+            ).toHaveCount(0, { signal })
           );
         }
         if (state === "declined") {
-          yield* Effect.tryPromise(() =>
+          yield* Effect.tryPromise((signal) =>
             expect(
               page.getByRole("button", { name: "Volver a intentar", exact: true })
-            ).toBeEnabled()
+            ).toBeEnabled({ signal })
           );
-          yield* Effect.tryPromise(() =>
+          yield* Effect.tryPromise((signal) =>
             expect(
               page.getByRole("button", { name: "Usar otra tarjeta", exact: true })
-            ).toBeEnabled()
+            ).toBeEnabled({ signal })
           );
         } else {
-          yield* Effect.tryPromise(() =>
+          yield* Effect.tryPromise((signal) =>
             expect(
               page.getByRole("button", { name: "Volver a intentar", exact: true })
-            ).toHaveCount(0)
+            ).toHaveCount(0, { signal })
           );
         }
         yield* capture(page, `${state}-light-desktop`);
         if (state === "pending") {
-          yield* Effect.tryPromise(() =>
-            page.getByRole("button", { name: "Consultar estado", exact: true }).click()
+          yield* Effect.tryPromise((signal) =>
+            page.getByRole("button", { name: "Consultar estado", exact: true }).click({ signal })
           );
-          yield* Effect.tryPromise(() =>
-            expect(page.getByText(copy, { exact: false })).toBeVisible()
+          yield* Effect.tryPromise((signal) =>
+            expect(page.getByText(copy, { exact: false })).toBeVisible({ signal })
           );
           expect(observed.submissions).toHaveLength(1);
         }
@@ -355,19 +376,20 @@ for (const { state, copy } of sourceStates) {
         );
         yield* chooseMonthly(page);
         yield* continueWith(page, "tarjeta");
-        yield* Effect.tryPromise(() =>
-          expect(page.getByText(copy, { exact: false })).toBeVisible()
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByText(copy, { exact: false })).toBeVisible({ signal })
         );
         if (state === "source-available") {
-          yield* Effect.tryPromise(() =>
+          yield* Effect.tryPromise((signal) =>
             expect(
               page.getByText("Esto todavía no confirma que el pago esté aprobado.", { exact: true })
-            ).toBeVisible()
+            ).toBeVisible({ signal })
           );
         }
-        yield* Effect.tryPromise(() =>
+        yield* Effect.tryPromise((signal) =>
           expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toHaveCount(
-            0
+            0,
+            { signal }
           )
         );
         yield* capture(page, `${state}-light-desktop`);
@@ -389,26 +411,28 @@ test("Uncertain DaviPlata confirmation does not offer a fresh authorization or i
       yield* chooseMonthly(page);
       yield* continueWith(page, "DaviPlata");
       yield* beginDaviplata(page);
-      yield* Effect.tryPromise(() =>
-        page.getByLabel("Código de verificación", { exact: true }).fill("574829")
+      yield* Effect.tryPromise((signal) =>
+        page.getByLabel("Código de verificación", { exact: true }).fill("574829", { signal })
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Confirmar código", exact: true }).click()
+      yield* Effect.tryPromise((signal) =>
+        page.getByRole("button", { name: "Confirmar código", exact: true }).click({ signal })
       );
-      yield* Effect.tryPromise(() =>
+      yield* Effect.tryPromise((signal) =>
         expect(
           page.getByText(
             /No pudimos confirmar el resultado. No vuelvas a iniciar la autorización./u
           )
-        ).toBeVisible()
+        ).toBeVisible({ signal })
       );
-      yield* Effect.tryPromise(() =>
+      yield* Effect.tryPromise((signal) =>
         expect(
           page.getByRole("button", { name: "Autorizar con DaviPlata", exact: true })
-        ).toHaveCount(0)
+        ).toHaveCount(0, { signal })
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByLabel("Código de verificación", { exact: true })).toHaveCount(0)
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByLabel("Código de verificación", { exact: true })).toHaveCount(0, {
+          signal,
+        })
       );
       yield* capture(page, "uncertain-light-desktop");
       expect(observed.submissions).toEqual([]);
@@ -429,16 +453,16 @@ for (const theme of themes) {
       Effect.runPromise(
         Effect.gen(function* () {
           const observed = yield* openSubscription(page, { viewport, theme }, "paid");
-          yield* Effect.tryPromise(() =>
-            expect(page.getByText(/Último período pagado/u)).toBeVisible()
+          yield* Effect.tryPromise((signal) =>
+            expect(page.getByText(/Último período pagado/u)).toBeVisible({ signal })
           );
-          yield* Effect.tryPromise(() =>
+          yield* Effect.tryPromise((signal) =>
             expect(
               page.getByRole("heading", { name: "Intentos de cobro recientes", exact: true })
-            ).toBeVisible()
+            ).toBeVisible({ signal })
           );
-          yield* Effect.tryPromise(() =>
-            expect(page.getByText(/Precio cobrado:/u)).toContainText("28.900")
+          yield* Effect.tryPromise((signal) =>
+            expect(page.getByText(/Precio cobrado:/u)).toContainText("28.900", { signal })
           );
           yield* capture(page, `paid-${theme}-${viewport.name}`);
           expect(observed.preparations).toEqual([]);
@@ -458,11 +482,13 @@ test("Unavailable subscription standing retains a retry without blocking histori
         { viewport: desktop, theme: "light" },
         "unavailable"
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText("Estado no disponible", { exact: true })).toBeVisible()
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByText("Estado no disponible", { exact: true })).toBeVisible({ signal })
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Reintentar", exact: true })).toBeEnabled()
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("button", { name: "Reintentar", exact: true })).toBeEnabled({
+          signal,
+        })
       );
       yield* capture(page, "unavailable-light-desktop");
       expect(observed.submissions).toEqual([]);
@@ -471,36 +497,42 @@ test("Unavailable subscription standing retains a retry without blocking histori
   ));
 
 const fillCardDraft = Effect.fnUntraced(function* (page: Page) {
-  yield* Effect.tryPromise(() =>
-    page.getByLabel("Número de tarjeta", { exact: true }).fill("4111111111111111")
+  yield* Effect.tryPromise((signal) =>
+    page.getByLabel("Número de tarjeta", { exact: true }).fill("4111111111111111", { signal })
   );
-  yield* Effect.tryPromise(() => page.getByLabel("Vencimiento", { exact: true }).fill("122028"));
-  yield* Effect.tryPromise(() => page.getByLabel("CVC", { exact: true }).fill("123"));
-  yield* Effect.tryPromise(() =>
-    page.getByLabel("Nombre en la tarjeta", { exact: true }).fill("Usuario Prueba")
+  yield* Effect.tryPromise((signal) =>
+    page.getByLabel("Vencimiento", { exact: true }).fill("122028", { signal })
+  );
+  yield* Effect.tryPromise((signal) =>
+    page.getByLabel("CVC", { exact: true }).fill("123", { signal })
+  );
+  yield* Effect.tryPromise((signal) =>
+    page.getByLabel("Nombre en la tarjeta", { exact: true }).fill("Usuario Prueba", { signal })
   );
   yield* fillBillingEmail(page);
 });
 const expectDiscardedCardDraft = Effect.fnUntraced(function* (page: Page) {
-  yield* Effect.tryPromise(() =>
-    expect(page.getByLabel("Número de tarjeta", { exact: true })).toHaveValue("")
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByLabel("Número de tarjeta", { exact: true })).toHaveValue("", { signal })
   );
-  yield* Effect.tryPromise(() => expect(page.getByLabel("CVC", { exact: true })).toHaveValue(""));
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByLabel("CVC", { exact: true })).toHaveValue("", { signal })
+  );
   yield* expectSeparateConsents(page);
 });
 const keyboardContinue = Effect.fnUntraced(function* (page: Page) {
   const choice = page.getByRole("button", { name: /^mensual\b/iu });
-  yield* Effect.tryPromise(() => choice.focus());
-  yield* Effect.tryPromise(() => expect(choice).toBeFocused());
-  yield* Effect.tryPromise(() => choice.press("Enter"));
+  yield* Effect.tryPromise((signal) => choice.focus({ signal }));
+  yield* Effect.tryPromise((signal) => expect(choice).toBeFocused({ signal }));
+  yield* Effect.tryPromise((signal) => choice.press("Enter", { signal }));
   const next = page.getByRole("button", { name: "Continuar con tarjeta", exact: true });
-  yield* Effect.tryPromise(() => next.focus());
-  yield* Effect.tryPromise(() => expect(next).toBeFocused());
-  yield* Effect.tryPromise(() => next.press("Enter"));
+  yield* Effect.tryPromise((signal) => next.focus({ signal }));
+  yield* Effect.tryPromise((signal) => expect(next).toBeFocused({ signal }));
+  yield* Effect.tryPromise((signal) => next.press("Enter", { signal }));
 });
 const changeSelection = Effect.fnUntraced(function* (page: Page) {
-  yield* Effect.tryPromise(() =>
-    page.getByRole("button", { name: "Cambiar selección", exact: true }).click()
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("button", { name: "Cambiar selección", exact: true }).click({ signal })
   );
 });
 for (const viewport of [desktop, mobile]) {
@@ -512,44 +544,46 @@ for (const viewport of [desktop, mobile]) {
         const observed = yield* openSubscription(page, { viewport, theme: "light" });
         yield* keyboardContinue(page);
         yield* fillCardDraft(page);
-        yield* Effect.tryPromise(() =>
-          page.getByRole("checkbox", { name: /Acepto el reglamento/iu }).check()
+        yield* Effect.tryPromise((signal) =>
+          page.getByRole("checkbox", { name: /Acepto el reglamento/iu }).check({ signal })
         );
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole("button", { name: "Activar Pro", exact: true })).toBeDisabled()
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByRole("button", { name: "Activar Pro", exact: true })).toBeDisabled({
+            signal,
+          })
         );
-        yield* Effect.tryPromise(() =>
-          page.getByRole("checkbox", { name: /Autorizo el tratamiento/iu }).check()
+        yield* Effect.tryPromise((signal) =>
+          page.getByRole("checkbox", { name: /Autorizo el tratamiento/iu }).check({ signal })
         );
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole("button", { name: "Activar Pro", exact: true })).toBeEnabled()
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByRole("button", { name: "Activar Pro", exact: true })).toBeEnabled({
+            signal,
+          })
         );
         yield* changeSelection(page);
         yield* continueWith(page, "Nequi");
         yield* expectSeparateConsents(page);
         yield* changeSelection(page);
-        yield* Effect.tryPromise(() =>
-          page.getByRole("button", { name: "Tarjeta", exact: true }).click()
+        yield* Effect.tryPromise((signal) =>
+          page.getByRole("button", { name: "Tarjeta", exact: true }).click({ signal })
         );
         yield* continueWith(page, "tarjeta");
         yield* expectDiscardedCardDraft(page);
         yield* fillCardDraft(page);
-        yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole("heading", { name: "Privacidad", exact: true })).toBeVisible()
-        );
-        yield* Effect.tryPromise(() => page.goBack());
+        const privacy = page.getByRole("heading", { name: "Privacidad", exact: true });
+        yield* Effect.tryPromise((signal) => page.goto("/settings/privacy", { signal }));
+        yield* Effect.tryPromise((signal) => expect(privacy).toBeVisible({ signal }));
+        yield* Effect.tryPromise((signal) => page.goBack({ signal }));
         yield* keyboardContinue(page);
         yield* expectDiscardedCardDraft(page);
-        yield* Effect.tryPromise(() => page.goForward());
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole("heading", { name: "Privacidad", exact: true })).toBeVisible()
-        );
-        yield* Effect.tryPromise(() => page.goBack());
-        yield* Effect.tryPromise(() =>
+        yield* Effect.tryPromise((signal) => page.goForward({ signal }));
+        yield* Effect.tryPromise((signal) => expect(privacy).toBeVisible({ signal }));
+        yield* Effect.tryPromise((signal) => page.goBack({ signal }));
+        yield* Effect.tryPromise((signal) =>
           expect(page.getByRole("button", { name: /^mensual\b/iu })).toHaveAttribute(
             "aria-pressed",
-            "false"
+            "false",
+            { signal }
           )
         );
         expect(observed.submissions).toEqual([]);
@@ -562,17 +596,21 @@ test("Only backend-enabled payment methods can be selected", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const observed = yield* installSubscriptionFixture(page, "form", ["nequi"]);
-      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      yield* Effect.tryPromise((signal) => page.goto("/upgrade", { signal }));
       yield* chooseMonthly(page);
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Tarjeta", exact: true })).toHaveCount(0)
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("button", { name: "Tarjeta", exact: true })).toHaveCount(0, {
+          signal,
+        })
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "DaviPlata", exact: true })).toHaveCount(0)
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("button", { name: "DaviPlata", exact: true })).toHaveCount(0, {
+          signal,
+        })
       );
       yield* continueWith(page, "Nequi");
-      yield* Effect.tryPromise(() =>
-        expect(page.getByLabel("Número de Nequi", { exact: true })).toBeVisible()
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByLabel("Número de Nequi", { exact: true })).toBeVisible({ signal })
       );
       expect(observed.preparations).toEqual(["nequi"]);
       expect(observed.submissions).toEqual([]);
@@ -584,17 +622,17 @@ test("No payment can start when the backend enables no methods", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const observed = yield* installSubscriptionFixture(page, "form", []);
-      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      yield* Effect.tryPromise((signal) => page.goto("/upgrade", { signal }));
       yield* chooseMonthly(page);
       for (const method of ["Tarjeta", "Nequi", "DaviPlata"]) {
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole("button", { name: method, exact: true })).toHaveCount(0)
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByRole("button", { name: method, exact: true })).toHaveCount(0, { signal })
         );
       }
-      yield* Effect.tryPromise(() =>
+      yield* Effect.tryPromise((signal) =>
         expect(
           page.getByRole("button", { name: "Continuar con tarjeta", exact: true })
-        ).toBeDisabled()
+        ).toBeDisabled({ signal })
       );
       expect(observed.preparations).toEqual([]);
       expect(observed.submissions).toEqual([]);
@@ -610,16 +648,18 @@ test("Paid access and billing history remain available when the offer catalog fa
         { viewport: desktop, theme: "light" },
         "offers-unavailable"
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText(/Último período pagado/u)).toBeVisible()
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByText(/Último período pagado/u)).toBeVisible({ signal })
       );
-      yield* Effect.tryPromise(() =>
+      yield* Effect.tryPromise((signal) =>
         expect(
           page.getByRole("heading", { name: "Intentos de cobro recientes", exact: true })
-        ).toBeVisible()
+        ).toBeVisible({ signal })
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Reintentar carga", exact: true })).toBeEnabled()
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("button", { name: "Reintentar carga", exact: true })).toBeEnabled({
+          signal,
+        })
       );
       yield* capture(page, "catalog-unavailable-light-desktop");
       expect(observed.preparations).toEqual([]);
@@ -649,36 +689,36 @@ test("Unavailable payment methods are not presented as an empty successful resul
     Effect.gen(function* () {
       const observed = yield* installSubscriptionFixture(page);
       const restoreMethods = yield* installUnavailableMethods(page);
-      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      yield* Effect.tryPromise((signal) => page.goto("/upgrade", { signal }));
       yield* chooseMonthly(page);
-      yield* Effect.tryPromise(() =>
+      yield* Effect.tryPromise((signal) =>
         expect(
           page.getByText("No pudimos consultar los métodos de pago. Intenta de nuevo.", {
             exact: true,
           })
-        ).toBeVisible()
+        ).toBeVisible({ signal })
       );
-      yield* Effect.tryPromise(() =>
+      yield* Effect.tryPromise((signal) =>
         expect(
           page.getByText("No hay métodos de pago disponibles en este momento.", { exact: true })
-        ).toHaveCount(0)
+        ).toHaveCount(0, { signal })
       );
-      yield* Effect.tryPromise(() =>
+      yield* Effect.tryPromise((signal) =>
         expect(
           page.getByRole("button", { name: "Continuar con tarjeta", exact: true })
-        ).toBeDisabled()
+        ).toBeDisabled({ signal })
       );
       restoreMethods();
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Actualizar métodos", exact: true }).click()
+      yield* Effect.tryPromise((signal) =>
+        page.getByRole("button", { name: "Actualizar métodos", exact: true }).click({ signal })
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Tarjeta", exact: true })).toBeVisible()
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("button", { name: "Tarjeta", exact: true })).toBeVisible({ signal })
       );
-      yield* Effect.tryPromise(() =>
+      yield* Effect.tryPromise((signal) =>
         expect(
           page.getByRole("button", { name: "Continuar con tarjeta", exact: true })
-        ).toBeEnabled()
+        ).toBeEnabled({ signal })
       );
       expect(observed.preparations).toEqual([]);
       expect(observed.submissions).toEqual([]);
@@ -691,11 +731,11 @@ for (const viewport of [desktop, mobile]) {
     Effect.runPromise(
       Effect.gen(function* () {
         const observed = yield* openSubscription(page, { viewport, theme: "light" });
-        yield* Effect.tryPromise(() =>
-          page.getByRole("button", { name: "Activar tema oscuro", exact: true }).click()
+        yield* Effect.tryPromise((signal) =>
+          page.getByRole("button", { name: "Activar tema oscuro", exact: true }).click({ signal })
         );
         yield* expectSubscriptionShell(page, { viewport, theme: "dark" });
-        yield* Effect.tryPromise(() => page.reload());
+        yield* Effect.tryPromise((signal) => page.reload({ signal }));
         yield* expectSubscriptionShell(page, { viewport, theme: "dark" });
         expect(observed.preparations).toEqual([]);
         expect(observed.submissions).toEqual([]);
@@ -748,20 +788,23 @@ for (const path of ["/UPGRADE", "/upgrade/"]) {
           yield* Effect.tryPromise(() => page.setViewportSize(desktop));
           const observed = yield* installSubscriptionFixture(page);
           const blocked = yield* installUnresolvedConsent(page, consent);
-          yield* Effect.tryPromise(() => page.goto(path));
-          yield* Effect.tryPromise(() =>
+          yield* Effect.tryPromise((signal) => page.goto(path, { signal }));
+          yield* Effect.tryPromise((signal) =>
             expect(page.getByRole("alert")).toContainText(
               consent === "unknown"
                 ? "No pudimos verificar tu autorización"
-                : "Tu autorización está retirada"
+                : "Tu autorización está retirada",
+              { signal }
             )
           );
-          yield* Effect.tryPromise(() =>
-            expect(page.getByRole("button", { name: "Cerrar sesión", exact: true })).toBeVisible()
+          yield* Effect.tryPromise((signal) =>
+            expect(page.getByRole("button", { name: "Cerrar sesión", exact: true })).toBeVisible({
+              signal,
+            })
           );
-          yield* Effect.tryPromise(() => page.waitForLoadState("networkidle"));
-          yield* Effect.tryPromise(() =>
-            expect(page.getByRole("button", { name: /^mensual\b/iu })).toHaveCount(0)
+          yield* Effect.tryPromise((signal) => page.waitForLoadState("networkidle", { signal }));
+          yield* Effect.tryPromise((signal) =>
+            expect(page.getByRole("button", { name: /^mensual\b/iu })).toHaveCount(0, { signal })
           );
           expect(blocked).toEqual([]);
           expect(observed.preparations).toEqual([]);

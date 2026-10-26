@@ -1,3 +1,4 @@
+import { acceptSubscriptionContracts } from "./subscription-interactions";
 import type { APIRequestContext, Page, Response } from "@playwright/test";
 import { type Cause, Config, Data, Effect, Option, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
@@ -303,9 +304,10 @@ test("measures authenticated navigation, pending payment, visibility and settlem
       const paymentSetupBefore = yield* snapshot(request);
       yield* wait(openUpgradeThroughCore(page));
       yield* wait(page.getByRole("button", { name: /^mensual\b/iu }).click());
-      yield* wait(page.getByRole("button", { name: "Continuar con tarjeta" }).click());
-      yield* wait(page.getByRole("checkbox", { name: /Acepto el reglamento/iu }).check());
-      yield* wait(page.getByRole("checkbox", { name: /Autorizo el tratamiento/iu }).check());
+      yield* Effect.tryPromise((signal) =>
+        page.getByRole("button", { name: "Continuar con tarjeta" }).click({ signal })
+      );
+      yield* acceptSubscriptionContracts(page);
       const submitting = page.waitForResponse("**/web/subscription/payment-enrollments/submit");
       yield* wait(page.getByRole("button", { name: "Activar Pro" }).click());
       expect((yield* wait(submitting)).status()).toBe(successStatus);

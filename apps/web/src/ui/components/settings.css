@@ -19,6 +19,7 @@
   gap: 24px;
   padding: 28px 108px 28px 42px;
   border: 0;
+  border-bottom: 1px solid var(--fidy-border-decorative-divider);
 }
 .settings-header :is(h1, h2),
 .settings-workspace > .workspace-page-header h1 {

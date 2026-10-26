@@ -276,12 +276,15 @@ Successful fixture tests do not prove merchant activation, provider destinations
 Production readiness; those remain separate operator-evidence gates. The server contract gate owns
 generated OpenAPI freshness, while browser checks prove that neither host publishes that artifact.
 
-Browser journey sign-in fixtures advance the initial polling timer after operator approval;
-Core proof verification, rate limits, and session creation stay active. A loopback-only operator
+Controlled browser journey sign-in fixtures advance the initial polling timer after operator approval;
+latency probes wait for real polling without installing Playwright Clock. Core proof verification,
+rate limits, and session creation stay active. A loopback-only operator
 advances the fixture clock through observed short cooldowns. Clock-sensitive admission probes run
 before concurrent journeys, and recurring read, chat, and pagination journeys own separate seeded
-Users. Latency probes preserve native browser performance timing while virtualizing timers and run
-without competing browser cases. Mocked expiry derives its deadline from the same browser clock
+Users. Latency probes retain native Date, timers and Performance across full-document authentication
+and reload, and run without competing browser cases. Their admission regression checks native
+Performance identity and real mark entries after both transitions; the unchanged latency limits
+apply only after sign-in. Mocked expiry derives its deadline from the same browser clock
 that the test advances. All production admission and timeout policies remain active.
 The browser verification group also runs the native CLI journey through
 `bun run test:browser:cli` in its dedicated `4183–4185` public/Core topology, with fresh D1 and
@@ -389,3 +392,32 @@ checks. Raw inputs and client names render as text. No bearer enters browser sta
 Approval does not execute the operation: the User returns to the native MCP continuation, whose
 canonical unit consumes it once with all live owner guards. An uncertain POST outcome disables
 further decisions until a fresh read; login resumes only this fixed UUID-selected route.
+
+## Review-return failure evidence
+
+The production browser performance gate retains its untraced capture-click to visible-review
+measurement and 10ms limit. Only a failed return from Transactions triggers one diagnostic
+Transactions → Needs Review replay; its original failure is always restored, including when
+capture fails or times out. A successful or interrupted measurement does not start diagnostics.
+
+The replay uses the existing synthetic fixture and only navigation links. Its scoped API guard
+refuses non-read requests. Authentication is outside the trace. Work has a five-second deadline;
+foreign acquisition and each cleanup request have explicit interruptible one-second budgets,
+with a two-second trace-flush budget. Supported browser actions receive cancellation signals.
+Trace-stop compensation is registered before trace start. The failed Page is closed after capture,
+so its enclosing Playwright fixture also owns late session/handle acquisition; a deadline does not
+claim to cancel an uncancellable protocol command. The guard is never removed from a still-live
+failed Page: it remains until Page/context teardown, including uncertain close. The Chromium trace is capped
+at 1MiB and the uploaded projection at 10,000 events. Only fixed timing-event names, phases and
+numeric fields survive projection: arguments, URLs, arbitrary marks and request data are dropped.
+Completion metadata is schema-decoded before it can enter the report.
+The existing JSON reporter carries attachments in the existing browser-timings artifact; no
+workflow permissions, upload paths or retention change.
+
+This replay is warmer and traced: it can identify scripting, style/layout or task gaps, but cannot
+retrospectively explain the exact untraced failure or replace its gate result. The failed original
+duration is copied into bounded failure evidence before replay; the original assertion still runs
+before any attachment, so attachment failure cannot replace its failure. Original thresholds,
+retry policy and application runtime remain unchanged. Sanitization,
+bounded accumulation, mutation refusal, failure preservation, masked acquisition/disposal deadlines
+and interruption are covered through the diagnostic helper's public seams in the web script tests.

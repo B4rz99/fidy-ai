@@ -5,13 +5,14 @@ import {
   advanceAcceptancePoll,
   advanceRefusedRequest,
   installAcceptanceClock,
-  installAcceptanceClockWithNativePerformance,
 } from "./acceptance-clock";
 import { apiOrigin } from "./http-fixtures";
 import {
   browserSessionHeaders,
   openBrowserLogin,
+  reloadTransactionsThroughCore,
   signInBudgetEditingThroughCore,
+  signInNavigationPerformanceThroughCore,
 } from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
 
@@ -65,17 +66,33 @@ test("native admission still refuses the burst and recovers only after the fixtu
     })
   ));
 
-const virtualWaitMilliseconds = 1_000;
-const browserPerformance = (): number => performance.now();
-test("virtual waiting preserves native high-resolution browser performance timing", ({ page }) =>
+const nativePerformanceEvidence = (): Readonly<{ native: boolean; marks: number }> => {
+  const name = "fidy-native-performance-probe";
+  performance.clearMarks(name);
+  performance.mark(name);
+  const evidence = {
+    native: performance instanceof Performance,
+    marks: performance.getEntriesByName(name, "mark").length,
+  };
+  performance.clearMarks(name);
+  return evidence;
+};
+
+test("native performance survives full-document login and reload", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => openBrowserLogin(page));
-      yield* Effect.tryPromise(() => installAcceptanceClockWithNativePerformance(page));
-      const before = yield* Effect.tryPromise(() => page.evaluate(browserPerformance));
-      yield* Effect.tryPromise(() => page.clock.fastForward(virtualWaitMilliseconds));
-      const after = yield* Effect.tryPromise(() => page.evaluate(browserPerformance));
-      expect(after - before).toBeLessThan(virtualWaitMilliseconds);
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationClock" })
+      );
+      expect(yield* Effect.tryPromise(() => page.evaluate(nativePerformanceEvidence))).toEqual({
+        native: true,
+        marks: 1,
+      });
+      yield* Effect.tryPromise(() => reloadTransactionsThroughCore(page));
+      expect(yield* Effect.tryPromise(() => page.evaluate(nativePerformanceEvidence))).toEqual({
+        native: true,
+        marks: 1,
+      });
     })
   ));
 

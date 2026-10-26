@@ -135,6 +135,46 @@ const capturePage = Effect.fnUntraced(function* (page: Page, filename: string) {
   expect(measured.content).toBeLessThanOrEqual(measured.viewport);
 });
 
+const expectHeaderDivider = Effect.fnUntraced(function* (
+  page: Page,
+  theme: (typeof themes)[number]
+) {
+  const header = page.locator(".settings-workspace > header");
+  yield* Effect.tryPromise((signal) => expect(header).toBeVisible({ signal }));
+  yield* Effect.tryPromise((signal) =>
+    expect(header).toHaveCSS("border-bottom-style", "solid", { signal })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(header).toHaveCSS("border-bottom-width", "1px", { signal })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(header).toHaveCSS(
+      "border-bottom-color",
+      theme === "light" ? "rgb(222, 214, 206)" : "rgb(96, 96, 96)",
+      { signal }
+    )
+  );
+  const headerBounds = yield* Effect.tryPromise((signal) => header.boundingBox({ signal }));
+  const workspaceBounds = yield* Effect.tryPromise((signal) =>
+    page.locator(".settings-workspace").boundingBox({ signal })
+  );
+  expect(headerBounds).not.toBeNull();
+  expect(workspaceBounds).not.toBeNull();
+  if (headerBounds === null || workspaceBounds === null) return;
+  expect(headerBounds.x).toBeCloseTo(workspaceBounds.x, 0);
+  expect(headerBounds.width).toBeCloseTo(workspaceBounds.width, 0);
+  const content = yield* Effect.tryPromise(() =>
+    page.locator(".settings-main, .settings-panel").all()
+  );
+  expect(content.length).toBeGreaterThan(0);
+  for (const region of content) {
+    const bounds = yield* Effect.tryPromise((signal) => region.boundingBox({ signal }));
+    expect(bounds).not.toBeNull();
+    if (bounds === null) continue;
+    expect(bounds.y).toBeGreaterThanOrEqual(headerBounds.y + headerBounds.height);
+  }
+});
+
 const expectAlignedHeader = Effect.fnUntraced(function* (
   page: Page,
   title: string,
@@ -234,6 +274,7 @@ for (const { viewport, destinations: targets } of captureViewports) {
             if (compact && destination.title === "Accesos") {
               yield* expectCompactAccess(page, viewport.width);
             }
+            yield* expectHeaderDivider(page, theme);
             yield* capturePage(page, `${destination.filename}-${theme}-${viewport.name}`);
             expect(observed.mutations).toEqual([]);
             expect(observed.missingReads).toEqual([]);

@@ -625,7 +625,9 @@ only text capabilities supported by the existing Agent endpoint.
 The approved panel uses a full-width header divider, a lime sparkle mark, “Agente Fidy”,
 a theme control backed by the existing application preference, and a circular close action.
 The composer stays outside the scrolling conversation with a side-by-side text field and Send
-button, followed by the credential-safety reminder. The empty state offers “Revisar mis gastos”,
+button, followed by the credential-safety reminder. Send, confirmation and recovery actions use the
+scoped control radius, not pills. Short viewports compact header/composer spacing while retaining
+a scrollable conversation, so the host explanation and confirmation can each be reviewed. The empty state offers “Revisar mis gastos”,
 “Ver mis presupuestos”, and “Consultar recurrentes”; these fill the draft and never submit it.
 Waiting uses a quiet sparkle/dots treatment; uncertain execution uses warning colors, while
 failed delivery and quota feedback use information colors. Recovery remains an explicit action.

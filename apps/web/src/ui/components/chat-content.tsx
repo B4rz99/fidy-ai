@@ -11,7 +11,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import type { JSX, ReactNode } from "react";
 import { Alert, AlertTitle } from "./alert";
 import { Button } from "./button";
-import { ConversationContent } from "./ai-elements/conversation";
+import { ConversationContent } from "@/ui/components/ai-elements/conversation";
 
 export const ChatContent = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => (
   <ConversationContent className="chat-conversation-content">{children}</ConversationContent>

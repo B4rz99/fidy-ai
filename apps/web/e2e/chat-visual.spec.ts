@@ -125,6 +125,18 @@ const prepare = Effect.fnUntraced(function* (page: Page, scenario: ChatScenario)
   }
 });
 
+const frameCompactConfirmation = Effect.fnUntraced(function* (page: Page) {
+  const summary = page.getByText(recurringReview, { exact: true });
+  const pending = page.getByText("Confirmación pendiente", { exact: true });
+  const confirm = page.getByRole("button", { name: "Confirmar cambio", exact: true });
+  yield* Effect.tryPromise(() => confirm.scrollIntoViewIfNeeded());
+  yield* Effect.tryPromise(() => expect(confirm).toBeInViewport({ ratio: 1 }));
+  yield* Effect.tryPromise(() => pending.scrollIntoViewIfNeeded());
+  yield* Effect.tryPromise(() => summary.scrollIntoViewIfNeeded());
+  yield* Effect.tryPromise(() => expect(summary).toBeInViewport({ ratio: 1 }));
+  yield* Effect.tryPromise(() => expect(pending).toBeInViewport({ ratio: 1 }));
+});
+
 const waitForFonts = (): Promise<void> => document.fonts.ready.then(() => undefined);
 const dimensions = (): Readonly<{ content: number; viewport: number }> => ({
   content: document.documentElement.scrollWidth,
@@ -173,6 +185,9 @@ for (const { viewport, scenarios } of cases) {
             );
             const observed = yield* installChatScenario(page, scenario);
             yield* prepare(page, scenario);
+            if (viewport.name === "landscape" && scenario === "confirmation") {
+              yield* frameCompactConfirmation(page);
+            }
             yield* capture(page, `${scenario}-${theme}-${viewport.name}`);
             expect(observed.mutations).toEqual([]);
             expect(observed.missingReads).toEqual([]);

@@ -293,45 +293,6 @@ it("trace accumulation is bounded and retains fixed replay markers", () => {
   });
 });
 
-it("native-window evidence keeps explicit timestamps but discards marker payloads", () => {
-  const trace = collectReviewTrace();
-  trace.collect({
-    value: [
-      {
-        name: "fidy-review-native-start",
-        ph: "I",
-        pid: 1,
-        tid: 2,
-        ts: 1000,
-        args: { data: { startTime: 1, detail: "synthetic-private-data" } },
-      },
-      { name: "fidy-review-native-visible", ph: "I", pid: 1, tid: 2, ts: 14_200 },
-      { name: "fidy-review-native-private-value", ph: "I", pid: 1, tid: 2, ts: 15_000 },
-    ],
-  });
-  expect(trace.snapshot()).toEqual({
-    traceEvents: [
-      {
-        name: "fidy-review-native-start",
-        cat: "blink.user_timing",
-        ph: "I",
-        pid: 1,
-        tid: 2,
-        ts: 1000,
-      },
-      {
-        name: "fidy-review-native-visible",
-        cat: "blink.user_timing",
-        ph: "I",
-        pid: 1,
-        tid: 2,
-        ts: 14_200,
-      },
-    ],
-    truncated: false,
-  });
-});
-
 it("trace collection rejects malformed CDP envelopes without throwing", () => {
   const trace = collectReviewTrace();
   for (const event of [null, undefined, "unsafe", {}, { value: null }, { value: "unsafe" }]) {

@@ -15,26 +15,6 @@ sca:
     - glob(.repos/**)
     - glob(**/node_modules/**)
   exclusions:
-    - CVE: CVE-2026-110180
-      paths:
-        - bun.lock
-        - tools/astro/bun.lock
-        - tools/mutation/bun.lock
-    - CVE: CVE-2026-110306
-      paths:
-        - bun.lock
-        - tools/astro/bun.lock
-        - tools/mutation/bun.lock
-    - CVE: CVE-2026-110095
-      paths:
-        - bun.lock
-        - tools/astro/bun.lock
-        - tools/mutation/bun.lock
-    - CVE: CVE-2026-110725
-      paths:
-        - bun.lock
-        - tools/astro/bun.lock
-        - tools/mutation/bun.lock
     - CVE: CVE-2026-111181
       paths:
         - bun.lock

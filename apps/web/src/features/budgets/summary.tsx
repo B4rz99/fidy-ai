@@ -111,7 +111,7 @@ const ExpenseSummary = ({ figure }: Readonly<{ figure: SummaryFigure }>): JSX.El
       <p>
         {figure.expenses} <span className="text-muted-foreground">gastados</span>
       </p>
-      <p className={cn("font-medium", figure.over ? "text-destructive-foreground" : "text-ring")}>
+      <p className={cn("font-medium", figure.over ? "text-error-foreground" : "text-ring")}>
         {figure.remaining} {figure.over ? "excedido" : "restantes"}
       </p>
     </div>

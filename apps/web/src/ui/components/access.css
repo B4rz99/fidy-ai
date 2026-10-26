@@ -172,6 +172,11 @@
   transform: translateY(-2px);
   border-color: var(--fidy-border-control);
 }
+[data-access-root] [data-access-action="provider"]:not(:disabled),
+[data-access-root] [data-access-action="alternative"]:not(:disabled),
+[data-access-root] [data-access-input]:not(:disabled) {
+  border-color: var(--fidy-border-control);
+}
 [data-access-divider] {
   height: 1px;
   background: var(--access-line);

@@ -4,14 +4,8 @@
   --review-line: #e9e2da;
   --muted: var(--review-soft);
   --border: var(--review-line);
-  --control-border: var(--review-line);
-  --disabled-border: var(--review-line);
-  --primary-border: var(--primary);
   min-width: 0;
   padding: 34px 0 0;
-}
-[data-review="workspace"] [data-slot="input"] {
-  --input: var(--review-line);
 }
 .dark [data-review="workspace"] {
   --review-soft: #292a25;
@@ -256,6 +250,7 @@
 }
 [data-review="source-icon"][data-source="email"] {
   background: var(--secondary);
+  color: var(--secondary-foreground);
 }
 [data-review="columns"] {
   display: grid;
@@ -285,7 +280,7 @@
 }
 [data-review="notice"] [data-slot="alert"] {
   border: 0;
-  border-left: 3px solid var(--warning-foreground);
+  border-left: 3px solid currentColor;
   border-radius: 0;
   padding: 12px 14px;
   font-size: 12px;

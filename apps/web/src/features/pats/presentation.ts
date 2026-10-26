@@ -1,14 +1,14 @@
 import { DateTime } from "effect";
 
 const dateFormatter = new Intl.DateTimeFormat("es-CO", {
-  day: "2-digit",
-  month: "2-digit",
+  day: "numeric",
+  month: "short",
   year: "numeric",
   timeZone: "UTC",
 });
 
 /** Displays the UTC date and preserves the complete instant in element metadata. */
 export const formatPATDate = (value: DateTime.Utc): string =>
-  dateFormatter.format(DateTime.toDate(value)).replaceAll("/", "-");
+  dateFormatter.format(DateTime.toDate(value)).replaceAll(" de ", " ");
 
 export const activePATReactivityKey = ["pats", "active"] as const;

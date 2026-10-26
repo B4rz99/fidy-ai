@@ -8,6 +8,7 @@ import { type BrowserAuthentication, useSession } from "@/session/session-contex
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type FidyClient } from "@/transport/client";
 import { sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
+import { RefreshButton } from "@/ui/components/refresh-button";
 import { ManualPATCreation } from "./creation";
 import { activePATReactivityKey } from "./presentation";
 import {
@@ -18,7 +19,11 @@ import {
 } from "./management-view";
 
 type PATManagementContentProps = Readonly<{
-  children: (content: Readonly<{ tokens: ReactNode; creation: ReactNode }>) => ReactNode;
+  children: (
+    content: Readonly<{ tokens: ReactNode; creation: ReactNode; refresh: ReactNode }>
+  ) => ReactNode;
+  refreshPATs: () => void;
+  refreshing: boolean;
   activePATState: ActivePATManagementState;
   authentication: BrowserAuthentication;
   apiClient: FidyClient;
@@ -30,6 +35,8 @@ type PATManagementContentProps = Readonly<{
 const PATManagementContent = ({
   children,
   activePATState,
+  refreshPATs,
+  refreshing,
   authentication,
   apiClient,
   resuming,
@@ -43,6 +50,14 @@ const PATManagementContent = ({
   >
     {(clipboard) =>
       children({
+        refresh: (
+          <RefreshButton
+            disabled={refreshing}
+            label="Actualizar tokens"
+            onClick={refreshPATs}
+            type="button"
+          />
+        ),
         tokens: (
           <ActivePATManagementView
             state={activePATState}
@@ -133,6 +148,8 @@ export const PATManagementFeature = ({
   return (
     <PATManagementContent
       activePATState={activePATState}
+      refreshPATs={refreshActivePATs}
+      refreshing={queryState.waiting}
       authentication={authentication}
       apiClient={router.options.context.apiClient}
       resuming={resuming}

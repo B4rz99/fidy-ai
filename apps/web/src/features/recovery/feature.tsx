@@ -1,3 +1,5 @@
+import { Key01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Effect, Option, Redacted, Schema } from "effect";
@@ -8,14 +10,6 @@ import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import type { BackupRecoveryCode, FidyClient } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/ui/components/card";
 
 export type RotateBackupRecoveryCommand = Readonly<{
   onRotated: (code: BackupRecoveryCode) => void;
@@ -36,7 +30,7 @@ type RotationViewProps = Readonly<{
 }>;
 
 const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
-  <CardContent className="flex flex-col gap-4">
+  <div className="flex flex-col gap-4">
     {state._tag === "Disclosed" ? (
       <Alert>
         <AlertTitle>Guárdalo ahora</AlertTitle>
@@ -66,7 +60,7 @@ const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
         </AlertDescription>
       </Alert>
     ) : null}
-  </CardContent>
+  </div>
 );
 
 const actionLabel = (state: RotationState): string => {
@@ -82,25 +76,31 @@ const RotationAction = (props: {
 }): JSX.Element => {
   if (props.state._tag === "FreshSessionRequired") {
     return (
-      <CardFooter>
+      <div>
         <Button render={<a aria-label="Iniciar sesión" href="/login?resume=account" />}>
           Iniciar sesión
         </Button>
-      </CardFooter>
+      </div>
     );
   }
   return (
-    <CardFooter className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2">
       {props.state._tag === "Disclosed" ? (
         <Button onClick={props.onCopy} type="button">
           {props.state.copied ? "Copiado" : "Copiar código"}
         </Button>
       ) : (
-        <Button disabled={props.state._tag === "Rotating"} onClick={props.onStart} type="button">
+        <Button
+          disabled={props.state._tag === "Rotating"}
+          onClick={props.onStart}
+          type="button"
+          variant="outline"
+        >
+          <HugeiconsIcon icon={Key01Icon} size={22} strokeWidth={1.5} aria-hidden="true" />
           {actionLabel(props.state)}
         </Button>
       )}
-    </CardFooter>
+    </div>
   );
 };
 
@@ -124,20 +124,22 @@ export const BackupRecoveryRotationView = ({
   };
 
   return (
-    <section aria-label="Recuperación">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2>Código de recuperación</h2>
-          </CardTitle>
-          <CardDescription>
-            Reemplaza el código anterior después de recuperar tu acceso. El código anterior dejará
-            de funcionar de inmediato.
-          </CardDescription>
-        </CardHeader>
-        <RotationFeedback state={state} />
-        <RotationAction onCopy={copyCode} onStart={start} state={state} />
-      </Card>
+    <section aria-label="Recuperación" className="settings-section">
+      <div className="settings-section-icon" aria-hidden="true">
+        <HugeiconsIcon icon={Key01Icon} size={30} strokeWidth={1.5} />
+      </div>
+      <div className="settings-section-body">
+        <h2 className="settings-section-title">Código de recuperación</h2>
+        <p className="settings-section-description">
+          Al crear uno nuevo, el código anterior deja de funcionar de inmediato.
+          <br />
+          Se mostrará una sola vez. Guárdalo fuera de Fidy.
+        </p>
+        <div className="settings-section-actions">
+          <RotationFeedback state={state} />
+          <RotationAction onCopy={copyCode} onStart={start} state={state} />
+        </div>
+      </div>
     </section>
   );
 };

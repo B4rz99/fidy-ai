@@ -72,7 +72,11 @@ const showIssuedPATForRevocation = (page: Page): Promise<void> =>
       );
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("Agente de casa", { exact: true })).toBeVisible()
+        expect(
+          page
+            .getByRole("table", { name: "Tokens activos" })
+            .getByText("Agente de casa", { exact: true })
+        ).toBeVisible()
       );
       expect(yield* Effect.tryPromise(() => page.locator("body").textContent())).not.toContain(
         bearer

@@ -22,6 +22,7 @@ import { TransactionsReference } from "./transactions-reference";
 import { WorkspaceReference } from "./workspace-reference";
 import { ReviewReference } from "./review-reference";
 import { RecurringReference } from "./recurring-reference";
+import { SettingsReference } from "./settings-reference";
 import "./reference.css";
 
 const themes = ["light", "dark", "system"] as const;
@@ -116,7 +117,17 @@ const ActionReference = (): JSX.Element => (
         <Button variant="outline" disabled>
           Acción no disponible
         </Button>
-        <Button variant="destructive">Retirar autorización</Button>
+        <Button variant="destructive">Confirmar eliminación</Button>
+        <Button variant="destructive-outline">Retirar autorización</Button>
+        <Button variant="destructive-outline" disabled>
+          Retirar autorización
+        </Button>
+        <Button variant="destructive-text" size="label">
+          Desactivar token
+        </Button>
+        <Button variant="destructive-text" size="label" disabled>
+          Desactivar token
+        </Button>
         <Button variant="destructive" disabled>
           Retirar autorización
         </Button>
@@ -315,6 +326,7 @@ export const UIReference = (): JSX.Element => {
           <ActionReference />
           <FieldReference />
         </div>
+        <SettingsReference />
         <WorkspaceReference />
         <ReviewReference />
         <RecurringReference dark={dark} toggleTheme={() => setTheme(dark ? "light" : "dark")} />

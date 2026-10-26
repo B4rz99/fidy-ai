@@ -3,11 +3,7 @@ import type { Cause } from "effect";
 import { Clock, Effect, Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
-import {
-  advanceRefusedRequest,
-  installAcceptanceClock,
-  installAcceptanceClockWithNativePerformance,
-} from "./acceptance-clock";
+import { advanceRefusedRequest, installAcceptanceClock } from "./acceptance-clock";
 
 const { expect } = playwright;
 
@@ -128,11 +124,7 @@ const signInWithIdentity = ({
       | "navigationDashboard";
   }>): Promise<void> =>
   openBrowserLogin(page)
-    .then(() =>
-      clockMode === "controlled"
-        ? installAcceptanceClock(page)
-        : installAcceptanceClockWithNativePerformance(page)
-    )
+    .then(() => (clockMode === "controlled" ? installAcceptanceClock(page) : undefined))
     .then(() => page.getByRole("button", { name: "WhatsApp" }).click())
     .then(() => visiblePairingCode(page))
     .then((code) => request.post(`${operatorOrigin}/approve?code=${code}&${identity}=true`))
@@ -140,8 +132,11 @@ const signInWithIdentity = ({
       expect(approval.status()).toBe(noContentStatus);
       const consent = observeConsentRead(page);
       const redemption = page.waitForResponse("**/web/pairings/redeem");
-      return page.clock
-        .fastForward(firstPollMilliseconds)
+      return (
+        clockMode === "controlled"
+          ? page.clock.fastForward(firstPollMilliseconds)
+          : Promise.resolve()
+      )
         .then(() => redemption)
         .then((response) => {
           expect(response.status()).toBe(successStatus);
@@ -151,7 +146,11 @@ const signInWithIdentity = ({
     .then((consent) =>
       expect(page)
         .toHaveURL(/\/app\/transactions$/u, { timeout: pairingTimeoutMilliseconds })
-        .then(() => page.clock.setSystemTime(Effect.runSync(Clock.currentTimeMillis)))
+        .then(() =>
+          clockMode === "controlled"
+            ? page.clock.setSystemTime(Effect.runSync(Clock.currentTimeMillis))
+            : undefined
+        )
         .then(() => confirmConsentRead({ page, first: consent }))
     );
 
@@ -336,7 +335,7 @@ type NavigationFixture = SignInFixture &
 /** Navigation journeys own their User and retained data. */
 export const signInNavigationThroughCore = (input: NavigationFixture): Promise<void> =>
   signInWithIdentity({ ...input, clockMode: "controlled" });
-/** Timing probes preserve native performance while virtualizing polling and cooldowns. */
+/** Timing probes use native clocks through login and navigation, including real polling waits. */
 export const signInNavigationPerformanceThroughCore = (input: NavigationFixture): Promise<void> =>
   signInWithIdentity({ ...input, clockMode: "native-performance" });
 

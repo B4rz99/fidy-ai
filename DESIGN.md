@@ -592,11 +592,16 @@ without opening the panel. Income/expense icons precede compact amounts below th
 Active-token management uses the shared `Table` with one row per token: name and safe short code,
 permissions, creation, last use, expiration, and action. Use `density="compact"` on `TableHead`
 and `TableCell` for 14px text, 8px horizontal padding, and 12px body-cell vertical padding.
-Show dates as `dd-mm-yyyy` without times; retain the full UTC instant in each `time` element’s
+Show localized short Spanish dates without times; retain the full UTC instant in each `time` element’s
 `dateTime` attribute. Use “Nunca” for tokens that have never been used and wrap names readably.
-On narrow screens, scroll
-the table within its container; keep the page width stable. One-token deactivation confirmation
-occupies a full-width row beneath that token. Default table density remains unchanged.
+At 900px and below, matching the compact application shell, replace Settings management tables with
+named native lists of unboxed entries,
+headings, and definition lists. Keep list markers for browser/assistive-technology semantics, and hide
+the inactive representation with `display: none`. Both representations share metadata formatting,
+commands and confirmation state; desktop tables retain their native display. Wrap long names and
+permissions. Expiration and individual actions remain visible without horizontal scrolling. One-token
+deactivation confirmation stays beneath its token, as a full-width table row or inside its mobile
+list item. Default table density remains unchanged.
 
 ### Floating Agent conversation
 
@@ -715,3 +720,27 @@ The recurring workspace uses the same continuous canvas, typography, aligned edg
 The global header spans the entire workspace and retains the base canvas color, including “Nuevo recurrente” and the theme control. The contrasting right-hand contextual plane begins strictly below that header. On narrow screens the editor becomes a full-width accessible sheet with close and theme controls. Closing restores focus without submitting changes. The monthly navigation shows only the localized month and year with previous/next controls: no “Hoy” or substitute shortcut. Use Hugeicons and the existing Fidy tokens in both themes.
 
 The component ownership is `src/ui/components/recurring.tsx` and `recurring.css`; `src/ui/recurring-reference.tsx` demonstrates the composition. Feature code owns data and interactions, not a separate visual token system.
+
+## Settings workspace
+
+Cuenta, Privacidad and Accesos use the approved continuous canvas: a 40px desktop
+title, peach icon circles, section dividers and the existing habitat sidebar. The
+light and Grafito themes share the same composition. Privacy rights contact and
+manual token creation use dedicated rails from 1280px: 422px for Privacy with 28px
+insets, and 384px for token creation. Below that width they stack in document order.
+Phone headings, icon circles and gutters compact without
+hiding security explanations, confirmation, result or recovery states.
+
+Settings controls retain the shared tokens, focus and disabled states with a
+50px target and 10px radius supplied by the Settings UI owner. Inputs and the token
+duration dropdown use a 52px target; the dropdown retains the same rectangular
+shape rather than the shared default pill. Privacy status chips use 30px height
+and 14px text; access status chips use 36px height and 16px text with a decorative
+status dot. Shared semantic foreground/background and state labels remain unchanged.
+The scoped reference includes these controls and the Privacy rail. Desktop Privacy
+spacing is compacted without removing safety copy or clipping expanded results. Destructive
+initiators use the named `destructive-outline` and `destructive-text` Button
+variants with the semantic error foreground; final destructive confirmations
+retain their existing treatment. These variants are demonstrated in the UI
+reference. Individual and bulk actions stay distinct. The selected Settings
+subsection uses a lime dot and weight in the nested navigation tree.

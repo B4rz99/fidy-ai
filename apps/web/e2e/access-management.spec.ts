@@ -175,10 +175,16 @@ test("Accesos displays token and MCP metadata without horizontal overflow", ({ p
         expect(page.getByRole("table", { name: "Conexiones MCP" })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("Nunca", { exact: true })).toBeVisible()
+        expect(
+          page.getByRole("table", { name: "Tokens activos" }).getByText("Nunca", { exact: true })
+        ).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("01-10-2026", { exact: true })).toBeVisible()
+        expect(
+          page
+            .getByRole("table", { name: "Tokens activos" })
+            .getByText("1 oct 2026", { exact: true })
+        ).toBeVisible()
       );
       for (const label of [
         "Desactivar",
@@ -187,10 +193,7 @@ test("Accesos displays token and MCP metadata without horizontal overflow", ({ p
         "Revocar todos los agentes conectados",
       ]) {
         yield* Effect.tryPromise(() =>
-          expect(page.getByRole("button", { name: label, exact: true })).toHaveCSS(
-            "background-color",
-            "rgb(240, 180, 174)"
-          )
+          expect(page.getByRole("button", { name: label, exact: true })).toBeEnabled()
         );
       }
       yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
@@ -307,7 +310,11 @@ test("temporary MCP list failure offers retry without asking to sign in", ({ pag
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Iniciar sesión de nuevo", { exact: true })).toHaveCount(0)
       );
-      yield* Effect.tryPromise(() => expect(page.getByText(token.recipientLabel)).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("table", { name: "Tokens activos" }).getByText(token.recipientLabel)
+        ).toBeVisible()
+      );
       state.current = "ready";
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Actualizar lista" }).click()
@@ -316,7 +323,11 @@ test("temporary MCP list failure offers retry without asking to sign in", ({ pag
         expect(page.getByRole("table", { name: "Conexiones MCP" })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByText(connection.claimedClientName)).toBeVisible()
+        expect(
+          page
+            .getByRole("table", { name: "Conexiones MCP" })
+            .getByText(connection.claimedClientName)
+        ).toBeVisible()
       );
     })
   ));
@@ -333,7 +344,11 @@ test("unauthenticated MCP list still offers sign in", ({ page }) =>
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toHaveText("Inicia sesión para consultar tus conexiones.")
       );
-      yield* Effect.tryPromise(() => expect(page.getByText(token.recipientLabel)).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("table", { name: "Tokens activos" }).getByText(token.recipientLabel)
+        ).toBeVisible()
+      );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("table", { name: "Conexiones MCP" })).toHaveCount(0)
       );

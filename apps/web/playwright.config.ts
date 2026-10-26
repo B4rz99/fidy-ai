@@ -31,7 +31,7 @@ export default defineConfig({
     {
       name: "admission",
       testMatch: ["acceptance-clock.spec.ts", "session-binding.spec.ts"],
-      grep: /native admission|virtual waiting|fixture polling|rejects stale cross-tab drafts and logout/u,
+      grep: /native admission|native performance|fixture polling|rejects stale cross-tab drafts and logout/u,
       workers: 1,
     },
     {

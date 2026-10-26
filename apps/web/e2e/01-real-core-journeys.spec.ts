@@ -1021,7 +1021,13 @@ const revokeReadOnlyPat = Effect.fnUntraced(function* (
   );
   yield* fromPlaywright(expect(page.getByText(bearer)).toHaveCount(0));
   yield* fromPlaywright(page.reload());
-  yield* fromPlaywright(expect(page.getByText("Agente de casa", { exact: true })).toBeVisible());
+  yield* fromPlaywright(
+    expect(
+      page
+        .getByRole("table", { name: "Tokens activos" })
+        .getByText("Agente de casa", { exact: true })
+    ).toBeVisible()
+  );
   yield* fromPlaywright(
     page
       .getByRole("row")

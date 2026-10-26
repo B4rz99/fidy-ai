@@ -1,10 +1,9 @@
-import { MailCheckIcon } from "@hugeicons/core-free-icons";
+import { Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { type FormEvent, type JSX, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
 import type { EmailAddress } from "@/transport/client";
@@ -25,7 +24,7 @@ const ReplacementForm = ({ request }: Pick<EmailReplacementViewProps, "request">
     request(candidateEmail);
   };
   return (
-    <form className="flex flex-col gap-4" onSubmit={submit}>
+    <form className="settings-email-form" onSubmit={submit}>
       <div className="flex flex-col gap-2">
         <Label htmlFor="candidate-email">Nuevo correo</Label>
         <Input
@@ -168,21 +167,19 @@ const replacementContent = ({
 
 /** Mailbox proofs stay in transient form state and request bodies. */
 export const EmailReplacementView = (props: EmailReplacementViewProps): JSX.Element => (
-  <section aria-label="Correo de acceso">
-    <Card>
-      <CardHeader>
-        <HugeiconsIcon aria-hidden="true" icon={MailCheckIcon} strokeWidth={2} />
-        <CardTitle>
-          <h2>Cambiar correo verificado</h2>
-        </CardTitle>
-        <CardDescription>
-          Esta opción requiere un correo verificado establecido por separado. Iniciar sesión con
-          Google o Microsoft no lo establece. Si ya tienes uno, seguirá activo hasta que verifiques
-          el nuevo.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>{replacementContent(props)}</CardContent>
-    </Card>
+  <section aria-label="Correo de acceso" className="settings-section">
+    <div className="settings-section-icon" aria-hidden="true">
+      <HugeiconsIcon icon={Mail01Icon} size={30} strokeWidth={1.5} />
+    </div>
+    <div className="settings-section-body">
+      <h2 className="settings-section-title">Correo verificado</h2>
+      <p className="settings-section-description">
+        Si ya tienes un correo verificado, seguirá activo hasta verificar el nuevo.
+        <br />
+        Iniciar sesión con Google o Microsoft no establece este correo.
+      </p>
+      <div className="settings-section-actions">{replacementContent(props)}</div>
+    </div>
   </section>
 );
 

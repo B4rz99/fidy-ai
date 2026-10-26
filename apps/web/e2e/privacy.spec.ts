@@ -127,10 +127,6 @@ const verifyAuthorizationRecovery = (page: Page): Promise<void> =>
         expect(page.getByRole("alert")).toContainText("No pudimos consultar la prueba")
       );
       yield* Effect.tryPromise(() => expect(withdraw).toBeDisabled());
-      yield* Effect.tryPromise(() => expect(withdraw).toHaveCSS("color", "rgb(23, 25, 22)"));
-      yield* Effect.tryPromise(() =>
-        expect(withdraw).toHaveCSS("background-color", "rgb(240, 180, 174)")
-      );
       yield* Effect.tryPromise(() => page.unroute(copyEndpoint));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Consultar prueba", exact: true }).click()
@@ -218,7 +214,7 @@ const verifyRenewal = (page: Page): Promise<void> =>
       yield* Effect.tryPromise(() => renew.click());
       expect((yield* Effect.tryPromise(() => response)).status()).toBe(successStatus);
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("Tu autorización está vigente.", { exact: true })).toBeVisible()
+        expect(page.getByRole("status", { name: "Tu autorización está vigente." })).toBeVisible()
       );
       yield* Effect.tryPromise(() => reloadPrivacyThroughCore(page));
       yield* Effect.tryPromise(() =>
@@ -413,9 +409,7 @@ test("privacy retains application navigation and the public contact when the ses
       yield* Effect.tryPromise(() => page.route(`${apiOrigin}/web/consent`, refusedConsent));
       yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
       yield* Effect.tryPromise(() =>
-        expect(
-          page.getByRole("heading", { name: "Privacidad y tratamiento de datos", exact: true })
-        ).toBeVisible()
+        expect(page.getByRole("heading", { name: "Privacidad", exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("link", { name: "obarboza@fidyapp.com" })).toBeVisible()

@@ -1,3 +1,5 @@
+import { UserGroupIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
@@ -127,6 +129,20 @@ const needsRetry = (listing: CanonicalQueryState<OAuthConnectionList, unknown>):
   if (listing._tag === "Failure") return true;
   return listing._tag === "Ready" && Option.isSome(listing.refreshFailure);
 };
+const ManagementHeading = (): JSX.Element => (
+  <div className="settings-access-heading">
+    <span className="settings-section-icon">
+      <HugeiconsIcon icon={UserGroupIcon} size={28} strokeWidth={1.5} aria-hidden="true" />
+    </span>
+    <div>
+      <h2 className="settings-section-title" id="connected-agents-title">
+        Agentes conectados
+      </h2>
+      <p className="settings-section-description">Conexiones MCP</p>
+    </div>
+  </div>
+);
+
 export const ManagementPage = ({
   after,
 }: Readonly<{ after: Option.Option<OAuthConnectionId> }>): JSX.Element => {
@@ -161,8 +177,8 @@ export const ManagementPage = ({
       .catch(() => undefined);
   };
   return (
-    <section className="flex min-w-0 flex-col gap-4">
-      <h2 className="text-xl font-semibold">Conexiones MCP</h2>
+    <section className="settings-access-section" aria-labelledby="connected-agents-title">
+      <ManagementHeading />
       <RevocationFeedback result={result} />
       <ManagementContent
         listing={listing}

@@ -1,3 +1,4 @@
+import "./settings.css";
 import { Moon02Icon, Sun03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { type ComponentProps, type JSX, type ReactNode } from "react";

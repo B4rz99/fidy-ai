@@ -43,7 +43,7 @@ test("combines verified email and recovery settings under Account", ({ page }) =
         expect(page.getByRole("heading", { name: "Cuenta", exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Cambiar correo verificado" })).toBeVisible()
+        expect(page.getByRole("heading", { name: "Correo verificado" })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         expect(

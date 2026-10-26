@@ -298,11 +298,12 @@ const inspectAndRevoke = (
 ): Effect.Effect<void, TestFailure> =>
   Effect.gen(function* () {
     const { page, request, query, token } = input;
+    const connections = page.getByRole("table", { name: "Conexiones MCP" });
     const connectionId = yield* inspectManagementPage({ page, request, token });
     const second = yield* reconnectFromBrowser({ page, request, query });
     yield* Effect.tryPromise(() => page.goto("/settings/access"));
     yield* Effect.tryPromise(() =>
-      expect(page.getByText("<img src=x onerror=alert(1)>")).toHaveCount(2)
+      expect(connections.getByText("<img src=x onerror=alert(1)>")).toHaveCount(2)
     );
     yield* refuseOtherBrowser({ page, request, connectionId });
     const csrf = yield* Effect.tryPromise(() =>
@@ -322,7 +323,7 @@ const inspectAndRevoke = (
       )
     );
     yield* Effect.tryPromise(() =>
-      expect(page.getByText("Revocado", { exact: true })).toBeVisible()
+      expect(connections.getByText("Revocado", { exact: true })).toBeVisible()
     );
     expect(
       (yield* Effect.tryPromise(() => callCategories(request, token.access_token))).status()
@@ -358,10 +359,14 @@ const inspectManagementPage = (
     ).toBe(ok);
     yield* Effect.tryPromise(() => page.goto("/settings/access"));
     yield* Effect.tryPromise(() =>
-      expect(page.getByRole("heading", { name: "Conexiones MCP", exact: true })).toBeVisible()
+      expect(page.getByRole("heading", { name: "Agentes conectados", exact: true })).toBeVisible()
     );
     yield* Effect.tryPromise(() =>
-      expect(page.getByText("<img src=x onerror=alert(1)>")).toBeVisible()
+      expect(
+        page
+          .getByRole("table", { name: "Conexiones MCP" })
+          .getByText("<img src=x onerror=alert(1)>")
+      ).toBeVisible()
     );
     yield* Effect.tryPromise(() => expect(page.getByRole("main").locator("img")).toHaveCount(0));
     yield* Effect.tryPromise(() =>
@@ -400,7 +405,9 @@ const revokeAllWithRacingRefresh = (
       )
     );
     yield* Effect.tryPromise(() =>
-      expect(page.getByText("Revocado", { exact: true })).toHaveCount(2)
+      expect(
+        page.getByRole("table", { name: "Conexiones MCP" }).getByText("Revocado", { exact: true })
+      ).toHaveCount(2)
     );
     expect(
       (yield* Effect.tryPromise(() => callCategories(request, second.access_token))).status()

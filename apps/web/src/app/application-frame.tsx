@@ -14,36 +14,47 @@ const ReviewPendingCount = lazy(() =>
 
 /** One application shell survives navigation across independently authorized product routes. */
 export const ApplicationFrame = (): JSX.Element => {
-  const route = useRouterState({
+  const { authentication } = useSession();
+  const frame = useRouterState({
     select: (state) => {
       if (state.matches.some((match) => match.routeId === "/authenticated")) {
-        return "authenticated";
+        return authentication === "expired" ? "refused" : "application";
       }
       if (state.matches.some((match) => match.routeId === "/independent-application")) {
-        return "independent";
+        return "application";
       }
       return "standalone";
     },
   });
-  const { authentication } = useSession();
-  const privacy = useRouterState({
-    select: (state) => state.location.pathname === "/settings/privacy",
+  const independentControls = useRouterState({
+    select: (state) =>
+      state.matches.some(
+        (match) =>
+          match.routeId === "/independent-application/settings/privacy" ||
+          match.routeId === "/independent-application/upgrade"
+      ),
   });
-  if (route === "authenticated" && authentication === "expired") return <AccessRefused />;
-  if (route === "standalone") return <Outlet />;
+  if (frame === "refused") return <AccessRefused />;
+  if (frame === "standalone") return <Outlet />;
   const shell = (
     <ApplicationShell
       reviewPendingCount={
-        <Suspense fallback={null}>
-          <ReviewPendingCount />
-        </Suspense>
+        independentControls ? null : (
+          <Suspense fallback={null}>
+            <ReviewPendingCount />
+          </Suspense>
+        )
       }
     >
-      <RetainedReviewWorkspace />
-      <RetainedRecurringWorkspace />
+      {independentControls ? null : (
+        <>
+          <RetainedReviewWorkspace />
+          <RetainedRecurringWorkspace />
+        </>
+      )}
     </ApplicationShell>
   );
-  return privacy || authentication === "expired" ? (
+  return independentControls || authentication === "expired" ? (
     shell
   ) : (
     <HostedAgentProvider>{shell}</HostedAgentProvider>

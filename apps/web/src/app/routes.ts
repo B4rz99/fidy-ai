@@ -194,7 +194,7 @@ const privacyRoute = createRoute({
   component: lazyRouteComponent(() => import("@/features/privacy/feature"), "PrivacyFeature"),
 });
 const subscriptionOffersRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => independentApplicationRoute,
   path: "/upgrade",
   component: SubscriptionOffersFeature,
 });
@@ -254,8 +254,11 @@ const routeTree = rootRoute.addChildren([
   oauthReviewRoute,
   oauthOperationRoute,
   connectionContinuationRoute,
-  subscriptionOffersRoute,
-  independentApplicationRoute.addChildren([privacyRoute, transactionsRoute]),
+  independentApplicationRoute.addChildren([
+    privacyRoute,
+    transactionsRoute,
+    subscriptionOffersRoute,
+  ]),
   authenticatedRoute.addChildren([
     signedInRoute.addChildren([
       signedInIndexRoute,

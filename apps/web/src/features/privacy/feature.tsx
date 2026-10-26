@@ -192,7 +192,7 @@ const PrivacyWorkspace = ({
   checkStatus,
   children,
 }: Readonly<{ busy: boolean; checkStatus: () => void; children: ReactNode }>): JSX.Element => (
-  <main className="settings-workspace">
+  <main className="settings-workspace settings-privacy">
     <WorkspaceHeader title="Privacidad" context={null}>
       <RefreshButton label="Verificar autorización" disabled={busy} onClick={checkStatus} />
     </WorkspaceHeader>

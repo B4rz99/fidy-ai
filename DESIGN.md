@@ -726,12 +726,19 @@ The component ownership is `src/ui/components/recurring.tsx` and `recurring.css`
 Cuenta, Privacidad and Accesos use the approved continuous canvas: a 40px desktop
 title, peach icon circles, section dividers and the existing habitat sidebar. The
 light and Grafito themes share the same composition. Privacy rights contact and
-manual token creation occupy a 384px rail from 1280px; below that width they stack
-in document order. Phone headings, icon circles and gutters compact without
+manual token creation use dedicated rails from 1280px: 422px for Privacy with 28px
+insets, and 384px for token creation. Below that width they stack in document order.
+Phone headings, icon circles and gutters compact without
 hiding security explanations, confirmation, result or recovery states.
 
 Settings controls retain the shared tokens, focus and disabled states with a
-50px target and 10px radius supplied by the Settings UI owner. Destructive
+50px target and 10px radius supplied by the Settings UI owner. Inputs and the token
+duration dropdown use a 52px target; the dropdown retains the same rectangular
+shape rather than the shared default pill. Privacy status chips use 30px height
+and 14px text; access status chips use 36px height and 16px text with a decorative
+status dot. Shared semantic foreground/background and state labels remain unchanged.
+The scoped reference includes these controls and the Privacy rail. Desktop Privacy
+spacing is compacted without removing safety copy or clipping expanded results. Destructive
 initiators use the named `destructive-outline` and `destructive-text` Button
 variants with the semantic error foreground; final destructive confirmations
 retain their existing treatment. These variants are demonstrated in the UI

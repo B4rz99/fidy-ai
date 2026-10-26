@@ -42,6 +42,9 @@
   border-radius: 50%;
   flex-shrink: 0;
 }
+.chat-conversation-scroll {
+  overflow-y: auto;
+}
 .chat-conversation-content {
   min-height: 100%;
   gap: 32px;

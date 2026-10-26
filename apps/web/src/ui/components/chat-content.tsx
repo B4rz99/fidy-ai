@@ -14,7 +14,12 @@ import { Button } from "./button";
 import { ConversationContent } from "@/ui/components/ai-elements/conversation";
 
 export const ChatContent = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => (
-  <ConversationContent className="chat-conversation-content">{children}</ConversationContent>
+  <ConversationContent
+    className="chat-conversation-content"
+    scrollClassName="chat-conversation-scroll"
+  >
+    {children}
+  </ConversationContent>
 );
 
 export const ChatStatus = ({

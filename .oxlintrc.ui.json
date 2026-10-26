@@ -72,6 +72,7 @@
               "chat-confirm",
               "chat-confirmation",
               "chat-conversation-content",
+              "chat-conversation-scroll",
               "chat-header",
               "chat-header-action",
               "chat-input",

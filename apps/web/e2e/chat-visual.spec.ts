@@ -133,7 +133,15 @@ const frameCompactConfirmation = Effect.fnUntraced(function* (page: Page) {
   yield* Effect.tryPromise(() => expect(confirm).toBeInViewport({ ratio: 1 }));
   yield* Effect.tryPromise(() => pending.scrollIntoViewIfNeeded());
   yield* Effect.tryPromise(() =>
-    summary.evaluate((element) => element.scrollIntoView({ block: "start" }))
+    summary.evaluate((element) => {
+      const scrollport = element.closest(".chat-conversation-scroll");
+      if (scrollport === null) {
+        throw new Error("Expected the Chat conversation scrollport");
+      }
+      const margin = Number.parseFloat(getComputedStyle(element).scrollMarginBlockStart);
+      scrollport.scrollTop +=
+        element.getBoundingClientRect().top - scrollport.getBoundingClientRect().top - margin;
+    })
   );
   yield* Effect.tryPromise(() => expect(summary).toBeInViewport({ ratio: 1 }));
   yield* Effect.tryPromise(() => expect(pending).toBeInViewport({ ratio: 1 }));

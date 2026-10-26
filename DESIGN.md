@@ -758,3 +758,26 @@ variants with the semantic error foreground; final destructive confirmations
 retain their existing treatment. These variants are demonstrated in the UI
 reference. Individual and bulk actions stay distinct. The selected Settings
 subsection uses a lime dot and weight in the nested navigation tree.
+
+## Subscription and payment workspace
+
+The approved #1552 composition uses the application shell, a full-width heading divider and
+a contextual rail beginning below that heading. The overview has unboxed period choices, one
+method choice with separate, equally rounded buttons, small gaps and narrow-width wrapping,
+followed by an explicit Continue action. Selection changes the green border and fill, not the
+button geometry or label weight. No period is selected on entry.
+Period controls stay transparent when selected or hovered, retaining the lime selection underline,
+text hover emphasis and shared keyboard focus. Prices include their canonical Currency code and omit
+only an empty fractional part; nonzero fractional amounts retain their exact currency precision.
+The payment form replaces the overview rather than appearing beneath it; phones put its chosen
+amount above the fields. Nequi approval, DaviPlata entry/OTP and payment outcomes are alternative
+states, not simultaneous forms. Source availability never presents as payment approval.
+
+`src/ui/components/subscription.css` owns the continuous planes, 50px controls, 52px inputs,
+icon circles, separators and responsive treatment, using existing theme and state tokens.
+`SubscriptionInputDecoration` adds the approved decorative leading field icons only on narrow
+screens, leaving the desktop fields icon-free and keeping the shared Input behavior unchanged.
+`/ui-reference.html#subscription` demonstrates the actual shared controls with local, non-payment
+examples; synthetic browser captures exercise the complete application composition in both themes.
+Canonical offers and status supply every real price, period and billing attempt. There are no
+invented invoices, stored-card details, next-charge dates or subscription cancellation controls.

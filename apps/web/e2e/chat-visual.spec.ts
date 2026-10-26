@@ -132,7 +132,9 @@ const frameCompactConfirmation = Effect.fnUntraced(function* (page: Page) {
   yield* Effect.tryPromise(() => confirm.scrollIntoViewIfNeeded());
   yield* Effect.tryPromise(() => expect(confirm).toBeInViewport({ ratio: 1 }));
   yield* Effect.tryPromise(() => pending.scrollIntoViewIfNeeded());
-  yield* Effect.tryPromise(() => summary.scrollIntoViewIfNeeded());
+  yield* Effect.tryPromise(() =>
+    summary.evaluate((element) => element.scrollIntoView({ block: "start" }))
+  );
   yield* Effect.tryPromise(() => expect(summary).toBeInViewport({ ratio: 1 }));
   yield* Effect.tryPromise(() => expect(pending).toBeInViewport({ ratio: 1 }));
 });

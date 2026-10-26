@@ -1,4 +1,6 @@
 import { useAtomSet } from "@effect/atom-react";
+import { InformationCircleIcon, SquareLock02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Option, Redacted } from "effect";
 import { type FormEvent, type JSX, type RefCallback, useRef, useState } from "react";
 import { Button } from "@/ui/components/button";
@@ -16,6 +18,7 @@ import {
   emptyDecisions,
 } from "./enrollment-decisions";
 import { DaviplataAuthorizationLock } from "./daviplata-activity";
+import { PaymentFeedback } from "./workspace";
 
 type Stage =
   | "fields"
@@ -45,9 +48,15 @@ const DocumentForm = ({
   change: (fields: DocumentFields) => void;
   disabled: boolean;
 }>): JSX.Element => (
-  <fieldset className="grid gap-3 sm:grid-cols-2" disabled={disabled}>
-    <legend>Cédula de ciudadanía (CC). Por ahora solo admitimos CC.</legend>
-    <label className="flex flex-col gap-1" htmlFor="daviplata-document">
+  <fieldset className="subscription-document-fields" disabled={disabled}>
+    <legend className="sr-only">Cédula de ciudadanía y número de DaviPlata</legend>
+    <div>
+      <h3 className="subscription-form-heading">Datos de autorización</h3>
+      <p className="subscription-form-description">
+        Completa tus datos para continuar con la autorización en DaviPlata a través de Wompi.
+      </p>
+    </div>
+    <label className="subscription-field" htmlFor="daviplata-document">
       Número de cédula
       <Input
         id="daviplata-document"
@@ -55,12 +64,13 @@ const DocumentForm = ({
         inputMode="numeric"
         pattern="[0-9]{5,15}"
         maxLength={15}
+        placeholder="Ej. 1234567890"
         required
         value={fields.documentNumber}
         onChange={(event) => change({ ...fields, documentNumber: digitsOnly(event.target.value) })}
       />
     </label>
-    <label className="flex flex-col gap-1" htmlFor="daviplata-product">
+    <label className="subscription-field" htmlFor="daviplata-product">
       Número de DaviPlata
       <Input
         id="daviplata-product"
@@ -68,6 +78,7 @@ const DocumentForm = ({
         inputMode="numeric"
         pattern="3[0-9]{9}"
         maxLength={10}
+        placeholder="Ej. 3001234567"
         required
         value={fields.productNumber}
         onChange={(event) => change({ ...fields, productNumber: digitsOnly(event.target.value) })}
@@ -87,27 +98,36 @@ const OtpForm = ({
   resend: () => void;
 }>): JSX.Element => (
   <>
-    <label className="flex flex-col gap-1" htmlFor="daviplata-otp">
+    <div>
+      <h3 className="subscription-form-heading">Verificar código</h3>
+      <p className="subscription-form-description">Ingresa el código para continuar.</p>
+    </div>
+    <label className="subscription-field" htmlFor="daviplata-otp">
       Código de verificación
-      <Input
-        id="daviplata-otp"
-        type="password"
-        autoComplete="off"
-        inputMode="numeric"
-        pattern="[0-9]{6}"
-        maxLength={6}
-        required
-        disabled={busy}
-        value={otp}
-        onChange={(event) => change(digitsOnly(event.target.value))}
-      />
+      <span className="subscription-otp">
+        <Input
+          id="daviplata-otp"
+          type="password"
+          autoComplete="off"
+          inputMode="numeric"
+          pattern="[0-9]{6}"
+          maxLength={6}
+          placeholder="— — — — — —"
+          required
+          disabled={busy}
+          value={otp}
+          onChange={(event) => change(digitsOnly(event.target.value))}
+        />
+      </span>
     </label>
-    <Button type="submit" disabled={busy}>
-      Confirmar código
-    </Button>
-    <Button type="button" variant="outline" disabled={busy} onClick={resend}>
-      Reenviar código
-    </Button>
+    <div className="subscription-form-actions">
+      <Button type="submit" disabled={busy}>
+        Confirmar código
+      </Button>
+      <Button type="button" variant="outline" disabled={busy} onClick={resend}>
+        Reenviar código
+      </Button>
+    </div>
   </>
 );
 const OutcomeMessage = ({
@@ -116,13 +136,19 @@ const OutcomeMessage = ({
 }: Readonly<{ stage: Stage; retry: () => void }>): JSX.Element => (
   <>
     {stage === "refused" ? (
-      <p role="alert">
-        No pudimos continuar la autorización de DaviPlata. La autorización pudo vencer o alcanzar su
-        límite.
-      </p>
+      <div role="alert">
+        <h3 className="subscription-form-heading">Autorización no disponible</h3>
+        <p className="subscription-form-description">
+          No pudimos continuar la autorización de DaviPlata. La autorización pudo vencer o alcanzar
+          su límite.
+        </p>
+      </div>
     ) : null}
     {stage === "uncertain" || stage === "submission-retry" ? (
-      <p role="alert">No pudimos confirmar el resultado. No vuelvas a iniciar la autorización.</p>
+      <PaymentFeedback tone="uncertain" title="Resultado sin confirmar">
+        <p role="alert">No pudimos confirmar el resultado. No vuelvas a iniciar la autorización.</p>
+        <p>No se presenta como pago fallido.</p>
+      </PaymentFeedback>
     ) : null}
     {stage === "submission-retry" ? (
       <Button type="button" onClick={retry}>
@@ -338,6 +364,26 @@ const AuthorizationProgress = ({ stage }: Readonly<{ stage: Stage }>): JSX.Eleme
   </>
 );
 
+const AuthorizationNotes = (): JSX.Element => (
+  <div className="subscription-authorization-notes">
+    <p className="subscription-authorization-note">
+      <span className="subscription-note-icon" aria-hidden="true">
+        <HugeiconsIcon icon={InformationCircleIcon} size={26} strokeWidth={1.5} />
+      </span>
+      <span>
+        <strong>No cierres ni recargues esta página:</strong> el código y la autorización no pueden
+        recuperarse al volver.
+      </span>
+    </p>
+    <p className="subscription-authorization-note">
+      <span className="subscription-note-icon" aria-hidden="true">
+        <HugeiconsIcon icon={SquareLock02Icon} size={26} strokeWidth={1.5} />
+      </span>
+      <span>Fidy nunca conserva tu documento, número de DaviPlata ni código.</span>
+    </p>
+  </div>
+);
+
 export const DaviplataEnrollmentForm = (props: FormProps): JSX.Element => {
   const interaction = useDaviplataInteraction(props);
   const [mountForm] = useState<RefCallback<HTMLFormElement>>(
@@ -350,7 +396,7 @@ export const DaviplataEnrollmentForm = (props: FormProps): JSX.Element => {
   const { stage } = interaction;
   const busy = authorizationBusy(stage);
   return (
-    <form ref={mountForm} className="flex flex-col gap-5" onSubmit={interaction.submit}>
+    <form ref={mountForm} className="subscription-form" onSubmit={interaction.submit}>
       {stage === "fields" ? (
         <>
           <DocumentForm
@@ -370,6 +416,7 @@ export const DaviplataEnrollmentForm = (props: FormProps): JSX.Element => {
             setDecisions={interaction.setDecisions}
           />
           <Button disabled={busy || !allDecisionsAccepted(interaction.decisions)} type="submit">
+            <HugeiconsIcon icon={SquareLock02Icon} size={22} strokeWidth={1.5} aria-hidden="true" />
             Autorizar con DaviPlata
           </Button>
         </>
@@ -384,15 +431,12 @@ export const DaviplataEnrollmentForm = (props: FormProps): JSX.Element => {
       ) : null}
       <AuthorizationProgress stage={stage} />
       {cancellableStage(stage) ? (
-        <Button type="button" variant="destructive" onClick={interaction.cancel}>
+        <Button type="button" variant="destructive-text" onClick={interaction.cancel}>
           Cancelar autorización
         </Button>
       ) : null}
       <OutcomeMessage stage={stage} retry={interaction.retry} />
-      <p className="text-sm text-muted-foreground">
-        No cierres ni recargues esta página: el código y la autorización no pueden recuperarse al
-        volver. Fidy nunca conserva tu documento, número de DaviPlata ni código.
-      </p>
+      <AuthorizationNotes />
     </form>
   );
 };

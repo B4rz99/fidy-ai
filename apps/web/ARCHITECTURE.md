@@ -54,6 +54,9 @@ and the browser visibility adapter remain with presentation. The feature's mount
 bounded visible conversation through popup dismissal and route navigation. `ApplicationFrame`
 retains one chat provider across independently authorized product routes; each route still gates
 chat visibility. Entering Privacy or ending the authentication lifetime discards that provider.
+The frame subscribes to its rendered access state, not the distinction between independently
+authorized and ordinary product routes. Moving between those routes keeps the shared shell stable;
+the route owners still recheck Consent, and expired ordinary access still renders refusal.
 An accepted processing response starts bounded observation of that exact Turn in the command's
 Effect lifetime, without resubmitting its message. Progress failures or an exhausted observation
 bound retain explicit recovery; unresolved execution still blocks new submissions. Disposal stops
@@ -82,7 +85,16 @@ activation switch, or a chatbot activation path; preparation still enforces the 
 restriction. Explicit method selection can replace a cleared failed card with a wallet; it never
 submits another payment automatically. Pending/verifying and successful payments keep selection
 locked, while final failure permits another method with fresh terms and authorization.
-Missing or failing availability does not advertise DaviPlata.
+Missing or failing availability does not advertise any method; the User can explicitly reread availability.
+The `/upgrade` route uses the independent ApplicationShell and its shared theme/navigation owner.
+Its cookie-only SubscriptionConsentBoundary still gates all ordinary subscription queries and
+payment controls. The shell does not mount Hosted Agent, retained product workspaces or the canonical
+pending-count query on this route, including before Consent is known or after it is withdrawn.
+The Subscription workspace presents selection and authorization as separate steps. No Price is selected
+on entry, and only Continue prepares the chosen enrollment. Returning to selection disposes the mounted
+form; pending or successful payment and live DaviPlata authorization keep that action locked. Payment
+feedback separates source availability from verified settlement, and paid access/history use canonical
+SubscriptionStatus rather than invented renewal or payment-source metadata.
 
 The DaviPlata form visibly supports only cédula de ciudadanía (CC). Document/product drafts and
 OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, page URLs,

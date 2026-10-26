@@ -242,6 +242,9 @@
   .chat-message {
     gap: 12px;
   }
+  .chat-message-content {
+    scroll-margin-block: 12px;
+  }
   .chat-confirmation {
     padding: 10px 12px;
   }

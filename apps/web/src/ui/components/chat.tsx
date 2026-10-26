@@ -45,6 +45,8 @@ export const ChatWindow = ({ open, onOpenChange, children }: ChatWindowProps): J
         sideOffset={12}
         collisionAvoidance={compact ? { side: "shift", align: "shift" } : undefined}
         collisionPadding={compact ? compactViewportInset : undefined}
+        sticky={compact ? true : undefined}
+        positionMethod={compact ? "fixed" : undefined}
         className="signed-in-theme chat-window"
       >
         <ChatHeader onClose={() => onOpenChange(false)} />

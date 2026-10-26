@@ -627,7 +627,7 @@ a theme control backed by the existing application preference, and a circular cl
 The composer stays outside the scrolling conversation with a side-by-side text field and Send
 button, followed by the credential-safety reminder. Send, confirmation and recovery actions use the
 scoped control radius, not pills. Short viewports compact header/composer spacing while retaining
-a named Chat scrollport (`chat-conversation-scroll`). At heights up to 500px, native popover collision shifting keeps an 8px viewport inset, allowing the panel to overlap the application header without becoming modal; ordinary portrait and desktop anchoring is unchanged. This lets the host explanation and confirmation can each be reviewed. The empty state offers “Revisar mis gastos”,
+a named Chat scrollport (`chat-conversation-scroll`). At heights up to 500px, native fixed, sticky popover collision shifting keeps an 8px viewport inset even when the background document scrolls, allowing the panel to overlap the application header without becoming modal; ordinary portrait and desktop anchoring is unchanged. This lets the host explanation and confirmation each be reviewed. The empty state offers “Revisar mis gastos”,
 “Ver mis presupuestos”, and “Consultar recurrentes”; these fill the draft and never submit it.
 Waiting uses a quiet sparkle/dots treatment; uncertain execution uses warning colors, while
 failed delivery and quota feedback use information colors. Recovery remains an explicit action.

@@ -18,11 +18,20 @@ const PopoverContent = ({
   sideOffset = 4,
   collisionAvoidance,
   collisionPadding,
+  sticky,
+  positionMethod,
   ...props
 }: PopoverPrimitive.Popup.Props &
   Pick<
     PopoverPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset" | "collisionAvoidance" | "collisionPadding"
+    | "align"
+    | "alignOffset"
+    | "side"
+    | "sideOffset"
+    | "collisionAvoidance"
+    | "collisionPadding"
+    | "sticky"
+    | "positionMethod"
   >): React.JSX.Element => (
   <PopoverPrimitive.Portal>
     <PopoverPrimitive.Positioner
@@ -32,6 +41,8 @@ const PopoverContent = ({
       sideOffset={sideOffset}
       collisionAvoidance={collisionAvoidance}
       collisionPadding={collisionPadding}
+      sticky={sticky}
+      positionMethod={positionMethod}
       className="isolate z-50"
     >
       <PopoverPrimitive.Popup

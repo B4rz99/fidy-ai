@@ -315,6 +315,7 @@ jobs:
       - name: Static-shell browser validation
         env:
           BROWSER_TEST_SHARD: ${{ matrix.shard }}/2
+          FIDY_REVIEW_NATIVE_TRACE: ${{ github.event.pull_request.head.ref == 'diagnostic/review-native-window-1559' && github.event.pull_request.head.repo.full_name == 'B4rz99/fidy-ai' && matrix.shard == 1 && '1' || '' }}
           VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
         run: |
           export TMPDIR="$(mktemp -d /dev/shm/fidy-browser.XXXXXX)"

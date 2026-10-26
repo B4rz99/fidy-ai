@@ -3,7 +3,11 @@ import type { Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
-import { captureReviewEntryReplay, withReviewEntryEvidence } from "./review-entry-diagnostics";
+import {
+  captureReviewEntryReplay,
+  traceOriginalReviewReturn,
+  withReviewEntryEvidence,
+} from "./review-entry-diagnostics";
 
 const { expect, test } = playwright;
 test.describe.configure({ mode: "parallel" });
@@ -846,6 +850,7 @@ for (const [destination, identity] of [
         yield* Effect.tryPromise(() =>
           signInNavigationPerformanceThroughCore({ page, request, identity })
         );
+        const trace = yield* traceOriginalReviewReturn(page, test.info(), destination);
         yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
         yield* Effect.tryPromise(() =>
           page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
@@ -871,7 +876,7 @@ for (const [destination, identity] of [
         yield* Effect.tryPromise(() =>
           page.route(`${apiOrigin}/ingestion/review-workspace**`, delayedReviewRead)
         );
-        yield* Effect.tryPromise(() => page.evaluate(measureReviewEntry));
+        yield* Effect.tryPromise(() => page.evaluate(measureReviewEntry, trace.enabled));
         yield* Effect.tryPromise(() => page.getByRole("link", { name: /^Por revisar/u }).click());
         yield* Effect.tryPromise(() =>
           expect(page.getByLabel("Valor")).toBeVisible({ timeout: 100 })
@@ -887,7 +892,7 @@ for (const [destination, identity] of [
         yield* Effect.tryPromise(() =>
           expect(page.locator("body")).toHaveAttribute("data-review-entry-milliseconds", /[0-9]/u)
         );
-        yield* recordReviewReturn(page, destination);
+        yield* recordReviewReturn(page, destination, trace.stop);
         if (destination === "Transacciones") {
           yield* Effect.tryPromise(() => verifyPrivacyDisposesReview(page));
         }
@@ -897,7 +902,7 @@ for (const [destination, identity] of [
         yield* Effect.tryPromise(() =>
           expect(page.getByText("Compra en Café — $13.500", { exact: true })).toHaveCount(0)
         );
-      })
+      }).pipe(Effect.scoped)
     )
   );
 }
@@ -927,7 +932,7 @@ const delayedReviewRead = (route: Route): Promise<void> =>
     Effect.sleep("1 second").pipe(Effect.andThen(Effect.tryPromise(() => reviewRoute(route))))
   );
 
-const measureReviewEntry = (): void => {
+const measureReviewEntry = (trace: boolean): void => {
   document.addEventListener(
     "click",
     () => {
@@ -937,6 +942,12 @@ const measureReviewEntry = (): void => {
         if (input === null || input.getClientRects().length === 0) return;
         document.body.dataset.reviewEntryMilliseconds = String(performance.now() - started);
         observer.disconnect();
+        if (trace) {
+          performance.mark("fidy-review-native-start", { startTime: started });
+          performance.mark("fidy-review-native-visible", {
+            startTime: started + Number(document.body.dataset.reviewEntryMilliseconds),
+          });
+        }
       });
       observer.observe(document.body, { childList: true, subtree: true, attributes: true });
     },
@@ -967,9 +978,12 @@ const recordReviewEntry = (page: Page): Promise<void> =>
 
 const recordReviewReturn = Effect.fnUntraced(function* (
   page: Page,
-  destination: "Presupuestos" | "Transacciones"
+  destination: "Presupuestos" | "Transacciones",
+  stopTrace: Effect.Effect<void>
 ) {
-  const measurement = Effect.tryPromise(() => recordReviewEntry(page));
+  const measurement = Effect.tryPromise(() => recordReviewEntry(page)).pipe(
+    Effect.ensuring(stopTrace)
+  );
   yield* destination === "Transacciones"
     ? withReviewEntryEvidence(
         measurement,

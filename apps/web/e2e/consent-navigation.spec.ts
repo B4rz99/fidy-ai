@@ -66,7 +66,7 @@ test("Upgrade observes its own Consent response after an outgoing page read is a
       yield* Effect.tryPromise(() => held.aborted);
       expect(yield* Effect.tryPromise(() => upgraded)).toBeUndefined();
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible()
+        expect(page.getByRole("button", { name: /^mensual\b/iu })).toBeVisible()
       );
     }).pipe(Effect.ensuring(Effect.sync(() => abortOutgoing.resolve())))
   );

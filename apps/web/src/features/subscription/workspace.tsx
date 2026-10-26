@@ -13,7 +13,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { DateTime, Option } from "effect";
 import type { JSX, ReactNode } from "react";
 import type { EnrollmentMethod, SubscriptionStatus } from "@/transport/client";
-import { formatMoney } from "@/transport/money";
+import { formatMoneyWithCompactCode } from "@/transport/money";
 import { Button } from "@/ui/components/button";
 import { Skeleton } from "@/ui/components/skeleton";
 import {
@@ -70,11 +70,6 @@ export const OfferSelection = ({
             <Button
               type="button"
               variant="ghost"
-              aria-label={
-                selected
-                  ? `Oferta ${offer.selectionLabel} seleccionada`
-                  : `Elegir ${offer.selectionLabel}`
-              }
               aria-pressed={selected}
               disabled={disabled}
               onClick={() => select(offer.id)}
@@ -281,7 +276,9 @@ const RecentAttempts = ({
                 </time>
               </TableCell>
               <TableCell>{periodLabels[attempt.billingPeriod]}</TableCell>
-              <TableCell>{formatMoney({ locale: "es-CO", money: attempt.money })}</TableCell>
+              <TableCell>
+                {formatMoneyWithCompactCode({ locale: "es-CO", money: attempt.money })}
+              </TableCell>
               <TableCell>
                 <span className="subscription-attempt-status" data-status={attempt.status}>
                   {attemptLabels[attempt.status]}
@@ -316,11 +313,37 @@ export const SubscriptionStandingView = ({
   return <ReadyStanding standing={state.standing} onRetry={onRetry} />;
 };
 
+const StandingAccessPeriod = ({
+  standing,
+}: Readonly<{ standing: SubscriptionStatus }>): JSX.Element => {
+  const { accessTier, trialPeriod, paidSubscription } = standing;
+  return Option.match(paidSubscription, {
+    onNone: () =>
+      accessTier === "pro" ? (
+        <p>
+          Período de prueba: hasta el{" "}
+          {standingDateFormatter.format(trialPeriod.endsAt.epochMilliseconds)}.
+        </p>
+      ) : (
+        <p>Tu historial sigue disponible.</p>
+      ),
+    onSome: (paid) => (
+      <>
+        <p>
+          Último período pagado: hasta el{" "}
+          {standingDateFormatter.format(paid.endsAt.epochMilliseconds)}.
+        </p>
+        <p>Precio cobrado: {formatMoneyWithCompactCode({ locale: "es-CO", money: paid.money })}.</p>
+      </>
+    ),
+  });
+};
+
 const ReadyStanding = ({
   standing,
   onRetry,
 }: Readonly<{ standing: SubscriptionStatus; onRetry: () => void }>): JSX.Element => {
-  const { accessTier, trialPeriod, paidSubscription, recentAttempts } = standing;
+  const { accessTier, recentAttempts } = standing;
   return (
     <>
       <section className="subscription-standing" aria-label="Estado de la suscripción">
@@ -343,26 +366,7 @@ const ReadyStanding = ({
               <span>Gratis</span>
             )}
           </h2>
-          {Option.match(paidSubscription, {
-            onNone: () =>
-              accessTier === "pro" ? (
-                <p>
-                  Período de prueba: hasta el{" "}
-                  {standingDateFormatter.format(trialPeriod.endsAt.epochMilliseconds)}.
-                </p>
-              ) : (
-                <p>Tu historial sigue disponible.</p>
-              ),
-            onSome: (paid) => (
-              <>
-                <p>
-                  Último período pagado: hasta el{" "}
-                  {standingDateFormatter.format(paid.endsAt.epochMilliseconds)}.
-                </p>
-                <p>Precio cobrado: {formatMoney({ locale: "es-CO", money: paid.money })}.</p>
-              </>
-            ),
-          })}
+          <StandingAccessPeriod standing={standing} />
         </div>
         <div className="subscription-refresh">
           <Button type="button" variant="outline" onClick={onRetry}>

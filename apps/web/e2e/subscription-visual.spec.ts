@@ -1,3 +1,4 @@
+import { acceptSubscriptionContracts } from "./subscription-interactions";
 import type { Page } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
@@ -57,6 +58,39 @@ const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
   const measured = yield* Effect.tryPromise(() => page.evaluate(dimensions));
   expect(measured.content).toBeLessThanOrEqual(measured.viewport);
 });
+const expectSubscriptionShell = Effect.fnUntraced(function* (
+  page: Page,
+  display: Readonly<{ viewport: typeof desktop; theme: Theme }>
+) {
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("img", { name: "Fidy", exact: true })).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByRole("button", {
+        name: display.theme === "dark" ? "Activar tema claro" : "Activar tema oscuro",
+        exact: true,
+      })
+    ).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("main")).toHaveCSS("color-scheme", display.theme)
+  );
+  const compact = display.viewport.name === "mobile";
+  if (compact) {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Menú de navegación", exact: true }).click()
+    );
+  }
+  const navigation = page.getByRole("navigation", { name: "Aplicación", exact: true });
+  yield* Effect.tryPromise(() => expect(navigation).toBeVisible());
+  const current = navigation.getByRole("link", { name: "Suscripción", exact: true });
+  yield* Effect.tryPromise(() => expect(current).toHaveAttribute("aria-current", "page"));
+  if (compact) {
+    yield* Effect.tryPromise(() => current.click());
+    yield* Effect.tryPromise(() => expect(navigation).toBeHidden());
+  }
+});
 const openSubscription = Effect.fnUntraced(function* (
   page: Page,
   display: Readonly<{ viewport: typeof desktop; theme: Theme }>,
@@ -72,12 +106,11 @@ const openSubscription = Effect.fnUntraced(function* (
   yield* Effect.tryPromise(() =>
     expect(page.getByRole("heading", { name: "Suscripción y pagos", exact: true })).toBeVisible()
   );
+  yield* expectSubscriptionShell(page, display);
   return observed;
 });
 const chooseMonthly = Effect.fnUntraced(function* (page: Page) {
-  yield* Effect.tryPromise(() =>
-    page.getByRole("button", { name: "Elegir mensual", exact: true }).click()
-  );
+  yield* Effect.tryPromise(() => page.getByRole("button", { name: /^mensual\b/iu }).click());
 });
 const continueWith = Effect.fnUntraced(function* (page: Page, method: MethodLabel) {
   if (method !== "tarjeta") {
@@ -87,10 +120,7 @@ const continueWith = Effect.fnUntraced(function* (page: Page, method: MethodLabe
     page.getByRole("button", { name: `Continuar con ${method}`, exact: true }).click()
   );
 });
-const acceptWompi = Effect.fnUntraced(function* (page: Page) {
-  yield* Effect.tryPromise(() => page.getByLabel(/Acepto el reglamento/iu).check());
-  yield* Effect.tryPromise(() => page.getByLabel(/Autorizo el tratamiento/iu).check());
-});
+
 const fillBillingEmail = Effect.fnUntraced(function* (page: Page) {
   yield* Effect.tryPromise(() =>
     page.getByLabel("Correo de facturación", { exact: true }).fill("prueba@example.com")
@@ -98,10 +128,10 @@ const fillBillingEmail = Effect.fnUntraced(function* (page: Page) {
 });
 const expectSeparateConsents = Effect.fnUntraced(function* (page: Page) {
   yield* Effect.tryPromise(() =>
-    expect(page.getByLabel(/Acepto el reglamento/iu)).not.toBeChecked()
+    expect(page.getByRole("checkbox", { name: /Acepto el reglamento/iu })).not.toBeChecked()
   );
   yield* Effect.tryPromise(() =>
-    expect(page.getByLabel(/Autorizo el tratamiento/iu)).not.toBeChecked()
+    expect(page.getByRole("checkbox", { name: /Autorizo el tratamiento/iu })).not.toBeChecked()
   );
   yield* Effect.tryPromise(() =>
     expect(page.getByRole("link", { name: /reglamento/u })).toHaveAttribute(
@@ -128,11 +158,12 @@ for (const viewport of [desktop, mobile]) {
       Effect.runPromise(
         Effect.gen(function* () {
           const observed = yield* openSubscription(page, { viewport, theme });
-          for (const period of ["semanal", "mensual", "anual"]) {
+          for (const period of [/^semanal\b/iu, /^mensual\b/iu, /^anual\b/iu]) {
             yield* Effect.tryPromise(() =>
-              expect(
-                page.getByRole("button", { name: `Elegir ${period}`, exact: true })
-              ).toHaveAttribute("aria-pressed", "false")
+              expect(page.getByRole("button", { name: period })).toHaveAttribute(
+                "aria-pressed",
+                "false"
+              )
             );
           }
           yield* Effect.tryPromise(() =>
@@ -170,7 +201,7 @@ const beginDaviplata = Effect.fnUntraced(function* (page: Page) {
     page.getByLabel("Número de DaviPlata", { exact: true }).fill("3991111111")
   );
   yield* fillBillingEmail(page);
-  yield* acceptWompi(page);
+  yield* acceptSubscriptionContracts(page);
   yield* Effect.tryPromise(() =>
     page.getByRole("button", { name: "Autorizar con DaviPlata", exact: true }).click()
   );
@@ -194,7 +225,7 @@ for (const theme of themes) {
           page.getByLabel("Número de Nequi", { exact: true }).fill("3991111111")
         );
         yield* fillBillingEmail(page);
-        yield* acceptWompi(page);
+        yield* acceptSubscriptionContracts(page);
         yield* Effect.tryPromise(() =>
           page.getByRole("button", { name: "Autorizar con Nequi", exact: true }).click()
         );
@@ -257,7 +288,7 @@ for (const { state, copy } of paymentStates) {
         yield* chooseMonthly(page);
         yield* continueWith(page, "tarjeta");
         yield* fillBillingEmail(page);
-        yield* acceptWompi(page);
+        yield* acceptSubscriptionContracts(page);
         yield* Effect.tryPromise(() =>
           page.getByRole("button", { name: "Activar Pro", exact: true }).click()
         );
@@ -458,7 +489,7 @@ const expectDiscardedCardDraft = Effect.fnUntraced(function* (page: Page) {
   yield* expectSeparateConsents(page);
 });
 const keyboardContinue = Effect.fnUntraced(function* (page: Page) {
-  const choice = page.getByRole("button", { name: "Elegir mensual", exact: true });
+  const choice = page.getByRole("button", { name: /^mensual\b/iu });
   yield* Effect.tryPromise(() => choice.focus());
   yield* Effect.tryPromise(() => expect(choice).toBeFocused());
   yield* Effect.tryPromise(() => choice.press("Enter"));
@@ -481,11 +512,15 @@ for (const viewport of [desktop, mobile]) {
         const observed = yield* openSubscription(page, { viewport, theme: "light" });
         yield* keyboardContinue(page);
         yield* fillCardDraft(page);
-        yield* Effect.tryPromise(() => page.getByLabel(/Acepto el reglamento/iu).check());
+        yield* Effect.tryPromise(() =>
+          page.getByRole("checkbox", { name: /Acepto el reglamento/iu }).check()
+        );
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("button", { name: "Activar Pro", exact: true })).toBeDisabled()
         );
-        yield* Effect.tryPromise(() => page.getByLabel(/Autorizo el tratamiento/iu).check());
+        yield* Effect.tryPromise(() =>
+          page.getByRole("checkbox", { name: /Autorizo el tratamiento/iu }).check()
+        );
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("button", { name: "Activar Pro", exact: true })).toBeEnabled()
         );
@@ -512,7 +547,7 @@ for (const viewport of [desktop, mobile]) {
         );
         yield* Effect.tryPromise(() => page.goBack());
         yield* Effect.tryPromise(() =>
-          expect(page.getByRole("button", { name: "Elegir mensual", exact: true })).toHaveAttribute(
+          expect(page.getByRole("button", { name: /^mensual\b/iu })).toHaveAttribute(
             "aria-pressed",
             "false"
           )
@@ -650,3 +685,90 @@ test("Unavailable payment methods are not presented as an empty successful resul
       expect(observed.unexpectedRequests).toEqual([]);
     })
   ));
+
+for (const viewport of [desktop, mobile]) {
+  test(`Subscription theme control persists the chosen palette on ${viewport.name}`, ({ page }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const observed = yield* openSubscription(page, { viewport, theme: "light" });
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Activar tema oscuro", exact: true }).click()
+        );
+        yield* expectSubscriptionShell(page, { viewport, theme: "dark" });
+        yield* Effect.tryPromise(() => page.reload());
+        yield* expectSubscriptionShell(page, { viewport, theme: "dark" });
+        expect(observed.preparations).toEqual([]);
+        expect(observed.submissions).toEqual([]);
+        expect(observed.unexpectedRequests).toEqual([]);
+      })
+    ));
+}
+
+const unavailableConsentStatus = 503;
+const availableConsentStatus = 200;
+const installUnresolvedConsent = Effect.fnUntraced(function* (
+  page: Page,
+  consent: "unknown" | "revoked"
+) {
+  const blocked: string[] = [];
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/web/consent`, (route) =>
+      route.fulfill({
+        status: consent === "unknown" ? unavailableConsentStatus : availableConsentStatus,
+        contentType: "application/json",
+        body: JSON.stringify(
+          consent === "unknown"
+            ? {}
+            : {
+                status: "Revoked",
+                withdrawal: {
+                  reference: "15520000-0000-4000-8000-000000000006",
+                  occurredAtMs: 1000,
+                },
+              }
+        ),
+      })
+    )
+  );
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/**`, (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/web/consent" || path === "/web/session/binding") return route.fallback();
+      blocked.push(`${route.request().method()} ${path}`);
+      return route.abort("blockedbyclient");
+    })
+  );
+  return blocked;
+});
+for (const path of ["/UPGRADE", "/upgrade/"]) {
+  for (const consent of ["unknown", "revoked"] as const) {
+    test(`Upgrade shell makes no product requests with ${consent} Consent at ${path}`, ({ page }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() => page.setViewportSize(desktop));
+          const observed = yield* installSubscriptionFixture(page);
+          const blocked = yield* installUnresolvedConsent(page, consent);
+          yield* Effect.tryPromise(() => page.goto(path));
+          yield* Effect.tryPromise(() =>
+            expect(page.getByRole("alert")).toContainText(
+              consent === "unknown"
+                ? "No pudimos verificar tu autorización"
+                : "Tu autorización está retirada"
+            )
+          );
+          yield* Effect.tryPromise(() =>
+            expect(page.getByRole("button", { name: "Cerrar sesión", exact: true })).toBeVisible()
+          );
+          yield* Effect.tryPromise(() => page.waitForLoadState("networkidle"));
+          yield* Effect.tryPromise(() =>
+            expect(page.getByRole("button", { name: /^mensual\b/iu })).toHaveCount(0)
+          );
+          expect(blocked).toEqual([]);
+          expect(observed.preparations).toEqual([]);
+          expect(observed.submissions).toEqual([]);
+          expect(observed.providerCalls).toEqual([]);
+          expect(observed.unexpectedRequests).toEqual([]);
+        })
+      ));
+  }
+}

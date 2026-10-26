@@ -1,3 +1,4 @@
+import { acceptSubscriptionContracts } from "./subscription-interactions";
 import { PaymentEnrollmentId, ResourceLimited } from "@fidy/server/client";
 import type { APIRequestContext, APIResponse, Page, Route } from "@playwright/test";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -553,7 +554,7 @@ const submitReusedCard = Effect.fnUntraced(function* (page: Page, request: APIRe
   yield* fromPlaywright(
     page
       .getByRole("button", {
-        name: "Elegir mensual",
+        name: /^mensual\b/iu,
       })
       .click()
   );
@@ -567,8 +568,7 @@ const submitReusedCard = Effect.fnUntraced(function* (page: Page, request: APIRe
       })
     ).toBeVisible()
   );
-  yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
-  yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
+  yield* acceptSubscriptionContracts(page);
   const submission = Promise.withResolvers<EnrollmentSubmission>();
   yield* fromPlaywright(observeEnrollmentSubmission(page, submission));
   yield* fromPlaywright(page.getByRole("button", { name: "Activar Pro" }).click());
@@ -693,7 +693,7 @@ test("tokenizes a first card without an email-login credential through real publ
       yield* fromPlaywright(
         page
           .getByRole("button", {
-            name: "Elegir mensual",
+            name: /^mensual\b/iu,
           })
           .click()
       );
@@ -705,8 +705,7 @@ test("tokenizes a first card without an email-login credential through real publ
       yield* fromPlaywright(page.getByLabel("Vencimiento").fill("122028"));
       yield* fromPlaywright(page.getByLabel("CVC").fill("123"));
       yield* fromPlaywright(page.getByLabel("Nombre en la tarjeta").fill("Usuario Prueba"));
-      yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
-      yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
+      yield* acceptSubscriptionContracts(page);
       // The application navigates on this response. Read the real Core reply before
       // releasing it to Chromium, which can discard response bodies after navigation.
       const submitResponse = Promise.withResolvers<EnrollmentSubmission>();
@@ -852,15 +851,14 @@ const assertDaviplataSecrecy = (bodies: ReadonlyArray<ObservedFidyBody>): void =
 const submitFirstDaviplata = Effect.fnUntraced(function* (page: Page) {
   yield* fromPlaywright(openUpgradeThroughCore(page));
   yield* fromPlaywright(page.getByRole("button", { name: "DaviPlata" }).click());
-  yield* fromPlaywright(page.getByRole("button", { name: "Elegir mensual" }).click());
+  yield* fromPlaywright(page.getByRole("button", { name: /^mensual\b/iu }).click());
   yield* fromPlaywright(page.getByRole("button", { name: "Continuar con DaviPlata" }).click());
   yield* fromPlaywright(page.getByLabel("Número de cédula").fill("1122233"));
   yield* fromPlaywright(page.getByLabel("Número de DaviPlata").fill("3991111111"));
   yield* fromPlaywright(
     expect(page.getByLabel("Correo de facturación")).toHaveValue("daviplata@example.com")
   );
-  yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
-  yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
+  yield* acceptSubscriptionContracts(page);
   yield* fromPlaywright(page.getByRole("button", { name: "Autorizar con DaviPlata" }).click());
   yield* fromPlaywright(expect(page.getByLabel("Número de cédula")).toHaveCount(0));
   yield* fromPlaywright(page.getByLabel("Código de verificación").fill("574829"));

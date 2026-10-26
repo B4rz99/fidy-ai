@@ -83,6 +83,10 @@ restriction. Explicit method selection can replace a cleared failed card with a 
 submits another payment automatically. Pending/verifying and successful payments keep selection
 locked, while final failure permits another method with fresh terms and authorization.
 Missing or failing availability does not advertise any method; the User can explicitly reread availability.
+The `/upgrade` route uses the independent ApplicationShell and its shared theme/navigation owner.
+Its cookie-only SubscriptionConsentBoundary still gates all ordinary subscription queries and
+payment controls. The shell does not mount Hosted Agent, retained product workspaces or the canonical
+pending-count query on this route, including before Consent is known or after it is withdrawn.
 The Subscription workspace presents selection and authorization as separate steps. No Price is selected
 on entry, and only Continue prepares the chosen enrollment. Returning to selection disposes the mounted
 form; pending or successful payment and live DaviPlata authorization keep that action locked. Payment

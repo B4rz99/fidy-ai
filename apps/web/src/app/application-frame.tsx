@@ -26,24 +26,35 @@ export const ApplicationFrame = (): JSX.Element => {
     },
   });
   const { authentication } = useSession();
-  const privacy = useRouterState({
-    select: (state) => state.location.pathname === "/settings/privacy",
+  const independentControls = useRouterState({
+    select: (state) =>
+      state.matches.some(
+        (match) =>
+          match.routeId === "/independent-application/settings/privacy" ||
+          match.routeId === "/independent-application/upgrade"
+      ),
   });
   if (route === "authenticated" && authentication === "expired") return <AccessRefused />;
   if (route === "standalone") return <Outlet />;
   const shell = (
     <ApplicationShell
       reviewPendingCount={
-        <Suspense fallback={null}>
-          <ReviewPendingCount />
-        </Suspense>
+        independentControls ? null : (
+          <Suspense fallback={null}>
+            <ReviewPendingCount />
+          </Suspense>
+        )
       }
     >
-      <RetainedReviewWorkspace />
-      <RetainedRecurringWorkspace />
+      {independentControls ? null : (
+        <>
+          <RetainedReviewWorkspace />
+          <RetainedRecurringWorkspace />
+        </>
+      )}
     </ApplicationShell>
   );
-  return privacy || authentication === "expired" ? (
+  return independentControls || authentication === "expired" ? (
     shell
   ) : (
     <HostedAgentProvider>{shell}</HostedAgentProvider>

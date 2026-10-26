@@ -204,7 +204,7 @@ const measureNavigation = Effect.fn(function* (
   const navigationBefore = yield* snapshot(request);
   for (let index = 0; index < 3; index += 1) {
     yield* wait(openUpgradeThroughCore(page));
-    yield* wait(expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible());
+    yield* wait(expect(page.getByRole("button", { name: /^mensual\b/iu })).toBeVisible());
     yield* wait(page.waitForLoadState("networkidle"));
     yield* wait(openTransactionsThroughCore(page));
     yield* wait(
@@ -302,10 +302,10 @@ test("measures authenticated navigation, pending payment, visibility and settlem
       yield* measureNavigation(page, request, observed);
       const paymentSetupBefore = yield* snapshot(request);
       yield* wait(openUpgradeThroughCore(page));
-      yield* wait(page.getByRole("button", { name: "Elegir mensual" }).click());
+      yield* wait(page.getByRole("button", { name: /^mensual\b/iu }).click());
       yield* wait(page.getByRole("button", { name: "Continuar con tarjeta" }).click());
-      yield* wait(page.getByLabel(/Acepto el reglamento/iu).check());
-      yield* wait(page.getByLabel(/Autorizo el tratamiento/iu).check());
+      yield* wait(page.getByRole("checkbox", { name: /Acepto el reglamento/iu }).check());
+      yield* wait(page.getByRole("checkbox", { name: /Autorizo el tratamiento/iu }).check());
       const submitting = page.waitForResponse("**/web/subscription/payment-enrollments/submit");
       yield* wait(page.getByRole("button", { name: "Activar Pro" }).click());
       expect((yield* wait(submitting)).status()).toBe(successStatus);

@@ -238,7 +238,6 @@ const fixtureReads = (fixture: Fixture): Map<string, string> =>
         ["paid", "offers-unavailable"].includes(fixture.state) ? paidStanding : freeStanding
       ),
     ],
-    ["/ingestion/review-workspace", response({ pendingCount: 0, total: 0, items: [] })],
     [`${enrollmentPath}/availability`, JSON.stringify({ enabledMethods: fixture.enabledMethods })],
     [
       `/web/subscription/billing-attempts/${attemptId}`,

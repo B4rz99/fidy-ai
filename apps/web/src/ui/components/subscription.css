@@ -160,6 +160,13 @@
   height: auto;
   white-space: normal;
 }
+.subscription-workspace .subscription-offer > [data-slot="button"]:not(:disabled) {
+  background: transparent;
+}
+.subscription-offer > [data-slot="button"]:hover .subscription-offer-label {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
 .subscription-offer + .subscription-offer {
   border-left: 1px solid var(--fidy-border-decorative-divider);
 }
@@ -473,7 +480,7 @@
 }
 @media (max-width: 900px) {
   .subscription-workspace {
-    min-height: calc(100svh - 73px);
+    min-height: calc(100svh - 84px);
   }
   .subscription-header {
     min-height: 76px;
@@ -708,5 +715,15 @@
   }
   .subscription-input-control [data-slot="input"] {
     padding-left: 52px;
+  }
+}
+
+@media (max-width: 900px) {
+  .application-shell:has(.subscription-workspace) .application-sidebar {
+    border-bottom: 1px solid var(--application-line);
+  }
+  .application-shell:has(.subscription-workspace) .application-brand {
+    left: 50%;
+    transform: translateX(-50%);
   }
 }

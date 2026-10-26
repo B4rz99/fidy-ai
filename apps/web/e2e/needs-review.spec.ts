@@ -1002,6 +1002,22 @@ test("refreshes a saved review draft from another device after returning", ({ pa
         expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Borrador remoto")
       );
       yield* Effect.tryPromise(() => expect(page.getByLabel("Valor")).toHaveValue("49000"));
+      const [saved] = yield* Effect.tryPromise(() =>
+        Promise.all([
+          page.waitForRequest(`${apiOrigin}/ingestion/review-workspace/edits`),
+          page.getByLabel("Valor").fill("51000"),
+        ])
+      );
+      expect(saved.postDataJSON()).toMatchObject({
+        _tag: "SaveDraft",
+        id,
+        revision: 1,
+        draft: { amount: "51000", counterparty: "Borrador remoto" },
+      });
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toContainText("Borrador guardado")
+      );
+      yield* Effect.tryPromise(() => expect(page.getByLabel("Valor")).toHaveValue("51000"));
     })
   ));
 const openReviewSibling = (page: Page): Promise<void> =>

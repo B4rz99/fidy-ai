@@ -1,7 +1,7 @@
 import type { DraftBarrier } from "./draft-barrier";
 import { useAtomSet } from "@effect/atom-react";
 import { Option } from "effect";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { FidyClient } from "@/transport/client";
 import { type ReviewWrite, makeReviewWrite } from "./command";
 import { type Command, type Detail, type Draft, creation, emptyDraft } from "./model";
@@ -144,17 +144,20 @@ export const useReviewEditor = ({
   const [acting, setActing] = useState(false);
   const { owner, draft, setDraft } = useCanonicalDraft({ detail, barrier, feedback, acting });
   const superseded = detail.revision > owner.revision;
-  const change = (next: Draft): void => {
-    if (owner.blocked || acting || superseded) return;
-    setDraft(next);
-    setFeedback("unsaved");
-    scheduleDraft({ owner, next, send, feedback: setFeedback });
-    barrier.set(owner.id, () =>
-      saveDraft(owner, send, setFeedback).then(() =>
-        owner.blocked ? Option.none() : Option.some(owner.revision)
-      )
-    );
-  };
+  const change = useCallback(
+    (next: Draft): void => {
+      if (owner.blocked || acting || superseded) return;
+      setDraft(next);
+      setFeedback("unsaved");
+      scheduleDraft({ owner, next, send, feedback: setFeedback });
+      barrier.set(owner.id, () =>
+        saveDraft(owner, send, setFeedback).then(() =>
+          owner.blocked ? Option.none() : Option.some(owner.revision)
+        )
+      );
+    },
+    [owner, acting, superseded, setDraft, send, barrier]
+  );
   const act = (kind: "Create" | "Skip"): void => {
     if (owner.blocked || acting || superseded) return;
     setActing(true);

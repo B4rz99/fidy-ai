@@ -1,5 +1,5 @@
-import type { CanonicalSuccess } from "@/transport/client";
-import { formatMoney } from "@/transport/money";
+import type { CanonicalSuccess, EnrollmentMethod } from "@/transport/client";
+import { formatMoneyWithCompactCode } from "@/transport/money";
 
 export type SubscriptionOffers = CanonicalSuccess<"subscription.listSubscriptionOffers">["data"];
 export type SubscriptionOffer = SubscriptionOffers[number];
@@ -33,9 +33,21 @@ export const presentSubscriptionOffer = (
     id: offer.id,
     selectionLabel: period.selectionLabel,
     billingUnit: period.billingUnit,
-    moneyText: formatMoney({ locale: "es-CO", money: offer.money }),
+    moneyText: formatMoneyWithCompactCode({ locale: "es-CO", money: offer.money }),
     renewalText: "Tu suscripción se renueva automáticamente al terminar cada período.",
     cancellationText:
       "Puedes cancelar renovaciones futuras y conservarás el acceso hasta terminar el período pagado.",
   };
+};
+
+export const paymentMethodCopy: Readonly<
+  Record<EnrollmentMethod, Readonly<{ label: string; title: string; continueLabel: string }>>
+> = {
+  card: { label: "Tarjeta", title: "Pago con tarjeta", continueLabel: "Continuar con tarjeta" },
+  nequi: { label: "Nequi", title: "Pagar con Nequi", continueLabel: "Continuar con Nequi" },
+  daviplata: {
+    label: "DaviPlata",
+    title: "Autorizar con DaviPlata",
+    continueLabel: "Continuar con DaviPlata",
+  },
 };

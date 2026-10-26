@@ -121,7 +121,7 @@ test("rejects stale cross-tab drafts and logout", ({ page, context, request }) =
     })
   ));
 
-test("keeps the signing-in tab live while a broadcast retires the other tab", ({
+test("retires the old product workspace while keeping sign-in and Privacy access live", ({
   page,
   context,
   request,
@@ -129,19 +129,48 @@ test("keeps the signing-in tab live while a broadcast retires the other tab", ({
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible({
+          signal,
+        })
+      );
+      yield* Effect.tryPromise((signal) =>
+        page.getByRole("link", { name: "Presupuestos", exact: true }).click({ signal })
+      );
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("heading", { name: "Presupuestos", exact: true })).toBeVisible({
+          signal,
+        })
       );
       const other = yield* Effect.tryPromise(() => context.newPage());
       yield* Effect.tryPromise(() => signInDashboardThroughCore({ page: other, request }));
-      yield* Effect.tryPromise(() =>
-        expect(other.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
+      yield* Effect.tryPromise((signal) =>
+        expect(other.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible({
+          signal,
+        })
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText("No pudimos autorizar esta acción.")).toBeVisible()
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByText("No pudimos autorizar esta acción.")).toBeVisible({ signal })
       );
-      yield* Effect.tryPromise(() =>
-        expect(other.getByText("No pudimos autorizar esta acción.")).not.toBeVisible()
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("button", { name: "Abrir agente Fidy" })).toHaveCount(0, { signal })
+      );
+      yield* Effect.tryPromise((signal) =>
+        page.getByRole("link", { name: "Revisar privacidad", exact: true }).click({ signal })
+      );
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("heading", { name: "Privacidad", exact: true })).toBeVisible({
+          signal,
+        })
+      );
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("link", { name: "obarboza@fidyapp.com" })).toBeVisible({ signal })
+      );
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("button", { name: "Abrir agente Fidy" })).toHaveCount(0, { signal })
+      );
+      yield* Effect.tryPromise((signal) =>
+        expect(other.getByText("No pudimos autorizar esta acción.")).not.toBeVisible({ signal })
       );
     })
   ));

@@ -9,11 +9,13 @@ const currencyAmount = ({
   currency,
   locale,
   currencyDisplay,
+  compact,
 }: Readonly<{
   amount: string;
   currency: string;
   locale: string;
   currencyDisplay: "narrowSymbol" | "code";
+  compact: boolean;
 }>): string => {
   const decimal = Schema.decodeSync(ExactDecimal)(amount);
   const digits = currencyMetadata(Schema.decodeUnknownSync(Currency)(currency)).fractionalDigits;
@@ -21,7 +23,7 @@ const currencyAmount = ({
     currency,
     currencyDisplay,
     style: "currency",
-    minimumFractionDigits: digits,
+    minimumFractionDigits: compact && BigDecimal.isInteger(decimal) ? 0 : digits,
     maximumFractionDigits: digits,
   });
   const scaled = BigDecimal.scale(BigDecimal.round(decimal, { scale: digits }), digits).value;
@@ -53,7 +55,7 @@ type MoneyOptions = Readonly<{
 
 export const formatCurrencyAmount = (
   options: Readonly<{ amount: string; currency: string; locale: string }>
-): string => currencyAmount({ ...options, currencyDisplay: "narrowSymbol" });
+): string => currencyAmount({ ...options, currencyDisplay: "narrowSymbol", compact: false });
 
 /** Formats exact canonical Money without allowing Locale to supply Currency meaning. */
 export const formatMoney = ({ locale, money }: MoneyOptions): string =>
@@ -62,6 +64,7 @@ export const formatMoney = ({ locale, money }: MoneyOptions): string =>
     currency: money.currency,
     locale,
     currencyDisplay: "narrowSymbol",
+    compact: false,
   });
 
 /** Unambiguous Money for surfaces that mix currencies with a shared symbol. */
@@ -71,4 +74,15 @@ export const formatMoneyWithCode = ({ locale, money }: MoneyOptions): string =>
     currency: money.currency,
     locale,
     currencyDisplay: "code",
+    compact: false,
   });
+
+/** Explicit currency after the symbol; exact integral amounts need no empty fractional part. */
+export const formatMoneyWithCompactCode = ({ locale, money }: MoneyOptions): string =>
+  `${currencyAmount({
+    amount: BigDecimal.format(money.amount),
+    currency: money.currency,
+    locale,
+    currencyDisplay: "narrowSymbol",
+    compact: true,
+  }).replaceAll("\u00a0", " ")} ${money.currency}`;

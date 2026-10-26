@@ -1,4 +1,3 @@
-import { RefreshButton } from "@/ui/components/refresh-button";
 import {
   make as makeScopedAtom,
   useAtom,
@@ -20,6 +19,7 @@ import {
   emptyDecisions,
 } from "./enrollment-decisions";
 import {
+  type ComponentProps,
   type FormEvent,
   type JSX,
   type RefCallback,
@@ -30,23 +30,18 @@ import {
 import { useSession } from "@/session/session-context";
 import { useSubscriptionEnrollmentClient } from "@/session/subscription-enrollment-context";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
-import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/ui/components/card";
 import { Input } from "@/ui/components/input";
+import { SubscriptionInputDecoration } from "@/ui/components/subscription-input-decoration";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import {
-  type EnrollmentMethod,
-  type FidyClient,
-  type SubscriptionStatus,
-} from "@/transport/client";
+import { type EnrollmentMethod, type FidyClient } from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
-import { formatMoney } from "@/transport/money";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import {
   type PriceId,
   type SubscriptionOfferPresentation,
   type SubscriptionOffers,
+  paymentMethodCopy,
   presentSubscriptionOffer,
 } from "./presentation";
 import { type CardFields } from "@/transport/wompi-tokenization";
@@ -59,6 +54,25 @@ import {
   makeEnrollmentGateway,
 } from "./enrollment-gateway";
 import { isAwaitingPaymentStatus, paymentStatusRefreshDelay } from "./payment-status";
+import {
+  ArrowLeft01Icon,
+  Calendar03Icon,
+  CreditCardIcon,
+  SmartPhone01Icon,
+  SquareLock02Icon,
+  UserIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  OfferSelection,
+  PaymentFeedback,
+  PaymentMethodSelection,
+  type StandingViewState,
+  SubscriptionStandingView,
+  SubscriptionSummary,
+  SubscriptionTerms,
+  SubscriptionWorkspace,
+} from "./workspace";
 
 export type SubscriptionOffersPageState =
   | Readonly<{ _tag: "Initial" }>
@@ -87,45 +101,20 @@ const LoadingOffers = (): JSX.Element => (
   </section>
 );
 
-const OfferButton = ({
-  disabled,
-  offer,
-  selected,
-  select,
-}: Readonly<{
-  disabled: boolean;
-  offer: SubscriptionOfferPresentation;
-  selected: boolean;
-  select: (id: PriceId) => void;
-}>): JSX.Element => (
-  <Button
-    aria-label={
-      selected ? `Oferta ${offer.selectionLabel} seleccionada` : `Elegir ${offer.selectionLabel}`
-    }
-    aria-pressed={selected}
-    className="w-full"
-    size="offer"
-    disabled={disabled}
-    onClick={() => select(offer.id)}
-    type="button"
-    variant={selected ? "secondary" : "default"}
-  >
-    {offer.moneyText}/{offer.billingUnit}
-  </Button>
-);
-
 const CardField = ({
   id,
   label,
+  icon,
   input,
 }: Readonly<{
   id: string;
   label: string;
+  icon: ComponentProps<typeof SubscriptionInputDecoration>["icon"];
   input: JSX.Element;
 }>): JSX.Element => (
-  <label className="flex flex-col gap-1" htmlFor={id}>
+  <label className="subscription-field" htmlFor={id}>
     {label}
-    {input}
+    <SubscriptionInputDecoration icon={icon}>{input}</SubscriptionInputDecoration>
   </label>
 );
 
@@ -140,11 +129,13 @@ type CardFieldsControlProps = Readonly<{
 
 const CardNumberField = ({ disabled, fields, setFields }: CardFieldsControlProps): JSX.Element => (
   <CardField
+    icon={CreditCardIcon}
     id="card-number"
     label="Número de tarjeta"
     input={
       <Input
         id="card-number"
+        placeholder="Número de tarjeta"
         autoComplete="cc-number"
         disabled={disabled}
         inputMode="numeric"
@@ -174,6 +165,7 @@ const ExpirationField = ({ disabled, fields, setFields }: CardFieldsControlProps
   };
   return (
     <CardField
+      icon={Calendar03Icon}
       id="card-expiration"
       label="Vencimiento"
       input={
@@ -197,6 +189,7 @@ const ExpirationField = ({ disabled, fields, setFields }: CardFieldsControlProps
 
 const CvcField = ({ disabled, fields, setFields }: CardFieldsControlProps): JSX.Element => (
   <CardField
+    icon={SquareLock02Icon}
     id="card-cvc"
     label="CVC"
     input={
@@ -222,11 +215,13 @@ const CardholderNameField = ({
   setFields,
 }: CardFieldsControlProps): JSX.Element => (
   <CardField
+    icon={UserIcon}
     id="cardholder-name"
     label="Nombre en la tarjeta"
     input={
       <Input
         id="cardholder-name"
+        placeholder="Nombre como aparece en la tarjeta"
         autoComplete="cc-name"
         disabled={disabled}
         required
@@ -241,7 +236,7 @@ const CardholderNameField = ({
 );
 
 const CardFieldsForm = ({ disabled, fields, setFields }: CardFieldsControlProps): JSX.Element => (
-  <fieldset className="grid gap-3 sm:grid-cols-2">
+  <fieldset className="subscription-card-fields">
     <legend className="sr-only">Datos de pago</legend>
     <CardNumberField disabled={disabled} fields={fields} setFields={setFields} />
     <ExpirationField disabled={disabled} fields={fields} setFields={setFields} />
@@ -266,6 +261,7 @@ type DaviplataFormActions = Readonly<{
 type EnrollmentFormProps = DaviplataFormActions &
   Readonly<{
     enrollment: PreparedEnrollment;
+    offer: SubscriptionOfferPresentation;
     busy: boolean;
     submit: (billingEmail: string, fields?: PaymentFields) => void;
   }>;
@@ -278,10 +274,11 @@ const NequiNumberField = (
     change: (value: string) => void;
   }>
 ): JSX.Element => (
-  <label className="flex flex-col gap-1" htmlFor="nequi-number">
+  <label className="subscription-field" htmlFor="nequi-number">
     Número de Nequi
     <Input
       id="nequi-number"
+      placeholder="Ej. 300 123 4567"
       autoComplete="off"
       inputMode="numeric"
       pattern="3[0-9]{9}"
@@ -325,37 +322,94 @@ const NequiEnrollmentForm = ({ enrollment, busy, submit }: EnrollmentFormProps):
     });
   };
   return (
-    <form ref={formLifetimeRef} className="flex flex-col gap-5" onSubmit={onSubmit}>
-      <NequiNumberField
-        required={!awaitingApproval}
-        disabled={busy}
-        value={phoneNumber}
-        change={(value) => {
-          setAwaitingApproval(false);
-          setPhoneNumber(value);
-        }}
-      />
-      <BillingEmailField email={billingEmail} disabled={busy} setEmail={setBillingEmail} />
-      <EnrollmentConsent
-        enrollment={enrollment}
-        disabled={busy}
-        decisions={decisions}
-        setDecisions={setDecisions}
-      />
-      {awaitingApproval && busy ? (
-        <output aria-live="polite">
-          Aprueba la suscripción en Nequi. Luego verificaremos tu fuente de pago.
-        </output>
-      ) : null}
-      <Button disabled={!allDecisionsAccepted(decisions) || busy} type="submit">
-        {busy ? "Esperando autorización…" : "Autorizar con Nequi"}
-      </Button>
-    </form>
+    <NequiFormContents
+      enrollment={enrollment}
+      busy={busy}
+      phoneNumber={phoneNumber}
+      billingEmail={billingEmail}
+      decisions={decisions}
+      awaitingApproval={awaitingApproval}
+      formLifetimeRef={formLifetimeRef}
+      onSubmit={onSubmit}
+      setBillingEmail={setBillingEmail}
+      setDecisions={setDecisions}
+      changePhone={(value) => {
+        setAwaitingApproval(false);
+        setPhoneNumber(value);
+      }}
+    />
   );
 };
+const NequiAwaiting = (): JSX.Element => (
+  <div className="subscription-nequi-waiting">
+    <h3>Esperando autorización</h3>
+    <HugeiconsIcon icon={SmartPhone01Icon} size={64} strokeWidth={1.5} aria-hidden="true" />
+    <output aria-live="polite">
+      Aprueba la suscripción en Nequi. Luego verificaremos tu fuente de pago.
+    </output>
+  </div>
+);
+
+const NequiFormContents = ({
+  enrollment,
+  busy,
+  phoneNumber,
+  billingEmail,
+  decisions,
+  awaitingApproval,
+  formLifetimeRef,
+  onSubmit,
+  setBillingEmail,
+  setDecisions,
+  changePhone,
+}: Readonly<{
+  enrollment: PreparedEnrollment;
+  busy: boolean;
+  phoneNumber: string;
+  billingEmail: string;
+  decisions: EnrollmentDecisions;
+  awaitingApproval: boolean;
+  formLifetimeRef: RefCallback<HTMLFormElement>;
+  onSubmit: (event: FormEvent) => void;
+  setBillingEmail: (email: string) => void;
+  setDecisions: (decisions: EnrollmentDecisions) => void;
+  changePhone: (phone: string) => void;
+}>): JSX.Element => (
+  <form ref={formLifetimeRef} className="subscription-form" onSubmit={onSubmit}>
+    {awaitingApproval && busy ? (
+      <NequiAwaiting />
+    ) : (
+      <>
+        <div>
+          <h3 className="subscription-form-heading">Antes de autorizar</h3>
+          <p className="subscription-form-description">
+            Ingresa la información para continuar con la suscripción.
+          </p>
+        </div>
+        <NequiNumberField
+          required={!awaitingApproval}
+          disabled={busy}
+          value={phoneNumber}
+          change={changePhone}
+        />
+        <BillingEmailField email={billingEmail} disabled={busy} setEmail={setBillingEmail} />
+        <EnrollmentConsent
+          enrollment={enrollment}
+          disabled={busy}
+          decisions={decisions}
+          setDecisions={setDecisions}
+        />
+      </>
+    )}
+    <Button disabled={!allDecisionsAccepted(decisions) || busy} type="submit">
+      {busy ? "Esperando autorización…" : "Autorizar con Nequi"}
+    </Button>
+  </form>
+);
 
 const PreparedCardEnrollmentForm = ({
   enrollment,
+  offer,
   busy,
   submit,
 }: EnrollmentFormProps): JSX.Element => {
@@ -375,7 +429,7 @@ const PreparedCardEnrollmentForm = ({
   const submitLabel = enrollmentSubmitLabel(busy);
 
   return (
-    <form className="flex flex-col gap-5" onSubmit={onSubmit}>
+    <form className="subscription-form" onSubmit={onSubmit}>
       {enrollment.paymentSourceMode === "create" ? (
         <CardFieldsForm disabled={busy} fields={fields} setFields={setFields} />
       ) : (
@@ -390,6 +444,9 @@ const PreparedCardEnrollmentForm = ({
         enrollment={enrollment}
         setDecisions={setDecisions}
       />
+      <p className="subscription-charge-summary">
+        Se cobrará {offer.moneyText} y se renovará cada {offer.billingUnit}.
+      </p>
       <Button disabled={!allAccepted || busy} type="submit">
         {submitLabel}
       </Button>
@@ -427,14 +484,22 @@ const EnrollmentStatusAction = ({
   current: Exclude<Enrollment, PreparedEnrollment>;
   busy: boolean;
   prepare: (replaceFailedSource?: boolean) => void;
-  refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
+  refresh: (current: PaymentFlowState) => void;
 }>): JSX.Element => {
   if (current.status === "available") {
-    return <output>Tu fuente de pago quedó disponible para cobros recurrentes.</output>;
+    return (
+      <PaymentFeedback tone="source" title="Fuente de pago disponible">
+        <output>Tu fuente de pago quedó disponible para cobros recurrentes.</output>
+        <p>Esto todavía no confirma que el pago esté aprobado.</p>
+      </PaymentFeedback>
+    );
   }
   if (current.status === "refused" || current.status === "expired") {
     return (
-      <div className="flex flex-col gap-2">
+      <PaymentFeedback
+        tone="refused"
+        title={current.status === "refused" ? "Autorización rechazada" : "Autorización vencida"}
+      >
         <p role="alert">
           {current.status === "refused"
             ? "No pudimos inscribir la fuente de pago."
@@ -443,20 +508,25 @@ const EnrollmentStatusAction = ({
         <Button disabled={busy} onClick={() => prepare()} type="button">
           Preparar una inscripción nueva
         </Button>
-      </div>
+      </PaymentFeedback>
     );
   }
   return (
-    <div className="flex flex-col gap-2">
-      <output>
+    <PaymentFeedback tone="pending" title="Verificando fuente de pago">
+      <output aria-live="polite">
         {current.status === "verifying"
           ? "Estamos verificando el resultado. No vuelvas a enviar los datos."
           : "Creando tu fuente de pago…"}
       </output>
-      <Button disabled={busy} onClick={() => refresh(current.enrollmentId)} type="button">
+      <Button
+        disabled={busy}
+        onClick={() => refresh(enrollmentFlow(current))}
+        type="button"
+        variant="outline"
+      >
         Consultar estado
       </Button>
-    </div>
+    </PaymentFeedback>
   );
 };
 
@@ -464,22 +534,46 @@ const maximumPaymentStatusRefreshes = 65;
 
 const PaymentSubmissionStatus = ({
   submission,
-}: Readonly<{
-  submission: PaymentSubmission;
-}>): JSX.Element => {
+}: Readonly<{ submission: PaymentSubmission }>): JSX.Element => {
   if (submission.status === "source-verifying") {
-    return <output aria-live="polite">Estamos verificando tu fuente de pago.</output>;
+    return (
+      <PaymentFeedback tone="pending" title="Verificando fuente de pago">
+        <output aria-live="polite">Estamos verificando tu fuente de pago.</output>
+        <p>Esto todavía no confirma que el pago esté aprobado.</p>
+      </PaymentFeedback>
+    );
   }
   if (submission.status === "refused") {
-    return <p role="alert">No pudimos iniciar el pago. Puedes intentarlo de nuevo.</p>;
+    return (
+      <PaymentFeedback tone="refused" title="Pago no iniciado">
+        <p role="alert">No pudimos iniciar el pago. Puedes intentarlo de nuevo.</p>
+      </PaymentFeedback>
+    );
   }
   if (submission.billingAttempt.status === "succeeded") {
-    return <output aria-live="polite">Tu pago fue realizado y tu suscripción está activa.</output>;
+    return (
+      <PaymentFeedback tone="success" title="Pago aprobado">
+        <output aria-live="polite">Tu pago fue realizado y tu suscripción está activa.</output>
+        <p>
+          Tu acceso: <strong>Pro</strong>
+        </p>
+      </PaymentFeedback>
+    );
   }
   if (submission.billingAttempt.status === "failed") {
-    return <p role="alert">Wompi rechazó el pago. Puedes intentarlo de nuevo.</p>;
+    return (
+      <PaymentFeedback tone="refused" title="Pago rechazado">
+        <p role="alert">Wompi rechazó el pago. Puedes intentarlo de nuevo.</p>
+      </PaymentFeedback>
+    );
   }
-  return <></>;
+  return (
+    <PaymentFeedback tone="pending" title="Pago pendiente">
+      <output aria-live="polite">
+        Estamos esperando la confirmación del pago. No vuelvas a enviarlo.
+      </output>
+    </PaymentFeedback>
+  );
 };
 
 type PaymentFlowState =
@@ -570,14 +664,7 @@ const refreshPaymentUntilTerminal = Effect.fn(function* (
     if (pageIsHidden()) continue;
     refreshCount += 1;
     const refreshed = yield* Effect.tryPromise({
-      try: (signal) =>
-        current.value.status === "payment-pending"
-          ? gateway.observeBillingAttempt(
-              current.value.enrollmentId,
-              current.value.billingAttempt.id,
-              signal
-            )
-          : gateway.continue(current.value.enrollmentId, current.billingEmail, signal),
+      try: (signal) => observePayment(gateway, current, signal),
       catch: () => new EnrollmentInteractionFailed(),
     }).pipe(Effect.option);
     if (Option.isSome(refreshed)) {
@@ -644,10 +731,11 @@ const TerminalPaymentFeedback = ({
 const renderPaymentEnrollment = (
   input: DaviplataFormActions & {
     current: PaymentFlowState;
+    offer: SubscriptionOfferPresentation;
     busy: boolean;
     prepare: (replaceFailedSource?: boolean) => void;
     submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
-    refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
+    refresh: (current: PaymentFlowState) => void;
   }
 ): JSX.Element => {
   const { current, busy, prepare, submit, refresh } = input;
@@ -655,19 +743,12 @@ const renderPaymentEnrollment = (
     if (!isAwaitingPaymentStatus(current.value)) {
       return <TerminalPaymentFeedback current={current} busy={busy} prepare={prepare} />;
     }
-    const prepared = current.prepared;
     return (
-      <div className="flex flex-col gap-5">
-        {Option.isSome(prepared) && prepared.value.method !== "daviplata" && (
-          <PreparedEnrollmentForm
-            gateway={input.gateway}
-            onDaviplataSubmitted={input.onDaviplataSubmitted}
-            busy
-            enrollment={prepared.value}
-            submit={(email, fields) => submit(prepared.value, email, fields)}
-          />
-        )}
+      <div className="subscription-payment-status">
         <PaymentSubmissionStatus submission={current.value} />
+        <Button disabled={busy} onClick={() => refresh(current)} type="button" variant="outline">
+          Consultar estado
+        </Button>
       </div>
     );
   }
@@ -676,6 +757,7 @@ const renderPaymentEnrollment = (
     return (
       <div className="flex flex-col gap-5">
         <PreparedEnrollmentForm
+          offer={input.offer}
           gateway={input.gateway}
           onDaviplataSubmitted={input.onDaviplataSubmitted}
           busy={busy}
@@ -696,6 +778,7 @@ const renderPaymentEnrollment = (
 };
 
 const EnrollmentContent = ({
+  offer,
   gateway,
   onDaviplataSubmitted,
   enrollment,
@@ -705,10 +788,11 @@ const EnrollmentContent = ({
   refresh,
 }: Readonly<{
   enrollment: Option.Option<PaymentFlowState>;
+  offer: SubscriptionOfferPresentation;
   busy: boolean;
   prepare: (replaceFailedSource?: boolean) => void;
   submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
-  refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
+  refresh: (current: PaymentFlowState) => void;
 }> &
   DaviplataFormActions): JSX.Element =>
   Option.match(enrollment, {
@@ -716,6 +800,7 @@ const EnrollmentContent = ({
     onSome: (current) =>
       renderPaymentEnrollment({
         current,
+        offer,
         busy,
         prepare,
         submit,
@@ -725,18 +810,12 @@ const EnrollmentContent = ({
       }),
   });
 
-const paymentMethodCopy: Readonly<
-  Record<EnrollmentMethod, Readonly<{ label: string; title: string; privateFields: string }>>
-> = {
-  card: { label: "Tarjeta", title: "Pago con tarjeta", privateFields: "Los datos de tu tarjeta" },
-  nequi: { label: "Nequi", title: "Pago con Nequi", privateFields: "Tu número de Nequi" },
-  daviplata: {
-    label: "DaviPlata",
-    title: "Pago con DaviPlata",
-    privateFields: "Tu documento, número de DaviPlata y código",
-  },
+const focusPaymentHeading: RefCallback<HTMLHeadingElement> = (node) => {
+  node?.focus();
 };
+
 const PaymentDetails = ({
+  offer,
   gateway,
   onDaviplataSubmitted,
   method,
@@ -748,51 +827,36 @@ const PaymentDetails = ({
   refresh,
 }: Readonly<{
   enrollment: Option.Option<PaymentFlowState>;
+  offer: SubscriptionOfferPresentation;
   busy: boolean;
   failed: boolean;
   prepare: (replaceFailedSource?: boolean) => void;
   submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
-  refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
+  refresh: (current: PaymentFlowState) => void;
   method: EnrollmentMethod;
 }> &
   DaviplataFormActions): JSX.Element => (
-  <section aria-label={paymentMethodCopy[method].title}>
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2>{paymentMethodCopy[method].title}</h2>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        {failed ? (
-          <p role="alert">No pudimos continuar. Revisa los datos o intenta más tarde.</p>
-        ) : null}
-        <EnrollmentContent
-          gateway={gateway}
-          onDaviplataSubmitted={onDaviplataSubmitted}
-          busy={busy}
-          enrollment={enrollment}
-          prepare={prepare}
-          refresh={refresh}
-          submit={submit}
-        />
-      </CardContent>
-      <CardFooter>
-        <p className="text-sm text-muted-foreground">
-          {paymentMethodCopy[method].privateFields} viajan directamente desde este navegador a
-          Wompi. Fidy no los recibe ni los conserva.
-        </p>
-      </CardFooter>
-    </Card>
-  </section>
-);
-
-const SubscriptionTerms = ({
-  offer,
-}: Readonly<{ offer: SubscriptionOfferPresentation }>): JSX.Element => (
-  <section aria-label="Condiciones de suscripción" className="flex max-w-3xl flex-col gap-2">
-    <p>{offer.renewalText}</p>
-    <p>{offer.cancellationText}</p>
+  <section className="subscription-payment" aria-label={paymentMethodCopy[method].title}>
+    <h2 ref={focusPaymentHeading} tabIndex={-1} className="subscription-payment-title">
+      {paymentMethodCopy[method].title}
+    </h2>
+    <div className="subscription-mobile-summary">
+      <p>Pro {offer.selectionLabel}</p>
+      <strong>{offer.moneyText}</strong> / {offer.billingUnit}
+    </div>
+    {failed ? (
+      <p role="alert">No pudimos continuar. Revisa los datos o intenta más tarde.</p>
+    ) : null}
+    <EnrollmentContent
+      offer={offer}
+      gateway={gateway}
+      onDaviplataSubmitted={onDaviplataSubmitted}
+      busy={busy}
+      enrollment={enrollment}
+      prepare={prepare}
+      refresh={refresh}
+      submit={submit}
+    />
   </section>
 );
 
@@ -941,38 +1005,34 @@ const useEnrollmentInteraction = (
   };
 };
 
-const OfferSelection = ({
-  disabled,
-  presented,
-  selectedId,
-  select,
-}: Readonly<{
-  disabled: boolean;
-  presented: ReadonlyArray<SubscriptionOfferPresentation>;
-  selectedId: Option.Option<PriceId>;
-  select: (id: PriceId) => void;
-}>): JSX.Element => (
-  <section className="grid gap-4 lg:grid-cols-3" aria-label="Ofertas de suscripción">
-    {presented.map((offer) => (
-      <OfferButton
-        key={offer.id}
-        disabled={disabled}
-        offer={offer}
-        selected={Option.contains(selectedId, offer.id)}
-        select={select}
-      />
-    ))}
-  </section>
-);
-
-const refreshEnrollmentFlow = (
+const observePayment = (
   gateway: EnrollmentGateway,
-  enrollmentId: PreparedEnrollment["enrollmentId"]
-): Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed> =>
-  Effect.tryPromise({
-    try: (signal) => gateway.status(enrollmentId, signal),
+  current: PaymentSubmissionFlowState,
+  signal: AbortSignal
+): Promise<PaymentSubmission> =>
+  current.value.status === "payment-pending"
+    ? gateway.observeBillingAttempt(
+        current.value.enrollmentId,
+        current.value.billingAttempt.id,
+        signal
+      )
+    : gateway.continue(current.value.enrollmentId, current.billingEmail, signal);
+
+const refreshPaymentFlow = (
+  gateway: EnrollmentGateway,
+  current: PaymentFlowState
+): Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed> => {
+  if (current._tag === "PaymentSubmission") {
+    return Effect.tryPromise({
+      try: (signal) => observePayment(gateway, current, signal),
+      catch: () => new EnrollmentInteractionFailed(),
+    }).pipe(Effect.map((value) => submissionFlow(value, current.billingEmail, current.prepared)));
+  }
+  return Effect.tryPromise({
+    try: (signal) => gateway.status(current.value.enrollmentId, signal),
     catch: () => new EnrollmentInteractionFailed(),
   }).pipe(Effect.map(enrollmentFlow));
+};
 
 const submitPaymentFlow = (
   gateway: EnrollmentGateway,
@@ -993,32 +1053,6 @@ const submitPaymentFlow = (
     Effect.map((submission) => submissionFlow(submission, input.email, Option.some(input.prepared)))
   );
 
-const PaymentMethodSelection = ({
-  enabledMethods,
-  selected,
-  disabled,
-  select,
-}: Readonly<{
-  enabledMethods: ReadonlyArray<EnrollmentMethod>;
-  selected: EnrollmentMethod;
-  disabled: boolean;
-  select: (method: EnrollmentMethod) => void;
-}>): JSX.Element => (
-  <section aria-label="Método de pago" className="flex gap-2">
-    {enabledMethods.map((method) => (
-      <Button
-        key={method}
-        type="button"
-        aria-pressed={selected === method}
-        disabled={disabled}
-        onClick={() => select(method)}
-      >
-        {paymentMethodCopy[method].label}
-      </Button>
-    ))}
-  </section>
-);
-
 const PaymentFlowDetails = ({
   gateway,
   offer,
@@ -1031,6 +1065,7 @@ const PaymentFlowDetails = ({
   interaction: EnrollmentInteraction;
 }>): JSX.Element => (
   <PaymentDetails
+    offer={offer}
     gateway={gateway}
     onDaviplataSubmitted={(email, submission) =>
       interaction.start(() => Effect.succeed(submissionFlow(submission, email, Option.none())))
@@ -1044,7 +1079,7 @@ const PaymentFlowDetails = ({
         preparePaymentFlow(gateway, offer.id, { method, replaceFailedSource: replacing })
       )
     }
-    refresh={(id) => interaction.start((gateway) => refreshEnrollmentFlow(gateway, id))}
+    refresh={(current) => interaction.start((gateway) => refreshPaymentFlow(gateway, current))}
     submit={(prepared, email, fields) =>
       interaction.start((gateway) =>
         submitPaymentFlow(gateway, {
@@ -1071,114 +1106,240 @@ const enrollmentAvailability = Atom.family((gateway: Option.Option<EnrollmentGat
 );
 const useEnrollmentMethods = (
   gateway: Option.Option<EnrollmentGateway>
-): ReadonlyArray<EnrollmentMethod> => {
+): Readonly<{
+  enabledMethods: ReadonlyArray<EnrollmentMethod>;
+  refresh: () => void;
+  waiting: boolean;
+  failed: boolean;
+}> => {
   const availabilityAtom = enrollmentAvailability(gateway);
   const availability = useAtomValue(availabilityAtom);
-  return availability._tag === "Success" ? availability.value.enabledMethods : ["card", "nequi"];
+  const refresh = useAtomRefresh(availabilityAtom);
+  return {
+    enabledMethods: availability._tag === "Success" ? availability.value.enabledMethods : [],
+    refresh,
+    waiting: availability.waiting,
+    failed: AsyncResult.isFailure(availability),
+  };
 };
-const makeOfferSelectionActions = (
-  input: Readonly<{
-    interaction: EnrollmentInteraction;
-    method: EnrollmentMethod;
-    selectedId: Option.Option<PriceId>;
-    setMethod: (method: EnrollmentMethod) => void;
-    setSelectedId: (id: Option.Option<PriceId>) => void;
-  }>
-): Readonly<{ method: (choice: EnrollmentMethod) => void; price: (id: PriceId) => void }> => ({
-  method: (choice) => {
-    if (input.method === choice) return;
-    input.setMethod(choice);
-    input.interaction.reset();
-    Option.map(input.selectedId, (id) =>
-      input.interaction.start((gateway) =>
-        preparePaymentFlow(gateway, id, { method: choice, replaceFailedSource: true })
-      )
-    );
-  },
-  price: (id) => {
-    input.setSelectedId(Option.some(id));
-    input.interaction.reset();
-    input.interaction.start((gateway) =>
-      preparePaymentFlow(gateway, id, { method: input.method, replaceFailedSource: false })
-    );
-  },
-});
 const paymentSelectionIsLocked = (current: PaymentFlowState): boolean =>
   current._tag === "PaymentSubmission" &&
   (isAwaitingPaymentStatus(current.value) ||
     (current.value.status === "payment-pending" &&
       current.value.billingAttempt.status === "succeeded"));
 
-const ReadyOffersContent = ({
-  offers,
-  gateway,
-}: Readonly<{
+type SubscriptionStandingPresentation = Readonly<{ state: StandingViewState; refresh: () => void }>;
+const hasPaidAccess = (state: StandingViewState): boolean =>
+  state._tag === "Ready" &&
+  state.standing.accessTier === "pro" &&
+  Option.isSome(state.standing.paidSubscription);
+
+type ReadyOffersProps = Readonly<{
+  standing: SubscriptionStandingPresentation;
   offers: SubscriptionOffers;
   gateway: Option.Option<EnrollmentGateway>;
-}>): JSX.Element => {
+}>;
+type SubscriptionSelection = Readonly<{
+  selectedId: Option.Option<PriceId>;
+  method: EnrollmentMethod;
+  checkout: boolean;
+  enabledMethods: ReadonlyArray<EnrollmentMethod>;
+  refreshMethods: () => void;
+  methodsWaiting: boolean;
+  methodsFailed: boolean;
+  interaction: EnrollmentInteraction;
+  presented: ReadonlyArray<SubscriptionOfferPresentation>;
+  disabled: boolean;
+  selectedOffer: Option.Option<SubscriptionOfferPresentation>;
+  canContinue: boolean;
+  selectPrice: (id: PriceId) => void;
+  selectMethod: (method: EnrollmentMethod) => void;
+  changeSelection: () => void;
+  continueToPayment: () => void;
+}>;
+const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): SubscriptionSelection => {
   const [selectedId, setSelectedId] = useState<Option.Option<PriceId>>(Option.none);
   const [method, setMethod] = useState<EnrollmentMethod>("card");
-  const enabledMethods = useEnrollmentMethods(gateway);
+  const [checkout, setCheckout] = useState(false);
+  const [replaceFailedSource, setReplaceFailedSource] = useState(false);
+  const availability = useEnrollmentMethods(gateway);
+  const { enabledMethods } = availability;
   const authorizationLocked = useAtomValue(DaviplataAuthorizationLock.use());
   const interaction = useEnrollmentInteraction(gateway);
-  const { enrollment, busy, interrupt } = interaction;
-  const select = makeOfferSelectionActions({
-    interaction,
-    method,
-    selectedId,
-    setMethod,
-    setSelectedId,
-  });
-  const refreshLifetimeRef = usePaymentRefreshLifetimeRef(interrupt);
   const presented = offers.map(presentSubscriptionOffer);
-  const sharedTerms = presentSubscriptionOffer(offers[0]);
-  const selectionDisabled =
-    authorizationLocked || Option.exists(enrollment, paymentSelectionIsLocked);
+  const disabled =
+    interaction.busy ||
+    authorizationLocked ||
+    Option.exists(interaction.enrollment, paymentSelectionIsLocked);
   const selectedOffer = Option.flatMap(selectedId, (id) =>
     EffectArray.findFirst(presented, (offer) => offer.id === id)
   );
+  const canContinue = !disabled && Option.isSome(selectedOffer) && enabledMethods.includes(method);
+  return {
+    selectedId,
+    method,
+    checkout,
+    enabledMethods,
+    refreshMethods: availability.refresh,
+    methodsWaiting: availability.waiting,
+    methodsFailed: availability.failed,
+    interaction,
+    presented,
+    disabled,
+    selectedOffer,
+    canContinue,
+    selectPrice: (id: PriceId): void => {
+      setSelectedId(Option.some(id));
+      interaction.reset();
+    },
+    selectMethod: (choice: EnrollmentMethod): void => {
+      if (choice === method) return;
+      setMethod(choice);
+      setReplaceFailedSource(true);
+      interaction.reset();
+    },
+    changeSelection: (): void => {
+      if (disabled) return;
+      interaction.reset();
+      setCheckout(false);
+      requestAnimationFrame(() => document.getElementById("subscription-period-title")?.focus());
+    },
+    continueToPayment: (): void => {
+      if (!canContinue) return;
+      Option.map(selectedOffer, (offer) => {
+        setCheckout(true);
+        interaction.start((gateway) =>
+          preparePaymentFlow(gateway, offer.id, { method, replaceFailedSource })
+        );
+      });
+    },
+  };
+};
+const methodAvailabilityMessage = (
+  selection: Pick<SubscriptionSelection, "methodsWaiting" | "methodsFailed">
+): string => {
+  if (selection.methodsWaiting) return "Consultando métodos de pago…";
+  if (selection.methodsFailed) return "No pudimos consultar los métodos de pago. Intenta de nuevo.";
+  return "No hay métodos de pago disponibles en este momento.";
+};
+const OfferOverview = ({
+  selection,
+  terms,
+}: Readonly<{
+  selection: SubscriptionSelection;
+  terms: SubscriptionOfferPresentation;
+}>): JSX.Element => (
+  <>
+    <OfferSelection
+      disabled={selection.disabled}
+      presented={selection.presented}
+      selectedId={selection.selectedId}
+      select={selection.selectPrice}
+    />
+    <SubscriptionTerms offer={terms} />
+    <PaymentMethodSelection
+      enabledMethods={selection.enabledMethods}
+      selected={selection.method}
+      disabled={selection.disabled}
+      select={selection.selectMethod}
+    />
+    {selection.enabledMethods.length === 0 && (
+      <div>
+        <p aria-live="polite" className="subscription-muted">
+          {methodAvailabilityMessage(selection)}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={selection.methodsWaiting}
+          onClick={selection.refreshMethods}
+        >
+          Actualizar métodos
+        </Button>
+      </div>
+    )}
+    <div className="subscription-continue">
+      <Button type="button" disabled={!selection.canContinue} onClick={selection.continueToPayment}>
+        {paymentMethodCopy[selection.method].continueLabel}
+      </Button>
+    </div>
+  </>
+);
+const Checkout = ({
+  selection,
+  gateway,
+}: Readonly<{
+  selection: SubscriptionSelection;
+  gateway: Option.Option<EnrollmentGateway>;
+}>): JSX.Element => (
+  <>
+    <div className="subscription-back">
+      <Button
+        variant="ghost"
+        type="button"
+        disabled={selection.disabled}
+        onClick={selection.changeSelection}
+      >
+        <HugeiconsIcon icon={ArrowLeft01Icon} size={22} aria-hidden="true" />
+        Cambiar selección
+      </Button>
+    </div>
+    {Option.match(selection.selectedOffer, {
+      onNone: () => null,
+      onSome: (offer) => (
+        <PaymentFlowDetails
+          key={`${selection.method}:${offer.id}`}
+          gateway={gateway}
+          offer={offer}
+          method={selection.method}
+          interaction={selection.interaction}
+        />
+      ),
+    })}
+  </>
+);
+const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
+  const selection = useSubscriptionSelection(props);
+  const refreshLifetimeRef = usePaymentRefreshLifetimeRef(selection.interaction.interrupt);
+  const { standing } = props;
+  const paid = hasPaidAccess(standing.state);
   return (
-    <div ref={refreshLifetimeRef} className="flex flex-col gap-6">
-      <SubscriptionTerms offer={sharedTerms} />
-      <PaymentMethodSelection
-        enabledMethods={enabledMethods}
-        selected={method}
-        disabled={busy || selectionDisabled}
-        select={select.method}
+    <div
+      ref={refreshLifetimeRef}
+      className="subscription-columns"
+      data-checkout={selection.checkout}
+      data-method={selection.method}
+      data-paid={paid}
+    >
+      <div className="subscription-main">
+        {selection.checkout ? (
+          <Checkout selection={selection} gateway={props.gateway} />
+        ) : (
+          <>
+            <SubscriptionStandingView state={standing.state} onRetry={standing.refresh} />
+            {!paid && (
+              <OfferOverview
+                selection={selection}
+                terms={presentSubscriptionOffer(props.offers[0])}
+              />
+            )}
+          </>
+        )}
+      </div>
+      <SubscriptionSummary
+        offer={selection.selectedOffer}
+        checkout={selection.checkout}
+        paid={paid}
       />
-      <OfferSelection
-        disabled={busy || selectionDisabled}
-        presented={presented}
-        selectedId={selectedId}
-        select={select.price}
-      />
-      {Option.match(selectedOffer, {
-        onNone: () => null,
-        onSome: (offer) => (
-          <PaymentFlowDetails
-            key={`${method}:${offer.id}`}
-            gateway={gateway}
-            offer={offer}
-            method={method}
-            interaction={interaction}
-          />
-        ),
-      })}
     </div>
   );
 };
 
-const ReadyOffers = ({
-  offers,
-  gateway,
-}: Readonly<{
-  offers: SubscriptionOffers;
-  gateway: Option.Option<EnrollmentGateway>;
-}>): JSX.Element => (
+const ReadyOffers = ({ offers, gateway, standing }: ReadyOffersProps): JSX.Element => (
   <PaymentFlow.Provider>
     <PaymentStatusRefresh.Provider>
       <DaviplataAuthorizationLock.Provider>
-        <ReadyOffersContent gateway={gateway} offers={offers} />
+        <ReadyOffersContent gateway={gateway} offers={offers} standing={standing} />
       </DaviplataAuthorizationLock.Provider>
     </PaymentStatusRefresh.Provider>
   </PaymentFlow.Provider>
@@ -1218,7 +1379,9 @@ const LoadFailure = ({
 const SubscriptionOffersContent = ({
   state,
   gateway,
+  standing,
 }: Readonly<{
+  standing: SubscriptionStandingPresentation;
   state: SubscriptionOffersPageState;
   gateway: Option.Option<EnrollmentGateway>;
 }>): JSX.Element => {
@@ -1228,14 +1391,14 @@ const SubscriptionOffersContent = ({
     case "Loading":
       return <LoadingOffers />;
     case "Ready":
-      return <ReadyOffers gateway={gateway} offers={state.offers} />;
+      return <ReadyOffers gateway={gateway} offers={state.offers} standing={standing} />;
     case "Refreshing":
       return (
         <>
           <p aria-live="polite" className="text-sm text-muted-foreground">
             Actualizando ofertas…
           </p>
-          <ReadyOffers gateway={gateway} offers={state.offers} />
+          <ReadyOffers gateway={gateway} offers={state.offers} standing={standing} />
         </>
       );
     case "RefreshFailure":
@@ -1249,7 +1412,7 @@ const SubscriptionOffersContent = ({
             title="No pudimos actualizar las ofertas"
             waiting={state.waiting}
           />
-          <ReadyOffers gateway={gateway} offers={state.offers} />
+          <ReadyOffers gateway={gateway} offers={state.offers} standing={standing} />
         </>
       );
     case "AuthenticationRequired":
@@ -1265,21 +1428,51 @@ const SubscriptionOffersContent = ({
   }
 };
 
+const StandingWithoutOffers = ({
+  standing,
+  children,
+}: Readonly<{
+  standing: SubscriptionStandingPresentation;
+  children: JSX.Element;
+}>): JSX.Element => (
+  <div className="subscription-columns" data-paid={hasPaidAccess(standing.state)}>
+    <div className="subscription-main">
+      <SubscriptionStandingView state={standing.state} onRetry={standing.refresh} />
+      <div className="subscription-offers-feedback">{children}</div>
+    </div>
+    <SubscriptionSummary
+      paid={hasPaidAccess(standing.state)}
+      offer={Option.none()}
+      checkout={false}
+    />
+  </div>
+);
+
 export const SubscriptionOffersView = ({
   state,
   gateway,
+  standing,
 }: Readonly<{
   state: SubscriptionOffersPageState;
   gateway: Option.Option<EnrollmentGateway>;
-}>): JSX.Element => (
-  <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-    <header className="flex max-w-3xl flex-col gap-2">
-      <Badge variant="secondary">Fidy Pro</Badge>
-      <h1 className="font-heading text-3xl font-semibold tracking-tight">Mejora tu suscripción</h1>
-    </header>
-    <SubscriptionOffersContent gateway={gateway} state={state} />
-  </main>
-);
+  standing: SubscriptionStandingPresentation;
+}>): JSX.Element => {
+  const content = <SubscriptionOffersContent gateway={gateway} state={state} standing={standing} />;
+  const hasOfferContent =
+    state._tag === "Ready" ||
+    state._tag === "Refreshing" ||
+    state._tag === "RefreshFailure" ||
+    state._tag === "AuthenticationRequired";
+  return (
+    <SubscriptionWorkspace>
+      {hasOfferContent ? (
+        content
+      ) : (
+        <StandingWithoutOffers standing={standing}>{content}</StandingWithoutOffers>
+      )}
+    </SubscriptionWorkspace>
+  );
+};
 
 const subscriptionOffersQuery = Atom.family((client: FidyClient) =>
   client.query("subscription", "listSubscriptionOffers", {})
@@ -1288,98 +1481,17 @@ const subscriptionStatusQuery = Atom.family((client: FidyClient) =>
   client.query("subscription", "getSubscriptionStatus", {})
 );
 
-const billingAttemptLabel = (status: "pending" | "succeeded" | "failed"): string => {
-  switch (status) {
-    case "pending":
-      return "pendiente";
-    case "succeeded":
-      return "aprobado";
-    case "failed":
-      return "fallido";
-  }
-};
-
-const standingDateFormatter = new Intl.DateTimeFormat("es-CO", {
-  dateStyle: "long",
-  timeZone: "America/Bogota",
-});
-
-type StandingViewState =
-  | Readonly<{ _tag: "Initial" }>
-  | Readonly<{ _tag: "Failure" }>
-  | Readonly<{ _tag: "Ready"; standing: SubscriptionStatus }>;
-
-export const SubscriptionStandingView = ({
-  state,
-  onRetry,
-}: Readonly<{ state: StandingViewState; onRetry: () => void }>): JSX.Element => {
-  if (state._tag === "Initial") return <Skeleton className="h-24 w-full" />;
-  if (state._tag === "Failure") {
-    return (
-      <Alert>
-        <AlertTitle>Estado no disponible</AlertTitle>
-        <AlertDescription>
-          No pudimos consultar tu suscripción. Tus datos siguen disponibles.
-        </AlertDescription>
-        <Button type="button" variant="outline" onClick={onRetry}>
-          Reintentar
-        </Button>
-      </Alert>
-    );
-  }
-  const { accessTier, trialPeriod, paidSubscription, recentAttempts } = state.standing;
-  const lastAttempt = recentAttempts[0];
-  const periodEnd = Option.isSome(paidSubscription)
-    ? paidSubscription.value.endsAt.epochMilliseconds
-    : trialPeriod.endsAt.epochMilliseconds;
-  const periodLabel = standingDateFormatter.format(periodEnd);
-  return (
-    <Card aria-label="Estado de la suscripción">
-      <CardHeader>
-        <CardTitle>Tu acceso: {accessTier === "pro" ? "Pro" : "Gratis"}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        <p>
-          {Option.isSome(paidSubscription) ? "Último período pagado" : "Período de prueba"}: hasta
-          el {periodLabel}.
-        </p>
-        {Option.isSome(paidSubscription) && (
-          <p>
-            Precio cobrado: {formatMoney({ locale: "es-CO", money: paidSubscription.value.money })}.
-          </p>
-        )}
-        {lastAttempt !== undefined && (
-          <p>Último intento de cobro: {billingAttemptLabel(lastAttempt.status)}.</p>
-        )}
-        <p className="text-muted-foreground">
-          Tu historial permanece disponible aunque termine el acceso Pro. Las cuotas no son un
-          bloqueo de suscripción.
-        </p>
-        <RefreshButton
-          type="button"
-          variant="outline"
-          onClick={onRetry}
-          label="Actualizar estado"
-        />
-      </CardContent>
-    </Card>
-  );
-};
-
-const SubscriptionStanding = (): JSX.Element => {
+const useSubscriptionStanding = (): SubscriptionStandingPresentation => {
   const router = useRouter();
   const query = subscriptionStatusQuery(router.options.context.apiClient);
   const status = useAtomValue(query);
   const refresh = useAtomRefresh(query);
   const view = presentCanonicalQuery(status);
-  return (
-    <SubscriptionStandingView
-      state={
-        view._tag === "Ready" ? { _tag: "Ready", standing: view.value.data } : { _tag: view._tag }
-      }
-      onRetry={refresh}
-    />
-  );
+  return {
+    state:
+      view._tag === "Ready" ? { _tag: "Ready", standing: view.value.data } : { _tag: view._tag },
+    refresh,
+  };
 };
 
 const readyOffersState = ({
@@ -1398,16 +1510,10 @@ const readyOffersState = ({
   return { _tag: "Ready", offers };
 };
 
-const StandingAndOffers = ({ children }: Readonly<{ children: JSX.Element }>): JSX.Element => (
-  <>
-    <SubscriptionStanding />
-    {children}
-  </>
-);
-
 const AuthorizedSubscriptionOffers = (): JSX.Element => {
   const router = useRouter();
   const { authentication } = useSession();
+  const standing = useSubscriptionStanding();
   const enrollmentClient = useSubscriptionEnrollmentClient();
   const [gateway] = useState(() => makeEnrollmentGateway(enrollmentClient));
   const offers = subscriptionOffersQuery(router.options.context.apiClient);
@@ -1415,47 +1521,48 @@ const AuthorizedSubscriptionOffers = (): JSX.Element => {
   const refresh = useAtomRefresh(offers);
   if (authentication === "expired") {
     return (
-      <SubscriptionOffersView gateway={Option.none()} state={{ _tag: "AuthenticationRequired" }} />
+      <SubscriptionOffersView
+        standing={standing}
+        gateway={Option.none()}
+        state={{ _tag: "AuthenticationRequired" }}
+      />
     );
   }
   const queryState = presentCanonicalQuery(result);
   switch (queryState._tag) {
     case "Initial":
       return (
-        <StandingAndOffers>
-          <SubscriptionOffersView
-            gateway={Option.none()}
-            state={{ _tag: queryState.waiting ? "Loading" : "Initial" }}
-          />
-        </StandingAndOffers>
+        <SubscriptionOffersView
+          standing={standing}
+          gateway={Option.none()}
+          state={{ _tag: queryState.waiting ? "Loading" : "Initial" }}
+        />
       );
     case "Failure":
       return (
-        <StandingAndOffers>
-          <SubscriptionOffersView
-            gateway={Option.none()}
-            state={{
-              _tag: "LoadFailure",
-              boundaryFailure: queryState.failure._tag !== "DeclaredFailure",
-              onRetry: refresh,
-              waiting: queryState.waiting,
-            }}
-          />
-        </StandingAndOffers>
+        <SubscriptionOffersView
+          standing={standing}
+          gateway={Option.none()}
+          state={{
+            _tag: "LoadFailure",
+            boundaryFailure: queryState.failure._tag !== "DeclaredFailure",
+            onRetry: refresh,
+            waiting: queryState.waiting,
+          }}
+        />
       );
     case "Ready":
       return (
-        <StandingAndOffers>
-          <SubscriptionOffersView
-            gateway={Option.some(gateway)}
-            state={readyOffersState({
-              offers: queryState.value.data,
-              refreshFailure: Option.isSome(queryState.refreshFailure),
-              refreshing: queryState.waiting,
-              onRetry: refresh,
-            })}
-          />
-        </StandingAndOffers>
+        <SubscriptionOffersView
+          standing={standing}
+          gateway={Option.some(gateway)}
+          state={readyOffersState({
+            offers: queryState.value.data,
+            refreshFailure: Option.isSome(queryState.refreshFailure),
+            refreshing: queryState.waiting,
+            onRetry: refresh,
+          })}
+        />
       );
   }
 };

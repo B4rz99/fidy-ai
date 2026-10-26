@@ -460,7 +460,7 @@ const finishRealPairing = ({
       yield* wait(expect(page.locator("[data-sonner-toast]")).toContainText("La Cocina"));
       yield* wait(editAndCheckDashboard(page));
       yield* wait(openUpgradeThroughCore(page));
-      yield* wait(expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible());
+      yield* wait(expect(page.getByRole("button", { name: /^mensual\b/iu })).toBeVisible());
       yield* wait(page.goto("/app/transactions"));
       const loggedOut = page.waitForResponse("**/web/session/logout");
       yield* wait(page.getByRole("button", { name: "Cerrar sesión" }).click());

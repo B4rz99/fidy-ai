@@ -3,6 +3,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Calendar03Icon,
   CreditCardIcon,
+  CrownIcon,
   Home01Icon,
   Logout02Icon,
   Wallet01Icon,
@@ -65,6 +66,15 @@ export const SignedInNavigation = ({
         </Link>
       ))}
       <SettingsNavigation />
+      <Link
+        to="/upgrade"
+        onClick={dismissCompactNavigation}
+        className="application-navigation-link"
+        activeProps={{ className: "application-navigation-active" }}
+      >
+        <HugeiconsIcon icon={CrownIcon} size={22} strokeWidth={1.5} aria-hidden="true" />
+        Suscripción
+      </Link>
       <NavigationFooter signedIn={signedIn} loggingOut={loggingOut} onLogout={onLogout} />
     </nav>
   );

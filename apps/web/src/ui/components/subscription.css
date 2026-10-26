@@ -533,6 +533,7 @@
   .subscription-workspace .subscription-offer > [data-slot="button"] {
     display: grid;
     grid-template-columns: 28px minmax(0, 1fr);
+    justify-items: start;
     column-gap: 18px;
     row-gap: 3px;
     padding: 20px 0;

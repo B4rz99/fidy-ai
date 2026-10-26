@@ -330,6 +330,67 @@ jobs:
           else
             /usr/bin/time -p bun run verify -- --group browser
           fi
+      - name: Temporary exact-revision review-return ABBA
+        if: ${{ !cancelled() && matrix.shard == 1 && github.event.pull_request.number == 1553 && github.run_attempt == 1 }}
+        timeout-minutes: 15
+        env:
+          REVIEW_ABBA_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEW_ABBA_HEAD" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid diagnostic head SHA' >&2; exit 2; }
+          git fetch --no-tags --depth=1 origin "$REVIEW_ABBA_HEAD"
+          subject="$(git show -s --format=%s "$REVIEW_ABBA_HEAD")"
+          if [[ "$subject" != *'[review-return-abba]'* ]]; then
+            echo 'ABBA is opt-in for one publication commit only.'
+            exit 0
+          fi
+          baseline=d73208c3e19585d854b032faa4b735924aceda20
+          candidate=86ed753df11fdd240792f6bf3ec2dc8f73738184
+          evidence="$PWD/apps/web/test-results/review-return-abba"
+          mkdir -p "$evidence"
+          sandbox="$(mktemp -d "$RUNNER_TEMP/review-return-abba.XXXXXX")"
+          cleanup() {
+            for label in A B; do
+              if [[ -d "$sandbox/$label" ]]; then
+                git worktree remove --force "$sandbox/$label" || echo "Cleanup failed for owned worktree $label" >&2
+              fi
+            done
+            rm -rf "$sandbox"
+          }
+          trap cleanup EXIT
+          git fetch --no-tags --depth=1 origin "$baseline" "$candidate"
+          printf 'A1\t%s\nB1\t%s\nB2\t%s\nA2\t%s\n' "$baseline" "$candidate" "$candidate" "$baseline" > "$evidence/plan.tsv"
+          for label in A B; do
+            revision="$baseline"
+            if [[ "$label" == B ]]; then revision="$candidate"; fi
+            git worktree add --detach --no-checkout "$sandbox/$label" "$revision"
+            git -C "$sandbox/$label" sparse-checkout set --no-cone '/*' '!/.repos/'
+            git -C "$sandbox/$label" checkout --detach "$revision"
+            (cd "$sandbox/$label" && bash scripts/install-workspace.sh --unit-tests) > "$evidence/$label-install.log" 2>&1
+          done
+          failed=0
+          while IFS=$'\t' read -r sequence revision; do
+            label="${sequence:0:1}"
+            output="$evidence/$sequence"
+            mkdir -p "$output"
+            scratch="$(mktemp -d /dev/shm/fidy-review-abba.XXXXXX)"
+            status=0
+            (
+              cd "$sandbox/$label/apps/web"
+              export CI=true BROWSER_TEST_SHARD=1/2 TMPDIR="$scratch"
+              export NATIVE_TEST_IMAGE_CACHE="$scratch/pristine-native-images"
+              export PLAYWRIGHT_JSON_OUTPUT_FILE="$output/browser-timings.json"
+              bun --bun playwright test --config playwright.config.ts --project performance \
+                --global-timeout=180000 needs-review.spec.ts \
+                --grep 'returns from (Presupuestos|Transacciones) with its review form and original already available'
+            ) > "$output/output.log" 2>&1 || status=$?
+            report=present
+            if [[ ! -s "$output/browser-timings.json" ]]; then report=missing; failed=1; fi
+            printf '%s\t%s\t%s\t%s\n' "$sequence" "$revision" "$status" "$report" >> "$evidence/results.tsv"
+            if [[ "$status" != 0 ]]; then failed=1; fi
+            rm -rf "$scratch"
+          done < "$evidence/plan.tsv"
+          exit "$failed"
       - name: Preserve browser timing evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -341,6 +402,7 @@ jobs:
             apps/web/test-results/verify-browser.json
             apps/web/test-results/dashboard-core-*/trace.zip
             apps/web/test-results/settings-visual/**
+            apps/web/test-results/review-return-abba/**
             apps/web/test-results/subscription-visual/**
           if-no-files-found: error
           retention-days: 7

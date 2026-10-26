@@ -120,6 +120,34 @@ const chooseMonthly = Effect.fnUntraced(function* (page: Page) {
     page.getByRole("button", { name: /^mensual\b/iu }).click({ signal })
   );
 });
+const renderedTextBounds = (element: Element): Readonly<Pick<DOMRect, "x" | "y" | "height">> => {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const bounds = range.getBoundingClientRect();
+  return { x: bounds.x, y: bounds.y, height: bounds.height };
+};
+const expectMobileOfferAlignment = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
+  for (const period of ["semanal", "mensual", "anual"]) {
+    const offer = page.getByRole("button", { name: new RegExp(`^${period}\\b`, "iu") });
+    const label = yield* Effect.tryPromise((signal) =>
+      offer
+        .getByText(new RegExp(`^${period}$`, "iu"))
+        .evaluate(renderedTextBounds, undefined, { signal })
+    );
+    const price = yield* Effect.tryPromise((signal) =>
+      offer.getByText(/COP$/u).evaluate(renderedTextBounds, undefined, { signal })
+    );
+    const unit = yield* Effect.tryPromise((signal) =>
+      offer.getByText(/^por /u).evaluate(renderedTextBounds, undefined, { signal })
+    );
+    expect(label.height).toBeGreaterThan(0);
+    expect(price.x).toBeCloseTo(label.x, 0);
+    expect(unit.x).toBeCloseTo(label.x, 0);
+    expect(price.y).toBeGreaterThanOrEqual(label.y + label.height);
+    expect(unit.y).toBeGreaterThanOrEqual(price.y + price.height);
+  }
+});
 const continueWith = Effect.fnUntraced(function* (page: Page, method: MethodLabel) {
   if (method !== "tarjeta") {
     yield* Effect.tryPromise((signal) =>
@@ -191,6 +219,7 @@ for (const viewport of [desktop, mobile]) {
           expect(observed.preparations).toEqual([]);
           yield* chooseMonthly(page);
           expect(observed.preparations).toEqual([]);
+          if (viewport.name === "mobile") yield* expectMobileOfferAlignment(page);
           yield* capture(page, `overview-${theme}-${viewport.name}`);
           yield* continueWith(page, "tarjeta");
           yield* Effect.tryPromise((signal) =>

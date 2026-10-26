@@ -293,6 +293,26 @@ it("trace accumulation is bounded and retains fixed replay markers", () => {
   });
 });
 
+it("original-interval markers retain timing only, never their attached arguments", () => {
+  const trace = collectReviewTrace();
+  for (const name of ["fidy-review-original-start", "fidy-review-original-visible"]) {
+    trace.collect({
+      value: [{ name, ph: "R", pid: 1, tid: 2, ts: 1000, args: { text: "private" } }],
+    });
+  }
+  expect(trace.snapshot()).toEqual({
+    traceEvents: ["fidy-review-original-start", "fidy-review-original-visible"].map((name) => ({
+      name,
+      cat: "blink.user_timing",
+      ph: "R",
+      pid: 1,
+      tid: 2,
+      ts: 1000,
+    })),
+    truncated: false,
+  });
+});
+
 it("trace collection rejects malformed CDP envelopes without throwing", () => {
   const trace = collectReviewTrace();
   for (const event of [null, undefined, "unsafe", {}, { value: null }, { value: "unsafe" }]) {

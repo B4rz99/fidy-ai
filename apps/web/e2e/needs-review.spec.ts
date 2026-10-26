@@ -3,7 +3,11 @@ import type { Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
-import { captureReviewEntryReplay, withReviewEntryEvidence } from "./review-entry-diagnostics";
+import {
+  captureReviewEntryReplay,
+  traceOriginalReviewReturn,
+  withReviewEntryEvidence,
+} from "./review-entry-diagnostics";
 
 const { expect, test } = playwright;
 test.describe.configure({ mode: "parallel" });
@@ -846,6 +850,7 @@ for (const [destination, identity] of [
         yield* Effect.tryPromise(() =>
           signInNavigationPerformanceThroughCore({ page, request, identity })
         );
+        const trace = yield* traceOriginalReviewReturn(page, test.info(), destination);
         yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
         yield* Effect.tryPromise(() =>
           page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
@@ -887,7 +892,7 @@ for (const [destination, identity] of [
         yield* Effect.tryPromise(() =>
           expect(page.locator("body")).toHaveAttribute("data-review-entry-milliseconds", /[0-9]/u)
         );
-        yield* recordReviewReturn(page, destination);
+        yield* recordReviewReturn(page, destination, trace.stop);
         if (destination === "Transacciones") {
           yield* Effect.tryPromise(() => verifyPrivacyDisposesReview(page));
         }
@@ -897,7 +902,7 @@ for (const [destination, identity] of [
         yield* Effect.tryPromise(() =>
           expect(page.getByText("Compra en Café — $13.500", { exact: true })).toHaveCount(0)
         );
-      })
+      }).pipe(Effect.scoped)
     )
   );
 }
@@ -967,9 +972,12 @@ const recordReviewEntry = (page: Page): Promise<void> =>
 
 const recordReviewReturn = Effect.fnUntraced(function* (
   page: Page,
-  destination: "Presupuestos" | "Transacciones"
+  destination: "Presupuestos" | "Transacciones",
+  stopTrace: Effect.Effect<void>
 ) {
-  const measurement = Effect.tryPromise(() => recordReviewEntry(page));
+  const measurement = Effect.tryPromise(() => recordReviewEntry(page)).pipe(
+    Effect.ensuring(stopTrace)
+  );
   yield* destination === "Transacciones"
     ? withReviewEntryEvidence(
         measurement,

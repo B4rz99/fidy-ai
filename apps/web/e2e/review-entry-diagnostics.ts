@@ -1,5 +1,5 @@
 import type { CDPSession, Page, Request, TestInfo } from "@playwright/test";
-import { Cause, Deferred, Effect, Option, Schema } from "effect";
+import { Cause, Config, Deferred, Effect, Option, Schema } from "effect";
 import { dual } from "effect/Function";
 import { apiOrigin } from "./http-fixtures";
 
@@ -73,6 +73,8 @@ const TraceEvent = Schema.Struct({
     "V8.GCCompactor",
     "fidy-review-replay-start",
     "fidy-review-replay-visible",
+    "fidy-review-original-start",
+    "fidy-review-original-visible",
   ]),
   ph: Schema.Literals(["B", "E", "X", "I", "R", "b", "e", "n"]),
   pid: Schema.Finite,
@@ -167,10 +169,46 @@ const markReviewReplay = (): (() => void) => {
 
 const releaseReplay = (release: () => void): void => release();
 
+/** Marks bracket the unchanged first-return observer; neither marker reads layout or form data. */
+const markOriginalReviewReturn = (): (() => void) => {
+  let entries = 0;
+  let disconnect = (): void => {};
+  const start = (event: Event): void => {
+    if (
+      !(event.target instanceof Element) ||
+      event.target.closest("a")?.pathname !== "/app/needs-review"
+    ) {
+      return;
+    }
+    entries++;
+    if (entries !== 2) return;
+    document.removeEventListener("click", start, true);
+    performance.mark("fidy-review-original-start");
+    const observer = new MutationObserver(() => {
+      performance.mark("fidy-review-original-visible");
+      observer.disconnect();
+    });
+    disconnect = (): void => observer.disconnect();
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["data-review-entry-milliseconds"],
+    });
+  };
+  document.addEventListener("click", start, true);
+  return () => {
+    document.removeEventListener("click", start, true);
+    disconnect();
+    performance.clearMarks("fidy-review-original-start");
+    performance.clearMarks("fidy-review-original-visible");
+  };
+};
+
+type TraceJourney = "original" | "replay";
+
 const finishTrace = Effect.fnUntraced(function* (
   session: CDPSession,
   trace: ReturnType<typeof collectReviewTrace>,
-  information: TestInfo
+  { information, journey }: Readonly<{ information: TestInfo; journey: TraceJourney }>
 ) {
   const completed = yield* Deferred.make<boolean, Schema.SchemaError>();
   const context = yield* Effect.context<never>();
@@ -193,31 +231,42 @@ const finishTrace = Effect.fnUntraced(function* (
     displayTimeUnit: "ms",
     dataLossOccurred,
     limitation:
-      "One warmer traced replay after an untraced failure; not a replacement gate measurement.",
+      journey === "original"
+        ? "Instrumented first return: CDP tracing and sibling markers add overhead. Not equivalent to an uninstrumented gate measurement."
+        : "One warmer traced replay after failure; not a replacement gate measurement.",
   });
   yield* reviewDiagnosticRequest(() =>
-    information.attach("review-return-replay-trace", {
+    information.attach(`review-return-${journey}-trace`, {
       body: report,
       contentType: "application/json",
     })
   );
 });
 
-const traceReviewReplay = Effect.fnUntraced(function* (page: Page, information: TestInfo) {
+const startReviewTrace = Effect.fnUntraced(function* (
+  page: Page,
+  information: TestInfo,
+  journey: TraceJourney
+) {
   const session = yield* Effect.acquireRelease(
     reviewDiagnosticRequest(() => page.context().newCDPSession(page)),
     (owned) => reviewDiagnosticRequest(() => owned.detach()).pipe(Effect.exit)
   );
   const trace = collectReviewTrace();
   session.on("Tracing.dataCollected", trace.collect);
-  yield* Effect.addFinalizer(() =>
-    finishTrace(session, trace, information).pipe(
+  let stopped = false;
+  const stop = Effect.suspend(() => {
+    if (stopped) return Effect.void;
+    stopped = true;
+    return finishTrace(session, trace, { information, journey }).pipe(
       Effect.interruptible,
       Effect.timeout("2 seconds"),
       Effect.scoped,
-      Effect.exit
-    )
-  );
+      Effect.exit,
+      Effect.asVoid
+    );
+  });
+  yield* Effect.addFinalizer(() => stop);
   yield* reviewDiagnosticRequest(() =>
     session.send("Tracing.start", {
       transferMode: "ReportEvents",
@@ -230,6 +279,36 @@ const traceReviewReplay = Effect.fnUntraced(function* (page: Page, information: 
       },
     })
   );
+  return { stop };
+});
+
+/** Temporary opt-in, started after synthetic login and before the first Review entry. */
+export const traceOriginalReviewReturn = Effect.fnUntraced(function* (
+  page: Page,
+  information: TestInfo,
+  destination: "Presupuestos" | "Transacciones"
+) {
+  if (destination !== "Transacciones") return { stop: Effect.void };
+  const enabled = yield* Config.String("FIDY_REVIEW_ORIGINAL_TRACE").pipe(Config.withDefault(""));
+  if (enabled !== "1") return { stop: Effect.void };
+  information.annotations.push({
+    type: "instrumented-original-return",
+    description: "CDP tracing and sibling marks add overhead; not an uninstrumented gate pass.",
+  });
+  const trace = yield* startReviewTrace(page, information, "original");
+  yield* Effect.acquireRelease(
+    reviewDiagnosticRequest(() => page.evaluateHandle(markOriginalReviewReturn)),
+    (cleanup) =>
+      reviewDiagnosticRequest(() => cleanup.evaluate(releaseReplay)).pipe(
+        Effect.ensuring(reviewDiagnosticRequest(() => cleanup.dispose()).pipe(Effect.exit)),
+        Effect.exit
+      )
+  );
+  return trace;
+});
+
+const traceReviewReplay = Effect.fnUntraced(function* (page: Page, information: TestInfo) {
+  yield* startReviewTrace(page, information, "replay");
   yield* Effect.acquireRelease(
     reviewDiagnosticRequest(() => page.evaluateHandle(markReviewReplay)),
     (cleanup) =>
@@ -271,7 +350,11 @@ export const captureReviewEntryReplay = Effect.fnUntraced(function* (
   );
   yield* reviewDiagnosticRequest(() =>
     information.attach("review-entry-failed-duration", {
-      body: `${Number(original)} ms (original untraced measurement)`,
+      body: information.annotations.some(
+        (annotation) => annotation.type === "instrumented-original-return"
+      )
+        ? `${Number(original)} ms (original instrumented measurement; tracing adds overhead)`
+        : `${Number(original)} ms (original untraced measurement)`,
       contentType: "text/plain",
     })
   ).pipe(Effect.exit);

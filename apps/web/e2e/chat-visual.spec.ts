@@ -40,7 +40,7 @@ test.afterEach(({ page }, information) =>
       yield* Effect.tryPromise(() =>
         page.screenshot({
           path: `${captureDirectory}/failed-${filename}.png`,
-          fullPage: true,
+          fullPage: page.viewportSize()?.height !== landscape.height,
           animations: "disabled",
           caret: "hide",
           scale: "css",
@@ -186,7 +186,7 @@ const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
   yield* Effect.tryPromise(() =>
     page.screenshot({
       path: `${captureDirectory}/${filename}.png`,
-      fullPage: true,
+      fullPage: page.viewportSize()?.height !== landscape.height,
       animations: "disabled",
       caret: "hide",
       scale: "css",

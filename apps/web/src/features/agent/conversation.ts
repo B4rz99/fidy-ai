@@ -140,11 +140,17 @@ type ConversationView = Readonly<{
   history: ReadonlyArray<Entry>;
   reply: Option.Option<VisibleAgentReply>;
   status: string;
+  statusKind: "waiting" | "warning" | "information";
   empty: boolean;
   canSubmit: boolean;
   canCheckProgress: boolean;
   canRetryDelivery: boolean;
 }>;
+const presentStatusKind = (tag: Turn["tag"]): ConversationView["statusKind"] => {
+  if (tag === "waiting" || tag === "polling") return "waiting";
+  if (tag === "uncertain" || tag === "processing" || tag === "error") return "warning";
+  return "information";
+};
 const presentConversation = ({ turn, history }: Conversation): ConversationView => ({
   history,
   reply:
@@ -156,6 +162,7 @@ const presentConversation = ({ turn, history }: Conversation): ConversationView 
         })
       : Option.none(),
   status: status[turn.tag],
+  statusKind: presentStatusKind(turn.tag),
   empty: history.length === 0 && turn.tag === "idle",
   canSubmit: canSubmit(turn),
   canCheckProgress: turn.tag === "processing" || turn.tag === "uncertain",

@@ -2,15 +2,16 @@ import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
 import { createContext, useContext, useState } from "react";
 import type { JSX, ReactNode, SubmitEvent } from "react";
-import {
-  Conversation,
-  ConversationContent,
-  ConversationEmptyState,
-  ConversationScrollButton,
-} from "@/ui/components/ai-elements/conversation";
+import { Conversation, ConversationScrollButton } from "@/ui/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/ui/components/ai-elements/message";
 import { ChatComposer, ChatWindow } from "@/ui/components/chat";
-import { Button } from "@/ui/components/button";
+import {
+  ChatConfirmation,
+  ChatContent,
+  ChatRecovery,
+  ChatStart,
+  ChatStatus,
+} from "@/ui/components/chat-content";
 import { type VisibleAgentReply, useHostedConversation } from "./conversation";
 import { VisibleReply } from "./visible-reply";
 
@@ -51,8 +52,8 @@ export const HostedAgentFeature = (): JSX.Element => {
   return (
     <ChatWindow open={open} onOpenChange={setOpen}>
       <Conversation className="min-h-0" aria-label="Conversación con Fidy">
-        <ConversationContent className="gap-4">
-          {view.empty && <ConversationEmptyState />}
+        <ChatContent>
+          {view.empty && <ChatStart onSelect={setText} />}
           {view.history.map((entry) => (
             <Message key={entry.id} from={entry.from}>
               <MessageContent>{entry.text}</MessageContent>
@@ -67,22 +68,14 @@ export const HostedAgentFeature = (): JSX.Element => {
               confirm={conversation.confirm}
             />
           )}
-          {view.status !== "" && (
-            <p aria-live="polite" className="text-xs text-muted-foreground">
-              {view.status}
-            </p>
-          )}
+          <ChatStatus text={view.status} kind={view.statusKind} />
           {view.canCheckProgress && (
-            <Button onClick={conversation.checkProgress} type="button">
-              Consultar estado
-            </Button>
+            <ChatRecovery onClick={conversation.checkProgress}>Consultar estado</ChatRecovery>
           )}
           {view.canRetryDelivery && (
-            <Button onClick={conversation.retryDelivery} type="button">
-              Reintentar conexión
-            </Button>
+            <ChatRecovery onClick={conversation.retryDelivery}>Reintentar conexión</ChatRecovery>
           )}
-        </ConversationContent>
+        </ChatContent>
         <ConversationScrollButton />
       </Conversation>
       <ChatComposer
@@ -111,11 +104,7 @@ const AgentReply = ({
   <VisibleReply active={active && reply.awaitingVisibility} onVisible={onVisible}>
     <Message from="assistant" aria-label="Respuesta del agente">
       <MessageContent>{reply.text}</MessageContent>
-      {reply.confirmation && (
-        <Button type="button" disabled={!canSubmit} onClick={confirm}>
-          Confirmar cambio
-        </Button>
-      )}
+      {reply.confirmation && <ChatConfirmation disabled={!canSubmit} onConfirm={confirm} />}
     </Message>
   </VisibleReply>
 );

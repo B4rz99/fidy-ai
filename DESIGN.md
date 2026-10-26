@@ -613,13 +613,25 @@ and reduced motion. It leaves the underlying workspace usable.
 
 AI Elements `Conversation` and `Message` live in `ui/components/ai-elements`, adapted to the local
 aliases, Hugeicons and branded controls. Conversation scrolling stays immediate, honors a reader's
-position, and offers a labeled jump-to-latest control. User entries use peach bubbles; assistant text
+position, and offers a labeled jump-to-latest control. User entries use lime-tinted bubbles in light
+mode and canonical lime with ink text in Grafito; assistant text
 stays plain and readable. Enter sends, Shift+Enter inserts a line, and composing IME text cannot send.
 The feature owns the draft, bounded session-only history and pending status. Delivery acknowledgement
 happens automatically after a reply renders in the open, visible panel; ordinary replies have no
 confirmation button or success footer. A failed acknowledgement offers a connection retry for the
 same reply. Closing the panel preserves its state and never acknowledges a hidden reply. The UI advertises
 only text capabilities supported by the existing Agent endpoint.
+
+The approved panel uses a full-width header divider, a lime sparkle mark, “Agente Fidy”,
+a theme control backed by the existing application preference, and a circular close action.
+The composer stays outside the scrolling conversation with a side-by-side text field and Send
+button, followed by the credential-safety reminder. The empty state offers “Revisar mis gastos”,
+“Ver mis presupuestos”, and “Consultar recurrentes”; these fill the draft and never submit it.
+Waiting uses a quiet sparkle/dots treatment; uncertain execution uses warning colors, while
+failed delivery and quota feedback use information colors. Recovery remains an explicit action.
+Quota preserves the existing editable draft and explicit retry contract, with no invented reset time.
+The `/ui-reference.html#chat` examples exercise the actual message, starter, composer and feedback
+components entirely locally, without invoking the agent or representing a real pending operation.
 
 Recurring lifecycle changes show the host's readable plan name, action and effective date with
 an explicit “Confirmar cambio” button. Only server-issued confirmation metadata can enable that

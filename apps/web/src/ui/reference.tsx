@@ -22,6 +22,7 @@ import { TransactionsReference } from "./transactions-reference";
 import { WorkspaceReference } from "./workspace-reference";
 import { ReviewReference } from "./review-reference";
 import { RecurringReference } from "./recurring-reference";
+import { ChatReference } from "./chat-reference";
 import { SettingsReference } from "./settings-reference";
 import "./reference.css";
 
@@ -327,6 +328,7 @@ export const UIReference = (): JSX.Element => {
           <FieldReference />
         </div>
         <SettingsReference />
+        <ChatReference />
         <WorkspaceReference />
         <ReviewReference />
         <RecurringReference dark={dark} toggleTheme={() => setTheme(dark ? "light" : "dark")} />

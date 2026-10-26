@@ -123,8 +123,13 @@ const makeAuthority = (
 
 const admit = (
   authority: ResourceAdmissionAuthorityConfig,
-  id: string,
-  charges: readonly [ResourceAdmissionCharge, ...ReadonlyArray<ResourceAdmissionCharge>],
+  {
+    id,
+    charges,
+  }: Readonly<{
+    id: string;
+    charges: readonly [ResourceAdmissionCharge, ...ReadonlyArray<ResourceAdmissionCharge>];
+  }>,
   ...input: [] | [statements: ReadonlyArray<D1PreparedStatement>]
 ): ReturnType<typeof admitResource> =>
   admitResource(authority, {
@@ -163,9 +168,10 @@ const verifyPersistedRestart = Effect.gen(function* () {
   const firstDatabase = yield* fromTestPromise(() => prepareDatabase(firstRuntime));
   const policy = rollingPolicy("stable-user:restart:v1", "stable_user", 1);
   const firstAuthority = makeAuthority(firstDatabase, [policy], { read: () => epochMs(10_000) });
-  yield* admit(firstAuthority, "before-restart", [
-    charge("stable-user:restart:v1", "user:restart"),
-  ]);
+  yield* admit(firstAuthority, {
+    id: "before-restart",
+    charges: [charge("stable-user:restart:v1", "user:restart")],
+  });
   yield* fromTestPromise(() => firstRuntime.dispose());
   activeMiniflare.delete(firstRuntime);
 
@@ -175,7 +181,10 @@ const verifyPersistedRestart = Effect.gen(function* () {
     read: () => epochMs(10_000),
   });
   const afterRestart = yield* Effect.result(
-    admit(replacementAuthority, "after-restart", [charge("stable-user:restart:v1", "user:restart")])
+    admit(replacementAuthority, {
+      id: "after-restart",
+      charges: [charge("stable-user:restart:v1", "user:restart")],
+    })
   );
   expect(Result.isFailure(afterRestart)).toBe(true);
   if (Result.isFailure(afterRestart)) {
@@ -279,9 +288,10 @@ describe("Cloudflare resource admission", () => {
           { read: () => epochMs(10_000) }
         );
         const fiber = yield* Effect.forkChild(
-          admit(authority, "interrupted-admission", [
-            charge("operation:interruption:v1", "operation:interruption"),
-          ])
+          admit(authority, {
+            id: "interrupted-admission",
+            charges: [charge("operation:interruption:v1", "operation:interruption")],
+          })
         );
 
         yield* fromTestPromise(() => batchStarted.promise);
@@ -327,11 +337,11 @@ describe("Cloudflare resource admission", () => {
           charge("outstanding:all:v1", "user:f1d1a001:statement-ingestion"),
           charge("spend:all:v1", "spend:workers-ai:user:f1d1a001", 10),
         ] as const;
-        yield* admit(authority, "all-dimensions-first", charges);
+        yield* admit(authority, { id: "all-dimensions-first", charges });
 
         const results = yield* Effect.all(
           charges.map((oneCharge, index) =>
-            Effect.result(admit(authority, `dimension-${index}`, [oneCharge]))
+            Effect.result(admit(authority, { id: `dimension-${index}`, charges: [oneCharge] }))
           ),
           { concurrency: "unbounded" }
         );
@@ -418,8 +428,7 @@ describe("Cloudflare resource admission", () => {
         const baseline = observeRetentionCost(database);
         yield* admit(
           { ...authority, database: baseline.database },
-          "atomic-baseline",
-          [charge("source:atomic:v1", "source:baseline")],
+          { id: "atomic-baseline", charges: [charge("source:atomic:v1", "source:baseline")] },
           [
             baseline.database
               .prepare("INSERT INTO test_outbox (id, admission_grant_id) VALUES (?, ?)")
@@ -520,15 +529,18 @@ describe("Cloudflare resource admission", () => {
           })
         );
 
-        const retry = yield* admit(authority, "successful-after-rollback", [
-          charge("operation:rollback:v1", "operation:rollback"),
-        ]);
+        const retry = yield* admit(authority, {
+          id: "successful-after-rollback",
+          charges: [charge("operation:rollback:v1", "operation:rollback")],
+        });
 
         const markerNamedStoreFailure = yield* Effect.result(
           admit(
             authority,
-            "marker-named-store-failure",
-            [charge("operation:rollback:v1", "operation:marker-store-failure")],
+            {
+              id: "marker-named-store-failure",
+              charges: [charge("operation:rollback:v1", "operation:marker-store-failure")],
+            },
             [database.prepare("INSERT INTO resource_admission_refused (id) VALUES ('x')")]
           )
         );
@@ -568,31 +580,36 @@ describe("Cloudflare resource admission", () => {
           { read: () => now }
         );
 
-        yield* admit(authority, "rolling-first", [
-          charge("source:boundary:v1", "source:rolling-boundary"),
-        ]);
+        yield* admit(authority, {
+          id: "rolling-first",
+          charges: [charge("source:boundary:v1", "source:rolling-boundary")],
+        });
 
         now = epochMs(1_999);
         const rollingBefore = yield* Effect.result(
-          admit(authority, "rolling-before", [
-            charge("source:boundary:v1", "source:rolling-boundary"),
-          ])
+          admit(authority, {
+            id: "rolling-before",
+            charges: [charge("source:boundary:v1", "source:rolling-boundary")],
+          })
         );
 
         now = epochMs(2_000);
-        const rollingAt = yield* admit(authority, "rolling-at", [
-          charge("source:boundary:v1", "source:rolling-boundary"),
-        ]);
+        const rollingAt = yield* admit(authority, {
+          id: "rolling-at",
+          charges: [charge("source:boundary:v1", "source:rolling-boundary")],
+        });
 
         now = epochMs(2_999);
-        yield* admit(authority, "calendar-first", [
-          charge("operation:calendar:v1", "operation:calendar-boundary"),
-        ]);
+        yield* admit(authority, {
+          id: "calendar-first",
+          charges: [charge("operation:calendar:v1", "operation:calendar-boundary")],
+        });
 
         now = epochMs(3_000);
-        const calendarAt = yield* admit(authority, "calendar-at", [
-          charge("operation:calendar:v1", "operation:calendar-boundary"),
-        ]);
+        const calendarAt = yield* admit(authority, {
+          id: "calendar-at",
+          charges: [charge("operation:calendar:v1", "operation:calendar-boundary")],
+        });
 
         expect(Result.isFailure(rollingBefore)).toBe(true);
         expect(rollingAt.grantId).toBe("rolling-at");
@@ -627,10 +644,13 @@ describe("Cloudflare resource admission", () => {
 
           { read: () => now }
         );
-        yield* admit(authority, "release-first", [
-          charge("model-work:outstanding:v1", "user:f1d1a002:model-work"),
-          charge("workers-ai:spend:v1", "spend:workers-ai:user:f1d1a002"),
-        ]);
+        yield* admit(authority, {
+          id: "release-first",
+          charges: [
+            charge("model-work:outstanding:v1", "user:f1d1a002:model-work"),
+            charge("workers-ai:spend:v1", "spend:workers-ai:user:f1d1a002"),
+          ],
+        });
 
         const failedRelease = yield* Effect.result(
           releaseOutstandingResource(authority, {
@@ -643,9 +663,10 @@ describe("Cloudflare resource admission", () => {
         );
 
         const stillOccupied = yield* Effect.result(
-          admit(authority, "release-still-occupied", [
-            charge("model-work:outstanding:v1", "user:f1d1a002:model-work"),
-          ])
+          admit(authority, {
+            id: "release-still-occupied",
+            charges: [charge("model-work:outstanding:v1", "user:f1d1a002:model-work")],
+          })
         );
 
         const eventAfterFailure = yield* fromTestPromise(() =>
@@ -680,14 +701,16 @@ describe("Cloudflare resource admission", () => {
           statements: [],
         });
 
-        const outstandingOnly = yield* admit(authority, "release-outstanding-reused", [
-          charge("model-work:outstanding:v1", "user:f1d1a002:model-work"),
-        ]);
+        const outstandingOnly = yield* admit(authority, {
+          id: "release-outstanding-reused",
+          charges: [charge("model-work:outstanding:v1", "user:f1d1a002:model-work")],
+        });
 
         const spendAgain = yield* Effect.result(
-          admit(authority, "release-spend-not-refunded", [
-            charge("workers-ai:spend:v1", "spend:workers-ai:user:f1d1a002"),
-          ])
+          admit(authority, {
+            id: "release-spend-not-refunded",
+            charges: [charge("workers-ai:spend:v1", "spend:workers-ai:user:f1d1a002")],
+          })
         );
 
         expect(outstandingOnly.grantId).toBe("release-outstanding-reused");

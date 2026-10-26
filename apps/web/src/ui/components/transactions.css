@@ -70,7 +70,7 @@
 }
 [data-transaction-slot~="transaction-workspace"] textarea {
   resize: vertical;
-  border: 1px solid var(--transaction-line);
+  border: 1px solid var(--control-border);
   min-height: 88px;
   width: 100%;
 }
@@ -530,14 +530,6 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
   font-weight: 400;
 }
 [data-transaction-slot~="transaction-workspace"]
-  [data-transaction-slot~="transaction-search-toolbar"]
-  button,
-[data-transaction-slot~="transaction-workspace"]
-  [data-transaction-slot~="transaction-search-toolbar"]
-  input {
-  border-color: var(--transaction-line);
-}
-[data-transaction-slot~="transaction-workspace"]
   [data-transaction-slot~="transaction-records"]
   > .transaction-ledger
   > div:first-child
@@ -592,7 +584,6 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
 [data-transaction-slot~="transaction-workspace"]
   [data-transaction-slot~="transaction-context-panel"]
   [aria-haspopup="dialog"] {
-  border-color: var(--transaction-line);
   background: var(--transaction-soft);
 }
 @media (max-width: 600px) {
@@ -604,12 +595,6 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
     padding: 14px 4px;
     row-gap: 10px;
   }
-}
-[data-transaction-slot~="transaction-workspace"] button {
-  border-color: var(--transaction-line);
-}
-[data-transaction-slot~="transaction-workspace"] button.bg-primary {
-  border-color: var(--fidy-lime);
 }
 [data-transaction-slot~="transaction-workspace"] button[aria-label^="Ver transacción"] {
   font-size: 14px;

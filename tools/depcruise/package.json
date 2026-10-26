@@ -4,7 +4,7 @@
   "private": true,
   "description": "Dependency-cruiser with the classic TypeScript compiler API, isolated from the workspace tsgo compiler.",
   "devDependencies": {
-    "dependency-cruiser": "18.6.0",
+    "dependency-cruiser": "18.7.0",
     "typescript": "6.0.3"
   }
 }

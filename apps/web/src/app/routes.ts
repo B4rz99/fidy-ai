@@ -218,6 +218,14 @@ const connectionContinuationRoute = createRoute({
     Schema.decodeSync(Schema.Struct({ attempt: Schema.optionalKey(Schema.Unknown) }))(search),
   component: ConnectionContinuationFeature,
 });
+const connectionResultRoute = createRoute({
+  getParentRoute: () => independentApplicationRoute,
+  path: "/connections/result",
+  component: lazyRouteComponent(
+    () => import("@/features/connections/feature"),
+    "ConnectionResultFeature"
+  ),
+});
 
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -253,6 +261,7 @@ const routeTree = rootRoute.addChildren([
   microsoftReturnRoute,
   connectionContinuationRoute,
   independentApplicationRoute.addChildren([
+    connectionResultRoute,
     oauthReviewRoute,
     oauthOperationRoute,
     privacyRoute,

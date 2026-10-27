@@ -1,13 +1,15 @@
+import { activate } from "./internal/activation";
 import { UtcTimestamp } from "../../src/core/_shared/time";
-import { Clock, type Crypto, DateTime, Effect, Option, Redacted, Schema } from "effect";
-import type { HttpClient } from "effect/http";
-import { type JWK, SignJWT, importJWK, importPKCS8, jwtVerify } from "jose";
+import { Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { SignJWT, importJWK, importPKCS8, jwtVerify } from "jose";
 import { makeBancolombiaSandboxOutboundHttp } from "../../src/shell/outbound-http/operations";
 import {
+  type BancolombiaActivationInput,
   BancolombiaAuthenticationFailed,
   BancolombiaAuthorizationFailed,
   BancolombiaAuthorizationInput,
   BancolombiaConsentProfile,
+  type SandboxAuthenticationInput,
 } from "./contract";
 
 const maximumTokenBytes = 32768;
@@ -40,14 +42,6 @@ const Token = Schema.Struct({
 const failure = (
   stage: BancolombiaAuthenticationFailed["stage"]
 ): BancolombiaAuthenticationFailed => new BancolombiaAuthenticationFailed({ stage });
-
-type SandboxAuthenticationInput = Readonly<{
-  crypto: Crypto.Crypto;
-  clientId: string;
-  privateKey: Redacted.Redacted<string>;
-  publicKey: JWK;
-  httpClient: HttpClient.HttpClient;
-}>;
 
 const prepareAssertion = Effect.fn(function* (input: SandboxAuthenticationInput) {
   if (
@@ -303,3 +297,12 @@ export const authorizeBancolombiaSandbox = (
     const created = yield* createConsent(input);
     return yield* pushBancolombiaSandboxAuthorization({ ...input, ...created });
   }).pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed()));
+
+export const activateBancolombiaSandbox = (
+  input: SandboxAuthenticationInput & BancolombiaActivationInput
+): Effect.Effect<ReadonlyArray<string>, BancolombiaAuthorizationFailed> =>
+  activate({
+    ...input,
+    assertion: prepareAssertion(input),
+    consentBearer: applicationToken(input, Discovery),
+  });

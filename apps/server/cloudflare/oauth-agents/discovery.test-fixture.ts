@@ -6,6 +6,7 @@ export const readDiscovery: ReadonlyArray<string> = [
   "categories.listCategories",
   "categories.listKeywordRules",
   "connections.getConnection",
+  "connections.listAccounts",
   "connections.listConnections",
   "connections.listInstitutions",
   "dashboard.getDashboard",

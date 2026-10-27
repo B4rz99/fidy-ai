@@ -1,4 +1,4 @@
-import { Context, Data, type Effect, Option, Schema } from "effect";
+import { Context, Data, type Effect, Option, type Redacted, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { ConnectionAttemptReference } from "../../src/shell/connections/contract";
@@ -19,6 +19,7 @@ export type ConnectionBrowserAdmission = typeof ConnectionBrowserAdmission.Type;
 export type ConnectionQueryOperation =
   | "connections.listInstitutions"
   | "connections.listConnections"
+  | "connections.listAccounts"
   | "connections.getConnection";
 
 /** Private operator-configured sandbox window; never supplied by a browser or canonical input. */
@@ -74,5 +75,53 @@ export type ConnectionBankPreparation = Readonly<{
 
 export const ConnectionBank = Context.Reference<Option.Option<ConnectionBankPreparation>>(
   "@fidy/cloudflare/connections/Bank",
+  { defaultValue: Option.none }
+);
+
+export const connectionCallbackPath = "/connections/bancolombia/sandbox/callback";
+const maximumCodeLength = 4096;
+export const ConnectionCallbackAdmission = Schema.Struct({
+  ...ConnectionBrowserAdmission.fields,
+  state: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)),
+  result: Schema.Union([
+    Schema.TaggedStruct("Code", {
+      code: Schema.String.check(
+        Schema.isBetweenLength(1, maximumCodeLength),
+        Schema.isPattern(/^[\x21-\x7e]+$/u)
+      ),
+    }),
+    Schema.TaggedStruct("Denied", {}),
+  ]),
+});
+export type ConnectionCallbackAdmission = typeof ConnectionCallbackAdmission.Type;
+
+export type ConnectionBankGrant = Readonly<{
+  accessToken: Redacted.Redacted<string>;
+  refreshToken: Option.Option<Redacted.Redacted<string>>;
+  expiresAtMilliseconds: number;
+}>;
+export type ConnectionBankActivation = Readonly<{
+  clientId: string;
+  activate: (
+    input: Readonly<{
+      userId: UserId;
+      code: Redacted.Redacted<string>;
+      verifier: Redacted.Redacted<string>;
+      consentId: string;
+      state: string;
+      intent: ConnectionConsentIntent;
+      expiresAtMilliseconds: number;
+      retainGrant: (
+        grant: ConnectionBankGrant
+      ) => Effect.Effect<void, ConnectionAuthorizationUnavailable>;
+    }>
+  ) => Effect.Effect<ReadonlyArray<string>, ConnectionAuthorizationUnavailable>;
+}>;
+export const ConnectionActivation = Context.Reference<Option.Option<ConnectionBankActivation>>(
+  "@fidy/cloudflare/connections/Activation",
+  { defaultValue: Option.none }
+);
+export const ConnectionGrantKey = Context.Reference<Option.Option<Redacted.Redacted<string>>>(
+  "@fidy/cloudflare/connections/GrantKey",
   { defaultValue: Option.none }
 );

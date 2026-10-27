@@ -30,7 +30,7 @@ type Continuation = Readonly<{
 }>;
 const selectScenario = (
   request: APIRequestContext,
-  mode: "ready" | "destination" | "signing" | "transport"
+  mode: "ready" | "destination" | "signing" | "transport" | "activation-malformed"
 ): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     const response = yield* Effect.tryPromise(() =>
@@ -86,6 +86,31 @@ const bankHandoff = (route: Route): Promise<void> => {
     body: "<!doctype html><title>Banco de prueba</title><h1>Autorización pendiente</h1>",
   });
 };
+
+const returnFromBank = (
+  page: Page,
+  request: APIRequestContext
+): Effect.Effect<void, BrowserFailure> =>
+  Effect.gen(function* () {
+    const handoff = page.getByRole("link", { name: "Continuar en Bancolombia", exact: true });
+    yield* Effect.tryPromise(() => expect(handoff).toBeVisible());
+    yield* Effect.tryPromise(() => page.route(`${bankOrigin}/auth?**`, bankHandoff));
+    yield* Effect.tryPromise(() => handoff.click());
+    yield* Effect.tryPromise(() =>
+      expect(page).toHaveURL(/^https:\/\/auth1-api-open-finance-sandbox\.ambientesbc\.com\/auth\?/u)
+    );
+    const bank = yield* Effect.tryPromise(() =>
+      request.post(`${operator}/connections/bank-return`)
+    );
+    const response = yield* Schema.decodeUnknownEffect(Schema.Struct({ state: Schema.String }))(
+      yield* Effect.tryPromise(() => bank.json())
+    );
+    yield* Effect.tryPromise(() =>
+      page.goto(
+        `${api}/connections/bancolombia/sandbox/callback?code=synthetic-browser-code&state=${response.state}`
+      )
+    );
+  });
 
 test("hands off through Core only after browser proof, refuses replay and keeps the Connection pending", ({
   page,
@@ -206,5 +231,58 @@ test("shows safe failure for destination, signing and transport refusals without
         });
         expect(replay.status()).toBe(notFoundStatus);
       }
+    })
+  ));
+
+test("returns from the bank through public Core to truthful failed and Active results without exposing protocol credentials", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInFirstCardThroughCore({ page, request }));
+      yield* selectScenario(request, "activation-malformed");
+      const failed = yield* startConnection({ page, request });
+      yield* begin(page, failed.path);
+      yield* returnFromBank(page, request);
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(`${app}/connections/result`));
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("heading", { name: "No pudimos completar la conexión" })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("navigation", { name: "Aplicación" })).toBeVisible()
+      );
+      yield* selectScenario(request, "ready");
+      const started = yield* startConnection({ page, request });
+      expect(started.id).toBe(failed.id);
+      yield* begin(page, started.path);
+      yield* returnFromBank(page, request);
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(`${app}/connections/result`));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Bancolombia está conectado" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Cuentas autorizadas: 2.")).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("Las transacciones y los saldos aún no se han importado.", {
+            exact: false,
+          })
+        ).toBeVisible()
+      );
+      const visible = yield* Effect.tryPromise(() => page.locator("body").innerText());
+      expect(visible).not.toContain("synthetic-browser-code");
+      expect(visible).not.toContain("synthetic-access");
+      expect(visible).not.toContain("synthetic-refresh");
+      expect(visible).not.toContain("synthetic-account-a");
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Consultar estado" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Bancolombia está conectado" })).toBeVisible()
+      );
     })
   ));

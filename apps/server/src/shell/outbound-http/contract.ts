@@ -119,6 +119,25 @@ export type BancolombiaSandboxHttpService = Readonly<{
     request:
       | Readonly<{ _tag: "Discovery" }>
       | Readonly<{ _tag: "Authenticate"; assertion: Redacted.Redacted<string> }>
+      | Readonly<{ _tag: "BankSigningKeys" }>
+      | Readonly<{
+          _tag: "ExchangeBankCode";
+          assertion: Redacted.Redacted<string>;
+          code: Redacted.Redacted<string>;
+          verifier: Redacted.Redacted<string>;
+        }>
+      | Readonly<{
+          _tag: "ReadBankConsent";
+          bearer: Redacted.Redacted<string>;
+          consentId: string;
+          interactionId: string;
+        }>
+      | Readonly<{
+          _tag: "ReadBankAccounts";
+          bearer: Redacted.Redacted<string>;
+          interactionId: string;
+          page: Option.Option<number>;
+        }>
       | Readonly<{
           _tag: "CreateConsent";
           bearer: Redacted.Redacted<string>;

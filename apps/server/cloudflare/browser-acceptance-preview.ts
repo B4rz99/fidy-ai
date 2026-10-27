@@ -495,7 +495,11 @@ const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {
       },
     },
     coreEnvironment,
-    { institutions: connectionFixture.institutions, bank: Option.some(connectionFixture.bank) }
+    {
+      institutions: connectionFixture.institutions,
+      bank: Option.some(connectionFixture.bank),
+      activation: Option.some(connectionFixture.activation),
+    }
   );
   const fetcher = {
     fetch: (command: RequestInfo | URL): Promise<Response> =>
@@ -506,7 +510,9 @@ const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {
 };
 const admissionKeyLength = 32;
 const digestHexLength = 64;
+const syntheticGrantKeyLength = 43;
 const coreEnvironment: Parameters<typeof core.fetch>[1] = {
+  BANCOLOMBIA_SANDBOX_GRANT_KEY: "A".repeat(syntheticGrantKeyLength),
   DB: browserDatabase,
   ERASURE_REQUIRED: "true",
   ERASURE_BUCKET: erasureRegistry,

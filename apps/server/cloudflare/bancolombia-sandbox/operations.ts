@@ -3,6 +3,7 @@ import { sandboxPublicKey } from "./contract";
 
 const jwksPath = "/connections/bancolombia/sandbox/jwks";
 const callbackPath = "/connections/bancolombia/sandbox/callback";
+const maximumCallbackLength = 8192;
 
 /** Publishes sandbox registration metadata without granting institution or User authority. */
 export const bancolombiaSandboxResponse = (request: Request): Option.Option<Response> => {
@@ -14,15 +15,10 @@ export const bancolombiaSandboxResponse = (request: Request): Option.Option<Resp
     );
   }
   if (url.pathname === callbackPath) {
-    if (url.search.length > 0) {
+    if (url.search.length > maximumCallbackLength) {
       return Option.some(new Response(null, { status: 303, headers: { location: callbackPath } }));
     }
-    return Option.some(
-      new Response("La autorización de Bancolombia Sandbox aún no está disponible.", {
-        status: 503,
-        headers: { "content-type": "text/plain; charset=utf-8" },
-      })
-    );
+    return Option.none();
   }
   return Option.some(Response.json({ keys: [sandboxPublicKey] }));
 };

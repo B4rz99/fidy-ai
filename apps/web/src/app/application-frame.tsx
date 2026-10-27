@@ -40,6 +40,7 @@ export const ApplicationFrame = (): JSX.Element => {
       state.matches.some(
         (match) =>
           match.routeId === "/independent-application/settings/privacy" ||
+          match.routeId === "/independent-application/connections/result" ||
           match.routeId === "/independent-application/upgrade" ||
           match.routeId === "/independent-application/oauth/review/$requestId" ||
           match.routeId === "/independent-application/oauth/operation/$reference"

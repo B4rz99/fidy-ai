@@ -2,8 +2,38 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "9bf312b6f587f1b0f68399651355836633c7dd3e6349792ee49bd1f4cfcf675b";
+const expectedEdgePolicyDigest = "63b32ddb4993896fcf60cf7c6f40c0168e1d9a9865596792a7088a4ff1fc100b";
 const securityArtifacts = [
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/bancolombia-authentication/internal/activation.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/internal/activation.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/internal/grant.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/internal/accounts.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/migrations/0003_connection_activation.sql",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/core-http/internal/http.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/web-session/internal/binding.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/core/connections/contract.ts", import.meta.url)
+  ).text(),
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
   await Bun.file(new URL("worker-observability.ts", import.meta.url)).text(),

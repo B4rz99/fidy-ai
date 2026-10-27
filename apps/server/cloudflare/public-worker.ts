@@ -49,6 +49,7 @@ import { smokeProofAccepted } from "./runtime/release-smoke/operations";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/operations";
 import { bancolombiaSandboxResponse } from "./bancolombia-sandbox/operations";
+import { connectionCallbackPath } from "./connections/contract";
 import { recoveryIsolationResponse } from "./release-isolation/operations";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
@@ -293,6 +294,7 @@ const preflightPaths = new Set<string>([
   ...browserMutationPaths,
 ]);
 const ownedPaths = new Set<string>([
+  connectionCallbackPath,
   browserSessionBindingPath,
   providerPaths.disclosure,
   microsoftProviderPaths.callback,
@@ -450,6 +452,9 @@ const oauthHeaders = (request: Request, path: string): Headers => {
   return headers;
 };
 const specialForwardedHeaders = (request: Request, path: string): Option.Option<Headers> => {
+  if (path === connectionCallbackPath) {
+    return Option.some(new Headers({ cookie: request.headers.get("cookie") ?? "" }));
+  }
   const browserTransport = connectionBrowserTransport(path).pipe(
     Option.orElse(() => processingConsentTransport(path))
   );
@@ -512,6 +517,7 @@ const canonicalAdmissionHeaders = (
     );
   });
 const preservesCoreQuery = (path: string): boolean =>
+  path === connectionCallbackPath ||
   transactionPath(path) ||
   canonicalRoute(path) ||
   path === smokePath ||
@@ -809,7 +815,22 @@ const routeOwnedRequest = (
       onFailure: () => smokeUnavailable(request, environment, "public_forwarding"),
       onSuccess: (response) => response,
     }),
-    Effect.map((response) => applyApiPolicy(response, environment.BROWSER_ORIGIN, origin))
+    Effect.map((response) =>
+      applyApiPolicy(
+        new URL(request.url).pathname === connectionCallbackPath && request.method === "GET"
+          ? new Response(null, {
+              status: 303,
+              headers: {
+                location: `${environment.BROWSER_ORIGIN}/connections/result`,
+                "cache-control": "no-store",
+                "referrer-policy": "no-referrer",
+              },
+            })
+          : response,
+        environment.BROWSER_ORIGIN,
+        origin
+      )
+    )
   );
 };
 

@@ -392,6 +392,9 @@ export default Alchemy.Stack(
         BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: yield* Config.Redacted(
           "BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM"
         ).pipe(Config.withDefault(Redacted.make(""))),
+        BANCOLOMBIA_SANDBOX_GRANT_KEY: yield* Config.Redacted("BANCOLOMBIA_SANDBOX_GRANT_KEY").pipe(
+          Config.withDefault(Redacted.make(""))
+        ),
         AI: Cloudflare.Workers.AI(),
         CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
         SMOKE_LIMITER: Cloudflare.RateLimit("ReleaseSmokeAdmission", {

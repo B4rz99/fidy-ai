@@ -1,6 +1,8 @@
 import { ConnectionConsentIntent } from "../connections/contract";
 import { UserId } from "../../src/core/identity/contract";
-import { Data, Schema } from "effect";
+import { type Crypto, Data, type Effect, type Option, type Redacted, Schema } from "effect";
+import type { HttpClient } from "effect/http";
+import type { JWK } from "jose";
 import { UtcTimestamp } from "../../src/core/_shared/time";
 
 export class BancolombiaAuthenticationFailed extends Data.TaggedError(
@@ -23,6 +25,7 @@ export type BancolombiaSandboxEnvironment = Partial<
     BANCOLOMBIA_SANDBOX_CLIENT_ID: string;
     BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: string;
     BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: string;
+    BANCOLOMBIA_SANDBOX_GRANT_KEY: string;
     BANCOLOMBIA_SANDBOX_MTLS: Pick<Fetcher, "fetch">;
   }>
 >;
@@ -63,3 +66,27 @@ export const BancolombiaConsentProfile = Schema.Struct({
   intent: ConnectionConsentIntent,
 });
 export type BancolombiaConsentProfile = typeof BancolombiaConsentProfile.Type;
+
+export type BancolombiaBankGrant = Readonly<{
+  accessToken: Redacted.Redacted<string>;
+  refreshToken: Option.Option<Redacted.Redacted<string>>;
+  expiresAtMilliseconds: number;
+}>;
+
+export type BancolombiaActivationInput = Readonly<{
+  code: Redacted.Redacted<string>;
+  verifier: Redacted.Redacted<string>;
+  consentId: string;
+  state: string;
+  intent: ConnectionConsentIntent;
+  expiresAtMilliseconds: number;
+  retainGrant: (grant: BancolombiaBankGrant) => Effect.Effect<void, BancolombiaAuthorizationFailed>;
+}>;
+
+export type SandboxAuthenticationInput = Readonly<{
+  crypto: Crypto.Crypto;
+  clientId: string;
+  privateKey: Redacted.Redacted<string>;
+  publicKey: JWK;
+  httpClient: HttpClient.HttpClient;
+}>;

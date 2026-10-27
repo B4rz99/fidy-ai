@@ -8,7 +8,11 @@ import { ConnectInstitutionInput } from "../../../src/core/connections/contract"
 import { processingConsentTransport } from "../../../src/shell/processing-consent/runtime";
 import { handleProcessingConsentRequest } from "../../consent/runtime";
 import { connectionBrowserTransport } from "../../../src/shell/connections/runtime";
-import { handleConnectionBrowserRequest } from "../../connections/runtime";
+import { connectionCallbackPath } from "../../connections/contract";
+import {
+  handleConnectionBrowserRequest,
+  handleConnectionCallback,
+} from "../../connections/runtime";
 import type { HttpClient } from "effect/http";
 import { completeProviderOnboarding } from "../../onboarding/operations";
 import {
@@ -514,6 +518,7 @@ const reconciliationOperation = (
 };
 
 const privacyOrConnectionPath = (path: string): boolean =>
+  path === connectionCallbackPath ||
   Option.isSome(processingConsentTransport(path)) ||
   Option.isSome(connectionBrowserTransport(path));
 
@@ -1576,6 +1581,9 @@ const dedicatedBrowserResponse = (
     db: environment.DB,
     browserOrigin: environment.BROWSER_ORIGIN,
   };
+  if (path === connectionCallbackPath) {
+    return Option.some(handleConnectionCallback(input));
+  }
   if (Option.isSome(processingConsentTransport(path))) {
     return Option.some(handleProcessingConsentRequest(input));
   }

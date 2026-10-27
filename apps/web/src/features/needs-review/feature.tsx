@@ -37,7 +37,7 @@ export const NeedsReviewRoute = (): JSX.Element => {
   const page = search.offset ?? 0;
   return (
     <>
-      <Toaster position="bottom-right" richColors />
+      <Toaster position="bottom-right" richColors dir="ltr" />
       <ReviewPageRepair key={`${filter}:${page}`} filter={filter} page={page} />
     </>
   );

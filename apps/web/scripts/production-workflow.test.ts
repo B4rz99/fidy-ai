@@ -58,6 +58,19 @@ describe("Production release workflow policy", () => {
     );
     expect(workflow).not.toContain("alchemy deploy --stage production --yes --no-input");
   });
+  it("keeps the sandbox signing binding identical across every topology planning phase", () => {
+    const planningSteps = workflow
+      .split("\n      - name:")
+      .filter((step) => /alchemy plan|bun production-resources\.ts (upload|retire)/u.test(step));
+    expect(planningSteps).toHaveLength(4);
+    for (const step of planningSteps) {
+      expect(step).toContain(
+        "BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: ${{ secrets.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM }}"
+      );
+    }
+    const jobEnv = workflow.slice(workflow.indexOf("    env:\n"), workflow.indexOf("    steps:\n"));
+    expect(jobEnv).not.toContain("BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM");
+  });
   it("keeps ordinary admission behind isolated proof and the existing release gates", () => {
     const steps = [
       "bun production-release.ts isolate\n",

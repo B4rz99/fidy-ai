@@ -1,4 +1,4 @@
-import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
+import { makeConnectionFixture } from "./browser-acceptance-connections.test-fixture";
 import { captureWhatsApp, whatsappOperator } from "./browser-acceptance-whatsapp";
 import {
   AcceptanceClockAdvance,
@@ -442,6 +442,7 @@ const approvedFixtureUser = (parameters: URLSearchParams): string =>
   Array.findFirst(fixtureIdentities, ({ key }) => parameters.get(key) === "true").pipe(
     Option.match({ onNone: () => fixtureUserId, onSome: ({ userId }) => userId })
   );
+const connectionFixture = makeConnectionFixture(firstCardUserId);
 const operator = Bun.serve({
   hostname: "127.0.0.1",
   port: operatorPort,
@@ -462,6 +463,7 @@ const operator = Bun.serve({
       whatsappOperator(request),
       googleOperator(request),
       operatorSetup(request),
+      connectionFixture.operator(request),
     ]);
     if (Option.isSome(setup)) return setup.value;
     const loginCode = operatorCode(request, "/email/login/deliver");
@@ -477,7 +479,7 @@ const operator = Bun.serve({
 process.stdout.write(`Browser approval fixture listening at ${operator.url}\n`);
 
 const telemetry = makeWorkerTelemetry(() => undefined);
-const core = makeCoreWorker({ telemetry, institutions: registeredConnectionInstitutionIds });
+const core = makeCoreWorker({ telemetry, institutions: connectionFixture.institutions });
 const worker = makePublicWorker(telemetry);
 const coordinators = new Map<string, Pick<Fetcher, "fetch">>();
 const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {
@@ -492,7 +494,8 @@ const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {
         setAlarm: (): Promise<void> => Promise.resolve(),
       },
     },
-    coreEnvironment
+    coreEnvironment,
+    { institutions: connectionFixture.institutions, bank: Option.some(connectionFixture.bank) }
   );
   const fetcher = {
     fetch: (command: RequestInfo | URL): Promise<Response> =>

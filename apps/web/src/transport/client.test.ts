@@ -169,30 +169,38 @@ describe("subscription enrollment transport", () => {
 describe("browser HTTP policy", () => {
   it.effect("retries a canonical mutation only after a declared unadmitted resource refusal", () =>
     Effect.gen(function* () {
-      const started = Deferred.makeUnsafe<void>();
-      let attempts = 0;
-      const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
-        attempts++;
-        yield* Deferred.succeed(started, undefined);
-        return HttpClientResponse.fromWeb(
-          request,
-          Response.json(
-            attempts === 1
-              ? { error: { code: "rate_limited", message: "Retry later." }, next: [] }
-              : { data: "accepted", next: [] },
-            { status: attempts === 1 ? 429 : 200, headers: { "retry-after": "1" } }
-          )
+      for (const [boundary, path] of [
+        ["canonical", "/dashboard/initialize"],
+        ["web-auth", "/web/connections/begin"],
+      ] as const) {
+        const started = Deferred.makeUnsafe<void>();
+        let attempts = 0;
+        const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
+          attempts++;
+          yield* Deferred.succeed(started, undefined);
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json(
+              attempts === 1
+                ? { error: { code: "rate_limited", message: "Retry later." }, next: [] }
+                : { data: "accepted", next: [] },
+              { status: attempts === 1 ? 429 : 200, headers: { "retry-after": "1" } }
+            )
+          );
+        });
+        const base = makeHttpClient(respond);
+        const client = yield* makePolicyTestClient(
+          Layer.succeed(HttpClient.HttpClient, base),
+          boundary
         );
-      });
-      const base = makeHttpClient(respond);
-      const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, base));
-      const work = yield* Effect.forkChild(client.post(`${policyTestOrigin}/dashboard/initialize`));
-      yield* Deferred.await(started);
-      yield* TestClock.adjust("1 second");
-      const result = yield* Fiber.join(work);
-      expect(result.status).toBe(200);
-      expect(yield* result.json).toEqual({ data: "accepted", next: [] });
-      expect(attempts).toBe(2);
+        const work = yield* Effect.forkChild(client.post(`${policyTestOrigin}${path}`));
+        yield* Deferred.await(started);
+        yield* TestClock.adjust("1 second");
+        const result = yield* Fiber.join(work);
+        expect(result.status).toBe(200);
+        expect(yield* result.json).toEqual({ data: "accepted", next: [] });
+        expect(attempts).toBe(2);
+      }
     })
   );
 

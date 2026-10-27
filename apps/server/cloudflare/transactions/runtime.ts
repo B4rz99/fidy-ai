@@ -1,4 +1,14 @@
 import {
+  bancolombiaSandboxAdmission,
+  makeBancolombiaSandboxPreparation,
+} from "../bancolombia-authentication/runtime";
+import type { BancolombiaSandboxEnvironment } from "../bancolombia-authentication/contract";
+import {
+  ConnectionBank,
+  type ConnectionBankPreparation,
+  ConnectionSandboxAdmission,
+} from "../connections/contract";
+import {
   ConnectionInstitutions,
   registeredConnectionInstitutionIds,
 } from "../../src/shell/connections/contract";
@@ -126,7 +136,8 @@ type CoordinatorEnvironment = Readonly<{
     }>
   > &
   WorkersAiEnvironment &
-  ProactivityEnvironment;
+  ProactivityEnvironment &
+  BancolombiaSandboxEnvironment;
 
 const executeStatementActivity = (
   activity: typeof StatementCoordinatorActivity.Type,
@@ -636,16 +647,23 @@ export class UserTransactionCoordinator {
   private readonly erasureEnvironment: CoordinatorEnvironment;
   private readonly mcp: McpResidency;
   private readonly institutions: typeof registeredConnectionInstitutionIds;
+  private readonly bank: Option.Option<ConnectionBankPreparation>;
   constructor(
     state: Readonly<{
       id: Readonly<{ name: string }>;
       storage: Pick<DurableObjectStorage, "setAlarm" | "deleteAlarm" | "getAlarm">;
     }>,
     env: CoordinatorEnvironment,
-    institutions = registeredConnectionInstitutionIds
+    configuration: Readonly<{
+      institutions: typeof registeredConnectionInstitutionIds;
+      bank: Option.Option<ConnectionBankPreparation>;
+    }> = { institutions: registeredConnectionInstitutionIds, bank: Option.none() }
   ) {
     this.state = state;
-    this.institutions = institutions;
+    this.institutions = configuration.institutions;
+    this.bank = Option.orElse(configuration.bank, () =>
+      makeBancolombiaSandboxPreparation({ environment: env, userId: state.id.name })
+    );
     this.erasureEnvironment = env;
     this.env = withErasureRecovery(env);
     this.mcp = makeMcpResidency({
@@ -750,11 +768,8 @@ export class UserTransactionCoordinator {
     }>
   ): Promise<Response> {
     const { request, userId } = input;
-    const environment = this.env;
-    const mcp = this.mcp;
-    const clearCoordinator = (): Effect.Effect<boolean, ErasureUnavailable> =>
-      this.clearErasureCoordinator();
-    const erasureEnvironment = this.erasureEnvironment;
+    const { env: environment, mcp, erasureEnvironment } = this;
+    const clearCoordinator = this.clearErasureCoordinator.bind(this);
     return Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -798,8 +813,11 @@ export class UserTransactionCoordinator {
           }
           return yield* executeCanonicalAdmission(admission.value, environment, Option.none());
         })
-      ).pipe(Effect.provideService(ConnectionInstitutions, this.institutions), (work) =>
-        observeCoordinatorRequest(work, request, environment)
+      ).pipe(
+        Effect.provideService(ConnectionInstitutions, this.institutions),
+        Effect.provideService(ConnectionSandboxAdmission, bancolombiaSandboxAdmission(environment)),
+        Effect.provideService(ConnectionBank, this.bank),
+        (work) => observeCoordinatorRequest(work, request, environment)
       )
     );
   }

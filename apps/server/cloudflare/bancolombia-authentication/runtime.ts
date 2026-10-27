@@ -1,11 +1,31 @@
-import { Context, Crypto, Effect, Layer, PlatformError, Redacted, Schema } from "effect";
+import {
+  ConnectionAuthorizationUnavailable,
+  type ConnectionBankPreparation,
+} from "../connections/contract";
+import {
+  Clock,
+  Context,
+  Crypto,
+  Effect,
+  Layer,
+  Option,
+  PlatformError,
+  Redacted,
+  Schema,
+} from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { sandboxPublicKey } from "../bancolombia-sandbox/contract";
-import { BancolombiaAuthenticationFailed, type BancolombiaSandboxEnvironment } from "./contract";
-import { authenticateBancolombiaSandbox } from "./operations";
+import {
+  BancolombiaAuthenticationFailed,
+  BancolombiaAuthorizationFailed,
+  BancolombiaConsentProfile,
+  type BancolombiaSandboxEnvironment,
+} from "./contract";
+import { authenticateBancolombiaSandbox, authorizeBancolombiaSandbox } from "./operations";
 
 const maximumPrivateKeyLength = 20000;
+const maximumProfileLength = 8192;
 const workerCrypto = Crypto.make({
   randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
   digest: (algorithm, data) =>
@@ -23,10 +43,10 @@ const workerCrypto = Crypto.make({
     }),
 });
 
-/** Use only the private Core certificate binding and registered signing key; missing bindings refuse. */
-export const verifyBancolombiaSandboxAuthentication = (
-  environment: BancolombiaSandboxEnvironment
-): Effect.Effect<void, BancolombiaAuthenticationFailed> =>
+const withSandboxClient = <A, E>(
+  environment: BancolombiaSandboxEnvironment,
+  run: (input: Parameters<typeof authenticateBancolombiaSandbox>[0]) => Effect.Effect<A, E>
+): Effect.Effect<A, E | BancolombiaAuthenticationFailed> =>
   Effect.gen(function* () {
     const binding = environment.BANCOLOMBIA_SANDBOX_MTLS;
     const clientId = environment.BANCOLOMBIA_SANDBOX_CLIENT_ID;
@@ -48,7 +68,7 @@ export const verifyBancolombiaSandboxAuthentication = (
     const services = yield* Layer.build(OutboundHttpLive).pipe(
       Effect.provideService(FetchHttpClient.Fetch, fetch)
     );
-    return yield* authenticateBancolombiaSandbox({
+    return yield* run({
       crypto: workerCrypto,
       clientId,
       privateKey: Redacted.make(key),
@@ -56,3 +76,73 @@ export const verifyBancolombiaSandboxAuthentication = (
       httpClient: Context.get(services, HttpClient.HttpClient),
     }).pipe(Effect.provideService(FetchHttpClient.Fetch, fetch));
   }).pipe(Effect.scoped);
+
+/** Use only the private Core certificate binding and registered signing key; missing bindings refuse. */
+export const verifyBancolombiaSandboxAuthentication = (
+  environment: BancolombiaSandboxEnvironment
+): Effect.Effect<void, BancolombiaAuthenticationFailed> =>
+  withSandboxClient(environment, authenticateBancolombiaSandbox);
+
+const sandboxProfile = (
+  environment: BancolombiaSandboxEnvironment
+): Option.Option<BancolombiaConsentProfile> =>
+  Option.flatMap(
+    Option.fromUndefinedOr(environment.BANCOLOMBIA_SANDBOX_CONSENT_PROFILE).pipe(
+      Option.filter((value) => value.length <= maximumProfileLength)
+    ),
+    Schema.decodeUnknownOption(Schema.fromJsonString(BancolombiaConsentProfile))
+  );
+
+export const bancolombiaSandboxAdmission = (
+  environment: BancolombiaSandboxEnvironment
+): Option.Option<Readonly<{ userId: string; startsAt: number; expiresAt: number }>> =>
+  Option.map(sandboxProfile(environment), ({ userId, admission }) => ({
+    userId,
+    startsAt: admission.startsAt.epochMilliseconds,
+    expiresAt: admission.expiresAt.epochMilliseconds,
+  }));
+
+const prepareProfile = (
+  environment: BancolombiaSandboxEnvironment,
+  profile: BancolombiaConsentProfile,
+  request: Parameters<ConnectionBankPreparation["prepare"]>[0]
+): ReturnType<ConnectionBankPreparation["prepare"]> =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    if (
+      request.userId !== profile.userId ||
+      now < profile.admission.startsAt.epochMilliseconds ||
+      now >= profile.admission.expiresAt.epochMilliseconds
+    ) {
+      return yield* new ConnectionAuthorizationUnavailable();
+    }
+    return yield* withSandboxClient(environment, (client) =>
+      authorizeBancolombiaSandbox({
+        ...client,
+        ...request,
+        expiresAtMilliseconds: Math.min(
+          request.expiresAtMilliseconds,
+          profile.admission.expiresAt.epochMilliseconds
+        ),
+        profile: Redacted.make(profile),
+        recordConsent: (consentId) =>
+          request
+            .recordConsent(consentId)
+            .pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed())),
+      })
+    ).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable()));
+  });
+
+/** Missing or foreign test profiles cannot install bank execution; registration remains a separate gate. */
+export const makeBancolombiaSandboxPreparation = (
+  input: Readonly<{ environment: BancolombiaSandboxEnvironment; userId: string }>
+): Option.Option<ConnectionBankPreparation> =>
+  Option.filter(
+    sandboxProfile(input.environment),
+    (profile) => profile.userId === input.userId
+  ).pipe(
+    Option.map((profile) => ({
+      intent: profile.intent,
+      prepare: (request) => prepareProfile(input.environment, profile, request),
+    }))
+  );

@@ -1,4 +1,5 @@
-import { Data, Schema } from "effect";
+import { UtcTimestamp } from "../../src/core/_shared/time";
+import { Context, Data, type Effect, Option, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { ConnectionAttemptReference } from "../../src/shell/connections/contract";
@@ -21,7 +22,63 @@ export type ConnectionQueryOperation =
   | "connections.listConnections"
   | "connections.getConnection";
 
+/** Private operator-configured sandbox window; never supplied by a browser or canonical input. */
+export const ConnectionSandboxAdmission = Context.Reference<
+  Option.Option<Readonly<{ userId: string; startsAt: number; expiresAt: number }>>
+>("@fidy/cloudflare/connections/SandboxAdmission", { defaultValue: Option.none });
+
 /** Connection continuation cleanup could not complete; no private storage detail is exposed. */
 export class ConnectionRetentionUnavailable extends Data.TaggedError(
   "ConnectionRetentionUnavailable"
 ) {}
+
+export class ConnectionAuthorizationUnavailable extends Data.TaggedError(
+  "ConnectionAuthorizationUnavailable"
+) {}
+
+const maximumPermissionCount = 5;
+export const ConnectionConsentIntent = Schema.Struct({
+  permissions: Schema.Array(
+    Schema.Literals([
+      "ReadAccountBasic",
+      "ReadAccountDetail",
+      "ReadBalance",
+      "ReadTransactionBasic",
+      "ReadTransactionDetail",
+    ])
+  ).check(
+    Schema.isBetweenLength(1, maximumPermissionCount),
+    Schema.makeFilter((values) => new Set(values).size === values.length)
+  ),
+  historyFrom: UtcTimestamp,
+  historyTo: UtcTimestamp,
+  expiryPolicy: Schema.Literal("bank-default"),
+}).check(
+  Schema.makeFilter(
+    (value) => value.historyFrom.epochMilliseconds <= value.historyTo.epochMilliseconds
+  )
+);
+export type ConnectionConsentIntent = typeof ConnectionConsentIntent.Type;
+
+/** Private preparation after durable admission; a failed or uncertain submission is never retried. */
+export type ConnectionBankPreparation = Readonly<{
+  intent: ConnectionConsentIntent;
+  prepare: (
+    input: Readonly<{
+      userId: UserId;
+      attempt: typeof ConnectionAttemptReference.Type;
+      state: string;
+      challenge: string;
+      recordConsent: (consentId: string) => Effect.Effect<void, ConnectionAuthorizationUnavailable>;
+      expiresAtMilliseconds: number;
+    }>
+  ) => Effect.Effect<
+    Readonly<{ url: string; expiresAtMilliseconds: number }>,
+    ConnectionAuthorizationUnavailable
+  >;
+}>;
+
+export const ConnectionBank = Context.Reference<Option.Option<ConnectionBankPreparation>>(
+  "@fidy/cloudflare/connections/Bank",
+  { defaultValue: Option.none }
+);

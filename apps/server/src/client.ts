@@ -8,6 +8,7 @@ export {
   TokenAuthorizationClientAnonymousLive,
 } from "~/shell/authorization/runtime";
 export { FidyApi, operationCatalog, type FidyApiGroups, type OperationId } from "~/shell/api";
+export { ConnectInstitutionResult } from "~/core/connections/contract";
 export { decideOperationAccess } from "~/shell/canonical-policy/operations";
 export {
   AtomicBatchCallId,
@@ -45,6 +46,7 @@ export { CanonicalAllowance, canonicalAllowanceHeaders } from "~/shell/quotas/co
 export {
   ConnectionBrowserApi,
   ConnectionAttemptReference,
+  connectionBrowserPaths,
   ConnectionContinuationInput,
   ConnectionContinuationFailure,
   ConnectionContinuationReview,

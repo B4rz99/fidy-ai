@@ -213,8 +213,10 @@ client. Review requires the same User's live cookie; preparation requires fresh 
 only on an explicit click. Login returns to this fixed route with the public reference, never a
 caller-supplied redirect. Query state and expiry work belong to the authentication registry.
 An uncertain preparation disables repeat submission and recovers through review. The screen
-truthfully shows pending authorization: institution authorization, callback credentials, Account
-discovery and activation remain unavailable until the verified institution capsule is installed.
+truthfully shows pending authorization and exposes a bank link only after validated PAR settlement,
+within the shorter bank deadline. ResourceLimited non-admission can be paced within the original
+request budget; uncertain POST outcomes cannot be replayed. Real sandbox preparation requires a private, same-User profile and a bounded operator test window. Callback credentials, Account discovery and
+activation remain unavailable until the verified institution capsule is installed.
 
 Conectar submits the exact reviewed scope subset, duration and absolute expiration through the typed
 origin/CSRF-protected client. Its void command result prevents callback codes from entering Atom result

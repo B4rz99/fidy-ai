@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "b3dada71f94be54a6a1280816ea8b4dd08f9340ef5e276327873f2648a6b1510";
+const expectedEdgePolicyDigest = "838926eba85cccabad810ff66be349fc59025de38740fab19084f12981cb9dd8";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
@@ -65,6 +65,43 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/src/shell/connections/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(new URL("../../apps/server/cloudflare/core-worker.ts", import.meta.url)).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/transactions/runtime.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/connections/internal/institution-registration.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/internal/initiation.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/runtime.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/internal/browser.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/internal/authorization.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/internal/erasure.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/migrations/0002_connection_authorization.sql",
+      import.meta.url
+    )
   ).text(),
   await Bun.file(
     new URL("../../apps/server/src/shell/connections/runtime.ts", import.meta.url)

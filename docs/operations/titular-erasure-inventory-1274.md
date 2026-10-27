@@ -75,6 +75,7 @@ class-wide hold. Stop review until the actual source and executable scope agree.
 | `transactions`            | `transaction_reconciliation_decisions`  | projections  | `transaction_reconciliation_decisions`                                          |
 | `transactions`            | `transaction_reconciliation_members`    | projections  | `transaction_reconciliation_members`                                            |
 | `transactions`            | `transactions`                          | transactions | `transactions`                                                                  |
+| `connections`             | `connection_authorizations`             | credentials  | `connection_authorizations`                                                     |
 | `connections`             | `connection_attempts`                   | projections  | `connection_attempts`                                                           |
 | `connections`             | `connections`                           | projections  | `connections`                                                                   |
 | `dashboard`               | `dashboard_documents`                   | projections  | `user_documents (kind=dashboard)`                                               |
@@ -240,3 +241,10 @@ logical purposes. Credential and route groups clear independently on User; Whats
 statement attachments clear independently on hosted Turn. OAuth and support records qualify their
 Audit kind. Budget crossing evidence clears independently on InsightEvent. Hosted delivery foreign
 keys require an inbound-qualified Turn; staging cleanup never deletes the Turn.
+
+Sandbox bank authorization preparation adds the credential disposition `connection_authorizations`.
+It stores the exact non-identity consent intent and returned bank ConsentId alongside the private
+PKCE verifier and state digest. It is deleted before `connection_attempts`, is excluded from
+retained archives, and has its own frozen-store permits. Expiry clears the verifier and handoff
+independently; full User erasure removes the remaining record. Synthetic bank test identity belongs
+only to the private configuration profile and outbound consent request, never to this store.

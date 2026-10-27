@@ -9,7 +9,12 @@ import {
   ConnectionId,
   InstitutionSummary,
 } from "~/core/connections/contract";
-import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
+import {
+  NotFound,
+  OperationResponse,
+  ResourceLimited,
+  ValidationFailed,
+} from "~/shell/public-http/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 
 const read = operationPolicy({
@@ -72,13 +77,53 @@ export const ConnectionAttemptReference = Schema.String.check(Schema.isUUID())
 
 export const ConnectionContinuationInput = Schema.Struct({ attempt: ConnectionAttemptReference });
 
+const maximumAuthorizationUrlLength = 4096;
+const AuthorizationUrl = Schema.String.check(
+  Schema.isBetweenLength(1, maximumAuthorizationUrlLength),
+  Schema.isPattern(/^https:\/\/auth1-api-open-finance-sandbox\.ambientesbc\.com\/auth\?[^#]*$/u),
+  Schema.makeFilter((value) => {
+    const query = new URL(value).searchParams;
+    return (
+      query.size === 4 &&
+      query.get("response_type") === "code" &&
+      query.get("scope") === "accounts" &&
+      /^[0-9a-f-]{36}$/u.test(query.get("client_id") ?? "") &&
+      /^urn:ietf:params:oauth:request_uri:[A-Za-z0-9_-]{1,256}$/u.test(
+        query.get("request_uri") ?? ""
+      )
+    );
+  })
+);
+
+export const ConnectionAuthorizationHandoff = Schema.Struct({
+  url: AuthorizationUrl,
+  expiresAt: UtcTimestamp,
+});
+
 /** Safe same-User continuation facts, with the original absolute deadline. */
-export const ConnectionContinuationReview = Schema.Struct({
+const continuationFields = {
   connection: Connection,
   institutionName: Schema.Literal("Bancolombia"),
   expiresAt: UtcTimestamp,
-  phase: Schema.Literals(["ready", "prepared"]),
-});
+};
+export const ConnectionContinuationReview = Schema.Union([
+  Schema.Struct({
+    ...continuationFields,
+    phase: Schema.Literals(["ready", "preparing", "failed"]),
+    authorization: Schema.optionalKey(Schema.Never),
+  }),
+  Schema.Struct({
+    ...continuationFields,
+    phase: Schema.Literal("prepared"),
+    authorization: Schema.optionalKey(ConnectionAuthorizationHandoff),
+  }),
+]).check(
+  Schema.makeFilter(
+    (value) =>
+      value.authorization === undefined ||
+      value.authorization.expiresAt.epochMilliseconds <= value.expiresAt.epochMilliseconds
+  )
+);
 
 export const connectionBrowserPaths = {
   review: "/web/connections/review",
@@ -95,7 +140,6 @@ const browserFailureStatuses = {
   forbidden: 403,
   missing: 404,
   method: 405,
-  limited: 429,
   unavailable: 503,
 } as const;
 const browserFailures = Object.values(browserFailureStatuses).map((status) =>
@@ -109,14 +153,14 @@ export const ConnectionBrowserApi = HttpApi.make("ConnectionBrowserApi").add(
       HttpApiEndpoint.get("review", connectionBrowserPaths.review, {
         query: ConnectionContinuationInput,
         success: ConnectionContinuationReview,
-        error: browserFailures,
+        error: [...browserFailures, ResourceLimited],
       })
     )
     .add(
       HttpApiEndpoint.post("begin", connectionBrowserPaths.begin, {
         payload: ConnectionContinuationInput,
         success: ConnectionContinuationReview,
-        error: browserFailures,
+        error: [...browserFailures, ResourceLimited],
       })
     )
 );

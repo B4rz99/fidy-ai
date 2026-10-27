@@ -287,12 +287,13 @@ export class UserTransactionCoordinator {
 
   constructor(
     state: ConstructorParameters<typeof UserCoordinatorRuntime>[0],
-    environment: CoreEnvironment
+    environment: CoreEnvironment,
+    configuration?: ConstructorParameters<typeof UserCoordinatorRuntime>[2]
   ) {
     this.delegate =
       state.id.name === "core-maintenance-v1"
         ? new CoreMaintenanceCoordinator(state, environment)
-        : new UserCoordinatorRuntime(state, environment);
+        : new UserCoordinatorRuntime(state, environment, configuration);
   }
 
   fetch(request: Request): Promise<Response> {

@@ -101,7 +101,8 @@ export const initiationStatements = ({
       .bind(transactionId(), subject.userId, current, current, ...authority.bindings),
     db
       .prepare(
-        `DELETE FROM connection_attempts WHERE EXISTS(SELECT 1 FROM connections c WHERE c.id=connection_attempts.connection_id AND c.user_id=?) AND expires_at_ms <= ? AND status != 'pending' AND ${live}`
+        `DELETE FROM connection_attempts WHERE EXISTS(SELECT 1 FROM connections c WHERE c.id=connection_attempts.connection_id AND c.user_id=?) AND expires_at_ms <= ? AND status != 'pending'
+          AND NOT EXISTS(SELECT 1 FROM connection_authorizations b WHERE b.attempt_id=connection_attempts.id AND b.consent_id IS NOT NULL) AND ${live}`
       )
       .bind(subject.userId, current - retentionMilliseconds, ...authority.bindings),
     db

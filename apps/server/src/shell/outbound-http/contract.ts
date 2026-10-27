@@ -119,5 +119,21 @@ export type BancolombiaSandboxHttpService = Readonly<{
     request:
       | Readonly<{ _tag: "Discovery" }>
       | Readonly<{ _tag: "Authenticate"; assertion: Redacted.Redacted<string> }>
+      | Readonly<{
+          _tag: "CreateConsent";
+          bearer: Redacted.Redacted<string>;
+          payload: Redacted.Redacted<string>;
+          financialId: string;
+          customerIpAddress: Option.Option<string>;
+          interactionId: string;
+        }>
+      | Readonly<{
+          _tag: "PushAuthorization";
+          assertion: Redacted.Redacted<string>;
+          clientId: string;
+          consentId: string;
+          state: string;
+          challenge: string;
+        }>
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure | Cause.TimeoutError>;
 }>;

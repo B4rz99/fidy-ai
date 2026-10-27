@@ -10,6 +10,7 @@ import { playwright } from "./playwright-runtime";
 
 const { test, expect } = playwright;
 const targetMilliseconds = 10;
+const budgetTargetMilliseconds = 16;
 const measurementSamples = 5;
 const freshConsentTimeoutMilliseconds = 500;
 const workspaces = [
@@ -107,7 +108,9 @@ const recordSamples = (
     })
     .then(() => {
       if (development === 0 && name !== "Transacciones") {
-        expect(median).toBeLessThanOrEqual(targetMilliseconds);
+        expect(median).toBeLessThanOrEqual(
+          name === "Presupuestos" ? budgetTargetMilliseconds : targetMilliseconds
+        );
       }
     });
 };

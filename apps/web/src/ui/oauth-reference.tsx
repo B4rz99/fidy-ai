@@ -1,7 +1,7 @@
 import { type JSX, useState } from "react";
-import { Button } from "./components/button";
-import { Checkbox } from "./components/checkbox";
-import { OAuthClient, OAuthNotice, OAuthStatus } from "./components/oauth-review";
+import { Button } from "@/ui/components/button";
+import { Checkbox } from "@/ui/components/checkbox";
+import { OAuthClient, OAuthNotice, OAuthStatus } from "@/ui/components/oauth-review";
 
 const exampleDurations = ["7", "30", "90", "365"];
 const PermissionExample = (): JSX.Element => {

@@ -30,7 +30,7 @@ const connection = {
   connectAvailable: true,
 };
 export const operationInput =
-  '{\n  "budgetId": "10000000-0000-4000-8000-000000000003",\n  "confirm": true\n}';
+  '{\n  "params": {\n    "id": "10000000-0000-4000-8000-000000000003"\n  }\n}';
 const operation = {
   reference: operationReference,
   connectionId: "10000000-0000-4000-8000-000000000004",
@@ -38,8 +38,7 @@ const operation = {
   operation: "budgets.deleteBudget",
   inputJson: operationInput,
   effects: [
-    "Eliminar el presupuesto seleccionado.",
-    "Las transacciones registradas no se eliminan.",
+    "budgets.deleteBudget: Eliminar el presupuesto 10000000-0000-4000-8000-000000000003, categoría 10000000-0000-4000-8000-000000000005, límite actual 500000 COP.",
   ],
   inputDigest: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   disclosureRevision: "budget-deletion-v1",

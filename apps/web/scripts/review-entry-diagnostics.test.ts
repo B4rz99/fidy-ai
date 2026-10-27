@@ -259,7 +259,16 @@ it("trace evidence keeps only known timing fields, not URLs, arguments or arbitr
   });
   expect(trace.snapshot()).toEqual({
     traceEvents: [
-      { name: "Layout", cat: "devtools.timeline", ph: "X", pid: 1, tid: 2, ts: 1000, dur: 3000 },
+      {
+        name: "Layout",
+        cat: "devtools.timeline",
+        ph: "X",
+        pid: 1,
+        tid: 2,
+        ts: 1000,
+        dur: 3000,
+        attribution: [],
+      },
     ],
     truncated: false,
   });
@@ -286,6 +295,7 @@ it("trace accumulation is bounded and retains fixed replay markers", () => {
   expect(result.traceEvents[0]).toEqual({
     name: "fidy-review-replay-start",
     cat: "blink.user_timing",
+    attribution: [],
     ph: "R",
     pid: 1,
     tid: 2,
@@ -300,4 +310,67 @@ it("trace collection rejects malformed CDP envelopes without throwing", () => {
   }
   trace.collect({ value: [{ name: "Layout", ph: "X", pid: 1, tid: 2, ts: 1000, dur: 100 }] });
   expect(trace.snapshot().traceEvents).toHaveLength(1);
+});
+
+it("temporary attribution excludes private URLs and arbitrary arguments", () => {
+  const trace = collectReviewTrace();
+  trace.collect({
+    value: [
+      {
+        name: "FunctionCall",
+        ph: "X",
+        pid: 1,
+        tid: 2,
+        ts: 1000,
+        args: {
+          data: {
+            url: "https://127.0.0.1:4173/assets/feature-Ab12.js",
+            lineNumber: 1,
+            columnNumber: 42,
+            token: "synthetic-secret",
+            elementCount: 12,
+            stackTrace: [
+              {
+                url: "https://127.0.0.1:4173/private?token=synthetic-secret",
+                lineNumber: 1,
+                columnNumber: 2,
+              },
+              {
+                url: "https://127.0.0.1:4173/assets/app-Cd34.js",
+                lineNumber: 3,
+                columnNumber: 4,
+                functionName: "private-name",
+              },
+            ],
+          },
+        },
+      },
+    ],
+  });
+  expect(trace.snapshot()).toEqual({
+    traceEvents: [
+      {
+        name: "FunctionCall",
+        ph: "X",
+        pid: 1,
+        tid: 2,
+        ts: 1000,
+        cat: "devtools.timeline",
+        attribution: [
+          {
+            elementCount: 12,
+            sources: [
+              {
+                asset: "feature-Ab12.js",
+                lineNumber: 1,
+                columnNumber: 42,
+              },
+              { asset: "app-Cd34.js", lineNumber: 3, columnNumber: 4 },
+            ],
+          },
+        ],
+      },
+    ],
+    truncated: false,
+  });
 });

@@ -8,6 +8,7 @@ const traceBufferKilobytes = 1024;
 const traceCategories = [
   "devtools.timeline",
   "disabled-by-default-devtools.timeline",
+  "disabled-by-default-devtools.timeline.stack",
   "blink.user_timing",
   "v8",
 ];
@@ -80,9 +81,61 @@ const TraceEvent = Schema.Struct({
   ts: Schema.Finite,
   dur: Schema.optionalKey(Schema.Finite),
 });
-type SafeTraceEvent = typeof TraceEvent.Type & Readonly<{ cat: string }>;
+const TraceSource = Schema.Struct({
+  url: Schema.String.check(
+    Schema.isPattern(/^https:\/\/127\.0\.0\.1:\d+\/assets\/[A-Za-z0-9_-]+\.js$/u)
+  ),
+  lineNumber: Schema.Finite,
+  columnNumber: Schema.Finite,
+});
+const TraceDetail = Schema.Struct({
+  elementCount: Schema.optionalKey(Schema.Finite),
+  dirtyObjects: Schema.optionalKey(Schema.Finite),
+  totalObjects: Schema.optionalKey(Schema.Finite),
+  stackTrace: Schema.optionalKey(Schema.Array(Schema.Unknown)),
+});
+type SourceLocation = Omit<typeof TraceSource.Type, "url"> & Readonly<{ asset: string }>;
+const sourceLocation = (value: unknown): ReadonlyArray<SourceLocation> =>
+  Option.toArray(Schema.decodeUnknownOption(TraceSource)(value)).map(({ url, ...location }) => ({
+    ...location,
+    asset: url.slice(url.lastIndexOf("/") + 1),
+  }));
 
-/** Only fixed event names and numeric timing fields may enter the uploaded trace. */
+/** Temporary synthetic-replay attribution: only static bundle locations and numeric counts. */
+const stackDepthLimit = 10;
+type TraceAttribution = Readonly<{
+  attribution: ReadonlyArray<
+    Omit<typeof TraceDetail.Type, "stackTrace"> & {
+      sources: ReadonlyArray<SourceLocation>;
+    }
+  >;
+}>;
+const traceAttribution = (value: unknown): TraceAttribution => {
+  const args = Schema.decodeUnknownOption(
+    Schema.Struct({
+      args: Schema.Struct({
+        data: Schema.optionalKey(Schema.Unknown),
+        beginData: Schema.optionalKey(Schema.Unknown),
+      }),
+    })
+  )(value);
+  if (Option.isNone(args)) return { attribution: [] };
+  const details = [args.value.args.data, args.value.args.beginData].flatMap((raw) => {
+    const decoded = Schema.decodeUnknownOption(TraceDetail)(raw);
+    if (Option.isNone(decoded)) return [];
+    const { stackTrace, ...counts } = decoded.value;
+    const sources = [
+      ...sourceLocation(raw),
+      ...(stackTrace ?? []).slice(0, stackDepthLimit).flatMap(sourceLocation),
+    ];
+    return Object.keys(counts).length === 0 && sources.length === 0 ? [] : [{ ...counts, sources }];
+  });
+  return { attribution: details };
+};
+
+type SafeTraceEvent = typeof TraceEvent.Type & TraceAttribution & Readonly<{ cat: string }>;
+
+/** Upload only fixed event names, numeric timings/counts, and bounded static bundle locations. */
 export const collectReviewTrace = (): Readonly<{
   collect: (event: unknown) => void;
   snapshot: () => Readonly<{ traceEvents: ReadonlyArray<SafeTraceEvent>; truncated: boolean }>;
@@ -104,6 +157,7 @@ export const collectReviewTrace = (): Readonly<{
         }
         traceEvents.push({
           ...decoded.value,
+          ...traceAttribution(value),
           cat: decoded.value.name.startsWith("fidy-") ? "blink.user_timing" : "devtools.timeline",
         });
       }
@@ -226,7 +280,7 @@ const traceReviewReplay = Effect.fnUntraced(function* (page: Page, information: 
         traceBufferSizeInKb: traceBufferKilobytes,
         includedCategories: traceCategories,
         enableSampling: false,
-        enableArgumentFilter: true,
+        enableArgumentFilter: false,
       },
     })
   );

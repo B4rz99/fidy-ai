@@ -13,11 +13,7 @@ import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { OAuthClient, OAuthNotice, OAuthState, OAuthWorkspace } from "@/ui/components/oauth-review";
 
-const expirationFormatter = new Intl.DateTimeFormat("es-CO", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "America/Bogota",
-});
+import { formatExpiration } from "./expiration";
 
 type DecisionCommand = Readonly<{
   choice: typeof OAuthOperationDecision.Type;
@@ -142,7 +138,7 @@ const OperationView = ({
       <p className="oauth-expiration">
         <span className="oauth-description">Esta solicitud vence</span>
         <time dateTime={DateTime.formatIso(DateTime.makeUnsafe(review.expiresAtMilliseconds))}>
-          {expirationFormatter.format(review.expiresAtMilliseconds)}
+          {formatExpiration(DateTime.makeUnsafe(review.expiresAtMilliseconds))}
         </time>
       </p>
       <OAuthNotice kind="information">

@@ -13,12 +13,8 @@ import { Button } from "@/ui/components/button";
 import { OAuthClient } from "@/ui/components/oauth-review";
 import { Checkbox } from "@/ui/components/checkbox";
 
-const formatter = new Intl.DateTimeFormat("es-CO", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "America/Bogota",
-});
-const formatExpiration = (value: DateTime.Utc): string => formatter.format(DateTime.toDate(value));
+import { formatExpiration } from "./expiration";
+
 type ReviewProps = Readonly<{
   review: OAuthReview;
   cancel: () => void;
@@ -165,7 +161,6 @@ export const OAuthReviewView = ({
           <time dateTime={DateTime.formatIso(review.requestExpiresAt)}>
             {formatExpiration(review.requestExpiresAt)}
           </time>
-          .
         </p>
         <p className="oauth-renewal">
           El acceso vence en la fecha indicada. Para renovarlo tendrás que aprobar una nueva

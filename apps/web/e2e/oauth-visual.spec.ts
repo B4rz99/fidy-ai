@@ -147,6 +147,13 @@ for (const viewport of viewports) {
                 expect(page.getByRole("main").locator("pre")).toHaveText(operationInput)
               );
             }
+            yield* Effect.tryPromise(() =>
+              expect(page.getByRole("main").locator("time").first()).toHaveText(
+                destination.name === "operation"
+                  ? "27 oct 2026 · 8:05 a. m."
+                  : "25 ene 2027 · 8:00 a. m."
+              )
+            );
             if (viewport.name === "desktop") {
               yield* Effect.tryPromise(() =>
                 expect(
@@ -262,7 +269,7 @@ for (const destination of destinations) {
     ));
 }
 
-test("OAuth connection submits only the selected permissions and duration, then locks an unknown outcome", ({
+test("OAuth keyboard review submits only the selected permissions and duration, then locks an unknown outcome", ({
   page,
 }) =>
   Effect.runPromise(
@@ -272,17 +279,17 @@ test("OAuth connection submits only the selected permissions and duration, then 
       const choices = page.getByRole("checkbox");
       yield* Effect.tryPromise(() => expect(choices).toHaveCount(3));
       for (const choice of yield* Effect.tryPromise(() => choices.all())) {
-        yield* Effect.tryPromise(() => choice.uncheck());
+        yield* Effect.tryPromise(() => choice.press("Space"));
       }
       const connect = page.getByRole("button", { name: "Conectar", exact: true });
       yield* Effect.tryPromise(() => expect(connect).toBeDisabled());
       yield* Effect.tryPromise(() =>
-        page.getByRole("checkbox", { name: /Consultar tus datos/u }).check()
+        page.getByRole("checkbox", { name: /Consultar tus datos/u }).press("Space")
       );
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "30 días", exact: true }).click()
+        page.getByRole("button", { name: "30 días", exact: true }).press("Enter")
       );
-      yield* Effect.tryPromise(() => connect.click());
+      yield* Effect.tryPromise(() => connect.press("Enter"));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toContainText("No pudimos confirmar el resultado")
       );
@@ -460,75 +467,6 @@ for (const viewport of viewports) {
             expect(observed.unexpected).toEqual([]);
             expect(observed.mutations).toHaveLength(1);
           }
-        })
-      ));
-  }
-}
-
-const captureReference = Effect.fnUntraced(function* (page: Page, filename: string) {
-  const reference = page.getByRole("region", { name: "Resultado por confirmar", exact: true });
-  const result = yield* Effect.tryPromise(() =>
-    new AxeBuilder({ page }).include("#oauth").analyze()
-  );
-  expect(result.violations).toEqual([]);
-  yield* Effect.tryPromise(() => reference.scrollIntoViewIfNeeded());
-  yield* Effect.tryPromise(() =>
-    page.screenshot({
-      path: `${captureDirectory}/${filename}.png`,
-      fullPage: false,
-      animations: "disabled",
-    })
-  );
-});
-
-for (const viewport of viewports) {
-  for (const theme of themes) {
-    test(`OAuth shared reference supports keyboard controls in ${theme} ${viewport.name}`, ({
-      page,
-    }) =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          yield* prepare(page, viewport, theme);
-          yield* Effect.tryPromise(() => page.goto("/ui-reference.html#oauth"));
-          const reference = page.getByRole("region", {
-            name: "Autorizaciones de ejemplo",
-            exact: true,
-          });
-          const permission = reference.getByRole("checkbox");
-          yield* Effect.tryPromise(() => permission.focus());
-          yield* Effect.tryPromise(() => page.keyboard.press("Space"));
-          yield* Effect.tryPromise(() => expect(permission).not.toBeChecked());
-          yield* Effect.tryPromise(() => page.keyboard.press("Space"));
-          yield* Effect.tryPromise(() => expect(permission).toBeChecked());
-          const duration = reference.getByRole("button", { name: "30 días", exact: true });
-          yield* Effect.tryPromise(() => duration.focus());
-          yield* Effect.tryPromise(() => page.keyboard.press("Enter"));
-          yield* Effect.tryPromise(() => expect(duration).toHaveAttribute("aria-pressed", "true"));
-          yield* Effect.tryPromise(() =>
-            reference.getByRole("button", { name: "Simular aprobación" }).click()
-          );
-          yield* Effect.tryPromise(() =>
-            expect(reference.getByRole("status")).toContainText("No se ejecutó ninguna operación")
-          );
-          yield* Effect.tryPromise(() =>
-            reference.getByRole("button", { name: "Reiniciar ejemplo" }).click()
-          );
-          yield* Effect.tryPromise(() =>
-            reference.getByRole("button", { name: "Simular cancelación" }).click()
-          );
-          yield* Effect.tryPromise(() =>
-            expect(reference.getByRole("status")).toContainText("no se ejecutó ningún cambio")
-          );
-          yield* Effect.tryPromise(() =>
-            reference.getByRole("button", { name: "Reiniciar ejemplo" }).click()
-          );
-          yield* Effect.tryPromise(() =>
-            reference.getByRole("button", { name: "Simular resultado incierto" }).click()
-          );
-          yield* Effect.tryPromise(() =>
-            expect(reference.getByRole("region", { name: "Resultado por confirmar" })).toBeVisible()
-          );
-          yield* captureReference(page, `reference-${theme}-${viewport.name}`);
         })
       ));
   }

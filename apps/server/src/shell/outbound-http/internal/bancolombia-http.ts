@@ -1,4 +1,4 @@
-import { Effect, Redacted } from "effect";
+import { Effect, Option, Redacted } from "effect";
 import { FetchHttpClient, HttpBody, type HttpClient, HttpClientRequest } from "effect/http";
 import type { BancolombiaSandboxHttpService } from "~/shell/outbound-http/contract";
 import { makeProviderTransport } from "./transport";
@@ -35,6 +35,9 @@ const prepareRequest = (
             authorization: `Bearer ${Redacted.value(request.bearer)}`,
             "x-fapi-financial-id": request.financialId,
             "x-fapi-interaction-id": request.interactionId,
+            ...(Option.isNone(request.customerIpAddress)
+              ? {}
+              : { "x-fapi-customer-ip-address": request.customerIpAddress.value }),
           },
         }
       );
@@ -46,7 +49,6 @@ const prepareRequest = (
             redirect_uri: "https://api.fidyapp.com/connections/bancolombia/sandbox/callback",
             scope: `accounts:${request.consentId} openid`,
             state: request.state,
-            nonce: request.nonce,
             response_type: "code",
             code_challenge: request.challenge,
             code_challenge_method: "S256",

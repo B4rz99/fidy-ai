@@ -1,10 +1,9 @@
-import { registeredInstitutionPredicate } from "./institution-registration";
+import { institutionsForUser, registeredInstitutionPredicate } from "./institution-registration";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import {
   ConnectionAuthorizationHandoff,
   ConnectionContinuationReview,
-  ConnectionInstitutions,
 } from "../../../src/shell/connections/contract";
 import { Connection } from "../../../src/core/connections/contract";
 import {
@@ -102,7 +101,7 @@ export const reviewContinuation = (
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const authority = callerAuthority(input);
-    const institutions = yield* ConnectionInstitutions;
+    const institutions = yield* institutionsForUser(input.subject.userId);
     const registered = registeredInstitutionPredicate({ column: "c.institution_id", institutions });
     const sql = guardedQuery(authority, registered);
     const bindings = [input.attempt, input.subject.userId, input.current, ...authority.bindings];
@@ -208,7 +207,7 @@ export const beginContinuation = (
       return continuationFailure(unavailableStatus);
     }
     const { admission, db } = input;
-    const institutions = yield* ConnectionInstitutions;
+    const institutions = yield* institutionsForUser(admission.userId);
     const registered = registeredInstitutionPredicate({ column: "c.institution_id", institutions });
     const authority = freshAuthority(admission, current);
     const result = yield* Effect.tryPromise({

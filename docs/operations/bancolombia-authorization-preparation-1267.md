@@ -42,7 +42,7 @@ certificate-backed client-credentials exchange, not consent creation or a User a
 
 The existing attempt now owns a private D1 authorization record. A single durable claim binds the
 fresh session, same User and current Fidy Consent before bank I/O. The record retains the immutable permissions/history/expiry intent, the returned bank ConsentId,
-the S256 verifier and state/nonce digests; neither private proof nor signing material enters browser output.
+the S256 verifier and state digest; neither private proof nor signing material enters browser output.
 A claimed request cannot be submitted again. Bank execution occurs outside the D1 atomic unit,
 then settles to a bounded handoff or a failed, non-retryable result. Expiry clears the verifier and
 handoff, and User erasure includes the private record.
@@ -58,61 +58,39 @@ ResourceLimited non-admission receives bounded pacing; uncertain submissions rec
 The built-browser fixture exercises consent creation through handoff over the public/Core/D1 path
 with synthetic keys and test identity; only the external bank endpoints are controlled. It proves local integration,
 not Bancolombia acceptance. The private coordinator can install the real adapter only from a
-bounded, matching-User `BANCOLOMBIA_SANDBOX_CONSENT_PROFILE` secret naming the pinned public-contract
-digest, explicit intent, assigned financial header and approved synthetic AccountOwner. No such
-profile is configured. Production registration remains empty, and the sandbox callback still refuses completion pending #1268.
+bounded, matching-User `BANCOLOMBIA_SANDBOX_CONSENT_PROFILE` secret naming the pinned support-collection
+digest, explicit intent and supplied test AccountOwner. No live profile is configured yet. Production registration remains empty, and the sandbox callback still refuses completion pending #1268.
 
-## Public contract reconciliation — 2026-10-27
+## Accepted support collection — 2026-10-27
 
-The public API Market now exposes downloadable consent and PAR specifications. Read the
-[Account Information documentation](https://developer-portal-public-sbx.apps.ambientesbc.com/documentacion/Account%20Information)
-and select **Account Access Consents → API**; read
-[Open Banking Authorization](https://developer-portal-public-sbx.apps.ambientesbc.com/documentacion/Open%20Banking%20Authorization)
-and select **Pushed Authorization Request → API**. The portal's shared `/documentacion/` detail
-route does not independently identify the selected API, so retain the navigation and file digest.
+The User confirmed that Bancolombia technical support's supplied Postman collection is authoritative
+for this sandbox client. Its SHA-256 is
+`869a3da43fed9043b734e9be698e49234738cb3b1a26ca79cde3f606eb3fcd62`.
+The supplied AccountOwner and representative identify the bank-provided test scenario; a separate
+customer approval or bank login is not a prerequisite for #1267's authorization handoff.
+Bank login, approval and callback completion belong to #1268.
 
-| Download                                                                                    | SHA-256                                                            |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `(Ozone) Account Information - Account Access Consents`, OpenAPI 3.0.1, API version 1.0.0   | `b794218bd9dbf50f68b20aa2335e552ecfb5734830a9fc1c36e70622b5928650` |
-| `Open Banking Authorization - Pushed Authorization Request`, Swagger 2.0, API version 1.0.0 | `c6135b16474812c05c2f392751ccf9e8a08d41d310d82180af0934450fe17df3` |
+The adapter sends the collection's five permission names, exact history window, AccountOwner and
+OnBehalfOf fields, with consent expiry left to the bank. Consent creation accepts HTTP 200/201 and
+requires Data.ConsentId; optional echoed permissions and history must match when present. PAR
+requires HTTP 201, private-key JWT and S256, with no nonce because this collection does not use one.
+The provided participant variable is empty and is preserved rather than replaced with an invented
+identifier. The customer-IP example contains a date instead of an IP address; that optional header
+is omitted. The sample external signing helper and verifier logging are never executed.
 
-The consent specification requires `Data.Permissions` and `Data.AccountOwner`; the latter requires
-`SchemeName` and `Identification`. `Name` and `OnBehalfOf` are optional. Omitted history dates request
-up to 90 days through the latest available transaction; omitted consent expiry defaults to one year.
-Its documented permissions are `ReadAccountsBasic`, `ReadBalances` and `ReadTransactionsDetail`,
-whereas the supplied collection uses five differently named permissions. The public create response
-is HTTP 200. Its GET path also differs from the collection. Both financial and interaction headers
-are required; the financial-header description calls it a transaction correlation identifier,
-whereas the collection sources it from the empty `obParticipantId` variable. These are unresolved
-client-profile differences, not grounds to invent an assigned participant identifier or substitute
-personal data.
+A Core-only redacted profile pins this collection digest, the test identity, one Fidy User and a
+fixed admission window of at most one hour. Browser review, initiation and preparation recheck the
+same User and window. The provider adapter rechecks it immediately before bank work and bounds the
+handoff by its expiry. Expired admission cannot reopen preparation. Existing bank consent evidence
+continues to block whole-User erasure pending institution suppression even after admission expires.
+The production institution registry remains empty.
 
-The PAR specification requires private-key JWT authentication, state, response type `code`, scope
-and S256. It returns `request_uri` and `expires_in`, with success documented as HTTP 200; the supplied
-collection checks HTTP 201. The published contract supplies an expiry field, but does not establish
-safe replay after an uncertain submission. No uncertain consent or PAR mutation may be blindly
-repeated.
-
-The bank's [authorization URL instructions](https://soportedevs.bancolombia.com/hc/es-419/articles/52174225347220-Utilidad-GET-par-auth-code-url)
-describe constructing the redirect from the discovered authorization endpoint, client id, response
-type, scope and returned request reference. Fidy does not need to call the sample URL-builder
-service. The article's production example is not a sandbox destination allowlist.
-
-Before enabling the installed public-contract adapter for #1267 live acceptance, reconcile which
-permission names, response statuses and financial-header value apply to Fidy's assigned sandbox
-client, and obtain the corresponding approved synthetic AccountOwner/test-login scenario. Existing
-Fidy authentication does not supply a bank document number. The inspected client file leaves
-`obParticipantId` empty and does not supply that test scenario. Do not request a real document or
-reuse a sample identity to conceal that gap. An updated bank specification or test instructions may
-resolve these points without any new credential disclosure.
-
-The unresolved consent contract and assigned synthetic test scenario prevent live end-to-end
-acceptance and completion of #1267. They do not prevent the installed durable preparation, PAR and
-browser controls described above. No new bank consent or live PAR submission has been performed.
+Live sandbox consent/PAR acceptance has not yet been exercised for this revision. Local tests
+control the external bank and do not establish Bancolombia acceptance.
 
 ## Local verification — 2026-10-27
 
-Focused native Connections, authentication, consent/PAR and configuration suites: 45 tests passed
+Focused native Connections, authentication, consent/PAR and configuration suites: 46 tests passed
 across four files. Public browser contract and outbound controls: seven tests passed. Browser
 transport: 40 tests passed. Built-browser public/Core/D1 acceptance: three journeys passed,
 covering consent creation through handoff/replay, shorter PAR expiry/leave, and destination/signing/

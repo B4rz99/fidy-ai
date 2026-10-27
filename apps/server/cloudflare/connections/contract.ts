@@ -22,6 +22,11 @@ export type ConnectionQueryOperation =
   | "connections.listConnections"
   | "connections.getConnection";
 
+/** Private operator-configured sandbox window; never supplied by a browser or canonical input. */
+export const ConnectionSandboxAdmission = Context.Reference<
+  Option.Option<Readonly<{ userId: string; startsAt: number; expiresAt: number }>>
+>("@fidy/cloudflare/connections/SandboxAdmission", { defaultValue: Option.none });
+
 /** Connection continuation cleanup could not complete; no private storage detail is exposed. */
 export class ConnectionRetentionUnavailable extends Data.TaggedError(
   "ConnectionRetentionUnavailable"
@@ -31,21 +36,26 @@ export class ConnectionAuthorizationUnavailable extends Data.TaggedError(
   "ConnectionAuthorizationUnavailable"
 ) {}
 
+const maximumPermissionCount = 5;
 export const ConnectionConsentIntent = Schema.Struct({
   permissions: Schema.Array(
-    Schema.Literals(["ReadAccountsBasic", "ReadBalances", "ReadTransactionsDetail"])
+    Schema.Literals([
+      "ReadAccountBasic",
+      "ReadAccountDetail",
+      "ReadBalance",
+      "ReadTransactionBasic",
+      "ReadTransactionDetail",
+    ])
   ).check(
-    Schema.isBetweenLength(1, 3),
+    Schema.isBetweenLength(1, maximumPermissionCount),
     Schema.makeFilter((values) => new Set(values).size === values.length)
   ),
   historyFrom: UtcTimestamp,
   historyTo: UtcTimestamp,
-  expiresAt: UtcTimestamp,
+  expiryPolicy: Schema.Literal("bank-default"),
 }).check(
   Schema.makeFilter(
-    (value) =>
-      value.historyFrom.epochMilliseconds <= value.historyTo.epochMilliseconds &&
-      value.historyTo.epochMilliseconds < value.expiresAt.epochMilliseconds
+    (value) => value.historyFrom.epochMilliseconds <= value.historyTo.epochMilliseconds
   )
 );
 export type ConnectionConsentIntent = typeof ConnectionConsentIntent.Type;
@@ -58,7 +68,6 @@ export type ConnectionBankPreparation = Readonly<{
       userId: UserId;
       attempt: typeof ConnectionAttemptReference.Type;
       state: string;
-      nonce: string;
       challenge: string;
       recordConsent: (consentId: string) => Effect.Effect<void, ConnectionAuthorizationUnavailable>;
       expiresAtMilliseconds: number;

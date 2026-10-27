@@ -2,22 +2,27 @@ import {
   ConnectionAuthorizationUnavailable,
   type ConnectionBankPreparation,
 } from "../connections/contract";
-import { Context, Crypto, Effect, Layer, Option, PlatformError, Redacted, Schema } from "effect";
+import {
+  Clock,
+  Context,
+  Crypto,
+  Effect,
+  Layer,
+  Option,
+  PlatformError,
+  Redacted,
+  Schema,
+} from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { sandboxPublicKey } from "../bancolombia-sandbox/contract";
 import {
   BancolombiaAuthenticationFailed,
   BancolombiaAuthorizationFailed,
-  type BancolombiaAuthorizationInput,
   BancolombiaConsentProfile,
   type BancolombiaSandboxEnvironment,
 } from "./contract";
-import {
-  authenticateBancolombiaSandbox,
-  authorizeBancolombiaSandbox,
-  pushBancolombiaSandboxAuthorization,
-} from "./operations";
+import { authenticateBancolombiaSandbox, authorizeBancolombiaSandbox } from "./operations";
 
 const maximumPrivateKeyLength = 20000;
 const maximumProfileLength = 8192;
@@ -78,49 +83,66 @@ export const verifyBancolombiaSandboxAuthentication = (
 ): Effect.Effect<void, BancolombiaAuthenticationFailed> =>
   withSandboxClient(environment, authenticateBancolombiaSandbox);
 
-/** Caller must have durably admitted this exact attempt and consent; no request or retry authority is created here. */
-export const prepareBancolombiaSandboxAuthorization = ({
-  environment,
-  request,
-}: Readonly<{
-  environment: BancolombiaSandboxEnvironment;
-  request: BancolombiaAuthorizationInput;
-}>): Effect.Effect<
-  Readonly<{ url: string; expiresAtMilliseconds: number }>,
-  BancolombiaAuthorizationFailed
-> =>
-  withSandboxClient(environment, (input) =>
-    pushBancolombiaSandboxAuthorization({ ...input, ...request })
-  ).pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed()));
-
-/** Missing or foreign test profiles cannot install bank execution; registration remains a separate gate. */
-export const makeBancolombiaSandboxPreparation = (
-  input: Readonly<{ environment: BancolombiaSandboxEnvironment; userId: string }>
-): Option.Option<ConnectionBankPreparation> => {
-  const parsed = Option.flatMap(
-    Option.fromUndefinedOr(input.environment.BANCOLOMBIA_SANDBOX_CONSENT_PROFILE).pipe(
+const sandboxProfile = (
+  environment: BancolombiaSandboxEnvironment
+): Option.Option<BancolombiaConsentProfile> =>
+  Option.flatMap(
+    Option.fromUndefinedOr(environment.BANCOLOMBIA_SANDBOX_CONSENT_PROFILE).pipe(
       Option.filter((value) => value.length <= maximumProfileLength)
     ),
     Schema.decodeUnknownOption(Schema.fromJsonString(BancolombiaConsentProfile))
   );
-  return Option.filter(parsed, (profile) => profile.userId === input.userId).pipe(
-    Option.map((profile) => {
-      const redactedProfile = Redacted.make(profile);
-      return {
-        intent: profile.intent,
-        prepare: (request) =>
-          withSandboxClient(input.environment, (client) =>
-            authorizeBancolombiaSandbox({
-              ...client,
-              ...request,
-              profile: redactedProfile,
-              recordConsent: (consentId) =>
-                request
-                  .recordConsent(consentId)
-                  .pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed())),
-            })
-          ).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable())),
-      };
-    })
+
+export const bancolombiaSandboxAdmission = (
+  environment: BancolombiaSandboxEnvironment
+): Option.Option<Readonly<{ userId: string; startsAt: number; expiresAt: number }>> =>
+  Option.map(sandboxProfile(environment), ({ userId, admission }) => ({
+    userId,
+    startsAt: admission.startsAt.epochMilliseconds,
+    expiresAt: admission.expiresAt.epochMilliseconds,
+  }));
+
+const prepareProfile = (
+  environment: BancolombiaSandboxEnvironment,
+  profile: BancolombiaConsentProfile,
+  request: Parameters<ConnectionBankPreparation["prepare"]>[0]
+): ReturnType<ConnectionBankPreparation["prepare"]> =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    if (
+      request.userId !== profile.userId ||
+      now < profile.admission.startsAt.epochMilliseconds ||
+      now >= profile.admission.expiresAt.epochMilliseconds
+    ) {
+      return yield* new ConnectionAuthorizationUnavailable();
+    }
+    return yield* withSandboxClient(environment, (client) =>
+      authorizeBancolombiaSandbox({
+        ...client,
+        ...request,
+        expiresAtMilliseconds: Math.min(
+          request.expiresAtMilliseconds,
+          profile.admission.expiresAt.epochMilliseconds
+        ),
+        profile: Redacted.make(profile),
+        recordConsent: (consentId) =>
+          request
+            .recordConsent(consentId)
+            .pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed())),
+      })
+    ).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable()));
+  });
+
+/** Missing or foreign test profiles cannot install bank execution; registration remains a separate gate. */
+export const makeBancolombiaSandboxPreparation = (
+  input: Readonly<{ environment: BancolombiaSandboxEnvironment; userId: string }>
+): Option.Option<ConnectionBankPreparation> =>
+  Option.filter(
+    sandboxProfile(input.environment),
+    (profile) => profile.userId === input.userId
+  ).pipe(
+    Option.map((profile) => ({
+      intent: profile.intent,
+      prepare: (request) => prepareProfile(input.environment, profile, request),
+    }))
   );
-};

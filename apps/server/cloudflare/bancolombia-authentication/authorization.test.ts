@@ -21,7 +21,6 @@ const issuer = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
 const as = "https://as1-api-open-finance-sandbox.ambientesbc.com";
 const clientId = "10000000-0000-4000-8000-000000000001";
 const state = "s".repeat(43);
-const nonce = "n".repeat(43);
 const challenge = "c".repeat(43);
 
 const signing = Effect.gen(function* () {
@@ -63,7 +62,6 @@ const checkPar = (
       redirect_uri: "https://api.fidyapp.com/connections/bancolombia/sandbox/callback",
       scope: "accounts:synthetic-consent openid",
       state,
-      nonce,
       response_type: "code",
       code_challenge: challenge,
       code_challenge_method: "S256",
@@ -96,10 +94,13 @@ it.effect(
           yield* checkPar(request, key.publicKey);
           return HttpClientResponse.fromWeb(
             request,
-            Response.json({
-              request_uri: "urn:ietf:params:oauth:request_uri:synthetic",
-              expires_in: 90,
-            })
+            Response.json(
+              {
+                request_uri: "urn:ietf:params:oauth:request_uri:synthetic",
+                expires_in: 90,
+              },
+              { status: 201 }
+            )
           );
         })
       );
@@ -111,7 +112,6 @@ it.effect(
         httpClient,
         consentId: "synthetic-consent",
         state,
-        nonce,
         challenge,
         expiresAtMilliseconds: 600000,
       });
@@ -149,7 +149,6 @@ it.effect("refuses hostile discovery before disclosing a signed PAR assertion", 
         clientId,
         consentId: "synthetic-consent",
         state,
-        nonce,
         challenge,
         expiresAtMilliseconds: 600000,
         httpClient: HttpClient.make((request) => {
@@ -172,16 +171,16 @@ it.effect("does not retry uncertain or malformed PAR outcomes or expose provider
       { status: 302, body: { error: "synthetic-secret" } },
       { status: 500, body: { error: "synthetic-secret" } },
       {
-        status: 201,
+        status: 200,
         body: { request_uri: "urn:ietf:params:oauth:request_uri:synthetic", expires_in: 90 },
       },
-      { status: 200, body: { request_uri: "https://foreign.example/secret", expires_in: 90 } },
+      { status: 201, body: { request_uri: "https://foreign.example/secret", expires_in: 90 } },
       {
-        status: 200,
+        status: 201,
         body: { request_uri: "urn:ietf:params:oauth:request_uri:synthetic", expires_in: 0 },
       },
       {
-        status: 200,
+        status: 201,
         body: { request_uri: "urn:ietf:params:oauth:request_uri:synthetic", expires_in: 36000 },
       },
     ]) {
@@ -191,7 +190,6 @@ it.effect("does not retry uncertain or malformed PAR outcomes or expose provider
         clientId,
         consentId: "synthetic-consent",
         state,
-        nonce,
         challenge,
         expiresAtMilliseconds: 600000,
         httpClient: HttpClient.make((request) => {
@@ -233,15 +231,33 @@ const assertionIdentifier = (
   ).pipe(Effect.map((value) => value.payload.jti ?? ""));
 
 const syntheticProfile = Schema.decodeSync(BancolombiaConsentProfile)({
-  contract: "b794218bd9dbf50f68b20aa2335e552ecfb5734830a9fc1c36e70622b5928650",
+  contract: "869a3da43fed9043b734e9be698e49234738cb3b1a26ca79cde3f606eb3fcd62",
   userId: clientId,
+  admission: { startsAt: "1970-01-01T00:00:00.000Z", expiresAt: "1970-01-01T00:10:00.000Z" },
   financialId: "synthetic-participant",
-  accountOwner: { SchemeName: "CC", Identification: "synthetic-identity" },
+  accountOwner: {
+    Name: "Cliente de prueba",
+    SchemeName: "CC",
+    Identification: "synthetic-identity",
+  },
+  onBehalfOf: {
+    TradingName: "Prueba",
+    LegalName: "Prueba SAS",
+    IdentifierType: "Other",
+    Identifier: "synthetic-company",
+  },
+  customerIpAddress: "127.0.0.1",
   intent: {
-    permissions: ["ReadAccountsBasic", "ReadBalances", "ReadTransactionsDetail"],
+    permissions: [
+      "ReadAccountBasic",
+      "ReadAccountDetail",
+      "ReadBalance",
+      "ReadTransactionBasic",
+      "ReadTransactionDetail",
+    ],
     historyFrom: "1969-12-31T00:00:00.000Z",
     historyTo: "1970-01-01T00:00:00.000Z",
-    expiresAt: "1970-04-01T00:00:00.000Z",
+    expiryPolicy: "bank-default",
   },
 });
 const consentResponse = {
@@ -249,7 +265,7 @@ const consentResponse = {
     ConsentId: "synthetic-consent",
     Status: "AwaitingAuthorization",
     Permissions: syntheticProfile.intent.permissions,
-    ExpirationDateTime: DateTime.formatIso(syntheticProfile.intent.expiresAt),
+
     TransactionFromDateTime: DateTime.formatIso(syntheticProfile.intent.historyFrom),
     TransactionToDateTime: DateTime.formatIso(syntheticProfile.intent.historyTo),
   },
@@ -257,8 +273,8 @@ const consentResponse = {
 const createdConsentEndpoint =
   "https://rs1-api-open-finance-sandbox.ambientesbc.com/open-banking/v1/deposits/accounts/account-access-consent";
 const returnedPermissions = (mode: string): readonly string[] => {
-  if (mode === "mismatch") return ["ReadAccountsBasic"];
-  if (mode === "duplicate") return ["ReadAccountsBasic", "ReadAccountsBasic", "ReadAccountsBasic"];
+  if (mode === "mismatch") return ["ReadAccountBasic"];
+  if (mode === "duplicate") return ["ReadAccountBasic", "ReadAccountBasic", "ReadAccountBasic"];
   return consentResponse.Data.Permissions;
 };
 it.effect(
@@ -268,6 +284,7 @@ it.effect(
       const keys = yield* signing;
       for (const mode of [
         "ready",
+        "minimal",
         "uncertain",
         "mismatch",
         "duplicate",
@@ -294,21 +311,24 @@ it.effect(
               ).toEqual({
                 Data: {
                   Permissions: syntheticProfile.intent.permissions,
-                  ExpirationDateTime: consentResponse.Data.ExpirationDateTime,
+
                   TransactionFromDateTime: consentResponse.Data.TransactionFromDateTime,
                   TransactionToDateTime: consentResponse.Data.TransactionToDateTime,
                   AccountOwner: syntheticProfile.accountOwner,
+                  OnBehalfOf: syntheticProfile.onBehalfOf,
                 },
               });
               return HttpClientResponse.fromWeb(
                 request,
                 Response.json(
-                  {
-                    Data: {
-                      ...consentResponse.Data,
-                      Permissions: returnedPermissions(mode),
-                    },
-                  },
+                  mode === "minimal"
+                    ? { Data: { ConsentId: "synthetic-consent" } }
+                    : {
+                        Data: {
+                          ...consentResponse.Data,
+                          Permissions: returnedPermissions(mode),
+                        },
+                      },
                   { status: mode === "uncertain" ? 503 : 200 }
                 )
               );
@@ -332,10 +352,13 @@ it.effect(
             yield* checkPar(request, keys.key.publicKey);
             return HttpClientResponse.fromWeb(
               request,
-              Response.json({
-                request_uri: "urn:ietf:params:oauth:request_uri:synthetic",
-                expires_in: 90,
-              })
+              Response.json(
+                {
+                  request_uri: "urn:ietf:params:oauth:request_uri:synthetic",
+                  expires_in: 90,
+                },
+                { status: 201 }
+              )
             );
           }).pipe(Effect.orDie)
         );
@@ -344,7 +367,6 @@ it.effect(
           clientId,
           httpClient,
           state,
-          nonce,
           challenge,
           expiresAtMilliseconds: 600000,
           profile: Redacted.make(syntheticProfile),
@@ -355,7 +377,7 @@ it.effect(
               : Effect.void;
           },
         }).pipe(Effect.exit);
-        if (mode === "ready") {
+        if (mode === "ready" || mode === "minimal") {
           expect(Exit.isSuccess(result)).toBe(true);
           expect(urls).toEqual([
             `${issuer}/.well-known/openid-configuration`,

@@ -1,4 +1,5 @@
-import { Clock, type Crypto, DateTime, Effect, Redacted, Schema } from "effect";
+import { UtcTimestamp } from "../../src/core/_shared/time";
+import { Clock, type Crypto, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { type JWK, SignJWT, importJWK, importPKCS8, jwtVerify } from "jose";
 import { makeBancolombiaSandboxOutboundHttp } from "../../src/shell/outbound-http/operations";
@@ -13,6 +14,7 @@ const maximumTokenBytes = 32768;
 const millisecondsPerSecond = 1000;
 const assertionLifetimeSeconds = 300;
 const successStatus = 200;
+const parCreatedStatus = 201;
 const issuer = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
 const token = "https://as1-api-open-finance-sandbox.ambientesbc.com/token";
 const Discovery = Schema.Struct({
@@ -152,7 +154,7 @@ const PushedAuthorization = Schema.Struct({
   ),
 });
 
-/** Push one already-created consent under the public sandbox PAR contract; never create consent or retry uncertainty. */
+/** Push one already-created consent under the support-provided sandbox PAR contract; never create consent or retry uncertainty. */
 export const pushBancolombiaSandboxAuthorization = (
   input: SandboxAuthenticationInput & BancolombiaAuthorizationInput
 ): Effect.Effect<
@@ -182,7 +184,7 @@ export const pushBancolombiaSandboxAuthorization = (
       clientId: input.clientId,
       ...parameters,
     });
-    if (response.status !== successStatus) return yield* new BancolombiaAuthorizationFailed();
+    if (response.status !== parCreatedStatus) return yield* new BancolombiaAuthorizationFailed();
     const pushed = yield* Schema.decodeEffect(Schema.fromJsonString(PushedAuthorization))(
       new TextDecoder().decode(response.body)
     );
@@ -206,27 +208,25 @@ export const pushBancolombiaSandboxAuthorization = (
 const ConsentRequest = Schema.Struct({
   Data: Schema.Struct({
     Permissions: Schema.Array(Schema.String),
-    ExpirationDateTime: Schema.String,
-    TransactionFromDateTime: Schema.String,
-    TransactionToDateTime: Schema.String,
+    TransactionFromDateTime: UtcTimestamp,
+    TransactionToDateTime: UtcTimestamp,
     AccountOwner: BancolombiaConsentProfile.fields.accountOwner,
+    OnBehalfOf: BancolombiaConsentProfile.fields.onBehalfOf,
   }),
 });
 const AuthorizationProof = Schema.Struct({
   state: BancolombiaAuthorizationInput.fields.state,
-  nonce: BancolombiaAuthorizationInput.fields.nonce,
   challenge: BancolombiaAuthorizationInput.fields.challenge,
   expiresAtMilliseconds: BancolombiaAuthorizationInput.fields.expiresAtMilliseconds,
 });
-
 const CreatedConsent = Schema.Struct({
   Data: Schema.Struct({
     ConsentId: BancolombiaAuthorizationInput.fields.consentId,
-    Status: Schema.Literal("AwaitingAuthorization"),
-    Permissions: Schema.Array(Schema.String),
-    ExpirationDateTime: Schema.String,
-    TransactionFromDateTime: Schema.String,
-    TransactionToDateTime: Schema.String,
+    Status: Schema.optionalKey(Schema.Literal("AwaitingAuthorization")),
+    Permissions: Schema.optionalKey(Schema.Array(Schema.String)),
+    ExpirationDateTime: Schema.optionalKey(UtcTimestamp),
+    TransactionFromDateTime: Schema.optionalKey(UtcTimestamp),
+    TransactionToDateTime: Schema.optionalKey(UtcTimestamp),
   }),
 });
 type ConsentCreationInput = SandboxAuthenticationInput &
@@ -235,21 +235,30 @@ type ConsentCreationInput = SandboxAuthenticationInput &
     profile: Redacted.Redacted<BancolombiaConsentProfile>;
     recordConsent: (consentId: string) => Effect.Effect<void, BancolombiaAuthorizationFailed>;
   }>;
-
-const matchesConsent = (
+const matchesPermissions = (
   created: (typeof CreatedConsent.Type)["Data"],
-  requested: (typeof ConsentRequest.Type)["Data"]
+  requested: readonly string[]
 ): boolean =>
-  created.Permissions.length === requested.Permissions.length &&
-  new Set(created.Permissions).size === created.Permissions.length &&
-  created.Permissions.every((permission) => requested.Permissions.includes(permission)) &&
-  created.ExpirationDateTime === requested.ExpirationDateTime &&
-  created.TransactionFromDateTime === requested.TransactionFromDateTime &&
-  created.TransactionToDateTime === requested.TransactionToDateTime;
+  created.Permissions === undefined ||
+  (created.Permissions.length === requested.length &&
+    new Set(created.Permissions).size === requested.length &&
+    created.Permissions.every((permission) => requested.includes(permission)));
+const matchesHistory = (
+  created: (typeof CreatedConsent.Type)["Data"],
+  requested: BancolombiaConsentProfile["intent"]
+): boolean =>
+  (created.TransactionFromDateTime === undefined ||
+    created.TransactionFromDateTime.epochMilliseconds ===
+      requested.historyFrom.epochMilliseconds) &&
+  (created.TransactionToDateTime === undefined ||
+    created.TransactionToDateTime.epochMilliseconds === requested.historyTo.epochMilliseconds);
 
 const createConsent = (
   input: ConsentCreationInput
-): Effect.Effect<string, BancolombiaAuthorizationFailed> =>
+): Effect.Effect<
+  Readonly<{ consentId: string; expiresAtMilliseconds: number }>,
+  BancolombiaAuthorizationFailed
+> =>
   Effect.gen(function* () {
     const profile = Redacted.value(input.profile);
     const bearer = yield* applicationToken(input, AuthorizationDiscovery);
@@ -257,32 +266,46 @@ const createConsent = (
       return yield* new BancolombiaAuthorizationFailed();
     }
     const interactionId = yield* input.crypto.randomUUIDv4();
-    const data = {
-      Permissions: profile.intent.permissions,
-      ExpirationDateTime: DateTime.formatIso(profile.intent.expiresAt),
-      TransactionFromDateTime: DateTime.formatIso(profile.intent.historyFrom),
-      TransactionToDateTime: DateTime.formatIso(profile.intent.historyTo),
-      AccountOwner: profile.accountOwner,
-    };
+    const payload = yield* Schema.encodeEffect(Schema.fromJsonString(ConsentRequest))({
+      Data: {
+        Permissions: profile.intent.permissions,
+        TransactionFromDateTime: profile.intent.historyFrom,
+        TransactionToDateTime: profile.intent.historyTo,
+        AccountOwner: profile.accountOwner,
+        ...(profile.onBehalfOf === undefined ? {} : { OnBehalfOf: profile.onBehalfOf }),
+      },
+    });
     const response = yield* makeBancolombiaSandboxOutboundHttp(input.httpClient).execute({
       _tag: "CreateConsent",
       bearer,
       financialId: profile.financialId,
       interactionId,
-      payload: Redacted.make(
-        yield* Schema.encodeEffect(Schema.fromJsonString(ConsentRequest))({ Data: data })
-      ),
+      customerIpAddress: Option.fromUndefinedOr(profile.customerIpAddress),
+      payload: Redacted.make(payload),
     });
-    if (response.status !== successStatus) return yield* new BancolombiaAuthorizationFailed();
+    if (![successStatus, parCreatedStatus].includes(response.status)) {
+      return yield* new BancolombiaAuthorizationFailed();
+    }
     const created = (yield* Schema.decodeEffect(Schema.fromJsonString(CreatedConsent))(
       new TextDecoder().decode(response.body)
     )).Data;
-    if (!matchesConsent(created, data)) return yield* new BancolombiaAuthorizationFailed();
+    if (
+      !matchesPermissions(created, profile.intent.permissions) ||
+      !matchesHistory(created, profile.intent)
+    ) {
+      return yield* new BancolombiaAuthorizationFailed();
+    }
     yield* input.recordConsent(created.ConsentId);
-    return created.ConsentId;
+    return {
+      consentId: created.ConsentId,
+      expiresAtMilliseconds: Math.min(
+        input.expiresAtMilliseconds,
+        created.ExpirationDateTime?.epochMilliseconds ?? input.expiresAtMilliseconds
+      ),
+    };
   }).pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed()));
 
-/** Uses only the explicitly configured public-contract profile; activation still requires bank acceptance. */
+/** Create the support-collection consent once, record its identifier, then push the exact PAR. */
 export const authorizeBancolombiaSandbox = (
   input: ConsentCreationInput
 ): Effect.Effect<
@@ -295,20 +318,9 @@ export const authorizeBancolombiaSandbox = (
       Redacted.value(input.profile)
     );
     const now = yield* Clock.currentTimeMillis;
-    if (
-      input.expiresAtMilliseconds <= now ||
-      profile.intent.expiresAt.epochMilliseconds <= now ||
-      profile.intent.historyTo.epochMilliseconds > now
-    ) {
+    if (input.expiresAtMilliseconds <= now || profile.intent.historyTo.epochMilliseconds > now) {
       return yield* new BancolombiaAuthorizationFailed();
     }
-    const bounded = {
-      ...input,
-      expiresAtMilliseconds: Math.min(
-        input.expiresAtMilliseconds,
-        profile.intent.expiresAt.epochMilliseconds
-      ),
-    };
-    const consentId = yield* createConsent(bounded);
-    return yield* pushBancolombiaSandboxAuthorization({ ...bounded, consentId });
+    const created = yield* createConsent(input);
+    return yield* pushBancolombiaSandboxAuthorization({ ...input, ...created });
   }).pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed()));

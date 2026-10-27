@@ -1,5 +1,8 @@
 import { ConnectionInstitutions } from "../../src/shell/connections/contract";
-import { registeredInstitutionPredicate } from "./internal/institution-registration";
+import {
+  institutionsForUser,
+  registeredInstitutionPredicate,
+} from "./internal/institution-registration";
 import { ConnectionBrowserAdmission, ConnectionRetentionUnavailable } from "./contract";
 import { beginContinuation } from "./internal/browser";
 import { initiationStatements, readInitiationResult } from "./internal/initiation";
@@ -95,7 +98,7 @@ export const prepareConnectInstitution = (
   work: CanonicalPreparationWork
 ): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
-    const institutions = yield* ConnectionInstitutions;
+    const institutions = yield* institutionsForUser(work.subject.userId);
     const input = Schema.decodeUnknownOption(Schema.Struct({ payload: ConnectInstitutionInput }))(
       work.input
     );
@@ -185,15 +188,17 @@ export const browseConnections = ({
         ],
       })
     );
-    return yield* presentConnections({ results, operation });
+    return yield* presentConnections({ results, operation, userId: subject.userId });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
 const presentConnections = ({
   results,
   operation,
+  userId,
 }: Readonly<{
   results: ReadonlyArray<D1Result>;
   operation: ConnectionQueryOperation;
+  userId: string;
 }>): Effect.Effect<Response, Schema.SchemaError> =>
   Effect.gen(function* () {
     const connections = yield* Schema.decodeUnknownEffect(Schema.Array(Schema.toType(Connection)))(
@@ -221,7 +226,7 @@ const presentConnections = ({
     const summary: InstitutionSummary = {
       id: InstitutionId.make("bancolombia"),
       displayName: "Bancolombia",
-      availability: (yield* ConnectionInstitutions).includes(InstitutionId.make("bancolombia"))
+      availability: (yield* institutionsForUser(userId)).includes(InstitutionId.make("bancolombia"))
         ? "available"
         : "unavailable",
       connection: Option.map(first, ({ id, state }) => ({ id: ConnectionId.make(id), state })),
@@ -290,7 +295,9 @@ export const requiresErasureSuppression = (
       try: () =>
         input.db
           .prepare(`SELECT EXISTS(SELECT 1 FROM connections c
-    WHERE c.user_id=? AND ${registeredInstitutionPredicate({ column: "c.institution_id", institutions })}) AS pending`)
+    WHERE c.user_id=? AND (${registeredInstitutionPredicate({ column: "c.institution_id", institutions })}
+      OR EXISTS (SELECT 1 FROM connection_attempts a JOIN connection_authorizations b ON b.attempt_id=a.id
+        WHERE a.connection_id=c.id AND b.consent_id IS NOT NULL))) AS pending`)
           .bind(input.userId)
           .first<number>("pending"),
       catch: () => new ConnectionRetentionUnavailable(),

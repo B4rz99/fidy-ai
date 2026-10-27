@@ -215,8 +215,7 @@ caller-supplied redirect. Query state and expiry work belong to the authenticati
 An uncertain preparation disables repeat submission and recovers through review. The screen
 truthfully shows pending authorization and exposes a bank link only after validated PAR settlement,
 within the shorter bank deadline. ResourceLimited non-admission can be paced within the original
-request budget; uncertain POST outcomes cannot be replayed. The real consent provider remains
-disabled pending its accepted sandbox contract. Callback credentials, Account discovery and
+request budget; uncertain POST outcomes cannot be replayed. Real sandbox preparation requires a private, same-User profile and a bounded operator test window. Callback credentials, Account discovery and
 activation remain unavailable until the verified institution capsule is installed.
 
 Conectar submits the exact reviewed scope subset, duration and absolute expiration through the typed

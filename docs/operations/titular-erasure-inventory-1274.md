@@ -244,7 +244,7 @@ keys require an inbound-qualified Turn; staging cleanup never deletes the Turn.
 
 Sandbox bank authorization preparation adds the credential disposition `connection_authorizations`.
 It stores the exact non-identity consent intent and returned bank ConsentId alongside the private
-PKCE verifier and state/nonce digests. It is deleted before `connection_attempts`, is excluded from
+PKCE verifier and state digest. It is deleted before `connection_attempts`, is excluded from
 retained archives, and has its own frozen-store permits. Expiry clears the verifier and handoff
 independently; full User erasure removes the remaining record. Synthetic bank test identity belongs
 only to the private configuration profile and outbound consent request, never to this store.

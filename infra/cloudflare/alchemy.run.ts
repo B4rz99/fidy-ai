@@ -386,6 +386,9 @@ export default Alchemy.Stack(
         BANCOLOMBIA_SANDBOX_CLIENT_ID: yield* Config.String("BANCOLOMBIA_SANDBOX_CLIENT_ID").pipe(
           Config.withDefault("")
         ),
+        BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: yield* Config.Redacted(
+          "BANCOLOMBIA_SANDBOX_CONSENT_PROFILE"
+        ).pipe(Config.withDefault(Redacted.make(""))),
         BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: yield* Config.Redacted(
           "BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM"
         ).pipe(Config.withDefault(Redacted.make(""))),

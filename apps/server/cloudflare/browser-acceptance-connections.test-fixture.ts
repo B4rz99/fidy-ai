@@ -31,7 +31,8 @@ const keys = await Effect.runPromise(
 );
 const Scenario = Schema.Literals(["ready", "destination", "signing", "transport"]);
 
-const okStatus = 200;
+const fixtureAdmissionExpiry = 600000;
+const createdStatus = 201;
 const unavailableStatus = 503;
 const fixtureResponse = (
   input: Readonly<{ scenario: typeof Scenario.Type; intent: ConnectionConsentIntent; url: string }>
@@ -67,7 +68,7 @@ const fixtureResponse = (
         ConsentId: "synthetic-consent",
         Status: "AwaitingAuthorization",
         Permissions: input.intent.permissions,
-        ExpirationDateTime: DateTime.formatIso(input.intent.expiresAt),
+
         TransactionFromDateTime: DateTime.formatIso(input.intent.historyFrom),
         TransactionToDateTime: DateTime.formatIso(input.intent.historyTo),
       },
@@ -75,7 +76,7 @@ const fixtureResponse = (
   }
   return Response.json(
     { request_uri: "urn:ietf:params:oauth:request_uri:synthetic", expires_in: 90 },
-    { status: input.scenario === "transport" ? unavailableStatus : okStatus }
+    { status: input.scenario === "transport" ? unavailableStatus : createdStatus }
   );
 };
 const fixtureClient = (
@@ -92,14 +93,18 @@ const millisecondsPerDay = 86400000;
 const fixtureHistoryMilliseconds = fixtureHistoryDays * millisecondsPerDay;
 
 const fixtureIntent = (): ConnectionConsentIntent => ({
-  permissions: ["ReadAccountsBasic", "ReadBalances", "ReadTransactionsDetail"],
+  permissions: [
+    "ReadAccountBasic",
+    "ReadAccountDetail",
+    "ReadBalance",
+    "ReadTransactionBasic",
+    "ReadTransactionDetail",
+  ],
   historyFrom: DateTime.makeUnsafe(
     DateTime.nowUnsafe().epochMilliseconds - fixtureHistoryMilliseconds
   ),
   historyTo: DateTime.nowUnsafe(),
-  expiresAt: DateTime.makeUnsafe(
-    DateTime.nowUnsafe().epochMilliseconds + fixtureHistoryMilliseconds
-  ),
+  expiryPolicy: "bank-default",
 });
 
 export const makeConnectionFixture = (
@@ -121,8 +126,12 @@ export const makeConnectionFixture = (
             ...keys,
             ...input,
             profile: Redacted.make({
-              contract: "b794218bd9dbf50f68b20aa2335e552ecfb5734830a9fc1c36e70622b5928650",
+              contract: "869a3da43fed9043b734e9be698e49234738cb3b1a26ca79cde3f606eb3fcd62",
               userId: Schema.decodeSync(UserId)(userId),
+              admission: {
+                startsAt: DateTime.makeUnsafe(0),
+                expiresAt: DateTime.makeUnsafe(fixtureAdmissionExpiry),
+              },
               financialId: "synthetic-financial-id",
               accountOwner: { SchemeName: "CC", Identification: "synthetic-identity" },
               intent,

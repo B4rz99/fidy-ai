@@ -1,6 +1,7 @@
 import { ConnectionConsentIntent } from "../connections/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { Data, Schema } from "effect";
+import { UtcTimestamp } from "../../src/core/_shared/time";
 
 export class BancolombiaAuthenticationFailed extends Data.TaggedError(
   "BancolombiaAuthenticationFailed"
@@ -33,17 +34,38 @@ export const BancolombiaAuthorizationInput = Schema.Struct({
     Schema.isPattern(/^[A-Za-z0-9_-]+$/u)
   ),
   state: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)),
-  nonce: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)),
   challenge: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)),
   expiresAtMilliseconds: Schema.Int,
 });
 export type BancolombiaAuthorizationInput = typeof BancolombiaAuthorizationInput.Type;
 
+const maximumNameLength = 140;
+const maximumIdentifierLength = 35;
+const maximumAdmissionMilliseconds = 3600000;
 export const BancolombiaConsentProfile = Schema.Struct({
-  contract: Schema.Literal("b794218bd9dbf50f68b20aa2335e552ecfb5734830a9fc1c36e70622b5928650"),
+  contract: Schema.Literal("869a3da43fed9043b734e9be698e49234738cb3b1a26ca79cde3f606eb3fcd62"),
   userId: UserId,
-  financialId: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{1,128}$/u)),
+  admission: Schema.Struct({ startsAt: UtcTimestamp, expiresAt: UtcTimestamp }).check(
+    Schema.makeFilter(
+      ({ startsAt, expiresAt }) =>
+        expiresAt.epochMilliseconds > startsAt.epochMilliseconds &&
+        expiresAt.epochMilliseconds - startsAt.epochMilliseconds <= maximumAdmissionMilliseconds
+    )
+  ),
+  financialId: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{0,128}$/u)),
+  customerIpAddress: Schema.optionalKey(
+    Schema.String.check(Schema.isPattern(/^[0-9A-Fa-f:.]{2,45}$/u))
+  ),
+  onBehalfOf: Schema.optionalKey(
+    Schema.Struct({
+      TradingName: Schema.String.check(Schema.isBetweenLength(1, maximumNameLength)),
+      LegalName: Schema.String.check(Schema.isBetweenLength(1, maximumNameLength)),
+      IdentifierType: Schema.Literal("Other"),
+      Identifier: Schema.String.check(Schema.isBetweenLength(1, maximumIdentifierLength)),
+    })
+  ),
   accountOwner: Schema.Struct({
+    Name: Schema.optionalKey(Schema.String.check(Schema.isBetweenLength(1, maximumNameLength))),
     SchemeName: Schema.Literals(["CC", "NIT", "CE", "TI", "PA", "CD", "PPT", "RC"]),
     Identification: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9-]{1,35}$/u)),
   }),

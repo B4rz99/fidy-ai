@@ -1,6 +1,13 @@
-import { makeBancolombiaSandboxPreparation } from "../bancolombia-authentication/runtime";
+import {
+  bancolombiaSandboxAdmission,
+  makeBancolombiaSandboxPreparation,
+} from "../bancolombia-authentication/runtime";
 import type { BancolombiaSandboxEnvironment } from "../bancolombia-authentication/contract";
-import { ConnectionBank, type ConnectionBankPreparation } from "../connections/contract";
+import {
+  ConnectionBank,
+  type ConnectionBankPreparation,
+  ConnectionSandboxAdmission,
+} from "../connections/contract";
 import {
   ConnectionInstitutions,
   registeredConnectionInstitutionIds,
@@ -762,8 +769,7 @@ export class UserTransactionCoordinator {
   ): Promise<Response> {
     const { request, userId } = input;
     const { env: environment, mcp, erasureEnvironment } = this;
-    const clearCoordinator = (): Effect.Effect<boolean, ErasureUnavailable> =>
-      this.clearErasureCoordinator();
+    const clearCoordinator = this.clearErasureCoordinator.bind(this);
     return Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -809,6 +815,7 @@ export class UserTransactionCoordinator {
         })
       ).pipe(
         Effect.provideService(ConnectionInstitutions, this.institutions),
+        Effect.provideService(ConnectionSandboxAdmission, bancolombiaSandboxAdmission(environment)),
         Effect.provideService(ConnectionBank, this.bank),
         (work) => observeCoordinatorRequest(work, request, environment)
       )

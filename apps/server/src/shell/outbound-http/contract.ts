@@ -124,6 +124,7 @@ export type BancolombiaSandboxHttpService = Readonly<{
           bearer: Redacted.Redacted<string>;
           payload: Redacted.Redacted<string>;
           financialId: string;
+          customerIpAddress: Option.Option<string>;
           interactionId: string;
         }>
       | Readonly<{
@@ -132,7 +133,6 @@ export type BancolombiaSandboxHttpService = Readonly<{
           clientId: string;
           consentId: string;
           state: string;
-          nonce: string;
           challenge: string;
         }>
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure | Cause.TimeoutError>;

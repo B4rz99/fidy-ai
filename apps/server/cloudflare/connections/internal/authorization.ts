@@ -17,10 +17,8 @@ const PreparationResult = Schema.Struct({
 type Proof = Readonly<{
   verifier: Redacted.Redacted<string>;
   state: string;
-  nonce: string;
   challenge: string;
   stateDigest: string;
-  nonceDigest: string;
 }>;
 
 export const prepareProof = (
@@ -31,7 +29,7 @@ export const prepareProof = (
     const secret = (): string =>
       Base64Url.encode(crypto.getRandomValues(new Uint8Array(entropyBytes)));
     const values = yield* Effect.try({
-      try: () => ({ verifier: secret(), state: secret(), nonce: secret() }),
+      try: () => ({ verifier: secret(), state: secret() }),
       catch: () => new ConnectionAuthorizationUnavailable(),
     });
     const hash = (value: string): Effect.Effect<string, ConnectionAuthorizationUnavailable> =>
@@ -45,10 +43,8 @@ export const prepareProof = (
     return Option.some({
       verifier: Redacted.make(values.verifier),
       state: values.state,
-      nonce: values.nonce,
       challenge: yield* hash(values.verifier),
       stateDigest: yield* hash(values.state),
-      nonceDigest: yield* hash(values.nonce),
     });
   });
 };
@@ -66,13 +62,12 @@ export const authorizationStatements = (
     ? []
     : [
         input.db
-          .prepare(`INSERT INTO connection_authorizations(attempt_id,intent_json,verifier,state_digest,nonce_digest,phase,expires_at_ms)
-  SELECT id,?,?,?,?, 'preparing',expires_at_ms FROM connection_attempts WHERE public_reference=? AND prepared_session_id=? AND consumed_at_ms=?`)
+          .prepare(`INSERT INTO connection_authorizations(attempt_id,intent_json,verifier,state_digest,phase,expires_at_ms)
+  SELECT id,?,?,?, 'preparing',expires_at_ms FROM connection_attempts WHERE public_reference=? AND prepared_session_id=? AND consumed_at_ms=?`)
           .bind(
             input.intentJson,
             Redacted.value(input.proof.value.verifier),
             input.proof.value.stateDigest,
-            input.proof.value.nonceDigest,
             input.admission.attempt,
             input.admission.sessionId,
             input.current
@@ -127,7 +122,6 @@ export const settleAuthorization = (
               userId: input.admission.userId,
               attempt: input.admission.attempt,
               state: input.proof.state,
-              nonce: input.proof.nonce,
               challenge: input.proof.challenge,
               recordConsent: (consentId) => recordConsent({ ...input, consentId }),
               expiresAtMilliseconds: input.expiresAtMilliseconds,

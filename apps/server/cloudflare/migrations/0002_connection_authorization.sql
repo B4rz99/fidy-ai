@@ -4,7 +4,6 @@ CREATE TABLE connection_authorizations (
   consent_id TEXT CHECK(consent_id IS NULL OR length(consent_id) BETWEEN 1 AND 128),
   verifier TEXT CHECK(verifier IS NULL OR length(verifier)=43),
   state_digest TEXT NOT NULL CHECK(length(state_digest)=43),
-  nonce_digest TEXT NOT NULL CHECK(length(nonce_digest)=43),
   phase TEXT NOT NULL CHECK(phase IN ('preparing','prepared','failed')),
   handoff_url TEXT,
   expires_at_ms INTEGER NOT NULL,
@@ -24,7 +23,7 @@ CREATE TRIGGER connection_authorization_transition BEFORE UPDATE ON connection_a
 WHEN OLD.phase='failed' OR (NEW.phase='preparing' AND NOT(OLD.phase='preparing' AND OLD.consent_id IS NULL AND NEW.consent_id IS NOT NULL)) OR (OLD.phase='prepared' AND NEW.phase!='failed')
   OR NEW.intent_json IS NOT OLD.intent_json OR (OLD.consent_id IS NOT NULL AND NEW.consent_id IS NOT OLD.consent_id)
   OR NEW.attempt_id IS NOT OLD.attempt_id OR (NEW.verifier IS NOT OLD.verifier AND NEW.phase!='failed')
-  OR NEW.state_digest IS NOT OLD.state_digest OR NEW.nonce_digest IS NOT OLD.nonce_digest
+  OR NEW.state_digest IS NOT OLD.state_digest
   OR NEW.expires_at_ms>OLD.expires_at_ms
 BEGIN SELECT RAISE(ABORT,'connection_authorization_transition'); END;
 --> statement-breakpoint

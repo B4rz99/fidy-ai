@@ -43,7 +43,9 @@ export const sweepConnectionAttempts = (
           .bind(input.current, maximumRetentionRows),
         input.db
           .prepare(`DELETE FROM connection_attempts WHERE id IN
-      (SELECT id FROM connection_attempts WHERE expires_at_ms <= ? ORDER BY expires_at_ms, id LIMIT ?)`)
+      (SELECT a.id FROM connection_attempts a WHERE expires_at_ms <= ?
+        AND NOT EXISTS(SELECT 1 FROM connection_authorizations b WHERE b.attempt_id=a.id AND b.consent_id IS NOT NULL)
+        ORDER BY expires_at_ms, id LIMIT ?)`)
           .bind(input.current - attemptRetentionMilliseconds, maximumRetentionRows),
       ]),
     catch: () => new ConnectionRetentionUnavailable(),

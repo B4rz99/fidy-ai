@@ -1,4 +1,5 @@
 import { fixtureWorker as scheduledCoreWorker } from "../core-worker.test-fixture";
+import { requiresErasureSuppression } from "./operations";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
@@ -23,12 +24,19 @@ import {
 
 const institutionRegistration = { enabled: false };
 let bankPreparation: Option.Option<ConnectionBankPreparation> = Option.none();
+let sandboxProfile = Option.none<string>();
 
 const fixtureConsentIntent = (): ConnectionBankPreparation["intent"] => ({
-  permissions: ["ReadAccountsBasic", "ReadBalances", "ReadTransactionsDetail"],
+  permissions: [
+    "ReadAccountBasic",
+    "ReadAccountDetail",
+    "ReadBalance",
+    "ReadTransactionBasic",
+    "ReadTransactionDetail",
+  ],
   historyFrom: DateTime.makeUnsafe(DateTime.nowUnsafe().epochMilliseconds - 90 * 86400000),
   historyTo: DateTime.nowUnsafe(),
-  expiresAt: DateTime.makeUnsafe(DateTime.nowUnsafe().epochMilliseconds + 90 * 86400000),
+  expiryPolicy: "bank-default",
 });
 
 const users = [
@@ -108,6 +116,7 @@ afterAll(() => databases.dispose());
 beforeEach(() => {
   institutionRegistration.enabled = false;
   bankPreparation = Option.none();
+  sandboxProfile = Option.none();
   vi.useFakeTimers({ toFake: ["Date"] });
 });
 afterEach(() => {
@@ -139,6 +148,7 @@ const send = (
       fetch: (internal) =>
         coreWorker.fetch(new Request(internal), {
           DB: db,
+          BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: Option.getOrUndefined(sandboxProfile),
           AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
           CONTRACT_DIGEST: "a".repeat(64),
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
@@ -165,6 +175,7 @@ const send = (
                     },
                     {
                       DB: db,
+                      BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: Option.getOrUndefined(sandboxProfile),
                       AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
                       HOSTED_AI_MODEL: approvedWorkersAiModel,
                     },
@@ -238,6 +249,58 @@ it("discovers Bancolombia as unavailable without creating a Connection or exposi
       expect(yield* Effect.tryPromise(() => list.json())).toEqual({ data: [], next: [] });
     })
   ));
+it("admits only the configured sandbox User within its fixed window and rechecks before browser preparation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const now = DateTime.nowUnsafe().epochMilliseconds;
+      sandboxProfile = Option.some(
+        yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+          contract: "869a3da43fed9043b734e9be698e49234738cb3b1a26ca79cde3f606eb3fcd62",
+          userId: users[0],
+          admission: {
+            startsAt: DateTime.formatIso(DateTime.makeUnsafe(now)),
+            expiresAt: DateTime.formatIso(DateTime.makeUnsafe(now + 60000)),
+          },
+          financialId: "",
+          accountOwner: { SchemeName: "CC", Identification: "synthetic" },
+          intent: yield* Schema.encodeEffect(ConnectionConsentIntent)(fixtureConsentIntent()),
+        })
+      );
+      for (const index of [0, 1]) {
+        const response = yield* Effect.tryPromise(() => send(db, request(index, "/institutions")));
+        expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+          data: [{ availability: index === 0 ? "available" : "unavailable" }],
+        });
+      }
+      const started = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/connections", "POST", { institutionId: "bancolombia" }))
+      );
+      expect(started.status).toBe(200);
+      const reference = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT public_reference FROM connection_attempts")
+          .first<string>("public_reference")
+      );
+      vi.setSystemTime(now + 60000);
+      const expired = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt: reference }))
+      );
+      expect(expired.status).toBe(404);
+      const foreign = yield* Effect.tryPromise(() =>
+        send(db, request(1, "/connections", "POST", { institutionId: "bancolombia" }))
+      );
+      expect(foreign.status).toBe(400);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT count(*) AS total FROM connection_authorizations")
+            .first<number>("total")
+        )
+      ).toBe(0);
+    })
+  ));
+
 it("starts a stable Connecting association and reuses its original browser attempt", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -312,7 +375,7 @@ it("binds one bank handoff to the original attempt and never repeats its prepara
             const stored = yield* Effect.tryPromise(() =>
               db
                 .prepare(
-                  "SELECT b.verifier,b.state_digest,b.nonce_digest,b.phase,b.intent_json,b.consent_id FROM connection_authorizations b JOIN connection_attempts a ON a.id=b.attempt_id WHERE a.public_reference=?"
+                  "SELECT b.verifier,b.state_digest,b.phase,b.intent_json,b.consent_id FROM connection_authorizations b JOIN connection_attempts a ON a.id=b.attempt_id WHERE a.public_reference=?"
                 )
                 .bind(Option.getOrThrow(publicReference))
                 .first()
@@ -323,7 +386,6 @@ it("binds one bank handoff to the original attempt and never repeats its prepara
                 intent_json: Schema.String,
                 consent_id: Schema.Literal("synthetic-consent"),
                 state_digest: Schema.String,
-                nonce_digest: Schema.String,
                 phase: Schema.Literal("preparing"),
               })
             )(stored);
@@ -338,13 +400,9 @@ it("binds one bank handoff to the original attempt and never repeats its prepara
             expect(proof.state_digest).toBe(
               Base64Url.encode(yield* Effect.tryPromise(() => digest(input.state)))
             );
-            expect(proof.nonce_digest).toBe(
-              Base64Url.encode(yield* Effect.tryPromise(() => digest(input.nonce)))
-            );
             expect(input.userId).toBe(users[0]);
             expect(input.challenge).toMatch(/^[A-Za-z0-9_-]{43}$/u);
             expect(input.state).toMatch(/^[A-Za-z0-9_-]{43}$/u);
-            expect(input.nonce).toMatch(/^[A-Za-z0-9_-]{43}$/u);
             return { url, expiresAtMilliseconds: DateTime.nowUnsafe().epochMilliseconds + 90000 };
           }).pipe(Effect.orDie),
       });
@@ -366,6 +424,20 @@ it("binds one bank handoff to the original attempt and never repeats its prepara
         )).status
       ).toBe(404);
       expect(calls).toBe(1);
+      institutionRegistration.enabled = false;
+      yield* sweepConnectionAttempts({
+        db,
+        current: DateTime.nowUnsafe().epochMilliseconds + 172800000,
+      });
+      expect(yield* requiresErasureSuppression({ db, userId: users[0] })).toBe(true);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT verifier,consent_id FROM connection_authorizations").first()
+        )
+      ).toEqual({
+        verifier: null,
+        consent_id: "synthetic-consent",
+      });
     })
   ));
 
@@ -1256,7 +1328,7 @@ it("removes expired attempts after their bounded retention while retaining the s
     })
   ));
 
-it("scheduled retention erases abandoned preparation after Consent withdrawal without another User request", () =>
+it("scheduled retention clears abandoned proof after Consent withdrawal while retaining bank suppression evidence", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
@@ -1353,17 +1425,10 @@ it("scheduled retention erases abandoned preparation after Consent withdrawal wi
       vi.setSystemTime(started.continuation.expiresAt.epochMilliseconds + 86400000);
       yield* Effect.tryPromise(tick);
       expect(
-        yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connection_attempts").all())
-      ).toMatchObject({ results: [] });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT id AS attempt_id FROM connection_attempts WHERE prepared_session_id IS NOT NULL"
-            )
-            .all()
-        )
-      ).toMatchObject({ results: [] });
+        (yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connection_attempts").all()))
+          .results
+      ).toHaveLength(1);
+      expect(yield* requiresErasureSuppression({ db, userId: users[0] })).toBe(true);
       expect(
         yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connections").all())
       ).toMatchObject({ results: [{ id: started.connection.id }] });

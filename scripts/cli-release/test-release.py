@@ -1,12 +1,15 @@
 """Exercise release decisions and publication through their process boundary."""
 import hashlib
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import threading
 import unittest
+from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -28,15 +31,45 @@ class ReleaseTests(unittest.TestCase):
         self.contract.write_text('export const version = "contract-one";')
         self.state = self.root / 'state.json'
         self.state.write_text('[]')
+        state = self.state
+        self.failed_page = self.root / 'failed-page'
+        failed_page = self.failed_page
+
+        class ReleasesHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                page = int(parse_qs(urlsplit(self.path).query).get('page', ['1'])[0])
+                if failed_page.exists() and page == int(failed_page.read_text()):
+                    self.send_error(503)
+                    return
+                releases = json.loads(state.read_text())
+                start = (page - 1) * 30
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                if start + 30 < len(releases):
+                    self.send_header('Link', f'<http://127.0.0.1:{self.server.server_port}/releases?page={page + 1}>; rel="next"')
+                self.end_headers()
+                self.wfile.write(json.dumps(releases[start:start + 30]).encode())
+
+            def log_message(self, *_args):
+                pass
+
+        server = HTTPServer(('127.0.0.1', 0), ReleasesHandler)
+        thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': .01})
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join)
+        self.addCleanup(server.shutdown)
         self.previous = self.root / 'previous.json'
         self.log = self.root / 'calls.jsonl'
         gh = self.root / 'bin/gh'
         gh.write_text('''#!/usr/bin/env python3
-import json,os,pathlib,shutil,sys
+import json,os,pathlib,shutil,subprocess,sys
 args=sys.argv[1:]
 with open(os.environ['CALL_LOG'],'a') as log: log.write(json.dumps(args)+'\\n')
 if args[0]=='api':
-    if args[1].endswith('/releases'): print(json.dumps([json.load(open(os.environ['STATE']))]))
+    if args[1].endswith('/releases'):
+        args[1]=os.environ['RELEASES_URL']
+        sys.exit(subprocess.run([os.environ['REAL_GH'],*args],env=dict(os.environ,GH_TOKEN='synthetic-local-test')).returncode)
     elif args[1].endswith('/releases/latest'): print(json.dumps(json.load(open(os.environ['STATE']))[0]))
     elif '/releases/tags/' in args[1]: print(json.dumps({'draft':False,'immutable':os.environ.get('IMMUTABLE_RELEASE')=='true'}))
     elif args[1].endswith('/immutable-releases'):
@@ -51,15 +84,19 @@ elif args[:2]==['release','edit'] and '--latest=true' in args:
         gh.chmod(0o755)
         self.env = dict(os.environ, PATH=str(self.root / 'bin') + os.pathsep + os.environ['PATH'],
                         STATE=str(self.state), PREVIOUS=str(self.previous), CALL_LOG=str(self.log),
+                        REAL_GH=shutil.which('gh'), RELEASES_URL=f'http://127.0.0.1:{server.server_port}/releases',
+                        GITHUB_OUTPUT=str(self.root / 'outputs'),
                         GITHUB_REPOSITORY='B4rz99/fidy-ai', DEFAULT_FILE=str(self.root / 'default'))
 
+    def run_plan(self):
+        return subprocess.run(['python3', 'scripts/cli-release/release.py', 'plan', '--sha', 'a' * 40,
+                               '--output', str(self.root / 'plan.json')], cwd=self.root, env=self.env,
+                              capture_output=True, text=True, timeout=30)
+
     def plan(self):
-        output = self.root / 'plan.json'
-        result = subprocess.run(['python3', 'scripts/cli-release/release.py', 'plan', '--sha', 'a' * 40,
-                                 '--output', str(output)], cwd=self.root, env=self.env,
-                                capture_output=True, text=True, timeout=30)
+        result = self.run_plan()
         self.assertEqual(result.returncode, 0, result.stderr)
-        return json.loads(output.read_text())
+        return json.loads((self.root / 'plan.json').read_text())
 
     def retain(self, plan):
         self.previous.write_text(json.dumps(plan))
@@ -75,6 +112,39 @@ elif args[:2]==['release','edit'] and '--latest=true' in args:
         plan = self.plan()
         self.assertTrue(plan['changed'])
         self.assertEqual(plan['version'], '0.1.0')
+
+    def test_large_release_details_do_not_prevent_reserving_versions_from_later_pages(self):
+        releases = [{'tag_name': 'runtime-bun-fixture', 'draft': False, 'prerelease': False,
+                     'body': 'release notes' * 6000} for _ in range(30)]
+        releases.extend([
+            {'tag_name': 'cli-v0.8.3', 'draft': True, 'prerelease': False},
+            {'tag_name': 'cli-v0.10.7', 'draft': False, 'prerelease': True},
+            {'tag_name': 'cli-v0.9.99', 'draft': True, 'prerelease': False},
+        ])
+        self.state.write_text(json.dumps(releases))
+        plan = self.plan()
+        self.assertTrue(plan['changed'])
+        self.assertEqual(plan['version'], '0.10.8')
+
+    def test_later_page_failure_does_not_emit_a_plan_from_partial_releases(self):
+        self.state.write_text(json.dumps([
+            {'tag_name': 'cli-v0.8.3', 'draft': True, 'prerelease': False}
+        ] * 31))
+        self.failed_page.write_text('2')
+        result = self.run_plan()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / 'plan.json').exists())
+        self.assertFalse((self.root / 'outputs').exists())
+
+    def test_oversized_release_metadata_still_refuses_planning(self):
+        self.state.write_text(json.dumps([
+            {'tag_name': 'x' * (1024 * 1024 + 1), 'draft': True, 'prerelease': False}
+        ]))
+        result = self.run_plan()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Command output or execution bound exceeded', result.stderr)
+        self.assertFalse((self.root / 'plan.json').exists())
+        self.assertFalse((self.root / 'outputs').exists())
 
     def test_unrelated_changes_do_not_release(self):
         first = self.plan()

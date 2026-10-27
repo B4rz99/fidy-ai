@@ -67,8 +67,9 @@ def fingerprint():
 def plan(sha, output):
     if not SHA.fullmatch(sha):
         raise ValueError('A full source revision is required')
-    pages = json.loads(run('gh', 'api', f'repos/{REPOSITORY}/releases', '--paginate', '--slurp'))
-    releases = [release for page in pages for release in page
+    metadata = run('gh', 'api', f'repos/{REPOSITORY}/releases', '--paginate',
+                   '--jq', '.[] | {tag_name, draft, prerelease}')
+    releases = [release for release in map(json.loads, metadata.splitlines())
                 if re.fullmatch(r'cli-v[0-9]+\.[0-9]+\.[0-9]+', release['tag_name'])]
     published = [release for release in releases if not release['draft'] and not release['prerelease']]
     version_key = lambda release: tuple(map(int, release['tag_name'][5:].split('.')))

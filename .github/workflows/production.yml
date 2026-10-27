@@ -230,6 +230,7 @@ jobs:
         if: ${{ inputs.recover_deleted_queue }}
         working-directory: infra/cloudflare
         env:
+          BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: ${{ secrets.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM }}
           RECOVERY_ISOLATION: ""
           MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
@@ -377,6 +378,7 @@ jobs:
         if: ${{ !inputs.isolate_schema_cutover && (success() && steps.post_smoke.outcome == 'success') }}
         working-directory: infra/cloudflare
         env:
+          BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: ${{ secrets.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM }}
           RECOVERY_ISOLATION: ""
           MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}

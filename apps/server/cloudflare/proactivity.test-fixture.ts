@@ -49,6 +49,7 @@ export const observeTestHostedContext = (
     );
     const prompts: unknown[] = [];
     const service = makeAgentService({
+      connectionAdmission: Option.none(),
       userId: proof.userId,
       environment: {
         DB: db,

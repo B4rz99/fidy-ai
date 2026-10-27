@@ -728,6 +728,7 @@ export class UserTransactionCoordinator {
       environment,
       userId: UserId.make(userId),
       scheduleRecovery: (due) => this.state.storage.setAlarm(due),
+      connectionAdmission: bancolombiaSandboxAdmission(environment),
     }).accept({ request, preceding: this.pending });
     if (Option.isSome(hosted)) {
       this.pending = hosted.value.settled;
@@ -838,6 +839,7 @@ export class UserTransactionCoordinator {
 
   private recoverAbandonedWork(): Promise<void> {
     return makeAgentService({
+      connectionAdmission: bancolombiaSandboxAdmission(this.env),
       environment: this.env,
       userId: UserId.make(this.state.id.name),
       scheduleRecovery: (due) => this.state.storage.setAlarm(due),

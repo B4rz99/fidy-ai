@@ -127,8 +127,11 @@ local copy. Successful sandbox testing remains separate from bank production eli
 
 ## Protected application authentication
 
-The implementation adds an explicit manual `verify_bancolombia_sandbox` option to the existing Production workflow.
-Normal deployments leave it false and do not call the bank. Private Core receives the existing
+The existing Production inspection workflow has an explicit manual `verify_bancolombia_sandbox`
+option. Normal deployments and inspections leave it false and do not call the bank. The inspection
+captures the live release and runs the signed proof through normal traffic without uploading,
+staging or promoting Workers. Re-deploying unchanged source is not a verification mechanism:
+Alchemy reuses the current versions, which the release controller correctly refuses as candidates. Private Core receives the existing
 `BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM` through its secret binding, the assigned client id from
 `BANCOLOMBIA_SANDBOX_CLIENT_ID`, and the outbound Fetcher for the existing certificate identified
 by `BANCOLOMBIA_SANDBOX_CERTIFICATE_ID`. Public ingress receives neither private capability.
@@ -143,9 +146,10 @@ ten-second deadline per request (within a thirty-second verification exchange), 
 It validates and discards the response bearer within the owner; only closed failure stages or
 successful release metadata are returned. It never creates a User consent or reads Accounts.
 
-Both candidate pairings retain the ordinary release checks. A D1-quota deferral cannot be recorded
-as successful bank verification. The release attestation distinguishes `passed` from `not-requested`;
-a client-authentication failure prevents promotion during the explicitly requested check. Missing
-configuration refuses that check without enabling any institution. An uploaded certificate, a
+The inspection retains the ordinary signed database, Queue, Workflow and edge checks. A D1-quota
+deferral cannot be recorded as successful bank verification. The inspection emits its fixed bank
+success message only after the full proof passes. Authentication failure fails the inspection;
+serving traffic remains unchanged. Missing configuration refuses the check without enabling any
+institution. An uploaded certificate, a
 passing local fixture and a configured key are still not a successful hosted bank-authentication
 result. Record the exact hosted run before marking that result verified.

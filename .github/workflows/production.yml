@@ -5,10 +5,6 @@ on:
     branches: [trunk]
   workflow_dispatch:
     inputs:
-      verify_bancolombia_sandbox:
-        description: Verify the registered signing key and certificate-bound sandbox application authentication
-        type: boolean
-        default: false
       recover_deleted_queue:
         description: Recover the inspected deleted Queue incident under isolated public admission
         type: boolean
@@ -285,8 +281,6 @@ jobs:
       - name: Prove both candidate and intermediate Worker pairings
         if: ${{ !inputs.isolate_schema_cutover }}
         id: candidate_smoke
-        env:
-          VERIFY_BANCOLOMBIA_SANDBOX: ${{ inputs.verify_bancolombia_sandbox && 'enabled' || 'disabled' }}
         working-directory: infra/cloudflare
         run: bun verify-production-smoke.ts
 

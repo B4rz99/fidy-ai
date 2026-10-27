@@ -1246,3 +1246,40 @@ effectIt.effect(
       expect(seen.has("/.well-known/oauth-protected-resource/mcp")).toBe(true);
     })
 );
+
+effectIt.effect("verifies sandbox authentication on live traffic without version overrides", () =>
+  Effect.gen(function* () {
+    let bankProbes = 0;
+    const client = HttpClient.make((request) => {
+      expect(request.headers["cloudflare-workers-version-overrides"]).toBeUndefined();
+      const probe = new Request(request.url, {
+        method: request.method,
+        headers: request.headers,
+      });
+      if (new URL(request.url).pathname !== "/internal/release-smoke") {
+        return Effect.succeed(HttpClientResponse.fromWeb(request, edgeResponse(probe)));
+      }
+      expect(request.method).toBe("POST");
+      expect(request.body._tag).toBe("Uint8Array");
+      if (request.body._tag !== "Uint8Array") throw new Error("Expected signed probe body");
+      const body = Schema.decodeSync(Schema.fromJsonString(SmokeRequest))(
+        new TextDecoder().decode(request.body.body)
+      );
+      expect(body.verifyBancolombiaSandbox).toBe(true);
+      expect(body.expectedCoreVersionId).toBe(coreCandidate);
+      bankProbes += 1;
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          pairingResponse({ oldPublic: false, coreRevision: revision, readiness: false })
+        )
+      );
+    });
+    const outcome = yield* verifyPromotedSmoke({
+      ...config,
+      VERIFY_BANCOLOMBIA_SANDBOX: "enabled",
+    }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    expect(outcome).toBe("passed");
+    expect(bankProbes).toBe(1);
+  })
+);

@@ -326,14 +326,12 @@ it.effect(
         expectedContractDigest: digest,
         verifyBancolombiaSandbox: true,
       });
-      const environment = smokeEnvironment({
-        BANCOLOMBIA_SANDBOX_MTLS: {
-          fetch: (): Promise<Response> => {
-            bankCalls += 1;
-            return Promise.resolve(Response.json({}));
-          },
-        },
-      });
+      const environment = smokeEnvironment();
+      const bankAuthentication = Option.some(
+        Effect.sync(() => {
+          bankCalls += 1;
+        })
+      );
       for (const scenario of [
         { authorized: false, environment, stage: null, status: 404 },
         {
@@ -356,7 +354,7 @@ it.effect(
       ]) {
         const response = yield* Effect.tryPromise(() =>
           handleSmoke({
-            bankAuthentication: Option.none(),
+            bankAuthentication,
             request: new Request("https://core.internal/internal/release-smoke", {
               method: "POST",
               headers: scenario.authorized

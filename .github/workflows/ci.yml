@@ -341,6 +341,7 @@ jobs:
             apps/web/test-results/verify-browser.json
             apps/web/test-results/dashboard-core-*/trace.zip
             apps/web/test-results/settings-visual/**
+            apps/web/test-results/recurring-report-visual/**
             apps/web/test-results/chat-visual/**
             apps/web/test-results/subscription-visual/**
             apps/web/test-results/brand-token-captures/

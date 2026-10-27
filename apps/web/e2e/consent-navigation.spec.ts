@@ -136,14 +136,28 @@ const openReview = Effect.fnUntraced(function* (page: Page) {
   );
 });
 
+const signInForRecovery = Effect.fnUntraced(function* (page: Page, request: APIRequestContext) {
+  yield* Effect.tryPromise((signal) =>
+    Promise.all([
+      page.waitForResponse(
+        (response) =>
+          new URL(response.url()).origin === api &&
+          new URL(response.url()).pathname === "/transactions" &&
+          response.request().method() === "GET" &&
+          response.status() === successStatus,
+        { signal }
+      ),
+      signInNavigationThroughCore({ page, request, identity: "navigationConsentRecovery" }),
+    ]).then(() => undefined)
+  );
+});
+
 const recheckConsent = Effect.fnUntraced(function* (
   page: Page,
   request: APIRequestContext,
   information: TestInfo
 ) {
-  yield* Effect.tryPromise(() =>
-    signInNavigationThroughCore({ page, request, identity: "navigationConsentRecovery" })
-  );
+  yield* signInForRecovery(page, request);
   yield* openReview(page);
   const diagnostic = yield* observeConsentRecovery({ page, information });
   const pending = Promise.withResolvers<Route>();

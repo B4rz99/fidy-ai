@@ -39,6 +39,11 @@ type Scenario =
   | "permissions"
   | "malformed"
   | "duplicate"
+  | "foreign-page"
+  | "looped-page"
+  | "skipped-page"
+  | "invalid-position"
+  | "over-limit"
   | "paginated"
   | "truncated"
   | "contradictory"
@@ -100,46 +105,82 @@ const tokenResponse = (
 };
 const incompletePages = (state: State, request: HttpClientRequest.HttpClientRequest): Response => {
   const second = request.urlParams.params.length > 0;
+  if (
+    second &&
+    !request.urlParams.params.some(([key, value]) => key === "pageNumber" && value === "2")
+  ) {
+    throw new Error("Expected contract pageNumber");
+  }
   const body = {
     Data: { AccountReport: [{ AccountIdentification: second ? "second" : "first" }] },
   };
   if (!second) {
     return Response.json({
       ...body,
-      Links: { Next: `${accountsUrl}?page=2` },
-      Meta: { TotalPages: state.scenario === "paginated" ? 2 : 3 },
+      Data: {
+        ...body.Data,
+        Links: {
+          Next: `${accountsUrl}?pageNumber=2`,
+          Last: `${accountsUrl}?pageNumber=${state.scenario === "paginated" ? 2 : 3}`,
+        },
+      },
     });
   }
   if (state.scenario === "contradictory") {
-    return Response.json({ ...body, Meta: { TotalPages: 2 } });
+    return Response.json({
+      Data: { ...body.Data, Links: { Last: `${accountsUrl}?pageNumber=2` } },
+    });
   }
   return Response.json(body);
 };
+const hostilePage = (scenario: Scenario): Response => {
+  const next =
+    scenario === "foreign-page"
+      ? "https://attacker.invalid/accounts?pageNumber=2"
+      : `${accountsUrl}?pageNumber=${scenario === "looped-page" ? 1 : 3}`;
+  return Response.json({
+    Data: {
+      AccountReport: [{ AccountIdentification: "first" }],
+      Links: scenario === "over-limit" ? { Last: `${accountsUrl}?pageNumber=21` } : { Next: next },
+    },
+  });
+};
 const accountResponse = (state: State, request: HttpClientRequest.HttpClientRequest): Response => {
+  if (state.scenario === "invalid-position") {
+    return Response.json({
+      Data: {
+        AccountReport: [{ AccountIdentification: "first" }],
+        Links: { Previous: "https://attacker.invalid/accounts?pageNumber=0" },
+      },
+    });
+  }
   if (state.scenario === "malformed") {
     return Response.json({ Data: { AccountReport: [{ AccountIdentification: {} }] } });
   }
   if (state.scenario === "partial" && request.urlParams.params.length > 0) {
     return new Response(null, { status: unavailableStatus });
   }
+  if (["foreign-page", "looped-page", "skipped-page", "over-limit"].includes(state.scenario)) {
+    return hostilePage(state.scenario);
+  }
   if (["truncated", "contradictory", "paginated"].includes(state.scenario)) {
     return incompletePages(state, request);
   }
-  return Response.json({
+  return readyAccounts(state.scenario);
+};
+const readyAccounts = (scenario: Scenario): Response =>
+  Response.json({
     Data: {
       AccountReport: [
         { AccountIdentification: "synthetic-account-a" },
         {
           AccountIdentification:
-            state.scenario === "duplicate" ? "synthetic-account-a" : "synthetic-account-b",
+            scenario === "duplicate" ? "synthetic-account-a" : "synthetic-account-b",
         },
       ],
+      ...(scenario === "partial" ? { Links: { Next: `${accountsUrl}?pageNumber=2` } } : {}),
     },
-    ...(state.scenario === "partial"
-      ? { Links: { Next: `${accountsUrl}?page=2` }, Meta: { TotalPages: 2 } }
-      : {}),
   });
-};
 const bankResponse = (
   input: Readonly<{
     request: HttpClientRequest.HttpClientRequest;

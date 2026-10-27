@@ -2,8 +2,14 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "63b32ddb4993896fcf60cf7c6f40c0168e1d9a9865596792a7088a4ff1fc100b";
+const expectedEdgePolicyDigest = "dcbb21f6d926970a6de394bb234056cebfc37df1df84db8db69d69cd083d9556";
 const securityArtifacts = [
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/bancolombia-authentication/internal/token-lifecycle.ts",
+      import.meta.url
+    )
+  ).text(),
   await Bun.file(
     new URL(
       "../../apps/server/cloudflare/bancolombia-authentication/internal/activation.ts",

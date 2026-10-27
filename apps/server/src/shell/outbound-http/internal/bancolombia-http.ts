@@ -63,12 +63,33 @@ const prepareActivationRequest = (
             "x-fapi-financial-id": "",
             "x-fapi-interaction-id": request.interactionId,
           },
-          urlParams: Option.isSome(request.page) ? { page: String(request.page.value) } : {},
+          urlParams: Option.isSome(request.page) ? { pageNumber: String(request.page.value) } : {},
         }
       );
   }
 };
+type TokenRequest = Extract<BankRequest, { _tag: "RevokeBankToken" | "InspectBankToken" }>;
+const isTokenRequest = (request: BankRequest): request is TokenRequest =>
+  request._tag === "RevokeBankToken" || request._tag === "InspectBankToken";
+const prepareTokenRequest = (request: TokenRequest): HttpClientRequest.HttpClientRequest =>
+  HttpClientRequest.post(
+    request._tag === "RevokeBankToken"
+      ? "https://as1-api-open-finance-sandbox.ambientesbc.com/token/revoke"
+      : "https://as1-api-open-finance-sandbox.ambientesbc.com/introspection",
+    {
+      body: HttpBody.text(
+        new URLSearchParams({
+          token: Redacted.value(request.token),
+          token_type_hint: request.tokenType,
+          client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+          client_assertion: Redacted.value(request.assertion),
+        }).toString(),
+        "application/x-www-form-urlencoded"
+      ),
+    }
+  );
 const prepareRequest = (request: BankRequest): HttpClientRequest.HttpClientRequest => {
+  if (isTokenRequest(request)) return prepareTokenRequest(request);
   if (isActivationRequest(request)) return prepareActivationRequest(request);
   switch (request._tag) {
     case "Discovery":

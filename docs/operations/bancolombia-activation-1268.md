@@ -74,11 +74,48 @@ Their immutable ConsentId and intent remain tracked even if an exchange response
 token was received. They are not evidence of successful bank-side revocation. Whole-User erasure
 retains its existing bank-suppression block until verified institution cleanup is available (#313).
 
-The selected collection contains no revocation request. Sandbox discovery observed on 2026-10-27
-advertises `/token/revoke` and `/introspection` on the fixed sandbox authorization server; that alone
-does not establish Fidy's accepted cleanup authentication or consent-revocation semantics. Do not
-guess a consent DELETE endpoint or report cleanup complete from local deletion. Bank-side cleanup
-and live response compatibility remain explicit verification items for issue closure.
+The selected collection contains no revocation request. The rechecked public contracts do provide
+Account response examples: `Data.AccountReport`, nested `Data.Links`, and `pageNumber`. Activation
+now follows that shape, checks contiguous pages and consistent `Last` links, and rejects untrusted
+destinations. The support-selected consent paths and corrected creation body remain authoritative.
+
+Sandbox discovery advertises fixed `/token/revoke` and `/introspection` mTLS endpoints. OAuth
+specifies their form bodies; RFC 8414 defaults absent revocation authentication metadata to Basic,
+while introspection authentication must be determined separately. A controlled 2026-10-27 probe
+using Fidy's supplied Basic credentials and client certificate returned HTTP 400 `invalid_client`
+for token issuance, introspection and revocation. The latter two used an explicitly invalid probe
+token; no customer consent or Account was touched and no application token was issued.
+
+The existing protected Core sandbox verification now tests the registered `private_key_jwt`
+candidate without extracting its signing key: issue one application token, prove it active through
+introspection, revoke it once, then prove it inactive. Every call uses a fresh assertion, pinned
+endpoints, the certificate binding, bounded responses, and no automatic retry. A revocation HTTP
+200 alone, an initially inactive token, failed introspection, or a token still active afterwards
+cannot pass. This proves only application-token behavior; it does not establish refresh-token
+cleanup, customer-grant cleanup or ConsentId cancellation. It has focused synthetic coverage but
+has **not been deployed or verified live**.
+
+## Remaining verification
+
+Release the reviewed changes through the normal protected PR path before running the existing
+`production-inspect.yml` workflow with `verify_bancolombia_sandbox=true`. Only Core holds the
+registered signing key; do not extract it or recreate the deleted signing-proof workflow. No
+customer test profile is required for this application-token verification.
+
+If the JWT lifecycle test succeeds, use its evidence to implement and verify cleanup for retained
+customer access/refresh grants. An uncertain exchange that returns no token remains separate:
+reviewed public consent contracts define creation and retrieval, but no TPP cancellation operation.
+They describe revocation through the bank's interface without specifying an API request for Fidy.
+If controlled sandbox verification cannot resolve this, ask only:
+
+> ¿Cómo debe Fidy cancelar o reconciliar un ConsentId de cuentas si el intercambio del código pudo
+> completarse, pero por un timeout no recibimos los tokens? Necesitamos el procedimiento soportado
+> y cómo comprobar que no queda acceso utilizable.
+
+Sources and recovered contract hashes are recorded in
+[the protocol research](../research/bancolombia-cleanup-public-protocol-1268.md). The broader support
+question previously drafted here is superseded; account examples and generic OAuth request details
+are already available.
 
 ## Bank clarification needed
 

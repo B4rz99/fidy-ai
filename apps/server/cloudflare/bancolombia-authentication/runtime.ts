@@ -25,8 +25,9 @@ import {
 } from "./contract";
 import {
   activateBancolombiaSandbox,
-  authenticateBancolombiaSandbox,
+  type authenticateBancolombiaSandbox,
   authorizeBancolombiaSandbox,
+  verifyBancolombiaSandboxTokenLifecycle,
 } from "./operations";
 
 const maximumPrivateKeyLength = 20000;
@@ -86,7 +87,7 @@ const withSandboxClient = <A, E>(
 export const verifyBancolombiaSandboxAuthentication = (
   environment: BancolombiaSandboxEnvironment
 ): Effect.Effect<void, BancolombiaAuthenticationFailed> =>
-  withSandboxClient(environment, authenticateBancolombiaSandbox);
+  withSandboxClient(environment, verifyBancolombiaSandboxTokenLifecycle);
 
 const sandboxProfile = (
   environment: BancolombiaSandboxEnvironment

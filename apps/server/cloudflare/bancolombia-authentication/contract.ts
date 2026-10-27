@@ -12,7 +12,8 @@ export class BancolombiaAuthenticationFailed extends Data.TaggedError(
     | "bancolombia_configuration"
     | "bancolombia_signing"
     | "bancolombia_discovery"
-    | "bancolombia_authentication";
+    | "bancolombia_authentication"
+    | "bancolombia_token_lifecycle";
 }> {}
 
 export class BancolombiaAuthorizationFailed extends Data.TaggedError(

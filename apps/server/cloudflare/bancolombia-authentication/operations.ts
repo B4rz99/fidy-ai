@@ -1,3 +1,4 @@
+import { verifyTokenLifecycle } from "./internal/token-lifecycle";
 import { activate } from "./internal/activation";
 import { UtcTimestamp } from "../../src/core/_shared/time";
 import { Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
@@ -15,6 +16,7 @@ import {
 const maximumTokenBytes = 32768;
 const millisecondsPerSecond = 1000;
 const assertionLifetimeSeconds = 300;
+const maximumApplicationTokenSeconds = 86400;
 const successStatus = 200;
 const parCreatedStatus = 201;
 const issuer = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
@@ -31,10 +33,26 @@ const Discovery = Schema.Struct({
   tls_client_certificate_bound_access_tokens: Schema.Literal(true),
   mtls_endpoint_aliases: Schema.Struct({ token_endpoint: Schema.Literal(token) }),
 });
+const TokenLifecycleDiscovery = Schema.Struct({
+  ...Discovery.fields,
+  revocation_endpoint: Schema.Literal(`${token}/revoke`),
+  introspection_endpoint: Schema.Literal(
+    "https://as1-api-open-finance-sandbox.ambientesbc.com/introspection"
+  ),
+  mtls_endpoint_aliases: Schema.Struct({
+    token_endpoint: Schema.Literal(token),
+    revocation_endpoint: Schema.Literal(`${token}/revoke`),
+    introspection_endpoint: Schema.Literal(
+      "https://as1-api-open-finance-sandbox.ambientesbc.com/introspection"
+    ),
+  }),
+});
 const Token = Schema.Struct({
   access_token: Schema.String.check(Schema.isBetweenLength(1, maximumTokenBytes)),
   token_type: Schema.String.check(Schema.isPattern(/^Bearer$/iu)),
-  expires_in: Schema.Int.check(Schema.isGreaterThan(0)),
+  expires_in: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: maximumApplicationTokenSeconds })
+  ),
   scope: Schema.optionalKey(
     Schema.String.check(Schema.makeFilter((value) => value.split(" ").includes("accounts")))
   ),
@@ -97,8 +115,11 @@ const prepareAssertion = Effect.fn(function* (input: SandboxAuthenticationInput)
  */
 const applicationToken = (
   input: SandboxAuthenticationInput,
-  schema: typeof Discovery | typeof AuthorizationDiscovery
-): Effect.Effect<Redacted.Redacted<string>, BancolombiaAuthenticationFailed> =>
+  schema: typeof Discovery | typeof AuthorizationDiscovery | typeof TokenLifecycleDiscovery
+): Effect.Effect<
+  Readonly<{ bearer: Redacted.Redacted<string>; expiresAtMilliseconds: number }>,
+  BancolombiaAuthenticationFailed
+> =>
   Effect.gen(function* () {
     const assertion = yield* prepareAssertion(input);
     const http = makeBancolombiaSandboxOutboundHttp(input.httpClient);
@@ -109,6 +130,7 @@ const applicationToken = (
     yield* Schema.decodeEffect(Schema.fromJsonString(schema))(
       new TextDecoder().decode(discovery.body)
     ).pipe(Effect.mapError(() => failure("bancolombia_discovery")));
+    const issuedAt = yield* Clock.currentTimeMillis;
     const response = yield* http
       .execute({ _tag: "Authenticate", assertion })
       .pipe(Effect.mapError(() => failure("bancolombia_authentication")));
@@ -116,7 +138,10 @@ const applicationToken = (
     const accepted = yield* Schema.decodeEffect(Schema.fromJsonString(Token))(
       new TextDecoder().decode(response.body)
     ).pipe(Effect.mapError(() => failure("bancolombia_authentication")));
-    return Redacted.make(accepted.access_token);
+    return {
+      bearer: Redacted.make(accepted.access_token),
+      expiresAtMilliseconds: issuedAt + accepted.expires_in * millisecondsPerSecond,
+    };
   });
 
 export const authenticateBancolombiaSandbox = (
@@ -240,7 +265,7 @@ const createConsent = (
 > =>
   Effect.gen(function* () {
     const profile = Redacted.value(input.profile);
-    const bearer = yield* applicationToken(input, AuthorizationDiscovery);
+    const { bearer } = yield* applicationToken(input, AuthorizationDiscovery);
     if (input.expiresAtMilliseconds <= (yield* Clock.currentTimeMillis)) {
       return yield* new BancolombiaAuthorizationFailed();
     }
@@ -304,5 +329,21 @@ export const activateBancolombiaSandbox = (
   activate({
     ...input,
     assertion: prepareAssertion(input),
-    consentBearer: applicationToken(input, Discovery),
+    consentBearer: applicationToken(input, Discovery).pipe(Effect.map((grant) => grant.bearer)),
   });
+
+/** Verifies active-to-inactive application-token behavior; grants no customer authority or consent cleanup guarantee. */
+export const verifyBancolombiaSandboxTokenLifecycle = (
+  input: SandboxAuthenticationInput
+): Effect.Effect<void, BancolombiaAuthenticationFailed> =>
+  Effect.gen(function* () {
+    const grant = yield* applicationToken(input, TokenLifecycleDiscovery);
+    yield* verifyTokenLifecycle({
+      ...input,
+      ...grant,
+      assertion: prepareAssertion(input),
+    });
+  }).pipe(
+    Effect.timeout("60 seconds"),
+    Effect.mapError(() => failure("bancolombia_token_lifecycle"))
+  );

@@ -25,9 +25,10 @@ const minimumModulusLength = 342;
 const maximumModulusLength = 1400;
 const maximumExponentLength = 16;
 const maximumSigningKeys = 32;
-const maximumAccountReferenceLength = 256;
+const maximumAccountReferenceLength = 512;
 const maximumAccounts = 1000;
 const maximumPages = 20;
+const maximumPageLinkLength = 500;
 const successfulResponse = 200;
 const millisecondsPerSecond = 1000;
 const maximumIdentityAge = 600;
@@ -77,6 +78,13 @@ const Consent = Schema.Struct({
     Permissions: ConnectionConsentIntent.fields.permissions,
   }),
 });
+const PageLink = Schema.String.check(Schema.isBetweenLength(1, maximumPageLinkLength));
+const PageLinks = Schema.Struct({
+  Self: Schema.optionalKey(PageLink),
+  Previous: Schema.optionalKey(PageLink),
+  Next: Schema.optionalKey(PageLink),
+  Last: Schema.optionalKey(PageLink),
+});
 const AccountPage = Schema.Struct({
   Data: Schema.Struct({
     AccountReport: Schema.Array(
@@ -86,15 +94,8 @@ const AccountPage = Schema.Struct({
         ),
       })
     ).check(Schema.isBetweenLength(0, maximumAccounts)),
+    Links: Schema.optionalKey(PageLinks),
   }),
-  Links: Schema.optionalKey(Schema.Struct({ Next: Schema.optionalKey(Schema.String) })),
-  Meta: Schema.optionalKey(
-    Schema.Struct({
-      TotalPages: Schema.optionalKey(
-        Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: maximumPages }))
-      ),
-    })
-  ),
 });
 const failed = (): BancolombiaAuthorizationFailed => new BancolombiaAuthorizationFailed();
 const checkHash = (
@@ -152,7 +153,7 @@ const nextPage = (value: string): Option.Option<number> => {
     ) {
       return Option.none();
     }
-    const page = url.searchParams.get("page");
+    const page = url.searchParams.get("pageNumber");
     return page !== null && /^[1-9][0-9]{0,4}$/u.test(page)
       ? Option.some(Number(page))
       : Option.none();
@@ -171,6 +172,28 @@ const appendAccounts = (
       accounts.add(account.AccountIdentification);
     }
   });
+const validatePosition = (
+  links: (typeof AccountPage.Type)["Data"]["Links"],
+  pageCount: number
+): Effect.Effect<void, BancolombiaAuthorizationFailed> =>
+  Effect.gen(function* () {
+    for (const { link, position } of [
+      { link: links?.Self, position: pageCount },
+      { link: links?.Previous, position: pageCount - 1 },
+    ]) {
+      if (link === undefined) continue;
+      const parsed = nextPage(link);
+      if (Option.isNone(parsed) || parsed.value !== position) return yield* failed();
+    }
+  });
+const validateCompletion = (
+  totalPages: Option.Option<number>,
+  accountCount: number,
+  pageCount: number
+): Effect.Effect<void, BancolombiaAuthorizationFailed> =>
+  accountCount === 0 || Option.getOrElse(totalPages, () => pageCount) !== pageCount
+    ? Effect.fail(failed())
+    : Effect.void;
 const followingPage = (
   input: Readonly<{
     decoded: typeof AccountPage.Type;
@@ -182,7 +205,9 @@ const followingPage = (
 ): Effect.Effect<Option.Option<number>, BancolombiaAuthorizationFailed> =>
   Effect.gen(function* () {
     const { decoded, visited, accountCount, pageCount } = input;
-    const next = decoded.Links?.Next;
+    const links = decoded.Data.Links;
+    yield* validatePosition(links, pageCount);
+    const next = links?.Next;
     if (next === undefined) {
       yield* validateCompletion(input.totalPages, accountCount, pageCount);
       return Option.none<number>();
@@ -197,21 +222,20 @@ const followingPage = (
     visited.add(page.value);
     return page;
   });
-const validateCompletion = (
-  totalPages: Option.Option<number>,
-  accountCount: number,
-  pageCount: number
-): Effect.Effect<void, BancolombiaAuthorizationFailed> =>
-  accountCount === 0 || Option.getOrElse(totalPages, () => pageCount) !== pageCount
-    ? Effect.fail(failed())
-    : Effect.void;
 const reconcilePageTotal = (
   previous: Option.Option<number>,
   page: typeof AccountPage.Type
 ): Effect.Effect<Option.Option<number>, BancolombiaAuthorizationFailed> => {
-  const declared = Option.fromUndefinedOr(page.Meta?.TotalPages);
-  if (Option.isNone(declared)) return Effect.succeed(previous);
-  if (Option.isSome(previous) && previous.value !== declared.value) return Effect.fail(failed());
+  const last = page.Data.Links?.Last;
+  if (last === undefined) return Effect.succeed(previous);
+  const declared = nextPage(last);
+  if (
+    Option.isNone(declared) ||
+    declared.value > maximumPages ||
+    (Option.isSome(previous) && previous.value !== declared.value)
+  ) {
+    return Effect.fail(failed());
+  }
   return Effect.succeed(declared);
 };
 const discoverAccounts = (

@@ -113,12 +113,18 @@ export type CliReleaseHttpService = Readonly<{
   readLatest: () => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
 
-/** Only fixed sandbox discovery and accounts application authentication; no caller-selected destinations. */
+/** Fixed sandbox bank operations; no caller-selected destinations or response limits. */
 export type BancolombiaSandboxHttpService = Readonly<{
   execute: (
     request:
       | Readonly<{ _tag: "Discovery" }>
       | Readonly<{ _tag: "Authenticate"; assertion: Redacted.Redacted<string> }>
+      | Readonly<{
+          _tag: "RevokeBankToken" | "InspectBankToken";
+          assertion: Redacted.Redacted<string>;
+          token: Redacted.Redacted<string>;
+          tokenType: "access_token" | "refresh_token";
+        }>
       | Readonly<{ _tag: "BankSigningKeys" }>
       | Readonly<{
           _tag: "ExchangeBankCode";

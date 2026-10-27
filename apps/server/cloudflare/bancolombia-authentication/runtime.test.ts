@@ -1,5 +1,7 @@
+import * as assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
+import { BancolombiaAuthenticationFailed } from "./contract";
 import { verifyBancolombiaSandboxAuthentication } from "./runtime";
 
 it.effect(
@@ -26,13 +28,11 @@ it.effect(
           BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: "synthetic-key",
         },
       ]) {
-        const result = yield* verifyBancolombiaSandboxAuthentication(environment).pipe(
-          Effect.result
+        const result = yield* verifyBancolombiaSandboxAuthentication(environment).pipe(Effect.exit);
+        assert.deepStrictEqual(
+          result,
+          Exit.fail(new BancolombiaAuthenticationFailed({ stage: "bancolombia_configuration" }))
         );
-        expect(result._tag).toBe("Failure");
-        if (result._tag === "Failure") {
-          expect(result.failure.stage).toBe("bancolombia_configuration");
-        }
       }
       expect(calls).toBe(0);
     })

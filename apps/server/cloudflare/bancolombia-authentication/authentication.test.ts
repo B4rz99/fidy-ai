@@ -1,8 +1,21 @@
+import * as assert from "node:assert/strict";
 import { TestCrypto } from "../../src/shell/testing/crypto-harness";
 import { expect, it } from "@effect/vitest";
-import { Context, Crypto, Data, DateTime, Effect, Layer, Redacted, Schema } from "effect";
+import {
+  Cause,
+  Context,
+  Crypto,
+  Data,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  Redacted,
+  Schema,
+} from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { exportJWK, exportPKCS8, generateKeyPair, jwtVerify } from "jose";
+import { BancolombiaAuthenticationFailed } from "./contract";
 import { authenticateBancolombiaSandbox } from "./operations";
 
 const issuer = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
@@ -114,13 +127,21 @@ it.effect("refuses a signing key that does not match registration before sending
         calls += 1;
         return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({})));
       }),
-    }).pipe(Effect.result);
+    }).pipe(Effect.exit);
     expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result)).not.toContain(
       "PRIVATE KEY"
     );
     expect(calls).toBe(0);
-    expect(result._tag).toBe("Failure");
-    if (result._tag === "Failure") expect(result.failure.stage).toBe("bancolombia_signing");
+    assert.ok(Exit.isFailure(result));
+    assert.deepStrictEqual(
+      result,
+      Exit.failCause(
+        Cause.annotate(
+          Cause.fail(new BancolombiaAuthenticationFailed({ stage: "bancolombia_signing" })),
+          Cause.annotations(result.cause)
+        )
+      )
+    );
   })
 );
 
@@ -160,10 +181,12 @@ it.effect("refuses issuer or token-endpoint drift before any credential-bearing 
             )
           );
         }),
-      }).pipe(Effect.result);
+      }).pipe(Effect.exit);
       expect(calls).toBe(1);
-      expect(result._tag).toBe("Failure");
-      if (result._tag === "Failure") expect(result.failure.stage).toBe("bancolombia_discovery");
+      assert.deepStrictEqual(
+        result,
+        Exit.fail(new BancolombiaAuthenticationFailed({ stage: "bancolombia_discovery" }))
+      );
     }
   })
 );
@@ -219,12 +242,12 @@ it.effect("does not retry bank rejection or expose its body or a malformed token
             )
           );
         }),
-      }).pipe(Effect.result);
+      }).pipe(Effect.exit);
       expect(posts).toBe(1);
-      expect(result._tag).toBe("Failure");
-      if (result._tag === "Failure") {
-        expect(result.failure.stage).toBe("bancolombia_authentication");
-      }
+      assert.deepStrictEqual(
+        result,
+        Exit.fail(new BancolombiaAuthenticationFailed({ stage: "bancolombia_authentication" }))
+      );
       expect(
         yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result)
       ).not.toContain("synthetic-secret-provider-body");

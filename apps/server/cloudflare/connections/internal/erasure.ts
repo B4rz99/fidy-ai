@@ -2,9 +2,29 @@ import type { ErasureProjection } from "../../erasure-store/contract";
 
 export const projections: ReadonlyArray<ErasureProjection> = [
   {
+    id: "connection_authorizations",
+    dataClass: "credentials",
+    dependencies: [],
+    quiescence: { _tag: "Synchronous" },
+    candidates: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM connection_authorizations r JOIN connection_attempts a ON a.id=r.attempt_id JOIN connections c ON c.id=a.connection_id WHERE c.user_id=?",
+      params: [userId],
+    }),
+    remaining: (userId) => ({
+      sql: "SELECT 1 FROM connection_authorizations r JOIN connection_attempts a ON a.id=r.attempt_id JOIN connections c ON c.id=a.connection_id WHERE c.user_id=?",
+      params: [userId],
+    }),
+    remove: (scope) => [
+      {
+        sql: "DELETE FROM connection_authorizations AS r WHERE attempt_id IN(SELECT a.id FROM connection_attempts a JOIN connections c ON c.id=a.connection_id WHERE c.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT value FROM json_each(?))",
+        params: [scope.userId, scope.rowRefsJson],
+      },
+    ],
+  },
+  {
     id: "connection_attempts",
     dataClass: "projections",
-    dependencies: [],
+    dependencies: ["connection_authorizations"],
     quiescence: { _tag: "Synchronous" },
 
     candidates: (userId) => ({

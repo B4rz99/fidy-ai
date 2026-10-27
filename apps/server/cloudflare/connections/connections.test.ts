@@ -1,5 +1,5 @@
 import { fixtureWorker as scheduledCoreWorker } from "../core-worker.test-fixture";
-import { type Cause, DateTime, Effect, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
@@ -8,10 +8,28 @@ import { makeCoreWorker } from "../core-worker";
 import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
 import publicWorker from "../public-worker";
 import { ConnectInstitutionResult, InstitutionId } from "../../src/core/connections/contract";
-import { handleConnectionBrowserRequest, sweepConnectionAttempts } from "./runtime";
+import {
+  handleConnectionBrowserRequest,
+  makeConnectionsErasureStores,
+  sweepConnectionAttempts,
+} from "./runtime";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
+import { Base64Url } from "effect/encoding";
+import {
+  ConnectionAuthorizationUnavailable,
+  type ConnectionBankPreparation,
+  ConnectionConsentIntent,
+} from "./contract";
 
 const institutionRegistration = { enabled: false };
+let bankPreparation: Option.Option<ConnectionBankPreparation> = Option.none();
+
+const fixtureConsentIntent = (): ConnectionBankPreparation["intent"] => ({
+  permissions: ["ReadAccountsBasic", "ReadBalances", "ReadTransactionsDetail"],
+  historyFrom: DateTime.makeUnsafe(DateTime.nowUnsafe().epochMilliseconds - 90 * 86400000),
+  historyTo: DateTime.nowUnsafe(),
+  expiresAt: DateTime.makeUnsafe(DateTime.nowUnsafe().epochMilliseconds + 90 * 86400000),
+});
 
 const users = [
   "10000000-0000-4000-8000-000000000051",
@@ -89,6 +107,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
 afterAll(() => databases.dispose());
 beforeEach(() => {
   institutionRegistration.enabled = false;
+  bankPreparation = Option.none();
   vi.useFakeTimers({ toFake: ["Date"] });
 });
 afterEach(() => {
@@ -149,7 +168,7 @@ const send = (
                       AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
                       HOSTED_AI_MODEL: approvedWorkersAiModel,
                     },
-                    institutions
+                    { institutions, bank: bankPreparation }
                   );
                   coordinators.set(`${name}:${institutionRegistration.enabled}`, coordinator);
                 }
@@ -274,6 +293,116 @@ const start = (db: D1Database, index = 0): Promise<ConnectInstitutionResult> =>
       )(yield* Effect.tryPromise(() => response.json()))).data;
     })
   );
+it("binds one bank handoff to the original attempt and never repeats its preparation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      institutionRegistration.enabled = true;
+      let calls = 0;
+      let publicReference = Option.none<string>();
+      const url =
+        "https://auth1-api-open-finance-sandbox.ambientesbc.com/auth?client_id=10000000-0000-4000-8000-000000000001&response_type=code&scope=accounts&request_uri=urn:ietf:params:oauth:request_uri:synthetic";
+      bankPreparation = Option.some({
+        intent: fixtureConsentIntent(),
+        prepare: (input) =>
+          Effect.gen(function* () {
+            calls += 1;
+            yield* input.recordConsent("synthetic-consent");
+            expect(input.attempt).toBe(Option.getOrThrow(publicReference));
+            const stored = yield* Effect.tryPromise(() =>
+              db
+                .prepare(
+                  "SELECT b.verifier,b.state_digest,b.nonce_digest,b.phase,b.intent_json,b.consent_id FROM connection_authorizations b JOIN connection_attempts a ON a.id=b.attempt_id WHERE a.public_reference=?"
+                )
+                .bind(Option.getOrThrow(publicReference))
+                .first()
+            );
+            const proof = yield* Schema.decodeUnknownEffect(
+              Schema.Struct({
+                verifier: Schema.String,
+                intent_json: Schema.String,
+                consent_id: Schema.Literal("synthetic-consent"),
+                state_digest: Schema.String,
+                nonce_digest: Schema.String,
+                phase: Schema.Literal("preparing"),
+              })
+            )(stored);
+            expect(proof.intent_json).toBe(
+              yield* Schema.encodeEffect(Schema.fromJsonString(ConnectionConsentIntent))(
+                Option.getOrThrow(bankPreparation).intent
+              )
+            );
+            expect(input.challenge).toBe(
+              Base64Url.encode(yield* Effect.tryPromise(() => digest(proof.verifier)))
+            );
+            expect(proof.state_digest).toBe(
+              Base64Url.encode(yield* Effect.tryPromise(() => digest(input.state)))
+            );
+            expect(proof.nonce_digest).toBe(
+              Base64Url.encode(yield* Effect.tryPromise(() => digest(input.nonce)))
+            );
+            expect(input.userId).toBe(users[0]);
+            expect(input.challenge).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+            expect(input.state).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+            expect(input.nonce).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+            return { url, expiresAtMilliseconds: DateTime.nowUnsafe().epochMilliseconds + 90000 };
+          }).pipe(Effect.orDie),
+      });
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      publicReference = Option.fromNullOr(attempt);
+      const first = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+      );
+      expect(first.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => first.json())).toMatchObject({
+        phase: "prepared",
+        authorization: { url },
+      });
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+        )).status
+      ).toBe(404);
+      expect(calls).toBe(1);
+    })
+  ));
+
+it("settles an uncertain bank submission without retaining its verifier or allowing a retry", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      institutionRegistration.enabled = true;
+      let calls = 0;
+      bankPreparation = Option.some({
+        intent: fixtureConsentIntent(),
+        prepare: () => {
+          calls += 1;
+          return Effect.fail(new ConnectionAuthorizationUnavailable());
+        },
+      });
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      const response = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+      );
+      expect(response.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({ phase: "failed" });
+      const retained = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT verifier FROM connection_authorizations").all()
+      );
+      expect(retained.results).toEqual([{ verifier: null }]);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+        )).status
+      ).toBe(404);
+      expect(calls).toBe(1);
+    })
+  ));
+
 it("prepares a browser authorization once without activating the Connection", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -477,6 +606,14 @@ it("commits only one concurrent browser preparation and retires old continuation
     Effect.gen(function* () {
       const db = yield* setup();
       institutionRegistration.enabled = true;
+      let bankCalls = 0;
+      bankPreparation = Option.some({
+        intent: fixtureConsentIntent(),
+        prepare: () => {
+          bankCalls++;
+          return Effect.fail(new ConnectionAuthorizationUnavailable());
+        },
+      });
       const started = yield* Effect.tryPromise(() => start(db));
       if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
       const attempt = new URL(started.continuation.url).searchParams.get("attempt");
@@ -489,6 +626,7 @@ it("commits only one concurrent browser preparation and retires old continuation
       );
       expect(parallel.filter((response) => response.status === 200)).toHaveLength(1);
       expect(parallel.every((response) => [200, 404, 429].includes(response.status))).toBe(true);
+      expect(bankCalls).toBe(1);
       const replacement = yield* Effect.tryPromise(() => start(db));
       expect(replacement.connection.id).toBe(started.connection.id);
       const retired = yield* Effect.tryPromise(() =>
@@ -1123,6 +1261,16 @@ it("scheduled retention erases abandoned preparation after Consent withdrawal wi
     Effect.gen(function* () {
       const db = yield* setup();
       institutionRegistration.enabled = true;
+      bankPreparation = Option.some({
+        intent: fixtureConsentIntent(),
+        prepare: (input) =>
+          input.recordConsent("synthetic-consent").pipe(
+            Effect.as({
+              url: "https://auth1-api-open-finance-sandbox.ambientesbc.com/auth?client_id=10000000-0000-4000-8000-000000000001&response_type=code&scope=accounts&request_uri=urn:ietf:params:oauth:request_uri:synthetic",
+              expiresAtMilliseconds: DateTime.nowUnsafe().epochMilliseconds + 90000,
+            })
+          ),
+      });
       yield* Effect.tryPromise(() =>
         db
           .prepare(
@@ -1179,6 +1327,18 @@ it("scheduled retention erases abandoned preparation after Consent withdrawal wi
             }
           )
           .catch(() => undefined);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT phase FROM connection_authorizations").all()
+        )).results
+      ).toEqual([{ phase: "prepared" }]);
+      vi.setSystemTime(started.continuation.expiresAt.epochMilliseconds);
+      yield* sweepConnectionAttempts({ db, current: DateTime.nowUnsafe().epochMilliseconds });
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT phase,verifier,handoff_url FROM connection_authorizations").all()
+        )).results
+      ).toEqual([{ phase: "failed", verifier: null, handoff_url: null }]);
       vi.setSystemTime(started.continuation.expiresAt.epochMilliseconds + 86400000 - 1);
       yield* Effect.tryPromise(tick);
       expect(
@@ -1240,5 +1400,100 @@ it("bounds independent retention and preserves live attempts and stable Connecti
       expect(
         (yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connections").all())).results
       ).toEqual([{ id: started.connection.id }]);
+    })
+  ));
+
+it("erases only the owning User's authorization proof with frozen writes and atomic failure recovery", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      institutionRegistration.enabled = true;
+      bankPreparation = Option.some({
+        intent: fixtureConsentIntent(),
+        prepare: (input) =>
+          input.recordConsent("synthetic-consent").pipe(
+            Effect.as({
+              url: "https://auth1-api-open-finance-sandbox.ambientesbc.com/auth?client_id=10000000-0000-4000-8000-000000000001&response_type=code&scope=accounts&request_uri=urn:ietf:params:oauth:request_uri:synthetic",
+              expiresAtMilliseconds: DateTime.nowUnsafe().epochMilliseconds + 90000,
+            })
+          ),
+      });
+      for (const index of [0, 1]) {
+        const connection = yield* Effect.tryPromise(() => start(db, index));
+        if (connection.type !== "continue_in_browser") throw new Error("Expected continuation");
+        const attempt = new URL(connection.continuation.url).searchParams.get("attempt");
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, request(index, "/web/connections/begin", "POST", { attempt }))
+          )).status
+        ).toBe(200);
+      }
+      const scope = { userId: users[0], reference: "12670000-0000-4000-8000-000000000001" };
+      const snapshot = (): Promise<D1Result> =>
+        db.prepare("SELECT b.* FROM connection_authorizations b ORDER BY attempt_id").all();
+      const before = (yield* Effect.tryPromise(snapshot)).results;
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Draining')"
+            )
+            .bind(scope.reference, scope.userId),
+          db
+            .prepare(
+              "INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'connection_authorizations')"
+            )
+            .bind(scope.reference),
+          db
+            .prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?")
+            .bind(scope.reference),
+        ])
+      );
+      const store = makeConnectionsErasureStores(db).find(
+        (value) => value.id === "connection_authorizations"
+      );
+      if (store === undefined) throw new Error("Missing authorization disposition");
+      expect((yield* Effect.result(store.remove({ ...scope, userId: users[1] })))._tag).toBe(
+        "Failure"
+      );
+      expect((yield* Effect.tryPromise(snapshot)).results).toEqual(before);
+      yield* Effect.tryPromise(() =>
+        expect(
+          db
+            .prepare(
+              "UPDATE connection_authorizations SET phase='failed',verifier=NULL,handoff_url=NULL WHERE attempt_id IN(SELECT a.id FROM connection_attempts a JOIN connections c ON c.id=a.connection_id WHERE c.user_id=?)"
+            )
+            .bind(users[0])
+            .run()
+        ).rejects.toThrow("erasure_fenced")
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_authorization_erasure BEFORE DELETE ON connection_authorizations BEGIN SELECT RAISE(ABORT,'synthetic_erasure_failure'); END"
+          )
+          .run()
+      );
+      expect((yield* Effect.result(store.remove(scope)))._tag).toBe("Failure");
+      expect((yield* Effect.tryPromise(snapshot)).results).toEqual(before);
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM erasure_permits").all())).results
+      ).toEqual([]);
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_authorization_erasure").run());
+      expect(yield* store.remove(scope)).toBe(true);
+      const retained = yield* Schema.decodeUnknownEffect(
+        Schema.Array(Schema.Struct({ user_id: Schema.String, verifier: Schema.String }))
+      )(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT c.user_id,b.verifier FROM connection_authorizations b JOIN connection_attempts a ON a.id=b.attempt_id JOIN connections c ON c.id=a.connection_id"
+            )
+            .all()
+        )).results
+      );
+      expect(retained).toHaveLength(1);
+      expect(retained[0]?.user_id).toBe(users[1]);
+      expect(retained[0]?.verifier).toMatch(/^[A-Za-z0-9_-]{43}$/u);
     })
   ));

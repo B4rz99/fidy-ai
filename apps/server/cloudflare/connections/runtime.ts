@@ -16,6 +16,7 @@ import { RequestBodyPolicy } from "../http/contract";
 import { boundedJsonBody } from "../http/operations";
 import type { AuthenticatedWebSession } from "../web-session/contract";
 
+const resourceLimitedStatus = 429;
 const forbiddenStatus = 403;
 const notFoundStatus = 404;
 const methodNotAllowedStatus = 405;
@@ -34,11 +35,17 @@ export const sweepConnectionAttempts = (
 ): Effect.Effect<void, ConnectionRetentionUnavailable> =>
   Effect.tryPromise({
     try: () =>
-      input.db
-        .prepare(`DELETE FROM connection_attempts WHERE id IN
+      input.db.batch([
+        input.db
+          .prepare(`UPDATE connection_authorizations SET phase='failed',verifier=NULL,handoff_url=NULL WHERE attempt_id IN
+      (SELECT b.attempt_id FROM connection_authorizations b JOIN connection_attempts a ON a.id=b.attempt_id JOIN connections c ON c.id=a.connection_id
+      WHERE b.expires_at_ms<=? AND b.phase!='failed' AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=c.user_id AND q.state<>'Draining') LIMIT ?)`)
+          .bind(input.current, maximumRetentionRows),
+        input.db
+          .prepare(`DELETE FROM connection_attempts WHERE id IN
       (SELECT id FROM connection_attempts WHERE expires_at_ms <= ? ORDER BY expires_at_ms, id LIMIT ?)`)
-        .bind(input.current - attemptRetentionMilliseconds, maximumRetentionRows)
-        .run(),
+          .bind(input.current - attemptRetentionMilliseconds, maximumRetentionRows),
+      ]),
     catch: () => new ConnectionRetentionUnavailable(),
   }).pipe(Effect.asVoid);
 
@@ -141,7 +148,12 @@ export const handleConnectionBrowserRequest = (input: BrowserRequest): Effect.Ef
       db: input.db,
       userId: session.value.userId,
       work: admittedBrowserRequest(input, session.value, transport.value.operation),
-      refused: (response) => Effect.succeed(continuationFailure(response.status)),
+      refused: (response) =>
+        Effect.succeed(
+          response.status === resourceLimitedStatus
+            ? response
+            : continuationFailure(response.status)
+        ),
     });
   }).pipe(Effect.orElseSucceed(() => continuationFailure(unavailableStatus)));
 

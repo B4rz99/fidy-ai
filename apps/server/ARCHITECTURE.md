@@ -191,3 +191,14 @@ specification and operational evidence.
 | Connections                         | [Authorization preparation](../../docs/operations/bancolombia-authorization-preparation-1267.md); [sandbox application authentication](../../docs/operations/bancolombia-sandbox-handoff-1266.md#protected-application-authentication) |
 | Privacy                             | [Withdrawal](../../docs/operations/processing-withdrawal-1273.md), [installed erasure procedure](../../docs/operations/titular-erasure-1274.md), [inventory](../../docs/operations/titular-erasure-inventory-1274.md)                  |
 | Schema redesign                     | [Feature specs](https://github.com/B4rz99/fidy-ai/issues/1394), [ownership and cutover checklist](../../docs/operations/database-cutover-1428.md)                                                                                      |
+
+Connection authorization preparation privately owns its attempt-bound verifier, state/nonce digests
+and bounded PAR handoff in `connection_authorizations`. Claim and Audit commit before external bank
+I/O; settlement cannot replay a consumed attempt. The scheduled Connections retention sweep clears
+expired private proofs independently of User Consent, and erasure removes them before attempts.
+The Bancolombia adapter reuses private Core mTLS/signing custody for application authentication,
+consent creation and PAR. It records the immutable consent intent at claim and the returned ConsentId
+before PAR. A bounded, matching-User secret profile pins the public-contract version and approved
+test identity; missing or invalid profiles install no adapter. The browser acceptance fixture
+controls only external bank responses. Institution registration stays empty until the client-applicable
+consent contract and test scenario are verified.

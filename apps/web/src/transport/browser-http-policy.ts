@@ -1,4 +1,9 @@
-import { ResourceLimited, TelemetryTraceId, telemetryTraceHeader } from "@fidy/server/client";
+import {
+  ResourceLimited,
+  TelemetryTraceId,
+  connectionBrowserPaths,
+  telemetryTraceHeader,
+} from "@fidy/server/client";
 import {
   Cause,
   Clock,
@@ -410,7 +415,11 @@ const executePolicyRequest = (
   if (destination.origin !== execution.apiOrigin) {
     return Effect.fail(requestFailure(request, "request destination origin refused"));
   }
+  const continuation =
+    execution.boundary === "web-auth" &&
+    Object.values(connectionBrowserPaths).some((path) => path === destination.pathname);
   const policy = browserHttpPolicies[execution.boundary];
+  const deadline = continuation ? "35 seconds" : policy.deadline;
   const attempt = Effect.suspend(() => {
     execution.observation.attempts++;
     return execution.client.postprocess(Effect.succeed(request));
@@ -426,10 +435,12 @@ const executePolicyRequest = (
     ? attempt.pipe(Effect.retry({ times: 1, while: isRetryableTransportFailure }))
     : attempt;
   const admittedResponse =
-    execution.boundary === "canonical" ? retryResourceRefusals(boundedRetries) : boundedRetries;
+    execution.boundary === "canonical" || continuation
+      ? retryResourceRefusals(boundedRetries)
+      : boundedRetries;
   return admittedResponse.pipe(
     Effect.timeoutOrElse({
-      duration: policy.deadline,
+      duration: deadline,
       orElse: () => {
         execution.observation.deadlineExceeded = true;
         return Effect.fail(requestFailure(request, "browser request deadline exceeded"));

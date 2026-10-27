@@ -5,6 +5,7 @@ import { type JSX, useState } from "react";
 import { ConnectionAttemptReference, type ConnectionContinuationReview } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
+import { buttonVariants } from "@/ui/components/button-variants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
 
 type AttemptReference = typeof ConnectionAttemptReference.Type;
@@ -13,6 +14,17 @@ const expirationFormatter = new Intl.DateTimeFormat("es-CO", {
   timeStyle: "short",
   timeZone: "America/Bogota",
 });
+
+const preparationMessage: Readonly<
+  Record<(typeof ConnectionContinuationReview.Type)["phase"], string>
+> = {
+  ready:
+    "Prepararemos la solicitud. Después podrás revisar y decidir qué autorizas directamente en Bancolombia.",
+  preparing: "Estamos preparando la autorización. Consulta el estado; no repitas la solicitud.",
+  prepared: "La conexión sigue pendiente. Solo Bancolombia puede confirmar tu autorización.",
+  failed:
+    "No pudimos completar esta solicitud. Inicia una nueva conexión; esta solicitud no se volverá a enviar.",
+};
 
 const Unavailable = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX.Element => (
   <Card className="w-full max-w-md">
@@ -30,6 +42,27 @@ const Unavailable = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX.
     </CardContent>
   </Card>
 );
+const BankHandoff = ({
+  review,
+  disabled,
+}: Readonly<{
+  review: typeof ConnectionContinuationReview.Type;
+  disabled: boolean;
+}>): JSX.Element => {
+  if (disabled || review.authorization === undefined) return <></>;
+  return (
+    <a className={buttonVariants()} href={review.authorization.url} rel="noreferrer">
+      Continuar en Bancolombia
+    </a>
+  );
+};
+const continuationDeadline = (review: typeof ConnectionContinuationReview.Type): DateTime.Utc =>
+  review.authorization?.expiresAt ?? review.expiresAt;
+const preparationBlocked = (
+  review: typeof ConnectionContinuationReview.Type,
+  uncertain: boolean,
+  stale: boolean
+): boolean => stale || (uncertain && review.phase === "ready");
 const ExpiringReview = ({
   review,
   busy,
@@ -42,16 +75,18 @@ const ExpiringReview = ({
   begin: () => void;
 }>): JSX.Element => {
   const client = useRouter().options.context.webAuthClient;
+  const expiresAt = continuationDeadline(review);
   const [expiry] = useState(() =>
     client.runtime.atom(
       Effect.gen(function* () {
         const current = yield* Clock.currentTimeMillis;
-        yield* Effect.sleep(Math.max(0, review.expiresAt.epochMilliseconds - current));
+        yield* Effect.sleep(Math.max(0, expiresAt.epochMilliseconds - current));
         return true;
       })
     )
   );
   const expired = useAtomValue(expiry).pipe(presentCanonicalQuery)._tag === "Ready";
+  const disabled = busy || blocked || expired;
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
@@ -62,26 +97,27 @@ const ExpiringReview = ({
               : `Conectar ${review.institutionName}`}
           </h1>
         </CardTitle>
-        <CardDescription>
-          La autorización con Bancolombia todavía no está disponible. No se ha autorizado acceso a
-          tus cuentas.
-        </CardDescription>
+        <CardDescription>{preparationMessage[review.phase]}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p>No compartas claves bancarias, documentos de identidad ni números de cuenta en Fidy.</p>
         <p>
           Esta solicitud vence:{" "}
-          <time dateTime={DateTime.formatIso(review.expiresAt)}>
-            {expirationFormatter.format(DateTime.toDate(review.expiresAt))}
+          <time dateTime={DateTime.formatIso(expiresAt)}>
+            {expirationFormatter.format(DateTime.toDate(expiresAt))}
           </time>
           .
         </p>
         {expired ? <p role="alert">La solicitud venció. Inicia una nueva conexión.</p> : null}
         {review.phase === "ready" ? (
-          <Button disabled={busy || blocked || expired} onClick={begin}>
+          <Button disabled={disabled} onClick={begin}>
             {busy ? "Continuando…" : "Continuar"}
           </Button>
         ) : null}
+        <BankHandoff review={review} disabled={disabled} />
+        <Button variant="outline" render={<Link to="/app/transactions" />}>
+          Cancelar y volver a Fidy
+        </Button>
       </CardContent>
     </Card>
   );
@@ -144,9 +180,10 @@ const Continuation = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX
         stale={Option.isSome(result.refreshFailure)}
       />
       <ExpiringReview
+        key={continuationDeadline(result.value).epochMilliseconds}
         review={result.value}
         busy={busy || result.waiting}
-        blocked={uncertain || Option.isSome(result.refreshFailure)}
+        blocked={preparationBlocked(result.value, uncertain, Option.isSome(result.refreshFailure))}
         begin={() => {
           setBusy(true);
           run();

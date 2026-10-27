@@ -34,7 +34,7 @@ export default {
       to: {
         path: "^src/",
         pathNot: [
-          "^src/core/(browser-login|budgets|categories|dashboard|email-authentication|identity|ingestion|insights|recurring-plans|recovery|subscription|tokens)/contract\\.ts$",
+          "^src/core/(browser-login|budgets|categories|connections|dashboard|email-authentication|identity|ingestion|insights|recurring-plans|recovery|subscription|tokens)/contract\\.ts$",
           "^src/core/tokens/operations\\.ts$",
           "^src/core/transactions/contract\\.ts$",
           "^src/core/_shared/money\\.ts$",

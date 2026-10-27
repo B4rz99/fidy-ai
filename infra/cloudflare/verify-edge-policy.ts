@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "b3dada71f94be54a6a1280816ea8b4dd08f9340ef5e276327873f2648a6b1510";
+const expectedEdgePolicyDigest = "1a0c76b6e0d93e4df667453bc984b682dd1511619b583a6a8792407035475c24";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
@@ -65,6 +65,31 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/src/shell/connections/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(new URL("../../apps/server/cloudflare/core-worker.ts", import.meta.url)).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/transactions/runtime.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/runtime.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/internal/browser.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/internal/authorization.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/internal/erasure.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/migrations/0002_connection_authorization.sql",
+      import.meta.url
+    )
   ).text(),
   await Bun.file(
     new URL("../../apps/server/src/shell/connections/runtime.ts", import.meta.url)

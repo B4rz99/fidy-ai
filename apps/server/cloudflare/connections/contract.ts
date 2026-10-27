@@ -1,4 +1,5 @@
-import { Data, Schema } from "effect";
+import { UtcTimestamp } from "../../src/core/_shared/time";
+import { Context, Data, type Effect, Option, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { ConnectionAttemptReference } from "../../src/shell/connections/contract";
@@ -25,3 +26,50 @@ export type ConnectionQueryOperation =
 export class ConnectionRetentionUnavailable extends Data.TaggedError(
   "ConnectionRetentionUnavailable"
 ) {}
+
+export class ConnectionAuthorizationUnavailable extends Data.TaggedError(
+  "ConnectionAuthorizationUnavailable"
+) {}
+
+export const ConnectionConsentIntent = Schema.Struct({
+  permissions: Schema.Array(
+    Schema.Literals(["ReadAccountsBasic", "ReadBalances", "ReadTransactionsDetail"])
+  ).check(
+    Schema.isBetweenLength(1, 3),
+    Schema.makeFilter((values) => new Set(values).size === values.length)
+  ),
+  historyFrom: UtcTimestamp,
+  historyTo: UtcTimestamp,
+  expiresAt: UtcTimestamp,
+}).check(
+  Schema.makeFilter(
+    (value) =>
+      value.historyFrom.epochMilliseconds <= value.historyTo.epochMilliseconds &&
+      value.historyTo.epochMilliseconds < value.expiresAt.epochMilliseconds
+  )
+);
+export type ConnectionConsentIntent = typeof ConnectionConsentIntent.Type;
+
+/** Private preparation after durable admission; a failed or uncertain submission is never retried. */
+export type ConnectionBankPreparation = Readonly<{
+  intent: ConnectionConsentIntent;
+  prepare: (
+    input: Readonly<{
+      userId: UserId;
+      attempt: typeof ConnectionAttemptReference.Type;
+      state: string;
+      nonce: string;
+      challenge: string;
+      recordConsent: (consentId: string) => Effect.Effect<void, ConnectionAuthorizationUnavailable>;
+      expiresAtMilliseconds: number;
+    }>
+  ) => Effect.Effect<
+    Readonly<{ url: string; expiresAtMilliseconds: number }>,
+    ConnectionAuthorizationUnavailable
+  >;
+}>;
+
+export const ConnectionBank = Context.Reference<Option.Option<ConnectionBankPreparation>>(
+  "@fidy/cloudflare/connections/Bank",
+  { defaultValue: Option.none }
+);

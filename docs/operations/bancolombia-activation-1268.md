@@ -90,7 +90,7 @@ The existing protected Core sandbox verification now tests the registered `priva
 candidate without extracting its signing key: issue one application token, prove it active through
 introspection, revoke it once, then prove it inactive. Every call uses a fresh assertion, pinned
 endpoints, the certificate binding, bounded responses, and no automatic retry. A revocation HTTP
-200 alone, an initially inactive token, failed introspection, or a token still active afterwards
+200 alone, an initially inactive token, failed introspection, a token still active afterwards, or natural token expiry during the check
 cannot pass. This proves only application-token behavior; it does not establish refresh-token
 cleanup, customer-grant cleanup or ConsentId cancellation. It has focused synthetic coverage but
 has **not been deployed or verified live**.
@@ -116,22 +116,6 @@ Sources and recovered contract hashes are recorded in
 [the protocol research](../research/bancolombia-cleanup-public-protocol-1268.md). The broader support
 question previously drafted here is superseded; account examples and generic OAuth request details
 are already available.
-
-## Bank clarification needed
-
-The public [Access Token Management documentation](https://api-portal-external.apps.bancolombia.com/api/open-finance/open-banking-authorization/open-finance/open-finance/1.0.0/access-token-management)
-was checked on 2026-10-27 and displayed “Aún no tenemos documentación disponible para esta API.”
-The support collection remains authoritative; discovery endpoint names alone are not a replacement
-for an accepted cleanup request. The outstanding technical question is:
-
-> Hola, estoy completando la integración de Fidy con el sandbox. ¿Me puedes compartir las solicitudes
-> de Postman para revocar los access/refresh tokens y el consentimiento de cuentas? Necesito confirmar
-> el endpoint, método, body, autenticación y cómo comprobar que el acceso quedó revocado. También,
-> si el intercambio del código termina en timeout y no recibo los tokens, ¿cómo debo cancelar o
-> reconciliar la autorización usando el ConsentId? Si es posible, incluye ejemplos de las respuestas
-> de consulta del consentimiento y de cuentas, con su paginación. Gracias.
-
-No credentials, tokens, bank login details or personal customer data are needed in this request.
 
 ## Verification
 

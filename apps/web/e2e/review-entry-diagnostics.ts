@@ -83,7 +83,7 @@ const TraceEvent = Schema.Struct({
 });
 const TraceSource = Schema.Struct({
   url: Schema.String.check(
-    Schema.isPattern(/^https:\/\/127\.0\.0\.1:\d+\/assets\/[A-Za-z0-9_-]+\.js$/u)
+    Schema.isPattern(/^https:\/\/127\.0\.0\.1:\d+\/assets\/[A-Za-z0-9_-]{1,160}\.js$/u)
   ),
   lineNumber: Schema.Finite,
   columnNumber: Schema.Finite,
@@ -247,7 +247,7 @@ const finishTrace = Effect.fnUntraced(function* (
     displayTimeUnit: "ms",
     dataLossOccurred,
     limitation:
-      "One warmer traced replay after an untraced failure; not a replacement gate measurement.",
+      "One synthetic traced navigation; diagnostic evidence, not a native gate measurement.",
   });
   yield* reviewDiagnosticRequest(() =>
     information.attach("review-return-replay-trace", {
@@ -257,11 +257,101 @@ const finishTrace = Effect.fnUntraced(function* (
   );
 });
 
-const traceReviewReplay = Effect.fnUntraced(function* (page: Page, information: TestInfo) {
+const cpuSampleIntervalMicroseconds = 100;
+const cpuNodeLimit = 10_000;
+const cpuSampleLimit = 20_000;
+const cpuReportByteLimit = 512_000;
+const CpuProfile = Schema.Struct({
+  nodes: Schema.Array(
+    Schema.Struct({
+      id: Schema.Finite,
+      callFrame: Schema.Unknown,
+      children: Schema.optionalKey(Schema.Array(Schema.Finite)),
+    })
+  ).check(Schema.isMaxLength(cpuNodeLimit)),
+  samples: Schema.Array(Schema.Finite).check(Schema.isMaxLength(cpuSampleLimit)),
+  timeDeltas: Schema.Array(Schema.Finite).check(Schema.isMaxLength(cpuSampleLimit)),
+  startTime: Schema.Finite,
+  endTime: Schema.Finite,
+});
+
+/** CPU evidence exposes static bundle coordinates, never function names, URLs or arguments. */
+export const sanitizeReviewCpuProfile = (value: unknown): string => {
+  const profile = Schema.decodeUnknownSync(CpuProfile)(value);
+  const report = JSON.stringify({
+    ...profile,
+    nodes: profile.nodes.map(({ callFrame, ...node }) => ({
+      ...node,
+      sources: sourceLocation(callFrame),
+    })),
+  });
+  if (new TextEncoder().encode(report).byteLength > cpuReportByteLimit) {
+    throw new Error("Review CPU evidence exceeds its byte limit");
+  }
+  return report;
+};
+
+export const finishReviewCpu = ({
+  session,
+  information,
+}: Readonly<{
+  session: Pick<CDPSession, "send">;
+  information: Pick<TestInfo, "attach">;
+}>): Effect.Effect<void, Cause.UnknownError | Cause.TimeoutError> =>
+  Effect.gen(function* () {
+    const result = yield* reviewDiagnosticRequest(() => session.send("Profiler.stop"));
+    const body = yield* Effect.try(() => sanitizeReviewCpuProfile(result.profile));
+    yield* reviewDiagnosticRequest(() =>
+      information.attach("review-return-cpu-profile", {
+        body,
+        contentType: "application/json",
+      })
+    );
+  }).pipe(
+    Effect.ensuring(
+      reviewDiagnosticRequest(() => session.send("Profiler.disable")).pipe(Effect.exit)
+    )
+  );
+
+const profileReviewCpu = Effect.fnUntraced(function* (session: CDPSession) {
+  yield* Effect.addFinalizer(() =>
+    reviewDiagnosticRequest(() => session.send("Profiler.disable")).pipe(Effect.exit)
+  );
+  yield* reviewDiagnosticRequest(() => session.send("Profiler.enable"));
+  yield* reviewDiagnosticRequest(() =>
+    session.send("Profiler.setSamplingInterval", {
+      interval: cpuSampleIntervalMicroseconds,
+    })
+  );
+  yield* Effect.addFinalizer(() =>
+    reviewDiagnosticRequest(() => session.send("Profiler.stop")).pipe(Effect.exit)
+  );
+  yield* reviewDiagnosticRequest(() => session.send("Profiler.start"));
+});
+
+const recordReplayDuration = Effect.fnUntraced(function* (page: Page, information: TestInfo) {
+  const raw = yield* reviewDiagnosticRequest((signal) =>
+    page.locator("body").getAttribute("data-review-replay-milliseconds", { signal })
+  );
+  const milliseconds = yield* Schema.decodeUnknownEffect(Schema.FiniteFromString)(raw);
+  yield* reviewDiagnosticRequest(() =>
+    information.attach("review-return-replay-duration", {
+      body: `${milliseconds} ms (diagnostic replay only; not a native benchmark)`,
+      contentType: "text/plain",
+    })
+  );
+});
+
+const traceReviewReplay = Effect.fnUntraced(function* (
+  page: Page,
+  information: TestInfo,
+  mode: "timeline" | "cpu"
+) {
   const session = yield* Effect.acquireRelease(
     reviewDiagnosticRequest(() => page.context().newCDPSession(page)),
     (owned) => reviewDiagnosticRequest(() => owned.detach()).pipe(Effect.exit)
   );
+  if (mode === "cpu") yield* profileReviewCpu(session);
   const trace = collectReviewTrace();
   session.on("Tracing.dataCollected", trace.collect);
   yield* Effect.addFinalizer(() =>
@@ -302,16 +392,8 @@ const traceReviewReplay = Effect.fnUntraced(function* (page: Page, information: 
       { signal }
     )
   );
-  const raw = yield* reviewDiagnosticRequest((signal) =>
-    page.locator("body").getAttribute("data-review-replay-milliseconds", { signal })
-  );
-  const milliseconds = yield* Schema.decodeUnknownEffect(Schema.FiniteFromString)(raw);
-  yield* reviewDiagnosticRequest(() =>
-    information.attach("review-return-replay-duration", {
-      body: `${milliseconds} ms (warmer traced replay; original failure preserved)`,
-      contentType: "text/plain",
-    })
-  );
+  yield* recordReplayDuration(page, information);
+  if (mode === "cpu") yield* finishReviewCpu({ session, information });
 });
 
 /** Consumes the failed Page with one read-only replay, then closes it; never traces authentication. */
@@ -343,5 +425,20 @@ export const captureReviewEntryReplay = Effect.fnUntraced(function* (
   yield* reviewDiagnosticRequest((signal) =>
     page.getByRole("heading", { name: "Transacciones", exact: true }).waitFor({ signal })
   );
-  yield* traceReviewReplay(page, information);
+  yield* traceReviewReplay(page, information, "timeline");
+});
+
+/** One temporary independent synthetic case; its consumed Page cannot execute mutations. */
+export const captureReviewCpuProfile = Effect.fnUntraced(function* (
+  page: Page,
+  information: TestInfo
+) {
+  yield* protectReviewReplay(page);
+  yield* reviewDiagnosticRequest((signal) =>
+    page.getByRole("link", { name: "Transacciones", exact: true }).click({ signal })
+  );
+  yield* reviewDiagnosticRequest((signal) =>
+    page.getByRole("heading", { name: "Transacciones", exact: true }).waitFor({ signal })
+  );
+  yield* traceReviewReplay(page, information, "cpu");
 });

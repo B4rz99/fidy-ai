@@ -5,9 +5,11 @@ import { TestClock } from "effect/testing";
 import {
   ReviewTraceCompletion,
   collectReviewTrace,
+  finishReviewCpu,
   protectReviewReplay,
   reviewDiagnosticRequest,
   reviewReplayGuard,
+  sanitizeReviewCpuProfile,
   withReviewEntryEvidence,
 } from "../e2e/review-entry-diagnostics";
 
@@ -374,3 +376,112 @@ it("temporary attribution excludes private URLs and arbitrary arguments", () => 
     truncated: false,
   });
 });
+
+it("CPU evidence retains only bounded static coordinates and numeric samples", () => {
+  const profile = sanitizeReviewCpuProfile({
+    nodes: [
+      {
+        id: 1,
+        callFrame: {
+          url: "https://127.0.0.1:4173/assets/index-Ab12.js",
+          lineNumber: 2,
+          columnNumber: 3,
+          functionName: "private",
+        },
+        children: [2],
+      },
+      {
+        id: 2,
+        callFrame: {
+          url: "https://example.test/private?token=secret",
+          lineNumber: 0,
+          columnNumber: 0,
+        },
+      },
+    ],
+    samples: [1, 2],
+    timeDeltas: [100, 100],
+    startTime: 1000,
+    endTime: 1200,
+    private: "discarded",
+  });
+  expect(JSON.parse(profile)).toEqual({
+    nodes: [
+      {
+        id: 1,
+        children: [2],
+        sources: [{ asset: "index-Ab12.js", lineNumber: 2, columnNumber: 3 }],
+      },
+      { id: 2, sources: [] },
+    ],
+    samples: [1, 2],
+    timeDeltas: [100, 100],
+    startTime: 1000,
+    endTime: 1200,
+  });
+});
+
+it("CPU evidence rejects malformed and excessive payloads", () => {
+  expect(() =>
+    sanitizeReviewCpuProfile({
+      nodes: [],
+      samples: [Number.NaN],
+      timeDeltas: [],
+      startTime: 0,
+      endTime: 1,
+    })
+  ).toThrow();
+  expect(() =>
+    sanitizeReviewCpuProfile({
+      nodes: [],
+      samples: Array.from({ length: 20_001 }, () => 1),
+      timeDeltas: [],
+      startTime: 0,
+      endTime: 1,
+    })
+  ).toThrow();
+  expect(() =>
+    sanitizeReviewCpuProfile({
+      nodes: Array.from({ length: 10_000 }, () => ({
+        id: 1,
+        callFrame: {
+          url: "https://127.0.0.1:4173/assets/index-Ab12.js",
+          lineNumber: 2,
+          columnNumber: 3,
+        },
+      })),
+      samples: [],
+      timeDeltas: [],
+      startTime: 0,
+      endTime: 1,
+    })
+  ).toThrow("Review CPU evidence exceeds its byte limit");
+});
+
+it.effect("required CPU capture reports failure while cleanup cannot mask it", () =>
+  Effect.gen(function* () {
+    const calls: string[] = [];
+    const result = yield* finishReviewCpu({
+      session: {
+        send: (method) => {
+          calls.push(method);
+          return Promise.reject(
+            new Error(method === "Profiler.stop" ? "capture failed" : "cleanup failed")
+          );
+        },
+      },
+      information: {
+        attach: () => {
+          calls.push("attach");
+          return Promise.resolve();
+        },
+      },
+    }).pipe(Effect.exit);
+    expect(calls).toEqual(["Profiler.stop", "Profiler.disable"]);
+    expect(Exit.isFailure(result)).toBe(true);
+    if (Exit.isFailure(result)) {
+      expect(Cause.pretty(result.cause)).toContain("capture failed");
+      expect(Cause.pretty(result.cause)).not.toContain("cleanup failed");
+    }
+  })
+);

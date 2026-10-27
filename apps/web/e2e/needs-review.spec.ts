@@ -3,7 +3,11 @@ import type { Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
-import { captureReviewEntryReplay, withReviewEntryEvidence } from "./review-entry-diagnostics";
+import {
+  captureReviewCpuProfile,
+  captureReviewEntryReplay,
+  withReviewEntryEvidence,
+} from "./review-entry-diagnostics";
 
 const { expect, test } = playwright;
 test.describe.configure({ mode: "parallel" });
@@ -901,6 +905,40 @@ for (const [destination, identity] of [
     )
   );
 }
+
+test("returns from Transacciones with its review form and original already available — diagnostic CPU profile", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({
+          page,
+          request,
+          identity: "navigationReviewTransactions",
+        })
+      );
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
+      );
+      yield* Effect.tryPromise(() => page.getByRole("link", { name: /^Por revisar/u }).click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Contraparte (opcional)").fill("Borrador al volver")
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, delayedReviewRead)
+      );
+      yield* captureReviewCpuProfile(page, test.info()).pipe(
+        Effect.scoped,
+        Effect.timeout("5 seconds")
+      );
+    })
+  ));
 
 const verifyPrivacyDisposesReview = (page: Page): Promise<void> =>
   Effect.runPromise(

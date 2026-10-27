@@ -36,6 +36,11 @@ type OutboundHttpPolicy = Readonly<{
 }>;
 
 const outboundHttpPolicies: Readonly<Record<OutboundHttpProvider, OutboundHttpPolicy>> = {
+  bancolombia: {
+    propagateTrace: false,
+    redactedHeaders: ["authorization"],
+    retainedResponseHeaders: [],
+  },
   github: { propagateTrace: false, redactedHeaders: [], retainedResponseHeaders: ["location"] },
   microsoft: { propagateTrace: false, redactedHeaders: [], retainedResponseHeaders: [] },
   google: { propagateTrace: false, redactedHeaders: [], retainedResponseHeaders: [] },

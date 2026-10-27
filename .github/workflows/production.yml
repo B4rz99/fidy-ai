@@ -5,6 +5,10 @@ on:
     branches: [trunk]
   workflow_dispatch:
     inputs:
+      verify_bancolombia_sandbox:
+        description: Verify the registered signing key and certificate-bound sandbox application authentication
+        type: boolean
+        default: false
       recover_deleted_queue:
         description: Recover the inspected deleted Queue incident under isolated public admission
         type: boolean
@@ -37,6 +41,8 @@ jobs:
     timeout-minutes: 30
     environment: production
     env:
+      BANCOLOMBIA_SANDBOX_CLIENT_ID: ${{ vars.BANCOLOMBIA_SANDBOX_CLIENT_ID }}
+      BANCOLOMBIA_SANDBOX_CERTIFICATE_ID: ${{ vars.BANCOLOMBIA_SANDBOX_CERTIFICATE_ID }}
       RELEASE_GIT_SHA: ${{ github.sha }}
       ISOLATE_SCHEMA_CUTOVER: ${{ inputs.isolate_schema_cutover && 'true' || 'false' }}
       SCHEMA_CUTOVER_PUBLIC_VERSION_ID: ${{ inputs.schema_cutover_public_version_id }}
@@ -110,6 +116,7 @@ jobs:
       - name: Plan the complete Cloudflare topology
         working-directory: infra/cloudflare
         env:
+          BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: ${{ secrets.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM }}
           RECOVERY_ISOLATION: ${{ (inputs.recover_deleted_queue || inputs.isolate_schema_cutover) && 'isolated' || '' }}
           MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
@@ -154,6 +161,7 @@ jobs:
       - name: Upload zero-traffic Worker candidates with Alchemy
         working-directory: infra/cloudflare
         env:
+          BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: ${{ secrets.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM }}
           RECOVERY_ISOLATION: ${{ (inputs.recover_deleted_queue || inputs.isolate_schema_cutover) && 'isolated' || '' }}
           MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
@@ -276,6 +284,8 @@ jobs:
       - name: Prove both candidate and intermediate Worker pairings
         if: ${{ !inputs.isolate_schema_cutover }}
         id: candidate_smoke
+        env:
+          VERIFY_BANCOLOMBIA_SANDBOX: ${{ inputs.verify_bancolombia_sandbox && 'enabled' || 'disabled' }}
         working-directory: infra/cloudflare
         run: bun verify-production-smoke.ts
 

@@ -112,3 +112,12 @@ export type ProviderOidcHttpService = Readonly<{
 export type CliReleaseHttpService = Readonly<{
   readLatest: () => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
+
+/** Only fixed sandbox discovery and accounts application authentication; no caller-selected destinations. */
+export type BancolombiaSandboxHttpService = Readonly<{
+  execute: (
+    request:
+      | Readonly<{ _tag: "Discovery" }>
+      | Readonly<{ _tag: "Authenticate"; assertion: Redacted.Redacted<string> }>
+  ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure | Cause.TimeoutError>;
+}>;

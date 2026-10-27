@@ -1,3 +1,4 @@
+import { bancolombiaSandboxHttp } from "~/shell/outbound-http/internal/bancolombia-http";
 import { cliReleaseHttp } from "~/shell/outbound-http/internal/cli-release-http";
 import { oidcHttp } from "~/shell/outbound-http/internal/oidc-http";
 import { type DaviplataOtpPolicy } from "~/core/subscription/contract";
@@ -14,6 +15,7 @@ import {
   makeOutboundHttp,
 } from "~/shell/outbound-http/internal/outbound-http";
 import type {
+  BancolombiaSandboxHttpService,
   CliReleaseHttpService,
   OutboundHttpFailure,
   OutboundHttpRequest,
@@ -159,3 +161,8 @@ export const makeMicrosoftOutboundHttp = (
 export const makeCliReleaseOutboundHttp = (
   httpClient: HttpClient.HttpClient
 ): CliReleaseHttpService => cliReleaseHttp(httpClient);
+
+/** Construct the fixed sandbox transport; the native composition supplies its certificate-bound client. */
+export const makeBancolombiaSandboxOutboundHttp = (
+  client: HttpClient.HttpClient
+): BancolombiaSandboxHttpService => bancolombiaSandboxHttp(client);

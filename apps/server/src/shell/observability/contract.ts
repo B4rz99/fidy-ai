@@ -118,6 +118,7 @@ export const TelemetryRegistry = {
     "disclosure_not_current",
   ],
   provider: [
+    "bancolombia",
     "github",
     "cloudflare-access",
     "google",

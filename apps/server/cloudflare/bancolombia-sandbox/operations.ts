@@ -1,5 +1,5 @@
 import { Option } from "effect";
-import { sandboxPublicKey } from "./internal/public-key";
+import { sandboxPublicKey } from "./contract";
 
 const jwksPath = "/connections/bancolombia/sandbox/jwks";
 const callbackPath = "/connections/bancolombia/sandbox/callback";

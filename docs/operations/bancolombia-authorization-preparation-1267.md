@@ -58,8 +58,8 @@ ResourceLimited non-admission receives bounded pacing; uncertain submissions rec
 The built-browser fixture exercises consent creation through handoff over the public/Core/D1 path
 with synthetic keys and test identity; only the external bank endpoints are controlled. It proves local integration,
 not Bancolombia acceptance. The private coordinator can install the real adapter only from a
-bounded, matching-User `BANCOLOMBIA_SANDBOX_CONSENT_PROFILE` secret naming the pinned support-collection
-digest, explicit intent and supplied test AccountOwner. Temporary one-User profiles are configured only for bounded live tests. Production registration remains empty, and the sandbox callback still refuses completion pending #1268.
+bounded, matching-User `BANCOLOMBIA_SANDBOX_CONSENT_PROFILE` secret naming the pinned support-corrected
+revision, explicit intent and supplied test AccountOwner. Temporary one-User profiles are configured only for bounded live tests. Production registration remains empty, and the sandbox callback still refuses completion pending #1268.
 
 ## Accepted support collection — 2026-10-27
 
@@ -76,13 +76,13 @@ The accepted override contains only `Data.Permissions` and `Data.AccountOwner`. 
 `ReadTransactionsDebits`. Neither historical dates nor `OnBehalfOf` are sent; history and consent
 expiry are left to the bank. Private profiles must select revision
 `bancolombia-sandbox-consent-2026-10-27`; the original collection-only revision is refused. Consent creation accepts HTTP 200/201 and
-requires Data.ConsentId; optional echoed permissions and history must match when present. PAR
+requires Data.ConsentId; optional echoed permissions must match when present. PAR
 requires HTTP 201, private-key JWT and S256, with no nonce because this collection does not use one.
 Support confirmed that `obParticipantId` is unused for this case and may remain empty; the blank
 `x-fapi-financial-id` value is valid. The customer-IP example contains a date instead of an IP address; that optional header
 is omitted. The sample external signing helper and verifier logging are never executed.
 
-A Core-only redacted profile pins this collection digest, the test identity, one Fidy User and a
+A Core-only redacted profile pins this corrected revision, the test identity, one Fidy User and a
 fixed admission window of at most one hour. Browser review, initiation and preparation recheck the
 same User and window. The provider adapter rechecks it immediately before bank work and bounds the
 handoff by its expiry. Expired admission cannot reopen preparation. Existing bank consent evidence

@@ -1879,6 +1879,7 @@ it("refuses another User's complete live proof at the Agent service before model
       const credentials = yield* Effect.tryPromise(() => subject(1));
       const model = vi.fn(() => Promise.resolve(reply("Never disclosed")));
       const service = makeAgentService({
+        connectionAdmission: Option.none(),
         environment: { DB: db, HOSTED_AI_MODEL: approvedWorkersAiModel, AI: { run: model } },
         userId: UserId.make(users[0]),
         scheduleRecovery: () => Promise.resolve(),
@@ -1921,6 +1922,7 @@ it("stops unavailable alarm retries when the hosted owner settles and preserves 
       let unavailable = true;
       let settled = false;
       const service = makeAgentService({
+        connectionAdmission: Option.none(),
         environment: {
           DB: db,
           HOSTED_AI_MODEL: approvedWorkersAiModel,
@@ -2062,6 +2064,7 @@ it("does not retry a recovery defect or release queued work before its hosted ow
         },
       });
       const service = makeAgentService({
+        connectionAdmission: Option.none(),
         environment: {
           DB: delayedDb,
           HOSTED_AI_MODEL: approvedWorkersAiModel,
@@ -2139,6 +2142,7 @@ it("cannot release queued hosted work before its ordinary predecessor settles", 
       const db = yield* Effect.tryPromise(() => setup());
       const predecessor = Promise.withResolvers<void>();
       const service = makeAgentService({
+        connectionAdmission: Option.none(),
         environment: {
           DB: db,
           HOSTED_AI_MODEL: approvedWorkersAiModel,
@@ -2506,6 +2510,7 @@ it.each(continuityCorruptions)(
         }
         const model = vi.fn(() => Promise.resolve(reply("Must not run")));
         const service = makeAgentService({
+          connectionAdmission: Option.none(),
           environment: {
             DB: db,
             KAPSO_API_KEY: "test-kapso-api-key",
@@ -2651,6 +2656,7 @@ it("admits a web-provider onboarding grant through the native Agent service and 
       const credentials = yield* Effect.tryPromise(() => subject(0));
       const model = vi.fn(() => Promise.resolve(reply("Conexión verificada")));
       const service = makeAgentService({
+        connectionAdmission: Option.none(),
         environment: { DB: db, HOSTED_AI_MODEL: approvedWorkersAiModel, AI: { run: model } },
         userId: UserId.make(users[0]),
         scheduleRecovery: () => Promise.resolve(),
@@ -2696,6 +2702,7 @@ it("returns safe quota feedback and retains a terminal failure without an assist
         )
       );
       const service = makeAgentService({
+        connectionAdmission: Option.none(),
         environment: { DB: db, HOSTED_AI_MODEL: approvedWorkersAiModel, AI: { run: model } },
         userId: UserId.make(users[0]),
         scheduleRecovery: () => Promise.resolve(),

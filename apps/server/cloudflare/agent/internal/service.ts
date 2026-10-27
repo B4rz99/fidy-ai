@@ -1,4 +1,5 @@
 import { OutboundHttpLive } from "../../outbound-http/runtime";
+import { ConnectionSandboxAdmission } from "../../connections/contract";
 import { TelemetryRelease } from "../../../src/shell/observability/contract";
 import { observeHostedResponse } from "../../runtime/application-observation/operations";
 import { workerInternalTraceHeader } from "../../runtime/telemetry/contract";
@@ -629,6 +630,18 @@ const runWhatsAppTurn = (
   );
 };
 
+const readHostedTurnAdmission = (
+  request: Request,
+  userId: UserId
+): Effect.Effect<Option.Option<typeof HostedTurnAdmission.Type>> =>
+  Effect.tryPromise(() => request.json()).pipe(
+    Effect.option,
+    Effect.map(Option.flatMap(Schema.decodeUnknownOption(HostedTurnAdmission))),
+    Effect.map(
+      Option.filter((proof) => proof.userId === userId && proof.digest.length === digestBytes)
+    )
+  );
+
 const runHostedTurn = (
   owner: AgentServiceInput,
   request: Request,
@@ -636,22 +649,10 @@ const runHostedTurn = (
 ): Promise<Response> => {
   const userId = owner.userId;
   const env = owner.environment;
-  const executeMutation = (
-    input: Parameters<typeof executeHostedMutation>[1]
-  ): ReturnType<typeof executeHostedMutation> => executeHostedMutation(owner, input);
   return Effect.runPromise(
     Effect.gen(function* () {
-      const candidate = yield* Effect.tryPromise(() => request.json()).pipe(
-        Effect.orElseSucceed(() => undefined)
-      );
-      const admission = Schema.decodeUnknownOption(HostedTurnAdmission)(candidate);
-      if (
-        Option.isNone(admission) ||
-        admission.value.userId !== userId ||
-        admission.value.digest.length !== digestBytes
-      ) {
-        return transactionUnavailable();
-      }
+      const admission = yield* readHostedTurnAdmission(request, userId);
+      if (Option.isNone(admission)) return transactionUnavailable();
       const inference = yield* Effect.option(
         makeUserCloudflareHostedInference({
           environment: env,
@@ -666,7 +667,12 @@ const runHostedTurn = (
           db: env.DB,
           bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
           executeMutation: Option.some((operation, input, hostedFence) =>
-            executeMutation({ admission: admission.value, operation, input, hostedFence })
+            executeHostedMutation(owner, {
+              admission: admission.value,
+              operation,
+              input,
+              hostedFence,
+            })
           ),
           subject: {
             userId: admission.value.userId,
@@ -684,8 +690,9 @@ const runHostedTurn = (
         Effect.withSpan("agent.hostedTurn.execution"),
         Effect.orElseSucceed(transactionUnavailable)
       );
-    }).pipe((effect) =>
-      observeHostedExecution(effect, request, { trigger: "api", environment: env })
+    }).pipe(
+      Effect.provideService(ConnectionSandboxAdmission, owner.connectionAdmission),
+      (effect) => observeHostedExecution(effect, request, { trigger: "api", environment: env })
     )
   );
 };

@@ -37,6 +37,7 @@ const compositionRoots = new Set([
   "cloudflare/agent/hosted-turn.test.ts",
   "cloudflare/agent/hosted-turn.test-fixture.ts",
   "cloudflare/agent/hosted-tool-turn.test.ts",
+  "cloudflare/agent/connection-admission.test.ts",
   "cloudflare/agent/hosted-continuity.test.ts",
   "cloudflare/agent/document-clock-cutover.test.ts",
   "cloudflare/budgets/budgets.test.ts",

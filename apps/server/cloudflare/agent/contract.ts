@@ -1,4 +1,5 @@
-import { Data, type Effect, type Option, Schema } from "effect";
+import { type Context, Data, type Effect, type Option, Schema } from "effect";
+import type { ConnectionSandboxAdmission } from "../connections/contract";
 import {
   HostedTurnProgressRequest,
   HostedTurnReceipt,
@@ -69,6 +70,7 @@ export type AgentServiceInput = Readonly<{
   environment: AgentEnvironment;
   userId: UserId;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
+  connectionAdmission: Context.Service.Shape<typeof ConnectionSandboxAdmission>;
 }>;
 /** Observation of accepted work. Responses contain only the channel contract, with failures closed as unavailable. Settlement, not early HTTP response, releases the User queue. */
 export type AgentWork = Readonly<{ response: Promise<Response>; settled: Promise<void> }>;

@@ -7,10 +7,10 @@ const measurementAssertionMilliseconds = 30_000;
 const normalAssertionMilliseconds = 5_000;
 const browserWorkers = 2;
 const performanceCases =
-  /returns from .+ with its review form and original already available|returns to .+ from cached data while refreshing|switches between visited review tabs/u;
+  /returns from .+ with its review form and original already available|returns to .+ from cached data while refreshing|switches between visited review tabs|temporary Consent chronology diagnostic/u;
 const performancePartitions: Readonly<Record<string, RegExp>> = {
   "1/2":
-    /returns from .+ with its review form and original already available|returns to Transacciones from cached data while refreshing/u,
+    /returns from .+ with its review form and original already available|returns to Transacciones from cached data while refreshing|temporary Consent chronology diagnostic/u,
   "2/2":
     /returns to (Presupuestos|Recurrentes|Tablero) from cached data while refreshing|switches between visited review tabs/u,
 };
@@ -36,7 +36,11 @@ export default defineConfig({
     },
     {
       name: "performance",
-      testMatch: ["needs-review.spec.ts", "workspace-navigation.spec.ts"],
+      testMatch: [
+        "needs-review.spec.ts",
+        "workspace-navigation.spec.ts",
+        "consent-navigation.spec.ts",
+      ],
       grep: performanceSelection,
       dependencies: ["admission"],
       workers: 1,
@@ -46,7 +50,7 @@ export default defineConfig({
       testIgnore: ["cli-login.spec.ts", "acceptance-clock.spec.ts"],
       dependencies: ["performance"],
       grepInvert:
-        /returns from .+ with its review form and original already available|returns to .+ from cached data while refreshing|switches between visited review tabs|rejects stale cross-tab drafts and logout/u,
+        /returns from .+ with its review form and original already available|returns to .+ from cached data while refreshing|switches between visited review tabs|rejects stale cross-tab drafts and logout|temporary Consent chronology diagnostic/u,
     },
   ],
   fullyParallel: false,

@@ -238,3 +238,16 @@ test("Transactions rechecks Consent after the initial authorized read settles an
   Effect.runPromise(
     recheckConsent({ page, request, initialRead: "settled" }, information).pipe(Effect.scoped)
   ));
+
+for (const initialRead of ["unsettled", "settled"] as const) {
+  test(`temporary Consent chronology diagnostic: ${initialRead} initial Transactions read`, ({
+    page,
+    request,
+  }, information) =>
+    Effect.runPromise(
+      recheckConsent({ page, request, initialRead }, information).pipe(
+        Effect.timeout("25 seconds"),
+        Effect.scoped
+      )
+    ));
+}

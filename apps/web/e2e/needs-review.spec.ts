@@ -929,7 +929,9 @@ const prepareContainmentPage = Effect.fnUntraced(function* (page: Page, baseline
   );
   if (baseline) {
     yield* Effect.tryPromise(() =>
-      page.addStyleTag({ content: '[data-review="workspace"] { contain: none !important; }' })
+      page.addStyleTag({
+        url: new URL("/review-containment-baseline.css", page.url()).href,
+      })
     );
   }
   const containment = yield* Effect.tryPromise((signal) =>

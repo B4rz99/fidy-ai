@@ -12,10 +12,11 @@ The public portal's unavailable API view does **not** mean the contracts are una
 the older sandbox portal still serves its public YAML and Markdown files when requested
 with the same public portal header its own JavaScript uses. Account response examples and
 pagination are available. Token revocation request mechanics come from OAuth standards,
-and Bancolombia publishes the endpoint. The remaining uncertainty is narrower: which
-authentication Fidy's registration accepts at revocation/introspection, and how to
-invalidate a bank consent when the exchange outcome is unknown and no token was received.
-Those are candidates for controlled sandbox verification before asking support.
+and Bancolombia publishes the endpoint. Controlled live verification now establishes the
+registered JWT/mTLS path for application-token introspection and revocation. Remaining gaps are
+customer access/refresh-grant cleanup and isolation, and cancellation of a bank consent when the
+exchange outcome is unknown and no token was received. The latter procedure is not established by
+the examined contracts or read-only capability responses.
 
 The support-supplied Postman collection and subsequent support correction remain the
 selected profile. Conflicting public examples must not override the corrected consent
@@ -97,13 +98,12 @@ endpoint.
 
 ## Next verification and any eventual support question
 
-Correct the account response/pagination interpretation using the recovered contract;
-retain the support-defined request paths and corrected consent creation body. Then run a
-controlled sandbox grant lifecycle with the existing protected credentials, establishing
-which advertised token operations actually accept Fidy's registration and what responses
-they produce. This research did not perform those authenticated tests.
+The account response/pagination interpretation has been corrected using the recovered contract;
+the support-defined request paths and corrected consent creation body remain authoritative. The
+protected application-token lifecycle verification passed as recorded below. Customer grant cleanup
+and isolation still require their own implementation and controlled verification.
 
-If that verification does not resolve consent cleanup, the focused question is: **How does
+The remaining bank-specific question is: **How does
 Fidy invalidate or reconcile a particular account ConsentId when authorization-code
 exchange may have succeeded but Fidy received no tokens?** Include the tested token
 revocation/introspection results rather than asking the bank to repeat the already public
@@ -123,6 +123,36 @@ it does not prove that the registered JWT method works at these endpoints.
 
 The follow-up implementation routes a JWT application-token lifecycle check through the existing
 protected Core verification. It must establish a positive active-token baseline before accepting
-an inactive result after revocation. This check is synthetic-test verified only until a protected
-release and live execution complete. Customer access/refresh cleanup and uncertain-exchange
-ConsentId handling remain unverified and are not installed as automatic cleanup on this evidence.
+an inactive result after revocation. Customer access/refresh cleanup and uncertain-exchange
+ConsentId handling remain unverified and are not installed as automatic cleanup on application-token
+evidence alone.
+
+## Live JWT application-token verification
+
+PR [#1575](https://github.com/B4rz99/fidy-ai/pull/1575) passed all CI checks and merged as
+`127ad191f29b288260876b63d3d4ada20866d8e1`. The normal [protected release](https://github.com/B4rz99/fidy-ai/actions/runs/40604041447)
+completed successfully. The [signed live verification](https://github.com/B4rz99/fidy-ai/actions/runs/40604618334)
+ran with `verify_bancolombia_sandbox=true` and passed on 2026-10-27. Inside Core, the registered
+RS256/private_key_jwt key and mTLS binding issued an accounts application token, obtained active
+introspection, revoked that token once, and obtained inactive introspection before natural expiry.
+No token or signing key was exported. Sandbox customer admission remained disabled and production
+institution registration stayed empty.
+
+This establishes the selected JWT/mTLS authentication and active-to-inactive application-token
+behavior for the advertised endpoints. It does not establish refresh-token handling, customer-grant
+isolation, customer-token cleanup or account-consent cancellation by ConsentId.
+
+## Read-only consent capability observation
+
+On 2026-10-27, mTLS `OPTIONS` requests to the support-selected consent collection and an explicitly
+invalid individual consent-resource path returned HTTP 200. The collection advertised `Allow: POST`;
+the individual resource advertised `Allow: GET, HEAD`. Neither advertised DELETE/cancellation.
+No customer consent was read or changed. Local system DNS failed to resolve the supplied resource
+host, while public Cloudflare DNS returned a successful answer. The check used that public
+resolution while preserving the bank hostname and normal TLS certificate verification; it did not
+disable TLS checks, follow redirects or retry.
+
+Together with the reviewed contracts, this leaves a specific documentation/verification gap:
+which bank-supported operation cancels or reconciles an account ConsentId when an authorization-code
+exchange might have succeeded but no tokens were received. These observations do not prove that no
+separate cancellation endpoint exists; that procedure still needs bank confirmation.

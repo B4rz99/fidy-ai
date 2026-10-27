@@ -87,26 +87,38 @@ for token issuance, introspection and revocation. The latter two used an explici
 token; no customer consent or Account was touched and no application token was issued.
 
 The existing protected Core sandbox verification now tests the registered `private_key_jwt`
-candidate without extracting its signing key: issue one application token, prove it active through
+method without extracting its signing key: issue one application token, prove it active through
 introspection, revoke it once, then prove it inactive. Every call uses a fresh assertion, pinned
 endpoints, the certificate binding, bounded responses, and no automatic retry. A revocation HTTP
 200 alone, an initially inactive token, failed introspection, a token still active afterwards, or natural token expiry during the check
 cannot pass. This proves only application-token behavior; it does not establish refresh-token
-cleanup, customer-grant cleanup or ConsentId cancellation. It has focused synthetic coverage but
-has **not been deployed or verified live**.
+cleanup, customer-grant cleanup or ConsentId cancellation.
+
+The [protected release](https://github.com/B4rz99/fidy-ai/actions/runs/40604041447) completed on
+2026-10-27 at revision `127ad191f29b288260876b63d3d4ada20866d8e1` with sandbox customer admission
+disabled. The subsequent [signed live verification](https://github.com/B4rz99/fidy-ai/actions/runs/40604618334)
+ran with `verify_bancolombia_sandbox=true` and passed the active → revoke → inactive check. The
+registered JWT/mTLS application-token path is verified; the Basic rejection remains recorded above.
+No signing key or bank token was exported.
 
 ## Remaining verification
 
-Release the reviewed changes through the normal protected PR path before running the existing
-`production-inspect.yml` workflow with `verify_bancolombia_sandbox=true`. Only Core holds the
-registered signing key; do not extract it or recreate the deleted signing-proof workflow. No
+Repeat application-token verification through the existing `production-inspect.yml` workflow with
+`verify_bancolombia_sandbox=true` after a relevant authentication/profile change. Only Core holds
+the registered signing key; do not extract it or recreate the deleted signing-proof workflow. No
 customer test profile is required for this application-token verification.
 
-If the JWT lifecycle test succeeds, use its evidence to implement and verify cleanup for retained
-customer access/refresh grants. An uncertain exchange that returns no token remains separate:
+Customer access/refresh-grant cleanup still requires implementation and verification before enabling
+customer admission. The successful application-token check is not evidence for those token kinds
+or for a different grant's isolation. An uncertain exchange that returns no token remains separate:
 reviewed public consent contracts define creation and retrieval, but no TPP cancellation operation.
 They describe revocation through the bank's interface without specifying an API request for Fidy.
-If controlled sandbox verification cannot resolve this, ask only:
+A read-only mTLS `OPTIONS` check on 2026-10-27 returned HTTP 200 with `Allow: POST` on the
+support-selected collection route and `Allow: GET, HEAD` on an explicitly invalid individual
+consent-resource route. Neither advertised cancellation. Local system DNS failed for the supplied
+resource host; public Cloudflare DNS resolved it, and the check retained normal HTTPS hostname and
+certificate verification. No customer resource was read or changed. These responses do not rule out
+a separate cancellation endpoint. The unresolved bank-specific question is:
 
 > ¿Cómo debe Fidy cancelar o reconciliar un ConsentId de cuentas si el intercambio del código pudo
 > completarse, pero por un timeout no recibimos los tokens? Necesitamos el procedimiento soportado

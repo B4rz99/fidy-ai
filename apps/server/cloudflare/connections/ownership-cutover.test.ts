@@ -53,8 +53,14 @@ it.each([
           documentedSqlBlock({ guide, marker: "connection-owner-" + part }).map((sql) =>
             db.prepare(sql)
           );
-        // This rehearsal predates migration 0002 and its authorization references to these tables.
-        yield* Effect.tryPromise(() => db.prepare("DROP TABLE connection_authorizations").run());
+        // Reconstruct the pre-authorization schema before replaying its historical cutover.
+        yield* Effect.tryPromise(() =>
+          db.batch(
+            ["connection_accounts", "connection_grants", "connection_authorizations"].map((table) =>
+              db.prepare(`DROP TABLE ${table}`)
+            )
+          )
+        );
         yield* Effect.tryPromise(() =>
           db.batch([
             db.prepare("PRAGMA defer_foreign_keys=ON"),

@@ -136,16 +136,44 @@ const openReview = Effect.fnUntraced(function* (page: Page) {
   );
 });
 
+type RecoveryFixture = Readonly<{
+  page: Page;
+  request: APIRequestContext;
+  initialRead: "unsettled" | "settled";
+}>;
+const signInForRecovery = Effect.fnUntraced(function* ({
+  page,
+  request,
+  initialRead,
+}: RecoveryFixture) {
+  const signIn = (): Promise<void> =>
+    signInNavigationThroughCore({ page, request, identity: "navigationConsentRecovery" });
+  yield* Effect.tryPromise((signal) =>
+    initialRead === "settled"
+      ? Promise.all([
+          page.waitForResponse(
+            (response) =>
+              new URL(response.url()).origin === api &&
+              new URL(response.url()).pathname === "/transactions" &&
+              response.request().method() === "GET" &&
+              response.status() === successStatus,
+            { signal }
+          ),
+          signIn(),
+        ]).then(() => undefined)
+      : signIn()
+  );
+});
+
 const recheckConsent = Effect.fnUntraced(function* (
-  page: Page,
-  request: APIRequestContext,
+  { page, request, initialRead }: RecoveryFixture,
   information: TestInfo
 ) {
-  yield* Effect.tryPromise(() =>
-    signInNavigationThroughCore({ page, request, identity: "navigationConsentRecovery" })
-  );
-  yield* openReview(page);
   const diagnostic = yield* observeConsentRecovery({ page, information });
+  yield* signInForRecovery({ page, request, initialRead });
+  diagnostic.mark("opening-review");
+  yield* openReview(page);
+  diagnostic.mark("review-visible");
   const pending = Promise.withResolvers<Route>();
   const holdConsent = (route: Route): void => pending.resolve(route);
   const productRequests: string[] = [];
@@ -156,10 +184,12 @@ const recheckConsent = Effect.fnUntraced(function* (
     }
   });
   yield* Effect.tryPromise(() => page.route(`${api}/web/consent`, holdConsent));
+  diagnostic.mark("leaving-review");
   yield* Effect.tryPromise((signal) =>
     page.getByRole("link", { name: "Transacciones", exact: true }).click({ signal })
   );
   const consent = yield* Effect.tryPromise(() => pending.promise);
+  diagnostic.mark("consent-held");
   yield* Effect.tryPromise((signal) =>
     expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toHaveCount(0, {
       signal,
@@ -169,6 +199,7 @@ const recheckConsent = Effect.fnUntraced(function* (
     expect(page.getByRole("button", { name: "Abrir agente Fidy" })).toHaveCount(0, { signal })
   );
   const unavailableStatus = 503;
+  diagnostic.mark("consent-failed");
   yield* Effect.tryPromise(() => consent.fulfill({ status: unavailableStatus }));
   yield* Effect.tryPromise((signal) =>
     expect(page.getByText("No pudimos verificar tu acceso a las transacciones.")).toBeVisible({
@@ -177,7 +208,7 @@ const recheckConsent = Effect.fnUntraced(function* (
   );
   expect(productRequests).toEqual([]);
   yield* Effect.tryPromise(() => page.unroute(`${api}/web/consent`));
-  diagnostic.retry();
+  diagnostic.mark("retry");
   yield* Effect.tryPromise((signal) =>
     page.getByRole("button", { name: "Reintentar", exact: true }).click({ signal })
   );
@@ -196,4 +227,14 @@ test("Transactions rechecks Consent before restoring editing and chat after leav
   page,
   request,
 }, information) =>
-  Effect.runPromise(recheckConsent(page, request, information).pipe(Effect.scoped)));
+  Effect.runPromise(
+    recheckConsent({ page, request, initialRead: "unsettled" }, information).pipe(Effect.scoped)
+  ));
+
+test("Transactions rechecks Consent after the initial authorized read settles and Review is left", ({
+  page,
+  request,
+}, information) =>
+  Effect.runPromise(
+    recheckConsent({ page, request, initialRead: "settled" }, information).pipe(Effect.scoped)
+  ));

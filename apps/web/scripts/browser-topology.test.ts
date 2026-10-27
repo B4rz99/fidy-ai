@@ -52,13 +52,20 @@ it("partitions the complete browser suite across both runners without dropping o
     tests.filter((line) => line.includes("[admission]"));
   const performance = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
     tests.filter((line) => line.includes("[performance]"));
+  const diagnostic = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
+    performance(tests).filter((line) => line.includes("containment A/B diagnostic"));
+  const nativePerformance = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
+    performance(tests).filter((line) => !line.includes("containment A/B diagnostic"));
+  expect(diagnostic(complete)).toHaveLength(1);
   expect(admission(complete)).toHaveLength(4);
   for (const [index, shard] of shards.entries()) {
     expect(admission(shard)).toEqual(admission(complete));
-    expect(performance(shard)).toHaveLength(index === 0 ? 3 : 4);
+    expect(nativePerformance(shard)).toHaveLength(index === 0 ? 3 : 4);
+    expect(diagnostic(shard)).toHaveLength(index === 0 ? 1 : 0);
   }
   expect(performance(shards.flat()).toSorted()).toEqual([...performance(complete)].sort());
-  expect(new Set(performance(shards.flat())).size).toBe(7);
+  expect(new Set(nativePerformance(shards.flat())).size).toBe(7);
+  expect(new Set(performance(shards.flat())).size).toBe(8);
   expect(browser(shards.flat()).toSorted()).toEqual([...browser(complete)].sort());
   expect(new Set(browser(shards.flat())).size).toBe(browser(complete).length);
 });

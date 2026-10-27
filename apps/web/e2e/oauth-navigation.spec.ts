@@ -22,15 +22,19 @@ const conditions = [
 
 const visitPrivateWorkspaces = Effect.fnUntraced(function* (page: Page) {
   const navigation = page.getByRole("navigation", { name: "Aplicación" });
-  yield* Effect.tryPromise(() => navigation.getByRole("link", { name: /^Por revisar/u }).click());
-  yield* Effect.tryPromise(() =>
-    expect(page.getByRole("heading", { name: "Por revisar", exact: true })).toBeVisible()
+  yield* Effect.tryPromise((signal) =>
+    navigation.getByRole("link", { name: /^Por revisar/u }).click({ signal })
   );
-  yield* Effect.tryPromise(() =>
-    navigation.getByRole("link", { name: "Recurrentes", exact: true }).click()
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("heading", { name: "Por revisar", exact: true })).toBeVisible({ signal })
   );
-  yield* Effect.tryPromise(() =>
-    expect(page.getByRole("button", { name: "Nuevo recurrente", exact: true })).toBeEnabled()
+  yield* Effect.tryPromise((signal) =>
+    navigation.getByRole("link", { name: "Recurrentes", exact: true }).click({ signal })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("button", { name: "Nuevo recurrente", exact: true })).toBeEnabled({
+      signal,
+    })
   );
 });
 
@@ -44,48 +48,50 @@ for (const condition of conditions) {
         yield* Effect.tryPromise(() =>
           signInNavigationThroughCore({ page, request, identity: "navigationRecurring" })
         );
-        yield* Effect.tryPromise(() => page.goto(`/oauth/review/${reviewReference}`));
-        yield* Effect.tryPromise(() =>
+        yield* Effect.tryPromise((signal) =>
+          page.goto(`/oauth/review/${reviewReference}`, { signal })
+        );
+        yield* Effect.tryPromise((signal) =>
           expect(
             page.getByRole("main").getByRole("link", { name: "Iniciar sesión", exact: true })
-          ).toBeVisible()
+          ).toBeVisible({ signal })
         );
         const startedAt = yield* Effect.tryPromise(() => page.evaluate(documentStartedAt));
         yield* visitPrivateWorkspaces(page);
         const observed = yield* installOAuthReview(page, { ...condition, mutation: "success" });
         yield* Effect.tryPromise(() => page.evaluate(returnToOAuth));
-        yield* Effect.tryPromise(() =>
-          expect(page).toHaveURL(new RegExp(`/oauth/review/${reviewReference}$`, "u"))
+        yield* Effect.tryPromise((signal) =>
+          expect(page).toHaveURL(new RegExp(`/oauth/review/${reviewReference}$`, "u"), { signal })
         );
         const continuedAt = yield* Effect.tryPromise(() => page.evaluate(documentStartedAt));
         expect(continuedAt).toBe(startedAt);
-        yield* Effect.tryPromise(() =>
+        yield* Effect.tryPromise((signal) =>
           expect(
             page.getByRole("heading", { name: "Por revisar", exact: true, includeHidden: true })
-          ).toHaveCount(0)
+          ).toHaveCount(0, { signal })
         );
-        yield* Effect.tryPromise(() =>
+        yield* Effect.tryPromise((signal) =>
           expect(
             page.getByRole("button", { name: "Nuevo recurrente", exact: true, includeHidden: true })
-          ).toHaveCount(0)
+          ).toHaveCount(0, { signal })
         );
         if (condition.review === "loading") {
-          yield* Effect.tryPromise(() =>
-            expect(page.getByRole("status")).toContainText("Cargando solicitud")
+          yield* Effect.tryPromise((signal) =>
+            expect(page.getByRole("status")).toContainText("Cargando solicitud", { signal })
           );
         } else {
-          yield* Effect.tryPromise(() =>
+          yield* Effect.tryPromise((signal) =>
             expect(
               page.getByRole("main").getByRole("link", { name: "Iniciar sesión", exact: true })
-            ).toBeVisible()
+            ).toBeVisible({ signal })
           );
         }
         yield* Effect.tryPromise(() => page.evaluate(focusWindow));
         yield* Effect.tryPromise(() => page.clock.fastForward(observationMilliseconds));
-        yield* Effect.tryPromise(() =>
+        yield* Effect.tryPromise((signal) =>
           expect(
             page.getByRole("heading", { name: "Por revisar", exact: true, includeHidden: true })
-          ).toHaveCount(0)
+          ).toHaveCount(0, { signal })
         );
         expect(observed.unexpected).toEqual([]);
         expect(observed.mutations).toEqual([]);

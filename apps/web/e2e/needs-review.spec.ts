@@ -4,8 +4,9 @@ import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 import {
-  captureReviewCpuProfile,
   captureReviewEntryReplay,
+  protectReviewReplay,
+  reviewDiagnosticRequest,
   withReviewEntryEvidence,
 } from "./review-entry-diagnostics";
 
@@ -893,7 +894,7 @@ for (const [destination, identity] of [
         );
         yield* recordReviewReturn(page, destination);
         if (destination === "Transacciones") {
-          yield* Effect.tryPromise(() => verifyPrivacyDisposesReview(page));
+          yield* verifyPrivacyDisposesReview(page);
         }
         yield* Effect.tryPromise(() =>
           page.getByRole("button", { name: "Cerrar sesión", exact: true }).click()
@@ -906,8 +907,104 @@ for (const [destination, identity] of [
   );
 }
 
-test("returns from Transacciones with its review form and original already available — diagnostic CPU profile", ({
+const containmentPairs = 5;
+const prepareContainmentPage = Effect.fnUntraced(function* (page: Page, baseline: boolean) {
+  yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+  yield* Effect.tryPromise(() =>
+    page.route(
+      `${apiOrigin}/ingestion/review-workspace**`,
+      lifecycleRoute([
+        {
+          id,
+          revision: 0,
+          status: "pending",
+          draft: { ...calendarDraft, counterparty: "Borrador al volver" },
+        },
+      ])
+    )
+  );
+  yield* Effect.tryPromise((signal) => page.goto("/app/needs-review", { signal }));
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Borrador al volver", { signal })
+  );
+  if (baseline) {
+    yield* Effect.tryPromise(() =>
+      page.addStyleTag({ content: '[data-review="workspace"] { contain: none !important; }' })
+    );
+  }
+  const containment = yield* Effect.tryPromise((signal) =>
+    page
+      .locator('[data-review="workspace"]')
+      .evaluate((element) => getComputedStyle(element).contain, undefined, { signal })
+  );
+  expect(containment).toBe(baseline ? "none" : "layout style");
+  yield* verifyContainmentPresentation(page);
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/ingestion/review-workspace**`, delayedReviewRead)
+  );
+  return yield* protectReviewReplay(page);
+});
+
+const verifyContainmentPresentation = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise((signal) => expect(page.getByLabel("Valor")).toBeVisible({ signal }));
+  const geometry = yield* Effect.tryPromise((signal) =>
+    page.getByLabel("Valor").evaluate(
+      (element) => ({
+        width: element.getBoundingClientRect().width,
+        height: element.getBoundingClientRect().height,
+        overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      }),
+      undefined,
+      { signal }
+    )
+  );
+  expect(geometry.width).toBeGreaterThan(0);
+  expect(geometry.height).toBeGreaterThan(0);
+  expect(geometry.overflow).toBe(false);
+  const trigger = page.getByRole("button", { name: /^Fecha del movimiento/u });
+  yield* Effect.tryPromise((signal) => trigger.click({ signal }));
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("dialog", { name: "Seleccionar fecha" })).toBeVisible({ signal })
+  );
+  yield* Effect.tryPromise(() => page.keyboard.press("Escape"));
+  yield* Effect.tryPromise((signal) => expect(trigger).toBeFocused({ signal }));
+});
+
+const sampleContainmentReturn = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise(() => page.bringToFront());
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("link", { name: "Transacciones", exact: true }).click({ signal })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("heading", { name: "Transacciones", exact: true })).toBeVisible({
+      signal,
+    })
+  );
+  yield* verifyHiddenReview(page, "dialog");
+  yield* Effect.tryPromise(() =>
+    page.evaluate(() => {
+      delete document.body.dataset.reviewEntryMilliseconds;
+    })
+  );
+  yield* Effect.tryPromise(() => page.evaluate(measureReviewEntry));
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("link", { name: /^Por revisar/u }).click({ signal })
+  );
+  yield* Effect.tryPromise((signal) => expect(page.getByLabel("Valor")).toBeVisible({ signal }));
+  yield* Effect.tryPromise((signal) =>
+    expect(page.locator("body")).toHaveAttribute("data-review-entry-milliseconds", /[0-9]/u, {
+      signal,
+    })
+  );
+  const raw = yield* Effect.tryPromise((signal) =>
+    page.locator("body").getAttribute("data-review-entry-milliseconds", { signal })
+  );
+  return yield* Schema.decodeUnknownEffect(Schema.FiniteFromString)(raw);
+});
+
+test("returns from Transacciones with its review form and original already available — containment A/B diagnostic", ({
   page,
+  context,
   request,
 }) =>
   Effect.runPromise(
@@ -919,46 +1016,55 @@ test("returns from Transacciones with its review form and original already avail
           identity: "navigationReviewTransactions",
         })
       );
-      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      const other = yield* Effect.acquireRelease(
+        reviewDiagnosticRequest(() => context.newPage()),
+        (owned) => reviewDiagnosticRequest(owned.close.bind(owned)).pipe(Effect.exit)
+      );
+      const baselineGuard = yield* prepareContainmentPage(page, true);
+      const candidateGuard = yield* prepareContainmentPage(other, false);
+      const samples: Array<Readonly<{ mode: "baseline" | "candidate"; milliseconds: number }>> = [];
+      for (let pair = 0; pair < containmentPairs; pair++) {
+        const order =
+          pair % 2 === 0
+            ? (["baseline", "candidate"] as const)
+            : (["candidate", "baseline"] as const);
+        for (const mode of order) {
+          samples.push({
+            mode,
+            milliseconds: yield* sampleContainmentReturn(mode === "baseline" ? page : other),
+          });
+        }
+      }
+      expect(baselineGuard.blocked()).toBe(0);
+      expect(candidateGuard.blocked()).toBe(0);
+      yield* verifyPrivacyDisposesReview(page);
+      yield* verifyPrivacyDisposesReview(other);
+      const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        samples,
+        limitation: "Paired synthetic navigation only; original native gate unchanged.",
+      });
       yield* Effect.tryPromise(() =>
-        page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
+        test.info().attach("review-containment-ab", { body, contentType: "application/json" })
       );
-      yield* Effect.tryPromise(() => page.getByRole("link", { name: /^Por revisar/u }).click());
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByLabel("Contraparte (opcional)").fill("Borrador al volver")
-      );
-      yield* Effect.tryPromise(() =>
-        page.route(`${apiOrigin}/ingestion/review-workspace**`, delayedReviewRead)
-      );
-      yield* captureReviewCpuProfile(page, test.info()).pipe(
-        Effect.scoped,
-        Effect.timeout("5 seconds")
-      );
-    })
+    }).pipe(Effect.scoped, Effect.timeout("45 seconds"))
   ));
 
-const verifyPrivacyDisposesReview = (page: Page): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() =>
-        page
-          .getByRole("navigation", { name: "Aplicación" })
-          .getByText("Ajustes", { exact: true })
-          .click()
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("link", { name: "Privacidad", exact: true }).click()
-      );
-      yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/settings\/privacy$/u));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText("Compra en Café — $13.500", { exact: true })).toHaveCount(0)
-      );
-      yield* Effect.tryPromise(() => expect(page.getByLabel("Valor")).toHaveCount(0));
-    })
+const verifyPrivacyDisposesReview = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise((signal) =>
+    page
+      .getByRole("navigation", { name: "Aplicación" })
+      .getByText("Ajustes", { exact: true })
+      .click({ signal })
   );
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("link", { name: "Privacidad", exact: true }).click({ signal })
+  );
+  yield* Effect.tryPromise((signal) => expect(page).toHaveURL(/\/settings\/privacy$/u, { signal }));
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByText("Compra en Café — $13.500", { exact: true })).toHaveCount(0, { signal })
+  );
+  yield* Effect.tryPromise((signal) => expect(page.getByLabel("Valor")).toHaveCount(0, { signal }));
+});
 
 const delayedReviewRead = (route: Route): Promise<void> =>
   Effect.runPromise(
@@ -1068,6 +1174,30 @@ const openReviewSibling = (page: Page): Promise<void> =>
       expect(page.getByRole("heading", { name: "Correo verificado", exact: true })).toBeVisible()
     );
 
+const verifyHiddenReview = Effect.fnUntraced(function* (
+  page: Page,
+  popup: "dialog" | "listbox" | "menu"
+) {
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole(popup, { includeHidden: true })).toHaveCount(0, { signal })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("textbox", { name: "Contraparte (opcional)" })).toHaveCount(0, { signal })
+  );
+  yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
+  const hidden = yield* Effect.tryPromise((signal) =>
+    page.locator("#review-amount").evaluate(
+      (element) => ({
+        rectangles: element.getClientRects().length,
+        focused: element === document.activeElement,
+      }),
+      undefined,
+      { signal }
+    )
+  );
+  expect(hidden).toEqual({ rectangles: 0, focused: false });
+});
+
 const reviewPickers = [
   { label: "Fecha del movimiento", trigger: "button", popup: "dialog" },
   { label: "Hora del movimiento", trigger: "button", popup: "dialog" },
@@ -1110,9 +1240,7 @@ for (const picker of reviewPickers) {
         );
         yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toBeVisible());
         yield* Effect.tryPromise(() => page.goBack());
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole(picker.popup, { includeHidden: true })).toHaveCount(0)
-        );
+        yield* verifyHiddenReview(page, picker.popup);
         yield* Effect.tryPromise(() => page.goForward());
         yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toHaveCount(0));
         yield* Effect.tryPromise(() =>
@@ -1127,9 +1255,7 @@ for (const picker of reviewPickers) {
         );
         yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toBeVisible());
         yield* Effect.tryPromise(() => page.goBack());
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole(picker.popup, { includeHidden: true })).toHaveCount(0)
-        );
+        yield* verifyHiddenReview(page, picker.popup);
         yield* Effect.tryPromise(() => page.goForward());
         yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toHaveCount(0));
         yield* Effect.tryPromise(() =>

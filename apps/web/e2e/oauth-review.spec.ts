@@ -99,8 +99,11 @@ const loginFromReview = ({
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => page.clock.install());
     yield* Effect.tryPromise(() => page.goto(path));
-    yield* Effect.tryPromise(() =>
-      page.getByRole("main").getByRole("link", { name: "Iniciar sesión", exact: true }).click()
+    yield* Effect.tryPromise((signal) =>
+      page
+        .getByRole("main")
+        .getByRole("link", { name: "Iniciar sesión", exact: true })
+        .click({ signal })
     );
     yield* Effect.tryPromise(() => page.getByRole("button", { name: "WhatsApp" }).click());
     const code = yield* Effect.tryPromise(() => visiblePairingCode(page));
@@ -117,12 +120,12 @@ const loginFromReview = ({
   });
 const assertReview = (page: Page): Effect.Effect<void, TestFailure> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise(() =>
+    yield* Effect.tryPromise((signal) =>
       expect(
         page
           .getByRole("navigation", { name: "Aplicación" })
           .getByRole("link", { name: "Tablero", exact: true })
-      ).toBeVisible()
+      ).toBeVisible({ signal })
     );
     yield* Effect.tryPromise(() =>
       expect(page.getByRole("heading", { name: "Conectar con Fidy" })).toBeVisible()
@@ -154,8 +157,8 @@ test("built browser returns from established sign-in to a text-only request revi
       yield* loginFromReview({ page, request, path, identity: "primary" });
       yield* assertReview(page);
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("status")).toContainText(cancelledMessage)
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("status")).toContainText(cancelledMessage, { signal })
       );
       expect(yield* Effect.tryPromise(() => page.evaluate(browserStorageCount))).toBe(0);
       expect(page.url()).not.toContain("code=");
@@ -700,8 +703,8 @@ test("built agent settings report unavailable or malformed state without a false
       const path = yield* beginReview(request, yield* authorization(request));
       yield* loginFromReview({ page, request, path, identity: "primary" });
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("status")).toContainText(cancelledMessage)
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("status")).toContainText(cancelledMessage, { signal })
       );
       yield* Effect.tryPromise(() => page.route("**/web/oauth/connections", unavailableManagement));
       yield* Effect.tryPromise(() => page.goto("/settings/access"));
@@ -797,13 +800,13 @@ const exerciseBrowserOperationApproval = (
       result: { isError: true },
     });
     yield* Effect.tryPromise(() => page.goto(`/oauth/operation/${reference}`));
-    yield* Effect.tryPromise(() =>
-      expect(page.getByRole("heading", { name: "Revisar operación" })).toBeVisible()
+    yield* Effect.tryPromise((signal) =>
+      expect(page.getByRole("heading", { name: "Revisar operación" })).toBeVisible({ signal })
     );
-    yield* Effect.tryPromise(() =>
+    yield* Effect.tryPromise((signal) =>
       expect(
         page.getByRole("heading", { name: "<img src=x onerror=alert(1)>", exact: true })
-      ).toBeVisible()
+      ).toBeVisible({ signal })
     );
     yield* Effect.tryPromise(() => expect(page.getByRole("main").locator("img")).toHaveCount(0));
     yield* Effect.tryPromise(() =>

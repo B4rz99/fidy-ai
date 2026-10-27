@@ -19,8 +19,18 @@ export type ConsentRecoveryPage = Readonly<{
 }>;
 
 const maximumHttpStatus = 599;
+const ConsentRecoveryStage = Schema.Literals([
+  "initial-transactions",
+  "opening-review",
+  "review-visible",
+  "leaving-review",
+  "consent-held",
+  "consent-failed",
+  "retry",
+]);
 const ConsentRecoveryObservation = Schema.Struct({
-  stage: Schema.Literals(["leaving-review", "retry"]),
+  stage: ConsentRecoveryStage,
+  observedStage: ConsentRecoveryStage,
   resource: Schema.Literals(["consent", "session", "profile", "categories", "transactions"]),
   status: Schema.Union([
     Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: maximumHttpStatus })),
@@ -43,16 +53,35 @@ const consentRecoveryResource = (
   return Option.fromUndefinedOr(consentResources.get(url.pathname));
 };
 
+const attachConsentRecovery = Effect.fnUntraced(function* (
+  information: Pick<TestInfo, "attach">,
+  observations: ReadonlyArray<typeof ConsentRecoveryObservation.Type>
+) {
+  const body = yield* Schema.encodeEffect(
+    Schema.fromJsonString(Schema.Array(ConsentRecoveryObservation))
+  )(observations);
+  yield* Effect.tryPromise(() =>
+    information.attach("consent-recovery-statuses", {
+      body,
+      contentType: "application/json",
+    })
+  );
+});
+
 export const observeConsentRecovery = ({
   page,
   information,
 }: Readonly<{
   page: ConsentRecoveryPage;
   information: Pick<TestInfo, "attach">;
-}>): Effect.Effect<Readonly<{ retry: () => void }>, never, Scope.Scope> => {
+}>): Effect.Effect<
+  Readonly<{ mark: (stage: typeof ConsentRecoveryStage.Type) => void }>,
+  never,
+  Scope.Scope
+> => {
   const observations: Array<typeof ConsentRecoveryObservation.Type> = [];
   const maximumObservations = 32;
-  let stage: typeof ConsentRecoveryObservation.Type.stage = "leaving-review";
+  let stage: typeof ConsentRecoveryObservation.Type.stage = "initial-transactions";
   const requests = new WeakMap<
     ConsentRecoveryRequest,
     typeof ConsentRecoveryObservation.Type.stage
@@ -65,7 +94,12 @@ export const observeConsentRecovery = ({
     const requestedStage = requests.get(request);
     if (requestedStage === undefined) return;
     if (Option.isNone(resource) || observations.length >= maximumObservations) return;
-    observations.push({ stage: requestedStage, resource: resource.value, status });
+    observations.push({
+      stage: requestedStage,
+      observedStage: stage,
+      resource: resource.value,
+      status,
+    });
   };
   const requested = (request: ConsentRecoveryRequest): void => {
     requests.set(request, stage);
@@ -80,8 +114,8 @@ export const observeConsentRecovery = ({
       page.on("response", observe);
       page.on("requestfailed", failed);
       return {
-        retry: () => {
-          stage = "retry";
+        mark: (nextStage) => {
+          stage = nextStage;
         },
       };
     }),
@@ -90,15 +124,7 @@ export const observeConsentRecovery = ({
         page.off("request", requested);
         page.off("response", observe);
         page.off("requestfailed", failed);
-        const body = yield* Schema.encodeEffect(
-          Schema.fromJsonString(Schema.Array(ConsentRecoveryObservation))
-        )(observations);
-        yield* Effect.tryPromise(() =>
-          information.attach("consent-recovery-statuses", {
-            body,
-            contentType: "application/json",
-          })
-        );
+        yield* attachConsentRecovery(information, observations);
       }).pipe(Effect.interruptible, Effect.timeout("1 second"), Effect.ignoreCause)
   );
 };

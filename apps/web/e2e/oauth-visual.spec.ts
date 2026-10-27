@@ -37,8 +37,9 @@ test.afterEach(({ page }, information) =>
     Effect.gen(function* () {
       if (information.status === information.expectedStatus) return;
       const filename = information.title.replaceAll(/[^a-z0-9-]+/giu, "-");
-      yield* Effect.tryPromise(() =>
+      yield* Effect.tryPromise((signal) =>
         page.screenshot({
+          signal,
           path: `${captureDirectory}/failed-${filename}.png`,
           fullPage: false,
           animations: "disabled",
@@ -60,8 +61,9 @@ const dimensions = (): Readonly<{ content: number; viewport: number }> => ({
 });
 const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
   yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
-  yield* Effect.tryPromise(() =>
+  yield* Effect.tryPromise((signal) =>
     page.screenshot({
+      signal,
       path: `${captureDirectory}/${filename}.png`,
       fullPage: false,
       animations: "disabled",
@@ -93,18 +95,22 @@ const captureMobile = Effect.fnUntraced(function* (
   destination: (typeof destinations)[number],
   theme: (typeof themes)[number]
 ) {
-  yield* Effect.tryPromise(() =>
-    page.getByRole("button", { name: destination.action, exact: true }).scrollIntoViewIfNeeded()
+  yield* Effect.tryPromise((signal) =>
+    page
+      .getByRole("button", { name: destination.action, exact: true })
+      .scrollIntoViewIfNeeded({ signal })
   );
   yield* capture(page, `${destination.name}-${theme}-mobile-actions`);
   yield* Effect.tryPromise(() => page.evaluate(scrollToTop));
-  yield* Effect.tryPromise(() => page.getByRole("button", { name: "Menú de navegación" }).click());
-  yield* Effect.tryPromise(() =>
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("button", { name: "Menú de navegación" }).click({ signal })
+  );
+  yield* Effect.tryPromise((signal) =>
     expect(
       page
         .getByRole("navigation", { name: "Aplicación" })
         .getByRole("link", { name: "Tablero", exact: true })
-    ).toBeVisible()
+    ).toBeVisible({ signal })
   );
   yield* capture(page, `${destination.name}-${theme}-mobile-menu`);
 });
@@ -119,48 +125,49 @@ for (const viewport of viewports) {
           Effect.gen(function* () {
             yield* prepare(page, viewport, theme);
             const observed = yield* installOAuthReview(page);
-            yield* Effect.tryPromise(() => page.goto(destination.path));
-            yield* Effect.tryPromise(() =>
+            yield* Effect.tryPromise((signal) => page.goto(destination.path, { signal }));
+            yield* Effect.tryPromise((signal) =>
               expect(
                 page.getByRole("heading", { name: destination.title, exact: true })
-              ).toBeVisible()
+              ).toBeVisible({ signal })
             );
-            yield* Effect.tryPromise(() =>
+            yield* Effect.tryPromise((signal) =>
               expect(
                 page.getByRole("button", { name: destination.action, exact: true })
-              ).toBeEnabled()
+              ).toBeEnabled({ signal })
             );
-            yield* Effect.tryPromise(() =>
+            yield* Effect.tryPromise((signal) =>
               expect(
                 page.getByText("Nombre declarado por el cliente; Fidy no verifica su identidad.", {
                   exact: true,
                 })
-              ).toBeVisible()
+              ).toBeVisible({ signal })
             );
-            yield* Effect.tryPromise(() =>
+            yield* Effect.tryPromise((signal) =>
               expect(
                 page.getByRole("button", { name: "Abrir agente Fidy", exact: true })
-              ).toBeVisible()
+              ).toBeVisible({ signal })
             );
             if (destination.name === "operation") {
-              yield* Effect.tryPromise(() =>
-                expect(page.getByRole("main").locator("pre")).toHaveText(operationInput)
+              yield* Effect.tryPromise((signal) =>
+                expect(page.getByRole("main").locator("pre")).toHaveText(operationInput, { signal })
               );
             }
-            yield* Effect.tryPromise(() =>
+            yield* Effect.tryPromise((signal) =>
               expect(page.getByRole("main").locator("time").first()).toHaveText(
                 destination.name === "operation"
                   ? "27 oct 2026 · 8:05 a. m."
-                  : "25 ene 2027 · 8:00 a. m."
+                  : "25 ene 2027 · 8:00 a. m.",
+                { signal }
               )
             );
             if (viewport.name === "desktop") {
-              yield* Effect.tryPromise(() =>
+              yield* Effect.tryPromise((signal) =>
                 expect(
                   page
                     .getByRole("navigation", { name: "Aplicación" })
                     .getByRole("link", { name: "Tablero", exact: true })
-                ).toBeVisible()
+                ).toBeVisible({ signal })
               );
             }
             yield* capture(page, `${destination.name}-${theme}-${viewport.name}`);
@@ -187,21 +194,21 @@ for (const viewport of viewports) {
               consent: "signed-out",
               mutation: "success",
             });
-            yield* Effect.tryPromise(() => page.goto(destination.path));
+            yield* Effect.tryPromise((signal) => page.goto(destination.path, { signal }));
             const login = page
               .getByRole("main")
               .getByRole("link", { name: "Iniciar sesión", exact: true });
-            yield* Effect.tryPromise(() => expect(login).toBeVisible());
+            yield* Effect.tryPromise((signal) => expect(login).toBeVisible({ signal }));
             const parameter = destination.name === "connection" ? "oauthRequest" : "oauthOperation";
             const reference =
               destination.name === "connection" ? reviewReference : operationReference;
-            yield* Effect.tryPromise(() =>
-              expect(login).toHaveAttribute("href", `/login?${parameter}=${reference}`)
+            yield* Effect.tryPromise((signal) =>
+              expect(login).toHaveAttribute("href", `/login?${parameter}=${reference}`, { signal })
             );
-            yield* Effect.tryPromise(() =>
+            yield* Effect.tryPromise((signal) =>
               expect(
                 page.getByRole("button", { name: destination.action, exact: true })
-              ).toHaveCount(0)
+              ).toHaveCount(0, { signal })
             );
             yield* capture(page, `${destination.name}-unavailable-${theme}-${viewport.name}`);
             expect(observed.unexpected).toEqual([]);
@@ -229,13 +236,18 @@ for (const consent of unavailableConsent) {
           consent,
           mutation: "success",
         });
-        yield* Effect.tryPromise(() => page.goto(`/oauth/review/${reviewReference}`));
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole("button", { name: "Conectar", exact: true })).toBeEnabled()
+        yield* Effect.tryPromise((signal) =>
+          page.goto(`/oauth/review/${reviewReference}`, { signal })
         );
-        yield* Effect.tryPromise(() =>
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByRole("button", { name: "Conectar", exact: true })).toBeEnabled({
+            signal,
+          })
+        );
+        yield* Effect.tryPromise((signal) =>
           expect(page.getByRole("button", { name: "Abrir agente Fidy", exact: true })).toHaveCount(
-            0
+            0,
+            { signal }
           )
         );
         expect(observed.unexpected).toEqual([]);
@@ -256,10 +268,15 @@ for (const destination of destinations) {
           consent: "signed-out",
           mutation: "success",
         });
-        yield* Effect.tryPromise(() => page.goto(destination.path));
-        yield* Effect.tryPromise(() => expect(page.getByRole("status")).toContainText("Cargando"));
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole("button", { name: destination.action, exact: true })).toHaveCount(0)
+        yield* Effect.tryPromise((signal) => page.goto(destination.path, { signal }));
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByRole("status")).toContainText("Cargando", { signal })
+        );
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByRole("button", { name: destination.action, exact: true })).toHaveCount(
+            0,
+            { signal }
+          )
         );
         yield* capture(page, `${destination.name}-loading`);
         expect(observed.unexpected).toEqual([]);
@@ -275,29 +292,37 @@ test("OAuth keyboard review submits only the selected permissions and duration, 
   Effect.runPromise(
     Effect.gen(function* () {
       const observed = yield* installOAuthReview(page);
-      yield* Effect.tryPromise(() => page.goto(`/oauth/review/${reviewReference}`));
+      yield* Effect.tryPromise((signal) =>
+        page.goto(`/oauth/review/${reviewReference}`, { signal })
+      );
       const choices = page.getByRole("checkbox");
-      yield* Effect.tryPromise(() => expect(choices).toHaveCount(3));
+      yield* Effect.tryPromise((signal) => expect(choices).toHaveCount(3, { signal }));
       for (const choice of yield* Effect.tryPromise(() => choices.all())) {
-        yield* Effect.tryPromise(() => choice.press("Space"));
+        yield* Effect.tryPromise((signal) => choice.press("Space", { signal }));
       }
       const connect = page.getByRole("button", { name: "Conectar", exact: true });
-      yield* Effect.tryPromise(() => expect(connect).toBeDisabled());
-      yield* Effect.tryPromise(() =>
-        page.getByRole("checkbox", { name: /Consultar tus datos/u }).press("Space")
+      yield* Effect.tryPromise((signal) => expect(connect).toBeDisabled({ signal }));
+      yield* Effect.tryPromise((signal) =>
+        page.getByRole("checkbox", { name: /Consultar tus datos/u }).press("Space", { signal })
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "30 días", exact: true }).press("Enter")
+      yield* Effect.tryPromise((signal) =>
+        page.getByRole("button", { name: "30 días", exact: true }).press("Enter", { signal })
       );
-      yield* Effect.tryPromise(() => connect.press("Enter"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("alert")).toContainText("No pudimos confirmar el resultado")
+      yield* Effect.tryPromise((signal) => connect.press("Enter", { signal }));
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("alert")).toContainText("No pudimos confirmar el resultado", {
+          signal,
+        })
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: /Conectar|Conectando/u })).toHaveCount(0)
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("button", { name: /Conectar|Conectando/u })).toHaveCount(0, {
+          signal,
+        })
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Cancelar", exact: true })).toHaveCount(0)
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("button", { name: "Cancelar", exact: true })).toHaveCount(0, {
+          signal,
+        })
       );
       expect(observed.mutations).toHaveLength(1);
       const submitted = yield* Schema.decodeUnknownEffect(
@@ -322,12 +347,16 @@ for (const decision of ["approve", "cancel"] as const) {
           consent: "granted",
           mutation: "pending",
         });
-        yield* Effect.tryPromise(() => page.goto(`/oauth/operation/${operationReference}`));
+        yield* Effect.tryPromise((signal) =>
+          page.goto(`/oauth/operation/${operationReference}`, { signal })
+        );
         const approve = page.getByRole("button", { name: "Aprobar operación", exact: true });
         const cancel = page.getByRole("button", { name: "Cancelar operación", exact: true });
-        yield* Effect.tryPromise(() => (decision === "approve" ? approve : cancel).click());
-        yield* Effect.tryPromise(() => expect(approve).toBeDisabled());
-        yield* Effect.tryPromise(() => expect(cancel).toBeDisabled());
+        yield* Effect.tryPromise((signal) =>
+          (decision === "approve" ? approve : cancel).click({ signal })
+        );
+        yield* Effect.tryPromise((signal) => expect(approve).toBeDisabled({ signal }));
+        yield* Effect.tryPromise((signal) => expect(cancel).toBeDisabled({ signal }));
         yield* Effect.tryPromise(() => expectOneMutation(observed.mutations));
         const submitted = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(
           observed.mutations[0]?.body
@@ -339,14 +368,15 @@ for (const decision of ["approve", "cancel"] as const) {
           decision,
         });
         observed.release();
-        yield* Effect.tryPromise(() =>
+        yield* Effect.tryPromise((signal) =>
           expect(page.getByRole("status")).toContainText(
             decision === "approve"
               ? "La operación aún no se ha ejecutado"
-              : "No se ejecutó ningún cambio"
+              : "No se ejecutó ningún cambio",
+            { signal }
           )
         );
-        yield* Effect.tryPromise(() => expect(approve).toHaveCount(0));
+        yield* Effect.tryPromise((signal) => expect(approve).toHaveCount(0, { signal }));
         yield* capture(page, `operation-${decision}`);
         expect(observed.unexpected).toEqual([]);
       })
@@ -363,17 +393,21 @@ test("OAuth operation uncertain delivery removes both decisions without executin
         consent: "granted",
         mutation: "unknown",
       });
-      yield* Effect.tryPromise(() => page.goto(`/oauth/operation/${operationReference}`));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Aprobar operación", exact: true }).click()
+      yield* Effect.tryPromise((signal) =>
+        page.goto(`/oauth/operation/${operationReference}`, { signal })
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("alert")).toContainText("No pudimos confirmar el resultado")
+      yield* Effect.tryPromise((signal) =>
+        page.getByRole("button", { name: "Aprobar operación", exact: true }).click({ signal })
       );
-      yield* Effect.tryPromise(() =>
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("alert")).toContainText("No pudimos confirmar el resultado", {
+          signal,
+        })
+      );
+      yield* Effect.tryPromise((signal) =>
         expect(
           page.getByRole("button", { name: /Aprobar operación|Cancelar operación/u })
-        ).toHaveCount(0)
+        ).toHaveCount(0, { signal })
       );
       yield* capture(page, "operation-unknown");
       expect(observed.mutations).toHaveLength(1);
@@ -385,15 +419,19 @@ test("OAuth connection cancellation cannot be repeated after its acknowledgement
   Effect.runPromise(
     Effect.gen(function* () {
       const observed = yield* installOAuthReview(page);
-      yield* Effect.tryPromise(() => page.goto(`/oauth/review/${reviewReference}`));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Cancelar", exact: true }).click()
+      yield* Effect.tryPromise((signal) =>
+        page.goto(`/oauth/review/${reviewReference}`, { signal })
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("status")).toContainText("No se autorizó ningún acceso")
+      yield* Effect.tryPromise((signal) =>
+        page.getByRole("button", { name: "Cancelar", exact: true }).click({ signal })
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Conectar", exact: true })).toHaveCount(0)
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("status")).toContainText("No se autorizó ningún acceso", { signal })
+      );
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("button", { name: "Conectar", exact: true })).toHaveCount(0, {
+          signal,
+        })
       );
       yield* capture(page, "connection-cancelled");
       expect(observed.mutations).toHaveLength(1);
@@ -452,15 +490,19 @@ for (const viewport of viewports) {
               consent: "granted",
               mutation: state.mutation,
             });
-            yield* Effect.tryPromise(() => page.goto(state.path));
-            yield* Effect.tryPromise(() =>
-              page.getByRole("button", { name: state.button, exact: true }).click()
+            yield* Effect.tryPromise((signal) => page.goto(state.path, { signal }));
+            yield* Effect.tryPromise((signal) =>
+              page.getByRole("button", { name: state.button, exact: true }).click({ signal })
             );
             const result = page.getByRole(state.mutation === "unknown" ? "alert" : "status");
-            yield* Effect.tryPromise(() => expect(result).toContainText(state.message));
+            yield* Effect.tryPromise((signal) =>
+              expect(result).toContainText(state.message, { signal })
+            );
             if (viewport.name === "mobile") {
-              yield* Effect.tryPromise(() =>
-                expect(page.getByRole("button", { name: "Menú de navegación" })).toBeInViewport()
+              yield* Effect.tryPromise((signal) =>
+                expect(page.getByRole("button", { name: "Menú de navegación" })).toBeInViewport({
+                  signal,
+                })
               );
             }
             yield* capture(page, `${state.name}-${theme}-${viewport.name}`);
@@ -484,37 +526,39 @@ for (const viewport of viewports) {
           consent: "granted",
           mutation: "unknown",
         });
-        yield* Effect.tryPromise(() => page.goto(`/oauth/review/${reviewReference}`));
-        const cancel = page.getByRole("button", { name: "Cancelar", exact: true });
-        yield* Effect.tryPromise(() => cancel.click());
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole("alert")).toContainText("No pudimos cancelar")
+        yield* Effect.tryPromise((signal) =>
+          page.goto(`/oauth/review/${reviewReference}`, { signal })
         );
-        yield* Effect.tryPromise(() => expect(cancel).toBeEnabled());
-        yield* Effect.tryPromise(() =>
-          expect(
-            page.getByRole("heading", { name: "Agente de ejemplo", exact: true })
-          ).toBeVisible()
+        const cancel = page.getByRole("button", { name: "Cancelar", exact: true });
+        yield* Effect.tryPromise((signal) => cancel.click({ signal }));
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByRole("alert")).toContainText("No pudimos cancelar", { signal })
+        );
+        yield* Effect.tryPromise((signal) => expect(cancel).toBeEnabled({ signal }));
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByRole("heading", { name: "Agente de ejemplo", exact: true })).toBeVisible(
+            { signal }
+          )
         );
         if (viewport.name === "desktop") {
-          yield* Effect.tryPromise(() =>
+          yield* Effect.tryPromise((signal) =>
             expect(
               page.getByRole("heading", { name: "Agente de ejemplo", exact: true })
-            ).toBeInViewport()
+            ).toBeInViewport({ signal })
           );
         }
         yield* Effect.tryPromise(() => page.evaluate(scrollToTop));
         yield* capture(page, `connection-cancel-failed-light-${viewport.name}`);
         const retried = yield* installOAuthReview(page);
-        yield* Effect.tryPromise(() => cancel.click());
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole("status")).toContainText("No se autorizó ningún acceso")
+        yield* Effect.tryPromise((signal) => cancel.click({ signal }));
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByRole("status")).toContainText("No se autorizó ningún acceso", { signal })
         );
         expect(failed.mutations).toHaveLength(1);
         expect(retried.mutations).toHaveLength(1);
         expect(failed.unexpected).toEqual([]);
         expect(retried.unexpected).toEqual([]);
-        yield* Effect.tryPromise(() => expect(cancel).toHaveCount(0));
+        yield* Effect.tryPromise((signal) => expect(cancel).toHaveCount(0, { signal }));
       })
     ));
 }

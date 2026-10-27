@@ -1,4 +1,5 @@
 [data-review="workspace"] {
+  contain: layout style;
   --review-height: calc(100dvh - 203px);
   --review-soft: #f5f2ee;
   --review-line: #e9e2da;

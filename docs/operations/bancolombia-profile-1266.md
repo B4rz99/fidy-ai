@@ -2,6 +2,12 @@
 
 Observed **2026-10-19**. This is the working technical contract/evidence worksheet for
 [#1266](https://github.com/B4rz99/fidy-ai/issues/1266), not a claim of bank acceptance.
+The [2026-10-27 sandbox handoff assessment](bancolombia-sandbox-handoff-1266.md) supersedes
+the pending-access status below: the owner reports sandbox provisioning and supplied the bank's
+collection/environment template. Public discovery matches the template and advertises RS256/PS256;
+client-specific authentication and certificate acceptance remain unverified. No credentialed bank
+flow has been executed.
+
 The production institution gate remains disabled. Fidy's production-hosted registration URLs
 publish sandbox metadata; their hostname does not make this a production bank client.
 

@@ -39,7 +39,7 @@ for (const scenario of ["admitted", "foreign", "expired", "absent"] as const) {
         const encodeTime = (milliseconds: number): string =>
           DateTime.formatIso(DateTime.makeUnsafe(milliseconds));
         const profile = encodeJson({
-          contract: "869a3da43fed9043b734e9be698e49234738cb3b1a26ca79cde3f606eb3fcd62",
+          contract: "bancolombia-sandbox-consent-2026-10-27",
           userId: scenario === "foreign" ? users[1] : users[0],
           admission: {
             startsAt: encodeTime(current - 60000),
@@ -48,9 +48,8 @@ for (const scenario of ["admitted", "foreign", "expired", "absent"] as const) {
           financialId: "",
           accountOwner: { SchemeName: "CC", Identification: "synthetic-identity" },
           intent: {
-            permissions: ["ReadAccountBasic"],
-            historyFrom: encodeTime(current - 60000),
-            historyTo: encodeTime(current),
+            permissions: ["ReadAccountsBasic"],
+            historyPolicy: "bank-default",
             expiryPolicy: "bank-default",
           },
         });

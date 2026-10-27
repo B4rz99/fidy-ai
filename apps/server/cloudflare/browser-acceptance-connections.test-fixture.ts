@@ -68,9 +68,6 @@ const fixtureResponse = (
         ConsentId: "synthetic-consent",
         Status: "AwaitingAuthorization",
         Permissions: input.intent.permissions,
-
-        TransactionFromDateTime: DateTime.formatIso(input.intent.historyFrom),
-        TransactionToDateTime: DateTime.formatIso(input.intent.historyTo),
       },
     });
   }
@@ -88,22 +85,15 @@ const fixtureClient = (
       HttpClientResponse.fromWeb(request, fixtureResponse({ scenario, intent, url: request.url }))
     )
   );
-const fixtureHistoryDays = 90;
-const millisecondsPerDay = 86400000;
-const fixtureHistoryMilliseconds = fixtureHistoryDays * millisecondsPerDay;
-
 const fixtureIntent = (): ConnectionConsentIntent => ({
   permissions: [
-    "ReadAccountBasic",
-    "ReadAccountDetail",
-    "ReadBalance",
-    "ReadTransactionBasic",
-    "ReadTransactionDetail",
+    "ReadAccountsBasic",
+    "ReadTransactionsCredits",
+    "ReadBalances",
+    "ReadTransactionsDebits",
+    "ReadTransactionsDetail",
   ],
-  historyFrom: DateTime.makeUnsafe(
-    DateTime.nowUnsafe().epochMilliseconds - fixtureHistoryMilliseconds
-  ),
-  historyTo: DateTime.nowUnsafe(),
+  historyPolicy: "bank-default",
   expiryPolicy: "bank-default",
 });
 
@@ -126,7 +116,7 @@ export const makeConnectionFixture = (
             ...keys,
             ...input,
             profile: Redacted.make({
-              contract: "869a3da43fed9043b734e9be698e49234738cb3b1a26ca79cde3f606eb3fcd62",
+              contract: "bancolombia-sandbox-consent-2026-10-27",
               userId: Schema.decodeSync(UserId)(userId),
               admission: {
                 startsAt: DateTime.makeUnsafe(0),

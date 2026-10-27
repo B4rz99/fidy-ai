@@ -1,4 +1,3 @@
-import { UtcTimestamp } from "../../src/core/_shared/time";
 import { Context, Data, type Effect, Option, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
 import { UserId } from "../../src/core/identity/contract";
@@ -40,24 +39,19 @@ const maximumPermissionCount = 5;
 export const ConnectionConsentIntent = Schema.Struct({
   permissions: Schema.Array(
     Schema.Literals([
-      "ReadAccountBasic",
-      "ReadAccountDetail",
-      "ReadBalance",
-      "ReadTransactionBasic",
-      "ReadTransactionDetail",
+      "ReadAccountsBasic",
+      "ReadBalances",
+      "ReadTransactionsDetail",
+      "ReadTransactionsCredits",
+      "ReadTransactionsDebits",
     ])
   ).check(
     Schema.isBetweenLength(1, maximumPermissionCount),
     Schema.makeFilter((values) => new Set(values).size === values.length)
   ),
-  historyFrom: UtcTimestamp,
-  historyTo: UtcTimestamp,
+  historyPolicy: Schema.Literal("bank-default"),
   expiryPolicy: Schema.Literal("bank-default"),
-}).check(
-  Schema.makeFilter(
-    (value) => value.historyFrom.epochMilliseconds <= value.historyTo.epochMilliseconds
-  )
-);
+});
 export type ConnectionConsentIntent = typeof ConnectionConsentIntent.Type;
 
 /** Private preparation after durable admission; a failed or uncertain submission is never retried. */

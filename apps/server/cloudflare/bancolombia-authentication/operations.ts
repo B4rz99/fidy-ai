@@ -208,10 +208,7 @@ export const pushBancolombiaSandboxAuthorization = (
 const ConsentRequest = Schema.Struct({
   Data: Schema.Struct({
     Permissions: Schema.Array(Schema.String),
-    TransactionFromDateTime: UtcTimestamp,
-    TransactionToDateTime: UtcTimestamp,
     AccountOwner: BancolombiaConsentProfile.fields.accountOwner,
-    OnBehalfOf: BancolombiaConsentProfile.fields.onBehalfOf,
   }),
 });
 const AuthorizationProof = Schema.Struct({
@@ -225,8 +222,6 @@ const CreatedConsent = Schema.Struct({
     Status: Schema.optionalKey(Schema.Literal("AwaitingAuthorization")),
     Permissions: Schema.optionalKey(Schema.Array(Schema.String)),
     ExpirationDateTime: Schema.optionalKey(UtcTimestamp),
-    TransactionFromDateTime: Schema.optionalKey(UtcTimestamp),
-    TransactionToDateTime: Schema.optionalKey(UtcTimestamp),
   }),
 });
 type ConsentCreationInput = SandboxAuthenticationInput &
@@ -243,16 +238,6 @@ const matchesPermissions = (
   (created.Permissions.length === requested.length &&
     new Set(created.Permissions).size === requested.length &&
     created.Permissions.every((permission) => requested.includes(permission)));
-const matchesHistory = (
-  created: (typeof CreatedConsent.Type)["Data"],
-  requested: BancolombiaConsentProfile["intent"]
-): boolean =>
-  (created.TransactionFromDateTime === undefined ||
-    created.TransactionFromDateTime.epochMilliseconds ===
-      requested.historyFrom.epochMilliseconds) &&
-  (created.TransactionToDateTime === undefined ||
-    created.TransactionToDateTime.epochMilliseconds === requested.historyTo.epochMilliseconds);
-
 const createConsent = (
   input: ConsentCreationInput
 ): Effect.Effect<
@@ -269,10 +254,7 @@ const createConsent = (
     const payload = yield* Schema.encodeEffect(Schema.fromJsonString(ConsentRequest))({
       Data: {
         Permissions: profile.intent.permissions,
-        TransactionFromDateTime: profile.intent.historyFrom,
-        TransactionToDateTime: profile.intent.historyTo,
         AccountOwner: profile.accountOwner,
-        ...(profile.onBehalfOf === undefined ? {} : { OnBehalfOf: profile.onBehalfOf }),
       },
     });
     const response = yield* makeBancolombiaSandboxOutboundHttp(input.httpClient).execute({
@@ -289,10 +271,7 @@ const createConsent = (
     const created = (yield* Schema.decodeEffect(Schema.fromJsonString(CreatedConsent))(
       new TextDecoder().decode(response.body)
     )).Data;
-    if (
-      !matchesPermissions(created, profile.intent.permissions) ||
-      !matchesHistory(created, profile.intent)
-    ) {
+    if (!matchesPermissions(created, profile.intent.permissions)) {
       return yield* new BancolombiaAuthorizationFailed();
     }
     yield* input.recordConsent(created.ConsentId);
@@ -314,11 +293,11 @@ export const authorizeBancolombiaSandbox = (
 > =>
   Effect.gen(function* () {
     yield* Schema.decodeEffect(AuthorizationProof)(input);
-    const profile = yield* Schema.decodeEffect(Schema.toType(BancolombiaConsentProfile))(
+    yield* Schema.decodeEffect(Schema.toType(BancolombiaConsentProfile))(
       Redacted.value(input.profile)
     );
     const now = yield* Clock.currentTimeMillis;
-    if (input.expiresAtMilliseconds <= now || profile.intent.historyTo.epochMilliseconds > now) {
+    if (input.expiresAtMilliseconds <= now) {
       return yield* new BancolombiaAuthorizationFailed();
     }
     const created = yield* createConsent(input);

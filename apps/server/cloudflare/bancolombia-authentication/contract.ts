@@ -40,10 +40,9 @@ export const BancolombiaAuthorizationInput = Schema.Struct({
 export type BancolombiaAuthorizationInput = typeof BancolombiaAuthorizationInput.Type;
 
 const maximumNameLength = 140;
-const maximumIdentifierLength = 35;
 const maximumAdmissionMilliseconds = 3600000;
 export const BancolombiaConsentProfile = Schema.Struct({
-  contract: Schema.Literal("869a3da43fed9043b734e9be698e49234738cb3b1a26ca79cde3f606eb3fcd62"),
+  contract: Schema.Literal("bancolombia-sandbox-consent-2026-10-27"),
   userId: UserId,
   admission: Schema.Struct({ startsAt: UtcTimestamp, expiresAt: UtcTimestamp }).check(
     Schema.makeFilter(
@@ -55,14 +54,6 @@ export const BancolombiaConsentProfile = Schema.Struct({
   financialId: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{0,128}$/u)),
   customerIpAddress: Schema.optionalKey(
     Schema.String.check(Schema.isPattern(/^[0-9A-Fa-f:.]{2,45}$/u))
-  ),
-  onBehalfOf: Schema.optionalKey(
-    Schema.Struct({
-      TradingName: Schema.String.check(Schema.isBetweenLength(1, maximumNameLength)),
-      LegalName: Schema.String.check(Schema.isBetweenLength(1, maximumNameLength)),
-      IdentifierType: Schema.Literal("Other"),
-      Identifier: Schema.String.check(Schema.isBetweenLength(1, maximumIdentifierLength)),
-    })
   ),
   accountOwner: Schema.Struct({
     Name: Schema.optionalKey(Schema.String.check(Schema.isBetweenLength(1, maximumNameLength))),

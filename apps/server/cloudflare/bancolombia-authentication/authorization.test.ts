@@ -231,32 +231,25 @@ const assertionIdentifier = (
   ).pipe(Effect.map((value) => value.payload.jti ?? ""));
 
 const syntheticProfile = Schema.decodeSync(BancolombiaConsentProfile)({
-  contract: "869a3da43fed9043b734e9be698e49234738cb3b1a26ca79cde3f606eb3fcd62",
+  contract: "bancolombia-sandbox-consent-2026-10-27",
   userId: clientId,
   admission: { startsAt: "1970-01-01T00:00:00.000Z", expiresAt: "1970-01-01T00:10:00.000Z" },
-  financialId: "synthetic-participant",
+  financialId: "",
   accountOwner: {
     Name: "Cliente de prueba",
     SchemeName: "CC",
     Identification: "synthetic-identity",
   },
-  onBehalfOf: {
-    TradingName: "Prueba",
-    LegalName: "Prueba SAS",
-    IdentifierType: "Other",
-    Identifier: "synthetic-company",
-  },
   customerIpAddress: "127.0.0.1",
   intent: {
     permissions: [
-      "ReadAccountBasic",
-      "ReadAccountDetail",
-      "ReadBalance",
-      "ReadTransactionBasic",
-      "ReadTransactionDetail",
+      "ReadAccountsBasic",
+      "ReadBalances",
+      "ReadTransactionsDetail",
+      "ReadTransactionsCredits",
+      "ReadTransactionsDebits",
     ],
-    historyFrom: "1969-12-31T00:00:00.000Z",
-    historyTo: "1970-01-01T00:00:00.000Z",
+    historyPolicy: "bank-default",
     expiryPolicy: "bank-default",
   },
 });
@@ -265,16 +258,13 @@ const consentResponse = {
     ConsentId: "synthetic-consent",
     Status: "AwaitingAuthorization",
     Permissions: syntheticProfile.intent.permissions,
-
-    TransactionFromDateTime: DateTime.formatIso(syntheticProfile.intent.historyFrom),
-    TransactionToDateTime: DateTime.formatIso(syntheticProfile.intent.historyTo),
   },
 };
 const createdConsentEndpoint =
   "https://rs1-api-open-finance-sandbox.ambientesbc.com/open-banking/v1/deposits/accounts/account-access-consent";
 const returnedPermissions = (mode: string): readonly string[] => {
-  if (mode === "mismatch") return ["ReadAccountBasic"];
-  if (mode === "duplicate") return ["ReadAccountBasic", "ReadAccountBasic", "ReadAccountBasic"];
+  if (mode === "mismatch") return ["ReadAccountsBasic"];
+  if (mode === "duplicate") return ["ReadAccountsBasic", "ReadAccountsBasic", "ReadAccountsBasic"];
   return consentResponse.Data.Permissions;
 };
 it.effect(
@@ -310,12 +300,14 @@ it.effect(
                 )
               ).toEqual({
                 Data: {
-                  Permissions: syntheticProfile.intent.permissions,
-
-                  TransactionFromDateTime: consentResponse.Data.TransactionFromDateTime,
-                  TransactionToDateTime: consentResponse.Data.TransactionToDateTime,
+                  Permissions: [
+                    "ReadAccountsBasic",
+                    "ReadBalances",
+                    "ReadTransactionsDetail",
+                    "ReadTransactionsCredits",
+                    "ReadTransactionsDebits",
+                  ],
                   AccountOwner: syntheticProfile.accountOwner,
-                  OnBehalfOf: syntheticProfile.onBehalfOf,
                 },
               });
               return HttpClientResponse.fromWeb(

@@ -27,13 +27,15 @@ export const bancolombiaSandboxHttp = (
                 "application/x-www-form-urlencoded"
               ),
             });
-      return http.execute(prepared, maximumBytes).pipe(
-        Effect.provideService(FetchHttpClient.RequestInit, {
-          redirect: "manual",
-          credentials: "omit",
-        }),
-        Effect.timeout("10 seconds")
-      );
+      return http
+        .execute(HttpClientRequest.setHeader(prepared, "accept", "application/json"), maximumBytes)
+        .pipe(
+          Effect.provideService(FetchHttpClient.RequestInit, {
+            redirect: "manual",
+            credentials: "omit",
+          }),
+          Effect.timeout("10 seconds")
+        );
     },
   };
 };

@@ -1,5 +1,5 @@
 import type { JSX, ReactNode } from "react";
-import { DateTime } from "effect";
+import { makeCompactDateFormatter } from "@/ui/compact-date";
 import { Calendar03Icon, InformationCircleIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { RecurringDigestReport } from "@/transport/client";
@@ -12,13 +12,7 @@ export const HistoricalReport = ({
   recovery,
 }: Readonly<{ report: RecurringDigestReport; recovery: ReactNode }>): JSX.Element => {
   const day = report.payload.confirmationDay;
-  const date = DateTime.format(DateTime.makeUnsafe(day.localDate), {
-    locale: report.locale,
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  const date = makeCompactDateFormatter(report.locale)(day.localDate);
   return (
     <div className="recurring-report-columns">
       <div className="recurring-report-main">

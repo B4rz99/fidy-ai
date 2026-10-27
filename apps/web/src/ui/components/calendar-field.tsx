@@ -8,6 +8,7 @@ import { Button } from "./button";
 import { Calendar } from "./calendar";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "./popover";
 import { cn } from "@/ui/class-names";
+import { makeCompactDateFormatter } from "@/ui/compact-date";
 
 type DateFieldProps = Readonly<{
   id: string;
@@ -32,25 +33,13 @@ const selectedDate = (date: Option.Option<Date>, timeZone: string): string =>
 const dateLabel = (value: string): string =>
   value === "" ? "Selecciona una fecha" : value.split("-").toReversed().join("-");
 
-const compactDateFormat = new Intl.DateTimeFormat("es-CO", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
+const compactDateLabel = makeCompactDateFormatter("es-CO");
 const accessibleDateFormat = new Intl.DateTimeFormat("es-CO", {
   day: "numeric",
   month: "long",
   year: "numeric",
   timeZone: "UTC",
 });
-const compactDateLabel = (value: string): string =>
-  compactDateFormat
-    .formatToParts(DateTime.toEpochMillis(DateTime.makeUnsafe(`${value}T12:00:00Z`)))
-    .flatMap((part) =>
-      ["day", "month", "year"].includes(part.type) ? [part.value.replace(/\.$/u, "")] : []
-    )
-    .join(" ");
 
 const calendarLabel = ({
   appearance,

@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 import { Effect, Schema } from "effect";
-import { response } from "./http-fixtures";
+import { apiOrigin, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect } = playwright;
@@ -77,3 +77,23 @@ export const captureReport = Effect.fnUntraced(function* (page: Page, filename: 
   const measured = yield* Effect.tryPromise(() => page.evaluate(dimensions));
   expect(measured.content).toBeLessThanOrEqual(measured.viewport);
 });
+
+export const installReportSession = (page: Page): Promise<void> =>
+  installUser(page)
+    .then(() =>
+      page.route(`${apiOrigin}/web/session/binding`, (route) =>
+        route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({ binding: "24000000-0000-4000-8000-000000000561" }),
+        })
+      )
+    )
+    .then(() =>
+      page.route(`${apiOrigin}/ingestion/review-workspace**`, (route) =>
+        route.fulfill({
+          contentType: "application/json",
+          body: response({ pendingCount: 0, total: 0, items: [] }),
+        })
+      )
+    )
+    .then(() => {});

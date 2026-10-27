@@ -4,6 +4,7 @@ import { apiOrigin, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 import {
   captureReport,
+  installReportSession,
   unavailableReportHandler,
   visualReportHandler,
   visualReportPath,
@@ -210,7 +211,7 @@ const visualStates = ["report", "loading", "invalid", "unavailable"] as const;
 type VisualState = (typeof visualStates)[number];
 
 const prepareVisualReport = Effect.fnUntraced(function* (page: Page, state: VisualState) {
-  yield* Effect.tryPromise(() => installUser(page));
+  yield* Effect.tryPromise(() => installReportSession(page));
   const pending = Promise.withResolvers<void>();
   const handler = (route: Route): Promise<void> => {
     if (state === "unavailable") return unavailableReportHandler(route);
@@ -258,6 +259,13 @@ for (const viewport of viewports) {
             yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme: theme }));
             const release = yield* prepareVisualReport(page, state);
             const filename = `${state}-${theme}-${viewport.name}`;
+            if (viewport.name === "desktop") {
+              yield* Effect.tryPromise(() =>
+                expect(
+                  page.getByRole("button", { name: "Cerrar sesión", exact: true })
+                ).toBeVisible()
+              );
+            }
             if (state === "report") yield* assertVisualReport(page);
             yield* captureReport(page, filename);
             if (state === "report" && viewport.name === "mobile") {

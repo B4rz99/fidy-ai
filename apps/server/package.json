@@ -289,7 +289,7 @@
     "csv-parse": "7.0.3",
     "effect": "4.0.5",
     "fflate": "0.8.3",
-    "jose": "6.2.12",
+    "jose": "6.2.13",
     "mupdf": "1.28.1",
     "parse5": "8.0.1",
     "postal-mime": "2.7.6",
@@ -308,6 +308,6 @@
     "rolldown": "1.2.14",
     "typescript": "7.0.2",
     "vitest": "5.0.5",
-    "wrangler": "4.151.2"
+    "wrangler": "4.151.3"
   }
 }

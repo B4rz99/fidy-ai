@@ -41,7 +41,7 @@ certificate-backed client-credentials exchange, not consent creation or a User a
 ## Implemented sandbox preparation
 
 The existing attempt now owns a private D1 authorization record. A single durable claim binds the
-fresh session, same User and current Fidy Consent before bank I/O. The record retains the immutable permissions/history/expiry intent, the returned bank ConsentId,
+fresh session, same User and current Fidy Consent before bank I/O. The record retains the immutable permissions and bank-default history/expiry intent, the returned bank ConsentId,
 the S256 verifier and state digest; neither private proof nor signing material enters browser output.
 A claimed request cannot be submitted again. Bank execution occurs outside the D1 atomic unit,
 then settles to a bounded handoff or a failed, non-retryable result. Expiry clears the verifier and
@@ -59,7 +59,7 @@ The built-browser fixture exercises consent creation through handoff over the pu
 with synthetic keys and test identity; only the external bank endpoints are controlled. It proves local integration,
 not Bancolombia acceptance. The private coordinator can install the real adapter only from a
 bounded, matching-User `BANCOLOMBIA_SANDBOX_CONSENT_PROFILE` secret naming the pinned support-collection
-digest, explicit intent and supplied test AccountOwner. No live profile is configured yet. Production registration remains empty, and the sandbox callback still refuses completion pending #1268.
+digest, explicit intent and supplied test AccountOwner. Temporary one-User profiles are configured only for bounded live tests. Production registration remains empty, and the sandbox callback still refuses completion pending #1268.
 
 ## Accepted support collection — 2026-10-27
 
@@ -70,12 +70,16 @@ The supplied AccountOwner and representative identify the bank-provided test sce
 customer approval or bank login is not a prerequisite for #1267's authorization handoff.
 Bank login, approval and callback completion belong to #1268.
 
-The adapter sends the collection's five permission names, exact history window, AccountOwner and
-OnBehalfOf fields, with consent expiry left to the bank. Consent creation accepts HTTP 200/201 and
+Bancolombia technical support subsequently corrected the collection's obsolete consent body.
+The accepted override contains only `Data.Permissions` and `Data.AccountOwner`. Permissions are
+`ReadAccountsBasic`, `ReadBalances`, `ReadTransactionsDetail`, `ReadTransactionsCredits` and
+`ReadTransactionsDebits`. Neither historical dates nor `OnBehalfOf` are sent; history and consent
+expiry are left to the bank. Private profiles must select revision
+`bancolombia-sandbox-consent-2026-10-27`; the original collection-only revision is refused. Consent creation accepts HTTP 200/201 and
 requires Data.ConsentId; optional echoed permissions and history must match when present. PAR
 requires HTTP 201, private-key JWT and S256, with no nonce because this collection does not use one.
-The provided participant variable is empty and is preserved rather than replaced with an invented
-identifier. The customer-IP example contains a date instead of an IP address; that optional header
+Support confirmed that `obParticipantId` is unused for this case and may remain empty; the blank
+`x-fapi-financial-id` value is valid. The customer-IP example contains a date instead of an IP address; that optional header
 is omitted. The sample external signing helper and verifier logging are never executed.
 
 A Core-only redacted profile pins this collection digest, the test identity, one Fidy User and a
@@ -85,8 +89,15 @@ handoff by its expiry. Expired admission cannot reopen preparation. Existing ban
 continues to block whole-User erasure pending institution suppression even after admission expires.
 The production institution registry remains empty.
 
-Live sandbox consent/PAR acceptance has not yet been exercised for this revision. Local tests
-control the external bank and do not establish Bancolombia acceptance.
+The deployed previous body received HTTP 400 during live consent creation on 2026-10-27 at
+20:20:28 UTC. Signing, discovery, mTLS and application-token exchange passed protected inspection
+[40577409689](https://github.com/B4rz99/fidy-ai/actions/runs/40577409689) at revision
+`cb88b8e112bed08381c9c502e1a973b1c55f8119`. The bank's body correction supersedes that failed
+request contract. Live consent/PAR acceptance of the corrected body remains to be verified; local
+tests control the external bank and do not establish Bancolombia acceptance.
+
+Test-bank login credentials remain with the User. They are not Fidy application credentials and
+are unnecessary for #1267's handoff; customer login, approval and callback belong to #1268.
 
 ## Local verification — 2026-10-27
 

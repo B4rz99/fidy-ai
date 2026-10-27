@@ -28,14 +28,13 @@ let sandboxProfile = Option.none<string>();
 
 const fixtureConsentIntent = (): ConnectionBankPreparation["intent"] => ({
   permissions: [
-    "ReadAccountBasic",
-    "ReadAccountDetail",
-    "ReadBalance",
-    "ReadTransactionBasic",
-    "ReadTransactionDetail",
+    "ReadAccountsBasic",
+    "ReadTransactionsCredits",
+    "ReadBalances",
+    "ReadTransactionsDebits",
+    "ReadTransactionsDetail",
   ],
-  historyFrom: DateTime.makeUnsafe(DateTime.nowUnsafe().epochMilliseconds - 90 * 86400000),
-  historyTo: DateTime.nowUnsafe(),
+  historyPolicy: "bank-default",
   expiryPolicy: "bank-default",
 });
 
@@ -256,7 +255,7 @@ it("admits only the configured sandbox User within its fixed window and rechecks
       const now = DateTime.nowUnsafe().epochMilliseconds;
       sandboxProfile = Option.some(
         yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-          contract: "869a3da43fed9043b734e9be698e49234738cb3b1a26ca79cde3f606eb3fcd62",
+          contract: "bancolombia-sandbox-consent-2026-10-27",
           userId: users[0],
           admission: {
             startsAt: DateTime.formatIso(DateTime.makeUnsafe(now)),

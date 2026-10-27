@@ -12,15 +12,14 @@ import {
 
 const userId = "10000000-0000-4000-8000-000000000001";
 const profile = {
-  contract: "869a3da43fed9043b734e9be698e49234738cb3b1a26ca79cde3f606eb3fcd62",
+  contract: "bancolombia-sandbox-consent-2026-10-27",
   userId,
   admission: { startsAt: "1970-01-01T00:00:00.000Z", expiresAt: "1970-01-01T00:10:00.000Z" },
   financialId: "synthetic-participant",
   accountOwner: { SchemeName: "CC", Identification: "synthetic-identity" },
   intent: {
-    permissions: ["ReadAccountBasic"],
-    historyFrom: "1969-12-31T00:00:00.000Z",
-    historyTo: "1970-01-01T00:00:00.000Z",
+    permissions: ["ReadAccountsBasic"],
+    historyPolicy: "bank-default",
     expiryPolicy: "bank-default",
   },
 };
@@ -67,6 +66,11 @@ it("installs only a bounded, matching-User support-collection sandbox profile", 
     "x".repeat(10000),
     encode({ ...profile, userId: "10000000-0000-4000-8000-000000000002" }),
     encode({ ...profile, contract: "unknown" }),
+    encode({
+      ...profile,
+      contract: "869a3da43fed9043b734e9be698e49234738cb3b1a26ca79cde3f606eb3fcd62",
+    }),
+    encode({ ...profile, intent: { ...profile.intent, permissions: ["ReadAccountBasic"] } }),
     encode({ ...profile, financialId: "\n" }),
     encode({ ...profile, customerIpAddress: "Mon, 19 Oct 2018 08:51:49 GMT" }),
   ]) {

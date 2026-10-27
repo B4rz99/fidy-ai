@@ -9,6 +9,28 @@ const securityArtifacts = [
   await Bun.file(new URL("worker-observability.ts", import.meta.url)).text(),
   await Bun.file(new URL("../../apps/server/cloudflare/public-worker.ts", import.meta.url)).text(),
   await Bun.file(
+    new URL("../../apps/server/cloudflare/bancolombia-authentication/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/bancolombia-authentication/operations.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/bancolombia-authentication/runtime.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/src/shell/outbound-http/internal/bancolombia-http.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/outbound-http/internal/transport.ts", import.meta.url)
+  ).text(),
+
+  await Bun.file(
     new URL("../../apps/server/cloudflare/release-smoke-worker.ts", import.meta.url)
   ).text(),
   await Bun.file(
@@ -33,10 +55,7 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/bancolombia-sandbox/operations.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL(
-      "../../apps/server/cloudflare/bancolombia-sandbox/internal/public-key.ts",
-      import.meta.url
-    )
+    new URL("../../apps/server/cloudflare/bancolombia-sandbox/contract.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/src/shell/processing-consent/contract.ts", import.meta.url)

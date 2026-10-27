@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { describe, expect } from "vitest";
 import {
   handleSmoke,
@@ -289,7 +289,11 @@ describe("production smoke ingress", () => {
               expect(forwarded.headers.get("cloudflare-workers-version-overrides")).toBe(overrides);
               expect(forwarded.headers.get("x-fidy-smoke-proof")).toBe("a".repeat(64));
               expect(init?.signal).toBeInstanceOf(AbortSignal);
-              return handleSmoke({ request: forwarded, environment: coreEnvironment });
+              return handleSmoke({
+                bankAuthentication: Option.none(),
+                request: forwarded,
+                environment: coreEnvironment,
+              });
             },
           },
           LOCAL_CANONICAL_READ_BEARER: "",

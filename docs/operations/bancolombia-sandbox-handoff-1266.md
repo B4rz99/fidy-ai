@@ -124,3 +124,28 @@ key and transport certificate/key in their intended protected stores. Values mus
 chat, source, shell arguments or logs. File paths or protected binding names suffice for coordination;
 never extract the existing GitHub signing secret or regenerate the registered key to bypass a missing
 local copy. Successful sandbox testing remains separate from bank production eligibility.
+
+## Protected application authentication
+
+The implementation adds an explicit manual `verify_bancolombia_sandbox` option to the existing Production workflow.
+Normal deployments leave it false and do not call the bank. Private Core receives the existing
+`BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM` through its secret binding, the assigned client id from
+`BANCOLOMBIA_SANDBOX_CLIENT_ID`, and the outbound Fetcher for the existing certificate identified
+by `BANCOLOMBIA_SANDBOX_CERTIFICATE_ID`. Public ingress receives neither private capability.
+The transport key itself stays in Cloudflare's certificate store.
+
+After deployment-proof, exact candidate identity, body bounds and release-budget admission, an
+explicit verification checks the signing key against the public registration, validates fixed
+sandbox discovery, and requests an accounts application token through mTLS. It uses a fresh RS256
+assertion with issuer/subject equal to the assigned client id, the discovered issuer as audience,
+a unique JTI and a five-minute lifetime. Shared Outbound HTTP applies streamed-byte bounds, a
+ten-second deadline per request (within a thirty-second verification exchange), no redirects, no automatic retries and coordinate-free telemetry.
+It validates and discards the response bearer within the owner; only closed failure stages or
+successful release metadata are returned. It never creates a User consent or reads Accounts.
+
+Both candidate pairings retain the ordinary release checks. A D1-quota deferral cannot be recorded
+as successful bank verification. The release attestation distinguishes `passed` from `not-requested`;
+a client-authentication failure prevents promotion during the explicitly requested check. Missing
+configuration refuses that check without enabling any institution. An uploaded certificate, a
+passing local fixture and a configured key are still not a successful hosted bank-authentication
+result. Record the exact hosted run before marking that result verified.

@@ -383,6 +383,12 @@ export default Alchemy.Stack(
       },
       env: {
         RECOVERY_ISOLATION: isolation,
+        BANCOLOMBIA_SANDBOX_CLIENT_ID: yield* Config.String("BANCOLOMBIA_SANDBOX_CLIENT_ID").pipe(
+          Config.withDefault("")
+        ),
+        BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: yield* Config.Redacted(
+          "BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM"
+        ).pipe(Config.withDefault(Redacted.make(""))),
         AI: Cloudflare.Workers.AI(),
         CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
         SMOKE_LIMITER: Cloudflare.RateLimit("ReleaseSmokeAdmission", {
@@ -501,6 +507,25 @@ export default Alchemy.Stack(
       },
       workersDev: productionTopology.core.workersDev,
     });
+
+    const bancolombiaCertificate = yield* Config.String("BANCOLOMBIA_SANDBOX_CERTIFICATE_ID").pipe(
+      Config.withDefault("")
+    );
+    if (production && bancolombiaCertificate.length > 0) {
+      yield* Config.schema(
+        Schema.String.check(Schema.isUUID()),
+        "BANCOLOMBIA_SANDBOX_CERTIFICATE_ID"
+      );
+      yield* core.bind`bancolombia-sandbox-mtls`({
+        bindings: [
+          {
+            type: "mtls_certificate",
+            name: "BANCOLOMBIA_SANDBOX_MTLS",
+            certificateId: bancolombiaCertificate,
+          },
+        ],
+      });
+    }
 
     yield* Cloudflare.Queues.Consumer("OperationalCanaryConsumer", {
       queueId: operationalCanaryQueue.queueId,

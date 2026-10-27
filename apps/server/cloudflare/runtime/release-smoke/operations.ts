@@ -1,3 +1,4 @@
+import { BancolombiaAuthenticationFailed } from "../../bancolombia-authentication/contract";
 import {
   type SmokeBindings,
   SmokeCompletion,
@@ -153,7 +154,11 @@ const identityFailure = (probe: SmokeRequestType, environment: SmokeEnvironment)
   return response;
 };
 
-const startProbe = Effect.fn(function* (request: Request, environment: SmokeEnvironment) {
+const startProbe = Effect.fn(function* (
+  request: Request,
+  environment: SmokeEnvironment,
+  bankAuthentication: Effect.Effect<void, BancolombiaAuthenticationFailed>
+) {
   if (Number(request.headers.get("content-length")) > maxBodyBytes) return refused();
   const decoded = yield* boundedJsonBody({ request, policy: bodyPolicy, schema: SmokeRequest });
   if (Option.isNone(decoded)) return refused();
@@ -168,6 +173,11 @@ const startProbe = Effect.fn(function* (request: Request, environment: SmokeEnvi
   if (!admitted.success) return fail("admission");
   const now = yield* Clock.currentTimeMillis;
   yield* checkBindings(environment);
+  if (probe.verifyBancolombiaSandbox === true) {
+    yield* bankAuthentication.pipe(
+      Effect.mapError((error) => new SmokeBindingFailed({ stage: error.stage }))
+    );
+  }
   const work: SmokeWork = {
     protocolVersion: 2,
     probeId: probe.probeId,
@@ -243,17 +253,31 @@ const getProbe = Effect.fn(function* (request: Request, environment: SmokeEnviro
 export const handleSmoke = ({
   request,
   environment,
-}: Readonly<{ request: Request; environment: SmokeEnvironment }>): Promise<Response> =>
+  bankAuthentication,
+}: Readonly<{
+  request: Request;
+  environment: SmokeEnvironment;
+  bankAuthentication: Option.Option<Effect.Effect<void, BancolombiaAuthenticationFailed>>;
+}>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF })) return refused();
-      if (request.method === "POST") return yield* startProbe(request, environment);
+      if (request.method === "POST") {
+        return yield* startProbe(
+          request,
+          environment,
+          Option.getOrElse(bankAuthentication, () =>
+            Effect.fail(new BancolombiaAuthenticationFailed({ stage: "bancolombia_configuration" }))
+          )
+        );
+      }
       if (request.method === "GET") return yield* getProbe(request, environment);
       return refused();
     }).pipe(
       Effect.catch((error) => Effect.succeed(fail(error.stage))),
       Effect.catchCause(() => Effect.succeed(fail("platform")))
-    )
+    ),
+    { signal: request.signal }
   );
 
 const receiveMessage = Effect.fn(function* (

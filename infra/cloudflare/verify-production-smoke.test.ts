@@ -1092,54 +1092,64 @@ describe("post-promotion production smoke", () => {
     ));
 });
 
-it.each(["d1_quota", "admission", "schema"])("defers only the closed quota refusal (%s)", (stage) =>
-  Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const methods: string[] = [];
-        const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-          const request = new Request(input, init);
-          if (new URL(request.url).pathname !== "/internal/release-smoke") {
-            return Promise.resolve(edgeResponse(request));
-          }
-          methods.push(request.method);
-          if (request.method === "GET") {
+it.each([
+  { stage: "d1_quota", bank: false },
+  { stage: "admission", bank: false },
+  { stage: "schema", bank: false },
+  { stage: "d1_quota", bank: true },
+])(
+  "defers quota only without requested bank authentication ($stage, bank=$bank)",
+  ({ stage, bank }) =>
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const methods: string[] = [];
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+            const request = new Request(input, init);
+            if (new URL(request.url).pathname !== "/internal/release-smoke") {
+              return Promise.resolve(edgeResponse(request));
+            }
+            methods.push(request.method);
+            if (request.method === "GET") {
+              return Promise.resolve(
+                pairingResponse({
+                  oldPublic: intermediateRequest(request),
+                  coreRevision: revision,
+                  readiness: true,
+                })
+              );
+            }
             return Promise.resolve(
-              pairingResponse({
-                oldPublic: intermediateRequest(request),
-                coreRevision: revision,
-                readiness: true,
+              new Response(null, {
+                status: 503,
+                headers: {
+                  ...securityHeaders,
+                  "x-fidy-smoke-worker-version": publicCandidate,
+                  "x-fidy-smoke-failure": stage,
+                },
               })
             );
-          }
-          return Promise.resolve(
-            new Response(null, {
-              status: 503,
-              headers: {
-                ...securityHeaders,
-                "x-fidy-smoke-worker-version": publicCandidate,
-                "x-fidy-smoke-failure": stage,
-              },
-            })
+          });
+          const services = yield* Layer.build(FetchHttpClient.layer);
+          const result = yield* verifyProductionSmoke({
+            ...config,
+            VERIFY_BANCOLOMBIA_SANDBOX: bank ? "enabled" : "disabled",
+          }).pipe(
+            Effect.provideService(
+              HttpClient.HttpClient,
+              Context.get(services, HttpClient.HttpClient)
+            ),
+            Effect.provideService(FetchHttpClient.Fetch, mockedFetch),
+            Effect.exit
           );
-        });
-        const services = yield* Layer.build(FetchHttpClient.layer);
-        const result = yield* verifyProductionSmoke(config).pipe(
-          Effect.provideService(
-            HttpClient.HttpClient,
-            Context.get(services, HttpClient.HttpClient)
-          ),
-          Effect.provideService(FetchHttpClient.Fetch, mockedFetch),
-          Effect.exit
-        );
-        expect(Exit.isSuccess(result)).toBe(stage === "d1_quota");
-        if (Exit.isSuccess(result)) {
-          expect(result.value).toBe("deferred-d1-quota");
-          expect(methods).toEqual(["POST", "GET", "GET"]);
-        }
-      })
+          expect(Exit.isSuccess(result)).toBe(stage === "d1_quota" && !bank);
+          if (Exit.isSuccess(result)) {
+            expect(result.value).toBe("deferred-d1-quota");
+            expect(methods).toEqual(["POST", "GET", "GET"]);
+          }
+        })
+      )
     )
-  )
 );
 
 it.each(["wrong-version", "cacheable", "readiness-refused"])(

@@ -113,6 +113,7 @@ for (const path of [
         yield* TestClock.setTime(current);
         const clients = yield* Layer.build(FetchHttpClient.layer);
         const response = yield* executeCoreHttp({
+          bankAuthentication: Effect.void,
           request: new Request(`https://api.fidyapp.com${path}`, {
             method: "POST",
             headers: {

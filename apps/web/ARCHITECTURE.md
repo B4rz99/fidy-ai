@@ -399,7 +399,7 @@ further decisions until a fresh read; login resumes only this fixed UUID-selecte
 ## Review-return failure evidence
 
 The production browser performance gate retains its untraced capture-click to visible-review
-measurement and 10ms limit. Only a failed return from Transactions triggers one diagnostic
+measurement and 16ms limit. Only a failed return from Transactions triggers one diagnostic
 Transactions → Needs Review replay; its original failure is always restored, including when
 capture fails or times out. A successful or interrupted measurement does not start diagnostics.
 

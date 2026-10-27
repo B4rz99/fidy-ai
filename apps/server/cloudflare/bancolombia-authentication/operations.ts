@@ -99,7 +99,7 @@ const prepareAssertion = Effect.fn(function* (input: SandboxAuthenticationInput)
 
 /**
  * Verifies the configured key against registration before HTTP, then requests only an accounts
- * application token. No retry, User consent or account read occurs; the bearer never leaves this call.
+ * application token for the private consent request. No retry, User consent or account read occurs.
  */
 const applicationToken = (
   input: SandboxAuthenticationInput,

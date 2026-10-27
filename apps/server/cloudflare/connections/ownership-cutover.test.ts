@@ -53,6 +53,8 @@ it.each([
           documentedSqlBlock({ guide, marker: "connection-owner-" + part }).map((sql) =>
             db.prepare(sql)
           );
+        // This rehearsal predates migration 0002 and its authorization references to these tables.
+        yield* Effect.tryPromise(() => db.prepare("DROP TABLE connection_authorizations").run());
         yield* Effect.tryPromise(() =>
           db.batch([
             db.prepare("PRAGMA defer_foreign_keys=ON"),

@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { ConnectInstitutionResult, ConnectionAttemptReference } from "@fidy/server/client";
-import { type Cause, Effect, Schema } from "effect";
+import { type Cause, Clock, Effect, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
 import {
@@ -17,7 +17,7 @@ const notFoundStatus = 404;
 const unauthenticatedStatus = 401;
 const forbiddenStatus = 403;
 const protocolJourneyBudget = 60000;
-const parExpiryAdvance = 120000;
+const browserClockLagMilliseconds = 600000;
 const bankOrigin = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
 test.setTimeout(protocolJourneyBudget);
 
@@ -154,12 +154,19 @@ test("expires the bank handoff before the original attempt and permits leaving w
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => signInFirstCardThroughCore({ page, request }));
+      const browserNow = (yield* Clock.currentTimeMillis) - browserClockLagMilliseconds;
+      yield* Effect.tryPromise(() => page.clock.setSystemTime(browserNow));
       yield* selectScenario(request, "ready");
       const continuation = yield* startConnection({ page, request });
       yield* begin(page, continuation.path);
       const handoff = page.getByRole("link", { name: "Continuar en Bancolombia", exact: true });
       yield* Effect.tryPromise(() => expect(handoff).toBeVisible());
-      yield* Effect.tryPromise(() => page.clock.fastForward(parExpiryAdvance));
+      const deadline = yield* Schema.decodeUnknownEffect(Schema.DateTimeUtcFromString)(
+        yield* Effect.tryPromise(() => page.locator("time").getAttribute("datetime"))
+      );
+      yield* Effect.tryPromise(() =>
+        page.clock.fastForward(deadline.epochMilliseconds - browserNow + 1)
+      );
       yield* Effect.tryPromise(() => expect(handoff).toHaveCount(0));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toContainText("La solicitud venció")

@@ -3,6 +3,7 @@ import { Context, Schema } from "effect";
 import type { InstitutionId } from "~/core/connections/contract";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api";
 import {
+  Account,
   ConnectInstitutionInput,
   ConnectInstitutionResult,
   Connection,
@@ -67,6 +68,18 @@ export const ConnectionsGroup = HttpApiGroup.make("connections")
       error: NotFound,
     })
       .annotate(OpenApi.Description, "Inspect one caller-owned Connection by stable identity.")
+      .annotateMerge(read)
+  )
+  .add(
+    HttpApiEndpoint.get("listAccounts", "/connections/:id/accounts", {
+      params: Schema.Struct({ id: ConnectionId }),
+      success: OperationResponse(Schema.Array(Account)),
+      error: NotFound,
+    })
+      .annotate(
+        OpenApi.Description,
+        "List the stable Accounts currently authorized through your Connection. Historical Transactions and Balances may still be pending."
+      )
       .annotateMerge(read)
   );
 

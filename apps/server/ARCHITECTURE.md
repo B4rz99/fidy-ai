@@ -202,3 +202,12 @@ before PAR. A bounded, matching-User secret profile pins the support-collection 
 test identity; missing or invalid profiles install no adapter. The browser acceptance fixture
 controls only external bank responses. Production institution registration stays empty. A Core-only, same-User admission window of at
 most one hour permits sandbox testing with the accepted support collection.
+
+The sandbox callback uses the original live WebSession and state digest, never bank identity as
+Fidy identity. Its single-use grant claim commits before token exchange, outside provider I/O;
+the User coordinator then settles validated Accounts, Active authority and Audit in one D1 batch.
+`connection_grants` owns claimed/quarantined/active/cleanup-required authority; its recoverable
+credentials use purpose-bound AES-GCM under a separate Core secret. `connection_accounts` retains
+stable Fidy identities across reauthorization and exposes only the currently active grant's exact
+Account set. [Activation custody and recovery](../../docs/operations/bancolombia-activation-1268.md)
+defines the encryption context, interrupted-work disposition and sandbox verification boundary.

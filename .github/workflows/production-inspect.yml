@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       verify_bancolombia_sandbox:
-        description: Verify the live Core signing key and certificate-bound sandbox application authentication
+        description: Verify sandbox application authentication, introspection and token revocation inside Core
         type: boolean
         default: false
       verify_database:

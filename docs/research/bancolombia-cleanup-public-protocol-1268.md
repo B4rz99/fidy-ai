@@ -1,0 +1,128 @@
+# Bancolombia sandbox cleanup protocol research — #1268
+
+Checked 2026-10-27. Scope: anonymous discovery, Bancolombia's public portal and its
+downloadable contracts, OAuth standards, and searches for applicable Ozone documentation.
+The public-source investigation did not read private bank files or send support messages.
+A subsequent authorized credential check and controlled Basic-authentication probe are recorded below.
+
+## Conclusion
+
+Several questions previously bundled into a support request are already answerable.
+The public portal's unavailable API view does **not** mean the contracts are unavailable:
+the older sandbox portal still serves its public YAML and Markdown files when requested
+with the same public portal header its own JavaScript uses. Account response examples and
+pagination are available. Token revocation request mechanics come from OAuth standards,
+and Bancolombia publishes the endpoint. The remaining uncertainty is narrower: which
+authentication Fidy's registration accepts at revocation/introspection, and how to
+invalidate a bank consent when the exchange outcome is unknown and no token was received.
+Those are candidates for controlled sandbox verification before asking support.
+
+The support-supplied Postman collection and subsequent support correction remain the
+selected profile. Conflicting public examples must not override the corrected consent
+creation body or the Postman consent URL.
+
+## Recovered public bank material
+
+The [sandbox portal](https://developer-portal-public-sbx.apps.ambientesbc.com/) loads
+`main.f01727443cad5225.js`. Its public API client uses a `client-id` header for downloading
+Open Banking descriptions; that header is portal infrastructure, not Fidy's bank client
+credential. An anonymous download without that header returned HTTP 400; using the
+portal's own header returned HTTP 200 for the files below. No login token was needed.
+
+| Source                                                                                                                                                                               |  Bytes | SHA-256                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -----: | ------------------------------------------------------------------ |
+| [Account consent YAML](https://apic-ext-sbx.apps.ambientesbc.com/developer-portal-public/apis/open-banking/account-information/account-information-account-access-consents.yaml)     | 28,571 | `7f6bdf7d362f858dc4ef0e7127965f1529847c7cfeaa201462df564bbba94d6f` |
+| [Accounts YAML](https://apic-ext-sbx.apps.ambientesbc.com/developer-portal-public/apis/open-banking/account-information/account-information-accounts.yaml)                           | 18,495 | `ed4cd62bf7c24b7f64161f53c059b1456bed75eb41edf22b6768126dd9305ff7` |
+| [Authorization guide](https://apic-ext-sbx.apps.ambientesbc.com/developer-portal-public/products/open-banking/open-banking-authorization/openBanking-Authorization-Documentation.md) |  8,923 | `aef3fcf108a8ddb1382fd72f4650a1f637871114f88e16195a7817a22ff82d0f` |
+| [Account information guide](https://apic-ext-sbx.apps.ambientesbc.com/developer-portal-public/products/open-banking/account-information/accounts-information-Documentation.md)       | 12,172 | `c80375ddd3f6c86f9c287fc5fefc4272ff5fbee4c97335cf1da74748dfeb5b0e` |
+| [Token management YAML](https://apic-ext-sbx.apps.ambientesbc.com/developer-portal-public/apis/open-banking/open-banking-authorization/access-token-management.yaml)                 | 13,802 | `ce962bf47aa5d4804b940908ac2f5a3dbe231eca8b08def7831f0bbc1c382139` |
+
+The [public product list](https://apic-ext-sbx.apps.ambientesbc.com/developer-portal-public/products/open-banking/productListOB.json)
+identifies these contract filenames. These are the same consent/accounts/guide bytes
+previously recorded in the repository's August research; retrieval now confirms continued
+public availability, not that every example matches Fidy's October support profile.
+
+## What the bank already publishes
+
+1. [Live OIDC discovery](https://auth1-api-open-finance-sandbox.ambientesbc.com/.well-known/openid-configuration)
+   publishes revocation at
+   `https://as1-api-open-finance-sandbox.ambientesbc.com/token/revoke` and introspection at
+   `https://as1-api-open-finance-sandbox.ambientesbc.com/introspection`. Their mTLS aliases
+   are those same URLs. Token endpoint methods include `client_secret_basic`,
+   `client_secret_jwt`, `tls_client_auth`, and `private_key_jwt`. Discovery contains no
+   revocation-specific or introspection-specific authentication method metadata.
+2. The [accounts contract](https://apic-ext-sbx.apps.ambientesbc.com/developer-portal-public/apis/open-banking/account-information/account-information-accounts.yaml)
+   contains `Data.AccountReport[]`, including `AccountIdentification`, and **nested
+   `Data.Links`**. `Previous`, `Self`, `Next`, and `Last` use `pageNumber` in examples.
+   Absence of `Next` means the last page. Its example host/path is illustrative; it must
+   not be blindly followed with a bearer token. It does not define `Meta.TotalPages`.
+3. The [consent contract](https://apic-ext-sbx.apps.ambientesbc.com/developer-portal-public/apis/open-banking/account-information/account-information-account-access-consents.yaml)
+   defines POST creation and GET retrieval, with sample response fields including
+   `ConsentId`, `Permissions`, `Status`, and `StatusUpdateDateTime`. It defines **no DELETE,
+   PATCH, or other consent cancellation operation**. Its GET path is
+   `/accounts/{consentId}/account-access-consent`, which conflicts with the support
+   collection's selected path; the public path does not override support.
+4. The [account information guide](https://apic-ext-sbx.apps.ambientesbc.com/developer-portal-public/products/open-banking/account-information/accounts-information-Documentation.md)
+   describes revoked consent through the ASPSP interface and business error
+   `BP40353007` for revocation. It does not specify a TPP cancellation request. Its status
+   table uses Spanish labels, not a definitive wire-value enum. Its token guidance assigns
+   client credentials to consent access and authorization-code tokens to account data.
+5. The [token management contract](https://apic-ext-sbx.apps.ambientesbc.com/developer-portal-public/apis/open-banking/open-banking-authorization/access-token-management.yaml)
+   describes `/token` and a health operation only. Its `private_key_jwt` requirement is
+   documented for token issuance; it supplies no revocation/introspection operation or
+   uncertain-exchange reconciliation endpoint.
+
+An actionable implementation correction follows from item 2: the current activation
+response reader's top-level `Links` and `page` assumption does not match the recovered
+public account response. Support's collection supplies no conflicting pagination example,
+so this evidence should inform the reader and tests before live proof.
+
+## What standards answer, and what they do not
+
+| Question                                         | Answer available now                                                                                                                                                                                            | Boundary                                                                                                                                 |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Revocation method/body                           | HTTPS POST, form-encoded `token`, optional `token_type_hint=access_token` or `refresh_token`, client authentication. [RFC 7009 §2.1](https://www.rfc-editor.org/rfc/rfc7009.html#section-2.1)                   | Requires the actual token. There is no standard `ConsentId` parameter.                                                                   |
+| Missing revocation auth metadata                 | RFC 8414 defaults to `client_secret_basic`; it does **not** inherit the token endpoint's method list. [RFC 8414 §2](https://www.rfc-editor.org/rfc/rfc8414.html#section-2)                                      | A standard-derived candidate for this bank profile; not proof Fidy's registration accepts it.                                            |
+| Missing introspection auth metadata              | Authentication methods must be determined by other means. [RFC 8414 §2](https://www.rfc-editor.org/rfc/rfc8414.html#section-2)                                                                                  | Discovery alone does not prove `private_key_jwt` or Basic works here.                                                                    |
+| Introspection body and result                    | Form POST with `token` and optional hint; response includes `active`. Authentication is mandatory. [RFC 7662 §2](https://www.rfc-editor.org/rfc/rfc7662.html#section-2)                                         | `active:false` can also mean the caller cannot inspect that token. Establish a positive baseline before using it as revocation evidence. |
+| Does HTTP 200 prove bank cleanup?                | Revocation returns 200 even for an invalid token; related-token invalidation depends on supported policy. [RFC 7009 §2.2](https://www.rfc-editor.org/rfc/rfc7009.html#section-2.2)                              | Record actual evidence for every held token; a 200 response is not proof that a consent was canceled.                                    |
+| Can a timed-out code exchange simply be retried? | A client must not use a code more than once; repeated use must be denied and should revoke previously issued tokens when possible. [RFC 6749 §4.1.2](https://www.rfc-editor.org/rfc/rfc6749.html#section-4.1.2) | Replaying a possibly consumed code is not a specified reconciliation procedure.                                                          |
+
+OAuth token revocation and account consent cancellation are separate concepts. None of
+these RFCs defines a bank-specific consent deletion route or guarantees that revoking a
+token changes the bank's consent resource. No applicable public Bancolombia/Ozone source
+establishing that missing operation was found in the sources searched. Ozone documentation
+for another country's bank-internal consent manager is not evidence of a Bancolombia TPP
+endpoint.
+
+## Next verification and any eventual support question
+
+Correct the account response/pagination interpretation using the recovered contract;
+retain the support-defined request paths and corrected consent creation body. Then run a
+controlled sandbox grant lifecycle with the existing protected credentials, establishing
+which advertised token operations actually accept Fidy's registration and what responses
+they produce. This research did not perform those authenticated tests.
+
+If that verification does not resolve consent cleanup, the focused question is: **How does
+Fidy invalidate or reconcile a particular account ConsentId when authorization-code
+exchange may have succeeded but Fidy received no tokens?** Include the tested token
+revocation/introspection results rather than asking the bank to repeat the already public
+endpoints, generic request body, or account examples. Absence from the examined contracts
+is evidence of a documentation gap, not proof that no bank-supported mechanism exists.
+
+## Controlled Basic-authentication probe
+
+On 2026-10-27, a separate authorized check confirmed the supplied environment's Basic credential
+belongs to Fidy's registered client without printing it. Using that credential and the supplied
+mTLS certificate, one client-credentials request to `/token` returned HTTP 400 `invalid_client`.
+Because no token was issued, the subsequent `/introspection` and `/token/revoke` requests used an
+explicitly invalid probe token. Both returned HTTP 400 `invalid_client`. There were no retries,
+redirects, customer consent changes or Account reads. No raw credentials or response bodies were
+recorded. This rules out treating the default Basic-authentication assumption as verified for Fidy;
+it does not prove that the registered JWT method works at these endpoints.
+
+The follow-up implementation routes a JWT application-token lifecycle check through the existing
+protected Core verification. It must establish a positive active-token baseline before accepting
+an inactive result after revocation. This check is synthetic-test verified only until a protected
+release and live execution complete. Customer access/refresh cleanup and uncertain-exchange
+ConsentId handling remain unverified and are not installed as automatic cleanup on this evidence.

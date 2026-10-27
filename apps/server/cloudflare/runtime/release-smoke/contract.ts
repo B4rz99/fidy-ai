@@ -18,6 +18,7 @@ export const SmokeFailureStage = Schema.Literals([
   "bancolombia_signing",
   "bancolombia_discovery",
   "bancolombia_authentication",
+  "bancolombia_token_lifecycle",
   "admission",
   "d1_quota",
   "identity",

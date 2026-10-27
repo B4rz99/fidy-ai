@@ -86,6 +86,7 @@ const queryOwners = new Map<string, QueryOwner>([
       "connections.listInstitutions",
       "connections.listConnections",
       "connections.getConnection",
+      "connections.listAccounts",
     ] as const
   ).map((operation): readonly [string, QueryOwner] => [
     operation,

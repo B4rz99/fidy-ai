@@ -1,11 +1,16 @@
+import { makeWorkerCrypto } from "../secret-material/runtime";
 import {
   bancolombiaSandboxAdmission,
+  makeBancolombiaSandboxActivation,
   makeBancolombiaSandboxPreparation,
 } from "../bancolombia-authentication/runtime";
 import type { BancolombiaSandboxEnvironment } from "../bancolombia-authentication/contract";
 import {
+  ConnectionActivation,
   ConnectionBank,
+  type ConnectionBankActivation,
   type ConnectionBankPreparation,
+  ConnectionGrantKey,
   ConnectionSandboxAdmission,
 } from "../connections/contract";
 import {
@@ -50,7 +55,10 @@ import type { ErasureStore } from "../erasure-store/contract";
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import { executeConsentRenewal, executeConsentWithdrawal } from "../consent/operations";
-import { executeConnectionBrowserAdmission } from "../connections/operations";
+import {
+  executeConnectionBrowserAdmission,
+  executeConnectionCallbackAdmission,
+} from "../connections/operations";
 import {
   executeRefundSupportAdmission,
   executeSubscriptionRenewalAdmission,
@@ -75,7 +83,18 @@ import { executeOAuthRefresh, executeOAuthRevocation } from "../oauth-agents/ope
 import type { HostedCommitFence } from "../agent/contract";
 import { UserId } from "../../src/core/identity/contract";
 
-import { Clock, Data, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
+import {
+  Clock,
+  Crypto,
+  Data,
+  DateTime,
+  Effect,
+  Exit,
+  Option,
+  Redacted,
+  Schema,
+  type Scope,
+} from "effect";
 
 import { optionalHostedInference } from "../ai/runtime";
 import type { WorkersAiEnvironment } from "../ai/contract";
@@ -403,17 +422,19 @@ const privateConnectionActivity = (
 ): Option.Option<Effect.Effect<Response>> => {
   if (
     input.request.method !== "POST" ||
-    new URL(input.request.url).pathname !== "/connection-begin"
+    !["/connection-begin", "/connection-callback"].includes(new URL(input.request.url).pathname)
   ) {
     return Option.none();
   }
   return Option.some(
-    executeConnectionBrowserAdmission({
+    (new URL(input.request.url).pathname === "/connection-callback"
+      ? executeConnectionCallbackAdmission
+      : executeConnectionBrowserAdmission)({
       db: input.environment.DB,
       candidate: input.candidate,
       userId: input.userId,
       signal: input.request.signal,
-    })
+    }).pipe(Effect.provideService(Crypto.Crypto, makeWorkerCrypto()))
   );
 };
 const consentActivities = new Map([
@@ -648,6 +669,7 @@ export class UserTransactionCoordinator {
   private readonly mcp: McpResidency;
   private readonly institutions: typeof registeredConnectionInstitutionIds;
   private readonly bank: Option.Option<ConnectionBankPreparation>;
+  private readonly activation: Option.Option<ConnectionBankActivation>;
   constructor(
     state: Readonly<{
       id: Readonly<{ name: string }>;
@@ -657,12 +679,20 @@ export class UserTransactionCoordinator {
     configuration: Readonly<{
       institutions: typeof registeredConnectionInstitutionIds;
       bank: Option.Option<ConnectionBankPreparation>;
-    }> = { institutions: registeredConnectionInstitutionIds, bank: Option.none() }
+      activation: Option.Option<ConnectionBankActivation>;
+    }> = {
+      institutions: registeredConnectionInstitutionIds,
+      bank: Option.none(),
+      activation: Option.none(),
+    }
   ) {
     this.state = state;
     this.institutions = configuration.institutions;
     this.bank = Option.orElse(configuration.bank, () =>
       makeBancolombiaSandboxPreparation({ environment: env, userId: state.id.name })
+    );
+    this.activation = Option.orElse(configuration.activation, () =>
+      makeBancolombiaSandboxActivation({ environment: env, userId: state.id.name })
     );
     this.erasureEnvironment = env;
     this.env = withErasureRecovery(env);
@@ -815,10 +845,21 @@ export class UserTransactionCoordinator {
           return yield* executeCanonicalAdmission(admission.value, environment, Option.none());
         })
       ).pipe(
-        Effect.provideService(ConnectionInstitutions, this.institutions),
-        Effect.provideService(ConnectionSandboxAdmission, bancolombiaSandboxAdmission(environment)),
-        Effect.provideService(ConnectionBank, this.bank),
+        (work) => this.withConnectionContext(work),
         (work) => observeCoordinatorRequest(work, request, environment)
+      )
+    );
+  }
+
+  private withConnectionContext<A, E>(work: Effect.Effect<A, E>): Effect.Effect<A, E> {
+    return work.pipe(
+      Effect.provideService(ConnectionInstitutions, this.institutions),
+      Effect.provideService(ConnectionSandboxAdmission, bancolombiaSandboxAdmission(this.env)),
+      Effect.provideService(ConnectionBank, this.bank),
+      Effect.provideService(ConnectionActivation, this.activation),
+      Effect.provideService(
+        ConnectionGrantKey,
+        Option.map(Option.fromUndefinedOr(this.env.BANCOLOMBIA_SANDBOX_GRANT_KEY), Redacted.make)
       )
     );
   }

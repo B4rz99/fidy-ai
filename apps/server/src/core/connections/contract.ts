@@ -32,6 +32,16 @@ export const Connection = Schema.Struct({
 }).annotate({ identifier: "Connection" });
 export type Connection = typeof Connection.Type;
 
+export const AccountId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("AccountId"))
+  .annotate({ identifier: "AccountId" });
+export type AccountId = typeof AccountId.Type;
+
+export const Account = Schema.Struct({ id: AccountId, connectionId: ConnectionId }).annotate({
+  identifier: "Account",
+});
+export type Account = typeof Account.Type;
+
 /** Discovery includes unavailable institutions and only the caller's current association. */
 export const InstitutionSummary = Schema.Struct({
   id: InstitutionId,

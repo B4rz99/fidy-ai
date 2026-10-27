@@ -3,10 +3,16 @@ import {
   institutionsForUser,
   registeredInstitutionPredicate,
 } from "./internal/institution-registration";
-import { ConnectionBrowserAdmission, ConnectionRetentionUnavailable } from "./contract";
+import {
+  ConnectionBrowserAdmission,
+  ConnectionCallbackAdmission,
+  ConnectionRetentionUnavailable,
+} from "./contract";
+import { completeAuthorization } from "./internal/activation";
+import { browseAccounts } from "./internal/accounts";
 import { beginContinuation } from "./internal/browser";
 import { initiationStatements, readInitiationResult } from "./internal/initiation";
-import { Effect, Option, Schema } from "effect";
+import { type Crypto, Effect, Option, Schema } from "effect";
 import {
   ConnectInstitutionInput,
   Connection,
@@ -156,6 +162,9 @@ export const browseConnections = ({
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const current = transactionNow();
+    if (operation === "connections.listAccounts") {
+      return yield* browseAccounts({ db, subject, request, current });
+    }
     const authority = callerAuthority({ subject, current });
     const id =
       operation === "connections.getConnection"
@@ -283,6 +292,25 @@ export const executeConnectionBrowserAdmission = (
     return Effect.succeed(transactionUnavailable());
   }
   return beginContinuation({ db: input.db, admission: admission.value, signal: input.signal });
+};
+
+export const executeConnectionCallbackAdmission = (
+  input: Readonly<{ db: D1Database; candidate: unknown; userId: string; signal: AbortSignal }>
+): Effect.Effect<Response, never, Crypto.Crypto> => {
+  const admission = Schema.decodeUnknownOption(ConnectionCallbackAdmission, {
+    onExcessProperty: "error",
+  })(input.candidate);
+  if (Option.isNone(admission) || admission.value.userId !== input.userId) {
+    return Effect.succeed(transactionUnavailable());
+  }
+  return completeAuthorization({
+    db: input.db,
+    admission: admission.value,
+    signal: input.signal,
+  }).pipe(
+    Effect.as(new Response(null, { status: 204, headers: transactionNoStore })),
+    Effect.orElseSucceed(transactionUnavailable)
+  );
 };
 
 /** Until #313 publishes completed suppression, an enabled institution's Connection blocks whole-User erasure. */

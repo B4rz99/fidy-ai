@@ -1,3 +1,5 @@
+import { ConnectionResult } from "./result";
+import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter, useSearch } from "@tanstack/react-router";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
@@ -207,6 +209,49 @@ export const ConnectionContinuationFeature = (): JSX.Element => {
       ) : (
         <p role="alert">La solicitud no es válida.</p>
       )}
+    </main>
+  );
+};
+
+export const ConnectionResultFeature = (): JSX.Element => {
+  const client = useRouter().options.context.apiClient;
+  const [query] = useState(() =>
+    client.query("connections", "listConnections", { timeToLive: "0 seconds" })
+  );
+  const result = useAtomValue(query).pipe(presentCanonicalQuery);
+  const refresh = useAtomRefresh(query);
+  return (
+    <main className="flex min-h-svh flex-col">
+      <WorkspaceHeader title="Conexión con Bancolombia" context={null}>
+        <Button variant="outline" disabled={result.waiting} onClick={refresh}>
+          Consultar estado
+        </Button>
+      </WorkspaceHeader>
+      <div className="flex max-w-2xl flex-col gap-5 p-5">
+        {result._tag === "Initial" ? <output>Consultando conexión…</output> : null}
+        {result._tag === "Failure" ? (
+          <div role="alert">
+            <p>
+              No pudimos verificar la conexión. Inicia sesión con la cuenta de Fidy que comenzó la
+              solicitud y vuelve a consultar.
+            </p>
+            <Button variant="outline" render={<Link to="/login" />}>
+              Iniciar sesión
+            </Button>
+          </div>
+        ) : null}
+        {result._tag === "Ready" && Option.isSome(result.refreshFailure) ? (
+          <p role="alert">
+            No pudimos actualizar el estado. La información mostrada puede estar desactualizada.
+          </p>
+        ) : null}
+        {result._tag === "Ready" ? <ConnectionResult connections={result.value.data} /> : null}
+        <div>
+          <Button variant="outline" render={<Link to="/app/transactions" />}>
+            Volver a Fidy
+          </Button>
+        </div>
+      </div>
     </main>
   );
 };

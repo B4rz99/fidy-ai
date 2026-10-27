@@ -1,4 +1,5 @@
 import { fixtureWorker as scheduledCoreWorker } from "../core-worker.test-fixture";
+import { activationFixture } from "../bancolombia-activation.test-fixture";
 import { requiresErasureSuppression } from "./operations";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -18,12 +19,14 @@ import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import { Base64Url } from "effect/encoding";
 import {
   ConnectionAuthorizationUnavailable,
+  type ConnectionBankActivation,
   type ConnectionBankPreparation,
   ConnectionConsentIntent,
 } from "./contract";
 
 const institutionRegistration = { enabled: false };
 let bankPreparation: Option.Option<ConnectionBankPreparation> = Option.none();
+let bankActivation: Option.Option<ConnectionBankActivation> = Option.none();
 let sandboxProfile = Option.none<string>();
 
 const fixtureConsentIntent = (): ConnectionBankPreparation["intent"] => ({
@@ -115,6 +118,7 @@ afterAll(() => databases.dispose());
 beforeEach(() => {
   institutionRegistration.enabled = false;
   bankPreparation = Option.none();
+  bankActivation = Option.none();
   sandboxProfile = Option.none();
   vi.useFakeTimers({ toFake: ["Date"] });
 });
@@ -175,10 +179,11 @@ const send = (
                     {
                       DB: db,
                       BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: Option.getOrUndefined(sandboxProfile),
+                      BANCOLOMBIA_SANDBOX_GRANT_KEY: "A".repeat(43),
                       AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
                       HOSTED_AI_MODEL: approvedWorkersAiModel,
                     },
-                    { institutions, bank: bankPreparation }
+                    { institutions, bank: bankPreparation, activation: bankActivation }
                   );
                   coordinators.set(`${name}:${institutionRegistration.enabled}`, coordinator);
                 }
@@ -216,7 +221,7 @@ const request = (
       ...(body === undefined ? {} : { "content-type": "application/json" }),
     },
   };
-  return new Request(
+  const value = new Request(
     `https://api.fidyapp.com${path}`,
     body === undefined
       ? init
@@ -225,6 +230,10 @@ const request = (
           body: JSON.stringify(body),
         }
   );
+  if (path.startsWith("/connections/bancolombia/sandbox/callback")) {
+    value.headers.delete("Fidy-Session-Binding");
+  }
+  return value;
 };
 it("discovers Bancolombia as unavailable without creating a Connection or exposing institution plumbing", () =>
   Effect.runPromise(
@@ -355,6 +364,320 @@ const start = (db: D1Database, index = 0): Promise<ConnectInstitutionResult> =>
       )(yield* Effect.tryPromise(() => response.json()))).data;
     })
   );
+it("returns a bank callback to a fixed first-party result without reflecting authorization credentials", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const response = yield* Effect.tryPromise(() =>
+        send(
+          db,
+          request(
+            0,
+            "/connections/bancolombia/sandbox/callback?code=synthetic-code&state=" + "s".repeat(43)
+          )
+        )
+      );
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe("https://app.fidyapp.com/connections/result");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+      expect(yield* Effect.tryPromise(() => response.text())).not.toContain("synthetic-code");
+    })
+  ));
+const prepareActivation = (
+  db: D1Database
+): Effect.Effect<
+  Readonly<{
+    bank: Effect.Success<typeof activationFixture>;
+    started: Extract<ConnectInstitutionResult, { type: "continue_in_browser" }>;
+    state: string;
+    callback: (index?: number, query?: string) => Promise<Response>;
+  }>,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    institutionRegistration.enabled = true;
+    coordinatorByDatabase.delete(db);
+    const bank = yield* activationFixture;
+    bankActivation = Option.some(bank.activation);
+    let state = "";
+    bankPreparation = Option.some({
+      intent: fixtureConsentIntent(),
+      prepare: (input) => {
+        state = input.state;
+        return input.recordConsent("synthetic-consent").pipe(
+          Effect.as({
+            url: "https://auth1-api-open-finance-sandbox.ambientesbc.com/auth?client_id=10000000-0000-4000-8000-000000000001&response_type=code&scope=accounts&request_uri=urn:ietf:params:oauth:request_uri:synthetic",
+            expiresAtMilliseconds: DateTime.nowUnsafe().epochMilliseconds + 90000,
+          })
+        );
+      },
+    });
+    const started = yield* Effect.tryPromise(() => start(db));
+    if (started.type !== "continue_in_browser") throw new Error("Expected continuation");
+    const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+    expect(
+      (yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+      )).status
+    ).toBe(200);
+    const callback = (index = 0, query = `code=synthetic-code&state=${state}`): Promise<Response> =>
+      send(db, request(index, `/connections/bancolombia/sandbox/callback?${query}`));
+    return { bank, started, state, callback };
+  });
+it.each(["ready", "paginated"] as const)(
+  "activates one owned Connection after a complete %s bank round trip, keeps tokens encrypted and refuses replay",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const { bank, started, callback } = yield* prepareActivation(db);
+        bank.scenario(scenario);
+        expect(
+          (yield* Effect.tryPromise(() => Promise.all([callback(), callback()]))).map(
+            (response) => response.status
+          )
+        ).toEqual([303, 303]);
+        const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+        expect(yield* Effect.tryPromise(() => listed.json())).toMatchObject({
+          data: [{ id: started.connection.id, state: "Active" }],
+        });
+        expect(bank.exchanges()).toBe(1);
+        expect((yield* Effect.tryPromise(() => callback())).status).toBe(303);
+        expect(bank.exchanges()).toBe(1);
+        const retained = yield* Effect.tryPromise(() =>
+          db.prepare("SELECT * FROM connection_grants").all()
+        );
+        const storage = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+          retained.results
+        );
+        expect(storage).not.toContain("synthetic-access");
+        expect(storage).not.toContain("synthetic-refresh");
+        expect(retained.results).toHaveLength(1);
+        const accounts = yield* Effect.tryPromise(() =>
+          send(db, request(0, `/connections/${started.connection.id}/accounts`))
+        );
+        expect(accounts.status).toBe(200);
+        expect(yield* Effect.tryPromise(() => accounts.json())).toMatchObject({
+          data: [{ connectionId: started.connection.id }, { connectionId: started.connection.id }],
+          next: [],
+        });
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, request(1, `/connections/${started.connection.id}/accounts`))
+          )).status
+        ).toBe(404);
+      })
+    )
+);
+it.each([
+  "issuer",
+  "subject",
+  "expired",
+  "future",
+  "not-before",
+  "intent",
+  "authorized-party",
+  "access-hash",
+  "code-hash",
+  "state-hash",
+  "audience",
+  "signature",
+  "consent",
+  "permissions",
+  "malformed",
+  "duplicate",
+  "partial",
+  "foreign-page",
+  "looped-page",
+  "skipped-page",
+  "over-limit",
+  "invalid-position",
+  "truncated",
+  "contradictory",
+  "uncertain",
+] as const)(
+  "refuses %s bank authority without Account settlement or a repeated code exchange",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const { bank, started, callback } = yield* prepareActivation(db);
+        bank.scenario(scenario);
+        expect((yield* Effect.tryPromise(() => callback())).status).toBe(303);
+        const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+        expect(yield* Effect.tryPromise(() => listed.json())).toMatchObject({
+          data: [{ state: "Action required" }],
+        });
+        const accounts = yield* Effect.tryPromise(() =>
+          send(db, request(0, `/connections/${started.connection.id}/accounts`))
+        );
+        expect(yield* Effect.tryPromise(() => accounts.json())).toEqual({ data: [], next: [] });
+        yield* Effect.tryPromise(() => callback());
+        expect(bank.exchanges()).toBe(1);
+        expect(
+          (yield* Effect.tryPromise(() => db.prepare("SELECT state FROM connection_grants").all()))
+            .results
+        ).toEqual([{ state: "cleanup_required" }]);
+        expect(
+          (yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connection_accounts").all()))
+            .results
+        ).toEqual([]);
+      })
+    )
+);
+it("refuses foreign, wrong-state and denied callbacks without exchanging any code", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { bank, state, callback } = yield* prepareActivation(db);
+      yield* Effect.tryPromise(() => callback(1));
+      yield* Effect.tryPromise(() => callback(0, `code=synthetic-code&state=${"s".repeat(43)}`));
+      yield* Effect.tryPromise(() =>
+        callback(0, `code=synthetic-code&state=${state}&iss=https://evil.example`)
+      );
+      yield* Effect.tryPromise(() => callback(0, `error=access_denied&state=${state}`));
+      yield* Effect.tryPromise(() => callback());
+      expect(bank.exchanges()).toBe(0);
+      const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => listed.json())).toMatchObject({
+        data: [{ state: "Action required" }],
+      });
+    })
+  ));
+it("rolls back Accounts and Active authority when the completion Audit cannot commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { bank, callback } = yield* prepareActivation(db);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER fail_activation_audit BEFORE INSERT ON audit_entries WHEN NEW.operation='connections.completeAuthorization' BEGIN SELECT RAISE(ABORT,'synthetic_audit_failure'); END"
+          )
+          .run()
+      );
+      yield* Effect.tryPromise(() => callback());
+      expect(bank.exchanges()).toBe(1);
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connection_accounts").all()))
+          .results
+      ).toEqual([]);
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("SELECT state FROM connection_grants").all()))
+          .results
+      ).toEqual([{ state: "cleanup_required" }]);
+      const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => listed.json())).toMatchObject({
+        data: [{ state: "Action required" }],
+      });
+    })
+  ));
+
+it.each([false, true])(
+  "refuses late bank results after processing Consent is withdrawn, even when renewed=%s",
+  (renewed) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES('processing_grant','activation-grant',?,'{}','disclosure','decision',1,1)"
+            )
+            .bind(users[0])
+            .run()
+        );
+        const { bank, callback } = yield* prepareActivation(db);
+        bank.beforeAccounts(
+          Effect.tryPromise(() =>
+            db
+              .prepare(
+                "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES('processing_withdrawal','activation-withdrawal',?,'activation-grant',?,?)"
+              )
+              .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
+              .run()
+          ).pipe(
+            Effect.flatMap(() =>
+              renewed
+                ? Effect.tryPromise(() =>
+                    db
+                      .prepare(
+                        "INSERT INTO consent_history(record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,occurred_at_ms) VALUES('processing_renewal','activation-renewal',?,'activation-withdrawal','activation-grant',?,'{}',?)"
+                      )
+                      .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
+                      .run()
+                  )
+                : Effect.void
+            ),
+            Effect.asVoid,
+            Effect.orDie
+          )
+        );
+        yield* Effect.tryPromise(() => callback());
+        expect(bank.exchanges()).toBe(1);
+        expect(
+          (yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connection_accounts").all()))
+            .results
+        ).toEqual([]);
+        expect(
+          (yield* Effect.tryPromise(() => db.prepare("SELECT state FROM connection_grants").all()))
+            .results
+        ).toEqual([{ state: "cleanup_required" }]);
+      })
+    )
+);
+
+it.each(["Ended", "superseded", "expired"] as const)(
+  "refuses an %s attempt before any bank code exchange",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const { bank, callback, started } = yield* prepareActivation(db);
+        if (scenario === "Ended") {
+          yield* Effect.tryPromise(() => db.prepare("UPDATE connections SET state='Ended'").run());
+        }
+        if (scenario === "superseded") yield* Effect.tryPromise(() => start(db));
+        if (scenario === "expired") {
+          vi.setSystemTime(started.continuation.expiresAt.epochMilliseconds + 1);
+        }
+        yield* Effect.tryPromise(() => callback());
+        expect(bank.exchanges()).toBe(0);
+        expect(
+          (yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connection_accounts").all()))
+            .results
+        ).toEqual([]);
+      })
+    )
+);
+
+it("allows a bank return after PAR expiry within the original attempt and preserves Account identities across reauthorization", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const first = yield* prepareActivation(db);
+      vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 95000);
+      yield* sweepConnectionAttempts({ db, current: DateTime.nowUnsafe().epochMilliseconds });
+      yield* Effect.tryPromise(() => first.callback());
+      expect(first.bank.exchanges()).toBe(1);
+      const read = (): Promise<unknown> =>
+        send(db, request(0, `/connections/${first.started.connection.id}/accounts`)).then(
+          (response) => response.json()
+        );
+      const accounts = yield* Effect.tryPromise(read);
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connections SET state='Action required'").run()
+      );
+      const second = yield* prepareActivation(db);
+      expect(second.started.connection.id).toBe(first.started.connection.id);
+      yield* Effect.tryPromise(() => second.callback());
+      expect(yield* Effect.tryPromise(read)).toEqual(accounts);
+      coordinatorByDatabase.delete(db);
+      yield* Effect.tryPromise(() => second.callback());
+      expect(second.bank.exchanges()).toBe(1);
+    })
+  ));
 it("binds one bank handoff to the original attempt and never repeats its preparation", () =>
   Effect.runPromise(
     Effect.gen(function* () {

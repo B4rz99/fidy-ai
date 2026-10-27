@@ -240,6 +240,7 @@ const expectedQueryFailure = (id: string, peer: boolean): boolean =>
       "dashboard.getDashboardView",
       "budgets.getBudget",
       "connections.getConnection",
+      "connections.listAccounts",
       "transactions.getTransaction",
     ].includes(id));
 

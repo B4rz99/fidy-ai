@@ -116,7 +116,7 @@ const failureThenReplies =
           receipt: "a".repeat(nonceHexLength),
         });
 
-const discardAtPrivacy = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+const visitPrivacy = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar chat" }).click());
     yield* Effect.tryPromise(() =>
@@ -131,6 +131,9 @@ const discardAtPrivacy = (page: Page): Effect.Effect<void, Cause.UnknownError> =
     yield* Effect.tryPromise(() =>
       expect(page.getByRole("button", { name: "Abrir agente Fidy" })).toHaveCount(0)
     );
+  });
+const returnFromPrivacy = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
     yield* Effect.tryPromise(() =>
       page.getByRole("link", { name: "Presupuestos", exact: true }).click()
     );
@@ -147,6 +150,9 @@ const discardAtPrivacy = (page: Page): Effect.Effect<void, Cause.UnknownError> =
       )
     );
   });
+
+const discardAtPrivacy = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  visitPrivacy(page).pipe(Effect.andThen(returnFromPrivacy(page)));
 
 test("a reply received with chat closed is acknowledged only after it becomes visible", ({
   page,
@@ -460,9 +466,15 @@ test("processing observation stops at its bound and Privacy disposes pending che
       yield* Effect.tryPromise(() => expect(page.getByLabel("Mensaje")).toHaveValue(""));
       yield* Effect.tryPromise(() => page.clock.fastForward(progressIntervalMilliseconds));
       yield* Effect.tryPromise(() => expectProgressCount(progress, maximumProgressChecks + 1));
-      yield* discardAtPrivacy(page);
+      yield* Effect.tryPromise(() => page.clock.fastForward(progressIntervalMilliseconds));
+      yield* Effect.tryPromise(() => expectProgressCount(progress, maximumProgressChecks + 2));
+      yield* visitPrivacy(page);
+      const progressAtPrivacy = progress.length;
       yield* Effect.tryPromise(() => page.clock.fastForward(observationWindowMilliseconds));
-      expect(progress).toHaveLength(maximumProgressChecks + 1);
+      expect(progress).toHaveLength(progressAtPrivacy);
+      yield* returnFromPrivacy(page);
+      yield* Effect.tryPromise(() => page.clock.fastForward(observationWindowMilliseconds));
+      expect(progress).toHaveLength(progressAtPrivacy);
       expect(submissions).toHaveLength(2);
     })
   ));

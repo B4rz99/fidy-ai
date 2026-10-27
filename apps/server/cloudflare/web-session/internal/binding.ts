@@ -12,8 +12,10 @@ import {
 import { authenticate } from "./authentication";
 import { noSession, unavailable } from "./support";
 import type { WebSessionRequest } from "../contract";
+import { connectionCallbackPath } from "../../connections/contract";
 
 const independentProofPaths = new Set<string>([
+  connectionCallbackPath,
   ...Object.values(providerPaths),
   ...Object.values(microsoftProviderPaths),
   webAuthenticationEndpoints.startPairing.path,

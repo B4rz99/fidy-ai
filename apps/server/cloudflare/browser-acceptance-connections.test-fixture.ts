@@ -1,35 +1,28 @@
 import { UserId } from "../src/core/identity/contract";
+import { activationFixture } from "./bancolombia-activation.test-fixture";
 import { BancolombiaAuthorizationFailed } from "./bancolombia-authentication/contract";
-import { Context, Crypto, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import { exportJWK, exportPKCS8, generateKeyPair } from "jose";
-import { TestCrypto } from "../src/shell/testing/crypto-harness";
 import { InstitutionId } from "../src/core/connections/contract";
 import { authorizeBancolombiaSandbox } from "./bancolombia-authentication/operations";
 import {
   ConnectionAuthorizationUnavailable,
+  type ConnectionBankActivation,
   type ConnectionBankPreparation,
   type ConnectionConsentIntent,
 } from "./connections/contract";
 
 const issuer = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
 const as = "https://as1-api-open-finance-sandbox.ambientesbc.com";
-const keys = await Effect.runPromise(
-  Effect.gen(function* () {
-    const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
-    const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
-    return {
-      crypto,
-      privateKey: Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(key.privateKey))),
-      publicKey: {
-        ...(yield* Effect.tryPromise(() => exportJWK(key.publicKey))),
-        kid: "synthetic-authorization-key",
-        alg: "RS256",
-      },
-    };
-  }).pipe(Effect.scoped)
-);
-const Scenario = Schema.Literals(["ready", "destination", "signing", "transport"]);
+const activationBank = await Effect.runPromise(activationFixture);
+const keys = activationBank.credentials;
+const Scenario = Schema.Literals([
+  "ready",
+  "destination",
+  "signing",
+  "transport",
+  "activation-malformed",
+]);
 
 const fixtureAdmissionExpiry = 600000;
 const createdStatus = 201;
@@ -97,49 +90,72 @@ const fixtureIntent = (): ConnectionConsentIntent => ({
   expiryPolicy: "bank-default",
 });
 
+const prepareBank = (
+  input: Readonly<{
+    userId: string;
+    scenario: typeof Scenario.Type;
+    intent: ConnectionConsentIntent;
+    request: Parameters<ConnectionBankPreparation["prepare"]>[0];
+  }>
+): ReturnType<ConnectionBankPreparation["prepare"]> => {
+  const { userId, scenario, intent, request } = input;
+  return request.userId !== userId
+    ? Effect.fail(new ConnectionAuthorizationUnavailable())
+    : authorizeBancolombiaSandbox({
+        ...keys,
+        ...request,
+        profile: Redacted.make({
+          contract: "bancolombia-sandbox-consent-2026-10-27",
+          userId: Schema.decodeSync(UserId)(userId),
+          admission: {
+            startsAt: DateTime.makeUnsafe(0),
+            expiresAt: DateTime.makeUnsafe(fixtureAdmissionExpiry),
+          },
+          financialId: "synthetic-financial-id",
+          accountOwner: { SchemeName: "CC", Identification: "synthetic-identity" },
+          intent,
+        }),
+        recordConsent: (consentId) =>
+          request
+            .recordConsent(consentId)
+            .pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed())),
+        clientId: "10000000-0000-4000-8000-000000000001",
+        privateKey:
+          scenario === "signing" ? Redacted.make("invalid-synthetic-key") : keys.privateKey,
+        httpClient: fixtureClient(scenario, intent),
+      }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable()));
+};
+
 export const makeConnectionFixture = (
   userId: string
 ): Readonly<{
   institutions: InstitutionId[];
   bank: ConnectionBankPreparation;
+  activation: ConnectionBankActivation;
   operator: (request: Request) => Option.Option<Promise<Response>>;
 }> => {
   const institutions: InstitutionId[] = [];
   let scenario: typeof Scenario.Type = "ready";
+  let state = "";
   const intent = fixtureIntent();
   const bank: ConnectionBankPreparation = {
     intent,
-    prepare: (input) =>
-      input.userId !== userId
-        ? Effect.fail(new ConnectionAuthorizationUnavailable())
-        : authorizeBancolombiaSandbox({
-            ...keys,
-            ...input,
-            profile: Redacted.make({
-              contract: "bancolombia-sandbox-consent-2026-10-27",
-              userId: Schema.decodeSync(UserId)(userId),
-              admission: {
-                startsAt: DateTime.makeUnsafe(0),
-                expiresAt: DateTime.makeUnsafe(fixtureAdmissionExpiry),
-              },
-              financialId: "synthetic-financial-id",
-              accountOwner: { SchemeName: "CC", Identification: "synthetic-identity" },
-              intent,
-            }),
-            recordConsent: (consentId) =>
-              input
-                .recordConsent(consentId)
-                .pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed())),
-            clientId: "10000000-0000-4000-8000-000000000001",
-            privateKey:
-              scenario === "signing" ? Redacted.make("invalid-synthetic-key") : keys.privateKey,
-            httpClient: fixtureClient(scenario, intent),
-          }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable())),
+    prepare: (input) => {
+      state = input.state;
+      return prepareBank({ userId, scenario, intent, request: input });
+    },
   };
   return {
     institutions,
     bank,
+    activation: activationBank.activation,
     operator: (request) => {
+      if (
+        request.method === "POST" &&
+        new URL(request.url).pathname === "/connections/bank-return"
+      ) {
+        return Option.some(Promise.resolve(Response.json({ state })));
+      }
       if (request.method !== "POST" || new URL(request.url).pathname !== "/connections/scenario") {
         return Option.none();
       }
@@ -150,6 +166,7 @@ export const makeConnectionFixture = (
         return Option.some(Promise.resolve(new Response(null, { status: 400 })));
       }
       scenario = parsed.value;
+      activationBank.scenario(scenario === "activation-malformed" ? "malformed" : "ready");
       if (institutions.length === 0) institutions.push(InstitutionId.make("bancolombia"));
       return Option.some(Promise.resolve(new Response(null, { status: 204 })));
     },

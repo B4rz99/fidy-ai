@@ -125,8 +125,20 @@ it.effect("keeps sandbox metadata inside the ingress origin and exact route poli
   })
 );
 
+it.effect("removes oversized callback queries before private forwarding", () =>
+  Effect.gen(function* () {
+    const app = harness();
+    const response = yield* app.fetch(
+      `/connections/bancolombia/sandbox/callback?code=${"x".repeat(9000)}`
+    );
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/connections/bancolombia/sandbox/callback");
+    expect(app.forwarded).toEqual([]);
+  })
+);
+
 it.effect(
-  "clears callback credentials and refuses authorization without forwarding or leaking them",
+  "forwards the callback privately and always clears credentials from browser output and telemetry",
   () =>
     Effect.gen(function* () {
       const app = harness();
@@ -134,16 +146,16 @@ it.effect(
         "/connections/bancolombia/sandbox/callback?code=private-bank-code&state=private-bank-state&redirect_uri=https://evil.example"
       );
       expect(response.status).toBe(303);
-      expect(response.headers.get("location")).toBe("/connections/bancolombia/sandbox/callback");
+      expect(response.headers.get("location")).toBe("https://app.fidyapp.com/connections/result");
       expect(response.headers.get("cache-control")).toBe("no-store");
       expect(response.headers.get("referrer-policy")).toBe("no-referrer");
       const clean = yield* app.fetch("/connections/bancolombia/sandbox/callback");
-      expect(clean.status).toBe(503);
+      expect(clean.status).toBe(303);
       const body = yield* Effect.tryPromise({
         try: () => clean.text(),
         catch: () => "response_read_failed" as const,
       });
-      expect(body).toContain("aún no está disponible");
+      expect(body).toBe("");
       const observable = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
         body,
         headers: [...response.headers],
@@ -152,6 +164,6 @@ it.effect(
       expect(observable).not.toContain("private-bank-code");
       expect(observable).not.toContain("private-bank-state");
       expect(observable).not.toContain("evil.example");
-      expect(app.forwarded).toEqual([]);
+      expect(app.forwarded).toEqual(["Core request", "Core request"]);
     })
 );

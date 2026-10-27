@@ -1,5 +1,6 @@
 import {
   ConnectionAuthorizationUnavailable,
+  type ConnectionBankActivation,
   type ConnectionBankPreparation,
 } from "../connections/contract";
 import {
@@ -22,7 +23,12 @@ import {
   BancolombiaConsentProfile,
   type BancolombiaSandboxEnvironment,
 } from "./contract";
-import { authenticateBancolombiaSandbox, authorizeBancolombiaSandbox } from "./operations";
+import {
+  activateBancolombiaSandbox,
+  type authenticateBancolombiaSandbox,
+  authorizeBancolombiaSandbox,
+  verifyBancolombiaSandboxTokenLifecycle,
+} from "./operations";
 
 const maximumPrivateKeyLength = 20000;
 const maximumProfileLength = 8192;
@@ -81,7 +87,7 @@ const withSandboxClient = <A, E>(
 export const verifyBancolombiaSandboxAuthentication = (
   environment: BancolombiaSandboxEnvironment
 ): Effect.Effect<void, BancolombiaAuthenticationFailed> =>
-  withSandboxClient(environment, authenticateBancolombiaSandbox);
+  withSandboxClient(environment, verifyBancolombiaSandboxTokenLifecycle);
 
 const sandboxProfile = (
   environment: BancolombiaSandboxEnvironment
@@ -144,5 +150,48 @@ export const makeBancolombiaSandboxPreparation = (
     Option.map((profile) => ({
       intent: profile.intent,
       prepare: (request) => prepareProfile(input.environment, profile, request),
+    }))
+  );
+
+const activateProfile = (
+  environment: BancolombiaSandboxEnvironment,
+  profile: BancolombiaConsentProfile,
+  request: Parameters<ConnectionBankActivation["activate"]>[0]
+): ReturnType<ConnectionBankActivation["activate"]> =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    if (
+      request.userId !== profile.userId ||
+      now < profile.admission.startsAt.epochMilliseconds ||
+      now >= profile.admission.expiresAt.epochMilliseconds
+    ) {
+      return yield* new ConnectionAuthorizationUnavailable();
+    }
+    return yield* withSandboxClient(environment, (client) =>
+      activateBancolombiaSandbox({
+        ...client,
+        ...request,
+        expiresAtMilliseconds: Math.min(
+          request.expiresAtMilliseconds,
+          profile.admission.expiresAt.epochMilliseconds
+        ),
+        retainGrant: (grant) =>
+          request
+            .retainGrant(grant)
+            .pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed())),
+      })
+    );
+  }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable()));
+
+export const makeBancolombiaSandboxActivation = (
+  input: Readonly<{ environment: BancolombiaSandboxEnvironment; userId: string }>
+): Option.Option<ConnectionBankActivation> =>
+  Option.filter(
+    sandboxProfile(input.environment),
+    (profile) => profile.userId === input.userId
+  ).pipe(
+    Option.map((profile) => ({
+      clientId: input.environment.BANCOLOMBIA_SANDBOX_CLIENT_ID ?? "",
+      activate: (request) => activateProfile(input.environment, profile, request),
     }))
   );

@@ -63,8 +63,8 @@ it("partitions the complete browser suite across both runners without dropping o
         !line.includes("temporary Consent chronology diagnostic")
     );
   expect(containmentDiagnostic(complete)).toHaveLength(1);
-  expect(consentDiagnostic(complete)).toHaveLength(2);
-  expect(performance(complete)).toHaveLength(10);
+  expect(consentDiagnostic(complete)).toHaveLength(1);
+  expect(performance(complete)).toHaveLength(9);
   expect(
     browser(complete).some((line) => line.includes("temporary Consent chronology diagnostic"))
   ).toBe(false);
@@ -73,11 +73,11 @@ it("partitions the complete browser suite across both runners without dropping o
     expect(admission(shard)).toEqual(admission(complete));
     expect(nativePerformance(shard)).toHaveLength(index === 0 ? 3 : 4);
     expect(containmentDiagnostic(shard)).toHaveLength(index === 0 ? 1 : 0);
-    expect(consentDiagnostic(shard)).toHaveLength(index === 0 ? 2 : 0);
+    expect(consentDiagnostic(shard)).toHaveLength(index === 0 ? 1 : 0);
   }
   expect(performance(shards.flat()).toSorted()).toEqual([...performance(complete)].sort());
   expect(new Set(nativePerformance(shards.flat())).size).toBe(7);
-  expect(new Set(performance(shards.flat())).size).toBe(10);
+  expect(new Set(performance(shards.flat())).size).toBe(9);
   expect(browser(shards.flat()).toSorted()).toEqual([...browser(complete)].sort());
   expect(new Set(browser(shards.flat())).size).toBe(browser(complete).length);
 });

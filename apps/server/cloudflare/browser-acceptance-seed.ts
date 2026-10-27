@@ -42,9 +42,15 @@ export const recurringIsolatedIdentities = [
   { key: "recurringPagination", userId: "24000000-0000-4000-8000-000000000551" },
 ] as const;
 export const navigationIdentities = [
+  { key: "navigationOAuthLoading", userId: "24000000-0000-4000-8000-000000000751" },
+  { key: "navigationOAuthUnavailable", userId: "24000000-0000-4000-8000-000000000761" },
+  { key: "navigationOAuthSignedOut", userId: "24000000-0000-4000-8000-000000000771" },
   { key: "navigationConsent", userId: "24000000-0000-4000-8000-000000000651" },
   { key: "navigationConsentRetry", userId: "24000000-0000-4000-8000-000000000701" },
   { key: "navigationConsentRecovery", userId: "24000000-0000-4000-8000-000000000711" },
+  { key: "navigationConsentDiagnostic", userId: "24000000-0000-4000-8000-000000000721" },
+  { key: "navigationReviewBaseline", userId: "24000000-0000-4000-8000-000000000731" },
+  { key: "navigationReviewCandidate", userId: "24000000-0000-4000-8000-000000000741" },
   { key: "navigationLoading", userId: "24000000-0000-4000-8000-000000000641" },
   { key: "navigationReviewBudget", userId: "24000000-0000-4000-8000-000000000591" },
   { key: "navigationReviewTransactions", userId: "24000000-0000-4000-8000-000000000601" },

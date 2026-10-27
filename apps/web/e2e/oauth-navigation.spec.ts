@@ -15,9 +15,9 @@ const focusWindow = (): void => {
   window.dispatchEvent(new Event("focus"));
 };
 const conditions = [
-  { review: "loading", consent: "granted" },
-  { review: "unavailable", consent: "granted" },
-  { review: "unavailable", consent: "signed-out" },
+  { review: "loading", consent: "granted", identity: "navigationOAuthLoading" },
+  { review: "unavailable", consent: "granted", identity: "navigationOAuthUnavailable" },
+  { review: "unavailable", consent: "signed-out", identity: "navigationOAuthSignedOut" },
 ] as const;
 
 const visitPrivateWorkspaces = Effect.fnUntraced(function* (page: Page) {
@@ -38,16 +38,14 @@ const visitPrivateWorkspaces = Effect.fnUntraced(function* (page: Page) {
   );
 });
 
-for (const condition of conditions) {
+for (const { identity, ...condition } of conditions) {
   test(`Returning to OAuth ${condition.review} with ${condition.consent} Consent disposes previously visited private workspaces`, ({
     page,
     request,
   }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        yield* Effect.tryPromise(() =>
-          signInNavigationThroughCore({ page, request, identity: "navigationRecurring" })
-        );
+        yield* Effect.tryPromise(() => signInNavigationThroughCore({ page, request, identity }));
         yield* Effect.tryPromise((signal) =>
           page.goto(`/oauth/review/${reviewReference}`, { signal })
         );

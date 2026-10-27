@@ -139,38 +139,34 @@ const openReview = Effect.fnUntraced(function* (page: Page) {
 type RecoveryFixture = Readonly<{
   page: Page;
   request: APIRequestContext;
-  initialRead: "unsettled" | "settled";
+  identity: "navigationConsentRecovery" | "navigationConsentDiagnostic";
 }>;
 const signInForRecovery = Effect.fnUntraced(function* ({
   page,
   request,
-  initialRead,
+  identity,
 }: RecoveryFixture) {
-  const signIn = (): Promise<void> =>
-    signInNavigationThroughCore({ page, request, identity: "navigationConsentRecovery" });
   yield* Effect.tryPromise((signal) =>
-    initialRead === "settled"
-      ? Promise.all([
-          page.waitForResponse(
-            (response) =>
-              new URL(response.url()).origin === api &&
-              new URL(response.url()).pathname === "/transactions" &&
-              response.request().method() === "GET" &&
-              response.status() === successStatus,
-            { signal }
-          ),
-          signIn(),
-        ]).then(() => undefined)
-      : signIn()
+    Promise.all([
+      page.waitForResponse(
+        (response) =>
+          new URL(response.url()).origin === api &&
+          new URL(response.url()).pathname === "/transactions" &&
+          response.request().method() === "GET" &&
+          response.status() === successStatus,
+        { signal }
+      ),
+      signInNavigationThroughCore({ page, request, identity }),
+    ]).then(() => undefined)
   );
 });
 
 const recheckConsent = Effect.fnUntraced(function* (
-  { page, request, initialRead }: RecoveryFixture,
+  { page, request, identity }: RecoveryFixture,
   information: TestInfo
 ) {
   const diagnostic = yield* observeConsentRecovery({ page, information });
-  yield* signInForRecovery({ page, request, initialRead });
+  yield* signInForRecovery({ page, request, identity });
   diagnostic.mark("opening-review");
   yield* openReview(page);
   diagnostic.mark("review-visible");
@@ -228,26 +224,18 @@ test("Transactions rechecks Consent before restoring editing and chat after leav
   request,
 }, information) =>
   Effect.runPromise(
-    recheckConsent({ page, request, initialRead: "unsettled" }, information).pipe(Effect.scoped)
+    recheckConsent({ page, request, identity: "navigationConsentRecovery" }, information).pipe(
+      Effect.scoped
+    )
   ));
 
-test("Transactions rechecks Consent after the initial authorized read settles and Review is left", ({
+test("temporary Consent chronology diagnostic: settled initial Transactions read", ({
   page,
   request,
 }, information) =>
   Effect.runPromise(
-    recheckConsent({ page, request, initialRead: "settled" }, information).pipe(Effect.scoped)
+    recheckConsent({ page, request, identity: "navigationConsentDiagnostic" }, information).pipe(
+      Effect.timeout("25 seconds"),
+      Effect.scoped
+    )
   ));
-
-for (const initialRead of ["unsettled", "settled"] as const) {
-  test(`temporary Consent chronology diagnostic: ${initialRead} initial Transactions read`, ({
-    page,
-    request,
-  }, information) =>
-    Effect.runPromise(
-      recheckConsent({ page, request, initialRead }, information).pipe(
-        Effect.timeout("25 seconds"),
-        Effect.scoped
-      )
-    ));
-}

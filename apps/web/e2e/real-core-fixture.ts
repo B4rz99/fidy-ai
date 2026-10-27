@@ -314,11 +314,17 @@ export const signInRecurringThroughCore = (
 type NavigationFixture = SignInFixture &
   Readonly<{
     identity:
+      | "navigationOAuthLoading"
+      | "navigationOAuthUnavailable"
+      | "navigationOAuthSignedOut"
       | "navigationTransactions"
       | "navigationLoading"
       | "navigationConsent"
       | "navigationConsentRetry"
       | "navigationConsentRecovery"
+      | "navigationConsentDiagnostic"
+      | "navigationReviewBaseline"
+      | "navigationReviewCandidate"
       | "navigationBudget"
       | "navigationRecurring"
       | "navigationReviewBudget"

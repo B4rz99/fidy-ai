@@ -1,5 +1,9 @@
-import { signInNavigationPerformanceThroughCore, signInThroughCore } from "./real-core-fixture";
-import type { Page, Route } from "@playwright/test";
+import {
+  navigateThroughConsent,
+  signInNavigationPerformanceThroughCore,
+  signInThroughCore,
+} from "./real-core-fixture";
+import type { Page, Response, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
@@ -975,7 +979,11 @@ const verifyContainmentPresentation = Effect.fnUntraced(function* (page: Page) {
 const sampleContainmentReturn = Effect.fnUntraced(function* (page: Page) {
   yield* Effect.tryPromise(() => page.bringToFront());
   yield* Effect.tryPromise((signal) =>
-    page.getByRole("link", { name: "Transacciones", exact: true }).click({ signal })
+    navigateThroughConsent({
+      page,
+      navigate: () =>
+        page.getByRole("link", { name: "Transacciones", exact: true }).click({ signal }),
+    })
   );
   yield* Effect.tryPromise((signal) =>
     expect(page.getByRole("heading", { name: "Transacciones", exact: true })).toBeVisible({
@@ -1004,28 +1012,105 @@ const sampleContainmentReturn = Effect.fnUntraced(function* (page: Page) {
   return yield* Schema.decodeUnknownEffect(Schema.FiniteFromString)(raw);
 });
 
+type ContainmentMode = "baseline" | "candidate";
+type ContainmentStatus = Readonly<{
+  mode: ContainmentMode;
+  pair: number;
+  resource: "consent" | "transactions" | "categories" | "review";
+  status: number;
+}>;
+const containmentResource = (pathname: string): ContainmentStatus["resource"] | "unobserved" => {
+  if (pathname === "/web/consent") return "consent";
+  if (pathname === "/transactions") return "transactions";
+  if (pathname === "/categories") return "categories";
+  if (pathname === "/ingestion/review-workspace") return "review";
+  return "unobserved";
+};
+const signInContainmentPage = Effect.fnUntraced(function* (
+  input: Readonly<{ page: Page; baseline: boolean }>
+) {
+  yield* Effect.tryPromise(() =>
+    signInNavigationPerformanceThroughCore({
+      page: input.page,
+      request: input.page.context().request,
+      identity: input.baseline ? "navigationReviewBaseline" : "navigationReviewCandidate",
+    })
+  );
+  return yield* prepareContainmentPage(input.page, input.baseline);
+});
+const observeContainmentResponses = Effect.fnUntraced(function* (
+  input: Readonly<{
+    page: Page;
+    mode: ContainmentMode;
+    pair: () => number;
+    statuses: Array<ContainmentStatus>;
+  }>
+) {
+  const observe = (response: Response): void => {
+    if (input.statuses.length >= 100) return;
+    const url = new URL(response.url());
+    if (url.origin !== apiOrigin) return;
+    const resource = containmentResource(url.pathname);
+    if (resource === "unobserved") return;
+    input.statuses.push({
+      mode: input.mode,
+      pair: input.pair(),
+      resource,
+      status: response.status(),
+    });
+  };
+  input.page.on("response", observe);
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      input.page.off("response", observe);
+    })
+  );
+});
+
+const attachContainmentEvidence = Effect.fnUntraced(function* (
+  input: Readonly<{
+    samples: ReadonlyArray<Readonly<{ mode: ContainmentMode; milliseconds: number }>>;
+    statuses: ReadonlyArray<ContainmentStatus>;
+  }>
+) {
+  const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+    samples: input.samples,
+    statuses: input.statuses,
+    limitation:
+      "Paired synthetic navigation only; original native gate unchanged. Up to 100 status observations; partial samples retained on failure.",
+  });
+  yield* reviewDiagnosticRequest(() =>
+    test.info().attach("review-containment-ab", { body, contentType: "application/json" })
+  );
+});
+
 test("returns from Transacciones with its review form and original already available — containment A/B diagnostic", ({
   page,
-  context,
-  request,
-}) =>
-  Effect.runPromise(
+  browser,
+  baseURL,
+  ignoreHTTPSErrors,
+}) => {
+  const samples: Array<Readonly<{ mode: ContainmentMode; milliseconds: number }>> = [];
+  const statuses: Array<ContainmentStatus> = [];
+  let pair = -1;
+  const attach = attachContainmentEvidence({ samples, statuses });
+  return Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() =>
-        signInNavigationPerformanceThroughCore({
-          page,
-          request,
-          identity: "navigationReviewTransactions",
-        })
-      );
-      const other = yield* Effect.acquireRelease(
-        reviewDiagnosticRequest(() => context.newPage()),
+      const otherContext = yield* Effect.acquireRelease(
+        reviewDiagnosticRequest(() => browser.newContext({ baseURL, ignoreHTTPSErrors })),
         (owned) => reviewDiagnosticRequest(owned.close.bind(owned)).pipe(Effect.exit)
       );
-      const baselineGuard = yield* prepareContainmentPage(page, true);
-      const candidateGuard = yield* prepareContainmentPage(other, false);
-      const samples: Array<Readonly<{ mode: "baseline" | "candidate"; milliseconds: number }>> = [];
-      for (let pair = 0; pair < containmentPairs; pair++) {
+      const other = yield* reviewDiagnosticRequest(() => otherContext.newPage());
+      yield* observeContainmentResponses({ page, mode: "baseline", pair: () => pair, statuses });
+      yield* observeContainmentResponses({
+        page: other,
+        mode: "candidate",
+        pair: () => pair,
+        statuses,
+      });
+      const baselineGuard = yield* signInContainmentPage({ page, baseline: true });
+      const candidateGuard = yield* signInContainmentPage({ page: other, baseline: false });
+      for (pair = 0; pair < containmentPairs; pair++) {
         const order =
           pair % 2 === 0
             ? (["baseline", "candidate"] as const)
@@ -1041,15 +1126,16 @@ test("returns from Transacciones with its review form and original already avail
       expect(candidateGuard.blocked()).toBe(0);
       yield* verifyPrivacyDisposesReview(page);
       yield* verifyPrivacyDisposesReview(other);
-      const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-        samples,
-        limitation: "Paired synthetic navigation only; original native gate unchanged.",
-      });
-      yield* Effect.tryPromise(() =>
-        test.info().attach("review-containment-ab", { body, contentType: "application/json" })
-      );
-    }).pipe(Effect.scoped, Effect.timeout("45 seconds"))
-  ));
+    }).pipe(
+      Effect.scoped,
+      Effect.timeout("25 seconds"),
+      Effect.matchCauseEffect({
+        onFailure: (cause) => attach.pipe(Effect.exit, Effect.andThen(Effect.failCause(cause))),
+        onSuccess: () => attach,
+      })
+    )
+  );
+});
 
 const verifyPrivacyDisposesReview = Effect.fnUntraced(function* (page: Page) {
   yield* Effect.tryPromise((signal) =>

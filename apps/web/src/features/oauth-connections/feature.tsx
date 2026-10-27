@@ -11,7 +11,7 @@ import {
 } from "@/transport/client";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
+import { OAuthState, OAuthWorkspace } from "@/ui/components/oauth-review";
 import { ManagementPage } from "./management-feature";
 import { OAuthReviewView } from "./view";
 
@@ -58,19 +58,12 @@ const makeConnect = (client: WebAuthClient): Atom.AtomResultFn<ConnectCommand, v
     { concurrent: false }
   );
 const ReviewUnavailable = ({ requestId }: Readonly<{ requestId: string }>): JSX.Element => (
-  <Card className="max-w-md">
-    <CardHeader>
-      <CardTitle>Solicitud no disponible</CardTitle>
-      <CardDescription>
-        Puede haber vencido o requerir un nuevo inicio de sesión. No se autorizó ningún acceso.
-      </CardDescription>
-    </CardHeader>
-    <CardContent>
-      <Button render={<Link to="/login" reloadDocument search={{ oauthRequest: requestId }} />}>
-        Iniciar sesión
-      </Button>
-    </CardContent>
-  </Card>
+  <OAuthState title="Solicitud no disponible" kind="warning">
+    <p>Puede haber vencido o requerir un nuevo inicio de sesión. No se autorizó ningún acceso.</p>
+    <Button render={<Link to="/login" reloadDocument search={{ oauthRequest: requestId }} />}>
+      Iniciar sesión
+    </Button>
+  </OAuthState>
 );
 const useReviewedRequest = (
   client: WebAuthClient,
@@ -82,6 +75,16 @@ const useReviewedRequest = (
   const result = useAtomValue(query);
   return presentCanonicalQuery(result);
 };
+const CancelledRequest = (): JSX.Element => (
+  <OAuthState title="Solicitud cancelada" kind="information">
+    <p>No se autorizó ningún acceso.</p>
+  </OAuthState>
+);
+const LoadingRequest = (): JSX.Element => (
+  <OAuthState title="Consultando solicitud" kind="warning">
+    <output>Cargando solicitud…</output>
+  </OAuthState>
+);
 const ReviewContent = ({ requestId }: Readonly<{ requestId: string }>): JSX.Element => {
   const router = useRouter();
   const result = useReviewedRequest(router.options.context.webAuthClient, requestId);
@@ -113,43 +116,43 @@ const ReviewContent = ({ requestId }: Readonly<{ requestId: string }>): JSX.Elem
       settled: () => setCancelling(false),
     });
   };
-  if (cancelled) return <output>Solicitud cancelada. No se autorizó ningún acceso.</output>;
-  if (result._tag === "Initial") return <output>Cargando solicitud…</output>;
+  if (cancelled) return <CancelledRequest />;
+  if (result._tag === "Initial") return <LoadingRequest />;
   if (result._tag === "Failure") return <ReviewUnavailable requestId={requestId} />;
-  return (
-    <div className="flex flex-col gap-3">
-      {connectFailed ? (
+  if (connectFailed) {
+    return (
+      <OAuthState title="Conexión sin confirmar" kind="warning">
         <p role="alert">
           No pudimos confirmar el resultado. Inicia una nueva conexión desde tu agente; no repitas
           esta aprobación.
         </p>
-      ) : null}
-      {cancelFailed ? (
-        <p role="alert">No pudimos cancelar. Intenta de nuevo; no se autorizó ningún acceso.</p>
-      ) : null}
+      </OAuthState>
+    );
+  }
+  return (
+    <OAuthWorkspace title="Conectar con Fidy">
       <OAuthReviewView
         key={result.value.requestId}
         review={result.value}
         cancelling={cancelling}
+        cancelFailed={cancelFailed}
         cancel={cancel}
-        connecting={connecting || connectFailed}
+        connecting={connecting}
         connect={connect}
       />
-    </div>
+    </OAuthWorkspace>
   );
 };
 /** Public references grant no authority and select no post-login destination. */
 export const OAuthReviewFeature = (): JSX.Element => {
   const params = useParams({ strict: false });
   const requestId = Schema.decodeUnknownOption(OAuthRequestId)(params.requestId);
-  return (
-    <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
-      {Option.isSome(requestId) ? (
-        <ReviewContent key={requestId.value} requestId={requestId.value} />
-      ) : (
-        <p role="alert">La solicitud no es válida.</p>
-      )}
-    </main>
+  return Option.isSome(requestId) ? (
+    <ReviewContent key={requestId.value} requestId={requestId.value} />
+  ) : (
+    <OAuthState title="Solicitud no válida" kind="warning">
+      <p role="alert">La solicitud no es válida.</p>
+    </OAuthState>
   );
 };
 

@@ -11,6 +11,13 @@ import {
 } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
+import { OAuthClient, OAuthNotice, OAuthState, OAuthWorkspace } from "@/ui/components/oauth-review";
+
+const expirationFormatter = new Intl.DateTimeFormat("es-CO", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "America/Bogota",
+});
 
 type DecisionCommand = Readonly<{
   choice: typeof OAuthOperationDecision.Type;
@@ -46,17 +53,20 @@ const OperationReview = ({ reference }: Readonly<{ reference: string }>): JSX.El
   );
   if (state === "approved") return <ApprovedOperation />;
   if (state === "cancelled") {
-    return <output>Operación cancelada. No se ejecutó ningún cambio.</output>;
-  }
-  if (state === "unknown") {
     return (
-      <p role="alert">
-        No pudimos confirmar el resultado. Recarga esta página para consultar el estado antes de
-        continuar.
-      </p>
+      <OAuthState title="Operación cancelada" kind="information">
+        <p>No se ejecutó ningún cambio.</p>
+      </OAuthState>
     );
   }
-  if (result._tag === "Initial") return <output>Cargando operación…</output>;
+  if (state === "unknown") return <UnknownOperation />;
+  if (result._tag === "Initial") {
+    return (
+      <OAuthState title="Consultando operación" kind="warning">
+        <output>Cargando operación…</output>
+      </OAuthState>
+    );
+  }
   if (result._tag === "Failure") return <UnavailableOperation reference={reference} />;
   const review = result.value;
   if (review.approved) return <ApprovedOperation />;
@@ -73,20 +83,22 @@ const OperationReview = ({ reference }: Readonly<{ reference: string }>): JSX.El
       failed: () => setState("unknown"),
     });
   };
-  return <OperationView review={review} disabled={state !== "ready"} submit={submit} />;
+  return (
+    <OAuthWorkspace title="Revisar operación">
+      <OperationView review={review} disabled={state !== "ready"} submit={submit} />
+    </OAuthWorkspace>
+  );
 };
 
 export const OAuthOperationFeature = (): JSX.Element => {
   const params = useParams({ strict: false });
   const reference = Schema.decodeUnknownOption(OAuthRequestId)(params.reference);
-  return (
-    <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
-      {Option.isSome(reference) ? (
-        <OperationReview key={reference.value} reference={reference.value} />
-      ) : (
-        <p role="alert">La referencia no es válida.</p>
-      )}
-    </main>
+  return Option.isSome(reference) ? (
+    <OperationReview key={reference.value} reference={reference.value} />
+  ) : (
+    <OAuthState title="Referencia no válida" kind="warning">
+      <p role="alert">La referencia no es válida.</p>
+    </OAuthState>
   );
 };
 
@@ -99,47 +111,76 @@ const OperationView = ({
   disabled: boolean;
   submit: (decision: "approve" | "cancel") => void;
 }>): JSX.Element => (
-  <section className="flex w-full max-w-2xl flex-col gap-4">
-    <h1 className="text-2xl font-semibold">Revisar operación del agente</h1>
-    <p>Cliente (nombre declarado): {review.claimedClientName}</p>
-    <p>Conexión: {review.connectionId}</p>
-    <p>Revisa todos los efectos y la entrada exacta. Aprueba solo si solicitaste esta operación.</p>
-    <ul>
-      {review.effects.map((effect, index) => (
-        <li key={`${index}:${effect}`}>{effect}</li>
-      ))}
-    </ul>
-    <p>Operación: {review.operation}</p>
-    <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded border p-3">
-      {review.inputJson}
-    </pre>
-    <p>
-      Vence: {DateTime.formatIso(DateTime.makeUnsafe(review.expiresAtMilliseconds))}. Aprobar
-      permite continuar una sola vez desde tu agente.
-    </p>
-    <div className="flex gap-3">
-      <Button disabled={disabled} onClick={() => submit("approve")}>
-        Aprobar operación
-      </Button>
-      <Button variant="outline" disabled={disabled} onClick={() => submit("cancel")}>
-        Cancelar operación
-      </Button>
+  <div className="settings-columns">
+    <div className="settings-main">
+      <OAuthClient name={review.claimedClientName}>
+        <p className="oauth-identity">
+          <span>Conexión</span>
+          <span>{review.connectionId}</span>
+        </p>
+        <section className="oauth-operation">
+          <h3>Efectos de la operación</h3>
+          <ul className="oauth-effects">
+            {review.effects.map((effect, index) => (
+              <li key={`${index}:${effect}`}>{effect}</li>
+            ))}
+          </ul>
+          <p className="oauth-operation-name">
+            <span className="oauth-description">Operación</span>
+            <strong>{review.operation}</strong>
+          </p>
+          <h4>Entrada exacta</h4>
+          <pre className="oauth-input">{review.inputJson}</pre>
+        </section>
+      </OAuthClient>
     </div>
-  </section>
+    <aside className="settings-panel oauth-panel" aria-label="Antes de aprobar">
+      <h2>Antes de aprobar</h2>
+      <OAuthNotice kind="warning">
+        Revisa todos los efectos y la entrada exacta. Aprueba solo si solicitaste esta operación.
+      </OAuthNotice>
+      <p className="oauth-expiration">
+        <span className="oauth-description">Esta solicitud vence</span>
+        <time dateTime={DateTime.formatIso(DateTime.makeUnsafe(review.expiresAtMilliseconds))}>
+          {expirationFormatter.format(review.expiresAtMilliseconds)}
+        </time>
+      </p>
+      <OAuthNotice kind="information">
+        Aprobar permite continuar una sola vez desde tu agente. La operación no se ejecuta aquí.
+      </OAuthNotice>
+      <div className="oauth-actions">
+        <Button disabled={disabled} onClick={() => submit("approve")}>
+          Aprobar operación
+        </Button>
+        <Button variant="outline" disabled={disabled} onClick={() => submit("cancel")}>
+          Cancelar operación
+        </Button>
+      </div>
+    </aside>
+  </div>
+);
+const UnknownOperation = (): JSX.Element => (
+  <OAuthState title="Resultado por confirmar" kind="warning">
+    <p role="alert">
+      No pudimos confirmar el resultado. Recarga esta página para consultar el estado antes de
+      continuar.
+    </p>
+  </OAuthState>
 );
 const ApprovedOperation = (): JSX.Element => (
-  <output>
-    Aprobación registrada. Vuelve a tu agente para continuar antes de que venza. La operación aún no
-    se ha ejecutado.
-  </output>
+  <OAuthState title="Aprobación registrada" kind="success">
+    <p>
+      Vuelve a tu agente para continuar antes de que venza. La operación aún no se ha ejecutado.
+    </p>
+  </OAuthState>
 );
 const UnavailableOperation = ({ reference }: Readonly<{ reference: string }>): JSX.Element => (
-  <div>
+  <OAuthState title="Operación no disponible" kind="warning">
     <p role="alert">
       La operación venció, no está disponible o requiere un nuevo inicio de sesión.
     </p>
     <Button render={<Link to="/login" reloadDocument search={{ oauthOperation: reference }} />}>
       Iniciar sesión
     </Button>
-  </div>
+  </OAuthState>
 );

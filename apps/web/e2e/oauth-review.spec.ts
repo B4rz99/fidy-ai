@@ -25,7 +25,7 @@ const isolateReviewSource = (page: Page): Promise<void> => {
 };
 test.beforeEach(({ page }) => isolateReviewSource(page));
 const firstPoll = 5000;
-const cancelledMessage = "Solicitud cancelada. No se autorizó ningún acceso.";
+const cancelledMessage = "No se autorizó ningún acceso.";
 const completeOAuthJourneyMilliseconds = 60_000;
 const created = 201;
 const found = 302;
@@ -100,7 +100,7 @@ const loginFromReview = ({
     yield* Effect.tryPromise(() => page.clock.install());
     yield* Effect.tryPromise(() => page.goto(path));
     yield* Effect.tryPromise(() =>
-      page.getByRole("link", { name: "Iniciar sesión", exact: true }).click()
+      page.getByRole("main").getByRole("link", { name: "Iniciar sesión", exact: true }).click()
     );
     yield* Effect.tryPromise(() => page.getByRole("button", { name: "WhatsApp" }).click());
     const code = yield* Effect.tryPromise(() => visiblePairingCode(page));
@@ -117,6 +117,13 @@ const loginFromReview = ({
   });
 const assertReview = (page: Page): Effect.Effect<void, TestFailure> =>
   Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      expect(
+        page
+          .getByRole("navigation", { name: "Aplicación" })
+          .getByRole("link", { name: "Tablero", exact: true })
+      ).toBeVisible()
+    );
     yield* Effect.tryPromise(() =>
       expect(page.getByRole("heading", { name: "Conectar con Fidy" })).toBeVisible()
     );
@@ -147,7 +154,9 @@ test("built browser returns from established sign-in to a text-only request revi
       yield* loginFromReview({ page, request, path, identity: "primary" });
       yield* assertReview(page);
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
-      yield* Effect.tryPromise(() => expect(page.getByRole("status")).toHaveText(cancelledMessage));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toContainText(cancelledMessage)
+      );
       expect(yield* Effect.tryPromise(() => page.evaluate(browserStorageCount))).toBe(0);
       expect(page.url()).not.toContain("code=");
     })
@@ -691,7 +700,9 @@ test("built agent settings report unavailable or malformed state without a false
       const path = yield* beginReview(request, yield* authorization(request));
       yield* loginFromReview({ page, request, path, identity: "primary" });
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
-      yield* Effect.tryPromise(() => expect(page.getByRole("status")).toHaveText(cancelledMessage));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toContainText(cancelledMessage)
+      );
       yield* Effect.tryPromise(() => page.route("**/web/oauth/connections", unavailableManagement));
       yield* Effect.tryPromise(() => page.goto("/settings/access"));
       yield* assertUnavailableConnections(page);
@@ -787,11 +798,11 @@ const exerciseBrowserOperationApproval = (
     });
     yield* Effect.tryPromise(() => page.goto(`/oauth/operation/${reference}`));
     yield* Effect.tryPromise(() =>
-      expect(page.getByRole("heading", { name: "Revisar operación del agente" })).toBeVisible()
+      expect(page.getByRole("heading", { name: "Revisar operación" })).toBeVisible()
     );
     yield* Effect.tryPromise(() =>
       expect(
-        page.getByText("Cliente (nombre declarado): <img src=x onerror=alert(1)>")
+        page.getByRole("heading", { name: "<img src=x onerror=alert(1)>", exact: true })
       ).toBeVisible()
     );
     yield* Effect.tryPromise(() => expect(page.getByRole("main").locator("img")).toHaveCount(0));

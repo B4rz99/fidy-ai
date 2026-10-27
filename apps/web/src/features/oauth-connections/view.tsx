@@ -8,12 +8,13 @@ import {
   defaultPATLifetimeDays,
   patLifetimeDayOptions,
 } from "@/transport/client";
+import { Alert, AlertDescription } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
-import { Input } from "@/ui/components/input";
+import { OAuthClient } from "@/ui/components/oauth-review";
+import { Checkbox } from "@/ui/components/checkbox";
 
 const formatter = new Intl.DateTimeFormat("es-CO", {
-  dateStyle: "long",
+  dateStyle: "medium",
   timeStyle: "short",
   timeZone: "America/Bogota",
 });
@@ -32,24 +33,22 @@ const PermissionChoices = (
     toggle: (scope: PATScope, checked: boolean) => void;
   }>
 ): JSX.Element => (
-  <fieldset className="flex flex-col gap-3">
-    <legend className="mb-2 font-medium">Permisos solicitados</legend>
+  <fieldset className="oauth-permissions">
+    <legend>Permisos solicitados</legend>
     {input.permissions.map((permission) => (
       <label
-        className="flex items-start gap-2"
+        className="oauth-permission"
         htmlFor={`oauth-${permission.scope}`}
         key={permission.scope}
       >
-        <Input
-          className="mt-1 size-4"
+        <Checkbox
           id={`oauth-${permission.scope}`}
-          type="checkbox"
           checked={input.scopes.has(permission.scope)}
-          onChange={(event) => input.toggle(permission.scope, event.currentTarget.checked)}
+          onCheckedChange={(checked) => input.toggle(permission.scope, checked)}
         />
         <span>
-          <span className="block font-medium">{permission.label}</span>
-          <span className="text-sm text-muted-foreground">{permission.description}</span>
+          <span className="oauth-permission-label">{permission.label}</span>
+          <span className="oauth-permission-description">{permission.description}</span>
         </span>
       </label>
     ))}
@@ -58,8 +57,8 @@ const PermissionChoices = (
 const DurationChoices = (
   input: Readonly<{ days: PATLifetimeDays; select: (days: PATLifetimeDays) => void }>
 ): JSX.Element => (
-  <fieldset className="flex flex-wrap gap-2">
-    <legend className="mb-2 font-medium">Duración</legend>
+  <fieldset className="oauth-duration">
+    <legend>Duración</legend>
     {patLifetimeDayOptions.map((option) => (
       <Button
         aria-pressed={input.days === option}
@@ -99,7 +98,7 @@ const ReviewActions = ({
     if (Option.isSome(choice)) connect(choice.value);
   };
   return (
-    <div className="flex gap-2">
+    <div className="oauth-actions">
       <Button
         disabled={scopes.length === 0 || cancelling || connecting}
         type="button"
@@ -113,13 +112,24 @@ const ReviewActions = ({
     </div>
   );
 };
+const CancellationFailure = (): JSX.Element => (
+  <div className="pt-6">
+    <Alert variant="warning">
+      <AlertDescription>
+        No pudimos cancelar. Intenta de nuevo; no se autorizó ningún acceso.
+      </AlertDescription>
+    </Alert>
+  </div>
+);
+
 export const OAuthReviewView = ({
   review,
   cancel,
   cancelling,
   connect,
   connecting,
-}: ReviewProps): JSX.Element => {
+  cancelFailed,
+}: ReviewProps & Readonly<{ cancelFailed: boolean }>): JSX.Element => {
   const [scopes, setScopes] = useState<ReadonlyArray<PATScope>>(() => review.scopes);
   const [days, setDays] = useState<PATLifetimeDays>(defaultPATLifetimeDays);
   const expiration = DateTime.addDuration(review.reviewedAt, Duration.days(days));
@@ -128,43 +138,43 @@ export const OAuthReviewView = ({
       checked ? [...current, scope] : current.filter((candidate) => candidate !== scope)
     );
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>
-          <h1>Conectar con Fidy</h1>
-        </CardTitle>
-        <CardDescription>
-          Nombre declarado por el cliente; Fidy no verifica su identidad.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <p className="break-words font-semibold">{review.claimedClientName}</p>
-        <PermissionChoices
-          permissions={review.permissions}
-          scopes={new Set(scopes)}
-          toggle={toggle}
-        />
-        {scopes.length === 0 ? <p role="alert">Selecciona al menos un permiso.</p> : null}
+    <div className="settings-columns">
+      <div className="settings-main">
+        {cancelFailed ? <CancellationFailure /> : null}
+        <OAuthClient name={review.claimedClientName}>
+          <PermissionChoices
+            permissions={review.permissions}
+            scopes={new Set(scopes)}
+            toggle={toggle}
+          />
+          {scopes.length === 0 ? <p role="alert">Selecciona al menos un permiso.</p> : null}
+        </OAuthClient>
+      </div>
+      <aside className="settings-panel oauth-panel" aria-label="Duración del acceso">
+        <div className="oauth-panel-heading">
+          <h2>Duración del acceso</h2>
+          <p className="oauth-description">Elige cuándo vencerá esta conexión.</p>
+        </div>
         <DurationChoices days={days} select={setDays} />
-        <p className="text-sm">
-          Vencimiento previsto:{" "}
+        <p className="oauth-expiration">
+          <span className="oauth-description">Vencimiento previsto</span>
           <time dateTime={DateTime.formatIso(expiration)}>{formatExpiration(expiration)}</time>
         </p>
-        <p className="text-sm text-muted-foreground">
+        <p className="oauth-request-expiration">
           Esta solicitud vence:{" "}
           <time dateTime={DateTime.formatIso(review.requestExpiresAt)}>
             {formatExpiration(review.requestExpiresAt)}
           </time>
           .
         </p>
-        <p className="text-sm text-muted-foreground">
+        <p className="oauth-renewal">
           El acceso vence en la fecha indicada. Para renovarlo tendrás que aprobar una nueva
           conexión.
         </p>
         <ReviewActions
           {...{ review, scopes, days, expiration, connect, connecting, cancelling, cancel }}
         />
-      </CardContent>
-    </Card>
+      </aside>
+    </div>
   );
 };

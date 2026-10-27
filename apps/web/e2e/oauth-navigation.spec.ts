@@ -1,0 +1,95 @@
+import type { Page } from "@playwright/test";
+import { Effect } from "effect";
+import { playwright } from "./playwright-runtime";
+import { installOAuthReview, reviewReference } from "./oauth-visual-fixture";
+import { signInNavigationThroughCore } from "./real-core-fixture";
+
+const { test, expect } = playwright;
+const observationMilliseconds = 61_000;
+const documentStartedAt = (): number => performance.timeOrigin;
+const returnToOAuth = (): void => {
+  const visitedWorkspaceSteps = -2;
+  window.history.go(visitedWorkspaceSteps);
+};
+const focusWindow = (): void => {
+  window.dispatchEvent(new Event("focus"));
+};
+const conditions = [
+  { review: "loading", consent: "granted" },
+  { review: "unavailable", consent: "granted" },
+  { review: "unavailable", consent: "signed-out" },
+] as const;
+
+const visitPrivateWorkspaces = Effect.fnUntraced(function* (page: Page) {
+  const navigation = page.getByRole("navigation", { name: "Aplicación" });
+  yield* Effect.tryPromise(() => navigation.getByRole("link", { name: /^Por revisar/u }).click());
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("heading", { name: "Por revisar", exact: true })).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    navigation.getByRole("link", { name: "Recurrentes", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("button", { name: "Nuevo recurrente", exact: true })).toBeEnabled()
+  );
+});
+
+for (const condition of conditions) {
+  test(`Returning to OAuth ${condition.review} with ${condition.consent} Consent disposes previously visited private workspaces`, ({
+    page,
+    request,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() =>
+          signInNavigationThroughCore({ page, request, identity: "navigationRecurring" })
+        );
+        yield* Effect.tryPromise(() => page.goto(`/oauth/review/${reviewReference}`));
+        yield* Effect.tryPromise(() =>
+          expect(
+            page.getByRole("main").getByRole("link", { name: "Iniciar sesión", exact: true })
+          ).toBeVisible()
+        );
+        const startedAt = yield* Effect.tryPromise(() => page.evaluate(documentStartedAt));
+        yield* visitPrivateWorkspaces(page);
+        const observed = yield* installOAuthReview(page, { ...condition, mutation: "success" });
+        yield* Effect.tryPromise(() => page.evaluate(returnToOAuth));
+        yield* Effect.tryPromise(() =>
+          expect(page).toHaveURL(new RegExp(`/oauth/review/${reviewReference}$`, "u"))
+        );
+        const continuedAt = yield* Effect.tryPromise(() => page.evaluate(documentStartedAt));
+        expect(continuedAt).toBe(startedAt);
+        yield* Effect.tryPromise(() =>
+          expect(
+            page.getByRole("heading", { name: "Por revisar", exact: true, includeHidden: true })
+          ).toHaveCount(0)
+        );
+        yield* Effect.tryPromise(() =>
+          expect(
+            page.getByRole("button", { name: "Nuevo recurrente", exact: true, includeHidden: true })
+          ).toHaveCount(0)
+        );
+        if (condition.review === "loading") {
+          yield* Effect.tryPromise(() =>
+            expect(page.getByRole("status")).toContainText("Cargando solicitud")
+          );
+        } else {
+          yield* Effect.tryPromise(() =>
+            expect(
+              page.getByRole("main").getByRole("link", { name: "Iniciar sesión", exact: true })
+            ).toBeVisible()
+          );
+        }
+        yield* Effect.tryPromise(() => page.evaluate(focusWindow));
+        yield* Effect.tryPromise(() => page.clock.fastForward(observationMilliseconds));
+        yield* Effect.tryPromise(() =>
+          expect(
+            page.getByRole("heading", { name: "Por revisar", exact: true, includeHidden: true })
+          ).toHaveCount(0)
+        );
+        expect(observed.unexpected).toEqual([]);
+        expect(observed.mutations).toEqual([]);
+        observed.release();
+      })
+    ));
+}

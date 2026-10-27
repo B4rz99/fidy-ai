@@ -18,6 +18,7 @@ import {
 import { verifyEdgeSmoke } from "./verify-edge-smoke";
 
 const RunnerConfig = Schema.Struct({
+  VERIFY_BANCOLOMBIA_SANDBOX: Schema.optionalKey(Schema.Literals(["enabled", "disabled"])),
   RELEASE_GIT_SHA: SmokeIdentity.fields.gitRevision,
   CONTRACT_DIGEST: SmokeIdentity.fields.contractDigest,
   PUBLIC_VERSION_ID: SmokeIdentity.fields.workerVersionId,
@@ -83,6 +84,9 @@ const awaitSyntheticWork = Effect.fn(function* (
 ) {
   const probeId = Hex.encode(crypto.getRandomValues(new Uint8Array(probeEntropyBytes)));
   const request = yield* Schema.encodeEffect(Schema.fromJsonString(SmokeRequest))({
+    ...(config.VERIFY_BANCOLOMBIA_SANDBOX === "enabled"
+      ? { verifyBancolombiaSandbox: true as const }
+      : {}),
     protocolVersion: 1,
     probeId,
     expectedPublicVersionId: expectedPublic.workerVersionId,
@@ -119,7 +123,17 @@ const awaitSyntheticWork = Effect.fn(function* (
       });
     }
     return "passed" as const;
-  }).pipe(Effect.catchTag("D1QuotaDeferred", () => Effect.succeed("deferred-d1-quota" as const)));
+  }).pipe(
+    Effect.catchTag("D1QuotaDeferred", () =>
+      config.VERIFY_BANCOLOMBIA_SANDBOX === "enabled"
+        ? Effect.fail(
+            new ReleaseSmokeFailed({
+              reason: "Sandbox authentication was not verified: D1 admission unavailable",
+            })
+          )
+        : Effect.succeed("deferred-d1-quota" as const)
+    )
+  );
   return completed;
 });
 
@@ -336,6 +350,8 @@ if (import.meta.main) {
         publicVersionId: smokeEnvironment.PUBLIC_VERSION_ID,
         coreVersionId: smokeEnvironment.CORE_VERSION_ID,
         synthetic: result.value,
+        bancolombiaSandboxAuthentication:
+          smokeEnvironment.VERIFY_BANCOLOMBIA_SANDBOX === "enabled" ? "passed" : "not-requested",
         oauthAvailability: result.value,
       })
     );

@@ -1,5 +1,5 @@
 import { documentedSqlBlock } from "../../apps/server/cloudflare/schema-cutover.test-fixture";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Miniflare, type WorkerOptions } from "miniflare";
@@ -154,6 +154,7 @@ it.live("refuses a candidate whose protected-read dependencies are absent from e
       )
     );
     let publications = 0;
+    let bankCalls = 0;
     let offered: unknown;
     const environment = smokeEnvironment({
       DB: db,
@@ -179,6 +180,11 @@ it.live("refuses a candidate whose protected-read dependencies are absent from e
     });
     const probe = (id: string, bindings = environment): Promise<Response> =>
       handleSmoke({
+        bankAuthentication: Option.some(
+          Effect.sync(() => {
+            bankCalls += 1;
+          })
+        ),
         environment: bindings,
         request: new Request("https://core.internal/internal/release-smoke", {
           method: "POST",
@@ -198,8 +204,10 @@ it.live("refuses a candidate whose protected-read dependencies are absent from e
       });
     expect((yield* Effect.tryPromise(() => probe("a"))).status).toBe(202);
     expect(publications).toBe(1);
+    expect(bankCalls).toBe(0);
     const poll = (overrides = environment): Promise<Response> =>
       handleSmoke({
+        bankAuthentication: Option.none(),
         environment: overrides,
         request: new Request(
           "https://core.internal/internal/release-smoke?probeId=" + "a".repeat(32),

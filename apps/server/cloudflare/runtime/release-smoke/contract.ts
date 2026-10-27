@@ -1,3 +1,4 @@
+import type { BancolombiaSandboxEnvironment } from "../../bancolombia-authentication/contract";
 import { Schema } from "effect";
 import { contractDigestPattern, gitRevisionPattern } from "../contract";
 
@@ -13,6 +14,10 @@ export const smokeDiagnosticRevision = "0000000000000000000000000000000000000000
 export const SmokeIdentityEquality = Schema.String.check(Schema.isPattern(/^[01]{3}$/u));
 /** Only closed stages cross the proof-admitted smoke boundary, never foreign error text. */
 export const SmokeFailureStage = Schema.Literals([
+  "bancolombia_configuration",
+  "bancolombia_signing",
+  "bancolombia_discovery",
+  "bancolombia_authentication",
   "admission",
   "d1_quota",
   "identity",
@@ -41,6 +46,7 @@ export const SmokeIdentity = Schema.Struct({
 export type SmokeIdentity = typeof SmokeIdentity.Type;
 
 export const SmokeRequest = Schema.Struct({
+  verifyBancolombiaSandbox: Schema.optionalKey(Schema.Literal(true)),
   protocolVersion: Schema.Literal(1),
   probeId: Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/u)),
   expectedPublicVersionId: SmokeIdentity.fields.workerVersionId,
@@ -69,24 +75,25 @@ export const SmokeCompletion = Schema.Struct({
 });
 export type SmokeCompletion = typeof SmokeCompletion.Type;
 
-/** Native synthetic release proof bindings; these never grant User authority. */
-export type SmokeEnvironment = Readonly<{
-  DB: D1Database;
-  SMOKE_LIMITER: RateLimit;
-  SMOKE_BUCKET: R2Bucket;
-  SMOKE_QUEUE: Queue;
-  SMOKE_WORKFLOW: Workflow;
-  SMOKE_QUEUE_NAME: string;
-  USER_TRANSACTION_COORDINATOR: { getByName: (name: string) => Pick<Fetcher, "fetch"> };
-  SMOKE_PROOF: string;
-  CF_VERSION_METADATA: { id: string };
-  RELEASE_GIT_SHA: string;
-  CONTRACT_DIGEST: string;
-  KAPSO_API_KEY: string;
-  KAPSO_WEBHOOK_SECRET: string;
-  WOMPI_PRIVATE_KEY: string;
-  WOMPI_INTEGRITY_SECRET: string;
-}> &
+/** Private release verification bindings; optional bank verification grants no User authority. */
+export type SmokeEnvironment = BancolombiaSandboxEnvironment &
+  Readonly<{
+    DB: D1Database;
+    SMOKE_LIMITER: RateLimit;
+    SMOKE_BUCKET: R2Bucket;
+    SMOKE_QUEUE: Queue;
+    SMOKE_WORKFLOW: Workflow;
+    SMOKE_QUEUE_NAME: string;
+    USER_TRANSACTION_COORDINATOR: { getByName: (name: string) => Pick<Fetcher, "fetch"> };
+    SMOKE_PROOF: string;
+    CF_VERSION_METADATA: { id: string };
+    RELEASE_GIT_SHA: string;
+    CONTRACT_DIGEST: string;
+    KAPSO_API_KEY: string;
+    KAPSO_WEBHOOK_SECRET: string;
+    WOMPI_PRIVATE_KEY: string;
+    WOMPI_INTEGRITY_SECRET: string;
+  }> &
   Partial<Readonly<{ RESEND_API_KEY: string; WOMPI_EVENT_SECRET: string }>>;
 
 /** The native bindings the existing readiness gate requires before any synthetic smoke path. */

@@ -3,6 +3,7 @@ import { type JSX, Suspense, lazy } from "react";
 import { AccessRefused, ApplicationShell } from "@/features/signed-in/feature";
 import { useSession } from "@/session/session-context";
 import { HostedAgentProvider } from "@/features/agent/feature";
+import { OAuthAgent } from "./oauth-agent";
 import { RetainedRecurringWorkspace } from "./recurring-workspace";
 import { RetainedReviewWorkspace } from "./review-workspace";
 
@@ -26,12 +27,22 @@ export const ApplicationFrame = (): JSX.Element => {
       return "standalone";
     },
   });
+  const oauthReview = useRouterState({
+    select: (state) =>
+      state.matches.some(
+        (match) =>
+          match.routeId === "/independent-application/oauth/review/$requestId" ||
+          match.routeId === "/independent-application/oauth/operation/$reference"
+      ),
+  });
   const independentControls = useRouterState({
     select: (state) =>
       state.matches.some(
         (match) =>
           match.routeId === "/independent-application/settings/privacy" ||
-          match.routeId === "/independent-application/upgrade"
+          match.routeId === "/independent-application/upgrade" ||
+          match.routeId === "/independent-application/oauth/review/$requestId" ||
+          match.routeId === "/independent-application/oauth/operation/$reference"
       ),
   });
   if (frame === "refused") return <AccessRefused />;
@@ -46,6 +57,7 @@ export const ApplicationFrame = (): JSX.Element => {
         )
       }
     >
+      {oauthReview ? <OAuthAgent /> : null}
       {independentControls ? null : (
         <>
           <RetainedReviewWorkspace />

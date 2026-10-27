@@ -3,6 +3,10 @@ name: Inspect Production Worker traffic
 on:
   workflow_dispatch:
     inputs:
+      verify_bancolombia_sandbox:
+        description: Verify the live Core signing key and certificate-bound sandbox application authentication
+        type: boolean
+        default: false
       verify_database:
         description: Run the signed database, Queue and Workflow proof on the live release
         type: boolean
@@ -55,13 +59,13 @@ jobs:
             echo 'Drift remains blocked; see sanitized resource categories above.'
           fi
       - name: Capture the live release for database verification
-        if: ${{ inputs.verify_database }}
+        if: ${{ inputs.verify_database || inputs.verify_bancolombia_sandbox }}
         working-directory: infra/cloudflare
         run: |
           bash scripts/check-topology-drift.sh
           bun production-release.ts capture
       - name: Export the captured live smoke identities
-        if: ${{ inputs.verify_database }}
+        if: ${{ inputs.verify_database || inputs.verify_bancolombia_sandbox }}
         run: |
           {
             echo "RELEASE_GIT_SHA=$(jq -r .stableRevision "$RELEASE_SNAPSHOT_FILE")"
@@ -75,9 +79,14 @@ jobs:
             echo "STABLE_CONTRACT_DIGEST=$(jq -r .stableContractDigest "$RELEASE_SNAPSHOT_FILE")"
           } >> "$GITHUB_ENV"
       - name: Require the full signed live database proof
-        if: ${{ inputs.verify_database }}
+        env:
+          VERIFY_BANCOLOMBIA_SANDBOX: ${{ inputs.verify_bancolombia_sandbox && 'enabled' || 'disabled' }}
+        if: ${{ inputs.verify_database || inputs.verify_bancolombia_sandbox }}
         working-directory: infra/cloudflare
         run: |
           set -euo pipefail
           bun verify-production-smoke.ts promoted | tee "$RUNNER_TEMP/fidy-live-smoke.log"
           grep -Fxq 'Production smoke passed.' "$RUNNER_TEMP/fidy-live-smoke.log"
+          if [[ "$VERIFY_BANCOLOMBIA_SANDBOX" == enabled ]]; then
+            echo 'Bancolombia sandbox application authentication passed.'
+          fi

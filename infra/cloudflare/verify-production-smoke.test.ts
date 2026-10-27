@@ -1092,54 +1092,64 @@ describe("post-promotion production smoke", () => {
     ));
 });
 
-it.each(["d1_quota", "admission", "schema"])("defers only the closed quota refusal (%s)", (stage) =>
-  Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const methods: string[] = [];
-        const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-          const request = new Request(input, init);
-          if (new URL(request.url).pathname !== "/internal/release-smoke") {
-            return Promise.resolve(edgeResponse(request));
-          }
-          methods.push(request.method);
-          if (request.method === "GET") {
+it.each([
+  { stage: "d1_quota", bank: false },
+  { stage: "admission", bank: false },
+  { stage: "schema", bank: false },
+  { stage: "d1_quota", bank: true },
+])(
+  "defers quota only without requested bank authentication ($stage, bank=$bank)",
+  ({ stage, bank }) =>
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const methods: string[] = [];
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+            const request = new Request(input, init);
+            if (new URL(request.url).pathname !== "/internal/release-smoke") {
+              return Promise.resolve(edgeResponse(request));
+            }
+            methods.push(request.method);
+            if (request.method === "GET") {
+              return Promise.resolve(
+                pairingResponse({
+                  oldPublic: intermediateRequest(request),
+                  coreRevision: revision,
+                  readiness: true,
+                })
+              );
+            }
             return Promise.resolve(
-              pairingResponse({
-                oldPublic: intermediateRequest(request),
-                coreRevision: revision,
-                readiness: true,
+              new Response(null, {
+                status: 503,
+                headers: {
+                  ...securityHeaders,
+                  "x-fidy-smoke-worker-version": publicCandidate,
+                  "x-fidy-smoke-failure": stage,
+                },
               })
             );
-          }
-          return Promise.resolve(
-            new Response(null, {
-              status: 503,
-              headers: {
-                ...securityHeaders,
-                "x-fidy-smoke-worker-version": publicCandidate,
-                "x-fidy-smoke-failure": stage,
-              },
-            })
+          });
+          const services = yield* Layer.build(FetchHttpClient.layer);
+          const result = yield* verifyProductionSmoke({
+            ...config,
+            VERIFY_BANCOLOMBIA_SANDBOX: bank ? "enabled" : "disabled",
+          }).pipe(
+            Effect.provideService(
+              HttpClient.HttpClient,
+              Context.get(services, HttpClient.HttpClient)
+            ),
+            Effect.provideService(FetchHttpClient.Fetch, mockedFetch),
+            Effect.exit
           );
-        });
-        const services = yield* Layer.build(FetchHttpClient.layer);
-        const result = yield* verifyProductionSmoke(config).pipe(
-          Effect.provideService(
-            HttpClient.HttpClient,
-            Context.get(services, HttpClient.HttpClient)
-          ),
-          Effect.provideService(FetchHttpClient.Fetch, mockedFetch),
-          Effect.exit
-        );
-        expect(Exit.isSuccess(result)).toBe(stage === "d1_quota");
-        if (Exit.isSuccess(result)) {
-          expect(result.value).toBe("deferred-d1-quota");
-          expect(methods).toEqual(["POST", "GET", "GET"]);
-        }
-      })
+          expect(Exit.isSuccess(result)).toBe(stage === "d1_quota" && !bank);
+          if (Exit.isSuccess(result)) {
+            expect(result.value).toBe("deferred-d1-quota");
+            expect(methods).toEqual(["POST", "GET", "GET"]);
+          }
+        })
+      )
     )
-  )
 );
 
 it.each(["wrong-version", "cacheable", "readiness-refused"])(
@@ -1235,4 +1245,41 @@ effectIt.effect(
       expect(seen.has("/mcp")).toBe(true);
       expect(seen.has("/.well-known/oauth-protected-resource/mcp")).toBe(true);
     })
+);
+
+effectIt.effect("verifies sandbox authentication on live traffic without version overrides", () =>
+  Effect.gen(function* () {
+    let bankProbes = 0;
+    const client = HttpClient.make((request) => {
+      expect(request.headers["cloudflare-workers-version-overrides"]).toBeUndefined();
+      const probe = new Request(request.url, {
+        method: request.method,
+        headers: request.headers,
+      });
+      if (new URL(request.url).pathname !== "/internal/release-smoke") {
+        return Effect.succeed(HttpClientResponse.fromWeb(request, edgeResponse(probe)));
+      }
+      expect(request.method).toBe("POST");
+      expect(request.body._tag).toBe("Uint8Array");
+      if (request.body._tag !== "Uint8Array") throw new Error("Expected signed probe body");
+      const body = Schema.decodeSync(Schema.fromJsonString(SmokeRequest))(
+        new TextDecoder().decode(request.body.body)
+      );
+      expect(body.verifyBancolombiaSandbox).toBe(true);
+      expect(body.expectedCoreVersionId).toBe(coreCandidate);
+      bankProbes += 1;
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          pairingResponse({ oldPublic: false, coreRevision: revision, readiness: false })
+        )
+      );
+    });
+    const outcome = yield* verifyPromotedSmoke({
+      ...config,
+      VERIFY_BANCOLOMBIA_SANDBOX: "enabled",
+    }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    expect(outcome).toBe("passed");
+    expect(bankProbes).toBe(1);
+  })
 );

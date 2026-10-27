@@ -344,6 +344,7 @@ jobs:
             apps/web/test-results/recurring-report-visual/**
             apps/web/test-results/chat-visual/**
             apps/web/test-results/subscription-visual/**
+            apps/web/test-results/oauth-visual/**
             apps/web/test-results/brand-token-captures/
           if-no-files-found: error
           retention-days: 7

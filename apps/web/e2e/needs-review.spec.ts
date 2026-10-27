@@ -889,7 +889,7 @@ for (const [destination, identity] of [
         );
         yield* recordReviewReturn(page, destination);
         if (destination === "Transacciones") {
-          yield* Effect.tryPromise(() => verifyPrivacyDisposesReview(page));
+          yield* verifyPrivacyDisposesReview(page);
         }
         yield* Effect.tryPromise(() =>
           page.getByRole("button", { name: "Cerrar sesión", exact: true }).click()
@@ -902,25 +902,22 @@ for (const [destination, identity] of [
   );
 }
 
-const verifyPrivacyDisposesReview = (page: Page): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() =>
-        page
-          .getByRole("navigation", { name: "Aplicación" })
-          .getByText("Ajustes", { exact: true })
-          .click()
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("link", { name: "Privacidad", exact: true }).click()
-      );
-      yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/settings\/privacy$/u));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText("Compra en Café — $13.500", { exact: true })).toHaveCount(0)
-      );
-      yield* Effect.tryPromise(() => expect(page.getByLabel("Valor")).toHaveCount(0));
-    })
+const verifyPrivacyDisposesReview = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise((signal) =>
+    page
+      .getByRole("navigation", { name: "Aplicación" })
+      .getByText("Ajustes", { exact: true })
+      .click({ signal })
   );
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("link", { name: "Privacidad", exact: true }).click({ signal })
+  );
+  yield* Effect.tryPromise((signal) => expect(page).toHaveURL(/\/settings\/privacy$/u, { signal }));
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByText("Compra en Café — $13.500", { exact: true })).toHaveCount(0, { signal })
+  );
+  yield* Effect.tryPromise((signal) => expect(page.getByLabel("Valor")).toHaveCount(0, { signal }));
+});
 
 const delayedReviewRead = (route: Route): Promise<void> =>
   Effect.runPromise(
@@ -1030,6 +1027,30 @@ const openReviewSibling = (page: Page): Promise<void> =>
       expect(page.getByRole("heading", { name: "Correo verificado", exact: true })).toBeVisible()
     );
 
+const verifyHiddenReview = Effect.fnUntraced(function* (
+  page: Page,
+  popup: "dialog" | "listbox" | "menu"
+) {
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole(popup, { includeHidden: true })).toHaveCount(0, { signal })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("textbox", { name: "Contraparte (opcional)" })).toHaveCount(0, { signal })
+  );
+  yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
+  const hidden = yield* Effect.tryPromise((signal) =>
+    page.locator("#review-amount").evaluate(
+      (element) => ({
+        rectangles: element.getClientRects().length,
+        focused: element === document.activeElement,
+      }),
+      undefined,
+      { signal }
+    )
+  );
+  expect(hidden).toEqual({ rectangles: 0, focused: false });
+});
+
 const reviewPickers = [
   { label: "Fecha del movimiento", trigger: "button", popup: "dialog" },
   { label: "Hora del movimiento", trigger: "button", popup: "dialog" },
@@ -1072,9 +1093,7 @@ for (const picker of reviewPickers) {
         );
         yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toBeVisible());
         yield* Effect.tryPromise(() => page.goBack());
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole(picker.popup, { includeHidden: true })).toHaveCount(0)
-        );
+        yield* verifyHiddenReview(page, picker.popup);
         yield* Effect.tryPromise(() => page.goForward());
         yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toHaveCount(0));
         yield* Effect.tryPromise(() =>
@@ -1089,9 +1108,7 @@ for (const picker of reviewPickers) {
         );
         yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toBeVisible());
         yield* Effect.tryPromise(() => page.goBack());
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole(picker.popup, { includeHidden: true })).toHaveCount(0)
-        );
+        yield* verifyHiddenReview(page, picker.popup);
         yield* Effect.tryPromise(() => page.goForward());
         yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toHaveCount(0));
         yield* Effect.tryPromise(() =>

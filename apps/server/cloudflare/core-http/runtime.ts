@@ -1,3 +1,4 @@
+import { verifyBancolombiaSandboxAuthentication } from "../bancolombia-authentication/runtime";
 import {
   ConnectionInstitutions,
   type registeredConnectionInstitutionIds,
@@ -45,6 +46,7 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
         Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
       );
       const response = yield* executeCoreHttp({
+        bankAuthentication: verifyBancolombiaSandboxAuthentication(environment),
         request,
         environment:
           new URL(request.url).pathname === "/internal/titular-erasure"

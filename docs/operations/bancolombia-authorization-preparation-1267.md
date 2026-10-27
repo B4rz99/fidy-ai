@@ -5,6 +5,11 @@ validated bank handoff; this note identifies reusable preparation already presen
 of the bank flow. The [#1266 profile worksheet](bancolombia-profile-1266.md) owns unresolved accepted
 client/issuer, PAR/token/consent contract, scopes and mTLS requirements. Keep the production gate disabled.
 
+The [2026-10-27 bank-supplied sandbox assessment](bancolombia-sandbox-handoff-1266.md) now records
+concrete AIS request examples and template coordinates corroborated by anonymous public discovery.
+It distinguishes server-advertised RS256/PS256 support from client-specific authentication and
+certificate acceptance, and identifies unresolved consent inputs before credentialed execution.
+
 ## Existing independent controls
 
 The existing Connections owner publishes browser continuation admission/preparation. Its native

@@ -4,6 +4,7 @@ import {
   SmokeFailureStage,
   SmokeIdentity,
   SmokeIdentityEquality,
+  SmokeRequest,
   SmokeResponse,
   smokeCoreVersionHeader,
   smokeFailureHeader,
@@ -115,7 +116,17 @@ export const exchangeSmoke = Effect.fn(
     } satisfies SmokeExchange;
   },
   Effect.scoped,
-  Effect.timeout("8 seconds"),
+  (work, input) =>
+    work.pipe(
+      Effect.timeout(
+        Option.exists(
+          Option.flatMap(input.body, Schema.decodeOption(Schema.fromJsonString(SmokeRequest))),
+          (request) => request.verifyBancolombiaSandbox === true
+        )
+          ? "30 seconds"
+          : "8 seconds"
+      )
+    ),
   Effect.mapError((failure) =>
     failure instanceof ReleaseSmokeFailed || failure instanceof CandidateRoutingPending
       ? failure

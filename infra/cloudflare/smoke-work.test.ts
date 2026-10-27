@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Clock, DateTime, Deferred, Effect, Schema } from "effect";
+import { Clock, DateTime, Deferred, Effect, Option, Schema } from "effect";
 import { describe, expect } from "vitest";
 import {
   SyntheticBindings,
@@ -149,16 +149,25 @@ describe("private release smoke", () => {
           });
         expect(
           (yield* Effect.tryPromise(() =>
-            handleSmoke({ request: request(body, false), environment })
+            handleSmoke({
+              bankAuthentication: Option.none(),
+              request: request(body, false),
+              environment,
+            })
           )).status
         ).toBe(404);
         expect(
           (yield* Effect.tryPromise(() =>
-            handleSmoke({ request: request("a".repeat(513), true), environment })
+            handleSmoke({
+              bankAuthentication: Option.none(),
+              request: request("a".repeat(513), true),
+              environment,
+            })
           )).status
         ).toBe(404);
         const refusedReadiness = yield* Effect.tryPromise(() =>
           handleSmoke({
+            bankAuthentication: Option.none(),
             request: new Request("https://core.internal/internal/release-smoke?readiness=1"),
             environment,
           })
@@ -169,6 +178,7 @@ describe("private release smoke", () => {
         expect(refusedReadiness.headers.get("x-fidy-smoke-core-version")).toBeNull();
         const ready = yield* Effect.tryPromise(() =>
           handleSmoke({
+            bankAuthentication: Option.none(),
             request: new Request("https://core.internal/internal/release-smoke?readiness=1", {
               headers: { "x-fidy-smoke-proof": proof },
             }),
@@ -193,7 +203,11 @@ describe("private release smoke", () => {
         };
         const requests = Array.from({ length: 32 }, () => request(body, true));
         const responses = requests.map((value) =>
-          handleSmoke({ request: value, environment: limitedEnvironment })
+          handleSmoke({
+            bankAuthentication: Option.none(),
+            request: value,
+            environment: limitedEnvironment,
+          })
         );
         const limited = yield* Effect.tryPromise(() => Promise.all(responses));
         expect(
@@ -205,7 +219,11 @@ describe("private release smoke", () => {
         ).toBe(true);
         expect(effects).toBe(0);
         const mismatch = yield* Effect.tryPromise(() =>
-          handleSmoke({ request: request(body, true), environment })
+          handleSmoke({
+            bankAuthentication: Option.none(),
+            request: request(body, true),
+            environment,
+          })
         );
         expect(mismatch.status).toBe(503);
         expect(mismatch.headers.get("x-fidy-smoke-failure")).toBe("identity");
@@ -223,6 +241,7 @@ describe("private release smoke", () => {
         });
         const diagnostic = yield* Effect.tryPromise(() =>
           handleSmoke({
+            bankAuthentication: Option.none(),
             request: request(diagnosticBody, true),
             environment: {
               ...environment,
@@ -240,6 +259,7 @@ describe("private release smoke", () => {
         ]) {
           const rejection = yield* Effect.tryPromise(() =>
             handleSmoke({
+              bankAuthentication: Option.none(),
               request: request(body, true),
               environment: { ...environment, CF_VERSION_METADATA: { id: version }, ...overrides },
             })
@@ -250,6 +270,7 @@ describe("private release smoke", () => {
         }
         const admissionFailure = yield* Effect.tryPromise(() =>
           handleSmoke({
+            bankAuthentication: Option.none(),
             request: request(body, true),
             environment: {
               ...environment,
@@ -269,6 +290,7 @@ describe("private release smoke", () => {
         );
         const executionFailure = yield* Effect.tryPromise(() =>
           handleSmoke({
+            bankAuthentication: Option.none(),
             request: request(body, true),
             environment: {
               ...environment,
@@ -289,3 +311,63 @@ describe("private release smoke", () => {
       })
   );
 });
+
+it.effect(
+  "refuses sandbox authentication without deployment authority, matching identity, or request budget",
+  () =>
+    Effect.gen(function* () {
+      let bankCalls = 0;
+      const payload = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        protocolVersion: 1,
+        probeId: "b".repeat(32),
+        expectedPublicVersionId: version,
+        expectedCoreVersionId: version,
+        expectedGitRevision: revision,
+        expectedContractDigest: digest,
+        verifyBancolombiaSandbox: true,
+      });
+      const environment = smokeEnvironment();
+      const bankAuthentication = Option.some(
+        Effect.sync(() => {
+          bankCalls += 1;
+        })
+      );
+      for (const scenario of [
+        { authorized: false, environment, stage: null, status: 404 },
+        {
+          authorized: true,
+          environment: { ...environment, RELEASE_GIT_SHA: "f".repeat(40) },
+          stage: "identity",
+          status: 503,
+        },
+        {
+          authorized: true,
+          environment: {
+            ...environment,
+            SMOKE_LIMITER: {
+              limit: (): Promise<{ success: boolean }> => Promise.resolve({ success: false }),
+            },
+          },
+          stage: "admission",
+          status: 503,
+        },
+      ]) {
+        const response = yield* Effect.tryPromise(() =>
+          handleSmoke({
+            bankAuthentication,
+            request: new Request("https://core.internal/internal/release-smoke", {
+              method: "POST",
+              headers: scenario.authorized
+                ? { "content-type": "application/json", "x-fidy-smoke-proof": proof }
+                : { "content-type": "application/json" },
+              body: payload,
+            }),
+            environment: scenario.environment,
+          })
+        );
+        expect(response.status).toBe(scenario.status);
+        expect(response.headers.get("x-fidy-smoke-failure")).toBe(scenario.stage);
+      }
+      expect(bankCalls).toBe(0);
+    })
+);

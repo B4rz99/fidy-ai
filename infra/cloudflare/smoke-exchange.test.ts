@@ -1,3 +1,4 @@
+import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
@@ -116,3 +117,30 @@ for (const method of ["readiness", "synthetic"] as const) {
     );
   });
 }
+
+it.effect("allows bounded sandbox authentication to exceed the ordinary release deadline", () =>
+  Effect.gen(function* () {
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+      protocolVersion: 1,
+      probeId: "b".repeat(32),
+      expectedPublicVersionId: identity.workerVersionId,
+      expectedCoreVersionId: identity.workerVersionId,
+      expectedGitRevision: identity.gitRevision,
+      expectedContractDigest: identity.contractDigest,
+      verifyBancolombiaSandbox: true,
+    });
+    const client = HttpClient.make((request) =>
+      Effect.sleep("9 seconds").pipe(
+        Effect.as(HttpClientResponse.fromWeb(request, Response.json({})))
+      )
+    );
+    const fiber = yield* Effect.forkChild(
+      exchangeSmoke({ query: "", headers, body: Option.some(body) }).pipe(
+        Effect.provideService(HttpClient.HttpClient, client)
+      )
+    );
+    yield* TestClock.adjust("9 seconds");
+    const result = yield* Fiber.join(fiber);
+    expect(result.status).toBe(200);
+  })
+);

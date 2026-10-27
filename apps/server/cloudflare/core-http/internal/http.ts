@@ -1,3 +1,4 @@
+import type { BancolombiaAuthenticationFailed } from "../../bancolombia-authentication/contract";
 import { ReviewCommand } from "../../../src/core/ingestion/contract";
 import { RecurringCommand } from "../../../src/core/recurring-plans/contract";
 import { handleErasureOperator } from "../../erasure/runtime";
@@ -1525,6 +1526,7 @@ const canonicalOrHealthResponse = (
 };
 
 type RequestExecution = Readonly<{
+  bankAuthentication: Effect.Effect<void, BancolombiaAuthenticationFailed>;
   request: Request;
   environment: CoreHttpEnvironment;
   telemetry: TelemetryService;
@@ -1533,12 +1535,13 @@ type RequestExecution = Readonly<{
 
 const smokeResponse = (
   request: Request,
-  environment: CoreHttpEnvironment
+  environment: CoreHttpEnvironment,
+  bankAuthentication: RequestExecution["bankAuthentication"]
 ): Effect.Effect<Response> =>
   Effect.tryPromise({
     try: () =>
       smokeReady(environment)
-        ? handleSmoke({ request, environment })
+        ? handleSmoke({ request, environment, bankAuthentication: Option.some(bankAuthentication) })
         : Promise.resolve(
             smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })
               ? Response.json(
@@ -1583,8 +1586,11 @@ const dedicatedBrowserResponse = (
 };
 
 const reservedCoreResponse = (
-  request: Request,
-  environment: CoreHttpEnvironment,
+  {
+    request,
+    environment,
+    bankAuthentication,
+  }: Pick<RequestExecution, "request" | "environment" | "bankAuthentication">,
   path: string
 ): Option.Option<Effect.Effect<Response, never, HttpClient.HttpClient>> => {
   if (!ownedCorePath(path)) {
@@ -1607,7 +1613,9 @@ const reservedCoreResponse = (
   if (ownsProviderAuthenticationPath(path)) {
     return Option.some(handleProviderAuthentication({ request, environment }));
   }
-  if (path === smokePath) return Option.some(smokeResponse(request, environment));
+  if (path === smokePath) {
+    return Option.some(smokeResponse(request, environment, bankAuthentication));
+  }
   return supportCoreResponse(request, environment, path);
 };
 
@@ -1631,6 +1639,7 @@ const supportCoreResponse = (
 };
 
 const dispatchCoreHttp = ({
+  bankAuthentication,
   request,
   environment,
   telemetry,
@@ -1645,7 +1654,7 @@ const dispatchCoreHttp = ({
       coordinator: environment.USER_TRANSACTION_COORDINATOR,
     });
   }
-  const reserved = reservedCoreResponse(request, environment, url.pathname);
+  const reserved = reservedCoreResponse({ request, environment, bankAuthentication }, url.pathname);
   if (Option.isSome(reserved)) return reserved.value;
   if (["/providers/kapso/callback", "/providers/wompi/billing-events"].includes(url.pathname)) {
     return providerCallbackEffect(request, environment, publish);

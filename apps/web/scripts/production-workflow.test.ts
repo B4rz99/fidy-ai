@@ -33,7 +33,19 @@ describe("Production release workflow policy", () => {
     expect(identity).toBeGreaterThan(capture);
     expect(proof).toBeGreaterThan(identity);
     expect(fullPass).toBeGreaterThan(proof);
-    expect(inspection.match(/if: \$\{\{ inputs.verify_database \}\}/gu)).toHaveLength(3);
+    expect(
+      inspection.match(
+        /if: \$\{\{ inputs.verify_database \|\| inputs.verify_bancolombia_sandbox \}\}/gu
+      )
+    ).toHaveLength(3);
+    expect(inspection).toContain("verify_bancolombia_sandbox:");
+    expect(inspection).toContain(
+      "VERIFY_BANCOLOMBIA_SANDBOX: ${{ inputs.verify_bancolombia_sandbox && 'enabled' || 'disabled' }}"
+    );
+    expect(
+      inspection.indexOf("Bancolombia sandbox application authentication passed.")
+    ).toBeGreaterThan(fullPass);
+    expect(inspection).not.toContain("secrets.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM");
     expect(inspection).toContain("set -euo pipefail");
     expect(inspection).not.toMatch(
       /production-resources\.ts|production-release\.ts (stage|promote|rollback)/u

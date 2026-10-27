@@ -52,7 +52,7 @@ it.effect(
         request("/web/consent", "POST");
         request("/web/consent", "GET", "https://foreign.invalid");
         request("", "GET", "not-a-url");
-        diagnostic.mark("retry");
+        diagnostic.retry();
         const second = request("/web/consent");
         events.emit("response", { request: () => first, status: () => 503 });
         events.emit("response", { request: () => second, status: () => 200 });
@@ -61,22 +61,12 @@ it.effect(
       }).pipe(Effect.scoped);
       expect(attachments).toEqual([
         [
-          {
-            stage: "initial-transactions",
-            observedStage: "initial-transactions",
-            resource: "consent",
-            status: "requested",
-          },
-          { stage: "retry", observedStage: "retry", resource: "consent", status: "requested" },
-          {
-            stage: "initial-transactions",
-            observedStage: "retry",
-            resource: "consent",
-            status: 503,
-          },
-          { stage: "retry", observedStage: "retry", resource: "consent", status: 200 },
-          { stage: "retry", observedStage: "retry", resource: "profile", status: "requested" },
-          { stage: "retry", observedStage: "retry", resource: "profile", status: "failed" },
+          { stage: "leaving-review", resource: "consent", status: "requested" },
+          { stage: "retry", resource: "consent", status: "requested" },
+          { stage: "leaving-review", resource: "consent", status: 503 },
+          { stage: "retry", resource: "consent", status: 200 },
+          { stage: "retry", resource: "profile", status: "requested" },
+          { stage: "retry", resource: "profile", status: "failed" },
         ],
       ]);
     })

@@ -52,32 +52,13 @@ it("partitions the complete browser suite across both runners without dropping o
     tests.filter((line) => line.includes("[admission]"));
   const performance = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
     tests.filter((line) => line.includes("[performance]"));
-  const containmentDiagnostic = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
-    performance(tests).filter((line) => line.includes("containment A/B diagnostic"));
-  const consentDiagnostic = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
-    performance(tests).filter((line) => line.includes("temporary Consent chronology diagnostic"));
-  const nativePerformance = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
-    performance(tests).filter(
-      (line) =>
-        !line.includes("containment A/B diagnostic") &&
-        !line.includes("temporary Consent chronology diagnostic")
-    );
-  expect(containmentDiagnostic(complete)).toHaveLength(1);
-  expect(consentDiagnostic(complete)).toHaveLength(1);
-  expect(performance(complete)).toHaveLength(9);
-  expect(
-    browser(complete).some((line) => line.includes("temporary Consent chronology diagnostic"))
-  ).toBe(false);
   expect(admission(complete)).toHaveLength(4);
   for (const [index, shard] of shards.entries()) {
     expect(admission(shard)).toEqual(admission(complete));
-    expect(nativePerformance(shard)).toHaveLength(index === 0 ? 3 : 4);
-    expect(containmentDiagnostic(shard)).toHaveLength(index === 0 ? 1 : 0);
-    expect(consentDiagnostic(shard)).toHaveLength(index === 0 ? 1 : 0);
+    expect(performance(shard)).toHaveLength(index === 0 ? 3 : 4);
   }
   expect(performance(shards.flat()).toSorted()).toEqual([...performance(complete)].sort());
-  expect(new Set(nativePerformance(shards.flat())).size).toBe(7);
-  expect(new Set(performance(shards.flat())).size).toBe(9);
+  expect(new Set(performance(shards.flat())).size).toBe(7);
   expect(browser(shards.flat()).toSorted()).toEqual([...browser(complete)].sort());
   expect(new Set(browser(shards.flat())).size).toBe(browser(complete).length);
 });

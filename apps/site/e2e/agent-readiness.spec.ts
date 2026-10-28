@@ -30,6 +30,8 @@ for (const path of documents) {
     const html = await request.get(path, { headers: { Accept: "text/html" } });
     expect(html.status()).toBe(ok);
     expect(html.headers()["content-type"]).toContain("text/html");
+    expect(html.headers()["content-security-policy"]).toContain("default-src 'none'");
+    expect(html.headers()["content-security-policy"]).toContain("script-src 'self' 'sha256-");
     expect(html.headers().vary).toMatch(/\bAccept\b/iu);
     const markdown = await request.get(path, { headers: { Accept: "text/markdown" } });
     expect(markdown.status()).toBe(ok);
@@ -290,3 +292,34 @@ test("verifies public OAuth discovery and keeps MCP tools authenticated", async 
     'resource_metadata="https://api.fidyapp.com/.well-known/oauth-protected-resource/mcp"'
   );
 });
+
+for (const path of ["/", "/docs", "/funciones/transacciones"]) {
+  test(`enforces browser output boundaries at ${path}`, async ({ page }) => {
+    const response = await page.goto(path);
+    expect(response?.headers()["strict-transport-security"]).toBe(
+      "max-age=31536000; includeSubDomains; preload"
+    );
+    const policy = response?.headers()["content-security-policy"];
+    expect(policy).toContain("default-src 'none'");
+    expect(policy).toContain("frame-ancestors 'none'");
+    expect(policy).toContain("require-trusted-types-for 'script'");
+    expect(policy).toContain("trusted-types 'none'");
+    const result = await page.evaluate(() => {
+      const container = document.createElement("div");
+      let rejected = false;
+      try {
+        container.innerHTML =
+          '<img src="/untrusted-markup" onerror="document.body.dataset.injected=1">';
+      } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+        rejected = true;
+      }
+      return {
+        rejected,
+        empty: container.childNodes.length === 0,
+        injected: document.body.dataset.injected,
+      };
+    });
+    expect(result).toEqual({ rejected: true, empty: true, injected: undefined });
+  });
+}

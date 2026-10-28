@@ -53,6 +53,11 @@ duplicating authorization declarations on the marketing host.
 Astro emits a document CSP with hashes for its hydration bootstrap;
 build-time stylesheets are inlined with CSP hashes to avoid a render-blocking request;
 static chart geometry uses CSS classes instead of inline style attributes.
+Build-generated response headers carry each document's exact CSP hashes, frame denial and
+Trusted Types enforcement without permitting policy creation. The metadata policy remains as
+a fallback for static HTML opened outside the deployed asset server.
+HSTS covers subdomains and declares preload eligibility;
+the header does not submit the domain to a browser preload list.
 
 `bun run dev:site` starts the site on port 4321. Its `--ignore-lock` flag keeps Astro in the
 foreground under agent execution so Alchemy owns the process lifetime. `build` generates the static pages and rejects unexpected output files.

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev --ignore-lock",
-    "build": "astro build && bun scripts/build-markdown.ts && bun scripts/check-artifact.ts",
+    "build": "astro build && bun scripts/build-markdown.ts && bun scripts/build-headers.ts && bun scripts/check-artifact.ts",
     "build:production": "bun run build && bun scripts/stamp-release.ts",
     "typecheck": "astro sync && bun install --cwd ../../tools/astro --frozen-lockfile && bun ../../tools/astro/check.ts",
     "test:browser": "playwright test"

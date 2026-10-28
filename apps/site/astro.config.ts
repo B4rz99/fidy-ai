@@ -8,7 +8,7 @@ export default defineConfig({
   output: "static",
   markdown: { syntaxHighlight: "prism" },
   trailingSlash: "never",
-  build: { format: "file", inlineStylesheets: "never" },
+  build: { format: "file", inlineStylesheets: "always" },
   integrations: [
     react(),
     sitemap({ filter: (page) => !page.endsWith("/terminos") && !page.endsWith("/404") }),

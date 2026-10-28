@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "151dd7f5d7de82c9c43731d79ef579aa176c321f765084aa452e1185aa87dbef";
+const expectedEdgePolicyDigest = "318520bfb7e69be77007923756e9c3bf4c39539d170d62e5fa7b77600e63fcb2";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/connections/internal/cleanup.ts", import.meta.url)
@@ -178,6 +178,7 @@ const securityArtifacts = [
   await Bun.file(new URL("../../apps/site/public/_headers", import.meta.url)).text(),
   await Bun.file(new URL("../../apps/site/public/_redirects", import.meta.url)).text(),
   await Bun.file(new URL("../../apps/site/astro.config.ts", import.meta.url)).text(),
+  await Bun.file(new URL("../../apps/site/cloudflare/worker.ts", import.meta.url)).text(),
 ];
 
 export const edgePolicyDigest = securityArtifacts

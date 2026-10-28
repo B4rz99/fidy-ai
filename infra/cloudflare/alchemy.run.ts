@@ -651,6 +651,7 @@ export default Alchemy.Stack(
     }).pipe(Alchemy.AdoptPolicy.adopt(production && productionTopology.web.adoptExistingWorker));
 
     const site = yield* Cloudflare.Website.StaticSite("Site", {
+      main: "../../apps/site/cloudflare/worker.ts",
       name: productionTopology.site.workerName,
       observability: freeTierWorkerObservability,
       command: "bun run build:production",
@@ -661,7 +662,11 @@ export default Alchemy.Stack(
         command: `bun run dev -- --host 127.0.0.1 --port ${productionTopology.site.localPort}`,
         cwd: "../../apps/site",
       },
-      assets: { htmlHandling: "drop-trailing-slash", notFoundHandling: "404-page" },
+      assets: {
+        htmlHandling: "drop-trailing-slash",
+        notFoundHandling: "404-page",
+        runWorkerFirst: ["/*", "!/_astro/*", "!/*.png", "!/*.webp"],
+      },
       domain: production ? productionTopology.site.hostname : undefined,
       workersDev: production ? productionTopology.site.workersDev : true,
     });

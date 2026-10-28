@@ -1,0 +1,49 @@
+---
+import SiteLayout from "../layouts/site-layout.astro";
+import { AgentConnectionGuide } from "../islands/agent-connection-guide";
+---
+
+<SiteLayout
+  variant="document"
+  title="Fidy para desarrolladores y agentes — MCP, CLI y API"
+  description="Conecta agentes a Fidy mediante MCP, CLI o API con permisos explícitos, vencimiento y revocación."
+>
+  <main class="legal-document">
+    <h1>Fidy para desarrolladores y agentes</h1>
+    <p>
+      Usa Fidy para consultar las transacciones que una persona ya registró, corregirlas con su
+      autorización, trabajar con presupuestos o preparar su dashboard. Colombia es el mercado
+      habilitado. Fidy no ejecuta transferencias ni sustituye asesoría financiera personalizada.
+    </p>
+    <p>
+      Empieza creando tu cuenta en <a href="https://app.fidyapp.com">la aplicación de Fidy</a>.
+      Incluye una prueba de Pro de siete días sin tarjeta. El acceso de cada agente necesita
+      autorización explícita; nunca compartas tokens en el chat. Esta guía describe el servicio
+      real: no anuncia un entorno público de pruebas ni credenciales de demostración.
+    </p>
+    <h2>Descubrimiento de permisos</h2>
+    <p>
+      El servidor MCP publica sus permisos en los{" "}
+      <a href="https://api.fidyapp.com/.well-known/oauth-protected-resource/mcp">
+        metadatos del recurso protegido (RFC 9728)
+      </a>
+      . Consulta también los{" "}
+      <a href="https://api.fidyapp.com/.well-known/oauth-authorization-server">
+        metadatos del servidor de autorización
+      </a>
+      . Solicita solo los permisos que necesites; un servidor puede anunciar un subconjunto de sus
+      permisos compatibles.
+    </p>
+    <p>
+      El servidor <a href="https://api.fidyapp.com/mcp">MCP remoto de Fidy</a> requiere
+      autenticación. La ausencia de una lista pública de herramientas no implica que falten
+      herramientas. La especificación OpenAPI requiere acceso autorizado: no se publica un contrato
+      que eluda sus controles.
+    </p>
+    <AgentConnectionGuide />
+    <p>
+      <a href="/llms.txt">Índice para agentes</a> · <a href="/about">Acerca de Fidy</a> ·{" "}
+      <a href="/contact">Contacto</a> · <a href="/">Inicio</a>
+    </p>
+  </main>
+</SiteLayout>

@@ -1,48 +1,27 @@
-import { useState } from "react";
 import { PhoneContent } from "./phone-content";
 import { conversations } from "./conversations";
-import { mountConversation, playConversation } from "./demo-motion";
 
-export const PhoneDemo = (): React.JSX.Element => {
-  const [scenario, setScenario] = useState(0);
-  return (
-    <PhoneContent
-      conversation={
-        <div key={scenario} className="conversation-frame" ref={mountConversation}>
-          {conversations[scenario]}
-        </div>
-      }
-      controls={
+export const PhoneDemo = (): React.JSX.Element => (
+  <PhoneContent
+    conversation={<div className="conversation-frame">{conversations[0]}</div>}
+    controls={
+      <>
         <div className="demo-controls" aria-label="Ejemplos de conversación">
           {["Registrar", "Consultar", "Presupuestar"].map((label, index) => (
-            <button
-              key={label}
-              aria-pressed={scenario === index}
-              onClick={(event) => {
-                const shell = event.currentTarget.closest<HTMLElement>(".demo-shell");
-                if (shell !== null) {
-                  shell.dataset.motion = event.detail === 0 ? "instant" : "pointer";
-                  if (scenario === index) {
-                    playConversation({ root: shell, instant: event.detail === 0 });
-                  }
-                }
-                setScenario(index);
-              }}
-            >
+            <button key={label} type="button" aria-pressed={index === 0} data-scenario={index}>
               {label}
             </button>
           ))}
-          <button
-            aria-label="Repetir animación de la conversación"
-            onClick={(event) => {
-              const shell = event.currentTarget.closest<HTMLElement>(".demo-shell");
-              if (shell !== null) playConversation({ root: shell, instant: event.detail === 0 });
-            }}
-          >
+          <button type="button" aria-label="Repetir animación de la conversación" data-replay>
             ↻ Repetir
           </button>
         </div>
-      }
-    />
-  );
-};
+        {conversations.map((conversation, index) => (
+          <template key={index} data-scenario={index}>
+            {conversation}
+          </template>
+        ))}
+      </>
+    }
+  />
+);

@@ -16,8 +16,8 @@ import { Input } from "./input";
 import { useTheme } from "./theme";
 import "./access.css";
 
-const mascot = new URL("../assets/access/mascot.png", import.meta.url).href;
-const habitat = new URL("../assets/access/habitat-ceiba.png", import.meta.url).href;
+const mascot = new URL("../assets/access/mascot.webp", import.meta.url).href;
+const habitat = new URL("../assets/access/habitat-ceiba.webp", import.meta.url).href;
 const google = new URL("../assets/access/google.svg", import.meta.url).href;
 const microsoft = new URL("../assets/access/microsoft.svg", import.meta.url).href;
 export type AccessMethod = "google" | "microsoft" | "email" | "whatsapp";
@@ -163,7 +163,14 @@ const AccessBackground = (): JSX.Element => (
         </filter>
       </defs>
     </svg>
-    <img data-access-habitat="" src={habitat} alt="" aria-hidden="true" />
+    <img
+      data-access-habitat=""
+      src={habitat}
+      alt=""
+      aria-hidden="true"
+      decoding="async"
+      fetchPriority="low"
+    />
     <div data-access-ambient="" aria-hidden="true" />
     <svg
       data-access-lines=""

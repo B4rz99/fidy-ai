@@ -97,6 +97,7 @@ const sharedTestSupport = new Set([
   "cloudflare/subscription/refund-charge.test-fixture.ts",
   "cloudflare/schema-cutover.test-fixture.ts",
   "cloudflare/browser-acceptance-connections.test-fixture.ts",
+  "cloudflare/browser-assessment.test-fixture.ts",
   "cloudflare/bancolombia-activation.test-fixture.ts",
   "cloudflare/browser-acceptance-clock.test-fixture.ts",
   "src/shell/testing/credential-evidence-harness.ts",

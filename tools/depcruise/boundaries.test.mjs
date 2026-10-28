@@ -155,19 +155,20 @@ await test("future portable and native owners share one privacy and direction po
   }
 });
 
-await test("bank acceptance composition is test-only even when it is a registered shared fixture", () => {
-  assert.equal(
-    inspect(
-      "cloudflare/core-worker.ts",
-      "cloudflare/browser-acceptance-connections.test-fixture.ts"
-    ).some((violation) => violation.name === "production-imports-test-code"),
-    true
-  );
-  assert.equal(
-    inspect(
+await test("shared acceptance fixtures remain unavailable to production", () => {
+  for (const [source, fixture] of [
+    [
       "cloudflare/browser-acceptance-preview.ts",
-      "cloudflare/browser-acceptance-connections.test-fixture.ts"
-    ).length,
-    0
-  );
+      "cloudflare/browser-acceptance-connections.test-fixture.ts",
+    ],
+    ["cloudflare/browser-acceptance-seed.ts", "cloudflare/browser-assessment.test-fixture.ts"],
+  ]) {
+    assert.equal(
+      inspect("cloudflare/core-worker.ts", fixture).some(
+        (violation) => violation.name === "production-imports-test-code"
+      ),
+      true
+    );
+    assert.equal(inspect(source, fixture).length, 0);
+  }
 });

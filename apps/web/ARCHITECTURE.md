@@ -18,9 +18,8 @@ Effect Atom derives browser transport from the assembled `FidyApi` with
 `AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`. A shared browser HTTP policy
 layer bounds and sanitizes that transport beneath each generated client; the web application does not
 hand-wrap endpoints or declare a second canonical surface. Only GET/HEAD transport failures retry
-once. Canonical requests may additionally retry a decoded `ResourceLimited` refusal with bounded
-`Retry-After` pacing (six retries, delays of one to five seconds) inside the original 15-second
-deadline. This proves non-admission; commercial exhaustion, uncertain mutations, authentication,
+once. Canonical requests and safe web-auth reads may additionally retry a decoded `ResourceLimited` refusal with bounded
+`Retry-After` pacing (six retries, delays of one to five seconds) inside the original boundary deadline (15 seconds for canonical requests, 10 seconds for ordinary web-auth reads). This proves non-admission; commercial exhaustion, uncertain mutations, authentication,
 and enrollment refusals never gain automatic replay. Cancellation interrupts pacing as well as
 in-flight transport. Shared and server state belongs to Effect
 Atom, navigation state to TanStack Router, and irreducible one-component interaction state to React.
@@ -365,8 +364,12 @@ polling within the authentication registry lifetime.
 
 Main workspace display queries retain their last result for one minute of inactivity in the
 current authentication registry. Returning to Budgets, Recurring, Transactions or Dashboard
-renders that result immediately and revalidates on mount and window focus. Cached profiles and
-resource results do not authorize editing: freshness and refresh failures still gate writes.
+renders that result immediately. Reads younger than five seconds remain fresh on mount and
+window focus; older reads revalidate, and explicit invalidation always refreshes. Cached profiles
+and resource results do not grant authority: the server checks live Consent, caller authority and
+revision guards for every write; refresh failures still gate editing. Authenticated clients share
+two in-flight request permits within their session signal, including across feature clients. Queue
+time counts against the original request deadline and session retirement cancels queued work.
 Dashboard initialization remains exclusive to a declared uninitialized response during an
 actual visit. Consent, session binding and security settings reads retain their fresh access
 checks. Router intent preloading loads destination code without executing workspace commands.
@@ -377,7 +380,8 @@ The root application frame owns one shared shell across authenticated and indepe
 application routes, including Transactions; each route retains its own access checks. It retains a
 visited Needs Review workspace across ordinary navigation within the authentication lifetime.
 Its saved route snapshot contains only the validated filter
-and offset; hidden panels keep their evidence deadline timers active. Entering Privacy disposes
+and offset; hidden panels keep their evidence deadline timers active but suspend their own
+focus and periodic refresh subscriptions. Entering Privacy disposes
 the retained workspace, as does authentication replacement. The first pending page shares the
 navigation count's canonical query, and the selected original loads alongside its detail. Returning
 invalidates review reads while retaining visible content and disabling decisions until fresh.
@@ -426,3 +430,9 @@ before any attachment, so attachment failure cannot replace its failure. Origina
 retry policy and application runtime remain unchanged. Sanitization,
 bounded accumulation, mutation refusal, failure preservation, masked acquisition/disposal deadlines
 and interruption are covered through the diagnostic helper's public seams in the web script tests.
+
+Recurring workspace reads and writes request the compact display projection: only the latest
+revision of each plan crosses the browser boundary. Storage and historical occurrence calculations
+retain the complete revision ledger; default API reads still return the full document. Draft
+autosave starts after 200 milliseconds of idle input and subsequent automatic writes are spaced
+by at least one second; explicit Create/Skip flushes remain immediate and revision-bound.

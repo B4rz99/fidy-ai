@@ -1,9 +1,12 @@
+import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
+import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import { ReviewDraftFooter, ReviewNotice } from "@/ui/components/review-workspace";
 import { useReviewExpired } from "./expiry";
 import type { DraftBarrier } from "./draft-barrier";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
+import type { AsyncResult, Atom } from "effect/reactivity";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   CheckmarkCircle02Icon,
@@ -61,6 +64,13 @@ const ExpiredReviewItem = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
   </section>
 );
 
+const reviewCategories = (
+  apiClient: FidyClient
+): Atom.Atom<AsyncResult.AsyncResult<CanonicalSuccess<"categories.listCategories">, unknown>> =>
+  apiClient
+    .query("categories", "listCategories", workspaceQueryRetention)
+    .pipe(revalidateWorkspaceQuery);
+
 const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
   const [query] = useState(() =>
@@ -69,9 +79,7 @@ const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Ele
       reactivityKeys: ["ingestion-review"],
     })
   );
-  const [categoryQuery] = useState(() =>
-    apiClient.query("categories", "listCategories", { reactivityKeys: ["ingestion-review"] })
-  );
+  const [categoryQuery] = useState(() => reviewCategories(apiClient));
   const detail = useAtomValue(query).pipe(presentCanonicalQuery);
   const categories = useAtomValue(categoryQuery).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);

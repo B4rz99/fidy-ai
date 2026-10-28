@@ -8,7 +8,8 @@ import { type Command, type Detail, type Draft, creation, emptyDraft } from "./m
 
 const { toast } = await import("sonner");
 
-const autosaveMilliseconds = 650;
+const autosaveMilliseconds = 200;
+const autosaveIntervalMilliseconds = 1000;
 type Feedback = "saved" | "saving" | "unsaved" | "failed" | "uncertain";
 type Queue = {
   id: Detail["item"]["id"];
@@ -17,6 +18,7 @@ type Queue = {
   draft: Draft;
   wanted: Option.Option<Draft>;
   timer: Option.Option<number>;
+  nextAutosaveAt: number;
   tail: Promise<void>;
   clean: () => void;
 };
@@ -35,6 +37,7 @@ const saveDraft = (
     if (owner.blocked || Option.isNone(owner.wanted)) return;
     const draft = owner.wanted.value;
     owner.wanted = Option.none();
+    owner.nextAutosaveAt = performance.now() + autosaveIntervalMilliseconds;
     feedback("saving");
     return send({
       command: { _tag: "SaveDraft", id: owner.id, revision: owner.revision, draft },
@@ -68,6 +71,7 @@ const makeQueue = (detail: Detail, barrier: DraftBarrier): Queue => {
     ),
     wanted: Option.none(),
     timer: Option.none(),
+    nextAutosaveAt: 0,
     tail: Promise.resolve(),
     clean: () => barrier.delete(detail.item.id),
   };
@@ -97,9 +101,12 @@ const scheduleDraft = ({
   owner.wanted = Option.some(next);
   clearTimer(owner);
   owner.timer = Option.some(
-    window.setTimeout(() => {
-      saveDraft(owner, send, feedback).catch(() => haltQueue(owner, feedback));
-    }, autosaveMilliseconds)
+    window.setTimeout(
+      () => {
+        saveDraft(owner, send, feedback).catch(() => haltQueue(owner, feedback));
+      },
+      Math.max(autosaveMilliseconds, owner.nextAutosaveAt - performance.now())
+    )
   );
 };
 const useCanonicalDraft = ({

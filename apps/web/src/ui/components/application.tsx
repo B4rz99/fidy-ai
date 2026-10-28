@@ -7,8 +7,8 @@ import { Button } from "./button";
 import { useTheme } from "./theme";
 import "./application.css";
 
-const mascot = new URL("../assets/access/mascot.png", import.meta.url).href;
-const habitat = new URL("../assets/access/habitat-ceiba.png", import.meta.url).href;
+const mascot = new URL("../assets/access/mascot.webp", import.meta.url).href;
+const habitat = new URL("../assets/access/habitat-ceiba.webp", import.meta.url).href;
 
 export const ApplicationSurface = ({
   children,
@@ -55,8 +55,20 @@ export const ApplicationWordmark = (): JSX.Element => (
 );
 export const ApplicationHabitat = (): JSX.Element => (
   <div className="application-habitat" aria-hidden="true">
-    <img className="application-habitat-plants" src={habitat} alt="" />
-    <img className="application-habitat-mascot" src={mascot} alt="" />
+    <img
+      className="application-habitat-plants"
+      src={habitat}
+      alt=""
+      decoding="async"
+      fetchPriority="low"
+    />
+    <img
+      className="application-habitat-mascot"
+      src={mascot}
+      alt=""
+      decoding="async"
+      fetchPriority="low"
+    />
   </div>
 );
 

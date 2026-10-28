@@ -167,11 +167,12 @@ describe("subscription enrollment transport", () => {
 });
 
 describe("browser HTTP policy", () => {
-  it.effect("retries a canonical mutation only after a declared unadmitted resource refusal", () =>
+  it.effect("retries eligible operations only after a declared unadmitted resource refusal", () =>
     Effect.gen(function* () {
-      for (const [boundary, path] of [
-        ["canonical", "/dashboard/initialize"],
-        ["web-auth", "/web/connections/begin"],
+      for (const [method, boundary, path] of [
+        ["POST", "canonical", "/dashboard/initialize"],
+        ["POST", "web-auth", "/web/connections/begin"],
+        ["GET", "web-auth", "/web/consent"],
       ] as const) {
         const started = Deferred.makeUnsafe<void>();
         let attempts = 0;
@@ -193,7 +194,9 @@ describe("browser HTTP policy", () => {
           Layer.succeed(HttpClient.HttpClient, base),
           boundary
         );
-        const work = yield* Effect.forkChild(client.post(`${policyTestOrigin}${path}`));
+        const work = yield* Effect.forkChild(
+          client.execute(HttpClientRequest.make(method)(`${policyTestOrigin}${path}`))
+        );
         yield* Deferred.await(started);
         yield* TestClock.adjust("1 second");
         const result = yield* Fiber.join(work);

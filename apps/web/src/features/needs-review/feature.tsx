@@ -100,18 +100,23 @@ const ReviewPanel = ({
   filter: Filter;
   page: number;
   select: (status: Filter, offset: number) => void;
-}>): JSX.Element => (
-  <div hidden={!active} data-review="panel">
-    <ReviewResources
-      key={`${filter}:${page}`}
-      active={active}
-      filter={filter}
-      select={select}
-      page={page}
-      move={(offset) => select(filter, offset)}
-    />
-  </div>
-);
+}>): JSX.Element => {
+  const [visited, setVisited] = useState(active);
+  if (active && !visited) setVisited(true);
+  if (!active && !visited) return <></>;
+  return (
+    <div hidden={!active} data-review="panel">
+      <ReviewResources
+        key={`${filter}:${page}`}
+        active={active}
+        filter={filter}
+        select={select}
+        page={page}
+        move={(offset) => select(filter, offset)}
+      />
+    </div>
+  );
+};
 const ReviewResources = ({
   active,
   filter,
@@ -126,12 +131,14 @@ const ReviewResources = ({
   select: (status: Filter, offset: number) => void;
 }>): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
-  const [query] = useState(() =>
-    makeReviewQuery(apiClient, filter, page).pipe(
-      Atom.withRefresh("60 seconds"),
-      Atom.refreshOnWindowFocus
-    )
-  );
+  const [queries] = useState(() => {
+    const source = makeReviewQuery(apiClient, filter, page);
+    return {
+      source,
+      active: source.pipe(Atom.withRefresh("60 seconds"), Atom.refreshOnWindowFocus),
+    };
+  });
+  const query = active ? queries.active : queries.source;
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   if (state._tag !== "Ready") {

@@ -1,4 +1,8 @@
-import { type BrowserSessionLifetime, bindBrowserSession } from "./session-binding";
+import {
+  type BrowserSessionLifetime,
+  bindBrowserSession,
+  coordinateBrowserRequests,
+} from "./session-binding";
 import {
   FidyApi,
   type FidyApiGroups,
@@ -166,9 +170,12 @@ const browserClientLayer = (
   options: BrowserClientOptions,
   boundary: BrowserHttpBoundary
 ): FidyClientLayer => {
-  const transport = ("httpClient" in options ? options.httpClient : FetchHttpClient.layer).pipe(
-    browserHttpClientLayer(boundary, options.apiOrigin)
-  );
+  const underlying = "httpClient" in options ? options.httpClient : FetchHttpClient.layer;
+  const coordinated =
+    "session" in options
+      ? coordinateBrowserRequests({ transport: underlying, signal: options.session.signal })
+      : underlying;
+  const transport = coordinated.pipe(browserHttpClientLayer(boundary, options.apiOrigin));
   return !("session" in options)
     ? transport
     : bindBrowserSession({ transport, lifetime: options.session });

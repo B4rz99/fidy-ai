@@ -21,6 +21,7 @@ import {
   recordWebOnboardingConsent,
 } from "./operations";
 import { UserId } from "../../src/core/identity/contract";
+import { ResourceLimited } from "../../src/shell/public-http/contract";
 
 const users = [
   "10000000-0000-4000-8000-000000000051",
@@ -221,6 +222,34 @@ const consentSetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     );
     return db;
   });
+
+it("preserves a declared retryable refusal for a pressured Consent read", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* consentSetup();
+      const availableAt = DateTime.nowUnsafe().epochMilliseconds + 60_000;
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("INSERT INTO canonical_request_buckets VALUES (?,?)")
+          .bind(`user:${users[0]}`, availableAt)
+          .run()
+      );
+      const refused = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
+      expect(refused.status).toBe(429);
+      expect(refused.headers.get("retry-after")).toBe("1");
+      expect(refused.headers.get("cache-control")).toBe("no-store");
+      yield* Schema.decodeUnknownEffect(Schema.toCodecJson(ResourceLimited))(
+        yield* Effect.tryPromise(() => refused.json())
+      );
+      vi.setSystemTime(availableAt);
+      const accepted = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
+      expect(accepted.status).toBe(200);
+      const status = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)(
+        yield* Effect.tryPromise(() => accepted.json())
+      );
+      expect(status.status).toBe("Granted");
+    })
+  ));
 
 it("renews the exact withdrawn authorization through the public browser boundary and permits another withdrawal", () =>
   Effect.runPromise(

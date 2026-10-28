@@ -216,10 +216,12 @@ const call = (db: D1Database, subject: QueryCaller, work: CanonicalWork): Effect
     oauthConfirmation: Option.none(),
     inference: Option.none(),
   });
-const edit = (revision: number, change: object): CanonicalWork => ({
+const edit = (revision: number, change: object, view?: "compact"): CanonicalWork => ({
   _tag: "Call",
   operation: CanonicalOperationId.make("recurringPlans.applyRecurringEdit"),
-  input: { payload: { expectedRevision: revision, edit: change } },
+  input: {
+    payload: { expectedRevision: revision, edit: change, ...(view === undefined ? {} : { view }) },
+  },
 });
 const read = (
   db: D1Database,
@@ -240,6 +242,54 @@ const read = (
     )(yield* Effect.tryPromise(() => response.json()));
     return parsed.data;
   });
+
+it("compact recurring responses preserve stored history and historical occurrence settings", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, subjects } = yield* fixture();
+      const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
+      const first = { ...planInput, firstDate: "2026-09-01" };
+      expect(
+        (yield* call(db, owner, edit(0, { kind: "create", id: planId, plan: first }))).status
+      ).toBe(200);
+      const changed = yield* call(
+        db,
+        owner,
+        edit(
+          1,
+          {
+            kind: "edit",
+            planId,
+            date: "2026-10-01",
+            scope: "forward",
+            plan: { ...first, firstDate: "2026-10-01", name: "Nuevo" },
+          },
+          "compact"
+        )
+      );
+      expect(changed.status).toBe(200);
+      const receipt = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(RecurringDocument) })
+      )(yield* Effect.tryPromise(() => changed.json()));
+      expect(receipt.data.plans[0]?.revisions).toHaveLength(1);
+      expect((yield* read(db, owner)).document.plans[0]?.revisions).toHaveLength(2);
+      const selected = yield* executeCanonicalQuery({
+        db,
+        subject: owner,
+        operation: CanonicalOperationId.make("recurringPlans.getRecurringWorkspace"),
+        input: { query: { month: "2026-09", view: "compact" } },
+        bucket: Option.none(),
+      });
+      const response = Option.getOrThrow(selected);
+      expect(response.status).toBe(200);
+      const workspace = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(RecurringWorkspace) })
+      )(yield* Effect.tryPromise(() => response.json()));
+      expect(workspace.data.document.plans[0]?.revisions).toHaveLength(1);
+      expect(workspace.data.document.plans[0]?.revisions[0].plan.name).toBe("Nuevo");
+      expect(workspace.data.occurrences[0]?.plan.name).toBe("Arriendo");
+    })
+  ));
 
 it(
   "detected history stays outside the plan until explicit review, and dismissal, restoration and linking persist",

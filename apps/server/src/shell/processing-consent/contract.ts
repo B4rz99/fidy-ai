@@ -9,6 +9,7 @@ import {
 import { Transaction } from "~/core/transactions/contract";
 import { UserPreferences } from "~/core/identity/contract";
 import { Category } from "~/core/categories/contract";
+import { ResourceLimited } from "~/shell/public-http/contract";
 
 /** A pagination position conveys no authority; every page authenticates the same browser afresh. */
 export const PrivacyTransactionCursor = Schema.Struct({
@@ -92,9 +93,13 @@ export const ProcessingConsentGroup = HttpApiGroup.make("processingConsent").add
     payload: ProcessingConsentRenewal,
     success: ProcessingConsentRenewalReceipt,
   }),
-  HttpApiEndpoint.get("status", "/web/consent", { success: ProcessingConsentStatus }),
+  HttpApiEndpoint.get("status", "/web/consent", {
+    success: ProcessingConsentStatus,
+    error: ResourceLimited,
+  }),
   HttpApiEndpoint.get("authorization", "/web/consent/authorization", {
     success: ProcessingAuthorization,
+    error: ResourceLimited,
   }),
   HttpApiEndpoint.post("transactions", "/web/privacy/transactions", {
     payload: PrivacyTransactionRequest,

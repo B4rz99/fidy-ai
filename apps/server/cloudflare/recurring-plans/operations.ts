@@ -95,6 +95,7 @@ export const browseRecurringPlans = ({
 export const prepareRecurringEdit = ({
   work,
   command,
+  compact,
 }: RecurringEditWork): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     if (!(yield* Effect.tryPromise(() => liveTransactionAuthority(work)))) {
@@ -145,7 +146,7 @@ export const prepareRecurringEdit = ({
           ...statements,
           audit({ work, operation, outcome: "accepted" }),
         ],
-        outcome: outcome(),
+        outcome: outcome(compact),
         guardRefusal: (current) => Effect.succeed(recurringRefusal(current)),
       },
     };

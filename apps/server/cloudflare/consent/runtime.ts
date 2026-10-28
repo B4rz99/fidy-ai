@@ -35,6 +35,7 @@ const methodNotAllowedStatus = 405;
 const invalidStatus = 400;
 const unauthenticatedStatus = 401;
 const unavailableStatus = 503;
+const resourceLimitedStatus = 429;
 const admissionLifetimeMilliseconds = 5000;
 type PrivacyRequest = Readonly<{
   request: Request;
@@ -42,6 +43,13 @@ type PrivacyRequest = Readonly<{
   browserOrigin: string;
   coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
 }>;
+const pressureResponse = (request: Request, response: Response): Response => {
+  if (request.method !== "GET" || response.status !== resourceLimitedStatus) {
+    return consentResponse(response.status);
+  }
+  response.headers.set("cache-control", "no-store");
+  return response;
+};
 const readTransactions = (
   input: PrivacyRequest,
   subject: AuthenticatedWebSession
@@ -136,7 +144,7 @@ export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Ef
     return yield* protectCanonicalPressure({
       db: input.db,
       userId: subject.value.userId,
-      refused: (response) => Effect.succeed(consentResponse(response.status)),
+      refused: (response) => Effect.succeed(pressureResponse(input.request, response)),
       work: {
         erase: handleErasureRequest(input),
         status: readProcessingConsent({ ...input, subject: subject.value }),

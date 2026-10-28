@@ -19,6 +19,7 @@ import { readPlanningTransactions } from "../../transactions/operations";
 
 import { linkedTransactions, planningFact } from "./facts";
 import { RecurringPlanningUnavailable } from "../contract";
+import { displayDocument } from "./display";
 
 type Query = typeof RecurringWorkspaceQuery.Type;
 const monthLength = 7;
@@ -157,7 +158,7 @@ export const workspaceValue = ({
       filters: query,
     });
     return yield* Schema.decodeEffect(Schema.toType(RecurringWorkspace))({
-      document,
+      document: displayDocument({ document, compact: query.view === "compact" }),
       month: query.month,
       today: DateTime.formatIsoDate(
         DateTime.makeZonedUnsafe(now, { timeZone: preferences.timeZone })

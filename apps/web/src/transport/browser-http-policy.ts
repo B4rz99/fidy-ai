@@ -402,6 +402,15 @@ type PolicyExecution = Readonly<{
   observation: TransportObservation;
 }>;
 
+const canRetryResourceRefusal = (
+  boundary: BrowserHttpBoundary,
+  request: HttpClientRequest.HttpClientRequest,
+  continuation: boolean
+): boolean =>
+  boundary === "canonical" ||
+  continuation ||
+  (boundary === "web-auth" && isSafeRetryRequest(request));
+
 const executePolicyRequest = (
   request: HttpClientRequest.HttpClientRequest,
   execution: PolicyExecution
@@ -434,10 +443,9 @@ const executePolicyRequest = (
   const boundedRetries = isSafeRetryRequest(request)
     ? attempt.pipe(Effect.retry({ times: 1, while: isRetryableTransportFailure }))
     : attempt;
-  const admittedResponse =
-    execution.boundary === "canonical" || continuation
-      ? retryResourceRefusals(boundedRetries)
-      : boundedRetries;
+  const admittedResponse = canRetryResourceRefusal(execution.boundary, request, continuation)
+    ? retryResourceRefusals(boundedRetries)
+    : boundedRetries;
   return admittedResponse.pipe(
     Effect.timeoutOrElse({
       duration: deadline,
@@ -502,7 +510,7 @@ const makePolicyClient = (
  * the only destination the resulting client will send to. `httpClient` supplies the underlying
  * browser or test transport. Requests include browser credentials, disable caching and automatic
  * redirects, and expose only sanitized transport failures; only GET and HEAD transport failures
- * retry, once. Canonical requests can additionally retry a declared, unadmitted resource refusal
+ * retry, once. Canonical requests and safe web-auth reads can additionally retry a declared, unadmitted resource refusal
  * with bounded Retry-After pacing inside the same absolute deadline. Uncertain mutations and
  * enrollment/authentication refusals are never automatically replayed.
  */

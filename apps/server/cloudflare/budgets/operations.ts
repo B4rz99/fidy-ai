@@ -740,7 +740,7 @@ export const readBudgetCrossings = (
       .sort((left, right) => left.threshold - right.threshold);
   });
 
-const maximumPendingWork = 1;
+const maximumPendingTimestamps = 128;
 
 const PendingWork = Schema.Struct({
   occurred_at_ms: Schema.DateTimeUtcFromMillis,
@@ -772,8 +772,39 @@ const reconcilePendingPeriod = ({
     return true;
   });
 
+const pendingPeriod = Effect.fn(function* ({
+  db,
+  userId,
+  context,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  context: UserContext;
+}>) {
+  const oldest = yield* Effect.tryPromise(() =>
+    db
+      .prepare(
+        "SELECT occurred_at_ms, version FROM budget_evaluation_work WHERE user_id=? ORDER BY occurred_at_ms LIMIT 1"
+      )
+      .bind(userId)
+      .first()
+  );
+  if (oldest === null) return [];
+  const first = yield* Schema.decodeUnknownEffect(PendingWork)(oldest);
+  const period = budgetPeriod({ now: first.occurred_at_ms, query: { timeZone: context.timeZone } });
+  const rows = yield* Effect.tryPromise(() =>
+    db
+      .prepare(`SELECT occurred_at_ms, version
+    FROM budget_evaluation_work WHERE user_id=? AND occurred_at_ms>=? AND occurred_at_ms<?
+    ORDER BY occurred_at_ms LIMIT ${maximumPendingTimestamps}`)
+      .bind(userId, period.from.epochMilliseconds, period.to.epochMilliseconds)
+      .all()
+  );
+  return yield* Schema.decodeUnknownEffect(Schema.Array(PendingWork))(rows.results);
+});
+
 /**
- * Consume durable work written atomically by D1 movement/Budget triggers. Work for a backdated
+ * Coalesce a bounded snapshot of timestamps in one applied month before reconciling its alerts. Work for a backdated
  * correction uses its own zoned month, not the request's current month. The versioned removal
  * leaves a concurrent writer's work pending even if it arrives during an earlier drain.
  */
@@ -785,31 +816,28 @@ export const evaluateBudgetAlerts = ({
     const subject = yield* Schema.decodeEffect(UserId)(userId);
     const context = yield* readUserContext({ db, userId: subject, authority: Option.none() });
     if (Option.isNone(context)) return false;
-    const pending = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT occurred_at_ms, version
-    FROM budget_evaluation_work WHERE user_id = ? ORDER BY occurred_at_ms LIMIT ${maximumPendingWork}`)
-        .bind(userId)
-        .all()
-    );
-    for (const row of pending.results) {
-      const item = Schema.decodeUnknownOption(PendingWork)(row);
-      if (Option.isNone(item)) return false;
+    const pending = yield* pendingPeriod({ db, userId, context: context.value });
+    const first = pending[0];
+    if (first !== undefined) {
       if (
         !(yield* reconcilePendingPeriod({
           db,
           userId,
           context: context.value,
-          now: item.value.occurred_at_ms,
+          now: first.occurred_at_ms,
         }))
       ) {
         return false;
       }
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(PendingWork)))(
+        pending
+      );
       yield* Effect.tryPromise(() =>
         db
           .prepare(`DELETE FROM budget_evaluation_work
-      WHERE user_id = ? AND occurred_at_ms = ? AND version = ?`)
-          .bind(userId, item.value.occurred_at_ms.epochMilliseconds, item.value.version)
+        WHERE user_id = ? AND (occurred_at_ms, version) IN
+        (SELECT json_extract(value,'$.occurred_at_ms'), json_extract(value,'$.version') FROM json_each(?))`)
+          .bind(userId, encoded)
           .run()
       );
     }

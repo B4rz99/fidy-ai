@@ -19,6 +19,7 @@ import { readPlanningTransactions } from "../../transactions/operations";
 import { readDocument } from "./store";
 
 import { planningFact } from "./facts";
+import { displayDocument } from "./display";
 
 const operation = "recurringPlans.applyRecurringEdit";
 export const validateReferences = ({
@@ -126,13 +127,14 @@ const validSeriesReference = ({
   if (edit.seriesId === undefined) return Effect.succeed(true);
   return ownsRecurringSeries({ db: work.db, userId: work.subject.userId, seriesId: edit.seriesId });
 };
-export const outcome = (): OwnerOutcome => ({
+export const outcome = (compact: boolean): OwnerOutcome => ({
   _tag: "Owner",
   operation,
   collisionKey: Option.some("recurring-plan-document"),
   guardFacts: Option.none(),
   read: (db, userId) =>
     readDocument({ db, userId }).pipe(
+      Effect.map((document) => displayDocument({ document, compact })),
       Effect.map((document) =>
         Option.some({
           _tag: "Owner" as const,

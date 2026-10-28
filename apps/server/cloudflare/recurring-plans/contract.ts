@@ -13,6 +13,7 @@ export type RecurringOperation =
 export type RecurringEditWork = Readonly<{
   work: CanonicalPreparationWork;
   command: RecurringCommand;
+  compact: boolean;
 }>;
 export type RecurringAuditWork = Readonly<{
   db: D1Database;

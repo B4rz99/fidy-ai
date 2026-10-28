@@ -9,7 +9,7 @@ export type PlanInput = Plan["revisions"][number]["plan"];
 export type Edit = CanonicalInput<"recurringPlans.applyRecurringEdit">["payload"]["edit"];
 export type Filters = Omit<
   CanonicalInput<"recurringPlans.getRecurringWorkspace">["query"],
-  "month" | "previousMonth"
+  "month" | "previousMonth" | "view"
 >;
 export type Category = CanonicalSuccess<"categories.listCategories">["data"][number];
 export type Save = (edit: Edit) => void;

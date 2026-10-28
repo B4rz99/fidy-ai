@@ -38,6 +38,7 @@ const Resources = (props: Props): JSX.Element => {
     refreshProfile: props.refreshProfile,
     query: {
       month: props.month,
+      view: "compact",
       ...props.filters,
       ...(Option.isSome(props.previous) ? { previousMonth: props.previous.value } : {}),
     },

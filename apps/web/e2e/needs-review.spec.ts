@@ -44,6 +44,57 @@ test("reviews an ingestion item alongside its original and saves a draft", ({ pa
     })
   ));
 
+test("saves an initial draft promptly and spaces continued autosaves", ({ page }) => {
+  let writes = 0;
+  const countWrites = (): number => writes;
+  const settleInitial = 250;
+  const settleContinued = 750;
+  const clockTime = DateTime.nowUnsafe().epochMilliseconds;
+  const save = (route: Route): Promise<void> => {
+    if (!new URL(route.request().url()).pathname.endsWith("/edits")) return reviewRoute(route);
+    writes++;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response([
+        {
+          item,
+          revision: writes,
+          draft: Schema.decodeUnknownSync(Schema.Struct({ draft: Schema.Unknown }))(
+            route.request().postDataJSON()
+          ).draft,
+        },
+      ]),
+    });
+  };
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() => page.route(`${apiOrigin}/ingestion/review-workspace**`, save));
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      const value = page.getByLabel("Valor", { exact: true });
+      yield* Effect.tryPromise(() => expect(value).toBeVisible());
+      yield* Effect.tryPromise(() => page.clock.install({ time: clockTime }));
+      yield* Effect.tryPromise(() => page.clock.pauseAt(clockTime));
+      yield* Effect.tryPromise(() => value.fill("13500"));
+      yield* Effect.tryPromise(() => page.clock.runFor(settleInitial));
+      yield* Effect.tryPromise(() => expect.poll(countWrites).toBe(1));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toContainText("Borrador guardado")
+      );
+      yield* Effect.tryPromise(() => value.fill("14500"));
+      yield* Effect.tryPromise(() => page.clock.runFor(settleInitial));
+      expect(writes).toBe(1);
+      yield* Effect.tryPromise(() => page.clock.runFor(settleContinued));
+      yield* Effect.tryPromise(() => expect.poll(countWrites).toBe(2));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toContainText("Borrador guardado")
+      );
+    })
+  );
+});
+
 const reviewRoute = (route: Route): Promise<void> => {
   const path = new URL(route.request().url()).pathname;
   if (path.endsWith("/material")) {

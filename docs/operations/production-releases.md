@@ -101,7 +101,10 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
    is needed. Require the reviewed edge policy, then run
    `alchemy plan --stage production --no-input`. No planning or candidate upload can bypass the barrier.
 8. Recheck trunk through the bounded Git reference response (not commit patches), then capture each
-   active public/Core deployment and its sole stable 100% version. Independent public/Core capture
+   active public/Core deployment and its sole serving 100% version. A second version at exactly 0%
+   may remain from an interrupted release; capture does not change traffic or secrets. The captured
+   immutable deployment ID binds that complete routing state, and staging rechecks it before
+   replacing the zero-traffic slot with the newly uploaded candidate. Independent public/Core capture
    reads overlap with concurrency capped at two;
    prove both stable identities through proof-admitted normal-traffic
    `GET /internal/release-smoke?readiness=1`. Require the exact public/Core versions, revision,
@@ -488,9 +491,12 @@ A successful deployment is not host interoperability or launch approval.
 
 ### Recover a stranded zero-traffic candidate
 
-If a failed pre-promotion release could not complete cleanup, capture refuses the retained
-100%/0% deployment. This is a routing repair, not permission to promote the failed candidate or
-restore data. Run `production-inspect.yml` first and review the current public/Core deployment IDs.
+If a failed pre-promotion release could not complete cleanup, an ordinary release can capture a
+retained 100%/0% deployment and replace only its zero-traffic candidate. It still verifies the serving
+pair and requires exact candidate/intermediate smoke proof before promotion. Split positive traffic,
+duplicate versions, more than two versions or changed captured deployment IDs refuse the release.
+
+For a standalone routing repair, run `production-inspect.yml` first and review the current public/Core deployment IDs.
 Then dispatch `production-staged-recovery.yml` on protected `trunk`, supplying those two IDs.
 
 The protected Production coordinator derives Worker names and candidate versions from completed
@@ -505,6 +511,12 @@ repair requires fresh inspection; do not reuse stale deployment IDs.
 After successful recovery, dispatch the ordinary Production workflow for current `trunk`. Capture,
 exact-pair smoke and promotion remain mandatory. Do not run the repair from a workstation or use it
 to bypass a failed candidate proof.
+
+Cloudflare code `10220` means the requested version would roll back changed secrets. Standalone
+cleanup can encounter it even when the target version already serves 100% of traffic. Do not force
+that rollback. Retry the ordinary Production workflow instead: its fresh candidate carries the
+current configured secrets and replaces the stranded 0% slot under the captured deployment guards.
+Cleanup and rollback continue to fail closed if Cloudflare refuses their secret compatibility.
 
 ### OAuth availability during a confirmed D1 quota outage
 

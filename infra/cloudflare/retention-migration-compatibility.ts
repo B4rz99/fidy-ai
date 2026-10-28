@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
-import { type Deployment, type ReleaseSnapshot } from "./release-controller";
+import { type Deployment, type ReleaseSnapshot, releaseController } from "./release-controller";
 
 export const retentionCompatibilityRevision = "cf11ac4c396634f555386bd49ea772548f17e5cb";
 
@@ -63,17 +63,13 @@ const requireCapturedCore = Effect.fn(function* (
   port: RetentionCompatibilityPort,
   snapshot: ReleaseSnapshot
 ) {
-  const current = yield* port.current(snapshot.core.name);
-  if (
-    current.id !== snapshot.core.deploymentId ||
-    current.versions.length !== 1 ||
-    current.versions[0]?.id !== snapshot.core.stableVersionId ||
-    current.versions[0].percentage !== 100
-  ) {
-    return yield* Effect.fail(
-      Error("Retention migration requires the captured stable Core deployment")
+  yield* releaseController
+    .requireCapturedWorker(port, snapshot.core)
+    .pipe(
+      Effect.mapError(() =>
+        Error("Retention migration requires the captured stable Core deployment")
+      )
     );
-  }
 });
 
 /** Fail closed before D1 apply: every traffic-serving version and guarded rollback target is proven. */

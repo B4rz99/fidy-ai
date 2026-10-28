@@ -941,12 +941,6 @@ export const releasePort = ({
   };
 };
 
-const soleStableVersion = (deployment: Deployment): string => {
-  if (deployment.versions.length !== 1 || deployment.versions[0]?.percentage !== 100) {
-    throw Error("Production Worker is not fully stable");
-  }
-  return deployment.versions[0].id;
-};
 const readStablePair = Effect.fn(function* ({
   port,
   workers,
@@ -972,14 +966,12 @@ const readStablePair = Effect.fn(function* ({
         })
     )
   );
-  const publicStable = yield* Effect.try({
-    try: () => soleStableVersion(publicDeployment),
-    catch: () => new ReleaseFailure({ message: "Unstable public Worker" }),
-  });
-  const coreStable = yield* Effect.try({
-    try: () => soleStableVersion(coreDeployment),
-    catch: () => new ReleaseFailure({ message: "Unstable Core Worker" }),
-  });
+  const publicStable = yield* releaseController
+    .servingVersion(publicDeployment)
+    .pipe(Effect.mapError(() => new ReleaseFailure({ message: "Unstable public Worker" })));
+  const coreStable = yield* releaseController
+    .servingVersion(coreDeployment)
+    .pipe(Effect.mapError(() => new ReleaseFailure({ message: "Unstable Core Worker" })));
   const identity = yield* stableIdentity({
     publicVersionId: publicStable,
     coreVersionId: coreStable,
@@ -1255,9 +1247,10 @@ const proveRecoveryCorePrivate = Effect.fn(function* (
 const stablePairUnchanged = Effect.fn(function* (port: ReleasePort, snapshot: ReleaseSnapshot) {
   const publicDeployment = yield* port.current(snapshot.public.name);
   const coreDeployment = yield* port.current(snapshot.core.name);
+  const publicStable = yield* releaseController.servingVersion(publicDeployment);
+  const coreStable = yield* releaseController.servingVersion(coreDeployment);
   return (
-    soleStableVersion(publicDeployment) === snapshot.public.stableVersionId &&
-    soleStableVersion(coreDeployment) === snapshot.core.stableVersionId
+    publicStable === snapshot.public.stableVersionId && coreStable === snapshot.core.stableVersionId
   );
 });
 const cleanup = Effect.fn(function* (port: ReleasePort, env: Config) {

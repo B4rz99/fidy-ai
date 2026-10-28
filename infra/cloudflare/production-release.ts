@@ -129,6 +129,19 @@ const healthSchema = Schema.Struct({
 const responseLimit = 100_000;
 const successStatusStart = 200;
 const successStatusEnd = 300;
+const isSuccessStatus = (status: number): boolean =>
+  status >= successStatusStart && status < successStatusEnd;
+const DeploymentRejection = Schema.Struct({
+  errors: Schema.Array(
+    Schema.Struct({
+      code: Schema.Number.check(
+        Schema.isInt(),
+        Schema.isGreaterThanOrEqualTo(0),
+        Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)
+      ),
+    })
+  ),
+});
 const inspectionHistoryLimit = 5;
 const recoveryUnavailableStatus = 503;
 const origin = "https://api.fidyapp.com";
@@ -196,8 +209,12 @@ const config = (): Config => {
   };
 };
 
-const boundedJson = Effect.fn(function* (response: HttpClientResponse.HttpClientResponse) {
-  if (response.status < successStatusStart || response.status >= successStatusEnd) {
+const boundedJson = Effect.fn(function* (
+  response: HttpClientResponse.HttpClientResponse,
+  reportDeploymentRejection: boolean
+) {
+  const rejected = !isSuccessStatus(response.status);
+  if (rejected && !reportDeploymentRejection) {
     return yield* Effect.fail(Error("Provider rejected the release request"));
   }
   if (Number(response.headers["content-length"] ?? 0) > responseLimit) {
@@ -222,15 +239,29 @@ const boundedJson = Effect.fn(function* (response: HttpClientResponse.HttpClient
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return yield* decodeJson(new TextDecoder().decode(bytes));
+  const text = new TextDecoder().decode(bytes);
+  if (rejected) {
+    const rejection = Option.flatMap(
+      Schema.decodeOption(Json)(text),
+      Schema.decodeUnknownOption(DeploymentRejection)
+    );
+    const code = Option.flatMap(rejection, (value) => Option.fromNullishOr(value.errors[0]?.code));
+    return yield* new ReleaseFailure({
+      message: `Cloudflare deployment rejected (HTTP ${response.status}${Option.match(code, {
+        onNone: () => "",
+        onSome: (value) => `; code ${value}`,
+      })})`,
+    });
+  }
+  return yield* decodeJson(text);
 });
 const providerJson = Effect.fn(
-  function* (request: HttpClientRequest.HttpClientRequest) {
+  function* (request: HttpClientRequest.HttpClientRequest, reportDeploymentRejection = false) {
     const client = yield* HttpClient.HttpClient;
     const response = yield* HttpClient.withScope(client)
       .execute(request)
       .pipe(Effect.mapError(() => Error("Provider request failed; inspect traffic state")));
-    return yield* boundedJson(response);
+    return yield* boundedJson(response, reportDeploymentRejection);
   },
   Effect.scoped,
   Effect.timeout("10 seconds"),
@@ -862,7 +893,9 @@ export const releasePort = ({
   client: HttpClient.HttpClient;
 }): ReleasePort => {
   const json = (request: HttpClientRequest.HttpClientRequest): Effect.Effect<unknown, Error> =>
-    providerJson(request).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    providerJson(request, request.method === "POST").pipe(
+      Effect.provideService(HttpClient.HttpClient, client)
+    );
   const url = (name: string): string =>
     `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/deployments`;
   const current: ReleasePort["current"] = (name) =>
@@ -1291,6 +1324,15 @@ const recoverAbandoned = Effect.fn(function* (
       verifyPair: (pair) =>
         stableIdentity({ ...pair, proof: env.smokeProof }).pipe(
           Effect.provideService(HttpClient.HttpClient, client),
+          Effect.mapError(
+            (failure) =>
+              new ReleaseFailure({
+                message:
+                  failure instanceof ReleaseSmokeFailed
+                    ? `Recovery serving-pair proof rejected: ${failure.reason}`
+                    : "Recovery serving-pair proof unavailable",
+              })
+          ),
           Effect.asVoid
         ),
     },

@@ -3,6 +3,18 @@ import { BigDecimal, Schema } from "effect";
 
 const ExactDecimal = Schema.NonEmptyString.pipe(Schema.decodeTo(Schema.BigDecimalFromString));
 
+const formatterLimit = 64;
+const numberFormatters = new Map<string, Intl.NumberFormat>();
+const numberFormatter = (locale: string, options: Intl.NumberFormatOptions): Intl.NumberFormat => {
+  const key = JSON.stringify([locale, options]);
+  const cached = numberFormatters.get(key);
+  if (cached !== undefined) return cached;
+  const formatter = new Intl.NumberFormat(locale, options);
+  if (numberFormatters.size >= formatterLimit) numberFormatters.clear();
+  numberFormatters.set(key, formatter);
+  return formatter;
+};
+
 /** Applies Locale and explicit Currency without routing exact decimal magnitude through Number. */
 const currencyAmount = ({
   amount,
@@ -19,7 +31,7 @@ const currencyAmount = ({
 }>): string => {
   const decimal = Schema.decodeSync(ExactDecimal)(amount);
   const digits = currencyMetadata(Schema.decodeUnknownSync(Currency)(currency)).fractionalDigits;
-  const formatter = new Intl.NumberFormat(locale, {
+  const formatter = numberFormatter(locale, {
     currency,
     currencyDisplay,
     style: "currency",
@@ -33,7 +45,7 @@ const currencyAmount = ({
   const fraction =
     digits === 0
       ? ""
-      : new Intl.NumberFormat(locale, { minimumIntegerDigits: digits, useGrouping: false }).format(
+      : numberFormatter(locale, { minimumIntegerDigits: digits, useGrouping: false }).format(
           remainder < 0n ? -remainder : remainder
         );
   // Preserve negative zero's Locale sign placement when rounding a negative amount to zero.

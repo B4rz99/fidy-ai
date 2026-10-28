@@ -1,0 +1,148 @@
+infra/cloudflare/alchemy.run.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 654,665-669
+apps/site/src/scripts/site.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 2,19-24,52-61
+apps/site/src/styles/landing.css
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 194
+apps/web/src/features/transactions/summary.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 82-92,136-137
+apps/site/scripts/build-headers.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-20
+infra/cloudflare/edge-security.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 82
+apps/site/playwright.config.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 5,11-15,17-24
+apps/site/scripts/check-artifact.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 12-14,18
+apps/web/src/features/budgets/layout.css
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 24-25,49-68
+  s_2c9d6c1daa679a::t_ed24f28ae3dc15 69
+apps/site/src/pages/privacy.astro
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-5
+apps/site/scripts/build-markdown.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-15
+apps/web/src/features/budgets/dev-preview.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1,16,29-32,35,42,66
+apps/web/src/ui/components/budget-meter.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 36
+apps/site/public/llms.txt
+  s_2c9d6c1daa679a::t_dd0b5fa6ff1be6 18-19
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 3,5,7,9,11,13-17,21,23-29,31,33-37
+apps/web/e2e/transactions-approved.spec.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 119-121
+apps/site/src/pages/404.astro
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 15-19
+.github/workflows/production.yml
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 372-379
+apps/site/public/_headers
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 5-6,15-18
+apps/site/e2e/site.spec.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 18-21,123,133,152,184,207,290
+apps/site/src/pages/index.astro
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 12,20,50,266,268-269
+apps/web/src/features/email-replacement/feature.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 41,90,93-98,101,131
+.oxlintrc.ui.json
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 147
+apps/site/cloudflare/worker.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-90
+apps/web/src/ui/components/button-variants.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 37-38,53-54
+apps/site/src/pages/[section]/[slug].astro
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 98
+apps/site/e2e/agent-readiness.spec.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-325
+apps/web/src/features/subscription/workspace.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 307,372
+apps/web/src/ui/components/dashboard.css
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 102,121-122,127
+apps/site/astro.config.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 11
+apps/site/src/islands/phone-demo.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 4-8,11,15,19-27
+infra/cloudflare/workers.test.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 444
+apps/site/src/islands/footer.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 6,14-16
+apps/site/src/scripts/phone-demo.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-33
+apps/web/e2e/text-reflow.spec.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-112
+apps/site/src/layouts/site-layout.astro
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 4-5,18,32-37
+apps/web/src/features/recurring/dev-preview.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 21,73,107
+apps/web/src/features/budgets/workspace.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 127-132,279-283,285
+apps/site/src/components/identity.astro
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-49
+apps/site/src/pages/contact.astro
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-42
+apps/site/wrangler.test.jsonc
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-13
+apps/web/src/features/budgets/dev-preview.css
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-8
+apps/web/src/ui/components/card.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 10,20,48-52
+apps/web/src/features/budgets/summary.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 94,102-104,113,116-121
+apps/web/src/ui/components/settings.css
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 2
+.oxlintrc.json
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 76-82,300
+  s_2c9d6c1daa679a::t_dd0b5fa6ff1be6 274
+apps/site/src/pages/about.astro
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-36
+apps/site/src/pages/docs.astro
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 1-49
+apps/web/src/features/oauth-connections/management-view.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 64,165-171,178
+apps/web/src/ui/components/financial-summary-card.css
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 9-10
+apps/site/ARCHITECTURE.md
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 11,15-17,41,45-60,71,73
+apps/web/src/features/privacy/renewal.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 93-98,136
+infra/cloudflare/verify-edge-policy.ts
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 5,181-182
+apps/web/src/features/privacy/erasure-request.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 55
+apps/site/package.json
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 8,26-28
+apps/web/src/features/privacy/authorization-copy.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 63
+apps/web/src/features/recovery/feature.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 80-83,92,97
+apps/web/src/ui/components/subscription.css
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 2,101-112,222-223,446-447
+apps/site/src/islands/phone-content.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 16-18,20-21
+apps/site/src/styles/global.css
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 64-71
+apps/site/src/components/header.astro
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 15
+apps/web/src/features/pats/management-view.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 126,143,151-157
+apps/web/src/features/privacy/feature.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 66,222,276-280
+apps/web/src/ui/components/workspace-layout.tsx
+  s_2c9d6c1daa679a::t_ba263ff43cb7b7 11,16
+bun.lock
+  s_2c9d6c1daa679a::t_ffee7c1f3f8ab3 100,102,672-673,1068-1069,2158-2159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d7156ecf2b80cc5a546d325f4ab305a8fd62b0f5",
+  "prompts": {},
+  "sessions": {
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

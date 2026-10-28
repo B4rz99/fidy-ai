@@ -58,6 +58,12 @@
       "path": "bun.lock",
       "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until corrected versions reach seven days. body-parser 2.3.0 remains vulnerable: a crafted compressed request with trailing bytes can trigger an uncaught decoder error and process crash; application reachability is not asserted. Fixed 2.4.0 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-29T11:39:38.614Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep request bounds and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-27r3-jxmh-p828",
       "until": "2026-10-29T11:39:38.614Z"
+    },
+    {
+      "cve": "CVE-2026-93753",
+      "path": "bun.lock",
+      "reason": "The User explicitly approved a 48-hour exception on 2026-10-28 UTC to unblock PR #1578 while a separate fix is prepared. deepmerge 4.3.1 remains vulnerable to prototype poisoning of returned merged objects; it is installed transitively through development tooling shadcn and @shadcn/registry. The registry latest is still 4.3.1 with no published fixed release. This is accepted installed risk, not remediation or a claim of non-reachability. Keep the seven-day release-age policy and all other checks active. Prepare and independently review remediation against the shipped CJS/UMD entrypoints, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion before this deadline. Upstream: https://github.com/TehShrike/deepmerge/issues/273",
+      "until": "2026-10-30T03:23:36Z"
     }
   ]
 }

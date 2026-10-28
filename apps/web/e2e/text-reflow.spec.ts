@@ -85,7 +85,7 @@ test("Upgrade keeps every payment choice and exact offer price reachable with do
         page.getByRole("button", { name: "Continuar con Nequi", exact: true }).click()
       );
       yield* wait(() =>
-        expect(page.getByRole("heading", { name: "Pago con Nequi" })).toBeVisible()
+        expect(page.getByRole("heading", { name: "Pagar con Nequi" })).toBeVisible()
       );
     })
   ));
@@ -105,6 +105,8 @@ test("the recurring create action grows around its label and opens the editor wi
       yield* expectReflow(page);
       yield* expectLabelInsideAction(create);
       yield* wait(() => create.click());
-      yield* wait(() => expect(page.getByRole("dialog")).toContainText("Configurar recurrente"));
+      yield* wait(() =>
+        expect(page.getByRole("dialog", { name: "Nuevo recurrente", exact: true })).toBeVisible()
+      );
     })
   ));

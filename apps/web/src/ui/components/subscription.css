@@ -98,6 +98,18 @@
   padding: 32px 0 40px;
   border-bottom: 1px solid var(--fidy-border-decorative-divider);
 }
+.subscription-refresh {
+  min-width: 0;
+  max-width: 100%;
+}
+.subscription-refresh [data-slot="button"] {
+  gap: 8px;
+  padding-inline: 16px;
+}
+.subscription-refresh svg {
+  width: 24px;
+  height: 24px;
+}
 .subscription-standing h2 {
   font-size: 20px;
   letter-spacing: -0.3px;
@@ -431,6 +443,8 @@
   grid-template-columns: 64px minmax(0, 1fr);
 }
 .subscription-columns[data-paid="true"] .subscription-refresh {
+  min-width: 0;
+  max-width: 100%;
   grid-column: 2;
   justify-self: start;
 }

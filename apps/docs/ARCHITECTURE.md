@@ -30,17 +30,21 @@ Starlight's unprocessed inline-script whitespace differs from Astro's collected 
 build step adds hashes of the actual emitted inline script bytes. Browser acceptance checks verify
 search, clipboard, navigation, accessibility and absence of CSP violations.
 
-## Manual publication
+## Automatic publication
 
 `infra/docs` owns a separate `FidyDocs` Alchemy stack and an assets-only `fidy-docs` Worker. The main
-product stack never deploys it. The sole publication workflow uses `workflow_dispatch`, protected
-trunk and the existing production environment. There is no push or scheduled publication trigger.
+product stack never deploys it. The publication workflow runs automatically on changes to docs,
+their infrastructure or shared build inputs on protected trunk, using the existing production
+environment. It checks out the triggering revision, builds the site, verifies types and runs the
+artifact, reference and browser checks before deploying. There is no owner attestation input,
+manual dispatch or scheduled refresh.
 
-The publication build requires an owner-authored Production verification attestation covering all
-three documented journeys and the named clients/CLI, bound to the exact static artifact SHA-256.
-The attestation is not a live test. Missing, incomplete or mismatched evidence blocks publication.
-Alchemy build memoization is disabled so an unchanged build cannot bypass this gate. The Worker
-has only `docs.fidyapp.com`, no workers.dev URL, no product bindings, no runtime script and a real 404. Public indexing is enabled only on this gated publication path.
+The three documented journeys must be verified against Production before the first publication.
+Local docs tests do not establish authenticated Production verification. After initial verification,
+merging a documentation change publishes it automatically; reference regeneration remains explicit.
+Alchemy build memoization is disabled. The Worker
+has only `docs.fidyapp.com`, no workers.dev URL, no product bindings, no runtime script and a real 404.
+The workflow verifies the served Markdown and agent index against the built artifact after deployment.
 
-See [manual operations](../../docs/operations/docs-site.md) and the
+See [publication operations](../../docs/operations/docs-site.md) and the
 [implementation checklist/spec](../../docs/operations/docs-site-plan.md).

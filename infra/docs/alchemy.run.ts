@@ -25,7 +25,7 @@ export default Alchemy.Stack(
     const docs = yield* Cloudflare.Website.StaticSite("Docs", {
       name: "fidy-docs",
       memo: false,
-      command: "bun run build:publication",
+      command: "bun run build",
       cwd: "../../apps/docs",
       outdir: "dist",
       assets: { htmlHandling: "drop-trailing-slash", notFoundHandling: "404-page" },

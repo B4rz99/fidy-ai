@@ -13,9 +13,9 @@ artifacts; manually author explanations/examples, permissions and troubleshootin
 Keep contributor material, planned features, an embedded AI assistant and an authenticated
 playground outside this site.
 
-The owner chooses when to update, regenerate and publish. No scheduled refreshes, implicit
-product-release publication or required documentation updates with product PRs. Publication
-is public and indexable only after all three journeys are verified against Production.
+The owner chooses when to update content and regenerate references. Publication runs automatically
+when docs or their build inputs change on trunk. There are no scheduled refreshes or required docs
+updates with product PRs. The three journeys must pass against Production before first publication.
 
 ## Checklist
 
@@ -27,7 +27,7 @@ is public and indexable only after all three journeys are verified against Produ
 - [x] Explain permissions, approval, expiration, revocation, ambiguity and troubleshooting.
 - [x] Add explicit reference generation with only customer-accessible contracts and reachable schemas.
 - [x] Publish identical maintained content as HTML, Markdown and `llms.txt`; add copy Markdown.
-- [x] Add an independent manual Cloudflare publication path with a Production verification gate.
+- [x] Add an independent automatic Cloudflare publication path with docs checks before deployment.
 - [x] Reconcile existing guidance and document the discovery-link handoff at first publication.
 - [x] Verify types regularly and run type-aware lint after the first slice and final edit.
 - [x] Run focused generation, publication and built-site/browser tests.
@@ -35,28 +35,29 @@ is public and indexable only after all three journeys are verified against Produ
 - [x] Run Standards, Security and Spec reviews against the starting revision; fix findings.
 - [x] Commit the implementation in the current checkout.
 
-Production activation remains an explicit owner action after real journey evidence is recorded.
+The first automatic deployment follows real Production journey verification.
 Local tests do not establish Production verification.
 
 ## Confirmed verification seams
 
 1. Built docs pages, search, Markdown exports and `llms.txt`.
 2. The explicit reference-generation command.
-3. The manual publication gate.
+3. The publication workflow and its checks.
 
 Initial baseline: `e5073e4ba1b43fdbdf5c1920c59417645b67239c`.
 Integration review baseline after synchronizing upstream: `9aa7f42eeb` (the same task diff, excluding unrelated upstream commits).
 
 ## Verification result
 
-The final review round reported no Standards, Security or Spec findings. Twelve focused docs tests
-pass (seven artifact/reference/publication tests and five browser tests); the existing verification
+The original implementation review reported no Standards, Security or Spec findings. Its focused docs tests
+passed; the existing verification
 runner's four focused tests also pass. Full typecheck, lint, type-aware lint, formatting, dependency
 policy and pattern-source checks passed. Desktop/mobile rendering was inspected. Repeat builds of
 unchanged sources produced the same publication digest.
 
-## First publication (owner-controlled, intentionally pending)
+## Automatic publication follow-up
 
 - [ ] Verify all three journeys against Production with the documented clients and CLI.
-- [ ] Record exact-artifact verification evidence and explicitly invoke publication.
+- [x] Replace manual attestation/dispatch with automatic publication on trunk changes.
+- [ ] Record Production verification outcomes and merge the automatic deployment change.
 - [ ] Verify the public site and point marketing discovery to the now-served docs hostname.

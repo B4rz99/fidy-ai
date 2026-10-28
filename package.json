@@ -56,7 +56,6 @@
     "docs:reference": "bun apps/docs/scripts/generate-reference.ts",
     "docs:build": "bun run --cwd apps/docs build",
     "docs:test": "node --test apps/docs/test/*.test.js",
-    "docs:publication:inspect": "bun apps/docs/scripts/check-publication.ts --inspect",
     "docs:verify": "bun run docs:build && bun run docs:test && bun run --cwd apps/docs test:browser"
   },
   "devDependencies": {

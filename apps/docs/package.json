@@ -9,8 +9,6 @@
     "typecheck": "astro sync && bun install --cwd ../../tools/astro --frozen-lockfile && bun ../../tools/astro/check.ts ../../apps/docs",
     "test:artifact": "node --test test/artifact.test.js",
     "reference:generate": "bun scripts/generate-reference.ts",
-    "build:publication": "bun run build && bun scripts/check-publication.ts",
-    "publication:inspect": "bun scripts/check-publication.ts --inspect",
     "test:browser": "playwright test",
     "sync": "astro sync"
   },

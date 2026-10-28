@@ -1,0 +1,31 @@
+tools/astro/package.json
+  s_5b520eabb82fd9::t_43db3752d446b1 8
+apps/server/package.json
+  s_5b520eabb82fd9::t_43db3752d446b1 308
+.patterns/astro.md
+  s_5b520eabb82fd9::t_eb1601a3313a05 4
+apps/site/package.json
+  s_5b520eabb82fd9::t_43db3752d446b1 14,16
+apps/docs/package.json
+  s_5b520eabb82fd9::t_43db3752d446b1 19
+bun.lock
+  s_5b520eabb82fd9::t_916a7e90d2dc2c 47,78,88,90,256,262,760,898,900,902,904,906,908,910,912,914,916,918,920,922,924,926,1164,2018,2430-2431,2770-2771
+tools/astro/bun.lock
+  s_5b520eabb82fd9::t_06bf7da16dd605 8,42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7737dea32a0ab40c3ff93aa02375aa56392c5399",
+  "prompts": {},
+  "sessions": {
+    "s_5b520eabb82fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1831f-5f52-73f1-a50f-586b77de9eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

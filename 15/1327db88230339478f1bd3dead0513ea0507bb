@@ -1,0 +1,19 @@
+infra/cloudflare/production-release.ts
+  s_5b520eabb82fd9::t_884eb51c81b568 259-262
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "151327db88230339478f1bd3dead0513ea0507bb",
+  "prompts": {},
+  "sessions": {
+    "s_5b520eabb82fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1831f-5f52-73f1-a50f-586b77de9eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

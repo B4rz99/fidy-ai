@@ -365,7 +365,9 @@ polling within the authentication registry lifetime.
 Main workspace display queries retain their last result for one minute of inactivity in the
 current authentication registry. Returning to Budgets, Recurring, Transactions or Dashboard
 renders that result immediately. Reads younger than five seconds remain fresh on mount and
-window focus; older reads revalidate, and explicit invalidation always refreshes. Cached profiles
+window focus; older reads revalidate, and explicit invalidation always refreshes. Retained
+workspace returns coalesce refreshes inside the same five-second window. Review categories share
+the normal category snapshot; an unvisited history panel starts only when selected. Cached profiles
 and resource results do not grant authority: the server checks live Consent, caller authority and
 revision guards for every write; refresh failures still gate editing. Authenticated clients share
 two in-flight request permits within their session signal, including across feature clients. Queue
@@ -436,3 +438,6 @@ revision of each plan crosses the browser boundary. Storage and historical occur
 retain the complete revision ledger; default API reads still return the full document. Draft
 autosave starts after 200 milliseconds of idle input and subsequent automatic writes are spaced
 by at least one second; explicit Create/Skip flushes remain immediate and revision-bound.
+
+Money presentation retains at most 32 locale/currency/precision formatter configurations. The
+cache contains no amounts or User data; exact decimal parsing and rounding remain unchanged.

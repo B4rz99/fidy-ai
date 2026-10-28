@@ -389,6 +389,48 @@ for (const profile of ["desktop", "mobile-slow"] as const) {
   });
 }
 
+for (const profile of ["desktop", "mobile-slow"] as const) {
+  test(`assesses isolated cold documents on ${profile}`, ({ page, request, context }) => {
+    const samples: Sample[] = [];
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const cdp = yield* Effect.tryPromise(() => context.newCDPSession(page));
+        yield* Effect.tryPromise(() =>
+          signInNavigationPerformanceThroughCore({
+            page,
+            request,
+            identity: "navigationDashboard",
+          })
+        );
+        yield* prepareBrowser(page, cdp, profile);
+        const measure = makeMeasure(page, samples, profile);
+        for (const route of routes) {
+          // Stop the previous document and let the unchanged ten-request allowance refill.
+          // This setup is excluded from latency; the rapid navigation suite measures contention.
+          yield* Effect.tryPromise(() => page.goto("about:blank"));
+          yield* Effect.sleep("12 seconds");
+          yield* Effect.tryPromise(() => cdp.send("Network.clearBrowserCache"));
+          yield* measure(
+            `${route.name}:isolated-cold-document`,
+            () =>
+              page.goto(route.path, { waitUntil: "domcontentloaded", timeout: navigationTimeout }),
+            () => readyWorkspace(page, route)
+          );
+        }
+      }).pipe(
+        Effect.ensuring(
+          Effect.tryPromise(() =>
+            test.info().attach("assessment-samples", {
+              body: json({ dataset, profile, browser: context.browser()?.version(), samples }),
+              contentType: "application/json",
+            })
+          ).pipe(Effect.orDie)
+        )
+      )
+    );
+  });
+}
+
 test("measures the recurring response independently of the browser body limit", ({
   page,
   request,

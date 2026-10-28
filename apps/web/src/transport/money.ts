@@ -3,6 +3,44 @@ import { BigDecimal, Schema } from "effect";
 
 const ExactDecimal = Schema.NonEmptyString.pipe(Schema.decodeTo(Schema.BigDecimalFromString));
 
+const maximumFormatters = 32;
+const formatters = new Map<string, Intl.NumberFormat>();
+const numberFormatter = ({
+  locale,
+  currency,
+  currencyDisplay,
+  minimumDigits,
+  maximumDigits,
+}: Readonly<{
+  locale: string;
+  currency: string;
+  currencyDisplay: "narrowSymbol" | "code";
+  minimumDigits: number;
+  maximumDigits: number;
+}>): Intl.NumberFormat => {
+  const key = [locale, currency, currencyDisplay, minimumDigits, maximumDigits].join("|");
+  const previous = formatters.get(key);
+  if (previous !== undefined) return previous;
+  const formatter = new Intl.NumberFormat(
+    locale,
+    currency === ""
+      ? {
+          minimumIntegerDigits: minimumDigits,
+          useGrouping: false,
+        }
+      : {
+          currency,
+          currencyDisplay,
+          style: "currency",
+          minimumFractionDigits: minimumDigits,
+          maximumFractionDigits: maximumDigits,
+        }
+  );
+  if (formatters.size >= maximumFormatters) formatters.clear();
+  formatters.set(key, formatter);
+  return formatter;
+};
+
 /** Applies Locale and explicit Currency without routing exact decimal magnitude through Number. */
 const currencyAmount = ({
   amount,
@@ -19,12 +57,12 @@ const currencyAmount = ({
 }>): string => {
   const decimal = Schema.decodeSync(ExactDecimal)(amount);
   const digits = currencyMetadata(Schema.decodeUnknownSync(Currency)(currency)).fractionalDigits;
-  const formatter = new Intl.NumberFormat(locale, {
+  const formatter = numberFormatter({
+    locale,
     currency,
     currencyDisplay,
-    style: "currency",
-    minimumFractionDigits: compact && BigDecimal.isInteger(decimal) ? 0 : digits,
-    maximumFractionDigits: digits,
+    minimumDigits: compact && BigDecimal.isInteger(decimal) ? 0 : digits,
+    maximumDigits: digits,
   });
   const scaled = BigDecimal.scale(BigDecimal.round(decimal, { scale: digits }), digits).value;
   const unit = 10n ** BigInt(digits);
@@ -33,9 +71,13 @@ const currencyAmount = ({
   const fraction =
     digits === 0
       ? ""
-      : new Intl.NumberFormat(locale, { minimumIntegerDigits: digits, useGrouping: false }).format(
-          remainder < 0n ? -remainder : remainder
-        );
+      : numberFormatter({
+          locale,
+          currency: "",
+          currencyDisplay: "code",
+          minimumDigits: digits,
+          maximumDigits: digits,
+        }).format(remainder < 0n ? -remainder : remainder);
   // Preserve negative zero's Locale sign placement when rounding a negative amount to zero.
   return formatter
     .formatToParts(whole === 0n && BigDecimal.isNegative(decimal) ? -0 : whole)

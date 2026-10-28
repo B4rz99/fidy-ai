@@ -32,8 +32,8 @@ is public and indexable only after all three journeys are verified against Produ
 - [x] Verify types regularly and run type-aware lint after the first slice and final edit.
 - [x] Run focused generation, publication and built-site/browser tests.
 - [x] Inspect desktop/mobile rendering, search, clipboard and accessibility.
-- [ ] Run Standards, Security and Spec reviews against the starting revision; fix findings.
-- [ ] Commit the implementation in the current checkout.
+- [x] Run Standards, Security and Spec reviews against the starting revision; fix findings.
+- [x] Commit the implementation in the current checkout.
 
 Production activation remains an explicit owner action after real journey evidence is recorded.
 Local tests do not establish Production verification.
@@ -46,3 +46,17 @@ Local tests do not establish Production verification.
 
 Initial baseline: `e5073e4ba1b43fdbdf5c1920c59417645b67239c`.
 Integration review baseline after synchronizing upstream: `9aa7f42eeb` (the same task diff, excluding unrelated upstream commits).
+
+## Verification result
+
+The final review round reported no Standards, Security or Spec findings. Twelve focused docs tests
+pass (seven artifact/reference/publication tests and five browser tests); the existing verification
+runner's four focused tests also pass. Full typecheck, lint, type-aware lint, formatting, dependency
+policy and pattern-source checks passed. Desktop/mobile rendering was inspected. Repeat builds of
+unchanged sources produced the same publication digest.
+
+## First publication (owner-controlled, intentionally pending)
+
+- [ ] Verify all three journeys against Production with the documented clients and CLI.
+- [ ] Record exact-artifact verification evidence and explicitly invoke publication.
+- [ ] Verify the public site and point marketing discovery to the now-served docs hostname.

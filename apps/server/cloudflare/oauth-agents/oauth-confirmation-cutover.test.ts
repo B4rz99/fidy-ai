@@ -7,7 +7,6 @@ import {
   schemaStatements,
 } from "../schema-cutover.test-fixture";
 import { pendingBudgetDeletion, sessionFor, wait } from "./oauth-ingress.test-fixture";
-import { approveFirstPartyOperation } from "./oauth-first-party.test-fixture";
 
 const guards = ["oauth_intent_initial", "oauth_intent_immutable"];
 const histories = [
@@ -24,7 +23,14 @@ it.each(histories)("preserves exact OAuth approvals or rejects %s history atomic
     Effect.gen(function* () {
       const fixture = yield* pendingBudgetDeletion();
       yield* wait(installHistoricalErasureChunk(fixture.db));
-      if (history !== "pending") yield* approveFirstPartyOperation(fixture, fixture.reference);
+      if (history !== "pending") {
+        yield* wait(
+          fixture.db
+            .prepare(`UPDATE oauth_operation_intents SET browser_approved_at_ms=created_at_ms,
+          browser_session_id=(SELECT id FROM web_sessions WHERE user_id=oauth_operation_intents.user_id LIMIT 1)`)
+            .run()
+        );
+      }
       yield* wait(
         fixture.db.batch(guards.map((name) => fixture.db.prepare(`DROP TRIGGER ${name}`)))
       );
@@ -94,7 +100,6 @@ it.each(histories)("preserves exact OAuth approvals or rejects %s history atomic
       ]) {
         yield* wait(expect(fixture.db.prepare(sql).run()).rejects.toThrow());
       }
-      if (history === "pending") yield* approveFirstPartyOperation(fixture, fixture.reference);
       const applied = yield* wait(fixture.call({ action: "accept", content: { confirm: true } }));
       expect(yield* wait(applied.json())).toMatchObject({ result: { isError: false } });
       expect(

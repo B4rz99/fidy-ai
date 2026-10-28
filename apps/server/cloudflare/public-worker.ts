@@ -325,7 +325,6 @@ const oauthMethods = (path: string): ReadonlyArray<string> => {
     oauthPaths.token,
     oauthPaths.cancel,
     oauthPaths.connect,
-    oauthPaths.operationDecision,
     oauthPaths.revoke,
     oauthPaths.revokeAll,
   ].some((owned) => owned === path)
@@ -630,11 +629,9 @@ const cookieAdmittedPath = (path: string): boolean =>
   keywordRulePath(path);
 const oauthBrowserPath = (path: string): boolean =>
   [
-    oauthPaths.operationReview,
     oauthPaths.review,
     oauthPaths.cancel,
     oauthPaths.connect,
-    oauthPaths.operationDecision,
     oauthPaths.connections,
     oauthPaths.revoke,
     oauthPaths.revokeAll,

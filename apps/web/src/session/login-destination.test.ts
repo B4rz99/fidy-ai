@@ -6,7 +6,6 @@ const request = "24000000-0000-4000-8000-000000000123";
 describe("login continuation", () => {
   it.each([
     [{ cliCode: "BCDF-GHJK" }, "/connect/cli?cliCode=BCDF-GHJK"],
-    [{ oauthOperation: request }, `/oauth/operation/${request}`],
     [{ oauthRequest: request }, `/oauth/review/${request}`],
     [{ connectionAttempt: request }, `/connections/continue?attempt=${request}`],
     [{ resume: "pat" }, "/settings/access?resume=pat"],
@@ -24,6 +23,7 @@ describe("login continuation", () => {
     { cliCode: "../../private" },
     { oauthRequest: "invalid" },
     { oauthOperation: "invalid" },
+    { oauthOperation: request },
     { connectionAttempt: "invalid" },
     { handoff: request },
   ])("cannot turn a link into arbitrary navigation or approval: %o", (search) => {

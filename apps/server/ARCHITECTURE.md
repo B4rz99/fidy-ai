@@ -77,7 +77,8 @@ See [ADR 0029](../../docs/adr/0029-atomic-batch-accountability-boundaries.md).
 MCP projects canonical capabilities under a separately identifiable OAuthConnection. It uses the
 same owner behavior, User coordination, Consent, accounting and Audit boundaries as other clients.
 OAuth approval, refresh, revocation and sensitive-operation confirmation remain distinct from PAT
-and browser-session authority. Operation policy determines any required first-party approval.
+and browser-session authority. Sensitive OAuth operations require one client-native decision,
+bound to the exact operation and consumed atomically; the client assertion is not human attestation.
 See [ADR 0033](../../docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md) and the
 [release evidence](../../docs/operations/hosted-mcp-release.md) for protocol and enablement details.
 

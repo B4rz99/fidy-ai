@@ -62,8 +62,8 @@
     {
       "cve": "CVE-2026-93753",
       "path": "bun.lock",
-      "reason": "The User explicitly approved a 48-hour exception on 2026-10-28 UTC to unblock PR #1578 while a separate fix is prepared. deepmerge 4.3.1 remains vulnerable to prototype poisoning of returned merged objects; it is installed transitively through development tooling shadcn and @shadcn/registry. The registry latest is still 4.3.1 with no published fixed release. This is accepted installed risk, not remediation or a claim of non-reachability. Keep the seven-day release-age policy and all other checks active. Prepare and independently review remediation against the shipped CJS/UMD entrypoints, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion before this deadline. Upstream: https://github.com/TehShrike/deepmerge/issues/273",
-      "until": "2026-10-30T03:23:36Z"
+      "reason": "The User explicitly accepted this scoped installed risk on 2026-10-28 UTC for PR #1581 until 2026-11-04 UTC. deepmerge 4.3.1 is inherited through shadcn and @shadcn/registry tooling; malicious merge inputs can poison the returned object prototype. Application reachability is not asserted. npm has no patched release as of acceptance. This is risk acceptance, not remediation. Keep the seven-day minimumReleaseAge and all other checks active. Before expiry, replace the dependency or upgrade to an eligible corrected release, rerun SCA and affected verification, and remove this record and its exact matching scanner exclusion. Upstream: https://github.com/TehShrike/deepmerge/issues/273",
+      "until": "2026-11-04T00:00:00Z"
     }
   ]
 }

@@ -1,0 +1,19 @@
+infra/cloudflare/workers.test.ts
+  s_2c9d6c1daa679a::t_742d337f41bf35 450-474
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2d33a8b34adf1ea6058e5e09a85b07f8b75a5fe7",
+  "prompts": {},
+  "sessions": {
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

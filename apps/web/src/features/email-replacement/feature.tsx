@@ -38,7 +38,7 @@ const ReplacementForm = ({ request }: Pick<EmailReplacementViewProps, "request">
           value={candidateEmail}
         />
       </div>
-      <Button disabled={candidateEmail.length === 0} type="submit">
+      <Button contentLayout="wrap" disabled={candidateEmail.length === 0} type="submit">
         Enviar código
       </Button>
     </form>
@@ -87,13 +87,18 @@ const ProofForm = ({
           value={combinedCode}
         />
       </div>
-      <Button disabled={combinedCode.length === 0} type="submit">
+      <Button contentLayout="wrap" disabled={combinedCode.length === 0} type="submit">
         Cambiar correo
       </Button>
-      <Button onClick={() => request(candidateEmail)} type="button" variant="outline">
+      <Button
+        contentLayout="wrap"
+        onClick={() => request(candidateEmail)}
+        type="button"
+        variant="outline"
+      >
         Reenviar código
       </Button>
-      <Button onClick={restart} type="button" variant="outline">
+      <Button contentLayout="wrap" onClick={restart} type="button" variant="outline">
         Usar otro correo
       </Button>
     </form>
@@ -123,7 +128,7 @@ const replacementContent = ({
   if (state._tag === "Editing") return <ReplacementForm request={request} />;
   if (state._tag === "Requesting" || state._tag === "Completing") {
     return (
-      <Button disabled type="button">
+      <Button contentLayout="wrap" disabled type="button">
         <Spinner /> Procesando…
       </Button>
     );

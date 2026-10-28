@@ -123,6 +123,7 @@ const RevocationControl = ({
   if (!selected) {
     return (
       <Button
+        contentLayout="wrap"
         aria-label={triggerLabel}
         disabled={disabled}
         onClick={select}
@@ -139,6 +140,7 @@ const RevocationControl = ({
       {confirmation}
       <div className="flex flex-wrap gap-2">
         <Button
+          contentLayout="wrap"
           disabled={disabled || revoking}
           onClick={revoke}
           type="button"
@@ -146,7 +148,13 @@ const RevocationControl = ({
         >
           {revoking ? revokingLabel : confirmLabel}
         </Button>
-        <Button disabled={revoking} onClick={cancel} type="button" variant="outline">
+        <Button
+          contentLayout="wrap"
+          disabled={revoking}
+          onClick={cancel}
+          type="button"
+          variant="outline"
+        >
           Cancelar
         </Button>
       </div>

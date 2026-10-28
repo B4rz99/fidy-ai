@@ -1,0 +1,45 @@
+ARCHITECTURE.md
+  s_2c9d6c1daa679a::t_a700cc52ac15cc 14-17,24-25
+  s_2c9d6c1daa679a::t_4379576d61fdbe 9-13
+infra/docs/alchemy.run.ts
+  s_2c9d6c1daa679a::t_24d75ac5985c35 28
+.patterns/astro.md
+  s_2c9d6c1daa679a::t_5953d4c078447f 4
+docs/operations/docs-site-plan.md
+  s_2c9d6c1daa679a::t_a700cc52ac15cc 16-18,30,38,45,52-53,58,61-62
+apps/docs/ARCHITECTURE.md
+  s_2c9d6c1daa679a::t_a700cc52ac15cc 33,36-49
+docs/operations/docs-site.md
+  s_2c9d6c1daa679a::t_4b347eb5d0ba54 3-5,9,20,26-28,30,33,38-40,42,44-45,48-75
+.github/workflows/docs-publication.yml
+  s_2c9d6c1daa679a::t_af29d2a04d811a 63-65,67
+  s_2c9d6c1daa679a::t_24d75ac5985c35 4-18,38,41,51,54
+apps/docs/package.json
+  s_2c9d6c1daa679a::t_920188bbe79c8d 17
+apps/server/package.json
+  s_2c9d6c1daa679a::t_84a23f73a78177 308
+apps/site/package.json
+  s_2c9d6c1daa679a::t_e02341402eccd1 14,16
+bun.lock
+  s_2c9d6c1daa679a::t_258814bbed3991 47,78,88,90,256,262,760,898,900,902,904,906,908,910,912,914,916,918,920,922,924,926,1164,2018,2430-2431,2770-2771
+tools/astro/bun.lock
+  s_2c9d6c1daa679a::t_685cd87a0d6f6c 8,42
+tools/astro/package.json
+  s_2c9d6c1daa679a::t_bffc73737a8683 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "80bfea3a5c373b6372fcee5d41c5313fb5d2e4df",
+  "prompts": {},
+  "sessions": {
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

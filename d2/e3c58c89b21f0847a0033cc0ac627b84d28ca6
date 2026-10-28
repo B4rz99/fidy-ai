@@ -1,0 +1,21 @@
+docs/operations/docs-site-plan.md
+  s_2c9d6c1daa679a::t_51115b8d748bac 62
+  s_2c9d6c1daa679a::t_255afb47ec2163 63-64,93-102,104-106
+  s_2c9d6c1daa679a::t_f936fd030a772f 103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d2e3c58c89b21f0847a0033cc0ac627b84d28ca6",
+  "prompts": {},
+  "sessions": {
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

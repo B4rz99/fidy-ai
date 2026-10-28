@@ -148,6 +148,9 @@ jobs:
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
       - uses: ./.github/actions/bun-install
       - name: Select installed Playwright version
         id: playwright-version

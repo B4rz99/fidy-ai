@@ -150,7 +150,6 @@ const queryActivity = ({
 type TransactionQueries = Readonly<{
   categoryState: CanonicalQueryState<Readonly<{ data: ReadonlyArray<Category> }>, unknown>;
   period: ReturnType<typeof deriveCurrentMonthPeriod>;
-  retry: () => void;
   transactionState: CanonicalQueryState<Readonly<{ data: ReadonlyArray<Transaction> }>, unknown>;
   history: HistoryState;
   corrections: TransactionCorrections;
@@ -195,15 +194,9 @@ const useTransactionQueries = (period: TransactionQueries["period"]): Transactio
   const history = useAtomValue(historyResource.state);
   const transactionState = history.query;
   const dispatch = useAtomSet(historyResource.action);
-  const refreshCategories = useAtomRefresh(categories);
-  const retry = (): void => {
-    refreshCategories();
-    dispatch("reset");
-  };
   return {
     categoryState,
     period,
-    retry,
     transactionState,
     history,
     corrections,

@@ -1,13 +1,23 @@
 // @vitest-environment jsdom
-import { BigDecimal, DateTime, Deferred, Effect, Option } from "effect";
+import { BigDecimal, DateTime, Deferred, Effect, Layer, Option, Schema } from "effect";
 import { Atom, AtomRegistry } from "effect/reactivity";
+import { HttpClient, HttpClientResponse } from "effect/http";
+import { UnknownJsonString } from "@/schema-compatibility";
 import { type Mock, afterEach, expect, vi } from "vitest";
 import { it } from "@effect/vitest";
-import { BillingEmail, PaymentEnrollmentId, PriceId } from "@/transport/client";
-import type {
-  EnrollmentGateway,
-  PaymentSubmission,
-  PreparedEnrollment,
+import {
+  BillingEmail,
+  PaymentEnrollment,
+  PaymentEnrollmentId,
+  PaymentSubmission as PaymentSubmissionSchema,
+  PriceId,
+  makeSubscriptionEnrollmentClient,
+} from "@/transport/client";
+import {
+  type EnrollmentGateway,
+  type PaymentSubmission,
+  type PreparedEnrollment,
+  makeEnrollmentGateway,
 } from "./enrollment-gateway";
 import { type EnrollmentInteraction, makeEnrollmentInteraction } from "./interaction";
 
@@ -64,6 +74,8 @@ afterEach(() => {
     .forEach((cleanup) => cleanup());
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  sessionStorage.clear();
 });
 type Fixture = Readonly<{
   enrollment: PreparedEnrollment;
@@ -171,6 +183,16 @@ it.effect(
       expect(input.view().needsRecovery).toBe(true);
       expect(input.view().disabled).toBe(true);
       expect(input.gateway.submit).toHaveBeenCalledTimes(1);
+      input.view().refresh();
+      yield* advance(0);
+      expect(input.view().needsRecovery).toBe(true);
+      expect(input.gateway.resume).not.toHaveBeenCalled();
+      input.gateway.status.mockResolvedValueOnce({
+        status: "expired",
+        enrollmentId: input.enrollment.enrollmentId,
+        method: "card",
+        priceId: input.enrollment.price.id,
+      });
       input.view().refresh();
       yield* advance(0);
       expect(input.view().needsRecovery).toBe(false);
@@ -283,5 +305,200 @@ it.effect(
       ]);
       expect(input.view().disabled).toBe(false);
       expect(input.view().changeSelection()).toBe(true);
+    })
+);
+
+const SubmissionRequest = Schema.Struct({
+  paymentSourceMode: Schema.Literals(["create", "reuse"]),
+  enrollmentId: Schema.String,
+  paymentRequestId: Schema.String,
+  cardToken: Schema.optional(Schema.String),
+});
+type RecoveryFixture = {
+  enrollment: PreparedEnrollment;
+  submission: Extract<PaymentSubmission, { status: "payment-pending" }>;
+  status: "available" | "verifying";
+  requests: Array<typeof SubmissionRequest.Type>;
+  failResume: boolean;
+  reads: number;
+};
+const recoveryFixture = (status: RecoveryFixture["status"]): RecoveryFixture => {
+  const enrollment = prepared(DateTime.nowUnsafe().epochMilliseconds);
+  return {
+    enrollment,
+    status,
+    requests: [],
+    failResume: true,
+    reads: 0,
+    submission: Schema.decodeSync(PaymentSubmissionSchema.members[0])({
+      status: "payment-pending",
+      enrollmentId: enrollment.enrollmentId,
+      billingAttempt: {
+        id: "23200000-0000-4000-8000-000000000050",
+        priceId: enrollment.price.id,
+        money: { amount: "9900", currency: "COP" },
+        billingPeriod: "weekly",
+        serviceMarket: "CO",
+        taxTreatment: "not-taxable",
+        timeZone: "America/Bogota",
+        createdAt: "2026-10-27T00:00:00Z",
+        status: "pending",
+      },
+    }),
+  };
+};
+const recoverySubmission = (
+  fixture: RecoveryFixture,
+  submission: typeof SubmissionRequest.Type
+): Response =>
+  submission.paymentSourceMode === "create" ||
+  fixture.failResume ||
+  submission.paymentRequestId !== fixture.requests[0]?.paymentRequestId
+    ? new Response(null, { status: 503 })
+    : Response.json(Schema.encodeSync(PaymentSubmissionSchema)(fixture.submission));
+const recoveryHttp = (fixture: RecoveryFixture): HttpClient.HttpClient =>
+  HttpClient.make((request) =>
+    Effect.gen(function* () {
+      const path = new URL(request.url).pathname;
+      let response: Response;
+      if (path.endsWith("/availability")) response = Response.json({ enabledMethods: ["card"] });
+      else if (path.endsWith("/prepare")) {
+        response = Response.json(yield* Schema.encodeEffect(PaymentEnrollment)(fixture.enrollment));
+      } else if (path.endsWith("/submit")) {
+        const text =
+          request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
+        const body = yield* Schema.decodeEffect(UnknownJsonString)(text);
+        const submission = yield* Schema.decodeUnknownEffect(SubmissionRequest)(body);
+        fixture.requests.push(submission);
+        response = recoverySubmission(fixture, submission);
+      } else if (path.includes("/billing-attempts/")) {
+        fixture.reads += 1;
+        response = Response.json(
+          (yield* Schema.encodeEffect(PaymentSubmissionSchema.members[0])(fixture.submission))
+            .billingAttempt
+        );
+      } else {
+        response = Response.json({
+          status: fixture.status,
+          enrollmentId: fixture.enrollment.enrollmentId,
+          method: "card",
+          priceId: fixture.enrollment.price.id,
+        });
+      }
+      return HttpClientResponse.fromWeb(request, response);
+    }).pipe(Effect.orDie)
+  );
+const mountRecovery = (
+  gateway: EnrollmentGateway,
+  enrollment: PreparedEnrollment
+): (() => EnrollmentInteraction) => {
+  const registry = AtomRegistry.make();
+  const atom = makeEnrollmentInteraction({
+    gateway: Option.some(gateway),
+    offers: [enrollment.price, enrollment.price, enrollment.price],
+    authorizationLock: Atom.make(false),
+  });
+  cleanups.push(() => registry.dispose());
+  cleanups.push(registry.mount(atom));
+  cleanups.push(registry.get(atom).mount());
+  return () => registry.get(atom);
+};
+for (const status of ["available", "verifying"] as const) {
+  it.effect(
+    `recovers a lost submission acknowledgment from ${status} with the original request and BillingAttempt`,
+    () =>
+      Effect.gen(function* () {
+        vi.useFakeTimers();
+        vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+        const input = recoveryFixture(status);
+        const provider = vi.fn(() =>
+          Promise.resolve(Response.json({ data: { id: "tok_test_synthetic", brand: "VISA" } }))
+        );
+        vi.stubGlobal("fetch", provider);
+        const client = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            makeSubscriptionEnrollmentClient({
+              apiOrigin: "https://api.test.fidyapp.com",
+              httpClient: Layer.succeed(HttpClient.HttpClient, recoveryHttp(input)),
+            })
+          ),
+          (client) => Effect.tryPromise(() => client.dispose()).pipe(Effect.orDie)
+        );
+        const view = mountRecovery(makeEnrollmentGateway(client), input.enrollment);
+        yield* advance(0);
+        view().selectPrice(input.enrollment.price.id);
+        view().continueToPayment();
+        yield* advance(0);
+        view().submit("synthetic@example.invalid", {
+          number: "4242424242424242",
+          cvc: "123",
+          expirationMonth: "12",
+          expirationYear: "2030",
+          cardholderName: "Synthetic Person",
+        });
+        yield* advance(0);
+        expect(view().needsRecovery).toBe(true);
+        view().refresh();
+        yield* advance(0);
+        expect(view().needsRecovery).toBe(true);
+        expect(view().disabled).toBe(true);
+        input.failResume = false;
+        view().refresh();
+        yield* advance(0);
+        expect(view().needsRecovery).toBe(false);
+        expect(view().disabled).toBe(true);
+        expect(Option.map(view().enrollment, (flow) => flow.value)).toEqual(
+          Option.some(input.submission)
+        );
+        yield* advance(1_000);
+        expect(input.reads).toBe(1);
+        expect(provider).toHaveBeenCalledTimes(1);
+        expect(input.requests.map((request) => request.paymentSourceMode)).toEqual([
+          "create",
+          "reuse",
+          "reuse",
+        ]);
+        expect(new Set(input.requests.map((request) => request.paymentRequestId)).size).toBe(1);
+        expect(input.requests.slice(1).every((request) => request.cardToken === undefined)).toBe(
+          true
+        );
+      })
+  );
+}
+
+it.effect(
+  "retains uncertainty when admitted enrollment recovery is missing or addresses another enrollment",
+  () =>
+    Effect.gen(function* () {
+      const input = fixture();
+      yield* prepareFixture(input);
+      input.gateway.submit.mockRejectedValueOnce(new Error("acknowledgment lost"));
+      input.view().submit("synthetic@example.invalid");
+      yield* advance(0);
+      input.gateway.status.mockResolvedValue({
+        status: "available",
+        enrollmentId: input.enrollment.enrollmentId,
+        method: "card",
+        priceId: input.enrollment.price.id,
+      });
+      input.view().refresh();
+      yield* advance(0);
+      expect(input.view().needsRecovery).toBe(true);
+      expect(input.view().changeSelection()).toBe(false);
+      input.gateway.resume.mockResolvedValueOnce(
+        Option.some({
+          billingEmail: "synthetic@example.invalid",
+          submission: {
+            status: "source-verifying",
+            enrollmentId: PaymentEnrollmentId.make("23200000-0000-4000-8000-000000000099"),
+          },
+        })
+      );
+      input.view().refresh();
+      yield* advance(0);
+      expect(input.view().needsRecovery).toBe(true);
+      expect(input.view().disabled).toBe(true);
+      expect(input.gateway.submit).toHaveBeenCalledTimes(1);
+      expect(input.gateway.continue).not.toHaveBeenCalled();
     })
 );

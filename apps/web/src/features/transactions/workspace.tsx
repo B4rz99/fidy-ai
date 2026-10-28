@@ -1,6 +1,7 @@
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Toaster, toast } from "sonner";
 import { use, useState } from "react";
+import type { TransactionCorrections } from "./corrections";
 import { TransactionCorrectionContext } from "./correction-context";
 import type { JSX, ReactNode, RefCallback } from "react";
 import { observeContinuation } from "./scroll-continuation";
@@ -417,6 +418,7 @@ const TransactionFilters = ({
   tool,
   onTool,
   disabled,
+  refreshDisabled,
 }: Readonly<{
   props: WorkspaceProps;
   filters: WorkspaceFilters;
@@ -424,6 +426,7 @@ const TransactionFilters = ({
   tool: FilterTool | "closed";
   onTool: () => void;
   disabled: boolean;
+  refreshDisabled: boolean;
 }>): JSX.Element => (
   <>
     <div data-transaction-slot="transaction-search-toolbar">
@@ -443,13 +446,7 @@ const TransactionFilters = ({
       />
       <FilterButton disabled={disabled} onClick={onTool} />
       <RefreshButton
-        disabled={
-          disabled &&
-          !Option.exists(
-            use(TransactionCorrectionContext),
-            (owner) => owner.status === "uncertain" || owner.status === "rejected"
-          )
-        }
+        disabled={refreshDisabled}
         onClick={props.onRefresh}
         label="Actualizar transacciones"
       />
@@ -566,6 +563,18 @@ type WorkspaceContentProps = Readonly<{
   visible: ReadonlyArray<Transaction>;
   rows: ReturnType<typeof presentTransactionRows>;
 }>;
+const refreshLocked = (
+  panel: TransactionPanel,
+  corrections: Option.Option<TransactionCorrections>
+): boolean =>
+  panelLocked(panel) ||
+  Option.match(corrections, {
+    onNone: () => panelEditing(panel),
+    onSome: (owner) =>
+      owner.status === "saving" ||
+      owner.status === "recovering" ||
+      (panelEditing(panel) && owner.status === "idle"),
+  });
 const WorkspaceContent = ({
   props,
   panel,
@@ -593,6 +602,7 @@ const WorkspaceContent = ({
           tool={tool}
           onTool={onTool}
           disabled={panelEditing(panel) || (!props.editable && !props.readOnly)}
+          refreshDisabled={refreshLocked(panel, corrections)}
         />
         <TransactionLedger
           partial={props.continuation !== "complete"}

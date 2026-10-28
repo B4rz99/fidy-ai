@@ -3,6 +3,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { afterEach, expect, vi } from "vitest";
+import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 import { makeFidyClient } from "@/transport/client";
 import { type TransactionCorrections, makeTransactionCorrections } from "./corrections";
 import { transactionHistory } from "./history";
@@ -30,14 +31,14 @@ afterEach(() => {
     .forEach((dispose) => dispose());
   vi.useRealTimers();
 });
-const advance = Effect.fnUntraced(function* (milliseconds = 0) {
+const advance = Effect.fnUntraced(function* (milliseconds: number = 0) {
   yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(milliseconds));
 });
 const fixture = Effect.fnUntraced(function* () {
   vi.useFakeTimers();
   const records = [record(firstId), record(secondId)];
   const sent: Array<{ path: string; body: string }> = [];
-  const behavior = { failRead: false, write: "success", delay: 0 };
+  const behavior = { failRead: false, write: "success", delay: 0, readDelay: 0 };
   let saved = 0;
   const http = HttpClient.make((request) =>
     Effect.gen(function* () {
@@ -61,6 +62,7 @@ const fixture = Effect.fnUntraced(function* () {
           };
         } else data = { data: records[0], next: [] };
       } else {
+        yield* Effect.sleep(behavior.readDelay);
         if (behavior.failRead) status = 503;
         data = {
           data: path.endsWith("categories") ? [{ id: categoryId, label: "Restaurantes" }] : records,
@@ -86,8 +88,12 @@ const fixture = Effect.fnUntraced(function* () {
     from: DateTime.makeUnsafe("2026-10-01T00:00:00Z"),
     to: DateTime.makeUnsafe("2026-11-01T00:00:00Z"),
   };
-  const firstPage = client.query("transactions", "listTransactions", { query: period });
-  const categories = client.query("categories", "listCategories", {});
+  const firstPage = client
+    .query("transactions", "listTransactions", { ...workspaceQueryRetention, query: period })
+    .pipe(revalidateWorkspaceQuery);
+  const categories = client
+    .query("categories", "listCategories", workspaceQueryRetention)
+    .pipe(revalidateWorkspaceQuery);
   const history = transactionHistory({ apiClient: client, firstPage, period });
   const atom = makeTransactionCorrections({
     client,
@@ -162,14 +168,25 @@ it.effect("keeps all editing paths locked after a lost acknowledgement and faile
       changes: { counterparty: "Another" },
     });
     test.behavior.failRead = true;
+    test.behavior.readDelay = 50;
     test.view().recover();
     yield* advance();
+    expect(test.view().status).toBe("recovering");
+    expect(test.view().locked).toBe(true);
+    yield* advance(50);
     expect(test.view().status).toBe("uncertain");
     expect(test.view().locked).toBe(true);
     expect(test.sent).toHaveLength(1);
+    test.view().recover();
+    yield* advance();
+    expect(test.view().status).toBe("recovering");
+    yield* advance(50);
+    expect(test.view().status).toBe("uncertain");
     test.behavior.failRead = false;
     test.view().recover();
     yield* advance();
+    expect(test.view().status).toBe("recovering");
+    yield* advance(50);
     expect(test.view().locked).toBe(false);
     expect(test.sent).toHaveLength(1);
   })

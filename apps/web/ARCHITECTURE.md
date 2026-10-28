@@ -100,7 +100,9 @@ preparation, submission progression, bounded visible-page observation and explic
 Presentation dispatches domain actions instead of constructing executable work or coordinating flow
 identities and resets. The module fences late completions after disposal; the existing gateway keeps
 provider authorization and transient credentials private. An uncertain submission blocks another
-submission and selection changes until an explicit successful status reread.
+submission and selection changes. Explicit recovery checks the same enrollment and resumes an
+admitted submission with its retained PaymentRequestId, then observes its BillingAttempt; source
+availability alone does not complete recovery. Failed or missing continuation retains the lock.
 
 The DaviPlata form visibly supports only cédula de ciudadanía (CC). Document/product drafts and
 OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, page URLs,

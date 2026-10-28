@@ -205,20 +205,36 @@ const submit = (owner: Owner, correction: Correction): void => {
     })
   );
 };
+// SWR publishes the refreshed source asynchronously; its cached terminal result is not recovery.
+const nextResult = <A, E>(
+  owner: Owner,
+  query: Query<A, E>,
+  previous: AsyncResult.AsyncResult<A, E>
+): Effect.Effect<boolean> =>
+  Effect.callback((resume) => {
+    const completed = (result: AsyncResult.AsyncResult<A, E>): boolean =>
+      result !== previous && result._tag !== "Initial" && !result.waiting;
+    const current = owner.get.once(query);
+    if (completed(current)) return resume(Effect.succeed(current._tag === "Success"));
+    const unsubscribe = owner.get.registry.subscribe(query, (result) => {
+      if (completed(result)) resume(Effect.succeed(result._tag === "Success"));
+    });
+    return Effect.sync(unsubscribe);
+  });
 const reread = (owner: Owner, generation: number): Work =>
   Effect.gen(function* () {
     owner.status = "recovering";
     notify(owner);
+    const categories = owner.get.once(owner.categories);
+    const firstPage = owner.get.once(owner.firstPage);
     owner.get.refresh(owner.categories);
     owner.get.set(owner.historyAction, "reset");
-    const results = yield* Effect.exit(
-      Effect.all([
-        owner.get.resultOnce(owner.categories, { suspendOnWaiting: true }),
-        owner.get.resultOnce(owner.firstPage, { suspendOnWaiting: true }),
-      ])
-    );
+    const results = yield* Effect.all([
+      nextResult(owner, owner.categories, categories),
+      nextResult(owner, owner.firstPage, firstPage),
+    ]);
     if (!live(owner, generation)) return;
-    owner.status = results._tag === "Success" ? "idle" : "uncertain";
+    owner.status = results.every(Boolean) ? "idle" : "uncertain";
     notify(owner);
   });
 const recover = (owner: Owner): void => {

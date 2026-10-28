@@ -119,29 +119,50 @@ const observePayment = (
       )
     : gateway.continue(current.value.enrollmentId, current.billingEmail, signal);
 
+const canResumeEnrollment = (value: Enrollment): boolean =>
+  value.status === "creating" || value.status === "verifying" || value.status === "available";
+const recoverEnrollment = Effect.fn(function* (
+  gateway: EnrollmentGateway,
+  current: Extract<PaymentFlowState, { _tag: "Enrollment" }>,
+  uncertain: boolean
+) {
+  const value = yield* Effect.tryPromise({
+    try: (signal) => gateway.status(current.value.enrollmentId, signal),
+    catch: () => new EnrollmentInteractionFailed(),
+  });
+  if (value.enrollmentId !== current.value.enrollmentId) {
+    return yield* new EnrollmentInteractionFailed();
+  }
+  if (value.status === "prepared" && uncertain) return yield* new EnrollmentInteractionFailed();
+  if (!canResumeEnrollment(value)) {
+    return enrollmentFlow(value);
+  }
+  const resumed = yield* Effect.tryPromise({
+    try: (signal) => gateway.resume(value.enrollmentId, signal),
+    catch: () => new EnrollmentInteractionFailed(),
+  });
+  if (Option.isNone(resumed) || resumed.value.submission.enrollmentId !== value.enrollmentId) {
+    return yield* new EnrollmentInteractionFailed();
+  }
+  return submissionFlow(
+    resumed.value.submission,
+    resumed.value.billingEmail,
+    current.value.status === "prepared" ? Option.some(current.value) : Option.none()
+  );
+});
 const refreshPaymentFlow = (
   gateway: EnrollmentGateway,
-  current: PaymentFlowState
+  current: PaymentFlowState,
+  uncertain: boolean
 ): Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed> => {
-  if (current._tag === "PaymentSubmission") {
-    return Effect.tryPromise({
-      try: (signal) => observePayment(gateway, current, signal),
-      catch: () => new EnrollmentInteractionFailed(),
-    }).pipe(
-      Effect.flatMap((value) =>
-        value.enrollmentId === current.value.enrollmentId
-          ? Effect.succeed(submissionFlow(value, current.billingEmail, current.prepared))
-          : Effect.fail(new EnrollmentInteractionFailed())
-      )
-    );
-  }
+  if (current._tag === "Enrollment") return recoverEnrollment(gateway, current, uncertain);
   return Effect.tryPromise({
-    try: (signal) => gateway.status(current.value.enrollmentId, signal),
+    try: (signal) => observePayment(gateway, current, signal),
     catch: () => new EnrollmentInteractionFailed(),
   }).pipe(
     Effect.flatMap((value) =>
       value.enrollmentId === current.value.enrollmentId
-        ? Effect.succeed(enrollmentFlow(value))
+        ? Effect.succeed(submissionFlow(value, current.billingEmail, current.prepared))
         : Effect.fail(new EnrollmentInteractionFailed())
     )
   );
@@ -367,7 +388,7 @@ const submit = (owner: Owner, email: string, fields?: PaymentFields): void => {
 const refresh = (owner: Owner): void => {
   if (Option.isNone(owner.flow)) return;
   const current = owner.flow.value;
-  run(owner, (gateway) => refreshPaymentFlow(gateway, current));
+  run(owner, (gateway) => refreshPaymentFlow(gateway, current, owner.uncertain));
 };
 const submittedDaviplata = (owner: Owner, email: string, submission: PaymentSubmission): void => {
   if (!owner.active || owner.busy || Option.isNone(owner.flow)) return;

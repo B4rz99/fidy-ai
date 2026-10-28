@@ -29,7 +29,7 @@ Para consultar:
 fidy login --recipient 'Mi agente' --scopes read --lifetime 7
 ```
 
-Para consultar, registrar y corregir, usa `--scopes read,write`. Revisa `fidy login --help` para las opciones del ejecutable instalado. El navegador abre la aprobación en `app.fidyapp.com`; comprueba el código mostrado en la terminal, los permisos y el vencimiento antes de aprobar. Usa `--no-browser` si necesitas abrir el enlace manualmente.
+Para consultar, registrar y corregir, usa `--scopes read,write`. Revisa `fidy --help` para las opciones del ejecutable instalado. El navegador abre la aprobación en `app.fidyapp.com`; comprueba el código mostrado en la terminal, los permisos y el vencimiento antes de aprobar. Usa `--no-browser` si necesitas abrir el enlace manualmente.
 
 La CLI guarda el acceso en el almacén de credenciales del sistema. No copies tokens al chat ni los pases como argumentos.
 

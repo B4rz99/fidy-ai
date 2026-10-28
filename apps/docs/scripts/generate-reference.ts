@@ -2,13 +2,13 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Schema } from "effect";
 
-const artifact = Schema.Struct({
+const Artifact = Schema.Struct({
   openapi: Schema.String,
   info: Schema.JsonObject,
   paths: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.JsonObject)),
   components: Schema.Struct({ schemas: Schema.Record(Schema.String, Schema.JsonObject) }),
 });
-const operation = Schema.Struct({
+const Operation = Schema.Struct({
   operationId: Schema.String.check(
     Schema.isPattern(/^[a-zA-Z][a-zA-Z0-9]*\.[a-zA-Z][a-zA-Z0-9]*$/u)
   ),
@@ -18,16 +18,19 @@ const operation = Schema.Struct({
   responses: Schema.Record(Schema.String, Schema.JsonObject),
   "x-fidy-access": Schema.Struct({
     type: Schema.Literal("user-owned-agent-scoped"),
-    scope: Schema.Struct({
-      evaluation: Schema.Literals(["operation", "children"]),
-      capability: Schema.optionalKey(Schema.Literals(["read", "write", "dashboard"])),
-    }),
+    scope: Schema.Union([
+      Schema.Struct({
+        evaluation: Schema.Literal("operation"),
+        capability: Schema.Literals(["read", "write", "dashboard"]),
+      }),
+      Schema.Struct({ evaluation: Schema.Literal("children") }),
+    ]),
   }),
   "x-fidy-agent-confirmation": Schema.Literals(["required", "not-required"]),
   "x-fidy-operation-kind": Schema.Literals(["query", "mutation"]),
   "x-fidy-required-tier": Schema.Literals(["free", "pro"]),
 });
-type Operation = typeof operation.Type;
+type Operation = typeof Operation.Type;
 const args = process.argv.slice(2);
 const argument = (name: string, fallback: string): string => {
   const index = args.indexOf(name);
@@ -46,15 +49,15 @@ const source = argument(
   new URL("../../server/contracts/openapi.json", import.meta.url).pathname
 );
 const destination = argument("--destination", new URL("..", import.meta.url).pathname);
-const document = Schema.decodeUnknownSync(Schema.fromJsonString(artifact))(
+const document = Schema.decodeUnknownSync(Schema.fromJsonString(Artifact))(
   readFileSync(source, "utf8")
 );
-const allowed = Schema.Struct({ type: Schema.Literal("user-owned-agent-scoped") });
+const UserOwnedAgentAccess = Schema.Struct({ type: Schema.Literal("user-owned-agent-scoped") });
 const discovered = Object.entries(document.paths)
   .flatMap(([path, methods]) =>
     Object.entries(methods).flatMap(([method, candidate]) =>
-      Schema.is(allowed)(candidate["x-fidy-access"])
-        ? [{ path, method, declaration: Schema.decodeUnknownSync(operation)(candidate) }]
+      Schema.is(UserOwnedAgentAccess)(candidate["x-fidy-access"])
+        ? [{ path, method, declaration: Schema.decodeUnknownSync(Operation)(candidate) }]
         : []
     )
   )
@@ -64,11 +67,11 @@ if (discovered.length === 0) {
 }
 
 const publicIds = new Set(discovered.map((entry) => entry.declaration.operationId));
-const operationAlternative = Schema.Struct({
+const OperationAlternative = Schema.Struct({
   properties: Schema.Struct({ operation: Schema.Struct({ enum: Schema.Array(Schema.String) }) }),
 });
 const inaccessibleOperation = (value: Schema.Json): boolean =>
-  Schema.is(operationAlternative)(value) &&
+  Schema.is(OperationAlternative)(value) &&
   value.properties.operation.enum.some((id) => !publicIds.has(id));
 const projectSchema = (value: Schema.Json): Schema.Json => {
   if (Array.isArray(value)) return value.map(projectSchema);
@@ -84,7 +87,7 @@ const projectSchema = (value: Schema.Json): Schema.Json => {
 };
 const published = discovered.map((entry) => ({
   ...entry,
-  declaration: Schema.decodeUnknownSync(operation)(projectSchema(entry.declaration)),
+  declaration: Schema.decodeUnknownSync(Operation)(projectSchema(entry.declaration)),
 }));
 
 const references = (value: Schema.Json): ReadonlyArray<string> =>

@@ -16,20 +16,20 @@ for (const file of files) {
   digest.update("\0");
 }
 const artifactDigest = digest.digest("hex");
-const requiredText = Schema.String.check(Schema.isMinLength(1));
-const evidenceSchema = Schema.Struct({
+const RequiredText = Schema.String.check(Schema.isMinLength(1));
+const PublicationEvidence = Schema.Struct({
   artifactDigest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
   productionRevision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)),
   verifiedAt: Schema.String.check(
     Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u)
   ),
-  clients: Schema.Struct({ claudeCode: requiredText, codex: requiredText, cli: requiredText }),
+  clients: Schema.Struct({ claudeCode: RequiredText, codex: RequiredText, cli: RequiredText }),
   journeys: Schema.Struct({
     connect: Schema.Literal(true),
     recordCorrect: Schema.Literal(true),
     query: Schema.Literal(true),
   }),
-  evidence: requiredText,
+  evidence: RequiredText,
 });
 const args = process.argv.slice(2);
 if (args.length === 1 && args[0] === "--inspect") {
@@ -42,7 +42,7 @@ if (args.length === 1 && args[0] === "--inspect") {
   if (!path || !existsSync(path)) {
     throw new Error("Production journey evidence is required before public docs publication");
   }
-  const evidence = Schema.decodeUnknownSync(Schema.fromJsonString(evidenceSchema))(
+  const evidence = Schema.decodeUnknownSync(Schema.fromJsonString(PublicationEvidence))(
     readFileSync(path, "utf8")
   );
   if (evidence.artifactDigest !== artifactDigest) {

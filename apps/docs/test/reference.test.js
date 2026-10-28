@@ -102,3 +102,48 @@ await test("explicit generation publishes agent operations and their reachable s
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+await test("rejects operation-level access without a capability before replacing the published reference", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "fidy-docs-invalid-scope-"));
+  try {
+    const source = join(directory, "source.json");
+    const prior = join(directory, "public/reference/openapi.json");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(directory, "public/reference"), { recursive: true });
+    await writeFile(prior, "previous reviewed contract");
+    await writeFile(
+      source,
+      JSON.stringify({
+        openapi: "3.1.0",
+        info: {},
+        components: { schemas: {} },
+        paths: {
+          "/transactions": {
+            get: {
+              operationId: "transactions.listTransactions",
+              parameters: [],
+              responses: {},
+              "x-fidy-access": {
+                type: "user-owned-agent-scoped",
+                scope: { evaluation: "operation" },
+              },
+              "x-fidy-agent-confirmation": "not-required",
+              "x-fidy-operation-kind": "query",
+              "x-fidy-required-tier": "free",
+            },
+          },
+        },
+      })
+    );
+    const result = spawnSync(
+      "bun",
+      ["apps/docs/scripts/generate-reference.ts", "--source", source, "--destination", directory],
+      { encoding: "utf8" }
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /capability/u);
+    assert.equal(await readFile(prior, "utf8"), "previous reviewed contract");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

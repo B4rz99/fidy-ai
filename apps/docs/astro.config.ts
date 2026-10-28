@@ -26,7 +26,7 @@ export default defineConfig({
     starlight({
       title: "Fidy · Guías",
       description: "Guías de Fidy para personas y sus propios agentes.",
-      components: { MarkdownContent: "./src/components/MarkdownContent.astro" },
+      components: { MarkdownContent: "./src/components/markdown-content.astro" },
       social: [{ icon: "external", label: "Abrir Fidy", href: "https://app.fidyapp.com" }],
       lastUpdated: false,
       locales: { root: { label: "Español", lang: "es" } },

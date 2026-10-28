@@ -26,6 +26,6 @@ Los permisos de este comando se separan con comas. Revisa que Fidy muestre los p
 
 Usa un modo interactivo. Las correcciones requieren la confirmación nativa del cliente; sigue [la guía de corrección](/transacciones/registrar-corregir#corregir-con-mcp).
 
-Codex 0.160.0 tiene evidencia local de interacción nativa compatible. Las versiones posteriores necesitan verificación; no interpretes esa evidencia como certificación de todos los clientes o modos de ejecución.
+Verificamos Codex 0.160.0 en producción el 28 de octubre de 2026: conexión, registro, corrección con aprobación o cancelación y consulta de transacciones. Las versiones posteriores y otros modos de ejecución necesitan su propia verificación.
 
 Si la conexión no aparece o no puede completar una confirmación, consulta [solución de problemas](/ayuda/problemas).

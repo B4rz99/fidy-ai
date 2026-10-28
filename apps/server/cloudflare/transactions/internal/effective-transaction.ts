@@ -50,22 +50,32 @@ export const effectiveHistoryPage = ({
     "created_at",
     "revision",
   ];
-  const columns = fields
-    .map((field) => (field === "occurred_at" || field === "created_at" ? `${field}_ms` : field))
+  const presentation = fields
+    .map((field) =>
+      field === "occurred_at" || field === "created_at"
+        ? `strftime('%Y-%m-%dT%H:%M:%fZ',${field}_ms/1000.0,'unixepoch') AS ${field}`
+        : field
+    )
     .join(", ");
-  const encoded = `json_object(${fields.flatMap((field) => ["'" + field + "'", field === "occurred_at" || field === "created_at" ? `strftime('%Y-%m-%dT%H:%M:%fZ',${field}_ms/1000.0,'unixepoch')` : field]).join(", ")})`;
-  const decoded = fields.map((field) => `json_extract(value, '$.${field}') AS ${field}`).join(", ");
   const ordered = `ORDER BY occurred_at_ms DESC, created_at_ms DESC, id DESC LIMIT ${limit}`;
+  // SQLite compound ORDER BY keys must be result columns. Canonical row decoding omits these
+  // numeric keys: https://www.sqlite.org/lang_select.html#orderby
   return {
-    sql: `WITH selected AS (SELECT CASE WHEN EXISTS (
+    sql: `WITH readiness AS MATERIALIZED (SELECT EXISTS (
         SELECT 1 FROM transaction_projection_state
-        WHERE user_id = ? AND version = 1 AND readiness = 'ready')
-      THEN (SELECT json_group_array(${encoded}) FROM (
-        SELECT ${columns} FROM transaction_projection_leaf WHERE (${where}) ${ordered}))
-      ELSE (WITH ${relation.sql} SELECT json_group_array(${encoded}) FROM (
-        SELECT ${columns} FROM effective_transaction WHERE (${where}) ${ordered}))
-      END AS records)
-      SELECT ${decoded} FROM selected, json_each(selected.records) ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT ${limit}`,
-    bindings: [userId, ...bindings, ...relation.bindings, ...bindings],
+        WHERE user_id = ? AND version = 1 AND readiness = 'ready') AS available),
+      ${relation.sql},
+      repair_page AS (
+        SELECT ${presentation}, occurred_at_ms, created_at_ms FROM effective_transaction
+        WHERE (${where}) ORDER BY occurred_at_ms DESC, created_at_ms DESC, id DESC
+        LIMIT CASE WHEN (SELECT available FROM readiness) THEN 0 ELSE ${limit} END)
+      SELECT ${presentation}, occurred_at_ms, created_at_ms
+        FROM transaction_projection_leaf
+        WHERE user_id = CASE WHEN (SELECT available FROM readiness) THEN ? END
+          AND (${where})
+      UNION ALL
+      SELECT * FROM repair_page
+      ${ordered}`,
+    bindings: [userId, ...relation.bindings, ...bindings, userId, ...bindings],
   };
 };

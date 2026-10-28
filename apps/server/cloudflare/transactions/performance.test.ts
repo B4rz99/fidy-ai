@@ -1,7 +1,10 @@
 import { type Cause, Clock, Config, Effect, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestStorage, observeRetentionCost } from "../d1-test-fixture";
-import { maintenancePerformanceEnvironment } from "../maintenance-performance.test-fixture";
+import {
+  maintenancePerformanceDatabase,
+  maintenancePerformanceEnvironment,
+} from "../maintenance-performance.test-fixture";
 import { runCoreMaintenance } from "../maintenance/runtime";
 import { seedHistory } from "./history-growth.test-fixture";
 import { effectiveHistoryPage } from "./internal/effective-transaction";
@@ -43,6 +46,7 @@ it.skipIf(!enabled)(
           const withMaintenance = sample % 2 === 1;
           const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
           yield* Effect.tryPromise(() => installTestSchema({ db }));
+          yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
           yield* Effect.tryPromise(() =>
             db
               .prepare(`INSERT INTO users
@@ -91,23 +95,34 @@ it.skipIf(!enabled)(
             deleteBatch: unavailable,
           };
           const environment = maintenancePerformanceEnvironment({
-            db: maintenance.database,
+            db: maintenancePerformanceDatabase({ db: maintenance.database, bucket }),
             bucket,
             queue,
             workflow,
           });
           const started = performance.now();
+          let foregroundElapsedMs = 0;
           yield* Effect.all(
             [
               Effect.forEach(
                 Array.from({ length: 128 }, (_, index) => index),
                 () => measurePage(foreground, subject, timings),
                 { concurrency: 8, discard: true }
+              ).pipe(
+                Effect.tap(() =>
+                  Effect.sync(() => {
+                    foregroundElapsedMs = performance.now() - started;
+                  })
+                )
               ),
               withMaintenance
                 ? Effect.forEach(
                     Array.from({ length: 8 }, (_, index) => index),
-                    () => runCoreMaintenance(environment),
+                    () =>
+                      runCoreMaintenance({
+                        environment,
+                        scheduledAtEpochMs: Math.floor(now / 86_400_000) * 86_400_000,
+                      }),
                     { discard: true }
                   )
                 : Effect.void,
@@ -115,6 +130,14 @@ it.skipIf(!enabled)(
             { concurrency: 2 }
           );
           timings.sort((left, right) => left - right);
+          const remainingExpired = yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT count(*) AS remaining FROM resource_admission_grants WHERE id GLOB 'workers-ai-expired-*'"
+              )
+              .first<number>("remaining")
+          );
+          expect(remainingExpired).toBe(withMaintenance ? 3072 : 4096);
           const encoded = yield* Schema.encodeEffect(
             Schema.fromJsonString(
               Schema.Struct({
@@ -124,6 +147,8 @@ it.skipIf(!enabled)(
                 requests: Schema.Int,
                 concurrency: Schema.Int,
                 elapsedMs: Schema.Finite,
+                foregroundElapsedMs: Schema.Finite,
+                requestsPerSecond: Schema.Finite,
                 p50Ms: Schema.Finite,
                 p95Ms: Schema.Finite,
                 p99Ms: Schema.Finite,
@@ -141,6 +166,8 @@ it.skipIf(!enabled)(
             requests: 128,
             concurrency: 8,
             elapsedMs: performance.now() - started,
+            foregroundElapsedMs,
+            requestsPerSecond: 128_000 / foregroundElapsedMs,
             p50Ms: timings[63] ?? 0,
             p95Ms: timings[121] ?? 0,
             p99Ms: timings[126] ?? 0,
@@ -148,13 +175,7 @@ it.skipIf(!enabled)(
             foregroundWrites: foreground.cost().rowsWritten,
             maintenanceReads: maintenance.cost().rowsRead,
             maintenanceWrites: maintenance.cost().rowsWritten,
-            remainingExpired: yield* Effect.tryPromise(() =>
-              db
-                .prepare(
-                  "SELECT count(*) AS remaining FROM resource_admission_grants WHERE id GLOB 'workers-ai-expired-*'"
-                )
-                .first<number>("remaining")
-            ).pipe(Effect.map((count) => count ?? 0)),
+            remainingExpired: remainingExpired ?? 0,
           });
           yield* Effect.sync(() => process.stdout.write(`INFRA_COST ${encoded}\n`));
         }

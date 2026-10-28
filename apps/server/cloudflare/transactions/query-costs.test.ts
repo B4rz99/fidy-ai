@@ -67,7 +67,7 @@ it("bounds ready effective History pages while preserving authoritative rows", (
       });
       const page = yield* fromTestPromise(() => historyPage(db, userId));
       expect(page.results).toHaveLength(101);
-      expect(page.meta.rows_read).toBeLessThan(500);
+      expect(page.meta.rows_read).toBeLessThanOrEqual(152);
     })
   ));
 it(
@@ -110,7 +110,9 @@ it(
             db
               .prepare(`WITH ${relation.sql}
         SELECT user_id, id, amount, currency, direction, counterparty, category_id, notes,
-          occurred_at, created_at, revision FROM effective_transaction
+          strftime('%Y-%m-%dT%H:%M:%fZ', occurred_at_ms / 1000.0, 'unixepoch') AS occurred_at,
+          strftime('%Y-%m-%dT%H:%M:%fZ', created_at_ms / 1000.0, 'unixepoch') AS created_at,
+          revision, occurred_at_ms, created_at_ms FROM effective_transaction
         WHERE ${filter.sql} ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 101`)
               .bind(...relation.bindings, ...filter.values)
               .all()

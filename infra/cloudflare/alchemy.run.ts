@@ -549,14 +549,14 @@ export default Alchemy.Stack(
       queueId: emailQueue.queueId,
       scriptName: core.workerName,
       deadLetterQueue: asyncDeadLetters.queueName,
-      settings: { batchSize: 10, maxRetries: 3 },
+      settings: { batchSize: 10, maxRetries: 3, maxWaitTimeMs: 0 },
     });
 
     yield* Cloudflare.Queues.Consumer("StatementExtractionConsumer", {
       queueId: statementExtractionQueue.queueId,
       scriptName: core.workerName,
       deadLetterQueue: asyncDeadLetters.queueName,
-      settings: { batchSize: 10, maxRetries: 3 },
+      settings: { batchSize: 10, maxRetries: 3, maxWaitTimeMs: 0 },
     });
 
     yield* Cloudflare.Queues.Consumer("BillingCollectionConsumer", {
@@ -570,13 +570,13 @@ export default Alchemy.Stack(
       queueId: browserPairingEmailQueue.queueId,
       scriptName: core.workerName,
       deadLetterQueue: asyncDeadLetters.queueName,
-      settings: { batchSize: 10, maxRetries: 3 },
+      settings: { batchSize: 10, maxRetries: 3, maxWaitTimeMs: 0 },
     });
     yield* Cloudflare.Queues.Consumer("EmailReplacementConsumer", {
       queueId: emailReplacementQueue.queueId,
       scriptName: core.workerName,
       deadLetterQueue: asyncDeadLetters.queueName,
-      settings: { batchSize: 10, maxRetries: 3 },
+      settings: { batchSize: 10, maxRetries: 3, maxWaitTimeMs: 0 },
     });
 
     yield* Cloudflare.Queues.Consumer("WeeklyDeliveryConsumer", {
@@ -590,7 +590,7 @@ export default Alchemy.Stack(
       queueId: hostedWhatsAppQueue.queueId,
       scriptName: core.workerName,
       deadLetterQueue: asyncDeadLetters.queueName,
-      settings: { batchSize: 10, maxRetries: 3 },
+      settings: { batchSize: 10, maxRetries: 3, maxWaitTimeMs: 0 },
     });
 
     const ingress = yield* Cloudflare.Worker("Ingress", {

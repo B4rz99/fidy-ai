@@ -7,7 +7,7 @@ const Card = ({ className, ...props }: DivProps): React.JSX.Element => (
     data-slot="card"
     data-size="default"
     className={cn(
-      "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-base text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+      "group/card flex min-w-0 flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-base text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
       className
     )}
     {...props}
@@ -17,7 +17,7 @@ const CardHeader = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div
     data-slot="card-header"
     className={cn(
-      "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-xl px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)",
+      "group/card-header @container/card-header grid min-w-0 grid-cols-[minmax(0,1fr)] auto-rows-min items-start gap-1 rounded-t-xl px-(--card-spacing) [overflow-wrap:anywhere] has-data-[slot=card-action]:grid-cols-[minmax(0,1fr)_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing) *:min-w-0",
       className
     )}
     {...props}
@@ -45,7 +45,11 @@ const CardAction = ({ className, ...props }: DivProps): React.JSX.Element => (
   />
 );
 const CardContent = ({ className, ...props }: DivProps): React.JSX.Element => (
-  <div data-slot="card-content" className={cn("px-(--card-spacing)", className)} {...props} />
+  <div
+    data-slot="card-content"
+    className={cn("min-w-0 px-(--card-spacing)", className)}
+    {...props}
+  />
 );
 const CardFooter = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div

@@ -15,6 +15,10 @@ const publicPaths = [
   "/politica",
   "/cookies",
   "/terminos",
+  "/about",
+  "/contact",
+  "/privacy",
+  "/docs",
 ];
 for (const path of publicPaths) {
   test(`delivers complete HTML and canonical metadata without JavaScript: ${path}`, async ({
@@ -111,58 +115,12 @@ const settleEntranceMotion = async (): Promise<void> => {
   );
 };
 
-type Violation = Awaited<ReturnType<AxeBuilder["analyze"]>>["violations"][number];
-type Node = Violation["nodes"][number];
-type Appearance = { path: string; theme: string };
-
-const hasApprovedColors = (data: unknown): boolean => {
-  if (typeof data !== "object" || data === null) return false;
-  return (
-    "fgColor" in data &&
-    data.fgColor === "#88cc20" &&
-    "bgColor" in data &&
-    data.bgColor === "#fae3d9" &&
-    "expectedContrastRatio" in data &&
-    data.expectedContrastRatio === "3:1"
-  );
-};
-
-const isExactSloganNode = (node: Node): boolean =>
-  node.target.length === 1 &&
-  node.target[0] === "h1 > em" &&
-  node.html === "<em>Tu vida, <br>más tranquila.</em>" &&
-  node.all.length === 0 &&
-  node.none.length === 0 &&
-  node.any.length === 1;
-
-// Design exception approved in #1524: this exact light slogan does NOT meet WCAG AA.
-// Keep axe running on the entire document and retain every other failing node.
-const isAcceptedSloganContrast = (appearance: Appearance, rule: string, node: Node): boolean =>
-  appearance.path === "/" &&
-  appearance.theme === "light" &&
-  rule === "color-contrast" &&
-  isExactSloganNode(node) &&
-  node.any[0]?.id === "color-contrast" &&
-  hasApprovedColors(node.any[0]?.data);
-
-const unexpectedViolations = (violations: Violation[], path: string, theme: string): Violation[] =>
-  violations
-    .map((violation) => ({
-      ...violation,
-      nodes: violation.nodes.filter(
-        (node) => !isAcceptedSloganContrast({ path, theme }, violation.id, node)
-      ),
-    }))
-    .filter(({ nodes }) => nodes.length > 0);
-
 const accessibilityPages = [
   ...publicPaths.map((path) => ({ path, theme: "light" as const })),
   { path: "/", theme: "dark" as const },
 ];
 for (const { path, theme } of accessibilityPages) {
-  test(`audits rendered public content and CSP with documented design exceptions: ${path} ${theme}`, async ({
-    page,
-  }) => {
+  test(`audits rendered public content and CSP: ${path} ${theme}`, async ({ page }) => {
     const errors: string[] = [];
     page.on("console", (message) => {
       if (message.type() === "error") errors.push(message.text());
@@ -171,75 +129,12 @@ for (const { path, theme } of accessibilityPages) {
     await page.goto(path);
     await page.evaluate(settleEntranceMotion);
     const results = await new AxeBuilder({ page }).analyze();
-    const violations = unexpectedViolations(results.violations, path, theme);
-    const accepted = results.violations.flatMap((violation) =>
-      violation.nodes.filter((node) =>
-        isAcceptedSloganContrast({ path, theme }, violation.id, node)
-      )
-    );
-    if (accepted.length > 0) {
-      test.info().annotations.push({
-        type: "accepted-design-exception",
-        description:
-          "#1524: light slogan #88CC20 on #FAE3D9 is 1.59:1 and does not meet WCAG AA (3:1).",
-      });
-      await test.info().attach("accepted-slogan-contrast.json", {
-        body: JSON.stringify(accepted, null, 2),
-        contentType: "application/json",
-      });
-    }
     expect(
-      violations.filter(({ impact }) => impact === "serious" || impact === "critical")
+      results.violations.filter(({ impact }) => impact === "serious" || impact === "critical")
     ).toEqual([]);
     expect(errors).toEqual([]);
   });
 }
-
-test("limits the approved contrast exception to the exact light slogan and color pair", async ({
-  page,
-}) => {
-  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
-  await page.goto("/");
-  const results = await new AxeBuilder({ page }).analyze();
-  const violation = results.violations.find(({ id }) => id === "color-contrast");
-  expect(violation).toBeDefined();
-  if (!violation) throw new Error("Expected the explicitly documented slogan contrast violation");
-  const node = violation.nodes[0];
-  expect(isAcceptedSloganContrast({ path: "/", theme: "light" }, violation.id, node)).toBe(true);
-  expect(isAcceptedSloganContrast({ path: "/", theme: "dark" }, violation.id, node)).toBe(false);
-  expect(
-    isAcceptedSloganContrast({ path: "/funciones/agentes", theme: "light" }, violation.id, node)
-  ).toBe(false);
-  expect(isAcceptedSloganContrast({ path: "/", theme: "light" }, "another-rule", node)).toBe(false);
-  const otherElement = { ...node, target: [".other-heading"] };
-  const changedText = { ...node, html: "<em>Different slogan</em>" };
-  const changedForeground = {
-    ...node,
-    any: [
-      {
-        ...node.any[0],
-        data: { fgColor: "#97ca47", bgColor: "#fae3d9", expectedContrastRatio: "3:1" },
-      },
-    ],
-  };
-  const changedBackground = {
-    ...node,
-    any: [
-      {
-        ...node.any[0],
-        data: { fgColor: "#88cc20", bgColor: "#fffaf6", expectedContrastRatio: "3:1" },
-      },
-    ],
-  };
-  for (const changed of [otherElement, changedText, changedForeground, changedBackground]) {
-    expect(unexpectedViolations([{ ...violation, nodes: [changed] }], "/", "light")).toHaveLength(
-      1
-    );
-  }
-  expect(
-    unexpectedViolations([{ ...violation, nodes: [node, otherElement] }], "/", "light")[0].nodes
-  ).toEqual([otherElement]);
-});
 
 test("publishes canonical discovery files and keeps draft terms out of the sitemap", async ({
   page,
@@ -254,7 +149,7 @@ test("publishes canonical discovery files and keeps draft terms out of the sitem
   const robots = await request.get("/robots.txt");
   expect(await robots.text()).toContain("https://fidyapp.com/sitemap-index.xml");
   const agentGuide = await request.get("/llms.txt");
-  expect(await agentGuide.text()).toContain("https://fidyapp.com/funciones/agentes#conectar");
+  expect(await agentGuide.text()).toContain("https://fidyapp.com/docs.md");
   await page.goto("/terminos");
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, follow");
 });
@@ -286,7 +181,7 @@ test("conversation replay does not cancel the visible coin flip on mobile", asyn
   await page.setViewportSize({ width: 390, height: 500 });
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/");
-  await page.locator("astro-island[component-export='PhoneDemo']:not([ssr])").waitFor();
+  await page.locator(".demo-shell[data-ready='true']").waitFor();
   await page.evaluate(() => {
     const coin = document.querySelector(".coin");
     if (coin === null) throw new Error("Missing landing coin");
@@ -309,7 +204,7 @@ test("replays the coin and conversation after scrolling away and returning", asy
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/");
-  await page.locator("astro-island[component-export='PhoneDemo']:not([ssr])").waitFor();
+  await page.locator(".demo-shell[data-ready='true']").waitFor();
   const revisit = async (visit: string): Promise<void> => {
     await page.evaluate(async () => {
       window.scrollTo({ top: document.body.scrollHeight, behavior: "instant" });
@@ -392,7 +287,7 @@ for (const width of Object.values(compositionWidths)) {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
     await page.locator("#demo").scrollIntoViewIfNeeded();
-    await page.locator("astro-island[component-export='PhoneDemo']:not([ssr])").waitFor();
+    await page.locator(".demo-shell[data-ready='true']").waitFor();
     await page.evaluate(settleEntranceMotion);
     const composition = await page.locator(".hero-stage").evaluate((stage) => {
       const bounds = (selector: string): DOMRect => {

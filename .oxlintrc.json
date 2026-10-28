@@ -73,7 +73,13 @@
       "error",
       "never",
       {
-        "pattern": { "mjs": "always", "css": "always", "html": "always", "astro": "always" }
+        "pattern": {
+          "mjs": "always",
+          "css": "always",
+          "html": "always",
+          "astro": "always",
+          "woff2": "always"
+        }
       }
     ],
     "no-void": "error",
@@ -265,7 +271,7 @@
         "apps/web/{playwright,playwright.capture,vite,vitest}.config.ts",
         "apps/site/{astro,playwright}.config.ts",
         "apps/docs/{astro,playwright}.config.ts",
-        "apps/site/e2e/site.spec.ts",
+        "apps/site/e2e/{site,agent-readiness}.spec.ts",
         "apps/docs/e2e/docs.spec.ts"
       ],
       "rules": {
@@ -291,6 +297,7 @@
         "infra/docs/alchemy.run.ts",
         "infra/cloudflare/alchemy-drift.run.ts",
         "apps/server/cloudflare/core-worker.ts",
+        "apps/site/cloudflare/worker.ts",
         "apps/server/cloudflare/release-smoke-worker.ts",
         "apps/server/cloudflare/d1-migration-test-worker.fixture.ts",
         "apps/server/cloudflare/ingestion/email-worker.ts",

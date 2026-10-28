@@ -304,7 +304,7 @@ export const SubscriptionStandingView = ({
     return (
       <PaymentFeedback tone="unavailable" title="Estado no disponible">
         <p>No pudimos consultar tu suscripción. Tus datos siguen disponibles.</p>
-        <Button type="button" variant="outline" onClick={onRetry}>
+        <Button contentLayout="wrap" type="button" variant="outline" onClick={onRetry}>
           Reintentar
         </Button>
       </PaymentFeedback>
@@ -369,7 +369,7 @@ const ReadyStanding = ({
           <StandingAccessPeriod standing={standing} />
         </div>
         <div className="subscription-refresh">
-          <Button type="button" variant="outline" onClick={onRetry}>
+          <Button contentLayout="wrap" type="button" variant="outline" onClick={onRetry}>
             <HugeiconsIcon icon={Refresh04Icon} size={24} aria-hidden="true" />
             Actualizar estado
           </Button>

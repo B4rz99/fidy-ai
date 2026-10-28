@@ -124,7 +124,12 @@ const BudgetFeedback = ({ props, controller }: ViewProps): JSX.Element => (
         <p className="text-sm text-muted-foreground">
           Plan heredado del mes anterior. Sin acumulación de saldos.
         </p>
-        <Button variant="outline" disabled={controller.disabled} onClick={controller.freezePlan}>
+        <Button
+          contentLayout="wrap"
+          variant="outline"
+          disabled={controller.disabled}
+          onClick={controller.freezePlan}
+        >
           Guardar plan del mes
         </Button>
       </div>
@@ -271,9 +276,13 @@ const Unbudgeted = ({
       </summary>
       <div className="flex flex-col gap-1 p-3">
         {categories.map((category) => (
-          <div key={category.id} className="flex items-center justify-between gap-3 px-1 py-2">
-            <span>{category.label}</span>
+          <div
+            key={category.id}
+            className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-1 py-2"
+          >
+            <span className="min-w-0 max-w-full [overflow-wrap:anywhere]">{category.label}</span>
             <Button
+              contentLayout="wrap"
               variant="outline"
               disabled={controller.disabled}
               onClick={() => controller.assignCategory(category)}

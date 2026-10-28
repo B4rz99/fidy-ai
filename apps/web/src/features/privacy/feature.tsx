@@ -63,6 +63,7 @@ const WithdrawalChoice = ({
     </label>
     <div>
       <Button
+        contentLayout="wrap"
         type="button"
         variant="destructive-outline"
         disabled={disabled || !confirmed}
@@ -218,7 +219,7 @@ const SavedTransactionsLink = (): JSX.Element => (
       </div>
       <div className="settings-section-actions">
         <div>
-          <Button variant="outline" render={<Link to="/app/transactions" />}>
+          <Button contentLayout="wrap" variant="outline" render={<Link to="/app/transactions" />}>
             Ver mis transacciones
           </Button>
         </div>
@@ -272,7 +273,11 @@ export const PrivacyFeature = (): JSX.Element => {
         ) : null}
         {status._tag === "Failure" ? (
           <div>
-            <Button variant="outline" render={<Link to="/login" reloadDocument />}>
+            <Button
+              contentLayout="wrap"
+              variant="outline"
+              render={<Link to="/login" reloadDocument />}
+            >
               Iniciar sesión
             </Button>
           </div>

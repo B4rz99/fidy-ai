@@ -99,7 +99,7 @@
 }
 .dashboard-figure-values {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(10rem, 24ch)), 1fr));
   gap: 20px;
   margin: 0;
 }
@@ -118,11 +118,13 @@
   margin-bottom: 8px;
 }
 .dashboard-figure-values dd {
+  max-width: 100%;
+  overflow-x: auto;
   font-size: 27px;
   letter-spacing: -1px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
   line-height: 1.5;
 }
 .dashboard-period {

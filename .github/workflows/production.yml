@@ -369,6 +369,14 @@ jobs:
             exit 1
           fi
 
+      - name: Verify public site representations and agent discovery
+        if: ${{ !inputs.isolate_schema_cutover }}
+        env:
+          SITE_PUBLIC_ORIGIN: https://fidyapp.com
+        run: >-
+          bun run --cwd apps/site test:browser e2e/agent-readiness.spec.ts
+          --grep 'negotiates complete|keeps missing pages|honors Accept|does not reuse|keeps unsafe methods|publishes a parseable|verifies public OAuth'
+
       - name: Probe production edge without valid User or provider authority
         if: ${{ !inputs.isolate_schema_cutover }}
         working-directory: infra/cloudflare

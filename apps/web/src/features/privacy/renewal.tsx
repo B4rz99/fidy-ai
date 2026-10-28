@@ -90,7 +90,12 @@ const RenewalChoice = ({
         Leí el aviso y vuelvo a autorizar el tratamiento de mis datos.
       </label>
       <div>
-        <Button type="button" disabled={!confirmed || result.waiting} onClick={() => submit()}>
+        <Button
+          contentLayout="wrap"
+          type="button"
+          disabled={!confirmed || result.waiting}
+          onClick={() => submit()}
+        >
           {result.waiting ? "Registrando autorización…" : "Renovar autorización"}
         </Button>
       </div>
@@ -128,7 +133,7 @@ export const ConsentRenewal = ({
     return (
       <div>
         <p>No pudimos consultar el aviso.</p>
-        <Button type="button" variant="outline" onClick={refresh}>
+        <Button contentLayout="wrap" type="button" variant="outline" onClick={refresh}>
           Reintentar aviso
         </Button>
       </div>

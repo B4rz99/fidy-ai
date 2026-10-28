@@ -79,13 +79,17 @@ const dateRange = ({
     last: format(Option.fromNullishOr(dates.at(-1))),
   };
 };
-const SummaryCount = ({ transactions }: Pick<SummaryProps, "transactions">): JSX.Element => (
-  <p data-transaction-slot="transaction-summary-count">
-    {transactions.length} transacciones ·{" "}
-    {transactions.filter((record) => record.direction === "inflow").length} ingresos ·{" "}
-    {transactions.filter((record) => record.direction === "outflow").length} gastos
-  </p>
-);
+const SummaryCount = ({ transactions }: Pick<SummaryProps, "transactions">): JSX.Element => {
+  const inflows = transactions.filter((record) => record.direction === "inflow").length;
+  const outflows = transactions.filter((record) => record.direction === "outflow").length;
+  return (
+    <p data-transaction-slot="transaction-summary-count">
+      {transactions.length} {transactions.length === 1 ? "transacción" : "transacciones"} ·{" "}
+      {inflows} {inflows === 1 ? "ingreso" : "ingresos"} · {outflows}{" "}
+      {outflows === 1 ? "gasto" : "gastos"}
+    </p>
+  );
+};
 const CurrencySummary = ({
   currency,
   props,
@@ -129,7 +133,8 @@ export const TransactionSummary = (props: SummaryProps): JSX.Element => {
       ) : null}
       {currencies.length !== 1 ? (
         <p className="text-sm text-muted-foreground">
-          {props.transactions.length} transacciones en total
+          {props.transactions.length}{" "}
+          {props.transactions.length === 1 ? "transacción" : "transacciones"} en total
         </p>
       ) : null}
       {currencies.map((currency) => (

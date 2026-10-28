@@ -1,0 +1,49 @@
+---
+const identity = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://fidyapp.com/#app",
+      name: "Fidy",
+      url: "https://fidyapp.com/",
+      description:
+        "Finanzas personales en Colombia desde WhatsApp, la web o tu agente de IA. Organiza transacciones, presupuestos y hallazgos.",
+      applicationCategory: "FinanceApplication",
+      operatingSystem: "Web",
+      inLanguage: "es-CO",
+      publisher: { "@id": "https://fidyapp.com/#organization" },
+      offers: {
+        "@type": "Offer",
+        name: "Fidy Pro mensual",
+        price: "28900",
+        priceCurrency: "COP",
+        url: "https://fidyapp.com/#precios",
+      },
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://fidyapp.com/#organization",
+      name: "Fidy",
+      url: "https://fidyapp.com/",
+      description: "Servicio de finanzas personales para personas y sus agentes en Colombia.",
+      logo: "https://fidyapp.com/fidy-logo.png",
+      email: "obarboza@fidyapp.com",
+      contactPoint: {
+        "@type": "ContactPoint",
+        contactType: "customer support",
+        email: "obarboza@fidyapp.com",
+        availableLanguage: "Spanish",
+      },
+      address: {
+        "@type": "PostalAddress",
+        streetAddress: "Calle 104 #53-49",
+        addressLocality: "Barranquilla",
+        addressCountry: "CO",
+      },
+    },
+  ],
+};
+---
+
+<script type="application/ld+json" set:html={JSON.stringify(identity)} />

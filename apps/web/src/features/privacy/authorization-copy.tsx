@@ -60,6 +60,7 @@ export const AuthorizationCopy = ({ client }: Readonly<{ client: WebAuthClient }
         <div className="settings-section-actions">
           <div>
             <Button
+              contentLayout="wrap"
               type="button"
               variant="outline"
               disabled={result.waiting}

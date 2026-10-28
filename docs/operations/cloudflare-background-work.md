@@ -6,6 +6,36 @@ completed. After commit, Core tries an identity-targeted offer within its execut
 The offer has a two-second budget. Failure leaves the accepted response intact, and the next
 five-minute recovery sweep can retry after the shared publication cooldown.
 
+User-triggered forwarded email, statement extraction, browser pairing email, email replacement and
+hosted WhatsApp consumers use a zero batch-fill wait, retaining ten-message batches, three retries
+and the existing dead-letter queue. A sparse message need not wait for nine more messages or the
+platform's default five-second timeout. This removes the batching delay, not Workflow, provider or
+delivery latency. Shorter waits can increase consumer invocations for closely spaced arrivals;
+Queue operations remain per message. Scheduled billing and weekly delivery retain default batching.
+See [Cloudflare batching](https://developers.cloudflare.com/queues/configuration/batching-retries/).
+
+The opt-in `queue/delivery-latency.test.ts` compares a single message with five-second and zero-second
+batch waits in the native local runtime. It measures Queue dispatch only. The
+`whatsapp/operational-cost.test.ts` measures guarded health inspection over retained successful
+delivery history, including R2 generation reads; a changed generation must still report unavailable.
+History contention measurements explicitly select a due maintenance window and verify that expired
+grants were removed. `foregroundElapsedMs` excludes waiting for maintenance to finish, while
+`elapsedMs` includes both workloads. Local timings are not production latency or CPU measurements.
+
+The [2026-10-27 measurements](../research/infra-performance-2026-10-27.json) retain matched
+before/after samples and the separate read-only dashboard observations. WhatsApp inspection batches
+its three samples into one guarded D1 unit, so it reads the external recovery generation once for
+that snapshot. Partial indexes select pending deliveries and recent failures without walking
+successful history. They add storage and index maintenance when a delivery enters or leaves those
+states; read savings are not a promise that every individual write becomes cheaper. Apply the
+additive `0005_whatsapp_health_indexes.sql` migration through the normal release process.
+
+History reads the ready projection directly and gates the authoritative repair branch in the same
+SQL snapshot. The final local fixture reads 105 rows per 101-item page versus 304 before (2.9× fewer).
+The broad 2× target remains unproven: final repeated History latency and throughput samples do not
+consistently reach it, and no production CPU, capacity, reliability or total-bill improvement has
+been measured. Resource counts are stable; local wall timings vary with host load.
+
 ## Maintenance cadence
 
 Core's minute trigger remains the scheduling entrypoint. Maintenance selects due activities before

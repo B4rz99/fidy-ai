@@ -7,39 +7,23 @@ const WhatsAppAge = Schema.Struct({ created: Schema.Int });
 const sampleLimit = 8;
 const staleAfterMilliseconds = 120_000;
 const rejectedWindowMilliseconds = 86_400_000;
-const readWhatsAppSample = (
-  statement: D1PreparedStatement
-): Effect.Effect<ReadonlyArray<typeof WhatsAppAge.Type>, void> =>
-  Effect.tryPromise(() => statement.all()).pipe(
-    Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(WhatsAppAge))(rows.results)),
-    Effect.mapError(() => undefined)
-  );
-
-const readPendingWhatsApp = (
-  db: D1Database
-): Effect.Effect<ReadonlyArray<typeof WhatsAppAge.Type>, void> =>
-  readWhatsAppSample(
-    prepareConsentOperationalMetadata({
-      db,
-      statement: {
-        sql: `SELECT created FROM (
+const pendingWhatsApp = (db: D1Database): D1PreparedStatement =>
+  prepareConsentOperationalMetadata({
+    db,
+    statement: {
+      sql: `SELECT created FROM (
                 SELECT created_at_ms AS created FROM consent_pending_deliveries
                 UNION ALL SELECT d.proposed_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d
                   JOIN (${hostedChannelTurnObservation()}) AS t ON t.id = d.turn_id AND t.user_id = d.user_id
                   WHERE t.status = 'pending' AND d.state IN ('sending', 'accepted', 'ambiguous')
               ) ORDER BY created LIMIT ?`,
-        params: [sampleLimit],
-      },
-    })
-  );
+      params: [sampleLimit],
+    },
+  });
 
-const readFailedWhatsApp = (
-  db: D1Database,
-  current: number
-): Effect.Effect<ReadonlyArray<typeof WhatsAppAge.Type>, void> =>
-  readWhatsAppSample(
-    db
-      .prepare(`SELECT created FROM (
+const failedWhatsApp = (db: D1Database, current: number): D1PreparedStatement =>
+  db
+    .prepare(`SELECT created FROM (
             SELECT proposed_at_ms AS created FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery
               WHERE state IN ('rejected', 'unconfirmed') AND proposed_at_ms >= ?
             UNION ALL SELECT t.terminal_at_ms FROM (${hostedChannelTurnObservation()}) AS t
@@ -48,8 +32,7 @@ const readFailedWhatsApp = (
                 AND t.terminal_at_ms >= ? AND NOT EXISTS
                   (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d WHERE d.turn_id = t.id)
           ) ORDER BY created LIMIT ?`)
-      .bind(current - rejectedWindowMilliseconds, current - rejectedWindowMilliseconds, sampleLimit)
-  );
+    .bind(current - rejectedWindowMilliseconds, current - rejectedWindowMilliseconds, sampleLimit);
 
 /** Each condition has its own bounded sample; old pending work cannot mask failed delivery. */
 export const inspectWhatsApp = ({
@@ -58,27 +41,37 @@ export const inspectWhatsApp = ({
 }: Readonly<{ db: D1Database; current: number }>): Effect.Effect<WhatsAppOperationalSignal> =>
   Effect.gen(function* () {
     const result = yield* Effect.exit(
-      Effect.all({
-        pending: readPendingWhatsApp(db),
-        failed: readFailedWhatsApp(db, current),
-        cleanup: readWhatsAppSample(
+      Effect.tryPromise(() =>
+        db.batch([
+          pendingWhatsApp(db),
+          failedWhatsApp(db, current),
           prepareConsentOperationalMetadata({
             db,
             statement: {
               sql: `SELECT created FROM (
-                SELECT last_verified_inbound_at_ms + 86400000 AS created FROM whatsapp_service_windows WHERE last_verified_inbound_at_ms <= ?
-                UNION ALL SELECT expires_at_ms FROM consent_expiry_deadlines WHERE expires_at_ms <= ?
-              ) ORDER BY created LIMIT ?`,
+              SELECT last_verified_inbound_at_ms + 86400000 AS created FROM whatsapp_service_windows WHERE last_verified_inbound_at_ms <= ?
+              UNION ALL SELECT expires_at_ms FROM consent_expiry_deadlines WHERE expires_at_ms <= ?
+            ) ORDER BY created LIMIT ?`,
               params: [current - whatsAppServiceWindowMilliseconds, current, sampleLimit],
             },
-          })
-        ),
-      })
+          }),
+        ])
+      ).pipe(
+        Effect.flatMap((results) =>
+          Schema.decodeUnknownEffect(
+            Schema.Tuple([
+              Schema.Struct({ results: Schema.Array(WhatsAppAge) }),
+              Schema.Struct({ results: Schema.Array(WhatsAppAge) }),
+              Schema.Struct({ results: Schema.Array(WhatsAppAge) }),
+            ])
+          )(results)
+        )
+      )
     );
     if (Exit.isFailure(result)) {
       return { component: "async-health", operation: "whatsapp", state: "unavailable" };
     }
-    const { pending, failed, cleanup } = result.value;
+    const [{ results: pending }, { results: failed }, { results: cleanup }] = result.value;
     const oldestPendingAgeMilliseconds = Math.max(
       0,
       ...pending.map((row) => current - row.created)

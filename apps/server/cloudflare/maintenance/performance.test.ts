@@ -207,12 +207,16 @@ it.skipIf(!enabled)(
           const measured = observeRetentionCost(db);
           const before = yield* Clock.currentTimeMillis;
           yield* runEmailMaintenance({
-            DB: measured.database,
-            EMAIL_BUCKET: bucket,
-            EMAIL_QUEUE: {
-              send: () => Promise.reject(new Error("Idle Email maintenance must not deliver")),
+            environment: {
+              DB: measured.database,
+              EMAIL_BUCKET: bucket,
+              EMAIL_QUEUE: {
+                send: () => Promise.reject(new Error("Idle Email maintenance must not deliver")),
+              },
             },
+            scheduledAtEpochMs: Math.floor(before / 86_400_000) * 86_400_000,
           });
+          expect(measured.statements().length).toBeGreaterThan(0);
           const after = yield* Clock.currentTimeMillis;
           const encoded = yield* Schema.encodeEffect(
             Schema.fromJsonString(

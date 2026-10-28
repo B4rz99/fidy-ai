@@ -1,6 +1,7 @@
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Toaster, toast } from "sonner";
-import { useState } from "react";
+import { use, useState } from "react";
+import { TransactionCorrectionContext } from "./correction-context";
 import type { JSX, ReactNode, RefCallback } from "react";
 import { observeContinuation } from "./scroll-continuation";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -145,12 +146,12 @@ const WorkspaceToolbar = ({
 const panelLocked = (panel: TransactionPanel): boolean => {
   switch (panel._tag) {
     case "Bulk":
-      return panel.stage === "editing" && panel.status === "saving";
+      return false;
     case "Capture":
       return panel.status === "saving";
     case "Detail":
       if (panel.mode._tag === "Deleting") return panel.mode.status !== "idle";
-      return panel.mode._tag === "Editing" && panel.mode.status === "saving";
+      return false;
     case "Summary":
       return false;
   }
@@ -243,10 +244,6 @@ const DetailPanel = ({
       onMode={(mode) => onPanel({ ...panel, mode })}
       onClose={close}
       onRefresh={props.onRefresh}
-      onSaved={() => {
-        toast.success("Cambios guardados");
-        props.onRefresh();
-      }}
       onDeleted={() => {
         toast.success("Transacción eliminada");
         close();
@@ -260,7 +257,7 @@ const beginBulkEditing = (
   onPanel: (panel: TransactionPanel) => void
 ): void => {
   if (Array.isReadonlyArrayNonEmpty(selected)) {
-    onPanel({ _tag: "Bulk", stage: "editing", transactions: selected, status: "idle" });
+    onPanel({ _tag: "Bulk", stage: "editing", transactions: selected });
   }
 };
 const SelectedTransactions = ({
@@ -317,20 +314,8 @@ const BulkPanel = (
       renderForm={props.renderPanel}
       transactions={panel.transactions}
       categories={props.categories}
-      apiClient={props.apiClient}
       timeZone={props.currentUser.timeZone}
-      status={panel.status}
-      onStatus={(status) => props.onPanel({ ...panel, status })}
       onCancel={close}
-      onRefresh={() => {
-        close();
-        props.onRefresh();
-      }}
-      onSaved={() => {
-        toast.success("Cambios guardados");
-        close();
-        props.onRefresh();
-      }}
     />
   );
 };
@@ -458,7 +443,13 @@ const TransactionFilters = ({
       />
       <FilterButton disabled={disabled} onClick={onTool} />
       <RefreshButton
-        disabled={disabled}
+        disabled={
+          disabled &&
+          !Option.exists(
+            use(TransactionCorrectionContext),
+            (owner) => owner.status === "uncertain" || owner.status === "rejected"
+          )
+        }
         onClick={props.onRefresh}
         label="Actualizar transacciones"
       />
@@ -520,7 +511,7 @@ const panelTitle = (panel: TransactionPanel): string => {
 const detailPanel = (id: string, editable: boolean): TransactionPanel => ({
   _tag: "Detail",
   id,
-  mode: editable ? { _tag: "Editing", status: "idle" } : { _tag: "Viewing" },
+  mode: editable ? { _tag: "Editing" } : { _tag: "Viewing" },
 });
 const selectionPanel = (panel: TransactionPanel): TransactionPanel =>
   panel._tag === "Bulk" ? { _tag: "Summary" } : { _tag: "Bulk", ids: [], stage: "selecting" };
@@ -535,14 +526,8 @@ const renderCategoryCell = (
     <InlineTransactionCategory
       row={row}
       disabled={disabled}
-      apiClient={props.apiClient}
       transactions={props.transactions}
       categories={props.categories}
-      onRefresh={props.onRefresh}
-      onSaved={() => {
-        toast.success("Categoría guardada");
-        props.onRefresh();
-      }}
     />
   );
 const ledgerDisabled = (panel: TransactionPanel): boolean =>
@@ -553,15 +538,17 @@ const WorkspaceContext = ({
   panel,
   onPanel,
   children,
+  busy,
 }: Readonly<{
   panel: TransactionPanel;
   onPanel: (panel: TransactionPanel) => void;
   children: JSX.Element;
+  busy: boolean;
 }>): JSX.Element => (
   <TransactionContextPanel
     active={panel._tag !== "Summary" && !(panel._tag === "Bulk" && panel.stage === "selecting")}
     identity={panel._tag === "Detail" ? `${panel.id}:${panel.mode._tag}` : panel._tag}
-    locked={panelLocked(panel)}
+    locked={panelLocked(panel) || busy}
     onClose={() => onPanel({ _tag: "Summary" })}
     title={panelTitle(panel)}
   >
@@ -590,7 +577,12 @@ const WorkspaceContent = ({
   tool,
   onTool,
 }: WorkspaceContentProps): JSX.Element => {
-  const locked = panelLocked(panel);
+  const corrections = use(TransactionCorrectionContext);
+  const correctionBusy = Option.exists(
+    corrections,
+    (owner) => owner.status === "saving" || owner.status === "recovering"
+  );
+  const locked = panelLocked(panel) || correctionBusy;
   return (
     <div data-transaction-slot="transaction-columns">
       <div data-transaction-slot="transaction-records">
@@ -612,12 +604,12 @@ const WorkspaceContent = ({
           rows={rows}
           locale={props.currentUser.locale}
           selected={panel._tag === "Detail" ? Option.some(panel.id) : Option.none()}
-          disabled={ledgerDisabled(panel)}
+          disabled={ledgerDisabled(panel) || correctionBusy}
           renderCategory={(row, disabled) => renderCategoryCell(row, disabled, props)}
           onSelect={(id) => onPanel(detailPanel(id, props.editable))}
         />
       </div>
-      <WorkspaceContext panel={panel} onPanel={onPanel}>
+      <WorkspaceContext panel={panel} onPanel={onPanel} busy={correctionBusy}>
         <WorkspacePanel
           {...props}
           panel={panel}

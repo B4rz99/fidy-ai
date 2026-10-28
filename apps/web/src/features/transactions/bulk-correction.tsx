@@ -1,17 +1,11 @@
 import { RefreshButton } from "@/ui/components/refresh-button";
-import { browserCrypto } from "@/browser/crypto";
-import { useAtomSet } from "@effect/atom-react";
-import type * as Atom from "effect/reactivity/Atom";
+import { useTransactionCorrections } from "./correction-context";
+
 import { useState } from "react";
 import type { FormEvent, JSX } from "react";
-import { Array as Arr, BigDecimal, Cause, DateTime, Effect, Option, Schema } from "effect";
-import {
-  AtomicBatchCallId,
-  AtomicBatchRejected,
-  type CanonicalInput,
-  type FidyClient,
-} from "@/transport/client";
-import { isCanonicalInput } from "@/transport/canonical-input";
+import { type Array as Arr, BigDecimal, DateTime, Option } from "effect";
+import { type CanonicalInput } from "@/transport/client";
+
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
@@ -28,18 +22,12 @@ type BulkDraft = Readonly<{
   amount: string;
   date: string;
 }>;
-type BatchInput = CanonicalInput<"operations.executeAtomicBatch">;
 type Changes = CanonicalInput<"transactions.updateTransaction">["payload"]["changes"];
 type BulkProps = Readonly<{
   transactions: Arr.NonEmptyReadonlyArray<Transaction>;
   categories: ReadonlyArray<Category>;
-  apiClient: FidyClient;
   timeZone: string;
-  status: CorrectionStatus;
-  onStatus: (status: CorrectionStatus) => void;
-  onSaved: () => void;
   onCancel: () => void;
-  onRefresh: () => void;
   renderForm: (form: JSX.Element) => JSX.Element;
 }>;
 const draftFacts = (draft: BulkDraft, props: BulkProps): Changes => ({
@@ -80,51 +68,6 @@ const draftDate = (draft: BulkDraft, timeZone: string): Option.Option<Changes> =
 const draftChanges = (draft: BulkDraft, props: BulkProps): Option.Option<Changes> =>
   Option.all({ money: draftMoney(draft, props), date: draftDate(draft, props.timeZone) }).pipe(
     Option.map(({ money, date }) => ({ ...draftFacts(draft, props), ...money, ...date }))
-  );
-const batchInput = (
-  changes: Changes,
-  transactions: ReadonlyArray<Pick<Transaction, "id" | "revision">>
-): Option.Option<BatchInput> => {
-  const calls = transactions.map((record) => ({
-    callId: Schema.decodeSync(AtomicBatchCallId)(
-      Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie))
-    ),
-    operation: "transactions.updateTransaction",
-    input: { params: { id: record.id }, payload: { expectedRevision: record.revision, changes } },
-  }));
-  if (
-    !Arr.isReadonlyArrayNonEmpty(calls) ||
-    !calls.every((call) => isCanonicalInput("transactions.updateTransaction", call.input))
-  ) {
-    return Option.none();
-  }
-  const input = { payload: { calls } };
-  return isCanonicalInput("operations.executeAtomicBatch", input)
-    ? Option.some(input)
-    : Option.none();
-};
-type BulkCommand = Readonly<{
-  input: BatchInput;
-  onSaved: () => void;
-  onRejected: () => void;
-  onUncertain: () => void;
-}>;
-const makeBulkCorrection = (apiClient: FidyClient): Atom.AtomResultFn<BulkCommand, void, never> =>
-  apiClient.runtime.fn<BulkCommand>()((command) =>
-    Effect.gen(function* () {
-      const client = yield* apiClient;
-      yield* client.operations.executeAtomicBatch(command.input);
-      yield* Effect.sync(command.onSaved);
-    }).pipe(
-      Effect.catch((failure) =>
-        Effect.sync(
-          Schema.is(AtomicBatchRejected)(failure) ? command.onRejected : command.onUncertain
-        )
-      ),
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.sync(command.onUncertain)
-      )
-    )
   );
 const BulkAmount = ({
   draft,
@@ -258,17 +201,20 @@ const BulkTextFields = ({
     </div>
   </>
 );
-const BulkFeedback = ({ props }: Readonly<{ props: BulkProps }>): JSX.Element => (
+const BulkFeedback = ({
+  status,
+  recover,
+}: Readonly<{ status: CorrectionStatus; recover: () => void }>): JSX.Element => (
   <>
-    {props.status === "invalid" ? <p role="alert">Revisa los campos que quieres cambiar.</p> : null}
-    {props.status === "rejected" || props.status === "uncertain" ? (
+    {status === "invalid" ? <p role="alert">Revisa los campos que quieres cambiar.</p> : null}
+    {status === "rejected" || status === "uncertain" ? (
       <div role="alert">
         <p>
-          {props.status === "rejected"
+          {status === "rejected"
             ? "No se guardó ningún cambio. Actualiza el historial y revisa la selección."
             : "No pudimos confirmar los cambios. Actualiza el historial antes de volver a editar."}
         </p>
-        <RefreshButton variant="outline" onClick={props.onRefresh} label="Actualizar historial" />
+        <RefreshButton variant="outline" onClick={recover} label="Actualizar historial" />
       </div>
     ) : null}
   </>
@@ -289,31 +235,21 @@ export const BulkTransactionCorrection = (props: BulkProps): JSX.Element => {
     amount: "",
     date: "",
   });
-  const observedRevisions = props.transactions.map(({ id, revision }) => ({ id, revision }));
-  const [command] = useState(() => makeBulkCorrection(props.apiClient));
-  const submit = useAtomSet(command);
-  const locked =
-    props.status === "saving" || props.status === "uncertain" || props.status === "rejected";
+  const corrections = useTransactionCorrections();
+  const [invalid, setInvalid] = useState(false);
+  const feedback = corrections.status === "recovering" ? "saving" : corrections.status;
+  const status: CorrectionStatus = feedback === "idle" && invalid ? "invalid" : feedback;
+  const locked = corrections.locked;
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     if (locked) return;
     const changes = draftChanges(draft, props);
     if (Option.isNone(changes) || Object.keys(changes.value).length === 0) {
-      props.onStatus("invalid");
+      setInvalid(true);
       return;
     }
-    const input = batchInput(changes.value, observedRevisions);
-    if (Option.isNone(input)) {
-      props.onStatus("invalid");
-      return;
-    }
-    props.onStatus("saving");
-    submit({
-      input: input.value,
-      onSaved: props.onSaved,
-      onRejected: () => props.onStatus("rejected"),
-      onUncertain: () => props.onStatus("uncertain"),
-    });
+    setInvalid(false);
+    corrections.submit({ kind: "bulk", transactions: props.transactions, changes: changes.value });
   };
   return props.renderForm(
     <form
@@ -321,18 +257,18 @@ export const BulkTransactionCorrection = (props: BulkProps): JSX.Element => {
       onSubmit={onSubmit}
       className="flex flex-col gap-5"
     >
-      <BulkHeading count={observedRevisions.length} />
+      <BulkHeading count={props.transactions.length} />
       <BulkFields draft={draft} onChange={setDraft} props={props} locked={locked} />
       <p className="text-sm text-muted-foreground">
         Los campos vacíos o sin cambiar conservan su valor en cada transacción.
       </p>
-      <BulkFeedback props={props} />
+      <BulkFeedback status={status} recover={corrections.recover} />
       <div data-transaction-slot="transaction-form-actions">
-        <Button variant="outline" disabled={props.status === "saving"} onClick={props.onCancel}>
+        <Button variant="outline" disabled={status === "saving"} onClick={props.onCancel}>
           Cancelar
         </Button>
         <Button type="submit" disabled={locked}>
-          {props.status === "saving" ? "Guardando…" : "Guardar"}
+          {status === "saving" ? "Guardando…" : "Guardar"}
         </Button>
       </div>
     </form>

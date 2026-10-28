@@ -95,6 +95,13 @@ form; pending or successful payment and live DaviPlata authorization keep that a
 feedback separates source availability from verified settlement, and paid access/history use canonical
 SubscriptionStatus rather than invented renewal or payment-source metadata.
 
+The mounted PaymentEnrollment interaction module owns Price and method selection admission,
+preparation, submission progression, bounded visible-page observation and explicit recovery.
+Presentation dispatches domain actions instead of constructing executable work or coordinating flow
+identities and resets. The module fences late completions after disposal; the existing gateway keeps
+provider authorization and transient credentials private. An uncertain submission blocks another
+submission and selection changes until an explicit successful status reread.
+
 The DaviPlata form visibly supports only cédula de ciudadanía (CC). Document/product drafts and
 OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, page URLs,
 or shared atoms. The form retains its opaque challenge in a mounted ref; the gateway and transport
@@ -351,6 +358,15 @@ The signed-in `/app/budgets` workspace keys its canonical queries by User, time 
 Category editors inherit their group Currency; only group settings or a new group expose the Currency selector. Decimal amount controls refuse non-numeric input before submission.
 
 The Budget summary shows recorded monthly income and all effective expenses, including uncapped categories, using the canonical report’s currency-preserving cash flow. Its Summary, Income, and Expenses selectors change presentation only; income planning remains outside the expense-cap model.
+
+### Transaction Correction
+
+One mounted Transaction Correction module coordinates inline Category edits, individual Corrections
+and atomic bulk Corrections for the canonical history resource. It owns synchronous write admission,
+observed revisions, outcomes and explicit canonical reread recovery. Drafts remain with presentation;
+single and atomic mutations retain their distinct server contracts. Closing an editing panel does
+not release an uncertain write. Recovery rereads history and Category data, and a failed reread
+preserves the write lock. The privacy history remains read-only and mounts no Correction authority.
 
 ### Recurring workspace
 

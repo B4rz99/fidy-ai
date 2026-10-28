@@ -1,11 +1,10 @@
 import { RefreshButton } from "@/ui/components/refresh-button";
-import { useState } from "react";
+
 import type { JSX } from "react";
-import { useAtomSet } from "@effect/atom-react";
+
 import { Option } from "effect";
-import type { FidyClient } from "@/transport/client";
 import { InlineChoiceDropdown } from "@/ui/components/choice-dropdown";
-import { makeTransactionCorrection } from "./correction-command";
+import { useTransactionCorrections } from "./correction-context";
 import { CategoryVisual } from "@/ui/components/category-visual";
 import type { Category, Transaction, TransactionListRow } from "./presentation";
 
@@ -13,10 +12,7 @@ type CategoryProps = Readonly<{
   row: TransactionListRow;
   transaction: Transaction;
   categories: ReadonlyArray<Category>;
-  apiClient: FidyClient;
   disabled: boolean;
-  onRefresh: () => void;
-  onSaved: () => void;
 }>;
 type SaveStatus = "idle" | "saving" | "rejected" | "uncertain";
 const CategoryFeedback = ({
@@ -40,21 +36,19 @@ const CategoryFeedback = ({
   </>
 );
 const CategoryCorrection = (props: CategoryProps): JSX.Element => {
-  const [status, setStatus] = useState<SaveStatus>("idle");
-  const [command] = useState(() =>
-    makeTransactionCorrection({ apiClient: props.apiClient, transaction: props.transaction })
-  );
-  const submit = useAtomSet(command);
+  const corrections = useTransactionCorrections();
+  const feedback = corrections.status === "recovering" ? "saving" : corrections.status;
+  const status: SaveStatus = corrections.affected.includes(props.transaction.id)
+    ? feedback
+    : "idle";
   const change = (categoryId: string): void => {
     if (props.disabled || status !== "idle" || categoryId === props.transaction.categoryId) return;
     const category = Option.fromNullishOr(props.categories.find((item) => item.id === categoryId));
     if (Option.isNone(category)) return;
-    setStatus("saving");
-    submit({
+    corrections.submit({
+      kind: "single",
+      transaction: props.transaction,
       changes: { categoryId: category.value.id },
-      onSaved: props.onSaved,
-      onRejected: () => setStatus("rejected"),
-      onUncertain: () => setStatus("uncertain"),
     });
   };
   return (
@@ -72,13 +66,7 @@ const CategoryCorrection = (props: CategoryProps): JSX.Element => {
       >
         {props.row.categoryLabel}
       </InlineChoiceDropdown>
-      <CategoryFeedback
-        status={status}
-        onRefresh={() => {
-          props.onRefresh();
-          setStatus("idle");
-        }}
-      />
+      <CategoryFeedback status={status} onRefresh={corrections.recover} />
     </div>
   );
 };

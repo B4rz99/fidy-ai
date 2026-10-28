@@ -48,7 +48,7 @@ import {
 import { sweepProactivityConsentOffers } from "../consent/runtime";
 import { sweepExpiredPATPairings } from "../tokens/runtime";
 import { sweepOAuthConfirmation } from "../oauth-confirmation/runtime";
-import { sweepConnectionAttempts, sweepConnectionGrants } from "../connections/runtime";
+import { recoverConnections } from "../connections/runtime";
 import { advanceProactivityWork } from "../insights/runtime";
 import { advanceRecurringWork } from "../recurring/runtime";
 import { repairDashboardProjections } from "../transactions/runtime";
@@ -233,21 +233,6 @@ const admissionActivities = (
     sweepOAuthConfirmation({ db: environment.DB, current: nowEpochMs })
   ),
   activity(
-    "connections.attemptRetention",
-    sweepConnectionAttempts({ db: environment.DB, current: nowEpochMs })
-  ),
-  activity(
-    "connections.grantCleanup",
-    sweepConnectionGrants({
-      db: environment.DB,
-      key: Option.map(
-        Option.fromUndefinedOr(environment.BANCOLOMBIA_SANDBOX_GRANT_KEY),
-        Redacted.make
-      ),
-      bank: makeBancolombiaSandboxCleanup(environment),
-    })
-  ),
-  activity(
     "quota.consumptionRetention",
     sweepCommercialAllowances({ db: environment.DB, current: nowEpochMs })
   ),
@@ -320,6 +305,18 @@ export const runCoreMaintenance = (
         activity("recurring.evaluate", advanceRecurringWork(environment)),
         activity("insights.weekly.dispatch", advanceProactivityWork(environment)),
         ...stagingActivities(environment, nowEpochMs),
+        activity(
+          "connections.recovery",
+          recoverConnections({
+            db: environment.DB,
+            key: Option.map(
+              Option.fromUndefinedOr(environment.BANCOLOMBIA_SANDBOX_GRANT_KEY),
+              Redacted.make
+            ),
+            bank: makeBancolombiaSandboxCleanup(environment),
+            scheduledAtEpochMs: "environment" in input ? input.scheduledAtEpochMs : nowEpochMs,
+          })
+        ),
         ...admissionActivities(environment, nowEpochMs),
         ...statementActivities(environment),
       ],

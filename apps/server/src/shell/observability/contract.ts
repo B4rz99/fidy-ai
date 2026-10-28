@@ -62,6 +62,8 @@ export const TelemetryRegistry = {
     "task.whatsappRetention",
     "task.billingReconciliationMaintenance",
     "task.queueHealth",
+    "connections.attemptRetention",
+    "connections.grantCleanup",
     "provider.request",
     "observability.accountSmoke",
     "browserLogin.redeemPairing",

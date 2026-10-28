@@ -1,5 +1,6 @@
 import { Option } from "effect";
-import type { JSX } from "react";
+import { type JSX, use } from "react";
+import { TransactionCorrectionContext } from "./correction-context";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Delete02Icon } from "@hugeicons/core-free-icons";
 import { CategoryVisual } from "@/ui/components/category-visual";
@@ -22,7 +23,6 @@ type DetailProps = Readonly<{
   categories: ReadonlyArray<Category>;
   locale: string;
   timeZone: string;
-  onSaved: () => void;
   onDeleted: () => void;
   onRefresh: () => void;
   onClose: () => void;
@@ -92,11 +92,7 @@ const DetailDeleteAction = ({ props }: Readonly<{ props: DetailProps }>): JSX.El
       <Button
         variant="outline"
         data-transaction-slot="transaction-danger"
-        disabled={
-          props.mode._tag === "Editing" &&
-          props.mode.status !== "idle" &&
-          props.mode.status !== "invalid"
-        }
+
         onClick={() => props.onMode({ _tag: "Deleting", status: "idle" })}
       >
         <HugeiconsIcon icon={Delete02Icon} size={20} aria-hidden="true" />
@@ -121,7 +117,13 @@ const DetailFrame = ({
             : props.onClose
         }
         aria-label="Cerrar detalle"
-        disabled={props.mode._tag !== "Viewing" && props.mode.status === "saving"}
+        disabled={
+          (props.mode._tag === "Deleting" && props.mode.status === "saving") ||
+          Option.exists(
+            use(TransactionCorrectionContext),
+            (owner) => owner.status === "saving" || owner.status === "recovering"
+          )
+        }
       >
         <HugeiconsIcon icon={Cancel01Icon} size={20} aria-hidden="true" />
       </Button>
@@ -145,7 +147,7 @@ export const TransactionDetail = (props: DetailProps): JSX.Element => {
           status={props.mode.status}
           onStatus={(status) => props.onMode({ _tag: "Deleting", status })}
           onDeleted={props.onDeleted}
-          onCancel={() => props.onMode({ _tag: "Editing", status: "idle" })}
+          onCancel={() => props.onMode({ _tag: "Editing" })}
           onRefresh={props.onRefresh}
         />
       </DetailFrame>
@@ -154,19 +156,12 @@ export const TransactionDetail = (props: DetailProps): JSX.Element => {
   if (props.mode._tag === "Editing") {
     return (
       <TransactionCorrection
+        key={`${props.transaction.id}:${props.transaction.revision}`}
         renderForm={(form) => props.renderPanel(<DetailFrame props={props}>{form}</DetailFrame>)}
-        apiClient={props.apiClient}
         transaction={props.transaction}
         categories={props.categories}
         timeZone={props.timeZone}
-        onSaved={() => {
-          props.onMode({ _tag: "Viewing" });
-          props.onSaved();
-        }}
         onCancel={props.onClose}
-        onRefresh={props.onRefresh}
-        status={props.mode.status}
-        onStatus={(status) => props.onMode({ _tag: "Editing", status })}
       />
     );
   }

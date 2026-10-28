@@ -1,21 +1,38 @@
+import assert from "node:assert/strict";
+import { sweepAttempts as sweepConnectionAttempts } from "./internal/retention";
+import { sweepGrants as sweepConnectionGrants } from "./internal/cleanup";
 import { UserId } from "../../src/core/identity/contract";
 import { fixtureWorker as scheduledCoreWorker } from "../core-worker.test-fixture";
 import { activationFixture } from "../bancolombia-activation.test-fixture";
 import { requiresErasureSuppression } from "./operations";
-import { type Cause, DateTime, Deferred, Effect, Fiber, Option, Redacted, Schema } from "effect";
+import {
+  type Cause,
+  DateTime,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Option,
+  Redacted,
+  Schema,
+} from "effect";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { makeCoreWorker } from "../core-worker";
-import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
+import {
+  cloudflareWorkerTelemetry,
+  makeWorkerTelemetry,
+  observeWorkerExecution,
+} from "../runtime/telemetry/operations";
+import type { WorkerTelemetryEvent } from "../runtime/telemetry/contract";
 import publicWorker from "../public-worker";
 import { ConnectInstitutionResult, InstitutionId } from "../../src/core/connections/contract";
 import {
   handleConnectionBrowserRequest,
   makeConnectionsErasureStores,
-  sweepConnectionAttempts,
-  sweepConnectionGrants,
+  recoverConnections,
 } from "./runtime";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import { Base64Url } from "effect/encoding";
@@ -25,6 +42,7 @@ import {
   type ConnectionBankPreparation,
   ConnectionConsentIntent,
   ConnectionGrantKey,
+  ConnectionRetentionUnavailable,
 } from "./contract";
 
 const institutionRegistration = { enabled: false };
@@ -2109,7 +2127,8 @@ it("recovers interrupted cleanup without losing encrypted authority or replaying
         bank.beforeCleanup(
           Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
         );
-        const sweep = sweepConnectionGrants({
+        const sweep = recoverConnections({
+          scheduledAtEpochMs: 3_600_000,
           db,
           key: Option.some(Redacted.make("A".repeat(43))),
           bank: Option.some(bank.cleanup),
@@ -2138,7 +2157,8 @@ it("does not mark an unknown exchange with no held tokens as cleaned", () =>
       const { bank, callback } = yield* prepareActivation(db);
       bank.scenario("uncertain");
       yield* Effect.tryPromise(() => callback());
-      yield* sweepConnectionGrants({
+      yield* recoverConnections({
+        scheduledAtEpochMs: 3_600_000,
         db,
         key: Option.some(Redacted.make("A".repeat(43))),
         bank: Option.some(bank.cleanup),
@@ -2195,5 +2215,185 @@ it("attempts immediate bank cleanup if encrypted credential retention fails", ()
         .pipe(Effect.option);
       expect(Option.isNone(result)).toBe(true);
       expect(bank.revocations()).toEqual(["synthetic-refresh", "synthetic-access"]);
+    })
+  ));
+
+const strandActivation = (db: D1Database): ReturnType<typeof prepareActivation> =>
+  Effect.gen(function* () {
+    const prepared = yield* prepareActivation(db);
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "CREATE TRIGGER strand_activation BEFORE UPDATE OF state ON connection_grants WHEN OLD.state='quarantined' AND NEW.state='cleanup_required' BEGIN SELECT RAISE(ABORT,'synthetic_crash'); END"
+        )
+        .run()
+    );
+    prepared.bank.scenario("malformed");
+    yield* Effect.tryPromise(() => prepared.callback());
+    yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER strand_activation").run());
+    expect(
+      yield* Effect.tryPromise(() => db.prepare("SELECT state FROM connection_grants").first())
+    ).toEqual({ state: "quarantined" });
+    vi.setSystemTime(prepared.started.continuation.expiresAt.epochMilliseconds + 1);
+    return prepared;
+  });
+
+it("recovers an expired quarantined grant on the hourly tick while preserving the Connection identity", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { bank, started } = yield* strandActivation(db);
+      const input = {
+        db,
+        key: Option.some(Redacted.make("A".repeat(43))),
+        bank: Option.some(bank.cleanup),
+      };
+      for (const scheduledAtEpochMs of [60_000, 300_000]) {
+        yield* recoverConnections({ ...input, scheduledAtEpochMs });
+        expect(bank.revocations()).toEqual([]);
+        expect(
+          yield* Effect.tryPromise(() => db.prepare("SELECT state FROM connection_grants").first())
+        ).toEqual({ state: "quarantined" });
+      }
+      yield* recoverConnections({ ...input, scheduledAtEpochMs: 3_600_000 });
+      expect(bank.revocations()).toEqual(["synthetic-refresh", "synthetic-access"]);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT state,envelope FROM connection_grants").first()
+        )
+      ).toEqual({ state: "cleanup_required", envelope: null });
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT id,state FROM connections").first())
+      ).toEqual({ id: started.connection.id, state: "Action required" });
+      yield* recoverConnections({ ...input, scheduledAtEpochMs: 3_900_000 });
+      expect(bank.revocations()).toHaveLength(2);
+      expect(bank.exchanges()).toBe(1);
+    })
+  ));
+
+it("continues held-grant cleanup after retention fails and exports only the failed phase's safe evidence", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { bank, callback } = yield* prepareActivation(db);
+      bank.scenario("malformed");
+      yield* Effect.tryPromise(() => callback());
+      const pending = yield* prepareActivation(db, 1);
+      vi.setSystemTime(pending.started.continuation.expiresAt.epochMilliseconds + 1);
+      const privateFailure = "private-retention-sentinel";
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_recovery_retention BEFORE UPDATE OF phase ON connection_authorizations BEGIN SELECT RAISE(ABORT,'private-retention-sentinel'); END"
+          )
+          .run()
+      );
+      const events: Array<WorkerTelemetryEvent> = [];
+      const telemetry = makeWorkerTelemetry({
+        exportWork: () => undefined,
+        exportEvent: (event) => events.push(event),
+      });
+      const input = {
+        db,
+        key: Option.some(Redacted.make("A".repeat(43))),
+        bank: Option.some(bank.cleanup),
+        scheduledAtEpochMs: 3_600_000,
+      };
+      const result = yield* recoverConnections(input).pipe(
+        observeWorkerExecution({
+          environment: { RELEASE_GIT_SHA: "a".repeat(40) },
+          telemetry,
+          operation: "worker.core.scheduled",
+        }),
+        Effect.exit
+      );
+      assert.deepStrictEqual(result, Exit.fail(new ConnectionRetentionUnavailable()));
+      expect(bank.revocations()).toEqual(["synthetic-refresh", "synthetic-access"]);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT b.phase FROM connection_authorizations b JOIN connection_attempts a ON a.id=b.attempt_id JOIN connections c ON c.id=a.connection_id WHERE c.user_id=?"
+            )
+            .bind(users[1])
+            .first()
+        )
+      ).toEqual({ phase: "prepared" });
+      expect(
+        events.filter(
+          (event) =>
+            event.event === "span" && event.data["fidy.operation"].startsWith("connections.")
+        )
+      ).toMatchObject([
+        {
+          event: "span",
+          data: { "fidy.operation": "connections.attemptRetention", "fidy.outcome": "failed" },
+        },
+        {
+          event: "span",
+          data: { "fidy.operation": "connections.grantCleanup", "fidy.outcome": "succeeded" },
+        },
+      ]);
+      expect(
+        events.filter(
+          (event) => event.event === "failure" && event.operation.startsWith("connections.")
+        )
+      ).toMatchObject([
+        {
+          event: "failure",
+          operation: "connections.attemptRetention",
+          error: "operational_failure",
+        },
+      ]);
+      const exported = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.Array(Schema.Unknown))
+      )(events);
+      expect(exported).not.toContain(privateFailure);
+      expect(exported).not.toContain("synthetic-access");
+      expect(exported).not.toContain("synthetic-refresh");
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_recovery_retention").run());
+      yield* recoverConnections(input);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT b.phase FROM connection_authorizations b JOIN connection_attempts a ON a.id=b.attempt_id JOIN connections c ON c.id=a.connection_id WHERE c.user_id=?"
+            )
+            .bind(users[1])
+            .first()
+        )
+      ).toEqual({ phase: "failed" });
+      expect(bank.revocations()).toHaveLength(2);
+    })
+  ));
+
+it("retains successful expiry through a cleanup failure and recovers on the next five-minute tick", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { bank } = yield* strandActivation(db);
+      bank.cleanupRejected(true);
+      const input = {
+        db,
+        key: Option.some(Redacted.make("A".repeat(43))),
+        bank: Option.some(bank.cleanup),
+      };
+      assert.deepStrictEqual(
+        yield* Effect.exit(recoverConnections({ ...input, scheduledAtEpochMs: 3_600_000 })),
+        Exit.fail(new ConnectionRetentionUnavailable())
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT state,cleaned_at_ms FROM connection_grants").first()
+        )
+      ).toEqual({ state: "cleanup_required", cleaned_at_ms: null });
+      bank.cleanupRejected(false);
+      vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 300001);
+      yield* recoverConnections({ ...input, scheduledAtEpochMs: 3_900_000 });
+      expect(bank.revocations()).toEqual(["synthetic-refresh", "synthetic-access"]);
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT envelope FROM connection_grants").first())
+      ).toEqual({ envelope: null });
+      expect(bank.exchanges()).toBe(1);
     })
   ));

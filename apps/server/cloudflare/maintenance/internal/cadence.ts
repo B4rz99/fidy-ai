@@ -29,8 +29,6 @@ const cadenceMinutes: Partial<Record<ScheduledOperation, number>> = {
   "provider.authenticationRetention": 60,
   "canonical.admissionRetention": 60,
   "oauth.confirmationRetention": 60,
-  "connections.attemptRetention": 60,
-  "connections.grantCleanup": 5,
   "quota.consumptionRetention": 60,
   "ingestion.reviewEvidenceExpiry": 60,
   "ingestion.reviewDraftExpiry": 60,

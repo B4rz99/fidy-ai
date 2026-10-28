@@ -241,6 +241,93 @@ const failure = (effect: Effect.Effect<unknown, Error>, message: string): Effect
   );
 
 describe("zero-traffic Worker release", () => {
+  it.effect.each([
+    [{ id: versions.coreStable, percentage: 0 }],
+    [
+      { id: versions.coreStable, percentage: 99 },
+      { id: versions.coreCandidate, percentage: 1 },
+    ],
+    [
+      { id: versions.coreStable, percentage: 100 },
+      { id: versions.coreCandidate, percentage: -1 },
+    ],
+    [
+      { id: versions.coreStable, percentage: 100 },
+      { id: versions.coreStable, percentage: 0 },
+    ],
+    [
+      { id: versions.coreStable, percentage: 100 },
+      { id: versions.coreCandidate, percentage: 0 },
+      { id: versions.publicCandidate, percentage: 0 },
+    ],
+  ])("refuses capture of invalid routing %j before any release write", (entries) =>
+    Effect.gen(function* () {
+      const fixture = harness();
+      yield* fixture.port.deploy(coreName, entries);
+      const before = [...fixture.changes];
+      expect(Exit.isFailure(yield* Effect.exit(captured(fixture.port)))).toBe(true);
+      expect(fixture.changes).toEqual(before);
+    })
+  );
+
+  it.effect("refuses a changed captured deployment before replacing a stranded candidate", () =>
+    Effect.gen(function* () {
+      const fixture = harness();
+      const baseline = [
+        { id: versions.coreStable, percentage: 100 },
+        { id: "55555555-5555-4555-8555-555555555555", percentage: 0 },
+      ];
+      yield* fixture.port.deploy(coreName, baseline);
+      const snapshot = yield* captured(fixture.port);
+      yield* fixture.port.deploy(coreName, baseline);
+      const before = [...fixture.changes];
+      expect(
+        Exit.isFailure(
+          yield* Effect.exit(releaseController.stageRelease(fixture.port, snapshot, candidates))
+        )
+      ).toBe(true);
+      expect(fixture.changes).toEqual(before);
+    })
+  );
+
+  it.effect("replaces a stranded zero-traffic candidate without rolling back changed secrets", () =>
+    Effect.gen(function* () {
+      const fixture = harness();
+      const abandoned = "55555555-5555-4555-8555-555555555555";
+      const baseline = yield* fixture.port.deploy(coreName, [
+        { id: versions.coreStable, percentage: 100 },
+        { id: abandoned, percentage: 0 },
+      ]);
+      const writes: Deployment["versions"][] = [];
+      const port: ReleasePort = {
+        ...fixture.port,
+        deploy: (name, entries) => {
+          writes.push(entries);
+          if (name === coreName && entries.length === 1 && entries[0]?.id === versions.coreStable) {
+            return Effect.fail(Error("Cloudflare deployment rejected (HTTP 400; code 10220)"));
+          }
+          return fixture.port.deploy(name, entries);
+        },
+      };
+      const snapshot = yield* captured(port);
+      expect(snapshot.core.deploymentId).toBe(baseline.id);
+      expect(snapshot.core.stableVersionId).toBe(versions.coreStable);
+      expect(writes).toEqual([]);
+      const release = yield* releaseController.stageRelease(port, snapshot, candidates);
+      expect((yield* port.current(coreName)).versions).toEqual([
+        { id: versions.coreStable, percentage: 100 },
+        { id: versions.coreCandidate, percentage: 0 },
+      ]);
+      yield* releaseController.promoteRelease(port, release, {
+        exactPairPassed: true,
+        middlePairPassed: true,
+      });
+      expect((yield* port.current(coreName)).versions).toEqual([
+        { id: versions.coreCandidate, percentage: 100 },
+      ]);
+    })
+  );
+
   it.effect("captures both stable Workers with overlapping reads and no traffic writes", () =>
     advanceReleaseClock(
       Effect.gen(function* () {

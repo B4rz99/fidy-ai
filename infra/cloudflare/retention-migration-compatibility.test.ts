@@ -61,16 +61,24 @@ it("reads the immutable revision and rejects missing, ambiguous, secret, or mism
   ).toThrow();
 });
 
-it.effect(
-  "checks the serving Core, the captured rollback version and candidate ancestry before migration",
-  () =>
+it.effect.each([false, true])(
+  "checks serving and rollback ancestry before migration with a stranded candidate: %s",
+  (stranded) =>
     Effect.gen(function* () {
       const observed: string[] = [];
       const port: RetentionCompatibilityPort = {
         current: (name) =>
           Effect.sync(() => {
             observed.push(name);
-            return stable;
+            return {
+              ...stable,
+              versions: stranded
+                ? [
+                    ...stable.versions,
+                    { id: "22222222-2222-4222-8222-222222222222", percentage: 0 },
+                  ]
+                : stable.versions,
+            };
           }),
         revision: (name, id) =>
           Effect.sync(() => {

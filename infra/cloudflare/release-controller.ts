@@ -46,6 +46,30 @@ export type ReleasePort = Readonly<{
   ): Effect.Effect<Deployment, Error>;
 }>;
 
+const servingVersion = Effect.fn(function* (deployment: Deployment) {
+  const serving = deployment.versions.filter((version) => version.percentage !== 0);
+  if (
+    deployment.versions.length > 2 ||
+    new Set(deployment.versions.map((version) => version.id)).size !== deployment.versions.length ||
+    serving.length !== 1 ||
+    serving[0]?.percentage !== 100
+  ) {
+    return yield* Effect.fail(Error("Worker does not have one sole 100% serving version"));
+  }
+  return serving[0].id;
+});
+
+const requireCapturedWorker = Effect.fn(function* (
+  port: Pick<ReleasePort, "current">,
+  snapshot: typeof WorkerSnapshot.Type
+) {
+  const current = yield* port.current(snapshot.name);
+  const version = yield* servingVersion(current);
+  if (current.id !== snapshot.deploymentId || version !== snapshot.stableVersionId) {
+    return yield* Effect.fail(Error(`Worker deployment changed: ${snapshot.name}`));
+  }
+});
+
 const requireTrunk = Effect.fn(function* (port: ReleasePort, revision: string) {
   if ((yield* port.trunk()) !== revision) {
     return yield* Effect.fail(Error("Release superseded by trunk; traffic unchanged"));
@@ -139,10 +163,8 @@ const captureRelease = Effect.fn(function* (
   yield* requireTrunk(port, input.revision);
   const get = Effect.fn(function* (name: string) {
     const current = yield* port.current(name);
-    if (current.versions.length !== 1 || current.versions[0]?.percentage !== 100) {
-      return yield* Effect.fail(Error(`Worker is not fully stable: ${name}`));
-    }
-    return { name, deploymentId: current.id, stableVersionId: current.versions[0].id };
+    const stableVersionId = yield* servingVersion(current);
+    return { name, deploymentId: current.id, stableVersionId };
   });
   const { publicWorker, coreWorker } = yield* Effect.all(
     { publicWorker: get(input.publicName), coreWorker: get(input.coreName) },
@@ -175,15 +197,15 @@ const stageRelease = Effect.fn(function* (
     return yield* Effect.fail(Error("Candidate upload did not produce new Worker versions"));
   }
   yield* requireTrunk(port, snapshot.revision);
-  yield* requireDeployment(port, snapshot.public.name, stable(snapshot.public));
-  yield* requireDeployment(port, snapshot.core.name, stable(snapshot.core));
+  yield* requireCapturedWorker(port, snapshot.public);
+  yield* requireCapturedWorker(port, snapshot.core);
   const publicDeployment = yield* deployExact(
     port,
     snapshot.public.name,
     staged(snapshot.public, versions.publicVersionId, snapshot.public.deploymentId).versions
   );
   yield* requireTrunk(port, snapshot.revision);
-  yield* requireDeployment(port, snapshot.core.name, stable(snapshot.core));
+  yield* requireCapturedWorker(port, snapshot.core);
   const coreDeployment = yield* deployExact(
     port,
     snapshot.core.name,
@@ -352,6 +374,8 @@ const verifyRetirement = Effect.fn(function* (
 });
 
 export const releaseController = {
+  servingVersion,
+  requireCapturedWorker,
   captureRelease,
   deployExact,
   stageRelease,

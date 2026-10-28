@@ -15,7 +15,7 @@ import {
 } from "@/ui/components/dropdown-menu";
 import { Fragment, useMemo, useState } from "react";
 import type { JSX } from "react";
-import { BigDecimal, Option } from "effect";
+import { Option } from "effect";
 import { Checkbox } from "@/ui/components/checkbox";
 import { Button } from "@/ui/components/button";
 import {
@@ -33,7 +33,7 @@ import { RecordToolbar } from "@/ui/components/workspace-layout";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { CategoryVisual } from "@/ui/components/category-visual";
 import { DirectionIndicator } from "@/ui/components/icon-indicator";
-import { formatMoney } from "@/transport/money";
+import { presentLedgerDays } from "./ledger-days";
 import type { TransactionListRow } from "./presentation";
 
 const columns: Array<ColumnDef<TransactionListRow>> = [
@@ -223,25 +223,6 @@ const LedgerHeader = ({
     ))}
   </TableHeader>
 );
-const dailyTotals = (rows: ReadonlyArray<TransactionListRow>, locale: string): string =>
-  Array.from(new Set(rows.map((row) => row.money.currency)))
-    .map((currency) =>
-      formatMoney({
-        locale,
-        money: {
-          currency,
-          amount: BigDecimal.sumAll(
-            rows.flatMap((row) => {
-              if (row.money.currency !== currency) return [];
-              return [
-                row.direction === "inflow" ? row.money.amount : BigDecimal.negate(row.money.amount),
-              ];
-            })
-          ),
-        },
-      })
-    )
-    .join(" · ");
 const sortValue = (sorting: SortingState): string =>
   Option.fromNullishOr(sorting[0]).pipe(
     Option.map((sort) => `${sort.id}:${sort.desc ? "desc" : "asc"}`),
@@ -345,39 +326,26 @@ const LedgerControls = ({
   </RecordToolbar>
 );
 const LedgerBody = ({
-  dates,
-  rows,
-  sortedRows,
-  locale,
+  days,
   rowProps,
 }: Readonly<{
-  dates: ReadonlyArray<string>;
-  rows: ReadonlyArray<TransactionListRow>;
-  sortedRows: ReturnType<ReactTable<TransactionListRow>["getRowModel"]>["rows"];
-  locale: string;
+  days: ReturnType<typeof presentLedgerDays>;
   rowProps: Omit<LedgerProps, "rows">;
 }>): JSX.Element => (
   <TableBody>
-    {dates.map((date) => (
-      <Fragment key={date}>
+    {days.map((day) => (
+      <Fragment key={day.date}>
         <TableRow data-date-group="true">
           <TableCell colSpan={4}>
             <div className="flex items-center justify-between gap-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-              <span>{rows.find((row) => row.occurredOnText === date)?.dateLabel}</span>
-              <span className="tabular-nums">
-                {dailyTotals(
-                  rows.filter((row) => row.occurredOnText === date),
-                  locale
-                )}
-              </span>
+              <span>{day.label}</span>
+              <span className="tabular-nums">{day.total}</span>
             </div>
           </TableCell>
         </TableRow>
-        {sortedRows.flatMap((item) =>
-          item.original.occurredOnText === date
-            ? [<TransactionRow key={item.id} row={item.original} {...rowProps} />]
-            : []
-        )}
+        {day.rows.map((row) => (
+          <TransactionRow key={row.id} row={row} {...rowProps} />
+        ))}
       </Fragment>
     ))}
   </TableBody>
@@ -438,7 +406,15 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
     getRowId: (row) => row.id,
   });
   const sortedRows = table.getRowModel().rows;
-  const dates = Array.from(new Set(rows.map((row) => row.occurredOnText)));
+  const days = useMemo(
+    () =>
+      presentLedgerDays({
+        rows,
+        sortedRows: sortedRows.map((row) => row.original),
+        locale: props.locale,
+      }),
+    [rows, sortedRows, props.locale]
+  );
   return (
     <section
       aria-label={props.readOnly ? "Transacciones guardadas" : "Transacciones del mes"}
@@ -463,13 +439,7 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
       ) : (
         <Table aria-label="Tabla de transacciones">
           <LedgerHeader table={table} />
-          <LedgerBody
-            dates={dates}
-            rows={rows}
-            sortedRows={sortedRows}
-            locale={props.locale}
-            rowProps={props}
-          />
+          <LedgerBody days={days} rowProps={props} />
         </Table>
       )}
     </section>

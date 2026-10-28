@@ -43,3 +43,30 @@ describe("Compact explicit-currency Money", () => {
     ).toBe(expected);
   });
 });
+
+describe("Money formatter configuration isolation", () => {
+  it("keeps locale, currency precision and compact display independent across repeated calls", () => {
+    const money = { currency: "USD", amount: BigDecimal.fromStringUnsafe("12") };
+    for (const locale of ["es-CO", "en-US", "es-CO"]) {
+      expect(formatMoneyWithCompactCode({ locale, money })).toBe(
+        locale === "es-CO" ? "$ 12 USD" : "$12 USD"
+      );
+      expect(formatMoney({ locale, money })).toBe(locale === "es-CO" ? "$ 12,00" : "$12.00");
+      expect(formatMoneyWithCode({ locale, money })).toBe(
+        locale === "es-CO" ? "USD 12,00" : "USD 12.00"
+      );
+      expect(
+        formatMoneyWithCode({
+          locale,
+          money: { currency: "KWD", amount: BigDecimal.fromStringUnsafe("-0.001") },
+        })
+      ).toBe(locale === "es-CO" ? "-KWD 0,001" : "-KWD 0.001");
+      expect(
+        formatMoneyWithCode({
+          locale,
+          money: { currency: "JPY", amount: BigDecimal.fromStringUnsafe("12") },
+        })
+      ).toBe("JPY 12");
+    }
+  });
+});

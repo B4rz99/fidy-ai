@@ -1,6 +1,6 @@
 import { useRouterState } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
-import { type JSX, useState } from "react";
+import { type JSX, useMemo, useState } from "react";
 import { cn } from "@/ui/class-names";
 import { Button } from "@/ui/components/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/sheet";
@@ -102,7 +102,10 @@ const CalendarGrid = ({
   view,
   open,
   agenda,
-}: CalendarProps & Pick<DayProps, "agenda">): JSX.Element => {
+  days,
+}: CalendarProps &
+  Pick<DayProps, "agenda"> &
+  Readonly<{ days: ReadonlyMap<string, ReadonlyArray<Occurrence>> }>): JSX.Element => {
   const first = DateTime.makeUnsafe(`${view.month}-01`);
   const offset = (DateTime.toPartsUtc(first).weekDay + weekLength - 1) % weekLength;
   const start = DateTime.subtract(first, { days: offset });
@@ -119,7 +122,7 @@ const CalendarGrid = ({
           <CalendarDay
             key={date}
             date={date}
-            items={view.occurrences.filter((item) => item.expectedDate === date)}
+            items={days.get(date) ?? []}
             today={view.today}
             month={view.month}
             open={open}
@@ -137,6 +140,31 @@ const dayLabel = (date: string): string =>
     timeZone: "UTC",
   });
 
+const CalendarAgenda = ({
+  days,
+  today,
+  open,
+  agenda,
+}: Pick<DayProps, "today" | "open" | "agenda"> &
+  Readonly<{ days: ReadonlyMap<string, ReadonlyArray<Occurrence>> }>): JSX.Element => (
+  <div className="divide-y @min-5xl:hidden">
+    {Array.from(days.keys())
+      .sort()
+      .map((date) => (
+        <section key={date} aria-label={date} className="grid min-w-0 gap-3 p-3">
+          <h3 className="text-sm font-medium">{dayLabel(date)}</h3>
+          <DayItems
+            date={date}
+            items={days.get(date) ?? []}
+            today={today}
+            open={open}
+            agenda={agenda}
+          />
+        </section>
+      ))}
+  </div>
+);
+
 export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
   const active = useRouterState({
     select: (state) => state.location.pathname === "/app/recurring",
@@ -150,28 +178,18 @@ export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
     setSelected(Option.none());
     open(item);
   };
-  const dates = [...new Set(view.occurrences.map((item) => item.expectedDate))].sort();
+  const days = useMemo(
+    () => Map.groupBy(view.occurrences, (item) => item.expectedDate),
+    [view.occurrences]
+  );
   return (
     <div
       data-recurring-slot="calendar"
       className="@container min-w-0"
       aria-label="Calendario de recurrentes"
     >
-      <CalendarGrid view={view} open={open} agenda={agenda} />
-      <div className="divide-y @min-5xl:hidden">
-        {dates.map((date) => (
-          <section key={date} aria-label={date} className="grid min-w-0 gap-3 p-3">
-            <h3 className="text-sm font-medium">{dayLabel(date)}</h3>
-            <DayItems
-              date={date}
-              items={view.occurrences.filter((item) => item.expectedDate === date)}
-              today={view.today}
-              open={open}
-              agenda={agenda}
-            />
-          </section>
-        ))}
-      </div>
+      <CalendarGrid view={view} open={open} agenda={agenda} days={days} />
+      <CalendarAgenda days={days} today={view.today} open={open} agenda={agenda} />
       <Sheet
         open={active && Option.isSome(selected)}
         onOpenChangeComplete={changeAgenda}
@@ -188,7 +206,7 @@ export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
             <DayAgenda
               key={selected.value}
               date={selected.value}
-              items={view.occurrences.filter((item) => item.expectedDate === selected.value)}
+              items={days.get(selected.value) ?? []}
               open={openItem}
             />
           ) : null}

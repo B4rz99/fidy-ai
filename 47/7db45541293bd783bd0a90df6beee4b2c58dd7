@@ -1,0 +1,265 @@
+apps/docs/src/components/MarkdownContent.astro
+  s_2c9d6c1daa679a::t_20dc78361e6e64 1-39
+tools/astro/check.ts
+  s_2c9d6c1daa679a::t_3ee229815eabc4 7-8,11
+package.json
+  s_2c9d6c1daa679a::t_8c9ace19822d1e 26,31-33,54-60
+docs/operations/docs-site.md
+  s_2c9d6c1daa679a::t_8c9ace19822d1e 1-107
+apps/docs/scripts/generate-reference.ts
+  s_2c9d6c1daa679a::t_7d46bed06d86d9 1-65,107-156,161,165,171
+  s_2c9d6c1daa679a::t_8c9ace19822d1e 66-106
+  s_2c9d6c1daa679a::t_501a8a089da098 157-160,162-164,166-170,172-174
+apps/docs/e2e/docs.spec.ts
+  s_2c9d6c1daa679a::t_a1f6e161554f75 1-73
+apps/docs/src/content/docs/index.md
+  s_2c9d6c1daa679a::t_6cfbbc620ed20c 1-17
+  s_f904568ea136da::t_d3fa5eaf913683 18-28
+scripts/verify.ts
+  s_2c9d6c1daa679a::t_8c9ace19822d1e 208
+apps/docs/package.json
+  s_2c9d6c1daa679a::t_6cfbbc620ed20c 1-7,9-16,19,23-24
+  s_2c9d6c1daa679a::t_8c9ace19822d1e 8
+  s_2c9d6c1daa679a::t_3ee229815eabc4 17
+  s_2c9d6c1daa679a::t_6c68fd3909bedb 18,20-22
+apps/docs/tsconfig.json
+  s_2c9d6c1daa679a::t_6cfbbc620ed20c 1-8
+.oxlintrc.json
+  s_2c9d6c1daa679a::t_a1f6e161554f75 268-269
+  s_2c9d6c1daa679a::t_3ee229815eabc4 267,279-280
+  s_2c9d6c1daa679a::t_8c9ace19822d1e 157
+  s_f904568ea136da::t_1972390882ed59 291
+docs/operations/docs-site-plan.md
+  s_2c9d6c1daa679a::t_d95963579d628a 1-23,35-46
+  s_2c9d6c1daa679a::t_8cc7d9b68ae4e2 24-34,47-48
+README.md
+  s_2c9d6c1daa679a::t_8c9ace19822d1e 40-41
+apps/docs/public/robots.txt
+  s_2c9d6c1daa679a::t_8c9ace19822d1e 1-4
+apps/docs/playwright.config.ts
+  s_2c9d6c1daa679a::t_a1f6e161554f75 1-13
+apps/docs/public/_headers
+  s_2c9d6c1daa679a::t_20dc78361e6e64 1-13
+apps/docs/public/favicon.svg
+  s_2c9d6c1daa679a::t_8c9ace19822d1e 1
+apps/docs/src/styles/fidy.css
+  s_2c9d6c1daa679a::t_6cfbbc620ed20c 1
+  s_2c9d6c1daa679a::t_028e54b5ea7ffd 2-97
+apps/docs/src/content.config.ts
+  s_2c9d6c1daa679a::t_6cfbbc620ed20c 1-16
+apps/docs/scripts/finalize-artifact.ts
+  s_2c9d6c1daa679a::t_8c9ace19822d1e 1-26
+apps/docs/src/pages/llms.txt.ts
+  s_2c9d6c1daa679a::t_20dc78361e6e64 1-27
+ARCHITECTURE.md
+  s_2c9d6c1daa679a::t_8c9ace19822d1e 24-25
+  s_f904568ea136da::t_8f590aa90687de 9-17
+.gitignore
+  s_2c9d6c1daa679a::t_3ee229815eabc4 55-58
+apps/docs/astro.config.ts
+  s_2c9d6c1daa679a::t_20dc78361e6e64 10-11
+  s_2c9d6c1daa679a::t_6cfbbc620ed20c 1-8
+  s_f904568ea136da::t_828a5c90cffd30 9,12-54
+apps/docs/ARCHITECTURE.md
+  s_2c9d6c1daa679a::t_8c9ace19822d1e 1-43
+.github/workflows/docs-publication.yml
+  s_f904568ea136da::t_c5c72d1454fa44 1-61
+.patterns/astro.md
+  s_2c9d6c1daa679a::t_6d23c52ad354c6 4
+apps/docs/bunfig.toml
+  s_2c9d6c1daa679a::t_3c4c22c43ee074 1-2
+apps/docs/public/reference/openapi.json
+  s_2c9d6c1daa679a::t_3d665774bb27e9 1-19570
+apps/docs/scripts/check-publication.ts
+  s_f904568ea136da::t_1d103372e74ac1 1-57
+apps/docs/src/content/docs/acceso/permisos.md
+  s_2c9d6c1daa679a::t_2769e6cdb76e2a 1-36
+apps/docs/src/content/docs/avanzado/api.md
+  s_f904568ea136da::t_357dc8a8b020a1 1-34
+apps/docs/src/content/docs/ayuda/problemas.md
+  s_2c9d6c1daa679a::t_bd96542e064569 1-26
+apps/docs/src/content/docs/conectar/claude-code.md
+  s_2c9d6c1daa679a::t_04daa7d87391dc 1-26
+apps/docs/src/content/docs/conectar/cli.md
+  s_f904568ea136da::t_4e25a9d498b43d 1-53
+apps/docs/src/content/docs/conectar/codex.md
+  s_2c9d6c1daa679a::t_9a00507dbe9aa2 1-31
+apps/docs/src/content/docs/conectar/mcp.md
+  s_f904568ea136da::t_e88164a8a9ff3d 1-29
+apps/docs/src/content/docs/consultar/finanzas.md
+  s_f904568ea136da::t_5103619c52c131 1-49
+apps/docs/src/content/docs/reference/budgets.createBudget.md
+  s_2c9d6c1daa679a::t_a5700ce2970a95 1-149
+apps/docs/src/content/docs/reference/budgets.deleteBudget.md
+  s_2c9d6c1daa679a::t_1c82227605de73 1-147
+apps/docs/src/content/docs/reference/budgets.getBudget.md
+  s_2c9d6c1daa679a::t_13ac079ed3f84d 1-157
+apps/docs/src/content/docs/reference/budgets.getBudgetStatus.md
+  s_2c9d6c1daa679a::t_2b380cdf26c645 1-171
+apps/docs/src/content/docs/reference/budgets.listBudgets.md
+  s_2c9d6c1daa679a::t_59a95e5c7be534 1-141
+apps/docs/src/content/docs/reference/budgets.updateBudget.md
+  s_2c9d6c1daa679a::t_27687b38f39319 1-158
+apps/docs/src/content/docs/reference/categories.createKeywordRule.md
+  s_2c9d6c1daa679a::t_fe15d7affe9f87 1-149
+apps/docs/src/content/docs/reference/categories.deleteKeywordRule.md
+  s_2c9d6c1daa679a::t_547cc8fdf7c429 1-147
+apps/docs/src/content/docs/reference/categories.listCategories.md
+  s_2c9d6c1daa679a::t_c65d85fa0b4c2b 1-141
+apps/docs/src/content/docs/reference/categories.listKeywordRules.md
+  s_2c9d6c1daa679a::t_a7834556d2ccfa 1-141
+apps/docs/src/content/docs/reference/categories.updateKeywordRule.md
+  s_2c9d6c1daa679a::t_1d3275cdfd5a81 1-158
+apps/docs/src/content/docs/reference/connections.connectInstitution.md
+  s_2c9d6c1daa679a::t_40a2713e0708f9 1-149
+apps/docs/src/content/docs/reference/connections.getConnection.md
+  s_2c9d6c1daa679a::t_eb4fd85e3458b4 1-157
+apps/docs/src/content/docs/reference/connections.listAccounts.md
+  s_2c9d6c1daa679a::t_e320615a98ae12 1-160
+apps/docs/src/content/docs/reference/connections.listConnections.md
+  s_2c9d6c1daa679a::t_d5a638cb2556b9 1-141
+apps/docs/src/content/docs/reference/connections.listInstitutions.md
+  s_2c9d6c1daa679a::t_71dcd9a173462a 1-141
+apps/docs/src/content/docs/reference/dashboard.applyDashboardEdit.md
+  s_2c9d6c1daa679a::t_a5527eb0c53863 1-149
+apps/docs/src/content/docs/reference/dashboard.getDashboard.md
+  s_2c9d6c1daa679a::t_246f90dcba9bb4 1-148
+apps/docs/src/content/docs/reference/dashboard.getDashboardView.md
+  s_2c9d6c1daa679a::t_3d9024f1758424 1-148
+apps/docs/src/content/docs/reference/dashboard.initializeDashboard.md
+  s_2c9d6c1daa679a::t_3cc7029a120d7f 1-128
+apps/docs/src/content/docs/reference/dashboard.listDashboardCatalog.md
+  s_2c9d6c1daa679a::t_0e3502041c79ed 1-154
+apps/docs/src/content/docs/reference/identity.getCurrentUser.md
+  s_2c9d6c1daa679a::t_07e341d2193de3 1-138
+apps/docs/src/content/docs/reference/identity.updateUserPreferences.md
+  s_2c9d6c1daa679a::t_47b9cb0c52b2f0 1-139
+apps/docs/src/content/docs/reference/index.md
+  s_2c9d6c1daa679a::t_ec43c3d7d2d0de 1-69
+apps/docs/src/content/docs/reference/ingestion.abandonStatementSubmission.md
+  s_2c9d6c1daa679a::t_8c79c8d8c82968 1-147
+apps/docs/src/content/docs/reference/ingestion.applyReviewEdit.md
+  s_2c9d6c1daa679a::t_887f9a871dffec 1-139
+apps/docs/src/content/docs/reference/ingestion.enableEmailForwarding.md
+  s_2c9d6c1daa679a::t_4ae5cd473dd97f 1-128
+apps/docs/src/content/docs/reference/ingestion.getEmailForwarding.md
+  s_2c9d6c1daa679a::t_22d54a01765b0e 1-138
+apps/docs/src/content/docs/reference/ingestion.getReviewItem.md
+  s_2c9d6c1daa679a::t_511cf9ab3df321 1-157
+apps/docs/src/content/docs/reference/ingestion.getReviewWorkspace.md
+  s_2c9d6c1daa679a::t_c8e1f3138d5cb2 1-176
+apps/docs/src/content/docs/reference/ingestion.getStatementSubmission.md
+  s_2c9d6c1daa679a::t_5eaba4110188a6 1-157
+apps/docs/src/content/docs/reference/ingestion.listNeedsReviewItems.md
+  s_2c9d6c1daa679a::t_2073ec6e8ebf37 1-168
+apps/docs/src/content/docs/reference/ingestion.resolveNeedsReviewItem.md
+  s_2c9d6c1daa679a::t_bea21115de8ec3 1-158
+apps/docs/src/content/docs/reference/ingestion.skipNeedsReviewItem.md
+  s_2c9d6c1daa679a::t_1498a355121fe2 1-147
+apps/docs/src/content/docs/reference/insights.dismissInsight.md
+  s_2c9d6c1daa679a::t_7adb728225e6f4 1-147
+apps/docs/src/content/docs/reference/insights.getRecurringDigestReport.md
+  s_2c9d6c1daa679a::t_17caaee280f954 1-157
+apps/docs/src/content/docs/reference/insights.getReminderSchedule.md
+  s_2c9d6c1daa679a::t_4fd54a1a34e0f9 1-145
+apps/docs/src/content/docs/reference/insights.listPendingInsights.md
+  s_2c9d6c1daa679a::t_a42e593300f704 1-157
+apps/docs/src/content/docs/reference/insights.markInsightDelivered.md
+  s_2c9d6c1daa679a::t_d64e1f6ac50162 1-158
+apps/docs/src/content/docs/reference/insights.markInsightRead.md
+  s_2c9d6c1daa679a::t_51a3788305feb8 1-147
+apps/docs/src/content/docs/reference/insights.updateReminderSchedule.md
+  s_2c9d6c1daa679a::t_a95dd2e123fb0b 1-149
+apps/docs/src/content/docs/reference/memory.forget.md
+  s_2c9d6c1daa679a::t_ed742cb48312d1 1-147
+apps/docs/src/content/docs/reference/memory.recall.md
+  s_2c9d6c1daa679a::t_138b3bec38ab82 1-138
+apps/docs/src/content/docs/reference/memory.remember.md
+  s_2c9d6c1daa679a::t_b8870882c8601c 1-149
+apps/docs/src/content/docs/reference/memory.revise.md
+  s_2c9d6c1daa679a::t_8b6ebf6d3b5a7a 1-168
+apps/docs/src/content/docs/reference/operations.executeAtomicBatch.md
+  s_2c9d6c1daa679a::t_c4fe9c3f1718af 1-190
+apps/docs/src/content/docs/reference/quota.getQuota.md
+  s_2c9d6c1daa679a::t_63408164d8f043 1-163
+apps/docs/src/content/docs/reference/recurring.listRecurringSeries.md
+  s_2c9d6c1daa679a::t_6369ff5797447e 1-148
+apps/docs/src/content/docs/reference/recurringPlans.applyRecurringEdit.md
+  s_2c9d6c1daa679a::t_fc1973a46248f6 1-139
+apps/docs/src/content/docs/reference/recurringPlans.getRecurringWorkspace.md
+  s_2c9d6c1daa679a::t_b86e6e1a7fac0e 1-343
+apps/docs/src/content/docs/reference/subscription.cancelSubscription.md
+  s_2c9d6c1daa679a::t_a64a85fa7e8663 1-138
+apps/docs/src/content/docs/reference/subscription.getSubscriptionStatus.md
+  s_2c9d6c1daa679a::t_23d4a3dd29d3e4 1-138
+apps/docs/src/content/docs/reference/subscription.getUpgradeUrl.md
+  s_2c9d6c1daa679a::t_080e0b7b0e3064 1-138
+apps/docs/src/content/docs/reference/subscription.listSubscriptionOffers.md
+  s_2c9d6c1daa679a::t_ffcc4af2c55aa2 1-138
+apps/docs/src/content/docs/reference/transactions.createTransaction.md
+  s_2c9d6c1daa679a::t_ca1a39bb58362a 1-149
+apps/docs/src/content/docs/reference/transactions.deleteTransaction.md
+  s_2c9d6c1daa679a::t_00e1fe535c1756 1-147
+apps/docs/src/content/docs/reference/transactions.getTransaction.md
+  s_2c9d6c1daa679a::t_614f98a0d0a387 1-157
+apps/docs/src/content/docs/reference/transactions.linkTransactions.md
+  s_2c9d6c1daa679a::t_abecf4d8b1962f 1-149
+apps/docs/src/content/docs/reference/transactions.listSourceAttestations.md
+  s_2c9d6c1daa679a::t_e5694ef9e36b7b 1-160
+apps/docs/src/content/docs/reference/transactions.listTransactions.md
+  s_2c9d6c1daa679a::t_ad5dacc7dec3f4 1-202
+apps/docs/src/content/docs/reference/transactions.searchTransactions.md
+  s_2c9d6c1daa679a::t_73d85c405bf2ea 1-161
+apps/docs/src/content/docs/reference/transactions.unlinkTransactions.md
+  s_2c9d6c1daa679a::t_eca04329eacf21 1-149
+apps/docs/src/content/docs/reference/transactions.updateTransaction.md
+  s_2c9d6c1daa679a::t_84b0dc609fe411 1-158
+apps/docs/src/content/docs/referencia/esquemas.md
+  s_2c9d6c1daa679a::t_e0c8d3f9acc5f3 1-11038
+apps/docs/src/content/docs/transacciones/registrar-corregir.md
+  s_2c9d6c1daa679a::t_2f595aad6fd3b9 1-57
+apps/docs/src/pages/[...slug].md.ts
+  s_f904568ea136da::t_ff37e8a261da26 1-15
+apps/docs/test/artifact.test.js
+  s_f904568ea136da::t_2a86927d2b5ebe 1-49
+apps/docs/test/publication.test.js
+  s_f904568ea136da::t_e279a712174a4d 1-64
+apps/docs/test/reference.test.js
+  s_f904568ea136da::t_76082352359c7e 1-104
+apps/site/public/llms.txt
+  s_2c9d6c1daa679a::t_93b870d688c7ea 59
+bun.lock
+  s_2c9d6c1daa679a::t_02ba43d1fc9c2c 42-53,167-174,250-251,258-259,390-391,480,482,484,542-549,554-557,846-861,1030-1031,1044-1045,1052-1053,1150-1151,1160-1161,1174-1177,1216-1217,1222-1223,1274-1275,1322-1323,1350-1351,1426-1427,1518-1535,1538-1541,1544-1545,1554-1555,1564-1565,1584-1589,1596-1597,1636-1637,1656-1657,1720-1721,1730-1735,1738-1741,1752-1767,1770-1781,1784-1789,1792-1793,1888-1891,1928-1929,1992-1995,2178-2179,2200-2201,2296-2301,2374-2375,2472-2473,2554-2555
+infra/docs/alchemy.run.ts
+  s_f904568ea136da::t_a3a3d3e3a20ae4 1-38
+infra/docs/bunfig.toml
+  s_2c9d6c1daa679a::t_3b5b432054b0fc 1-2
+infra/docs/package.json
+  s_f904568ea136da::t_4c9b68b50157a5 1-15
+infra/docs/tsconfig.json
+  s_f904568ea136da::t_9fd1a57c5a3ff5 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "477db45541293bd783bd0a90df6beee4b2c58dd7",
+  "prompts": {},
+  "sessions": {
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    },
+    "s_f904568ea136da": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18076-d635-7a53-a658-d027c05a7d97",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

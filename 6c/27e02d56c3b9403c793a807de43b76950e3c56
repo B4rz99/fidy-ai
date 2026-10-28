@@ -1,0 +1,118 @@
+apps/server/cloudflare/connections/connections.test.ts
+  s_036f45c3a54b1c::t_013a660634e1b2 2-3,8-18,24-29,35
+  s_036f45c3a54b1c::t_2e201080b55c77 2221
+  s_036f45c3a54b1c::t_95b8bc64db58e8 45
+  s_036f45c3a54b1c::t_6a9227368dcfa1 1,2290,2309-2310,2381-2384
+  s_036f45c3a54b1c::t_deaf37a33f5a8a 2222-2289,2314-2374,2388
+  s_036f45c3a54b1c::t_4e378386290e91 2130-2131,2160-2161,2220,2291-2308,2311-2313,2375-2380,2385-2387,2389-2399
+apps/web/src/features/transactions/correction.tsx
+  s_036f45c3a54b1c::t_428c0e5373427d 2,6,11,258-259,262,268,275-276,291
+  s_036f45c3a54b1c::t_d427f65440cfc8 260-261
+apps/web/ARCHITECTURE.md
+  s_036f45c3a54b1c::t_e2a672b02be58f 99-105
+  s_036f45c3a54b1c::t_3e1f70375cbbea 363-371
+apps/server/ARCHITECTURE.md
+  s_036f45c3a54b1c::t_f0b9e32b4d3512 170-175
+apps/web/src/features/transactions/corrections.test.ts
+  s_036f45c3a54b1c::t_95b8bc64db58e8 7,13-14,23-24,115,122,152-156,159-163,183-187,192-196,202-206
+  s_036f45c3a54b1c::t_dcead77e89cc2c 1-6,8-12,15-22,25-26,31-41,83-84,89-91,108-113,124-125,147,177,227
+  s_036f45c3a54b1c::t_3ba181972421c4 27-30,42-82,85-88,92-107,114,116-121,123,126-146,148-151,157-158,164-176,178-182,188-191,197-201,207-226,228-249
+apps/server/cloudflare/connections/internal/retention.ts
+  s_036f45c3a54b1c::t_013a660634e1b2 1-40
+apps/web/src/features/transactions/bulk-correction.tsx
+  s_036f45c3a54b1c::t_7819df41e3916b 260
+  s_036f45c3a54b1c::t_428c0e5373427d 2-3,8,204-205,207,209-210,213,217,238-239,242,248,251-252,265,267,271
+  s_036f45c3a54b1c::t_8101b041abdcae 6-7,206,240-241
+infra/cloudflare/verify-edge-policy.ts
+  s_036f45c3a54b1c::t_7b3b8aa016e26d 5
+  s_036f45c3a54b1c::t_dc205775ea9c46 8-9
+  s_2c9d6c1daa679a::t_883b89f1de2a85 7
+apps/server/cloudflare/maintenance/runtime.ts
+  s_036f45c3a54b1c::t_013a660634e1b2 51,308-319
+apps/web/src/features/subscription/interaction.test.ts
+  s_036f45c3a54b1c::t_f7af7ae75a308f 211,213
+  s_036f45c3a54b1c::t_f0b368e60b53b6 2-5,103,120-210,212,214-258
+  s_036f45c3a54b1c::t_a8f95b8369a81f 259-268,270-275,277-287
+  s_036f45c3a54b1c::t_70c9f50987321a 269,276
+  s_036f45c3a54b1c::t_387dd252aeb543 71
+  s_036f45c3a54b1c::t_a93614967ba9fe 12-70,72-77,117
+  s_036f45c3a54b1c::t_0e797a8c1b8949 1,6-11,78-102,104-116,118-119
+apps/web/src/features/transactions/feature.tsx
+  s_036f45c3a54b1c::t_428c0e5373427d 6-7,156,183-193,209,312,323
+  s_036f45c3a54b1c::t_8dfaa677d9be22 239-240,246,248-250,280-285,287-297,299-300
+  s_036f45c3a54b1c::t_7819df41e3916b 247,251,286,298,301
+  s_036f45c3a54b1c::t_fe36e3719f54a1 5,8,234-238,241-245,252
+apps/web/src/features/transactions/correction-context.tsx
+  s_036f45c3a54b1c::t_42dfdbe6a1c150 1-9
+apps/server/cloudflare/maintenance/contract.ts
+  s_036f45c3a54b1c::t_013a660634e1b2 13
+apps/web/src/features/subscription/interaction.ts
+  s_036f45c3a54b1c::t_387dd252aeb543 130-136,141-147,166-170,241-244,279-281
+  s_036f45c3a54b1c::t_6595796db7723d 16,25,173-179,181-240,245-278,282-321,323-331,333-354,356-359,361-379,381-473
+  s_036f45c3a54b1c::t_850387356eb366 1-9,11-15,17-24,26-101,103-129,137-140,148-165,171-172
+  s_036f45c3a54b1c::t_a8f95b8369a81f 102,355,360
+  s_036f45c3a54b1c::t_6f767a82489a89 10,180,322,332,380
+apps/web/src/features/transactions/panel-state.ts
+  s_036f45c3a54b1c::t_428c0e5373427d 9
+apps/server/cloudflare/connections/runtime.ts
+  s_036f45c3a54b1c::t_013a660634e1b2 2,10,19,248-258,267-301
+  s_036f45c3a54b1c::t_467980c31c18f8 1,259-266
+apps/web/src/features/transactions/inline-category.tsx
+  s_036f45c3a54b1c::t_428c0e5373427d 2,4,7,39,48-50,69
+  s_036f45c3a54b1c::t_261379eb940094 40-43
+apps/web/src/features/transactions/corrections.ts
+  s_036f45c3a54b1c::t_3ba181972421c4 150-154,156
+  s_036f45c3a54b1c::t_42dfdbe6a1c150 1,3-24,26-29,34-35,38-46,48-67,69-79,81-109,111,113-129,131-144,146,149,161-162,168-169,171-175,177-180,184-229
+  s_036f45c3a54b1c::t_95b8bc64db58e8 155,157
+  s_036f45c3a54b1c::t_11162da1945493 2,25,30-33,36-37,47,68,80,110,112,130,145,147-148,158-160,163-167,170,176,181-183
+apps/web/src/features/transactions/workspace.tsx
+  s_036f45c3a54b1c::t_95b8bc64db58e8 446-452
+  s_036f45c3a54b1c::t_428c0e5373427d 4,149,154,514,541,546,551,580-585,607
+  s_036f45c3a54b1c::t_99e9a1160cb8d3 3,260,612
+apps/web/e2e/transactions-approved.spec.ts
+  s_036f45c3a54b1c::t_42b939d7384818 11
+  s_036f45c3a54b1c::t_5106726a5ceefb 207
+  s_d9571b3fccd032::t_62837b045ec02b 199-206,208-258
+apps/web/src/features/subscription/feature.tsx
+  s_036f45c3a54b1c::t_013a660634e1b2 3-8,10,53,484,518,574,590,601,605-606,617,633,658,662-663,693,698,702,704-705,720-724,729,749-753,755-757,759,763,766-767,769-771,847,852-859,909-911
+  s_036f45c3a54b1c::t_e395c9618a4a8a 1,9,768,865-870,873,878
+apps/web/src/features/transactions/detail.tsx
+  s_036f45c3a54b1c::t_428c0e5373427d 95,120,126,150
+  s_036f45c3a54b1c::t_e61bc135637288 2-3,121-125,159
+.oxlintrc.json
+  s_036f45c3a54b1c::t_bd649df5e0d951 183
+apps/server/src/shell/observability/contract.ts
+  s_036f45c3a54b1c::t_d31323740a8e94 65-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6c27e02d56c3b9403c793a807de43b76950e3c56",
+  "prompts": {},
+  "sessions": {
+    "s_036f45c3a54b1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a180b2-716f-7cd2-8260-834c95b527cb",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

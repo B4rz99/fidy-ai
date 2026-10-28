@@ -447,6 +447,31 @@ describe("Production topology contract", () => {
     expect(rule?.expression).not.toMatch(/auth|settings|transactions|api\.fidyapp/u);
   });
 
+  it("admits the exact public docs host while rejecting unknown hosts and non-read exemptions", () => {
+    const rules = edgeSecurityPolicy.rulesets.customFirewall.rules;
+    expect(rules[1]).toMatchObject({
+      action: "block",
+      enabled: true,
+      expression:
+        'not http.host in {"docs.fidyapp.com" "fidyapp.com" "app.fidyapp.com" "api.fidyapp.com"}',
+    });
+    expect(rules[4]).toEqual({
+      action: "skip",
+      actionParameters: { products: ["bic", "uaBlock"] },
+      description: "Allow browser-signature-independent reads of public customer documentation",
+      enabled: true,
+      expression: '(http.host eq "docs.fidyapp.com" and http.request.method in {"GET" "HEAD"})',
+    });
+    expect(edgeSecurityPolicy.rulesets.managedFirewall.rules[0]).toMatchObject({
+      action: "execute",
+      expression: "true",
+    });
+    expect(edgeSecurityPolicy.rulesets.httpDdos.rules[0]).toMatchObject({
+      action: "execute",
+      expression: "true",
+    });
+  });
+
   it("permits declared canonical methods through production ingress for Worker-level route enforcement", () => {
     expect(edgeSecurityPolicy.rulesets.customFirewall.rules[2]).toMatchObject({
       action: "block",

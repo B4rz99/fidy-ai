@@ -24,6 +24,7 @@ const freePlanRateLimitPeriod = 10;
 const freePlanRequestsPerPeriod = 60;
 const apiHostname = productionTopology.ingress.hostname;
 const ownedHostnames = [
+  productionTopology.docs.hostname,
   productionTopology.site.hostname,
   productionTopology.web.hostname,
   apiHostname,
@@ -80,6 +81,13 @@ const customFirewallRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
     enabled: true,
     expression:
       '(http.host in {"fidyapp.com" "app.fidyapp.com"} and http.request.method in {"GET" "HEAD"} and http.request.uri.path in {"/" "/politica" "/terminos" "/cookies" "/about" "/contact" "/privacy" "/docs" "/robots.txt" "/llms.txt" "/sitemap-index.xml" "/sitemap-0.xml" "/install.sh" "/install.ps1" "/funciones/transacciones" "/funciones/presupuestos" "/funciones/asistente" "/funciones/tablero" "/funciones/insights" "/funciones/agentes" "/index.md" "/about.md" "/contact.md" "/privacy.md" "/docs.md" "/politica.md" "/cookies.md" "/terminos.md" "/404.md" "/funciones/transacciones.md" "/funciones/presupuestos.md" "/funciones/asistente.md" "/funciones/tablero.md" "/funciones/insights.md" "/funciones/agentes.md"})',
+  },
+  {
+    action: "skip",
+    actionParameters: { products: ["bic", "uaBlock"] },
+    description: "Allow browser-signature-independent reads of public customer documentation",
+    enabled: true,
+    expression: `(http.host eq "${productionTopology.docs.hostname}" and http.request.method in {"GET" "HEAD"})`,
   },
 ];
 

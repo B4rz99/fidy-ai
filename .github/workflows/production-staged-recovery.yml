@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       public_deployment_id:
-        description: Inspected public deployment containing the serving version and zero-traffic candidate
+        description: Inspected public deployment, either already stable or containing its zero-traffic candidate
         required: true
         type: string
       core_deployment_id:
-        description: Inspected Core deployment containing the serving version and zero-traffic candidate
+        description: Inspected Core deployment, either already stable or containing its zero-traffic candidate
         required: true
         type: string
 

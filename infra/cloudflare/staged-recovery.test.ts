@@ -96,6 +96,34 @@ it.effect(
 );
 
 it.effect.each([
+  { cleaned: [request.public.name], remaining: [request.core.name] },
+  { cleaned: [request.core.name], remaining: [request.public.name] },
+  { cleaned: [request.public.name, request.core.name], remaining: [] },
+])("resumes inspected partial cleanup with $cleaned already stable", ({ cleaned, remaining }) =>
+  Effect.gen(function* () {
+    const fixture = harness();
+    for (const name of cleaned) {
+      const current = getDeployment(fixture.deployments, name);
+      fixture.deployments.set(name, {
+        ...current,
+        versions: current.versions.filter((version) => version.percentage === 100),
+      });
+    }
+    yield* recoverStaged(fixture.port, request);
+    expect(fixture.writes.map((write) => write.name)).toEqual(remaining);
+    expect(fixture.proofs).toEqual([
+      { publicVersionId: publicStable, coreVersionId: coreStable },
+      { publicVersionId: publicStable, coreVersionId: coreStable },
+    ]);
+    for (const name of [request.public.name, request.core.name]) {
+      expect(getDeployment(fixture.deployments, name).versions).toEqual([
+        { id: name === request.public.name ? publicStable : coreStable, percentage: 100 },
+      ]);
+    }
+  })
+);
+
+it.effect.each([
   {
     label: "candidate receiving traffic",
     change: (deployment: Deployment): Deployment => ({
@@ -155,6 +183,39 @@ it.effect("refuses an unverifiable serving pair without a traffic write", () =>
     expect(result._tag).toBe("Failure");
     expect(fixture.writes).toEqual([]);
   })
+);
+it.effect.each(["stale inspection", "failed proof", "routing changed during proof"])(
+  "refuses partial cleanup with %s before writing Core",
+  (failure) =>
+    Effect.gen(function* () {
+      const fixture = harness();
+      const current = getDeployment(fixture.deployments, request.public.name);
+      fixture.deployments.set(request.public.name, {
+        ...current,
+        id: failure === "stale inspection" ? request.core.deploymentId : current.id,
+        versions: [{ id: publicStable, percentage: 100 }],
+      });
+      const result = yield* Effect.exit(
+        recoverStaged(
+          {
+            ...fixture.port,
+            verifyPair: () =>
+              failure === "failed proof"
+                ? Effect.fail(Error("pair mismatch"))
+                : Effect.sync(() => {
+                    fixture.deployments.set(request.public.name, {
+                      ...current,
+                      id: request.core.deploymentId,
+                      versions: [{ id: publicStable, percentage: 100 }],
+                    });
+                  }),
+          },
+          request
+        )
+      );
+      expect(result._tag).toBe("Failure");
+      expect(fixture.writes).toEqual([]);
+    })
 );
 it.effect("rechecks both deployment IDs after the proof before any traffic write", () =>
   Effect.gen(function* () {

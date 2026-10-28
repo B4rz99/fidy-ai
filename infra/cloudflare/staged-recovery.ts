@@ -23,13 +23,9 @@ const servingVersion = Effect.fn(function* (port: ReleasePort, worker: typeof Re
   const current = yield* port.current(worker.name);
   const stable = current.versions.find((version) => version.percentage === 100);
   const candidate = current.versions.find((version) => version.id === worker.candidateVersionId);
-  if (
-    current.id !== worker.deploymentId ||
-    current.versions.length !== 2 ||
-    stable === undefined ||
-    candidate?.percentage !== 0 ||
-    stable.id === candidate.id
-  ) {
+  const cleaned = current.versions.length === 1 && candidate === undefined;
+  const staged = current.versions.length === 2 && candidate?.percentage === 0;
+  if (current.id !== worker.deploymentId || stable === undefined || (!cleaned && !staged)) {
     return yield* Effect.fail(Error("Recovery refused: inspected zero-traffic deployment changed"));
   }
   return { current, stableVersionId: stable.id };
@@ -76,6 +72,8 @@ export const recoverStaged = Effect.fn(function* (
   yield* port.verifyPair(pair);
   for (const worker of [request.public, request.core]) {
     yield* requireUnchanged(port, request.revision, deployments);
+    const inspected = worker.name === request.public.name ? ingress : core;
+    if (inspected.current.versions.length === 1) continue;
     const stableVersionId =
       worker.name === request.public.name ? pair.publicVersionId : pair.coreVersionId;
     const observed = yield* releaseController.deployExact(port, worker.name, [

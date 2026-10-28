@@ -85,6 +85,11 @@ jobs:
           echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/fidy-release.json" >> "$GITHUB_ENV"
           echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/fidy-release-verification.json" >> "$GITHUB_ENV"
 
+      - name: Select Node for Astro build tooling
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+
       - name: Set up Bun for build tooling
         uses: ./.github/actions/bun-runtime
 

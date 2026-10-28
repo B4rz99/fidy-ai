@@ -494,10 +494,11 @@ restore data. Run `production-inspect.yml` first and review the current public/C
 Then dispatch `production-staged-recovery.yml` on protected `trunk`, supplying those two IDs.
 
 The protected Production coordinator derives Worker names and candidate versions from completed
-Alchemy receipts. It requires both inspected deployments to contain exactly the current serving
-version at 100% and that candidate at 0%, verifies the normal-traffic public/Core release identity,
-and rechecks trunk and both deployments before each write. It removes only the zero-traffic entry,
-confirms both writes and the unchanged serving pair, then runs ordinary capture. Changed identities,
+Alchemy receipts. Each inspected deployment must contain either the current serving version at
+100% and that candidate at 0%, or a sole 100% version distinct from the candidate after cleanup.
+It verifies the normal-traffic public/Core release identity and rechecks trunk and both deployments
+before each write. It skips already-cleaned Workers, removes only remaining zero-traffic entries,
+confirms each write and the unchanged serving pair, then runs ordinary capture. Changed identities,
 positive candidate traffic, missing receipts or failed proof refuse recovery. A partially completed
 repair requires fresh inspection; do not reuse stale deployment IDs.
 

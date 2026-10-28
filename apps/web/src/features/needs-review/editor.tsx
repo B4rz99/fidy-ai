@@ -1,3 +1,4 @@
+import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 import { ReviewDraftFooter, ReviewNotice } from "@/ui/components/review-workspace";
 import { useReviewExpired } from "./expiry";
 import type { ReviewDecisions, ReviewEditorState } from "./decisions";
@@ -18,12 +19,12 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Badge } from "@/ui/components/badge";
 import { reviewExpiry, reviewReason, reviewTitle } from "./presentation";
-import { type JSX, type ReactNode, useState } from "react";
+import { type JSX, type ReactNode, useCallback, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { ReviewFields } from "./fields";
 import { OriginalMaterial, ReviewMaterialPreload } from "./original";
-import { type Category, type Detail, type Item, deadline, sources } from "./model";
+import { type Category, type Detail, type Draft, type Item, deadline, sources } from "./model";
 
 type Props = Readonly<{
   item: Item;
@@ -68,7 +69,9 @@ const ReviewItemEditor = ({ item, decisions, disabled }: Props): JSX.Element => 
     })
   );
   const [categoryQuery] = useState(() =>
-    apiClient.query("categories", "listCategories", { reactivityKeys: ["ingestion-review"] })
+    apiClient
+      .query("categories", "listCategories", workspaceQueryRetention)
+      .pipe(revalidateWorkspaceQuery)
   );
   const detail = useAtomValue(query).pipe(presentCanonicalQuery);
   const categories = useAtomValue(categoryQuery).pipe(presentCanonicalQuery);
@@ -170,6 +173,10 @@ const ReadyEditor = ({
   categories: ReadonlyArray<Category>;
   recover: () => void;
 }>): JSX.Element => {
+  const change = useCallback(
+    (draft: Draft) => decisions.change(detail, draft),
+    [decisions, detail]
+  );
   const editor = decisions.editor(detail);
   const act = (kind: "Create" | "Skip"): void => decisions.decide(detail, kind);
   const locked = editor.locked || disabled;
@@ -193,7 +200,7 @@ const ReadyEditor = ({
           />
           <ReviewFields
             draft={editor.draft}
-            change={(draft) => decisions.change(detail, draft)}
+            change={change}
             locked={locked}
             categories={categories}
             timeZone={detail.item.timeZone}

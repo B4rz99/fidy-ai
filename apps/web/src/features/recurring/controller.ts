@@ -168,7 +168,9 @@ export const useRecurringPlanning = ({
     if (disabled || admission.current || state._tag !== "Ready") return;
     admission.current = true;
     setSaveState("saving");
-    submit({ payload: { expectedRevision: state.value.data.document.revision, edit } })
+    submit({
+      payload: { expectedRevision: state.value.data.document.revision, edit, view: "compact" },
+    })
       .then((exit) => complete(Exit.isSuccess(exit) ? exit.value : "uncertain"))
       .catch(() => complete("uncertain"));
   };

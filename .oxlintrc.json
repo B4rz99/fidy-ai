@@ -196,7 +196,10 @@
     },
     // Playwright loads custom reporter modules through their default export.
     {
-      "files": ["apps/web/scripts/browser-phase-reporter.ts"],
+      "files": [
+        "apps/web/scripts/browser-phase-reporter.ts",
+        "apps/web/scripts/performance-reporter.ts"
+      ],
       "rules": { "import/no-default-export": "off" }
     },
     {
@@ -268,7 +271,7 @@
         "apps/web/src/ui/class-names.ts",
         "apps/web/src/ui/components/{alert,badge,button,calendar,checkbox,dropdown-menu,empty,input,popover,progress,searchable-choice-dropdown,toggle-group}.tsx",
         "apps/web/e2e/{browser-pairing,static-shell}.spec.ts",
-        "apps/web/{playwright,playwright.capture,vite,vitest}.config.ts",
+        "apps/web/{playwright,playwright.capture,playwright.assessment,vite,vitest}.config.ts",
         "apps/site/{astro,playwright}.config.ts",
         "apps/docs/{astro,playwright}.config.ts",
         "apps/site/e2e/{site,agent-readiness}.spec.ts",
@@ -281,7 +284,7 @@
     // Vite and Vitest require default-exported configuration objects.
     {
       "files": [
-        "apps/web/{playwright,playwright.capture,playwright.cli,playwright.oauth,vite,vitest}.config.ts",
+        "apps/web/{playwright,playwright.capture,playwright.cli,playwright.oauth,playwright.assessment,vite,vitest}.config.ts",
         "apps/site/{astro,playwright}.config.ts",
         "apps/docs/{astro,playwright}.config.ts"
       ],

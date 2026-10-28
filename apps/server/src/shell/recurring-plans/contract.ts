@@ -15,6 +15,7 @@ import { OperationResponse, ValidationFailed } from "~/shell/public-http/contrac
 export const RecurringWorkspaceQuery = Schema.Struct({
   month: RecurringMonth,
   previousMonth: Schema.optionalKey(RecurringMonth),
+  view: Schema.optionalKey(Schema.Literal("compact")),
   ...RecurringFilters.fields,
 });
 export const RecurringWorkspace = Schema.Struct({
@@ -29,7 +30,11 @@ export const RecurringWorkspace = Schema.Struct({
   matches: Schema.Array(Schema.Struct({ item: RecurringOccurrence, fact: RecurringMatchFact })),
   matchesComplete: Schema.Boolean,
 });
-export const ApplyRecurringCanonicalInput = Schema.Struct({ payload: RecurringCommand });
+const RecurringCommandRequest = Schema.Struct({
+  ...RecurringCommand.fields,
+  view: Schema.optionalKey(Schema.Literal("compact")),
+});
+export const ApplyRecurringCanonicalInput = Schema.Struct({ payload: RecurringCommandRequest });
 export const RecurringPlansGroup = HttpApiGroup.make("recurringPlans")
   .add(
     HttpApiEndpoint.get("getRecurringWorkspace", "/recurring-plans", {
@@ -39,7 +44,7 @@ export const RecurringPlansGroup = HttpApiGroup.make("recurringPlans")
     })
       .annotate(
         OpenApi.Description,
-        "Read a recurring month and Currency-separated totals. Get plan IDs from data.document.plans and expectedRevision from data.document.revision before editing; never ask the User. Follow previousMonth for older unresolved items."
+        "Read a recurring month and Currency-separated totals. Get plan IDs from data.document.plans and expectedRevision from data.document.revision before editing; never ask the User. Follow previousMonth for older unresolved items. Use view=compact to return only the latest revision of each plan; occurrences still use full history. Omit view to retrieve the full ledger."
       )
       .annotateMerge(
         operationPolicy({
@@ -52,13 +57,13 @@ export const RecurringPlansGroup = HttpApiGroup.make("recurringPlans")
   )
   .add(
     HttpApiEndpoint.post("applyRecurringEdit", "/recurring-plans/edits", {
-      payload: RecurringCommand,
+      payload: RecurringCommandRequest,
       success: OperationResponse(RecurringDocument),
       error: ValidationFailed,
     })
       .annotate(
         OpenApi.Description,
-        "Create/edit plans, lifecycle, occurrences, tracking, Transaction associations or suggestions. Read recurringPlans.getRecurringWorkspace for the revision and plan ID, then propose the edit; the host obtains exact approval. Reread unknown outcomes; never replay blindly. Tracking creates no Transactions and never cancels external services."
+        "Create/edit plans, lifecycle, occurrences, tracking, Transaction associations or suggestions. Read recurringPlans.getRecurringWorkspace for the revision and plan ID, then propose the edit; the host obtains exact approval. Reread unknown outcomes; never replay blindly. Tracking creates no Transactions and never cancels external services. Set view to compact for a response containing only the latest revision per plan; stored history is preserved."
       )
       .annotateMerge(
         operationPolicy({

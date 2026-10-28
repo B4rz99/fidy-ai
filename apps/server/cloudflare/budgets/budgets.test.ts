@@ -1968,8 +1968,49 @@ it("latches a backdated month and does not reopen it after a correction", () =>
     })
   ));
 
+it("drains one month at a time and preserves a concurrently changed work version", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      expect(
+        (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload())))).status
+      ).toBe(201);
+      const current = DateTime.nowUnsafe().epochMilliseconds;
+      const earlier = current - 40 * 86400000;
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare("INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(?,?)")
+            .bind(users[0], earlier),
+          db
+            .prepare("INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(?,?)")
+            .bind(users[0], current),
+        ])
+      );
+      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(false);
+      const remaining = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT occurred_at_ms FROM budget_evaluation_work WHERE user_id=?")
+          .bind(users[0])
+          .all<{ occurred_at_ms: number }>()
+      );
+      expect(remaining.results).toEqual([{ occurred_at_ms: current }]);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER change_pending_version
+      AFTER UPDATE ON budget_month_latches BEGIN
+      UPDATE budget_evaluation_work SET version=version+1 WHERE user_id=NEW.user_id;
+      END`)
+          .run()
+      );
+      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(false);
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER change_pending_version").run());
+      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+    })
+  ));
+
 it(
-  "blocks a correcting mutation until its versioned work backlog has drained",
+  "coalesces same-month invalidations before correcting without losing reached thresholds",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -2009,21 +2050,14 @@ it(
               changes: { money: { amount: "1", currency: "COP" } },
             })
           );
-        expect((yield* Effect.tryPromise(() => correction())).status).toBe(503);
+        expect((yield* Effect.tryPromise(() => correction())).status).toBe(200);
         const pending = yield* Effect.tryPromise(() =>
           db
             .prepare("SELECT COUNT(*) AS count FROM budget_evaluation_work WHERE user_id = ?")
             .bind(users[0])
             .first<{ count: number }>()
         );
-        expect(pending?.count).toBe(8);
-        const retryCount = 7;
-        const refusals = yield* Effect.all(
-          Array.from({ length: retryCount }, () => Effect.tryPromise(correction)),
-          { concurrency: 2 }
-        );
-        expect(refusals.map((response) => response.status)).toEqual(Array(retryCount).fill(503));
-        expect((yield* Effect.tryPromise(() => correction())).status).toBe(200);
+        expect(pending?.count).toBe(0);
         const alerts = yield* Effect.tryPromise(() =>
           db
             .prepare(

@@ -1,4 +1,4 @@
-import type { APIRequestContext, APIResponse, Page, Route } from "@playwright/test";
+import type { APIRequestContext, APIResponse, Page, Response, Route } from "@playwright/test";
 import type { Cause } from "effect";
 import { Clock, Effect, Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
@@ -29,33 +29,40 @@ export const openBrowserLogin = (page: Page): Promise<void> =>
 
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
 type ConsentRead = Readonly<{ status: number }>;
-const observeConsentRead = (page: Page): Promise<ConsentRead> =>
-  page
-    .waitForResponse(
-      (response) => response.url().endsWith("/web/consent") && response.request().method() === "GET"
-    )
-    .then((response) => ({ status: response.status() }));
+const consentReads = new WeakMap<Page, ConsentRead>();
+const isConsentRead = (response: Response): boolean =>
+  response.url().endsWith("/web/consent") && response.request().method() === "GET";
+const observeConsentRead = (page: Page): Promise<ConsentRead> => {
+  if (!consentReads.has(page)) {
+    consentReads.set(page, { status: 0 });
+    page.on("response", (response) => {
+      if (isConsentRead(response)) consentReads.set(page, { status: response.status() });
+    });
+  }
+  return page.waitForResponse(isConsentRead).then((response) => ({ status: response.status() }));
+};
 export const confirmConsentRead = ({
   page,
   first,
 }: Readonly<{ page: Page; first: ConsentRead }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      let response = first;
-      const maximumRetries = 6;
-      for (
-        let retry = 0;
-        response.status === resourceLimitedStatus && retry < maximumRetries;
-        retry++
-      ) {
+      const maximumRetries = 12;
+      for (let retry = 0; retry < maximumRetries; retry++) {
+        const response = consentReads.get(page) ?? first;
+        if (response.status !== resourceLimitedStatus) {
+          expect(response.status).toBe(successStatus);
+          return;
+        }
+        // A declared refusal can be followed by the client's bounded automatic retry.
+        // Only use manual retry once the browser exposes it after that attempt finishes.
+        const button = page.getByRole("button", { name: "Reintentar", exact: true });
+        if (yield* Effect.tryPromise(() => button.isVisible())) {
+          yield* Effect.tryPromise(() => button.click());
+        }
         yield* Effect.sleep("1 second");
-        const refreshed = observeConsentRead(page);
-        yield* Effect.tryPromise(() =>
-          page.getByRole("button", { name: "Reintentar", exact: true }).click()
-        );
-        response = yield* Effect.tryPromise(() => refreshed);
       }
-      expect(response.status).toBe(successStatus);
+      expect((consentReads.get(page) ?? first).status).toBe(successStatus);
     }).pipe(Effect.timeout("15 seconds"))
   );
 export const navigateThroughConsent = ({

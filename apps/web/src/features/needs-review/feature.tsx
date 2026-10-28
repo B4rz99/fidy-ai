@@ -97,16 +97,33 @@ const ReviewPanel = ({
   filter: Filter;
   page: number;
   select: (status: Filter, offset: number) => void;
-}>): JSX.Element => (
-  <ReviewResources
-    key={`${filter}:${page}`}
-    active={active}
-    filter={filter}
-    select={select}
-    page={page}
-    move={(offset) => select(filter, offset)}
-  />
-);
+}>): JSX.Element => {
+  const [visited, setVisited] = useState(active);
+  if (active && !visited) setVisited(true);
+  if (!active && !visited) return <></>;
+  return (
+    <ReviewResources
+      key={`${filter}:${page}`}
+      active={active}
+      filter={filter}
+      select={select}
+      page={page}
+      move={(offset) => select(filter, offset)}
+    />
+  );
+};
+const reviewQueries = (
+  client: FidyClient,
+  filter: Filter,
+  page: number
+): Readonly<{
+  source: ReviewWorkspaceQuery;
+  active: ReviewWorkspaceQuery;
+}> => {
+  const source = makeReviewQuery(client, filter, page);
+  return { source, active: source.pipe(Atom.withRefresh("60 seconds"), Atom.refreshOnWindowFocus) };
+};
+
 const ReviewResources = ({
   active,
   filter,
@@ -121,16 +138,12 @@ const ReviewResources = ({
   select: (status: Filter, offset: number) => void;
 }>): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
-  const [query] = useState(() =>
-    makeReviewQuery(apiClient, filter, page).pipe(
-      Atom.withRefresh("60 seconds"),
-      Atom.refreshOnWindowFocus
-    )
-  );
+  const [queries] = useState(() => reviewQueries(apiClient, filter, page));
+  const query = active ? queries.active : queries.source;
   const [decisionAtom] = useState(() =>
     makeReviewDecisions({
       client: apiClient,
-      query,
+      query: queries.source,
       created: () => toast.success("Transacción creada"),
     })
   );
@@ -156,7 +169,7 @@ const ReviewResources = ({
               <ReviewReadFailure refresh={refresh} waiting={state.waiting} />
             ) : null
           }
-          disabled={[!active, state.waiting, Option.isSome(state.refreshFailure)].some(Boolean)}
+          disabled={state.waiting || Option.isSome(state.refreshFailure)}
           page={page}
           move={move}
           filter={filter}

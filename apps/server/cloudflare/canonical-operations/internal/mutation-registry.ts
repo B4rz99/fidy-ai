@@ -258,7 +258,7 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
     CanonicalOperationId.make("recurringPlans.applyRecurringEdit"),
     {
       prepare: decodeAndPrepare(ApplyRecurringCanonicalInput, ({ payload }, work) =>
-        prepareRecurringEdit({ work, command: payload })
+        prepareRecurringEdit({ work, command: payload, compact: payload.view === "compact" })
       ),
       present: present(HTTP_OK),
       invalidRefusal: recurringRefusal,

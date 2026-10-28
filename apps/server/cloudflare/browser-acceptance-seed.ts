@@ -380,3 +380,8 @@ await db
   )
   .bind(recoveryDisclosureUserId, recoveryDisclosureDigest, now)
   .run();
+
+if (Bun.env.FIDY_ASSESSMENT !== undefined) {
+  const { seedAssessment } = await import("./browser-assessment.test-fixture");
+  await Effect.runPromise(seedAssessment({ db, dataset: Bun.env.FIDY_ASSESSMENT, now }));
+}

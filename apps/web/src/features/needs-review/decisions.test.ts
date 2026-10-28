@@ -187,12 +187,29 @@ it.live(
     })
 );
 
+it.live("saves promptly while spacing automatic writes and retaining the latest draft", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    test.view().change(test.detail, edit("100"));
+    yield* advance(250);
+    expect(test.sent).toHaveLength(1);
+    test.view().change(test.detail, edit("200"));
+    yield* advance(250);
+    expect(test.sent).toHaveLength(1);
+    test.view().change(test.detail, edit("300"));
+    yield* advance(750);
+    expect(test.sent).toHaveLength(2);
+    expect(test.sent[1]).toMatchObject({ revision: 1, draft: { amount: "300" } });
+    expect(test.view().editor(test.detail).feedback).toBe("saved");
+  })
+);
+
 it.live("serializes new draft changes behind an in-flight save before deciding", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
     test.delay(100);
     test.view().change(test.detail, edit("100"));
-    yield* advance(650);
+    yield* advance(250);
     test.view().change(test.detail, edit("200"));
     test.view().decide(test.detail, "Skip");
     yield* advance(400);

@@ -63,6 +63,8 @@ for (const workspace of workspaces) {
         const count = workspace.name === "Transacciones" ? 1 : measurementSamples;
         for (let sample = 0; sample < count; sample++) {
           if (sample > 0) yield* Effect.tryPromise(() => openWorkspace(page, "Por revisar"));
+          // Exercise expired display revalidation; recent returns now reuse the five-second snapshot.
+          if (workspace.name === "Recurrentes" && sample === 0) yield* Effect.sleep("6 seconds");
           yield* Effect.tryPromise(() => page.evaluate(observeSwitch, workspace.ready));
           yield* Effect.tryPromise(() => revisitWorkspace(page, workspace.name));
           yield* Effect.tryPromise(() =>

@@ -1,5 +1,5 @@
 import { WebAuthApi, browserSessionBindingHeader } from "@fidy/server/client";
-import { Context, Effect, Layer, type Schema } from "effect";
+import { Context, Effect, Layer, type Schema, Semaphore } from "effect";
 import {
   FetchHttpClient,
   HttpClient,
@@ -16,6 +16,35 @@ export type BrowserSessionLifetime = Readonly<{
   signal: AbortSignal;
   expired: () => void;
 }>;
+
+const concurrentRequests = 2;
+const requestPermits = new WeakMap<AbortSignal, Semaphore.Semaphore>();
+const permitsFor = (signal: AbortSignal): Semaphore.Semaphore => {
+  const existing = requestPermits.get(signal);
+  if (existing !== undefined) return existing;
+  const permits = Semaphore.makeUnsafe(concurrentRequests);
+  requestPermits.set(signal, permits);
+  return permits;
+};
+
+/** Coordinates this page's clients within their shared session; admission remains server-owned. */
+export const coordinateBrowserRequests = ({
+  transport,
+  signal,
+}: Readonly<{
+  transport: Layer.Layer<HttpClient.HttpClient>;
+  signal: AbortSignal;
+}>): Layer.Layer<HttpClient.HttpClient> => {
+  const permits = permitsFor(signal);
+  return HttpClient.layerMergedContext(
+    Effect.map(HttpClient.HttpClient, (client) =>
+      HttpClient.makeWith(
+        (request) => permits.withPermits(1)(client.postprocess(request)),
+        client.preprocess
+      )
+    )
+  ).pipe(Layer.provide(transport));
+};
 
 /** Read public session identity without loading User data or renewing/replacing a cookie. */
 export const loadBrowserSessionBinding = ({

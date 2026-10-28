@@ -5508,6 +5508,12 @@
             "maximum": 9007199254740991,
             "minimum": -9007199254740991,
             "type": "integer"
+          },
+          "view": {
+            "enum": [
+              "compact"
+            ],
+            "type": "string"
           }
         },
         "required": [
@@ -10525,6 +10531,12 @@
                           "skipped"
                         ],
                         "type": "string"
+                      },
+                      "view": {
+                        "enum": [
+                          "compact"
+                        ],
+                        "type": "string"
                       }
                     },
                     "type": "object"
@@ -10793,6 +10805,12 @@
                         "maximum": 9007199254740991,
                         "minimum": -9007199254740991,
                         "type": "integer"
+                      },
+                      "view": {
+                        "enum": [
+                          "compact"
+                        ],
+                        "type": "string"
                       }
                     },
                     "type": "object"
@@ -22230,7 +22248,7 @@
     },
     "/recurring-plans": {
       "get": {
-        "description": "Read a recurring month and Currency-separated totals. Get plan IDs from data.document.plans and expectedRevision from data.document.revision before editing; never ask the User. Follow previousMonth for older unresolved items.",
+        "description": "Read a recurring month and Currency-separated totals. Get plan IDs from data.document.plans and expectedRevision from data.document.revision before editing; never ask the User. Follow previousMonth for older unresolved items. Use view=compact to return only the latest revision of each plan; occurrences still use full history. Omit view to retrieve the full ledger.",
         "operationId": "recurringPlans.getRecurringWorkspace",
         "parameters": [
           {
@@ -22248,6 +22266,17 @@
             "required": false,
             "schema": {
               "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "enum": [
+                "compact"
+              ],
               "type": "string"
             }
           },
@@ -22583,7 +22612,7 @@
     },
     "/recurring-plans/edits": {
       "post": {
-        "description": "Create/edit plans, lifecycle, occurrences, tracking, Transaction associations or suggestions. Read recurringPlans.getRecurringWorkspace for the revision and plan ID, then propose the edit; the host obtains exact approval. Reread unknown outcomes; never replay blindly. Tracking creates no Transactions and never cancels external services.",
+        "description": "Create/edit plans, lifecycle, occurrences, tracking, Transaction associations or suggestions. Read recurringPlans.getRecurringWorkspace for the revision and plan ID, then propose the edit; the host obtains exact approval. Reread unknown outcomes; never replay blindly. Tracking creates no Transactions and never cancels external services. Set view to compact for a response containing only the latest revision per plan; stored history is preserved.",
         "operationId": "recurringPlans.applyRecurringEdit",
         "parameters": [],
         "requestBody": {

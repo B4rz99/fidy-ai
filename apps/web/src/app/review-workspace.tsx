@@ -41,7 +41,7 @@ const VisitedReviewWorkspace = (): JSX.Element => {
     <div hidden={!active} inert={!active} ref={resume}>
       <Suspense fallback={<p className="p-5">Cargando elementos…</p>}>
         <ReviewWorkspace
-          active={true}
+          active={active}
           filter={current.value.status ?? "pending"}
           page={current.value.offset ?? 0}
         />

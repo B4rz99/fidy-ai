@@ -50,6 +50,7 @@ type Entry = {
   acting: boolean;
   recovering: boolean;
   version: number;
+  nextAutosaveAt: number;
   permit: Semaphore.Semaphore;
   retired: Deferred.Deferred<void>;
 };
@@ -69,7 +70,8 @@ type Owner = {
   undo: ReadonlyArray<Detail>;
   completed: Option.Option<Completion>;
 };
-const autosaveMilliseconds = 650;
+const autosaveMilliseconds = 200;
+const autosaveIntervalMilliseconds = 1000;
 const maximumTimerMilliseconds = 2_147_483_647;
 const now = (): number => DateTime.toEpochMillis(DateTime.nowUnsafe());
 const draftFor = (detail: Detail): Draft =>
@@ -85,6 +87,7 @@ const makeEntry = (detail: Detail): Entry => ({
   acting: false,
   recovering: false,
   version: 0,
+  nextAutosaveAt: 0,
   permit: Semaphore.makeUnsafe(1),
   retired: Deferred.makeUnsafe<void>(),
 });
@@ -227,9 +230,9 @@ const changeDraft = (owner: Owner, detail: Detail, draft: Draft): void => {
   const version = entry.version;
   run(
     owner,
-    Effect.sleep(autosaveMilliseconds).pipe(
+    Effect.sleep(Math.max(autosaveMilliseconds, entry.nextAutosaveAt - now())).pipe(
       Effect.andThen(
-        Effect.suspend(() => (version === entry.version ? flush(owner, entry) : Effect.void))
+        Effect.suspend(() => (version === entry.version ? flush(owner, entry, true) : Effect.void))
       )
     )
   );
@@ -258,12 +261,13 @@ const write = Effect.fnUntraced(function* (owner: Owner, command: Command) {
       return (yield* client.ingestion.applyReviewEdit({ payload: command })).data;
   }
 });
-const flush = (owner: Owner, entry: Entry): Work =>
+const flush = (owner: Owner, entry: Entry, automatic = false): Work =>
   entry.permit.withPermit(
     Effect.gen(function* () {
       while (current(owner, entry) && !blocked(entry) && Option.isSome(entry.wanted)) {
         const draft = entry.wanted.value;
         entry.wanted = Option.none();
+        entry.nextAutosaveAt = now() + autosaveIntervalMilliseconds;
         entry.feedback = "saving";
         notify(owner);
         const result = yield* Effect.exit(
@@ -279,6 +283,7 @@ const flush = (owner: Owner, entry: Entry): Work =>
         else acceptDraft(entry, result.value);
         notify(owner);
         if (result._tag === "Success") yield* Reactivity.invalidate(["ingestion-review"]);
+        if (automatic) return;
       }
     })
   );

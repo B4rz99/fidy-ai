@@ -39,8 +39,9 @@ the mTLS private key. Preserve it while retained grants exist; replacing it with
 those grants makes their credentials unrecoverable. Never put it in evidence, a browser or Git.
 
 `connection_grants` stores one row per claimed attempt. A successful token response is quarantined
-before signed-identity validation or Account reads. The minimum recoverable payload is access token,
-optional refresh token and access-token expiry. ID tokens are transient. The envelope format is
+before signed-identity validation or Account reads. The recoverable payload contains each valid
+access or refresh token independently, plus the access-token expiry when known. A missing or invalid
+expiry is never treated as proof of expiry. ID tokens are transient. The envelope format is
 `v1.<base64url 12-byte nonce>.<base64url AES-GCM ciphertext and tag>` with a fresh random nonce.
 
 Authenticated additional data is the JSON string array, in this order:

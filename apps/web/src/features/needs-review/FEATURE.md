@@ -7,10 +7,19 @@ original permits explicit manual completion only before its original deadline.
 
 Canonical query atoms own inbox, item, taxonomy and browser-only original reads.
 The authentication registry owns their lifetime. Navigation polls the complete pending count and
-refreshes on window focus. Local selection and form drafts are presentation state; a mounted,
-serialized draft queue debounces saves and flushes before individual creation or omission. Bulk skip
-also waits for queued drafts, using the revisions acknowledged by those saves. Route search owns
-filters and pagination; exhausting a page advances to a populated page.
+refreshes on window focus. Each mounted panel/page has one NeedsReviewItem decision module in that
+registry. It owns pending draft snapshots, debounced saves, acknowledged revisions, individual and
+bulk ordering, Undo, and explicit reread recovery. Presentation owns selection and field interaction;
+it receives draft/status projections and actions, never queue callbacks or revision coordination.
+Bulk skip and individual decisions wait for relevant saves and use their acknowledged revisions.
+Route search owns filters and pagination; exhausting a page advances to a populated page.
+
+Item switches and retained-panel hiding preserve pending saves. Actual panel/page disposal and
+authentication teardown cancel timers and unsent work immediately and ignore late completions.
+Evidence expiry stops further work for that item. Disposal never initiates a final save; an
+already-sent mutation may commit, so a subsequent mount reads canonical state. Item uncertainty
+blocks that item; bulk uncertainty holds the panel lock until an explicit successful workspace
+reread. Failed rereads do not release either lock or replay mutations.
 Statement suggestions retain independently validated date, direction and Counterparty facts when
 another field needs review; unsafe spreadsheet cells remain unresolved.
 Unknown currency remains absent in the draft and requires an explicit selection before creation.

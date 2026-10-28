@@ -1363,3 +1363,33 @@ test("keeps history geometry independent of selection retained in the hidden pen
       expect(after).toBe(before);
     })
   ));
+
+test("discards an unsent review draft when entering Privacy", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const start = DateTime.makeUnsafe("2026-10-28T12:00:00Z");
+      yield* Effect.tryPromise(() => page.clock.install({ time: DateTime.toDateUtc(start) }));
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      let writes = 0;
+      const countedRoute = (route: Route): Promise<void> => {
+        if (route.request().method() === "POST") writes += 1;
+        return reviewRoute(route);
+      };
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, countedRoute)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Valor", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.clock.pauseAt(DateTime.toDateUtc(DateTime.add(start, { minutes: 1 })))
+      );
+      yield* Effect.tryPromise(() => page.getByLabel("Valor", { exact: true }).fill("98765"));
+      yield* verifyPrivacyDisposesReview(page);
+      const disposalObservationMilliseconds = 2000;
+      yield* Effect.tryPromise(() => page.clock.runFor(disposalObservationMilliseconds));
+      expect(writes).toBe(0);
+    })
+  ));

@@ -1,6 +1,6 @@
 import { ReviewDraftFooter, ReviewNotice } from "@/ui/components/review-workspace";
 import { useReviewExpired } from "./expiry";
-import type { DraftBarrier } from "./draft-barrier";
+import type { ReviewDecisions, ReviewEditorState } from "./decisions";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -22,15 +22,13 @@ import { type JSX, type ReactNode, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { ReviewFields } from "./fields";
-import { useReviewEditor } from "./editor-controller";
 import { OriginalMaterial, ReviewMaterialPreload } from "./original";
 import { type Category, type Detail, type Item, deadline, sources } from "./model";
 
 type Props = Readonly<{
   item: Item;
-  barrier: DraftBarrier;
+  decisions: ReviewDecisions;
   disabled: boolean;
-  finished: (items: ReadonlyArray<Detail>, skipped: boolean) => void;
 }>;
 export const ReviewEditor = (props: Props): JSX.Element => {
   const expired = useReviewExpired(props.item);
@@ -61,7 +59,7 @@ const ExpiredReviewItem = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
   </section>
 );
 
-const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Element => {
+const ReviewItemEditor = ({ item, decisions, disabled }: Props): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
   const [query] = useState(() =>
     apiClient.query("ingestion", "getReviewItem", {
@@ -76,14 +74,10 @@ const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Ele
   const categories = useAtomValue(categoryQuery).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   const refreshCategories = useAtomRefresh(categoryQuery);
-  const [recovery, setRecovery] = useState(0);
-  const [previous, setPrevious] = useState<Option.Option<Detail>>(Option.none);
   const recover = (): void => {
-    if (detail._tag === "Ready") setPrevious(Option.some(detail.value.data));
-    barrier.delete(item.id);
-    refresh();
+    if (detail._tag === "Ready") decisions.recoverItem(detail.value.data);
+    else refresh();
     refreshCategories();
-    setRecovery((value) => value + 1);
   };
   if (detail._tag === "Initial" || categories._tag === "Initial") {
     return <ReviewItemUnavailable item={item} recover={recover} loading />;
@@ -91,7 +85,7 @@ const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Ele
   if (detail._tag !== "Ready" || categories._tag !== "Ready") {
     return <ReviewItemUnavailable item={item} recover={recover} loading={false} />;
   }
-  if (Option.isSome(previous) && previous.value === detail.value.data) {
+  if (decisions.editor(detail.value.data).recovering) {
     return (
       <ReviewItemFrame item={item}>
         <RecoveringReviewItem recover={recover} />
@@ -104,9 +98,8 @@ const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Ele
         <ReviewItemFailure recover={recover} />
       ) : null}
       <ReadyEditor
-        key={`${item.id}:${recovery}`}
         detail={detail.value.data}
-        barrier={barrier}
+        decisions={decisions}
         disabled={[
           disabled,
           ...[detail, categories].map(
@@ -114,7 +107,6 @@ const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Ele
           ),
         ].some(Boolean)}
         categories={categories.value.data}
-        finished={finished}
         recover={recover}
       />
     </ReviewItemFrame>
@@ -168,23 +160,21 @@ const ReviewItemFailure = ({ recover }: Readonly<{ recover: () => void }>): JSX.
 const ReadyEditor = ({
   detail,
   categories,
-  finished,
   recover,
-  barrier,
+  decisions,
   disabled,
 }: Readonly<{
   detail: Detail;
-  barrier: DraftBarrier;
+  decisions: ReviewDecisions;
   disabled: boolean;
   categories: ReadonlyArray<Category>;
-  finished: Props["finished"];
   recover: () => void;
 }>): JSX.Element => {
-  const apiClient = useRouter().options.context.apiClient;
-  const editor = useReviewEditor({ apiClient, detail, finished, barrier });
+  const editor = decisions.editor(detail);
+  const act = (kind: "Create" | "Skip"): void => decisions.decide(detail, kind);
   const locked = editor.locked || disabled;
-  if (detail.item.status !== "pending") {
-    return <HistoryDetail detail={detail} />;
+  if (editor.detail.item.status !== "pending") {
+    return <HistoryDetail detail={editor.detail} />;
   }
   const failed = editor.feedback === "uncertain" || editor.feedback === "failed";
   return (
@@ -197,13 +187,13 @@ const ReadyEditor = ({
           <h2 className="sr-only">Completa la transacción</h2>
           <ReviewEditorNotice
             feedback={editor.feedback}
-            creationRequired={Option.isNone(editor.creation)}
+            creationRequired={!editor.canCreate}
             reason={reviewReason(detail.item)}
             recover={recover}
           />
           <ReviewFields
             draft={editor.draft}
-            change={editor.change}
+            change={(draft) => decisions.change(detail, draft)}
             locked={locked}
             categories={categories}
             timeZone={detail.item.timeZone}
@@ -217,7 +207,7 @@ const ReadyEditor = ({
             <output>{failed ? "Revisión necesaria" : feedbackCopy[editor.feedback]}</output>
           </>
         }
-        actions={<ReviewEditorActions editor={editor} locked={locked} />}
+        actions={<ReviewEditorActions editor={editor} locked={locked} act={act} />}
       />
     </>
   );
@@ -226,15 +216,17 @@ const ReadyEditor = ({
 const ReviewEditorActions = ({
   editor,
   locked,
-}: Readonly<{ editor: ReturnType<typeof useReviewEditor>; locked: boolean }>): JSX.Element => (
+  act,
+}: Readonly<{
+  editor: ReviewEditorState;
+  locked: boolean;
+  act: (kind: "Create" | "Skip") => void;
+}>): JSX.Element => (
   <>
-    <Button variant="ghost" onClick={() => editor.act("Skip")} disabled={locked}>
+    <Button variant="ghost" onClick={() => act("Skip")} disabled={locked}>
       Omitir
     </Button>
-    <Button
-      onClick={() => editor.act("Create")}
-      disabled={locked || Option.isNone(editor.creation)}
-    >
+    <Button onClick={() => act("Create")} disabled={locked || !editor.canCreate}>
       Confirmar
     </Button>
   </>

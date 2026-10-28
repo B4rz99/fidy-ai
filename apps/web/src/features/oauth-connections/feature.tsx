@@ -155,5 +155,3 @@ export const OAuthReviewFeature = (): JSX.Element => {
     </OAuthState>
   );
 };
-
-export { OAuthOperationFeature } from "./operation-feature";

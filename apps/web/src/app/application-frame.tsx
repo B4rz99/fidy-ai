@@ -30,9 +30,7 @@ export const ApplicationFrame = (): JSX.Element => {
   const oauthReview = useRouterState({
     select: (state) =>
       state.matches.some(
-        (match) =>
-          match.routeId === "/independent-application/oauth/review/$requestId" ||
-          match.routeId === "/independent-application/oauth/operation/$reference"
+        (match) => match.routeId === "/independent-application/oauth/review/$requestId"
       ),
   });
   const independentControls = useRouterState({
@@ -42,8 +40,7 @@ export const ApplicationFrame = (): JSX.Element => {
           match.routeId === "/independent-application/settings/privacy" ||
           match.routeId === "/independent-application/connections/result" ||
           match.routeId === "/independent-application/upgrade" ||
-          match.routeId === "/independent-application/oauth/review/$requestId" ||
-          match.routeId === "/independent-application/oauth/operation/$reference"
+          match.routeId === "/independent-application/oauth/review/$requestId"
       ),
   });
   if (frame === "refused") return <AccessRefused />;

@@ -217,7 +217,7 @@ test("built browser approves an exact connection and exchanges its callback code
         (yield* Effect.tryPromise(() => request.post(`${api}/oauth/token`, { form }))).status()
       ).toBe(invalid);
       yield* assertResidentHostSession(request, token.access_token);
-      yield* exerciseBrowserOperationApproval(page, request, token.access_token);
+      yield* exerciseNativeOperationApproval(page, request, token.access_token);
       yield* inspectAndRevoke({ page, request, query, token });
     })
   );
@@ -782,40 +782,17 @@ const callReviewedOperation = (
       },
     },
   });
-const exerciseBrowserOperationApproval = (
+const exerciseNativeOperationApproval = (
   page: Page,
   request: APIRequestContext,
   bearer: string
 ): Effect.Effect<void, TestFailure> =>
   Effect.gen(function* () {
-    const { args, reference } = yield* prepareBrowserOperation(request, bearer);
+    const { args, reference } = yield* prepareNativeOperation(request, bearer);
     const continuation = {
       requestState: reference,
       inputResponses: { review: { action: "accept", content: { confirm: true } } },
     };
-    const forged = yield* Effect.tryPromise(() =>
-      callReviewedOperation(request, bearer, { name: "memory.forget", input: args, continuation })
-    );
-    expect(yield* Effect.tryPromise(() => forged.json())).toMatchObject({
-      result: { isError: true },
-    });
-    yield* Effect.tryPromise(() => page.goto(`/oauth/operation/${reference}`));
-    yield* Effect.tryPromise((signal) =>
-      expect(page.getByRole("heading", { name: "Revisar operación" })).toBeVisible({ signal })
-    );
-    yield* Effect.tryPromise((signal) =>
-      expect(
-        page.getByRole("heading", { name: "<img src=x onerror=alert(1)>", exact: true })
-      ).toBeVisible({ signal })
-    );
-    yield* Effect.tryPromise(() => expect(page.getByRole("main").locator("img")).toHaveCount(0));
-    yield* Effect.tryPromise(() =>
-      expect(page.getByRole("button", { name: "Aprobar operación" })).toBeEnabled()
-    );
-    yield* Effect.tryPromise(() => page.getByRole("button", { name: "Aprobar operación" }).click());
-    yield* Effect.tryPromise(() =>
-      expect(page.getByRole("status")).toContainText("Aprobación registrada")
-    );
     const executed = yield* Effect.tryPromise(() =>
       callReviewedOperation(request, bearer, { name: "memory.forget", input: args, continuation })
     );
@@ -839,12 +816,12 @@ const exerciseBrowserOperationApproval = (
     expect(yield* Effect.tryPromise(() => page.evaluate(browserStorageCount))).toBe(0);
   });
 
-const prepareBrowserOperation = Effect.fn(function* (request: APIRequestContext, bearer: string) {
+const prepareNativeOperation = Effect.fn(function* (request: APIRequestContext, bearer: string) {
   const createdMemory = yield* Effect.tryPromise(() =>
     callReviewedOperation(request, bearer, {
       name: "memory.remember",
       input: {
-        payload: { text: "Synthetic browser approval memory" },
+        payload: { text: "Synthetic native approval memory" },
       },
       continuation: {},
     })

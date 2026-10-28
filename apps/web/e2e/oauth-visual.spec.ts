@@ -1,13 +1,7 @@
 import type { Page } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
-import {
-  type ConsentState,
-  installOAuthReview,
-  operationInput,
-  operationReference,
-  reviewReference,
-} from "./oauth-visual-fixture";
+import { type ConsentState, installOAuthReview, reviewReference } from "./oauth-visual-fixture";
 
 const { test, expect } = playwright;
 const { AxeBuilder } = await import("@axe-core/playwright");
@@ -22,12 +16,6 @@ const destinations = [
     path: `/oauth/review/${reviewReference}`,
     title: "Conectar con Fidy",
     action: "Conectar",
-  },
-  {
-    name: "operation",
-    path: `/oauth/operation/${operationReference}`,
-    title: "Revisar operación",
-    action: "Aprobar operación",
   },
 ];
 const captureDirectory = "test-results/oauth-visual";
@@ -51,8 +39,6 @@ test.afterEach(({ page }, information) =>
   )
 );
 
-const expectOneMutation = (mutations: ReadonlyArray<unknown>): Promise<void> =>
-  expect.poll(() => mutations.length).toBe(1);
 const waitForFonts = (): Promise<void> => document.fonts.ready.then(() => undefined);
 const scrollToTop = (): void => window.scrollTo(0, 0);
 const dimensions = (): Readonly<{ content: number; viewport: number }> => ({
@@ -148,16 +134,9 @@ for (const viewport of viewports) {
                 page.getByRole("button", { name: "Abrir agente Fidy", exact: true })
               ).toBeVisible({ signal })
             );
-            if (destination.name === "operation") {
-              yield* Effect.tryPromise((signal) =>
-                expect(page.getByRole("main").locator("pre")).toHaveText(operationInput, { signal })
-              );
-            }
             yield* Effect.tryPromise((signal) =>
               expect(page.getByRole("main").locator("time").first()).toHaveText(
-                destination.name === "operation"
-                  ? "27 oct 2026 · 8:05 a. m."
-                  : "25 ene 2027 · 8:00 a. m.",
+                "25 ene 2027 · 8:00 a. m.",
                 { signal }
               )
             );
@@ -199,9 +178,8 @@ for (const viewport of viewports) {
               .getByRole("main")
               .getByRole("link", { name: "Iniciar sesión", exact: true });
             yield* Effect.tryPromise((signal) => expect(login).toBeVisible({ signal }));
-            const parameter = destination.name === "connection" ? "oauthRequest" : "oauthOperation";
-            const reference =
-              destination.name === "connection" ? reviewReference : operationReference;
+            const parameter = "oauthRequest";
+            const reference = reviewReference;
             yield* Effect.tryPromise((signal) =>
               expect(login).toHaveAttribute("href", `/login?${parameter}=${reference}`, { signal })
             );
@@ -336,85 +314,6 @@ test("OAuth keyboard review submits only the selected permissions and duration, 
     })
   ));
 
-for (const decision of ["approve", "cancel"] as const) {
-  test(`OAuth operation ${decision} stays single-shot while pending and preserves its exact binding`, ({
-    page,
-  }) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const observed = yield* installOAuthReview(page, {
-          review: "ready",
-          consent: "granted",
-          mutation: "pending",
-        });
-        yield* Effect.tryPromise((signal) =>
-          page.goto(`/oauth/operation/${operationReference}`, { signal })
-        );
-        const approve = page.getByRole("button", { name: "Aprobar operación", exact: true });
-        const cancel = page.getByRole("button", { name: "Cancelar operación", exact: true });
-        yield* Effect.tryPromise((signal) =>
-          (decision === "approve" ? approve : cancel).click({ signal })
-        );
-        yield* Effect.tryPromise((signal) => expect(approve).toBeDisabled({ signal }));
-        yield* Effect.tryPromise((signal) => expect(cancel).toBeDisabled({ signal }));
-        yield* Effect.tryPromise(() => expectOneMutation(observed.mutations));
-        const submitted = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(
-          observed.mutations[0]?.body
-        );
-        expect(submitted).toEqual({
-          reference: operationReference,
-          inputDigest: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-          disclosureRevision: "budget-deletion-v1",
-          decision,
-        });
-        observed.release();
-        yield* Effect.tryPromise((signal) =>
-          expect(page.getByRole("status")).toContainText(
-            decision === "approve"
-              ? "La operación aún no se ha ejecutado"
-              : "No se ejecutó ningún cambio",
-            { signal }
-          )
-        );
-        yield* Effect.tryPromise((signal) => expect(approve).toHaveCount(0, { signal }));
-        yield* capture(page, `operation-${decision}`);
-        expect(observed.unexpected).toEqual([]);
-      })
-    ));
-}
-
-test("OAuth operation uncertain delivery removes both decisions without executing or retrying", ({
-  page,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const observed = yield* installOAuthReview(page, {
-        review: "ready",
-        consent: "granted",
-        mutation: "unknown",
-      });
-      yield* Effect.tryPromise((signal) =>
-        page.goto(`/oauth/operation/${operationReference}`, { signal })
-      );
-      yield* Effect.tryPromise((signal) =>
-        page.getByRole("button", { name: "Aprobar operación", exact: true }).click({ signal })
-      );
-      yield* Effect.tryPromise((signal) =>
-        expect(page.getByRole("alert")).toContainText("No pudimos confirmar el resultado", {
-          signal,
-        })
-      );
-      yield* Effect.tryPromise((signal) =>
-        expect(
-          page.getByRole("button", { name: /Aprobar operación|Cancelar operación/u })
-        ).toHaveCount(0, { signal })
-      );
-      yield* capture(page, "operation-unknown");
-      expect(observed.mutations).toHaveLength(1);
-      expect(observed.unexpected).toEqual([]);
-    })
-  ));
-
 test("OAuth connection cancellation cannot be repeated after its acknowledgement", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -451,27 +350,6 @@ const terminalStates = [
     name: "connection-unknown",
     path: `/oauth/review/${reviewReference}`,
     button: "Conectar",
-    mutation: "unknown",
-    message: "No pudimos confirmar el resultado",
-  },
-  {
-    name: "operation-approved",
-    path: `/oauth/operation/${operationReference}`,
-    button: "Aprobar operación",
-    mutation: "success",
-    message: "La operación aún no se ha ejecutado",
-  },
-  {
-    name: "operation-cancelled",
-    path: `/oauth/operation/${operationReference}`,
-    button: "Cancelar operación",
-    mutation: "success",
-    message: "No se ejecutó ningún cambio",
-  },
-  {
-    name: "operation-unknown",
-    path: `/oauth/operation/${operationReference}`,
-    button: "Aprobar operación",
     mutation: "unknown",
     message: "No pudimos confirmar el resultado",
   },

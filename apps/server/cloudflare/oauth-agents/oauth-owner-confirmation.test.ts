@@ -1,4 +1,3 @@
-import { approveFirstPartyOperation } from "./oauth-first-party.test-fixture";
 import { categoryIds } from "../../src/core/categories/contract";
 import { Effect, Option, Schema } from "effect";
 import { nativeHostBridgeFile, runNativeHostFixture } from "./native-host.test-fixture";
@@ -162,7 +161,6 @@ it.each(nativeOwnerJourneys)(
             "transactions.deleteTransaction",
           ].some((operation) => operation === name)
         ) {
-          yield* approveFirstPartyOperation(fixture, pending.result.requestState);
         }
         const accepted = yield* wait(
           nativeConfirmationCall({
@@ -213,7 +211,6 @@ it.each(["created_at_ms", "updated_at_ms"] as const)(
         const pending = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ result: Schema.Struct({ requestState: Schema.String }) })
         )(yield* wait(review.json()));
-        yield* approveFirstPartyOperation(fixture, pending.result.requestState);
         yield* wait(fixture.db.prepare(`UPDATE memories SET ${column}=${column}+1`).run());
         const accepted = yield* wait(
           nativeConfirmationCall({

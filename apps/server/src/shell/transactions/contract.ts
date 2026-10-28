@@ -37,7 +37,6 @@ const destructiveWrite = operationPolicy({
   access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "required",
-  oauthApproval: "first-party",
   kind: "mutation",
 });
 

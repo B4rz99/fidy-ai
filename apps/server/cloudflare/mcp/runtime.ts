@@ -41,7 +41,9 @@ import {
 } from "../canonical-admission/operations";
 
 const queryLifetimeMilliseconds = 3000;
-const transportLifetimeMilliseconds = 5000;
+const mutationLifetimeMilliseconds = 30000;
+const admissionLifetimeMilliseconds = 5000;
+const transportLifetimeMilliseconds = mutationLifetimeMilliseconds + admissionLifetimeMilliseconds;
 const maximumResidentOwners = 8;
 const maximumResidentLifetimeMilliseconds = 300000;
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
@@ -125,10 +127,17 @@ const dispatchCanonicalTool = (
       });
     })
   );
+const operationLifetime = (operation: CatalogOperation): number =>
+  operation.policy.kind === "mutation" ? mutationLifetimeMilliseconds : queryLifetimeMilliseconds;
 const canonicalDeadline = (
-  input: Readonly<{ admission: ToolAdmission; current: number; continuation: boolean }>
+  input: Readonly<{
+    admission: ToolAdmission;
+    current: number;
+    continuation: boolean;
+    operation: CatalogOperation;
+  }>
 ): number => {
-  const boundedExecution = input.current + queryLifetimeMilliseconds;
+  const boundedExecution = input.current + operationLifetime(input.operation);
   if (input.continuation) return boundedExecution;
   return Math.min(boundedExecution, input.admission.transportDeadlineMilliseconds);
 };
@@ -221,6 +230,7 @@ const executeAdmittedTool = (
         admission: input,
         current: yield* Clock.currentTimeMillis,
         continuation: Option.isSome(work.confirmation),
+        operation,
       }),
       operation: operation.id,
       input: encodedInput,
@@ -235,7 +245,7 @@ const executeAdmittedTool = (
       }),
     });
     const response = yield* dispatchCanonicalTool(input, admission).pipe(
-      Effect.timeout(queryLifetimeMilliseconds)
+      Effect.timeout(operationLifetime(operation))
     );
     if (response.headers.get("fidy-oauth-review") === "1") {
       const requested = yield* requestNativeConfirmation({ response, context, responsePolicy });
@@ -367,7 +377,10 @@ export const handleMcpRequest = (
     return yield* forwardMcp(input, caller.value.subject, body);
   }).pipe(
     Effect.raceFirst(awaitRequestAbort(input.request)),
-    Effect.timeoutOrElse({ duration: "5 seconds", orElse: () => Effect.succeed(unavailable()) }),
+    Effect.timeoutOrElse({
+      duration: transportLifetimeMilliseconds,
+      orElse: () => Effect.succeed(unavailable()),
+    }),
     Effect.catchCause(() => Effect.succeed(unavailable()))
   );
 

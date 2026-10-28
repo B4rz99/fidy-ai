@@ -41,8 +41,9 @@ establish authenticated Production journey verification.
 
 ## Verify the Production journeys
 
-Before first publication, use a dedicated authorized synthetic Production User and follow the
-actual instructions. Record serving API/web revisions, client versions, UTC time and outcomes:
+Before first publication, use a dedicated authorized synthetic Production User, or an account
+whose owner explicitly authorizes the marked test workflow, and follow the actual instructions.
+Record serving API/web revisions, client versions, UTC time and outcomes:
 
 1. Connect Claude Code and Codex through MCP, approve the intended scopes/lifetime, discover tools
    and query a Transaction.

@@ -6,7 +6,7 @@ const keyLength = 32;
 const nonceLength = 12;
 const EncodedKey = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u));
 const Grant = Schema.Struct({
-  accessToken: Schema.String,
+  accessToken: Schema.OptionFromNullOr(Schema.String),
   refreshToken: Schema.OptionFromNullOr(Schema.String),
   expiresAtMilliseconds: Schema.Int,
 });
@@ -33,7 +33,7 @@ export const sealGrant = (
   Effect.gen(function* () {
     const bytes = yield* decodeGrantKey(input.key);
     const plaintext = yield* Schema.encodeEffect(Schema.fromJsonString(Grant))({
-      accessToken: Redacted.value(input.grant.accessToken),
+      accessToken: Option.map(input.grant.accessToken, Redacted.value),
       refreshToken: Option.map(input.grant.refreshToken, Redacted.value),
       expiresAtMilliseconds: input.grant.expiresAtMilliseconds,
     });
@@ -99,7 +99,7 @@ export const openGrant = (
     const grant = yield* Schema.decodeEffect(Schema.fromJsonString(Grant))(plaintext);
     return {
       ...grant,
-      accessToken: Redacted.make(grant.accessToken),
+      accessToken: Option.map(grant.accessToken, Redacted.make),
       refreshToken: Option.map(grant.refreshToken, Redacted.make),
     };
   }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable()));

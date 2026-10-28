@@ -2039,6 +2039,30 @@ it("retains known tokens for cleanup even when the exchange omits the required s
     })
   ));
 
+it.each(["missing-access", "invalid-access"] as const)(
+  "retains a received refresh token when the exchange has %s",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const { bank, callback } = yield* prepareActivation(db);
+        bank.scenario(scenario);
+        yield* Effect.tryPromise(() => callback());
+        yield* sweepConnectionGrants({
+          db,
+          key: Option.some(Redacted.make("A".repeat(43))),
+          bank: Option.some(bank.cleanup),
+        });
+        expect(bank.revocations()).toEqual(["synthetic-refresh"]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT state,envelope FROM connection_grants").first()
+          )
+        ).toEqual({ state: "cleanup_required", envelope: null });
+      })
+    )
+);
+
 it("cleans only the failed generation after the same User establishes a new active grant", () =>
   Effect.runPromise(
     Effect.gen(function* () {

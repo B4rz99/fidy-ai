@@ -111,8 +111,14 @@ export const revokeGrant = (input: Cleanup): Effect.Effect<void, BancolombiaAuth
           tokenType: "refresh_token",
         }))
       ),
-      { token: input.grant.accessToken, tokenType: "access_token" },
+      ...Option.toArray(
+        Option.map(input.grant.accessToken, (token): Token => ({
+          token,
+          tokenType: "access_token",
+        }))
+      ),
     ];
+    if (tokens.length === 0) return yield* failed();
     const prepared = yield* Effect.forEach(tokens, (token) =>
       prepareCleanupToken(input, token).pipe(Effect.result)
     );

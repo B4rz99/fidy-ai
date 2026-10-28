@@ -53,7 +53,7 @@ const TokenResponse = Schema.Struct({
   ),
 });
 const HeldGrant = Schema.Struct({
-  access_token: TokenResponse.fields.access_token,
+  access_token: Schema.optionalKey(Schema.Unknown),
   refresh_token: Schema.optionalKey(Schema.Unknown),
   expires_in: Schema.optionalKey(Schema.Unknown),
 });
@@ -313,13 +313,18 @@ export const activate = (
     const body = new TextDecoder().decode(response.body);
     const held = yield* Schema.decodeEffect(Schema.fromJsonString(HeldGrant))(body);
     const seconds = Schema.decodeUnknownOption(TokenResponse.fields.expires_in)(held.expires_in);
-    const accessToken = Redacted.make(held.access_token);
+    const accessToken = Option.map(
+      Schema.decodeUnknownOption(TokenResponse.fields.access_token)(held.access_token),
+      Redacted.make
+    );
+    const refreshToken = Option.map(
+      Schema.decodeUnknownOption(TokenResponse.fields.access_token)(held.refresh_token),
+      Redacted.make
+    );
+    if (Option.isNone(accessToken) && Option.isNone(refreshToken)) return yield* failed();
     yield* input.retainGrant({
       accessToken,
-      refreshToken: Option.map(
-        Schema.decodeUnknownOption(TokenResponse.fields.access_token)(held.refresh_token),
-        Redacted.make
-      ),
+      refreshToken,
       expiresAtMilliseconds: Option.match(seconds, {
         onNone: () => Number.MAX_SAFE_INTEGER,
         onSome: (value) => exchangedAt + value * millisecondsPerSecond,
@@ -329,7 +334,7 @@ export const activate = (
     yield* validateIdentity(input, accepted, keys);
     const consentBearer = yield* input.consentBearer;
     yield* verifyConsent(input, consentBearer);
-    const accounts = yield* discoverAccounts(input, accessToken);
+    const accounts = yield* discoverAccounts(input, Redacted.make(accepted.access_token));
     yield* verifyConsent(input, consentBearer);
     return accounts;
   }).pipe(Effect.mapError(failed), Effect.timeout("60 seconds"), Effect.mapError(failed));

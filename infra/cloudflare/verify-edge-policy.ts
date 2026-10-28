@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "086f8900e2e6e74df58d53565b0d7bc15173382385f0e9ad5104852eb2472171";
+const expectedEdgePolicyDigest = "1a22128c3be881f631f176034eab9aecbc9d90e9324d9d0ea527e3378ca58a01";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/connections/internal/cleanup.ts", import.meta.url)

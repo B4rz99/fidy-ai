@@ -30,6 +30,8 @@ type Scenario =
   | "ready"
   | "issuer"
   | "missing-identity"
+  | "missing-access"
+  | "invalid-access"
   | "subject"
   | "expired"
   | "future"
@@ -93,6 +95,13 @@ const fixtureKeys = Effect.gen(function* () {
 });
 type Material = Effect.Success<typeof fixtureKeys>;
 
+const exchangeAccess = (
+  state: State
+): Readonly<{ access_token: string | boolean }> | Readonly<Record<string, never>> => {
+  if (state.scenario === "missing-access") return {};
+  if (state.scenario === "invalid-access") return { access_token: false };
+  return { access_token: `${state.tokenLabel}synthetic-access` };
+};
 const tokenResponse = (
   request: HttpClientRequest.HttpClientRequest,
   state: State,
@@ -106,7 +115,7 @@ const tokenResponse = (
     return new Response(null, { status: uncertainStatus });
   }
   return Response.json({
-    access_token: codeExchange ? `${state.tokenLabel}synthetic-access` : "synthetic-application",
+    ...(codeExchange ? exchangeAccess(state) : { access_token: "synthetic-application" }),
     ...(codeExchange
       ? {
           refresh_token: `${state.tokenLabel}synthetic-refresh`,

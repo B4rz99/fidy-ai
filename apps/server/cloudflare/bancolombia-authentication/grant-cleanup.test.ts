@@ -17,6 +17,8 @@ type Scenario =
   | "unauthorized"
   | "endpoint-drift"
   | "access-only"
+  | "refresh-only"
+  | "empty"
   | "expired-access"
   | "proof-write";
 const inspectResponse = (scenario: Scenario, active: boolean, hint: string): Response =>
@@ -96,9 +98,12 @@ const cleanup = Effect.fn(function* (scenario: Scenario) {
           })
         : Option.none(),
     grant: {
-      accessToken: Redacted.make("synthetic-access"),
+      accessToken:
+        scenario === "refresh-only" || scenario === "empty"
+          ? Option.none()
+          : Option.some(Redacted.make("synthetic-access")),
       refreshToken:
-        scenario === "access-only"
+        scenario === "access-only" || scenario === "empty"
           ? Option.none()
           : Option.some(Redacted.make("synthetic-refresh")),
       expiresAtMilliseconds: scenario === "expired-access" ? 0 : 300000,
@@ -163,5 +168,26 @@ it.effect("can clean an expired access token alongside a positively inspected re
     const { result, revoked } = yield* cleanup("expired-access");
     expect(Exit.isSuccess(result)).toBe(true);
     expect([...revoked]).toEqual(["synthetic-refresh", "synthetic-access"]);
+  })
+);
+
+it.effect("cleans a received refresh token without an access token", () =>
+  Effect.gen(function* () {
+    const { result, revoked, requests } = yield* cleanup("refresh-only");
+    expect(Exit.isSuccess(result)).toBe(true);
+    expect([...revoked]).toEqual(["synthetic-refresh"]);
+    expect(requests).toEqual([
+      `${as}/introspection:refresh_token`,
+      `${as}/token/revoke:refresh_token`,
+      `${as}/introspection:refresh_token`,
+    ]);
+  })
+);
+
+it.effect("refuses completion when no token is held", () =>
+  Effect.gen(function* () {
+    const { result, revoked } = yield* cleanup("empty");
+    expect(Exit.isFailure(result)).toBe(true);
+    expect([...revoked]).toEqual([]);
   })
 );

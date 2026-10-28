@@ -103,7 +103,8 @@ No signing key or bank token was exported.
 
 ## Held-grant recovery
 
-Known tokens are retained before validating the complete exchange response. If retaining them fails,
+Known tokens are retained independently before validating the complete exchange response, including
+a refresh token received without a valid access token. An empty response cannot establish cleanup. If retaining them fails,
 Fidy attempts immediate bank cleanup; it still rejects activation, and an unsuccessful cleanup cannot
 be reported as resolved. Failed and superseded grants with an encrypted envelope are eligible for
 private scheduled cleanup.

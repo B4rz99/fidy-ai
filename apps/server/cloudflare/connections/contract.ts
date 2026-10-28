@@ -96,7 +96,7 @@ export const ConnectionCallbackAdmission = Schema.Struct({
 export type ConnectionCallbackAdmission = typeof ConnectionCallbackAdmission.Type;
 
 export type ConnectionBankGrant = Readonly<{
-  accessToken: Redacted.Redacted<string>;
+  accessToken: Option.Option<Redacted.Redacted<string>>;
   refreshToken: Option.Option<Redacted.Redacted<string>>;
   expiresAtMilliseconds: number;
 }>;

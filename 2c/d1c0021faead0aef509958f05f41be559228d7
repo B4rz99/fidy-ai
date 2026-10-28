@@ -1,0 +1,23 @@
+infra/cloudflare/static-build-retirement.test.ts
+  s_5b520eabb82fd9::t_2994ef47e1250e 16
+  s_5b520eabb82fd9::t_56bab230a2c4f6 7
+  s_5b520eabb82fd9::t_b8cb40cae33ad1 1-6,8-15,17-37
+apps/site/.gitignore
+  s_5b520eabb82fd9::t_bbb59bfa695f24 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2cd1c0021faead0aef509958f05f41be559228d7",
+  "prompts": {},
+  "sessions": {
+    "s_5b520eabb82fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1831f-5f52-73f1-a50f-586b77de9eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,12 +1,21 @@
 name: Publish customer docs
 
 on:
-  workflow_dispatch:
-    inputs:
-      verification:
-        description: JSON attestation for the exact built docs digest and three verified Production journeys (see docs/operations/docs-site.md)
-        type: string
-        required: true
+  push:
+    branches: [trunk]
+    paths:
+      - apps/docs/**
+      - infra/docs/**
+      - design/**
+      - bun.lock
+      - package.json
+      - patches/**
+      - tools/astro/**
+      - scripts/install-workspace.sh
+      - scripts/install-bun.sh
+      - .github/actions/bun-runtime/**
+      - .github/actions/configure-alchemy-cloudflare-profile/**
+      - .github/workflows/docs-publication.yml
 
 permissions:
   contents: read
@@ -26,9 +35,10 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
-      - name: Check out the selected trunk revision
+      - name: Check out the exact trunk revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Select Node for Astro build tooling
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -38,19 +48,14 @@ jobs:
         uses: ./.github/actions/bun-runtime
       - name: Install locked workspace
         run: bash scripts/install-workspace.sh --ignore-scripts
-      - name: Save the owner's verification without logging it
-        env:
-          DOCS_VERIFICATION: ${{ inputs.verification }}
-        run: |
-          printf '%s' "$DOCS_VERIFICATION" > "$RUNNER_TEMP/docs-verification.json"
-          echo "DOCS_VERIFICATION_FILE=$RUNNER_TEMP/docs-verification.json" >> "$GITHUB_ENV"
       - name: Install the browser for documentation checks
         run: bunx playwright install --with-deps chromium
       - name: Validate the publication and focused checks
         run: |
-          bun run --cwd apps/docs build:publication
+          bun run docs:build
           bun run docs:test
           bun run --cwd apps/docs typecheck
+          bun run --cwd infra/docs typecheck
           bun run --cwd apps/docs test:browser
       - name: Configure Alchemy's ephemeral Cloudflare profile
         uses: ./.github/actions/configure-alchemy-cloudflare-profile
@@ -59,7 +64,9 @@ jobs:
         run: bun run publish
       - name: Verify the public documentation artifact
         run: |
-          curl --fail --silent --show-error --retry 3 https://docs.fidyapp.com/index.md -o "$RUNNER_TEMP/docs-index.md"
+          curl --fail --silent --show-error --max-time 30 --retry 3 https://docs.fidyapp.com/ -o "$RUNNER_TEMP/docs-index.html"
+          cmp apps/docs/dist/index.html "$RUNNER_TEMP/docs-index.html"
+          curl --fail --silent --show-error --max-time 30 --retry 3 https://docs.fidyapp.com/index.md -o "$RUNNER_TEMP/docs-index.md"
           cmp apps/docs/dist/index.md "$RUNNER_TEMP/docs-index.md"
-          curl --fail --silent --show-error --retry 3 https://docs.fidyapp.com/llms.txt -o "$RUNNER_TEMP/docs-llms.txt"
+          curl --fail --silent --show-error --max-time 30 --retry 3 https://docs.fidyapp.com/llms.txt -o "$RUNNER_TEMP/docs-llms.txt"
           cmp apps/docs/dist/llms.txt "$RUNNER_TEMP/docs-llms.txt"

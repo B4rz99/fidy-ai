@@ -1,0 +1,22 @@
+docs/operations/docs-site.md
+  s_2c9d6c1daa679a::t_7dfa1427cd8f13 44-46
+docs/operations/docs-site-plan.md
+  s_2c9d6c1daa679a::t_ca48fc76acaef7 88-91
+  s_2c9d6c1daa679a::t_cbeac28e110278 60,64-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0c66e2cf5f1339f397901c977a4fad7776b3fffb",
+  "prompts": {},
+  "sessions": {
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

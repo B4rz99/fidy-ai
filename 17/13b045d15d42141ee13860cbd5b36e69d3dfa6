@@ -1,0 +1,28 @@
+infra/cloudflare/staged-recovery.ts
+  s_5b520eabb82fd9::t_c18a0497d6bbbc 26-27,75-76
+  s_5b520eabb82fd9::t_3fa9272e6ac7d5 28
+infra/cloudflare/staged-recovery.test.ts
+  s_5b520eabb82fd9::t_0089b7cfa37875 99-125
+  s_5b520eabb82fd9::t_e7984f1d6d8825 187-219
+  s_5b520eabb82fd9::t_26624106918a40 98
+docs/operations/production-releases.md
+  s_5b520eabb82fd9::t_c18a0497d6bbbc 497-501
+.github/workflows/production-staged-recovery.yml
+  s_5b520eabb82fd9::t_c18a0497d6bbbc 7,11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1713b045d15d42141ee13860cbd5b36e69d3dfa6",
+  "prompts": {},
+  "sessions": {
+    "s_5b520eabb82fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1831f-5f52-73f1-a50f-586b77de9eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

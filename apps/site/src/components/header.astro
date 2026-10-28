@@ -3,10 +3,11 @@ import { LaunchButton } from "../islands/registration";
 import ThemeToggle from "./theme-toggle.astro";
 
 const links = [
-  ["como", "Cómo funciona"],
-  ["funciones", "Funciones"],
-  ["precios", "Precios"],
-  ["preguntas", "Preguntas frecuentes"],
+  ["#como", "Cómo funciona"],
+  ["#funciones", "Funciones"],
+  ["#precios", "Precios"],
+  ["#preguntas", "Preguntas frecuentes"],
+  ["https://docs.fidyapp.com", "Documentación"],
 ];
 ---
 
@@ -15,8 +16,8 @@ const links = [
     <img src="/fidy-logo.webp" alt="fidy" width="160" height="102" />
   </a>
   <nav class="navlinks" aria-label="Principal">
-    {links.map(([id, label]) => (
-      <a href={`#${id}`}>{label}</a>
+    {links.map(([href, label]) => (
+      <a href={href}>{label}</a>
     ))}
   </nav>
   <div class="navend">
@@ -47,8 +48,8 @@ const links = [
     popover="auto"
     aria-label="Navegación compacta"
   >
-    {links.map(([id, label]) => (
-      <a href={`#${id}`}>{label}</a>
+    {links.map(([href, label]) => (
+      <a href={href}>{label}</a>
     ))}
   </nav>
 </header>

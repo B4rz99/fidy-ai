@@ -59,8 +59,9 @@ unchanged sources produced the same publication digest.
 
 - [x] Verify all three journeys against Production with the documented clients and CLI.
 - [x] Replace manual attestation/dispatch with automatic publication on trunk changes.
-- [ ] Record Production verification outcomes and merge the automatic deployment change.
-- [ ] Verify the public site and point marketing discovery to the now-served docs hostname.
+- [x] Record Production verification outcomes and merge the automatic deployment change.
+- [x] Verify public guides, Markdown, `llms.txt`, search assets, indexing and real 404 behavior.
+- [x] Add marketing navigation and agent-discovery links to the served docs hostname.
 
 ## Production verification, 2026-10-28
 
@@ -89,3 +90,17 @@ was blindly retried. The previously reproduced server deadline error was fixed a
 Cleanup reconciliation found five marked test rows across both rounds and zero active rows.
 The two replacement MCP connections were revoked and the CLI test token disabled through Fidy.
 Isolated native profiles were logged out; no other account records or grants were modified.
+
+## Public activation
+
+Automatic docs publication was introduced by [PR #1599](https://github.com/B4rz99/fidy-ai/pull/1599).
+Its first run deployed the independent Worker but public verification found a closed edge-host list
+that omitted `docs.fidyapp.com`. [PR #1607](https://github.com/B4rz99/fidy-ai/pull/1607) added the exact
+owned hostname and a GET/HEAD-only browser-signature exemption, retaining managed WAF and DDoS.
+The deployment-policy regression fails without the fix and passes with it; 37 focused tests pass.
+
+Public checks at 23:31 UTC on 2026-10-28 returned 200 for the homepage, all three primary guides,
+`index.md`, `llms.txt`, robots, sitemap and search assets, and 404 for an unknown page. Live search found the correction guide and the copy action reported Markdown copied. The homepage
+permits indexing and supplies its document CSP. The discovery follow-up adds the now-valid docs
+destination to both marketing navigation layouts and the marketing `llms.txt`; its client-guide
+updates trigger another automatic docs deployment with exact public-artifact verification.

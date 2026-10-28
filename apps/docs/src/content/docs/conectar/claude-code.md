@@ -21,6 +21,6 @@ Conserva `dashboard` únicamente si necesitas ver o editar el tablero. Revisa si
 
 Usa un modo interactivo. Las correcciones requieren la confirmación nativa del cliente; sigue [la guía de corrección](/transacciones/registrar-corregir#corregir-con-mcp).
 
-Claude Code 2.1.289 tiene evidencia local de interacción nativa compatible. Una versión posterior o una prueba local no certifican por sí solas el recorrido completo en producción. Si la interacción falla, consulta [solución de problemas](/ayuda/problemas).
+Verificamos Claude Code 2.1.289 en producción el 28 de octubre de 2026: conexión, registro, corrección con aprobación o cancelación y consulta de transacciones. Las versiones posteriores y otros modos de ejecución necesitan su propia verificación. Si la interacción falla, consulta [solución de problemas](/ayuda/problemas).
 
 Consulta también la [documentación de MCP de Claude Code](https://code.claude.com/docs/en/mcp).

@@ -1,0 +1,19 @@
+docs/operations/docs-site-plan.md
+  s_036f45c3a54b1c::t_938bfcd344f028 35-36,49-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "93076885e5bf901eb0280e4587ba61117fb2ba5e",
+  "prompts": {},
+  "sessions": {
+    "s_036f45c3a54b1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a180b2-716f-7cd2-8260-834c95b527cb",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

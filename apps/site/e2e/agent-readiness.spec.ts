@@ -43,11 +43,13 @@ for (const path of documents) {
     const sidecar = await request.get(path === "/" ? "/index.md" : `${path}.md`);
     expect(sidecar.status()).toBe(ok);
     expect(sidecar.headers()["content-type"]).toContain("text/markdown");
+    expect(sidecar.headers()["x-robots-tag"]).toBe("noindex");
     expect(await sidecar.text()).toBe(body);
     const head = await request.head(path, { headers: { Accept: "text/markdown" } });
     expect(head.status()).toBe(ok);
     expect(head.headers()["content-type"]).toContain("text/markdown");
     expect(await head.text()).toBe("");
+    if (path === "/terminos") expect(markdown.headers()["x-robots-tag"]).toBe("noindex");
   });
 }
 
@@ -67,6 +69,7 @@ test("keeps missing pages as 404 in both representations without reflecting inpu
       expect(body).toContain("/llms.txt");
       expect(body).not.toContain("do-not-reflect");
       expect(body).not.toContain("__ora-404-probe-untrusted");
+      if (accept === "text/markdown") expect(response.headers()["x-robots-tag"]).toBe("noindex");
     })
   );
 });

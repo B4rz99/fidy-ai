@@ -58,6 +58,9 @@ const renderMarkdown = async (
   const markdown = await environment.ASSETS.fetch(new Request(url, { method: "GET" }));
   if (!markdown.ok) return new Response(response.body, { status: response.status, headers });
   headers.set("content-type", "text/markdown; charset=utf-8");
+  if (response.status === notFound || ["/terminos", "/404"].includes(path)) {
+    headers.set("x-robots-tag", "noindex");
+  }
   for (const name of ["content-length", "content-encoding", "etag", "last-modified"]) {
     headers.delete(name);
   }

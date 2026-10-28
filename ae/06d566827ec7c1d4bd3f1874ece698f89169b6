@@ -1,0 +1,25 @@
+infra/cloudflare/production-release.test.ts
+  s_5b520eabb82fd9::t_eabcd25da7ceb1 539-543,552,578
+  s_5b520eabb82fd9::t_8bbfa46c4d6dfc 544-549,554-577,579-582
+  s_5b520eabb82fd9::t_ee129a92cc88ae 550-551,553
+infra/cloudflare/production-release.ts
+  s_5b520eabb82fd9::t_216bf41d212266 132-133,216
+  s_5b520eabb82fd9::t_ee129a92cc88ae 248,259
+  s_5b520eabb82fd9::t_eb86efa69571bc 134-144,212-215,217,242-247,249-256,264,896-898,1327-1335
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae06d566827ec7c1d4bd3f1874ece698f89169b6",
+  "prompts": {},
+  "sessions": {
+    "s_5b520eabb82fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1831f-5f52-73f1-a50f-586b77de9eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

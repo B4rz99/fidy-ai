@@ -1,0 +1,23 @@
+.github/workflows/production.yml
+  s_5b520eabb82fd9::t_5f9e0dff188f7a 88-92
+.github/workflows/ci.yml
+  s_5b520eabb82fd9::t_5f9e0dff188f7a 151-153
+.github/workflows/docs-publication.yml
+  s_5b520eabb82fd9::t_5f9e0dff188f7a 33-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "beee80ba7cb76a3fde4f2f42d5407631405eab48",
+  "prompts": {},
+  "sessions": {
+    "s_5b520eabb82fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1831f-5f52-73f1-a50f-586b77de9eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

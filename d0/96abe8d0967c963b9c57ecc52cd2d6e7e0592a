@@ -1,0 +1,28 @@
+apps/server/cloudflare/oauth-agents/oauth-canonical.test.ts
+  s_2c9d6c1daa679a::t_5d2c49df0b50e6 402,409-410,425-429
+  s_2c9d6c1daa679a::t_d6e1d823dcde02 403-408,430,472-474
+  s_2c9d6c1daa679a::t_d2844eb9568845 422,431-471
+  s_2c9d6c1daa679a::t_05245dacf6a51f 411-421,423-424
+tools/mcp-inspector/package.json
+  s_2c9d6c1daa679a::t_bd078ca9be9ac0 14
+apps/server/cloudflare/mcp/runtime.ts
+  s_2c9d6c1daa679a::t_d0038a8db8ccde 44-46,130-131,133-138,140,233,248,380-383
+tools/mcp-inspector/bun.lock
+  s_2c9d6c1daa679a::t_50555c4b41eff5 9,27,175-176,219,239-240,317
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d096abe8d0967c963b9c57ecc52cd2d6e7e0592a",
+  "prompts": {},
+  "sessions": {
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

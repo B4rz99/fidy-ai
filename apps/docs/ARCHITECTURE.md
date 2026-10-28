@@ -10,7 +10,10 @@ binding, authenticated playground or embedded agent.
 
 `src/content/docs` is the maintained content source. Astro's content loader supplies both rendered
 HTML and the `.md` endpoint for every published page. `llms.txt` derives from those same entries;
-drafts are excluded from all three representations. The Markdown action reads the public `.md`
+drafts are excluded from all three representations. Type-aware lint explicitly runs `astro sync` before loading the docs collection types, so a fresh
+checkout does not depend on another parallel check generating them first. The repository graph
+recognizes `astro:content` as a framework-provided virtual module only inside docs source; other
+unresolved imports still fail. The Markdown action reads the public `.md`
 endpoint and offers an ordinary link when clipboard access is unavailable.
 
 The explicit `docs:reference` command reads the committed server OpenAPI artifact, runtime-decodes

@@ -11,7 +11,8 @@
     "reference:generate": "bun scripts/generate-reference.ts",
     "build:publication": "bun run build && bun scripts/check-publication.ts",
     "publication:inspect": "bun scripts/check-publication.ts --inspect",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "sync": "astro sync"
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.6",

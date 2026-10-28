@@ -155,6 +155,8 @@ apps/server/cloudflare/transactions/performance.test.ts
   s_d9571b3fccd032::t_188257f32216ac 4-7,49,98,121-125
   s_d9571b3fccd032::t_44dce94756bb69 104,111-116,150-151,169-170
   s_d9571b3fccd032::t_3c5d0ad005ac4c 133-140,178
+infra/cloudflare/verify-edge-policy.ts
+  s_d9571b3fccd032::t_a36aa62716a8fb 5
 ---
 {
   "schema_version": "authorship/3.0.0",

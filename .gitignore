@@ -52,3 +52,7 @@ apps/site/test-results/
 apps/site/playwright-report/
 
 .local/browser/
+
+apps/docs/.astro/
+apps/docs/test-results/
+apps/docs/playwright-report/

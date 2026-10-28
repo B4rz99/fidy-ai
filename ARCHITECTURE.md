@@ -6,21 +6,23 @@ fields and operational procedures live in their linked references.
 
 ## System ownership
 
-| Package                                                      | Responsibility                                                                             |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| [Server](apps/server/ARCHITECTURE.md)                        | Domain model, canonical operations, provider contracts and Cloudflare application adapters |
-| [Web](apps/web/ARCHITECTURE.md)                              | React product application and browser interactions                                         |
-| [CLI](apps/cli/ARCHITECTURE.md)                              | Bun executable, server-derived client and native credential storage                        |
-| [Site](apps/site/ARCHITECTURE.md)                            | Public marketing, legal documents and discovery                                            |
-| [Cloudflare infrastructure](infra/cloudflare/alchemy.run.ts) | Deployment topology, resource wiring and edge policy                                       |
-| Workspace                                                    | Dependencies, shared tooling and CI                                                        |
+| Package                                                      | Responsibility                                                                                    |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| [Server](apps/server/ARCHITECTURE.md)                        | Domain model, canonical operations, provider contracts and Cloudflare application adapters        |
+| [Web](apps/web/ARCHITECTURE.md)                              | React product application and browser interactions                                                |
+| [CLI](apps/cli/ARCHITECTURE.md)                              | Bun executable, server-derived client and native credential storage                               |
+| [Docs](apps/docs/ARCHITECTURE.md)                            | Public customer and User-owned-agent guides, generated reference snapshots and manual publication |
+| [Site](apps/site/ARCHITECTURE.md)                            | Public marketing, legal documents and discovery                                                   |
+| [Cloudflare infrastructure](infra/cloudflare/alchemy.run.ts) | Deployment topology, resource wiring and edge policy                                              |
+| Workspace                                                    | Dependencies, shared tooling and CI                                                               |
 
 ## Production boundary
 
 Cloudflare is the sole Production runtime. The public ingress Worker forwards to a private Core
 Worker and has no D1 binding. Core owns the User-scoped data API; the unrouted Email Worker has
 narrow forwarded-mail admission and retention authority. Static site and web Workers serve the
-marketing and product applications separately.
+marketing and product applications separately. The customer docs use an independent, manually
+published assets-only stack; product releases do not update it.
 
 ```mermaid
 flowchart LR

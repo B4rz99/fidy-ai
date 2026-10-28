@@ -77,6 +77,7 @@ const unresolvedDependencies = (graph) =>
         (dependency) =>
           dependency.couldNotResolve &&
           dependency.module !== "cloudflare:workers" &&
+          !(dependency.module === "astro:content" && module.source.startsWith("../docs/src/")) &&
           !(
             module.source === "cloudflare/browser-acceptance-core-module.ts" &&
             dependency.module === "./browser-acceptance-core-bundle.mjs"

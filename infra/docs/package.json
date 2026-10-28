@@ -1,0 +1,15 @@
+{
+  "name": "@fidy/docs-infra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "plan": "bun ../../node_modules/alchemy/bin/alchemy.js plan --stage production --no-input",
+    "publish": "bun ../../node_modules/alchemy/bin/alchemy.js deploy --stage production --no-input --yes",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "alchemy": "2.0.0-beta.80",
+    "effect": "4.0.5"
+  }
+}

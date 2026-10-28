@@ -15,7 +15,8 @@ MCP requiere autorización en el navegador. Los permisos habilitados de cada rec
 - [Servidor de autorización](https://api.fidyapp.com/.well-known/oauth-authorization-server): descubrimiento OAuth; solicita solo permisos habilitados para el recurso.
 - [MCP remoto](https://api.fidyapp.com/mcp): transporte HTTP autenticado; configura el cliente y aprueba el acceso antes de listar herramientas.
 - [Crear cuenta](https://app.fidyapp.com): prueba de Pro de 7 días sin tarjeta.
-- [Tokens personales y revocación](https://app.fidyapp.com/settings/access): emisión de PAT y gestión de accesos. OpenAPI no es público.
+- [Agentes conectados y revocación MCP](https://app.fidyapp.com/settings/access): gestión del acceso de agentes.
+- [Tokens personales y revocación PAT](https://app.fidyapp.com/settings/access): emisión y gestión de PAT. OpenAPI no es público.
 
 ## Funciones y precios
 

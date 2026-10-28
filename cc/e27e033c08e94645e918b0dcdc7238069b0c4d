@@ -1,0 +1,21 @@
+apps/site/public/llms.txt
+  s_2c9d6c1daa679a::t_900b94453124d2 13
+apps/site/src/components/header.astro
+  s_2c9d6c1daa679a::t_900b94453124d2 6-10,19-20,51-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cce27e033c08e94645e918b0dcdc7238069b0c4d",
+  "prompts": {},
+  "sessions": {
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

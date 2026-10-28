@@ -536,6 +536,50 @@ it("keeps foreign failures and defects out of release CLI diagnostics", () => {
   }
 });
 
+it.effect.each([
+  { code: 10097, diagnostic: "Cloudflare deployment rejected (HTTP 400; code 10097)" },
+  { code: "private-provider-code", diagnostic: "Cloudflare deployment rejected (HTTP 400)" },
+  { code: -1, diagnostic: "Cloudflare deployment rejected (HTTP 400)" },
+])("reports only bounded deployment refusal metadata for code $code", ({ code, diagnostic }) =>
+  Effect.gen(function* () {
+    const client = HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          Response.json(
+            {
+              success: false,
+              errors: [{ code, message: "private-provider-body-and-token" }],
+            },
+            { status: 400 }
+          )
+        )
+      )
+    );
+    const port = releasePort({
+      env: {
+        account: "0".repeat(32),
+        token: "private-provider-token",
+        revision,
+        repository: "test/fidy",
+        githubToken: "private-github-token",
+        file: "/unused-snapshot",
+        smokeProof: "0".repeat(64),
+        smokeAttestationFile: "/unused-attestation",
+        recoveryDeployments: Option.none(),
+      },
+      client,
+    });
+    const outcome = yield* Effect.exit(
+      port.deploy("prod-core", [{ id: coreVersion, percentage: 100 }])
+    );
+    expect(Exit.isFailure(outcome)).toBe(true);
+    if (Exit.isFailure(outcome)) {
+      expect(releaseFailureMessage(outcome.cause)).toBe(diagnostic);
+    }
+  })
+);
+
 describe("Production release Worker receipts", () => {
   it("reports a missing Worker receipt without echoing state values", () => {
     expect(() => decodeWorkerReceipts('{"secret":"not-for-logs"}')).toThrowError(

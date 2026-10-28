@@ -11,7 +11,7 @@ export const ReviewToolbar = ({
   view,
   control,
 }: Readonly<{ view: Workspace; control: InboxControl }>): JSX.Element => {
-  if (control.checked.length === 0 && control.undo.length === 0 && control.feedback === "") {
+  if (control.checked.length === 0 && control.undoCount === 0 && control.feedback === "") {
     return <></>;
   }
   const checked = new Set(control.checked);
@@ -33,7 +33,7 @@ export const ReviewToolbar = ({
         {pending ? `Omitir ${selectedLabel}` : `Restaurar ${selectedLabel}`}
       </Button>
       <RefreshButton variant="ghost" onClick={control.recover} label="Actualizar" />
-      {control.undo.length > 0 ? (
+      {control.undoCount > 0 ? (
         <Button variant="ghost" disabled={control.locked} onClick={control.undoSkip}>
           Deshacer omisión
         </Button>

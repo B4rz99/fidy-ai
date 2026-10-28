@@ -117,6 +117,17 @@ The web submits through the server-owned payment boundary and observes only brow
 `BillingAttempt` state through a canonical query;
 provider references are not part of web application state.
 
+### NeedsReviewItem decisions
+
+Each retained Pending/History panel and page owns one registry-backed decision module. It encloses
+draft-save ordering, acknowledged revisions, individual and bulk decisions, Undo and explicit
+canonical reread recovery. Presentation receives status and actions; it does not coordinate queues,
+flush callbacks, or recovery remounts. Item uncertainty and bulk uncertainty retain their respective
+item and panel locks. Selection changes and ordinary route hiding preserve pending saves. Actual
+panel disposal or authentication teardown cancels unsent work, and evidence expiry stops new work
+for that item. Already-sent mutations may commit; reopening reads canonical state. The generated
+client retains authorization, transport policy and telemetry ownership.
+
 ### Dashboard first use
 
 The authenticated Dashboard's Effect Atom owner explicitly reads the canonical view, initializes

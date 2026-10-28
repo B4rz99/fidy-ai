@@ -144,6 +144,18 @@ const proactivityMaintenanceInput = (
 });
 
 const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput => ({
+  ...(environment.BANCOLOMBIA_SANDBOX_CLIENT_ID === undefined
+    ? {}
+    : { BANCOLOMBIA_SANDBOX_CLIENT_ID: environment.BANCOLOMBIA_SANDBOX_CLIENT_ID }),
+  ...(environment.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM === undefined
+    ? {}
+    : { BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: environment.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM }),
+  ...(environment.BANCOLOMBIA_SANDBOX_GRANT_KEY === undefined
+    ? {}
+    : { BANCOLOMBIA_SANDBOX_GRANT_KEY: environment.BANCOLOMBIA_SANDBOX_GRANT_KEY }),
+  ...(environment.BANCOLOMBIA_SANDBOX_MTLS === undefined
+    ? {}
+    : { BANCOLOMBIA_SANDBOX_MTLS: environment.BANCOLOMBIA_SANDBOX_MTLS }),
   DB: environment.DB,
   ...proactivityMaintenanceInput(environment),
   USER_TRANSACTION_COORDINATOR: environment.USER_TRANSACTION_COORDINATOR,

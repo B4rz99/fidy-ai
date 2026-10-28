@@ -1,3 +1,4 @@
+import type { BancolombiaSandboxEnvironment } from "../bancolombia-authentication/contract";
 import type { ProactivityDeliveryWork, ProactivityEnvironment } from "../insights/contract";
 import { Data, type Effect, type Option } from "effect";
 import type { PlatformMaintenanceInput } from "../runtime/contract";
@@ -10,6 +11,7 @@ export type ScheduledOperation =
   | "canonical.admissionRetention"
   | "oauth.confirmationRetention"
   | "connections.attemptRetention"
+  | "connections.grantCleanup"
   | "quota.consumptionRetention"
   | "operational.canary.publish"
   | "browserPairing.email.dispatch"
@@ -73,6 +75,7 @@ export type CoreMaintenanceInput = Omit<
     HOSTED_WHATSAPP_QUEUE: Option.Option<Queue>;
   }> &
   ProactivityEnvironment &
+  BancolombiaSandboxEnvironment &
   Partial<
     Readonly<{
       WEEKLY_DELIVERY_QUEUE: Queue<ProactivityDeliveryWork>;

@@ -69,7 +69,7 @@ export const BancolombiaConsentProfile = Schema.Struct({
 export type BancolombiaConsentProfile = typeof BancolombiaConsentProfile.Type;
 
 export type BancolombiaBankGrant = Readonly<{
-  accessToken: Redacted.Redacted<string>;
+  accessToken: Option.Option<Redacted.Redacted<string>>;
   refreshToken: Option.Option<Redacted.Redacted<string>>;
   expiresAtMilliseconds: number;
 }>;
@@ -90,4 +90,11 @@ export type SandboxAuthenticationInput = Readonly<{
   privateKey: Redacted.Redacted<string>;
   publicKey: JWK;
   httpClient: HttpClient.HttpClient;
+}>;
+
+export type BancolombiaCleanupProof = Readonly<{
+  observedTokens: ReadonlyArray<"access_token" | "refresh_token">;
+  recordActive: (
+    tokenType: "access_token" | "refresh_token"
+  ) => Effect.Effect<void, BancolombiaAuthorizationFailed>;
 }>;

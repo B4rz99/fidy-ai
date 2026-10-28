@@ -96,7 +96,7 @@ export const ConnectionCallbackAdmission = Schema.Struct({
 export type ConnectionCallbackAdmission = typeof ConnectionCallbackAdmission.Type;
 
 export type ConnectionBankGrant = Readonly<{
-  accessToken: Redacted.Redacted<string>;
+  accessToken: Option.Option<Redacted.Redacted<string>>;
   refreshToken: Option.Option<Redacted.Redacted<string>>;
   expiresAtMilliseconds: number;
 }>;
@@ -125,3 +125,17 @@ export const ConnectionGrantKey = Context.Reference<Option.Option<Redacted.Redac
   "@fidy/cloudflare/connections/GrantKey",
   { defaultValue: Option.none }
 );
+
+/** Cleanup only held bank authority, independently of browser login, Consent standing or sandbox admission. */
+export type ConnectionBankCleanup = Readonly<{
+  clientId: string;
+  revoke: (
+    input: Readonly<{
+      grant: ConnectionBankGrant;
+      observedTokens: ReadonlyArray<"access_token" | "refresh_token">;
+      recordActive: (
+        tokenType: "access_token" | "refresh_token"
+      ) => Effect.Effect<void, ConnectionAuthorizationUnavailable>;
+    }>
+  ) => Effect.Effect<void, ConnectionAuthorizationUnavailable>;
+}>;

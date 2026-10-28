@@ -2,8 +2,15 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "dcbb21f6d926970a6de394bb234056cebfc37df1df84db8db69d69cd083d9556";
+const expectedEdgePolicyDigest = "1a22128c3be881f631f176034eab9aecbc9d90e9324d9d0ea527e3378ca58a01";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/connections/internal/cleanup.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/migrations/0004_connection_cleanup.sql", import.meta.url)
+  ).text(),
+
   await Bun.file(
     new URL(
       "../../apps/server/cloudflare/bancolombia-authentication/internal/token-lifecycle.ts",

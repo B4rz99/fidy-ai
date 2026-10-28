@@ -33,8 +33,8 @@ const loadSchemaStatements = (): Promise<ReadonlyArray<string>> => {
     .then((statements) =>
       statements.filter(
         (statement, index) =>
-          !statement.startsWith("DROP VIEW ") &&
-          (!statement.startsWith("CREATE VIEW ") ||
+          !/^DROP (?:VIEW|TRIGGER) /u.test(statement) &&
+          (!/^CREATE (?:VIEW|TRIGGER) /u.test(statement) ||
             statements.findLastIndex((other) => objectName(other) === objectName(statement)) ===
               index)
       )
@@ -43,9 +43,11 @@ const loadSchemaStatements = (): Promise<ReadonlyArray<string>> => {
   return loaded;
 };
 const objectName = (sql: string): string =>
-  /^CREATE (?:UNIQUE )?(?:TABLE|INDEX|TRIGGER|VIEW) "?(\w+)"?/u.exec(sql.trim())?.[1] ?? "";
+  /^ALTER TABLE (\w+) ADD COLUMN (\w+)/u.exec(sql.trim())?.slice(1).join(":") ??
+  /^CREATE (?:UNIQUE )?(?:TABLE|INDEX|TRIGGER|VIEW) "?(\w+)"?/u.exec(sql.trim())?.[1] ??
+  "";
 const statementOwner = (sql: string): string =>
-  /^CREATE TABLE "?(\w+)"?/u.exec(sql.trim())?.[1] ??
+  /^(?:CREATE|ALTER) TABLE "?(\w+)"?/u.exec(sql.trim())?.[1] ??
   /^CREATE (?:UNIQUE )?INDEX "?\w+"?\s+ON "?(\w+)"?/u.exec(sql.trim())?.[1] ??
   /^CREATE TRIGGER "?\w+"?[\s\S]*?\bON "?(\w+)"?/u.exec(sql.trim())?.[1] ??
   "";

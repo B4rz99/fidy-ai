@@ -1,13 +1,17 @@
-import { Clock, Context, Crypto, Effect, Layer, Redacted } from "effect";
+import { Clock, Context, Crypto, Effect, Layer, Option, Redacted } from "effect";
 import { Base64Url } from "effect/encoding";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 import { SignJWT, exportJWK, exportPKCS8, generateKeyPair } from "jose";
 import { TestCrypto } from "../src/shell/testing/crypto-harness";
-import { activateBancolombiaSandbox } from "./bancolombia-authentication/operations";
+import {
+  activateBancolombiaSandbox,
+  revokeBancolombiaSandboxGrant,
+} from "./bancolombia-authentication/operations";
 import { BancolombiaAuthorizationFailed } from "./bancolombia-authentication/contract";
 import {
   ConnectionAuthorizationUnavailable,
   type ConnectionBankActivation,
+  type ConnectionBankCleanup,
 } from "./connections/contract";
 
 const issuer = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
@@ -20,10 +24,14 @@ const clientId = "10000000-0000-4000-8000-000000000001";
 const tokenSeconds = 300;
 const millisecondsPerSecond = 1000;
 const unavailableStatus = 503;
+const successfulStatus = 200;
 const uncertainStatus = 504;
 type Scenario =
   | "ready"
   | "issuer"
+  | "missing-identity"
+  | "missing-access"
+  | "invalid-access"
   | "subject"
   | "expired"
   | "future"
@@ -54,6 +62,10 @@ type State = {
   exchanges: number;
   consentReads: number;
   beforeAccounts: Effect.Effect<void>;
+  beforeCleanup: Effect.Effect<void>;
+  cleanupRejected: boolean;
+  tokenLabel: string;
+  revocations: string[];
 };
 type ActivationInput = Parameters<ConnectionBankActivation["activate"]>[0];
 
@@ -83,6 +95,13 @@ const fixtureKeys = Effect.gen(function* () {
 });
 type Material = Effect.Success<typeof fixtureKeys>;
 
+const exchangeAccess = (
+  state: State
+): Readonly<{ access_token: string | boolean }> | Readonly<Record<string, never>> => {
+  if (state.scenario === "missing-access") return {};
+  if (state.scenario === "invalid-access") return { access_token: false };
+  return { access_token: `${state.tokenLabel}synthetic-access` };
+};
 const tokenResponse = (
   request: HttpClientRequest.HttpClientRequest,
   state: State,
@@ -96,8 +115,13 @@ const tokenResponse = (
     return new Response(null, { status: uncertainStatus });
   }
   return Response.json({
-    access_token: codeExchange ? "synthetic-access" : "synthetic-application",
-    ...(codeExchange ? { refresh_token: "synthetic-refresh", id_token: identity } : {}),
+    ...(codeExchange ? exchangeAccess(state) : { access_token: "synthetic-application" }),
+    ...(codeExchange
+      ? {
+          refresh_token: `${state.tokenLabel}synthetic-refresh`,
+          ...(state.scenario === "missing-identity" ? {} : { id_token: identity }),
+        }
+      : {}),
     expires_in: tokenSeconds,
     token_type: "Bearer",
     scope: "accounts",
@@ -194,26 +218,17 @@ const bankResponse = (
     const { request, state, material, identity, activation } = input;
     if (request.url === jwks) return Response.json({ keys: [material.bankKey] });
     if (request.url.endsWith("/.well-known/openid-configuration")) {
-      return Response.json({
-        issuer,
-        token_endpoint: token,
-        jwks_uri: jwks,
-        token_endpoint_auth_methods_supported: ["private_key_jwt"],
-        token_endpoint_auth_signing_alg_values_supported: ["RS256"],
-        tls_client_certificate_bound_access_tokens: true,
-        mtls_endpoint_aliases: { token_endpoint: token },
-      });
+      return bankDiscovery();
+    }
+    if (
+      request.url === `${token}/revoke` ||
+      request.url === token.replace("/token", "/introspection")
+    ) {
+      return yield* cleanupResponse(request, state);
     }
     if (request.url === token) return tokenResponse(request, state, identity);
     if (request.url.includes("account-access-consent/")) {
-      state.consentReads += 1;
-      return Response.json({
-        Data: {
-          ConsentId: activation.consentId,
-          Status: state.scenario === "consent" && state.consentReads > 1 ? "Revoked" : "Authorised",
-          Permissions: state.scenario === "permissions" ? [] : activation.intent.permissions,
-        },
-      });
+      return consentResponse(state, activation);
     }
     yield* state.beforeAccounts;
     return accountResponse(state, request);
@@ -234,7 +249,9 @@ const bankIdentity = (
     const payload = {
       openbanking_intent_id: state.scenario === "intent" ? "other-consent" : input.consentId,
       azp: state.scenario === "authorized-party" ? "other-client" : clientId,
-      at_hash: yield* hash(state.scenario === "access-hash" ? "other-access" : "synthetic-access"),
+      at_hash: yield* hash(
+        state.scenario === "access-hash" ? "other-access" : `${state.tokenLabel}synthetic-access`
+      ),
       c_hash: yield* hash(
         state.scenario === "code-hash" ? "other-code" : Redacted.value(input.code)
       ),
@@ -282,8 +299,23 @@ export const activationFixture = Effect.gen(function* () {
     exchanges: 0,
     consentReads: 0,
     beforeAccounts: Effect.void,
+    beforeCleanup: Effect.void,
+    cleanupRejected: false,
+    tokenLabel: "",
+    revocations: [],
   };
   return {
+    cleanup: makeCleanup(material, state),
+    revocations: (): ReadonlyArray<string> => state.revocations,
+    tokenLabel: (value: string): void => {
+      state.tokenLabel = value;
+    },
+    cleanupRejected: (value: boolean): void => {
+      state.cleanupRejected = value;
+    },
+    beforeCleanup: (work: Effect.Effect<void>): void => {
+      state.beforeCleanup = work;
+    },
     credentials: material.credentials,
     activation: makeActivation(material, state),
     exchanges: (): number => state.exchanges,
@@ -295,3 +327,69 @@ export const activationFixture = Effect.gen(function* () {
     },
   };
 }).pipe(Effect.scoped);
+
+const bankDiscovery = (): Response =>
+  Response.json({
+    issuer,
+    token_endpoint: token,
+    jwks_uri: jwks,
+    token_endpoint_auth_methods_supported: ["private_key_jwt"],
+    token_endpoint_auth_signing_alg_values_supported: ["RS256"],
+    tls_client_certificate_bound_access_tokens: true,
+    revocation_endpoint: `${token}/revoke`,
+    introspection_endpoint: token.replace("/token", "/introspection"),
+    mtls_endpoint_aliases: {
+      token_endpoint: token,
+      revocation_endpoint: `${token}/revoke`,
+      introspection_endpoint: token.replace("/token", "/introspection"),
+    },
+  });
+const cleanupResponse = (
+  request: HttpClientRequest.HttpClientRequest,
+  state: State
+): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    yield* state.beforeCleanup;
+    if (request.body._tag !== "Uint8Array") throw new Error("Expected token form");
+    const form = new URLSearchParams(new TextDecoder().decode(request.body.body));
+    const held = form.get("token") ?? "";
+    if (request.url === `${token}/revoke`) {
+      if (!state.cleanupRejected) state.revocations.push(held);
+      return new Response(null, {
+        status: state.cleanupRejected ? unavailableStatus : successfulStatus,
+      });
+    }
+    return Response.json({ active: !state.revocations.includes(held), client_id: clientId });
+  });
+const makeCleanup = (material: Material, state: State): ConnectionBankCleanup => ({
+  clientId,
+  revoke: (input) =>
+    revokeBancolombiaSandboxGrant({
+      ...material.credentials,
+      grant: input.grant,
+      proof: Option.some({
+        observedTokens: input.observedTokens,
+        recordActive: (tokenType) =>
+          input
+            .recordActive(tokenType)
+            .pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed())),
+      }),
+      httpClient: HttpClient.make((request) =>
+        (request.method === "GET"
+          ? Effect.sync(bankDiscovery)
+          : cleanupResponse(request, state)
+        ).pipe(Effect.map((response) => HttpClientResponse.fromWeb(request, response)))
+      ),
+    }).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable())),
+});
+
+const consentResponse = (state: State, activation: ActivationInput): Response => {
+  state.consentReads += 1;
+  return Response.json({
+    Data: {
+      ConsentId: activation.consentId,
+      Status: state.scenario === "consent" && state.consentReads > 1 ? "Revoked" : "Authorised",
+      Permissions: state.scenario === "permissions" ? [] : activation.intent.permissions,
+    },
+  });
+};

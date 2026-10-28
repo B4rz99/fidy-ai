@@ -132,7 +132,9 @@ it.effect(
         expiresAtMilliseconds: 600000,
         retainGrant: (grant) =>
           Effect.sync(() => {
-            expect(Redacted.value(grant.accessToken)).toBe("synthetic-access");
+            expect(Option.map(grant.accessToken, Redacted.value)).toEqual(
+              Option.some("synthetic-access")
+            );
             expect(Option.isSome(grant.refreshToken)).toBe(true);
             retained = true;
           }),

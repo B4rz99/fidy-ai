@@ -1,6 +1,7 @@
+import { makeBancolombiaSandboxCleanup } from "../bancolombia-authentication/runtime";
 import { sweepProviderAuthentication } from "../provider-authentication/runtime";
 import { sweepRecoveryEvidence } from "../recovery/runtime";
-import { Clock, Effect, Option } from "effect";
+import { Clock, Effect, Option, Redacted } from "effect";
 import { makeAuditRetention } from "../../src/shell/audit/runtime";
 import {
   type CoreMaintenanceInput,
@@ -47,7 +48,7 @@ import {
 import { sweepProactivityConsentOffers } from "../consent/runtime";
 import { sweepExpiredPATPairings } from "../tokens/runtime";
 import { sweepOAuthConfirmation } from "../oauth-confirmation/runtime";
-import { sweepConnectionAttempts } from "../connections/runtime";
+import { sweepConnectionAttempts, sweepConnectionGrants } from "../connections/runtime";
 import { advanceProactivityWork } from "../insights/runtime";
 import { advanceRecurringWork } from "../recurring/runtime";
 import { repairDashboardProjections } from "../transactions/runtime";
@@ -234,6 +235,17 @@ const admissionActivities = (
   activity(
     "connections.attemptRetention",
     sweepConnectionAttempts({ db: environment.DB, current: nowEpochMs })
+  ),
+  activity(
+    "connections.grantCleanup",
+    sweepConnectionGrants({
+      db: environment.DB,
+      key: Option.map(
+        Option.fromUndefinedOr(environment.BANCOLOMBIA_SANDBOX_GRANT_KEY),
+        Redacted.make
+      ),
+      bank: makeBancolombiaSandboxCleanup(environment),
+    })
   ),
   activity(
     "quota.consumptionRetention",

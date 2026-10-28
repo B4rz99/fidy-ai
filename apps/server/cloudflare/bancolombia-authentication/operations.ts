@@ -1,4 +1,4 @@
-import { verifyTokenLifecycle } from "./internal/token-lifecycle";
+import { revokeGrant, verifyTokenLifecycle } from "./internal/token-lifecycle";
 import { activate } from "./internal/activation";
 import { UtcTimestamp } from "../../src/core/_shared/time";
 import { Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
@@ -9,6 +9,8 @@ import {
   BancolombiaAuthenticationFailed,
   BancolombiaAuthorizationFailed,
   BancolombiaAuthorizationInput,
+  type BancolombiaBankGrant,
+  type BancolombiaCleanupProof,
   BancolombiaConsentProfile,
   type SandboxAuthenticationInput,
 } from "./contract";
@@ -329,6 +331,16 @@ export const activateBancolombiaSandbox = (
   activate({
     ...input,
     assertion: prepareAssertion(input),
+    retainGrant: (grant) =>
+      input
+        .retainGrant(grant)
+        .pipe(
+          Effect.onError(() =>
+            revokeBancolombiaSandboxGrant({ ...input, grant, proof: Option.none() }).pipe(
+              Effect.orElseSucceed(() => undefined)
+            )
+          )
+        ),
     consentBearer: applicationToken(input, Discovery).pipe(Effect.map((grant) => grant.bearer)),
   });
 
@@ -346,4 +358,30 @@ export const verifyBancolombiaSandboxTokenLifecycle = (
   }).pipe(
     Effect.timeout("60 seconds"),
     Effect.mapError(() => failure("bancolombia_token_lifecycle"))
+  );
+
+/** Revoke only the supplied held grant and verify both token kinds inactive; does not cancel bank consent. */
+export const revokeBancolombiaSandboxGrant = (
+  input: SandboxAuthenticationInput &
+    Readonly<{ grant: BancolombiaBankGrant; proof: Option.Option<BancolombiaCleanupProof> }>
+): Effect.Effect<void, BancolombiaAuthorizationFailed> =>
+  Effect.gen(function* () {
+    const response = yield* makeBancolombiaSandboxOutboundHttp(input.httpClient).execute({
+      _tag: "Discovery",
+    });
+    if (response.status !== successStatus) return yield* failure("bancolombia_discovery");
+    yield* Schema.decodeEffect(Schema.fromJsonString(TokenLifecycleDiscovery))(
+      new TextDecoder().decode(response.body)
+    );
+    yield* revokeGrant({
+      ...input,
+      proof: Option.getOrElse(input.proof, (): BancolombiaCleanupProof => ({
+        observedTokens: [],
+        recordActive: () => Effect.void,
+      })),
+      assertion: prepareAssertion(input),
+    });
+  }).pipe(
+    Effect.timeout("60 seconds"),
+    Effect.mapError(() => new BancolombiaAuthorizationFailed())
   );

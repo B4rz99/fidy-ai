@@ -52,6 +52,11 @@ const TokenResponse = Schema.Struct({
     )
   ),
 });
+const HeldGrant = Schema.Struct({
+  access_token: Schema.optionalKey(Schema.Unknown),
+  refresh_token: Schema.optionalKey(Schema.Unknown),
+  expires_in: Schema.optionalKey(Schema.Unknown),
+});
 const BankKeys = Schema.Struct({
   keys: Schema.Array(
     Schema.Struct({
@@ -305,19 +310,31 @@ export const activate = (
       verifier: input.verifier,
     });
     if (response.status !== successfulResponse) return yield* failed();
-    const accepted = yield* Schema.decodeEffect(Schema.fromJsonString(TokenResponse))(
-      new TextDecoder().decode(response.body)
+    const body = new TextDecoder().decode(response.body);
+    const held = yield* Schema.decodeEffect(Schema.fromJsonString(HeldGrant))(body);
+    const seconds = Schema.decodeUnknownOption(TokenResponse.fields.expires_in)(held.expires_in);
+    const accessToken = Option.map(
+      Schema.decodeUnknownOption(TokenResponse.fields.access_token)(held.access_token),
+      Redacted.make
     );
-    const accessToken = Redacted.make(accepted.access_token);
+    const refreshToken = Option.map(
+      Schema.decodeUnknownOption(TokenResponse.fields.access_token)(held.refresh_token),
+      Redacted.make
+    );
+    if (Option.isNone(accessToken) && Option.isNone(refreshToken)) return yield* failed();
     yield* input.retainGrant({
       accessToken,
-      refreshToken: Option.map(Option.fromUndefinedOr(accepted.refresh_token), Redacted.make),
-      expiresAtMilliseconds: exchangedAt + accepted.expires_in * millisecondsPerSecond,
+      refreshToken,
+      expiresAtMilliseconds: Option.match(seconds, {
+        onNone: () => Number.MAX_SAFE_INTEGER,
+        onSome: (value) => exchangedAt + value * millisecondsPerSecond,
+      }),
     });
+    const accepted = yield* Schema.decodeEffect(Schema.fromJsonString(TokenResponse))(body);
     yield* validateIdentity(input, accepted, keys);
     const consentBearer = yield* input.consentBearer;
     yield* verifyConsent(input, consentBearer);
-    const accounts = yield* discoverAccounts(input, accessToken);
+    const accounts = yield* discoverAccounts(input, Redacted.make(accepted.access_token));
     yield* verifyConsent(input, consentBearer);
     return accounts;
   }).pipe(Effect.mapError(failed), Effect.timeout("60 seconds"), Effect.mapError(failed));

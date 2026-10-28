@@ -1,0 +1,19 @@
+apps/web/e2e/privacy-core-fixture.ts
+  s_5b520eabb82fd9::t_221c1b87180a13 1-2,20,38-57,60-61,70,79,88,99,105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a3504ff00b29f28208e400459d0c6c7990242cbc",
+  "prompts": {},
+  "sessions": {
+    "s_5b520eabb82fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1831f-5f52-73f1-a50f-586b77de9eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

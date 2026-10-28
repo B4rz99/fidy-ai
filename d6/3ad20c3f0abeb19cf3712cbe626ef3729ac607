@@ -1,0 +1,28 @@
+apps/docs/astro.config.ts
+  s_2c9d6c1daa679a::t_3f6f535e383f94 29
+apps/docs/scripts/check-publication.ts
+  s_2c9d6c1daa679a::t_3f6f535e383f94 19-20,26,32,45
+apps/docs/scripts/generate-reference.ts
+  s_2c9d6c1daa679a::t_3f6f535e383f94 5,11,21-27,33,52,55,59-60,70,74,90
+apps/docs/src/content/docs/conectar/cli.md
+  s_2c9d6c1daa679a::t_3f6f535e383f94 32
+apps/docs/test/reference.test.js
+  s_2c9d6c1daa679a::t_bba3ff28b848f4 105-113,143-149
+  s_2c9d6c1daa679a::t_3f6f535e383f94 114-142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d63ad20c3f0abeb19cf3712cbe626ef3729ac607",
+  "prompts": {},
+  "sessions": {
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

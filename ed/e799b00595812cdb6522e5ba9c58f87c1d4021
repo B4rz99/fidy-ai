@@ -1,0 +1,20 @@
+apps/web/src/features/transactions/correction.tsx
+  h_c6d49c804e0ad2 276-281
+apps/web/src/features/transactions/corrections.test.ts
+  h_c6d49c804e0ad2 1,138,145,162,168,215,257,265
+apps/web/src/features/transactions/corrections.ts
+  h_c6d49c804e0ad2 19-24,30,52,73,85,186-189
+apps/web/src/features/transactions/inline-category.tsx
+  h_c6d49c804e0ad2 41,50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ede799b00595812cdb6522e5ba9c58f87c1d4021",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

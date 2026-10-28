@@ -1,0 +1,34 @@
+apps/web/ARCHITECTURE.md
+  s_036f45c3a54b1c::t_6a332572b08f30 104-106
+apps/web/src/features/transactions/corrections.test.ts
+  s_036f45c3a54b1c::t_d8820eb22fde89 6
+  s_036f45c3a54b1c::t_671e2a1b1d8d70 41,65,91-96,171,174-176,180-184,188-189
+  s_036f45c3a54b1c::t_db200e507b1aea 34
+apps/web/src/features/subscription/interaction.ts
+  s_036f45c3a54b1c::t_39128f4ef7d4bb 124-132,134-136,138-152,155-156,158,160,165,391
+  s_036f45c3a54b1c::t_0bcf488e8fa01c 122-123,133,137
+apps/web/src/features/transactions/corrections.ts
+  s_036f45c3a54b1c::t_671e2a1b1d8d70 208-223,228-229,232-235,237
+apps/web/src/features/subscription/interaction.test.ts
+  s_036f45c3a54b1c::t_655a310036ec06 193-194,333-504
+  s_036f45c3a54b1c::t_39128f4ef7d4bb 188-191,195-197
+  s_036f45c3a54b1c::t_16ad11ab58a8b7 2,4-5,8-20,77-78,192,310-332
+apps/web/src/features/transactions/workspace.tsx
+  s_036f45c3a54b1c::t_06946d9814c194 4,421,429,449,566-577,605
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "543de5249e0ad7b77b628abc11f9243da1b3e80e",
+  "prompts": {},
+  "sessions": {
+    "s_036f45c3a54b1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a180b2-716f-7cd2-8260-834c95b527cb",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -4643,15 +4643,6 @@ it("invalidates OAuth review when automatic Category changes without creating a 
         work: { operation, input, attempt: { _tag: "Review" } },
       });
       if (issued._tag !== "Review") return yield* Effect.die("Missing review intent");
-      // This canonical-owner fixture assumes the first-party decision already passed ingress.
-      yield* fromTestPromise(() =>
-        runtime.db
-          .prepare(
-            "UPDATE oauth_operation_intents SET browser_approved_at_ms = created_at_ms, browser_session_id = ? WHERE reference = ?"
-          )
-          .bind(sessionA, issued.review.reference)
-          .run()
-      );
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(

@@ -52,6 +52,7 @@ export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>):
       </label>
       <div>
         <Button
+          contentLayout="wrap"
           type="button"
           variant="destructive-outline"
           disabled={!confirmed || result.waiting || accepted}

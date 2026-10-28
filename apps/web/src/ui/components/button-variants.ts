@@ -34,7 +34,8 @@ export const buttonVariants = cva(
       },
       size: {
         label: "min-h-11 gap-2 px-0 py-2.5 [&_svg:not([class*='size-'])]:size-4",
-        offer: "h-auto min-h-12 px-6 py-6 font-heading text-xl font-semibold tabular-nums",
+        offer:
+          "h-auto min-h-12 min-w-0 max-w-full flex-wrap gap-x-1 gap-y-1 px-2 py-6 font-heading text-base font-semibold tabular-nums sm:px-6 sm:text-xl",
         default:
           "min-h-11 gap-2 px-5 py-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
@@ -49,6 +50,8 @@ export const buttonVariants = cva(
       },
     },
     compoundVariants: [
+      { contentLayout: "wrap", size: "xs", className: "h-auto min-h-6" },
+      { contentLayout: "wrap", size: "sm", className: "h-auto min-h-7" },
       {
         variant: "destructive",
         focusAppearance: "subtle",

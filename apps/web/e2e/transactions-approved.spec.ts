@@ -116,6 +116,9 @@ const captureJourney = (page: Page, explicit: boolean): Journey =>
     yield* wait(() =>
       expect(page.getByText("Transacción registrada", { exact: true })).toBeVisible()
     );
+    yield* wait(() =>
+      expect(page.getByText("1 transacción · 0 ingresos · 1 gasto", { exact: true })).toBeVisible()
+    );
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
       money: { amount: "12345.67", currency: "COP" },

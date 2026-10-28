@@ -61,6 +61,14 @@ body {
   max-width: 48rem;
   padding: 3rem 1.5rem calc(3rem + env(safe-area-inset-bottom, 0px));
   margin: auto;
+  overflow-wrap: anywhere;
+}
+.legal-document pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.legal-document .wrap {
+  width: 100%;
 }
 .legal-navigation {
   border-bottom: 1px solid #ddd;

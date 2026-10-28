@@ -9,10 +9,13 @@ const publicFiles = new Set([
   "sitemap-0.xml",
   "fidy-logo.png",
   "fidy-mascot.png",
+  "fidy-logo.webp",
+  "fidy-mascot.webp",
+  "fidy-mascot-small.webp",
   "deployment-metadata.json",
 ]);
 const pages =
-  /^(?:index|cookies|politica|terminos|404|funciones\/(?:transacciones|presupuestos|asistente|tablero|insights|agentes))\.html$/u;
+  /^(?:index|about|contact|privacy|docs|cookies|politica|terminos|404|funciones\/(?:transacciones|presupuestos|asistente|tablero|insights|agentes))\.(?:html|md)$/u;
 const assets = /^_astro\/[^/]+\.[A-Za-z0-9_-]{8,}\.(?:js|css|woff2)$/u;
 
 for (const path of await readdir(new URL("../dist", import.meta.url), { recursive: true })) {

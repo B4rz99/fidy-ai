@@ -13,10 +13,12 @@ export const PhoneContent = ({
       <div className="hero-stage">
         <img
           className="brand-companion"
-          src="/fidy-mascot.png"
+          src="/fidy-mascot.webp"
+          srcSet="/fidy-mascot-small.webp 220w, /fidy-mascot.webp 420w"
+          sizes="(max-width: 600px) 110px, (max-width: 1100px) 150px, 200px"
           alt="Tití cabeciblanco, compañero de Fidy"
-          width={1024}
-          height={1024}
+          width={420}
+          height={420}
         />
         <div className="halo"></div>
         <span className="coin" aria-hidden="true">

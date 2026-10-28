@@ -9,6 +9,7 @@ import { FeatureTabs } from "../islands/feature-tabs";
 import { DashboardStory } from "../islands/dashboard-story";
 import { ChannelStory } from "../islands/channel-story";
 import { Pricing } from "../islands/pricing";
+import Identity from "../components/identity.astro";
 ---
 
 <SiteLayout
@@ -16,8 +17,7 @@ import { Pricing } from "../islands/pricing";
   title="Fidy — Finanzas personales en Colombia, desde WhatsApp"
   description="Entiende en qué se va tu plata y planea lo que viene. Organiza transacciones y presupuestos desde WhatsApp, la web o tu agente de IA. Hecho para Colombia."
 >
-  {" "}
-  <Header />
+  <Identity slot="head" /> <Header />
   <main itemscope itemtype="https://schema.org/SoftwareApplication">
     <meta itemprop="name" content="Fidy" />
     <meta itemprop="applicationCategory" content="FinanceApplication" />
@@ -47,7 +47,7 @@ import { Pricing } from "../islands/pricing";
           <small class="fine">7 días de Fidy Pro sin tarjeta. Tú eliges si te suscribes.</small>
         </div>
         <div id="demo">
-          <PhoneDemo client:load />
+          <PhoneDemo />
         </div>
       </div>
     </section>
@@ -263,10 +263,10 @@ import { Pricing } from "../islands/pricing";
     <section class="closing">
       <img
         class="brand-companion"
-        src="/fidy-mascot.png"
+        src="/fidy-mascot.webp"
         alt=""
-        width="1024"
-        height="1024"
+        width="420"
+        height="420"
         loading="lazy"
       />
       <h2>

@@ -1,0 +1,21 @@
+apps/docs/src/content/docs/conectar/claude-code.md
+  s_2c9d6c1daa679a::t_a638bb0d258cf5 24
+apps/docs/src/content/docs/conectar/codex.md
+  s_2c9d6c1daa679a::t_1f8914ff92fc76 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9153e19d1d1f3a40a2b82c9c5ffb3613872c2d84",
+  "prompts": {},
+  "sessions": {
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

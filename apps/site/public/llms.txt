@@ -10,6 +10,7 @@ MCP requiere autorización en el navegador. Los permisos habilitados de cada rec
 
 ## Documentación y acceso
 
+- [Documentación de Fidy](https://docs.fidyapp.com/llms.txt): guías completas para conectar un agente, registrar y corregir transacciones, consultar finanzas y usar la referencia de MCP, CLI y API.
 - [Fidy para desarrolladores y agentes](https://fidyapp.com/docs.md): guía MCP, CLI y API; comandos de conexión, permisos, vencimiento y revocación.
 - [Permisos del recurso MCP (RFC 9728)](https://api.fidyapp.com/.well-known/oauth-protected-resource/mcp): JSON con resource, authorization_servers y scopes_supported.
 - [Servidor de autorización](https://api.fidyapp.com/.well-known/oauth-authorization-server): descubrimiento OAuth; solicita solo permisos habilitados para el recurso.

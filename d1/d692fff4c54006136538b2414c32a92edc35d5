@@ -1,0 +1,19 @@
+infra/cloudflare/static-build-retirement.test.ts
+  s_5b520eabb82fd9::t_e59e0eb3d8171d 3,8-23,25-28,30-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d1d692fff4c54006136538b2414c32a92edc35d5",
+  "prompts": {},
+  "sessions": {
+    "s_5b520eabb82fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1831f-5f52-73f1-a50f-586b77de9eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -91,7 +91,7 @@ const SummaryTabs = ({
 const IncomeSummary = ({ figure }: Readonly<{ figure: SummaryFigure }>): JSX.Element => (
   <div className="flex flex-wrap items-baseline justify-between gap-3 border-t border-foreground/5 px-4 py-5 text-sm">
     <h3 className="text-muted-foreground">Ingresos recibidos</h3>
-    <p className="tabular-nums">{figure.income}</p>
+    <p className="max-w-full overflow-x-auto whitespace-nowrap tabular-nums">{figure.income}</p>
   </div>
 );
 
@@ -99,7 +99,9 @@ const ExpenseSummary = ({ figure }: Readonly<{ figure: SummaryFigure }>): JSX.El
   <div className="flex flex-col gap-3 border-t border-foreground/5 px-4 py-5">
     <div className="flex flex-wrap items-baseline justify-between gap-3 text-sm">
       <h3 className="text-muted-foreground">Gastos</h3>
-      <span className="text-muted-foreground tabular-nums">Plan de gastos: {figure.budgeted}</span>
+      <span className="max-w-full overflow-x-auto text-muted-foreground tabular-nums">
+        Plan de gastos: {figure.budgeted}
+      </span>
     </div>
     <BudgetMeter
       variant="summary"
@@ -108,10 +110,15 @@ const ExpenseSummary = ({ figure }: Readonly<{ figure: SummaryFigure }>): JSX.El
       label={`Gastos ${figure.currency}`}
     />
     <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 text-xs tracking-tight tabular-nums">
-      <p>
+      <p className="max-w-full overflow-x-auto whitespace-nowrap">
         {figure.expenses} <span className="text-muted-foreground">gastados</span>
       </p>
-      <p className={cn("font-medium", figure.over ? "text-error-foreground" : "text-ring")}>
+      <p
+        className={cn(
+          "max-w-full overflow-x-auto font-medium whitespace-nowrap",
+          figure.over ? "text-error-foreground" : "text-ring"
+        )}
+      >
         {figure.remaining} {figure.over ? "excedido" : "restantes"}
       </p>
     </div>

@@ -8,12 +8,12 @@ export const WorkspaceHeader = ({
   children,
 }: Readonly<{ title: string; context: ReactNode; children: ReactNode }>): JSX.Element => (
   <header className="workspace-page-header flex min-h-18 flex-wrap items-center justify-between gap-4 border-b px-5 py-3">
-    <div>
+    <div className="min-w-0 [overflow-wrap:anywhere]">
       <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
       {context}
     </div>
     {children !== null && (
-      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center [&>:only-child]:col-span-full">
         {children}
       </div>
     )}

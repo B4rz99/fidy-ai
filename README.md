@@ -37,8 +37,8 @@ Google application registration, deployed credentials and real sign-in remain un
 
 Some product paths remain deliberately unavailable. Forwarded institutional email requires verified
 sender and connection admission before inbound routing can be enabled. Receipt/image processing is
-not yet an executable capture path, and hosted MCP/OAuth access remains a design rather than a live
-integration.
+not yet an executable capture path, while hosted MCP/OAuth setup and its verification limits are documented in
+[the customer connection guide](docs/guides/hosted-mcp.md).
 
 ## Local browser testing
 

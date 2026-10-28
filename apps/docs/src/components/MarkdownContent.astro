@@ -1,0 +1,39 @@
+---
+import DefaultMarkdownContent from "@astrojs/starlight/components/MarkdownContent.astro";
+
+const { id } = Astro.locals.starlightRoute;
+const markdownPath = `/${id || "index"}.md`;
+---
+
+{id !== "404" && (
+  <div class="page-actions">
+    <button type="button" data-copy-markdown={markdownPath}>
+      Copiar Markdown
+    </button>
+    <a href={markdownPath}>Ver Markdown</a>
+    <span data-copy-status role="status" aria-live="polite"></span>
+  </div>
+)}
+<DefaultMarkdownContent>
+  <slot />
+</DefaultMarkdownContent>
+
+<script>
+  const button = document.querySelector<HTMLButtonElement>("[data-copy-markdown]");
+  const status = document.querySelector<HTMLElement>("[data-copy-status]");
+  button?.addEventListener("click", async () => {
+    const path = button.dataset.copyMarkdown;
+    if (!path || !status) return;
+    button.disabled = true;
+    try {
+      const response = await fetch(path, { credentials: "omit", redirect: "error" });
+      if (!response.ok) throw new Error("Markdown unavailable");
+      await navigator.clipboard.writeText(await response.text());
+      status.textContent = "Markdown copiado";
+    } catch {
+      status.textContent = "No se pudo copiar. Usa «Ver Markdown».";
+    } finally {
+      button.disabled = false;
+    }
+  });
+</script>

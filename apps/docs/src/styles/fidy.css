@@ -1,0 +1,97 @@
+@import "../../../../design/tokens.css";
+
+@font-face {
+  font-family: Poppins;
+  src: url("/fonts/Poppins-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: Poppins;
+  src: url("/fonts/Poppins-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+:root {
+  color-scheme: dark;
+  --sl-font: var(--fidy-font-family);
+  --sl-color-accent-low: #213119;
+  --sl-color-accent: var(--fidy-lime);
+  --sl-color-accent-high: #b8e384;
+  --sl-color-white: #fff6ef;
+  --sl-color-gray-1: #e8ded5;
+  --sl-color-gray-2: #c7c7c7;
+  --sl-color-gray-3: #a2a2a2;
+  --sl-color-gray-4: #606060;
+  --sl-color-gray-5: #383838;
+  --sl-color-gray-6: #202020;
+  --sl-color-black: var(--fidy-ink);
+  --sl-content-width: 50rem;
+  --sl-text-h1: 2.25rem;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --sl-color-accent-low: #edf6e1;
+  --sl-color-accent: #456821;
+  --sl-color-accent-high: #36531d;
+  --sl-color-white: var(--fidy-ink);
+  --sl-color-gray-1: #202020;
+  --sl-color-gray-2: #514d48;
+  --sl-color-gray-3: #76716b;
+  --sl-color-gray-4: #ded6ce;
+  --sl-color-gray-5: #e8ded5;
+  --sl-color-gray-6: #f2ece6;
+  --sl-color-gray-7: #fffaf6;
+  --sl-color-black: #fffaf6;
+}
+.site-title {
+  color: var(--sl-color-white);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+.sidebar-content a[aria-current="page"] {
+  background: var(--fidy-lime);
+  color: var(--fidy-ink);
+}
+h1,
+h2,
+h3 {
+  letter-spacing: -0.025em;
+}
+.sl-markdown-content {
+  line-height: 1.8;
+}
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-block-end: 1.5rem;
+  font-size: 0.875rem;
+}
+.page-actions button {
+  min-height: 44px;
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: var(--fidy-radius-control);
+  padding: 0.5rem 1rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-white);
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.page-actions button:hover {
+  border-color: var(--sl-color-accent);
+}
+.page-actions button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 3px;
+}
+.page-actions [role="status"] {
+  color: var(--sl-color-gray-2);
+}
+
+.page-actions a {
+  color: var(--sl-color-accent);
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@fidy/docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --ignore-lock --port 4323",
+    "build": "astro build && bun scripts/finalize-artifact.ts",
+    "typecheck": "astro sync && bun install --cwd ../../tools/astro --frozen-lockfile && bun ../../tools/astro/check.ts ../../apps/docs",
+    "test:artifact": "node --test test/artifact.test.js",
+    "reference:generate": "bun scripts/generate-reference.ts",
+    "build:publication": "bun run build && bun scripts/check-publication.ts",
+    "publication:inspect": "bun scripts/check-publication.ts --inspect",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.6",
+    "astro": "7.4.1"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1"
+  }
+}

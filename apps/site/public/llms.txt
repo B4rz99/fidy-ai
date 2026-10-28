@@ -56,7 +56,7 @@ Ejemplo de consulta: GET /transactions?currency=COP
 Autenticación: encabezado Authorization: Bearer con tu PAT, nunca en la URL.
 Conserva el token en un gestor de secretos. /openapi.json no es público.
 
-Revoca MCP en https://app.fidyapp.com/settings/access.
+Revoca MCP en https://app.fidyapp.com/settings/agents.
 Revoca PAT en https://app.fidyapp.com/settings/access.
 Cerrar sesión no revoca agentes; revocar no deshace cambios completados.
 

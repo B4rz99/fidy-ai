@@ -154,7 +154,7 @@
   },
   "overrides": [
     {
-      "files": ["apps/site/src/**/*.{astro,ts,tsx}"],
+      "files": ["apps/{site,docs}/src/**/*.{astro,ts,tsx}"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -264,7 +264,9 @@
         "apps/web/e2e/{browser-pairing,static-shell}.spec.ts",
         "apps/web/{playwright,playwright.capture,vite,vitest}.config.ts",
         "apps/site/{astro,playwright}.config.ts",
-        "apps/site/e2e/site.spec.ts"
+        "apps/docs/{astro,playwright}.config.ts",
+        "apps/site/e2e/site.spec.ts",
+        "apps/docs/e2e/docs.spec.ts"
       ],
       "rules": {
         "import/extensions": "off"
@@ -274,7 +276,8 @@
     {
       "files": [
         "apps/web/{playwright,playwright.capture,playwright.cli,playwright.oauth,vite,vitest}.config.ts",
-        "apps/site/{astro,playwright}.config.ts"
+        "apps/site/{astro,playwright}.config.ts",
+        "apps/docs/{astro,playwright}.config.ts"
       ],
       "rules": {
         "import/no-default-export": "off"
@@ -285,6 +288,7 @@
     {
       "files": [
         "infra/cloudflare/alchemy.run.ts",
+        "infra/docs/alchemy.run.ts",
         "infra/cloudflare/alchemy-drift.run.ts",
         "apps/server/cloudflare/core-worker.ts",
         "apps/server/cloudflare/release-smoke-worker.ts",

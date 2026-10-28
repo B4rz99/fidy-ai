@@ -169,7 +169,7 @@ const ReviewResources = ({
               <ReviewReadFailure refresh={refresh} waiting={state.waiting} />
             ) : null
           }
-          disabled={[!active, state.waiting, Option.isSome(state.refreshFailure)].some(Boolean)}
+          disabled={state.waiting || Option.isSome(state.refreshFailure)}
           page={page}
           move={move}
           filter={filter}

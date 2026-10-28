@@ -376,7 +376,8 @@ Main workspace display queries retain their last result for one minute of inacti
 current authentication registry. Returning to Budgets, Recurring, Transactions or Dashboard
 renders that result immediately. Reads younger than five seconds remain fresh on mount and
 window focus; older reads revalidate, and explicit invalidation always refreshes. Retained
-workspace returns coalesce refreshes inside the same five-second window. Review categories share
+Recurring workspace returns coalesce refreshes inside the same five-second window using wall
+time, including calendar changes. Review always revalidates on return to observe remote drafts. Review categories share
 the normal category snapshot; an unvisited history panel starts only when selected. Cached profiles
 and resource results do not grant authority: the server checks live Consent, caller authority and
 revision guards for every write; refresh failures still gate editing. Authenticated clients share

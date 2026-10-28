@@ -156,12 +156,15 @@ await test("future portable and native owners share one privacy and direction po
 });
 
 await test("shared acceptance fixtures remain unavailable to production", () => {
-  for (const [source, fixture] of [
-    [
-      "cloudflare/browser-acceptance-preview.ts",
-      "cloudflare/browser-acceptance-connections.test-fixture.ts",
-    ],
-    ["cloudflare/browser-acceptance-seed.ts", "cloudflare/browser-assessment.test-fixture.ts"],
+  for (const { source, fixture } of [
+    {
+      source: "cloudflare/browser-acceptance-preview.ts",
+      fixture: "cloudflare/browser-acceptance-connections.test-fixture.ts",
+    },
+    {
+      source: "cloudflare/browser-acceptance-seed.ts",
+      fixture: "cloudflare/browser-assessment.test-fixture.ts",
+    },
   ]) {
     assert.equal(
       inspect("cloudflare/core-worker.ts", fixture).some(

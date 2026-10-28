@@ -1,5 +1,6 @@
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
+import { DateTime } from "effect";
 import { Reactivity } from "effect/reactivity";
 import { type RefCallback, useCallback, useRef, useState } from "react";
 
@@ -20,17 +21,18 @@ export const useWorkspaceResume = ({
     (node) => {
       if (node === null) return;
       const previous = visibility.current;
-      if (!previous.visited) previous.refreshedAt = performance.now();
+      if (!previous.visited) previous.refreshedAt = DateTime.nowUnsafe().epochMilliseconds;
       const returning = active && previous.visited && !previous.active;
-      const expired = performance.now() - previous.refreshedAt >= recentResumeMilliseconds;
+      const expired =
+        DateTime.nowUnsafe().epochMilliseconds - previous.refreshedAt >= recentResumeMilliseconds;
       visibility.current = { ...previous, active, visited: true };
-      if (returning && expired) {
-        visibility.current.refreshedAt = performance.now();
+      if (returning && (key === "ingestion-review" || expired)) {
+        visibility.current.refreshedAt = DateTime.nowUnsafe().epochMilliseconds;
         queueMicrotask(() => {
           if (node.isConnected && node.hidden === false) refresh();
         });
       }
     },
-    [active, refresh]
+    [active, key, refresh]
   );
 };

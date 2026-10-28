@@ -25,7 +25,7 @@ Revisa el efecto concreto. Cancelar o rechazar no autoriza el cambio. La aprobac
 
 ## Revocar
 
-- **MCP/OAuth:** abre [Configuración → Agentes conectados](https://app.fidyapp.com/settings/agents). Revoca la conexión correspondiente o todas las conexiones. Dos clientes con el mismo nombre pueden tener aprobaciones independientes.
+- **MCP/OAuth:** abre [Configuración → Accesos](https://app.fidyapp.com/settings/access). En la sección de agentes conectados, revoca la conexión correspondiente o todas las conexiones. Dos clientes con el mismo nombre pueden tener aprobaciones independientes.
 - **CLI o API con PAT:** abre [Configuración → Tokens personales](https://app.fidyapp.com/settings/access) y revoca el PAT correspondiente.
 - **CLI local:** `fidy logout` borra el acceso guardado en ese equipo; no revoca el PAT del servidor.
 

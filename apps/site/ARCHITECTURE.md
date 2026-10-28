@@ -8,12 +8,13 @@ The React product, authentication, and account settings remain in `apps/web` at
 ## Rendering and ownership
 
 Astro produces static HTML for the homepage, six feature pages, privacy policy,
-cookie information, draft terms, and a real 404. `src/pages` owns URLs;
+cookie information, trust and developer pages, draft terms, and a real 404. `src/pages` owns URLs;
 `src/layouts/site-layout.astro` owns document metadata, canonical URLs and page shape;
 `src/components` owns static page composition; `src/islands` contains the preserved
 React demonstrations and their supporting presentation. React components without
-client directives render only during the build. Interactive demonstrations hydrate
-on visibility; the hero PhoneDemo hydrates on load. Theme, navigation and entrance
+client directives render only during the build. Below-the-fold interactive React demonstrations hydrate on visibility. The hero PhoneDemo
+renders only at build time; its document controller clones trusted templates to switch examples
+and owns animation cleanup, without sending React on initial view. Theme, navigation and entrance
 motion use the small document script in `src/scripts/site.ts`.
 
 There is no server adapter, authentication client, session state, database binding,
@@ -37,12 +38,26 @@ search ranking or AI citations.
 
 ## Deployment and verification
 
-Alchemy owns a separate assets-only `Site` Worker with a custom domain at the apex,
+Alchemy owns a separate `Site` Worker with a custom domain at the apex,
 no API bindings and no production `workers.dev` URL. Asset serving drops trailing
 slashes and returns the built 404 document for missing paths instead of an SPA
 fallback. `_headers` applies security headers and immutable caching to hashed
-`_astro` assets. Astro emits a document CSP with hashes for its hydration bootstrap;
-static chart geometry lives in external CSS instead of inline style attributes.
+`_astro` assets. The site-owned Worker negotiates HTML and build-generated Markdown using Accept quality values,
+adds `Vary: Accept`, and preserves real 404 responses in both formats. Conversion occurs at build
+time with Turndown; no runtime HTML parsing or external fetches are involved. Hashed assets and
+images bypass the handler. Markdown discovery uses alternate/describedby links and `llms.txt`.
+The homepage JSON-LD identifies the application and Fidy organization; public contact details
+are owner-provided. OAuth discovery links point to the API-owned RFC 9728 metadata rather than
+duplicating authorization declarations on the marketing host.
+
+Astro emits a document CSP with hashes for its hydration bootstrap;
+build-time stylesheets are inlined with CSP hashes to avoid a render-blocking request;
+static chart geometry uses CSS classes instead of inline style attributes.
+Build-generated response headers carry each document's exact CSP hashes, frame denial and
+Trusted Types enforcement without permitting policy creation. The metadata policy remains as
+a fallback for static HTML opened outside the deployed asset server.
+HSTS covers subdomains and declares preload eligibility;
+the header does not submit the domain to a browser preload list.
 
 `bun run dev:site` starts the site on port 4321. Its `--ignore-lock` flag keeps Astro in the
 foreground under agent execution so Alchemy owns the process lifetime. `build` generates the static pages and rejects unexpected output files.
@@ -53,9 +68,9 @@ also requires and publishes the exact `RELEASE_GIT_SHA`. The normal Production
 workflow builds and verifies both static artifacts and checks their revision on
 their public hosts. Core/ingress candidate promotion remains server-owned.
 
-Playwright uses Astro’s standard preview command for built HTML on port 4322, with JavaScript-disabled content
+Playwright uses Wrangler’s local Worker and asset server for built output on port 4322, with JavaScript-disabled content
 checks, canonical metadata, sitemap exclusions, interactive island hydration,
-theme persistence, browser/CSP errors and serious accessibility violations. The
+theme persistence, browser/CSP errors and serious accessibility violations with no slogan contrast exception. The
 repository verification groups include the site build, types and browser suite.
 
 The existing Builds runner owns the public-site browser suite and reuses the static artifact

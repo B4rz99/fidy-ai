@@ -1,6 +1,8 @@
 ---
 import "../styles/global.css";
 import "../styles/landing.css";
+import regularFont from "../assets/fonts/Poppins-Regular.woff2?url";
+import headingFont from "../assets/fonts/Poppins-SemiBold.woff2?url";
 
 type Props = {
   title: string;
@@ -13,6 +15,7 @@ const noindex = variant === "draft" || variant === "missing";
 const detail = variant === "detail";
 const pathname = Astro.url.pathname.replace(/\.html$/u, "").replace(/^\/index$/u, "/");
 const canonical = new URL(pathname, Astro.site);
+const markdownPath = pathname === "/" ? "/index.md" : `${pathname}.md`;
 ---
 
 <!doctype html>
@@ -26,6 +29,12 @@ const canonical = new URL(pathname, Astro.site);
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    <link rel="preload" href={regularFont} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={headingFont} as="font" type="font/woff2" crossorigin />
+    <link rel="alternate" type="text/markdown" href={markdownPath} />
+    <link rel="describedby" type="text/plain" href="/llms.txt" />
+    <link rel="help" href="/docs" />
+    <slot name="head" />
     <meta
       name="robots"
       content={noindex ? "noindex, follow" : "index, follow, max-image-preview:large"}

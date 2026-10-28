@@ -1,4 +1,5 @@
 import { mountMotion } from "../islands/motion";
+import { mountPhoneDemo } from "./phone-demo";
 
 type Theme = "system" | "light" | "dark";
 const storedTheme = (): Theme => {
@@ -15,10 +16,12 @@ const mountTheme = (root: HTMLDivElement): void => {
   const isDark = (): boolean => theme === "dark" || (theme === "system" && preference.matches);
   const updateTheme = (): void => {
     root.dataset.theme = theme;
-    const canvasColor = getComputedStyle(document.documentElement).backgroundColor;
-    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
-      meta.content = canvasColor;
-    }
+    requestAnimationFrame(() => {
+      const canvasColor = getComputedStyle(document.documentElement).backgroundColor;
+      for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+        meta.content = canvasColor;
+      }
+    });
     const label = isDark() ? "Activar tema claro" : "Activar tema oscuro";
     for (const button of document.querySelectorAll<HTMLButtonElement>(".theme-toggle")) {
       button.setAttribute("aria-label", label);
@@ -46,6 +49,16 @@ if (root !== null) {
     window.addEventListener("pagehide", stopMotion, { once: true });
   }
 }
+const mountDemos = (): void => {
+  for (const shell of document.querySelectorAll<HTMLElement>(".demo-shell")) {
+    const stopDemo = mountPhoneDemo(shell);
+    window.addEventListener("pagehide", stopDemo, { once: true });
+  }
+};
+mountDemos();
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) mountDemos();
+});
 for (const summary of document.querySelectorAll("summary")) {
   summary.addEventListener("click", (event) => {
     const disclosure = summary.closest("details");

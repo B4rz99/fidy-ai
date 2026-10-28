@@ -85,7 +85,7 @@ export const requestLocalConfirmationBridge = <A>({
   path,
   codec,
 }: Readonly<{
-  path: "/reset" | "/reset?firstParty=approve" | "/status" | "/finish";
+  path: "/reset" | "/status" | "/finish";
   codec: Schema.Codec<A>;
 }>): Effect.Effect<A, LocalProofFailure, HttpClient.HttpClient> =>
   Effect.gen(function* () {
@@ -223,7 +223,7 @@ const runCase = Effect.fn(function* (args: Arguments, name: HostCase) {
   const decision = decisionFor(name);
   const root = join(args.output, name);
   const reset = yield* requestLocalConfirmationBridge({
-    path: decision === "accept" ? "/reset?firstParty=approve" : "/reset",
+    path: "/reset",
     codec: Reset,
   });
   yield* prepareCase({
@@ -314,11 +314,11 @@ const execute = Effect.gen(function* () {
   }
   yield* writeJson(join(args.output, "evidence.json"), {
     trustBoundary:
-      "Fresh same-User first-party decision plus OAuth-authorized native continuation; no independent human-presence attestation",
+      "OAuth-authorized client-native decision; no independent human-presence attestation",
     actualSeam:
       "Public ingress → Core → User coordinator → canonical mutation and Audit in native D1",
     fixture:
-      "Disposable approved OAuth credential injected by local bridge; explicit synthetic first-party browser decision before native acceptance; canned model; pinned native CLIs and PTYs. No Production or inference.",
+      "Disposable approved OAuth credential injected by local bridge; no per-operation browser decision; canned model; pinned native CLIs and PTYs. No Production or inference.",
     results,
   });
 });

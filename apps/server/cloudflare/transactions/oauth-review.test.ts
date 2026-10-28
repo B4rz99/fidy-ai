@@ -261,16 +261,6 @@ const acceptedCommit = (
     if (issued._tag !== "Review") {
       return yield* Effect.die(new Error("Native review unavailable"));
     }
-    // This owner-seam fixture starts from an already approved first-party decision.
-    // Browser authority admission is exercised through real ingress in oauth-first-party.test.ts.
-    yield* fromTestPromise(() =>
-      db
-        .prepare(
-          "UPDATE oauth_operation_intents SET browser_approved_at_ms = created_at_ms, browser_session_id = ? WHERE reference = ?"
-        )
-        .bind(sessionId, issued.review.reference)
-        .run()
-    );
     const accepted = yield* prepareOAuthConfirmation({
       db,
       subject,
@@ -438,7 +428,7 @@ for (const work of ["correction", "unlink"] as const) {
     ));
 }
 
-it("commits unchanged correction and ordinary unlink with first-party approval and one native acceptance", () =>
+it("commits unchanged correction and ordinary unlink with one native acceptance", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();

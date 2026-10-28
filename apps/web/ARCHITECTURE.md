@@ -237,8 +237,7 @@ to restart from the agent.
 
 `/settings/access` composes independent mounted owners for manual PAT management, one-time PAT issuance and external MCP connections. Obsolete PAT and agent settings aliases are removed. The application owns composition and disposal; each feature retains its canonical client and command authority. MCP rows show declared name, approved Spanish permissions, absolute expiration and status, while duplicate names remain separate through canonical identity. Pagination belongs to the router and server resources/commands belong to the authentication registry. Individual and aggregate revocation remain separate for PATs and MCP connections. Successful commands invalidate their own list; unavailable or malformed reads never become empty state, and uncertain commands never report success. Previously loaded data is visibly stale and controls are disabled when refresh fails. The mounted manual PAT issuance module encloses review, request identity, command outcomes and same-User draft continuation. Presentation receives display state and User actions. Issued PAT bearer disclosure remains in its private child owner and is cleared when the combined page leaves the authentication lifetime; late command completion cannot restore it.
 
-Sensitive-operation confirmation under #988 uses a server-owned native MCP form in **Claude Code and
-Codex only**, not a web feature or browser handoff. The server owns the exact effect disclosure,
+Sensitive-operation confirmation under #1564 uses a server-owned native MCP form in supported interactive MCP clients, not a web feature or browser handoff. The server owns the exact effect disclosure,
 intent binding and atomic single-use consumption; it trusts the authorized client's response
 without independently attesting human presence, as explicitly accepted in ADR 0033. Unsupported
 native interaction fails closed with no browser/chat fallback. The web owns live-session connection
@@ -397,17 +396,6 @@ and require recovery if superseded. A completed autosave releases its draft barr
 bulk decisions use the fresh workspace revision.
 
 `/settings/account` composes independently mounted verified-email replacement and backup-recovery sections under one Account header. Each feature retains its own proof and disclosure lifetime. Fresh sign-in returns to the fixed Account destination without retaining email or recovery material in navigation. Removed settings aliases have no compatibility redirects.
-
-## First-party OAuth operation review
-
-`oauth-connections/feature.tsx` publishes the operation review route alongside connection review.
-`/oauth/operation/<reference>` reads the exact immutable input, ordered effects, connection identity
-and expiry through the browser-safe WebAuth client. References confer no authority. Approval and
-cancellation are explicit events under a fresh same-User WebSession, Origin and session-binding
-checks. Raw inputs and client names render as text. No bearer enters browser state or storage.
-Approval does not execute the operation: the User returns to the native MCP continuation, whose
-canonical unit consumes it once with all live owner guards. An uncertain POST outcome disables
-further decisions until a fresh read; login resumes only this fixed UUID-selected route.
 
 ## Review-return failure evidence
 

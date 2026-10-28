@@ -270,9 +270,9 @@ _Avoid_: Hosted agent, web caller, PAT caller (for OAuth authority).
 **OAuthOperationConfirmation**:
 Single-use approval bound to one OAuthConnection, exact canonical operation and inputs, applicable
 revisions and a five-minute expiry, consumed with the protected mutation in its atomic unit.
-Canonical policy selects whether an authenticated first-party browser decision is also required;
-for those operations, client-native acceptance alone cannot approve. Other sensitive operations
-retain client-asserted native approval. Neither mode independently attests human presence.
+The authorized client collects the explicit native decision in the originating interface.
+Client-asserted acceptance does not independently attest human presence; a modified client can
+assert acceptance without displaying a review.
 _Avoid_: Hosted confirmation, approval link (as a credential), model confirmation.
 
 **PATPairing**:

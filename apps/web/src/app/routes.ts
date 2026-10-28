@@ -198,14 +198,6 @@ const subscriptionOffersRoute = createRoute({
   path: "/upgrade",
   component: SubscriptionOffersFeature,
 });
-const oauthOperationRoute = createRoute({
-  getParentRoute: () => independentApplicationRoute,
-  path: "/oauth/operation/$reference",
-  component: lazyRouteComponent(
-    () => import("@/features/oauth-connections/feature"),
-    "OAuthOperationFeature"
-  ),
-});
 const oauthReviewRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/oauth/review/$requestId",
@@ -263,7 +255,6 @@ const routeTree = rootRoute.addChildren([
   independentApplicationRoute.addChildren([
     connectionResultRoute,
     oauthReviewRoute,
-    oauthOperationRoute,
     privacyRoute,
     transactionsRoute,
     subscriptionOffersRoute,

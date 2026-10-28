@@ -257,25 +257,19 @@ rebinding protection; arbitrary URLs and redirect chains are not compatibility f
 
 Sensitive operations, including batch children, require OAuth-specific confirmation bound to the
 same stable User/OAuthConnection, exact operation, input digest, applicable domain and disclosure
-revisions, original scope requirements and five-minute expiry. Canonical `oauthApproval` policy
-requires a fresh same-User first-party browser decision for Budget update/deletion, Transaction
-update/deletion, Memory revision/forgetting and confirmed Ingestion review/resolution/skip/abandon
-operations. If any batch child requires it, the browser reviews the complete ordered batch.
-Origin, session-binding CSRF, current Consent, live connection and expiry are checked on review
-and decision; GET never approves. The immutable intent retains the browser session identity and
-approval instant. A client assertion alone cannot satisfy this prerequisite. No agent tool can
-approve it, and browser approval alone does not execute a mutation.
+revisions, original scope requirements and five-minute expiry. The complete ordered batch and all
+effects are disclosed in the originating client, without a separate browser decision.
 
-Continuation still requires the authorized client's standard native form response: `accept` with
+Continuation requires the authorized client's standard native form response: `accept` with
 explicit `confirm: true`. Public references/state alone, model claims, arbitrary tool arguments,
 host annotations, local tool permissions and hosted-only evidence grant no confirmation. Decline,
 cancel, false/missing content and malformed responses authorize nothing.
 
-**Accepted risk (#988, amended #1381, 2026-10-20):** sensitive OAuth operations without first-party
-policy retain client-asserted approval: a modified authorized client or hook may assert acceptance
-without human presence or displaying a form. This exception no longer covers the selected operations
-above. An authenticated first-party decision still does not independently prove physical human
-presence or protect a stolen browser session. Initial OAuth approval, scope escalation, connection
+**Accepted risk (#1564, owner decision 2026-10-27, superseding #1381):** all sensitive OAuth
+operations trust the authorized client to collect explicit native approval. A modified authorized
+client or hook may assert acceptance without human presence or displaying a form. The owner accepted
+this limitation to keep review and decision in the originating interface. Native acceptance is not
+independently verified human approval. Initial OAuth approval, scope escalation, connection
 management, PAT and hosted confirmation retain their existing contracts. Claimed client names and
 capabilities are not verified identity; the supported Claude Code/Codex matrix is not a security allowlist.
 Consume evidence once in the same atomic unit as live credential/grant, scope, Consent, domain
@@ -285,8 +279,7 @@ commits leave no partial effect or incorrectly consumed evidence. Wrong subject/
 changed input/revision, expiry, revocation, replay and concurrent consumption reject. Bound pending
 intents and waits under ADR 0033; do not block User coordination throughout native review.
 Unsupported native interaction and non-interactive modes without the required decision fail closed,
-with no alternative approval fallback or blind retry after ambiguous mutation delivery. The selected
-first-party browser step is a required prerequisite, never a fallback to client assertion.
+with no alternative approval fallback or blind retry after ambiguous mutation delivery.
 Raw access/refresh credentials never enter Fidy browser state, URLs, models, tools or diagnostics;
 authorization codes cross only the validated no-store/referrer-protected callback. Downstream tests
 must prove replay/concurrency, cross-User substitution, issuer/resource/redirect/PKCE refusal,
@@ -401,8 +394,7 @@ admitted Turn's handlers and canonical execution state; none can escape its stru
 Exact confirmation under the caller's approved authority contract is required when canonical
 operation metadata marks an effect as destructive or irreversible. OAuth-native client assertions
 use section 2's explicit accepted trust boundary: model claims alone cannot approve, but valid
-client/hook acceptance is trusted without independent human attestation only where first-party policy
-is absent. Selected operations additionally require the authenticated first-party decision. Do not claim resistance
+client/hook acceptance is trusted without independent human attestation. Do not claim resistance
 to deliberate client automation as a guarantee of this boundary.
 Canonical operations independently enforce identity, capability, paywall, validation, and domain
 rules on every call. Consent is the one check hosted work resolves per Turn rather than per call:
@@ -626,7 +618,7 @@ comparison, not a code audit or a complete ASVS assessment.
 | ASI03                                  | Hosted and User-owned agents                      | Covered: caller-specific authority and credential lifecycle (§§1–2, 6).                                                                                                                                                                 |
 | ASI07                                  | Agent communication                               | Partial: external agent calls cross authenticated API/MCP boundaries (§§1–2, 4–6). Autonomous peer-agent delegation is not a current declared capability; reassess if introduced.                                                       |
 | ASI08                                  | Hosted agent and background work                  | Covered: atomic effects, failure containment and bounded retries/work (§§5–6, 8, 10).                                                                                                                                                   |
-| ASI09                                  | Confirmation and generated presentation           | Partial: exact-action confirmation and safe presentation (§§2, 4, 6). Selected OAuth operations require §2's first-party decision; other sensitive operations retain its client-assertion risk. Neither attests human presence.         |
+| ASI09                                  | Confirmation and generated presentation           | Partial: exact-action confirmation and safe presentation (§§2, 4, 6). OAuth operations retain §2's explicitly accepted client-assertion risk; native decisions do not attest human presence.                                            |
 | MCP01, MCP02, MCP07                    | MCP and browser OAuth approval                    | Covered: token lifetime, immutable grants, audience/scope and current authority (§§1–2, 8).                                                                                                                                             |
 | MCP03, MCP05, MCP06, MCP10             | MCP tools and context                             | Covered: canonical tool declarations, hostile inputs/output and User-isolated context (§§1, 3–4, 6).                                                                                                                                    |
 | MCP08                                  | MCP activity and diagnostics                      | Partial: metadata-only security evidence (§8); the implementation assessment distinguishes tested monitoring from outstanding security alerts and live response evidence.                                                               |

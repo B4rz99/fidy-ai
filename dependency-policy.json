@@ -62,8 +62,8 @@
     {
       "cve": "CVE-2026-93753",
       "path": "bun.lock",
-      "reason": "Extends the earlier 48-hour approval recorded for PR #1578. The User explicitly accepted this exact finding for seven days while merging PR #1583 on 2026-10-28 UTC. CI SCA reports deepmerge 4.3.1, a transitive shadcn and @shadcn/registry dependency, with Low severity (CVSS4 2.7). npm registry metadata lists 4.3.1 as latest with no newer published release at acceptance. Application reachability is not established. This retains installed risk rather than remediating it. Review a compatible fix when available under the unchanged release-age policy; rerun SCA and affected checks and remove this record and matching scanner exclusion when resolved. Reference: https://db.fluidattacks.com/vul/CVE-2026-93753",
-      "until": "2026-11-04T03:36:44Z"
+      "reason": "The User explicitly accepted this scoped installed risk on 2026-10-28 UTC for PR #1581 until 2026-11-04 UTC. deepmerge 4.3.1 is inherited through shadcn and @shadcn/registry tooling; malicious merge inputs can poison the returned object prototype. Application reachability is not asserted. npm has no patched release as of acceptance. This is risk acceptance, not remediation. Keep the seven-day minimumReleaseAge and all other checks active. Before expiry, replace the dependency or upgrade to an eligible corrected release, rerun SCA and affected verification, and remove this record and its exact matching scanner exclusion. Upstream: https://github.com/TehShrike/deepmerge/issues/273",
+      "until": "2026-11-04T00:00:00Z"
     }
   ]
 }

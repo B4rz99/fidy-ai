@@ -7,7 +7,7 @@ import { refusedCredentialResponse, transactionUnavailable } from "../../canonic
 
 const confirmationRequiredStatus = 403;
 const confirmationMessage =
-  "Esta operación requiere una nueva confirmación nativa del cliente OAuth autorizado.";
+  "Esta operación requiere una nueva confirmación nativa del cliente OAuth autorizado. Usa un cliente interactivo compatible con formularios de confirmación MCP; no se puede aprobar desde la web.";
 
 /** Canonical metadata decides sensitivity; native client acceptance is separate from hosted evidence. */
 export const requiresOAuthConfirmation = (operation: CatalogOperation): boolean =>

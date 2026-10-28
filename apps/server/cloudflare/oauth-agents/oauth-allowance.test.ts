@@ -1,4 +1,3 @@
-import { approveFirstPartyOperation } from "./oauth-first-party.test-fixture";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import { categoryIds } from "../../src/core/categories/contract";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
@@ -571,7 +570,6 @@ it("charges native confirmation once and prevents continuation references from e
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* pendingBudgetDeletion();
-      yield* approveFirstPartyOperation(fixture, fixture.reference);
       const inspect = (): Promise<Response> =>
         mcpFixture({
           retryKey: Option.none(),

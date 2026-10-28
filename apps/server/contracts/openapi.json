@@ -15024,7 +15024,6 @@
           "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-oauth-approval": "first-party",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       },
@@ -15316,7 +15315,6 @@
           "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-oauth-approval": "first-party",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       }
@@ -17934,7 +17932,6 @@
           "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-oauth-approval": "first-party",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       }
@@ -18071,7 +18068,6 @@
           "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-oauth-approval": "first-party",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       }
@@ -18713,7 +18709,6 @@
           "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-oauth-approval": "first-party",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       }
@@ -19135,7 +19130,6 @@
           "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-oauth-approval": "first-party",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       }
@@ -20658,7 +20652,6 @@
           "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-oauth-approval": "first-party",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       },
@@ -20813,7 +20806,6 @@
           "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-oauth-approval": "first-party",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       }
@@ -23834,7 +23826,6 @@
           "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-oauth-approval": "first-party",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       },
@@ -24126,7 +24117,6 @@
           "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-oauth-approval": "first-party",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       }

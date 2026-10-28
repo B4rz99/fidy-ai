@@ -91,3 +91,10 @@ export type SandboxAuthenticationInput = Readonly<{
   publicKey: JWK;
   httpClient: HttpClient.HttpClient;
 }>;
+
+export type BancolombiaCleanupProof = Readonly<{
+  observedTokens: ReadonlyArray<"access_token" | "refresh_token">;
+  recordActive: (
+    tokenType: "access_token" | "refresh_token"
+  ) => Effect.Effect<void, BancolombiaAuthorizationFailed>;
+}>;

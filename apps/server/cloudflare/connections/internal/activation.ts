@@ -13,7 +13,7 @@ import {
   ConnectionGrantKey,
 } from "../contract";
 import { institutionsForUser } from "./institution-registration";
-import { decodeGrantKey, sealGrant } from "./grant";
+import { decodeGrantKey, grantPurpose, sealGrant } from "./grant";
 import { InstitutionId } from "../../../src/core/connections/contract";
 
 const Claim = Schema.Struct({
@@ -114,17 +114,11 @@ const retainGrant = (
   Effect.gen(function* () {
     const key = yield* ConnectionGrantKey;
     if (Option.isNone(key)) return yield* failed();
-    const purpose = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))([
-      "fidy-bank-grant-v1",
-      input.admission.userId,
-      claim.connectionId,
-      claim.attemptId,
-      "bancolombia",
-      "sandbox",
-      retained.clientId,
-      claim.consentId,
-      claim.intentJson,
-    ]);
+    const purpose = yield* grantPurpose({
+      ...claim,
+      userId: input.admission.userId,
+      clientId: retained.clientId,
+    });
     const envelope = yield* sealGrant({ key: key.value, purpose, grant: retained.grant });
     yield* Effect.tryPromise(() =>
       input.db.batch([

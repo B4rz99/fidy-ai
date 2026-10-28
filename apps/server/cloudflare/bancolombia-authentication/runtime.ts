@@ -1,6 +1,7 @@
 import {
   ConnectionAuthorizationUnavailable,
   type ConnectionBankActivation,
+  type ConnectionBankCleanup,
   type ConnectionBankPreparation,
 } from "../connections/contract";
 import {
@@ -27,6 +28,7 @@ import {
   activateBancolombiaSandbox,
   type authenticateBancolombiaSandbox,
   authorizeBancolombiaSandbox,
+  revokeBancolombiaSandboxGrant,
   verifyBancolombiaSandboxTokenLifecycle,
 } from "./operations";
 
@@ -195,3 +197,30 @@ export const makeBancolombiaSandboxActivation = (
       activate: (request) => activateProfile(input.environment, profile, request),
     }))
   );
+
+/** Cleanup remains available after the sandbox admission window closes; it cannot create customer authority. */
+export const makeBancolombiaSandboxCleanup = (
+  environment: BancolombiaSandboxEnvironment
+): Option.Option<ConnectionBankCleanup> => {
+  const clientId = environment.BANCOLOMBIA_SANDBOX_CLIENT_ID;
+  if (clientId === undefined || !Schema.is(Schema.String.check(Schema.isUUID()))(clientId)) {
+    return Option.none();
+  }
+  return Option.some({
+    clientId,
+    revoke: (input) =>
+      withSandboxClient(environment, (client) =>
+        revokeBancolombiaSandboxGrant({
+          ...client,
+          grant: input.grant,
+          proof: Option.some({
+            observedTokens: input.observedTokens,
+            recordActive: (tokenType) =>
+              input
+                .recordActive(tokenType)
+                .pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed())),
+          }),
+        })
+      ).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable())),
+  });
+};

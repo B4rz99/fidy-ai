@@ -1,3 +1,4 @@
+import { sweepGrants } from "./internal/cleanup";
 import { digestBytes } from "../secret-material/operations";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -277,3 +278,8 @@ export const handleConnectionBrowserRequest = (input: BrowserRequest): Effect.Ef
 
 export const makeConnectionsErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+/** Recover one due held grant per tick, with a durable lease and no new customer authorization. */
+export const sweepConnectionGrants = (
+  input: Parameters<typeof sweepGrants>[0]
+): ReturnType<typeof sweepGrants> => sweepGrants(input);

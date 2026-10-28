@@ -156,3 +156,19 @@ Together with the reviewed contracts, this leaves a specific documentation/verif
 which bank-supported operation cancels or reconciles an account ConsentId when an authorization-code
 exchange might have succeeded but no tokens were received. These observations do not prove that no
 separate cancellation endpoint exists; that procedure still needs bank confirmation.
+
+## Held-token implementation follow-up
+
+The follow-up now implements held customer-token cleanup through the protected bank adapter and
+private scheduled recovery. It persists positive token-inspection baselines under the exact grant
+lease before revocation, attempts both held token kinds independently, and requires inactive results
+before destroying the encrypted envelope. A validated original access-token expiry can establish
+that an already-expired access token is unusable; an unverified inactive refresh token cannot.
+Failure, interruption, concurrent recovery, foreign keys, different Users, replacement generations,
+and a response missing signed identity are covered at the public/Core/native-D1 seam. Retention
+failure also attempts immediate cleanup without claiming a successful durable outcome.
+
+This local implementation and substituted-transport evidence do not establish live customer-token
+behavior or bank-side isolation between separate customer grants. Those still require controlled
+sandbox verification. ConsentId cancellation after an uncertain exchange with no held tokens remains
+the focused bank-support question above; no new public cancellation contract was discovered.

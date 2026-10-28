@@ -101,6 +101,34 @@ ran with `verify_bancolombia_sandbox=true` and passed the active → revoke → 
 registered JWT/mTLS application-token path is verified; the Basic rejection remains recorded above.
 No signing key or bank token was exported.
 
+## Held-grant recovery
+
+Known tokens are retained before validating the complete exchange response. If retaining them fails,
+Fidy attempts immediate bank cleanup; it still rejects activation, and an unsuccessful cleanup cannot
+be reported as resolved. Failed and superseded grants with an encrypted envelope are eligible for
+private scheduled cleanup.
+One due grant is leased per five-minute tick; the two-minute lease prevents competing ticks from
+cleaning the same attempt. A failed or interrupted attempt retains its envelope and waits five
+minutes before retry. A crash that bypasses the failure handler is recoverable after lease expiry.
+Discovery and each destination remain pinned, and cleanup uses the same Core mTLS and signing key
+independently of browser sessions, processing Consent standing, or the sandbox admission window.
+
+Before any revocation, cleanup inspects both tokens and durably records each positive active result
+under the exact live lease. It then attempts the held refresh token first, then the access token even
+if refresh cleanup fails. Each token requires authenticated introspection, revocation, and inactive
+introspection afterwards. An initially inactive token is insufficient without its retained positive
+baseline; an access token past its validated original expiry can instead rely on that expiry. A
+malformed exchange expiry is never treated as evidence that a received token has already expired.
+Both must finish before the exact leased envelope is destroyed and its completion timestamp is
+recorded. Already-inactive tokens with that proof can be processed after a prior ambiguous revocation;
+no new token or refresh grant is requested. Active grants, another User's grants, and newer attempt
+results are not eligible. The database guards and encryption purpose bind every operation to its
+original User, Connection, attempt, client, consent, and intent.
+
+The marker records only verified invalidation of held tokens, not cancellation of bank consent.
+A claim with no envelope remains unresolved and cannot acquire a cleanup completion timestamp.
+Whole-User erasure remains blocked under #313; the pending ConsentId procedure is unchanged.
+
 ## Remaining verification
 
 Repeat application-token verification through the existing `production-inspect.yml` workflow with
@@ -108,8 +136,8 @@ Repeat application-token verification through the existing `production-inspect.y
 the registered signing key; do not extract it or recreate the deleted signing-proof workflow. No
 customer test profile is required for this application-token verification.
 
-Customer access/refresh-grant cleanup still requires implementation and verification before enabling
-customer admission. The successful application-token check is not evidence for those token kinds
+Customer access/refresh-grant cleanup is implemented for held credentials; live customer-token
+verification is still required before general sandbox customer admission. The successful application-token check is not evidence for those token kinds
 or for a different grant's isolation. An uncertain exchange that returns no token remains separate:
 reviewed public consent contracts define creation and retrieval, but no TPP cancellation operation.
 They describe revocation through the bank's interface without specifying an API request for Fidy.

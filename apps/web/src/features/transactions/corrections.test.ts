@@ -1,4 +1,4 @@
-import { DateTime, Effect, Layer, Schema } from "effect";
+import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
@@ -135,12 +135,14 @@ it.effect("admits one revision-bound Correction synchronously and rereads after 
     test.behavior.delay = 50;
     const correction = {
       kind: "single" as const,
+      origin: "inline" as const,
       transaction: test.transaction,
       changes: { counterparty: "Updated" },
     };
     test.view().submit(correction);
     test.view().submit(correction);
     expect(test.view().status).toBe("saving");
+    expect(Option.contains(test.view().inlineTransaction, test.transaction.id)).toBe(true);
     yield* advance(50);
     expect(test.sent).toHaveLength(1);
     expect(
@@ -157,11 +159,13 @@ it.effect("keeps all editing paths locked after a lost acknowledgement and faile
     test.behavior.write = "uncertain";
     test.view().submit({
       kind: "single",
+      origin: "editor",
       transaction: test.transaction,
       changes: { counterparty: "Updated" },
     });
     yield* advance();
     expect(test.view().status).toBe("uncertain");
+    expect(Option.isNone(test.view().inlineTransaction)).toBe(true);
     test.view().submit({
       kind: "bulk",
       transactions: test.transactions,
@@ -208,6 +212,7 @@ it.effect(
       yield* advance();
       test.view().submit({
         kind: "single",
+        origin: "editor",
         transaction: { ...test.transaction, revision: 0 },
         changes: { counterparty: "Stale" },
       });
@@ -249,6 +254,7 @@ it.effect("disposal stops pending completion and an obsolete view cannot submit 
     const view = test.view();
     view.submit({
       kind: "single",
+      origin: "editor",
       transaction: test.transaction,
       changes: { counterparty: "Sent" },
     });
@@ -256,6 +262,7 @@ it.effect("disposal stops pending completion and an obsolete view cannot submit 
     test.dispose();
     view.submit({
       kind: "single",
+      origin: "editor",
       transaction: test.transaction,
       changes: { counterparty: "Stale view" },
     });

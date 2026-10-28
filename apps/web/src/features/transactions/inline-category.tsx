@@ -38,7 +38,7 @@ const CategoryFeedback = ({
 const CategoryCorrection = (props: CategoryProps): JSX.Element => {
   const corrections = useTransactionCorrections();
   const feedback = corrections.status === "recovering" ? "saving" : corrections.status;
-  const status: SaveStatus = corrections.affected.includes(props.transaction.id)
+  const status: SaveStatus = Option.contains(corrections.inlineTransaction, props.transaction.id)
     ? feedback
     : "idle";
   const change = (categoryId: string): void => {
@@ -47,6 +47,7 @@ const CategoryCorrection = (props: CategoryProps): JSX.Element => {
     if (Option.isNone(category)) return;
     corrections.submit({
       kind: "single",
+      origin: "inline",
       transaction: props.transaction,
       changes: { categoryId: category.value.id },
     });

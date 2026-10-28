@@ -273,7 +273,12 @@ export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
       return;
     }
     setInvalid(false);
-    corrections.submit({ kind: "single", transaction: props.transaction, changes: changes.value });
+    corrections.submit({
+      kind: "single",
+      origin: "editor",
+      transaction: props.transaction,
+      changes: changes.value,
+    });
   };
   return props.renderForm(
     <form aria-label="Corregir transacción" onSubmit={onSubmit} className="flex flex-col gap-5">

@@ -16,13 +16,18 @@ import type { Transaction } from "./presentation";
 type Revision = Pick<Transaction, "id" | "revision">;
 type Changes = CanonicalInput<"transactions.updateTransaction">["payload"]["changes"];
 type Correction =
-  | Readonly<{ kind: "single"; transaction: Revision; changes: Changes }>
+  | Readonly<{
+      kind: "single";
+      origin: "inline" | "editor";
+      transaction: Revision;
+      changes: Changes;
+    }>
   | Readonly<{ kind: "bulk"; transactions: ReadonlyArray<Revision>; changes: Changes }>;
 type Status = "idle" | "saving" | "rejected" | "uncertain" | "recovering";
 export type TransactionCorrections = Readonly<{
   status: Status;
   locked: boolean;
-  affected: ReadonlyArray<Transaction["id"]>;
+  inlineTransaction: Option.Option<Transaction["id"]>;
   submit: (correction: Correction) => void;
   recover: () => void;
   mount: () => () => void;
@@ -44,7 +49,7 @@ type Owner = Input & {
   get: Atom.AtomContext;
   command: Atom.AtomResultFn<Work, void, never>;
   status: Status;
-  affected: ReadonlyArray<Transaction["id"]>;
+  inlineTransaction: Option.Option<Transaction["id"]>;
   active: boolean;
   generation: number;
   stopped: Deferred.Deferred<void>;
@@ -65,7 +70,7 @@ export const makeTransactionCorrections = (input: Input): Atom.Atom<TransactionC
       command,
       get,
       status: "idle",
-      affected: [],
+      inlineTransaction: Option.none(),
       active: false,
       generation: 0,
       stopped: Deferred.makeUnsafe<void>(),
@@ -77,7 +82,7 @@ export const makeTransactionCorrections = (input: Input): Atom.Atom<TransactionC
 const present = (owner: Owner): TransactionCorrections => ({
   status: owner.status,
   locked: owner.status !== "idle",
-  affected: owner.affected,
+  inlineTransaction: owner.inlineTransaction,
   submit: (correction) => submit(owner, correction),
   recover: () => recover(owner),
   mount: () => {
@@ -178,9 +183,10 @@ const rejected = (cause: Cause.Cause<unknown>, kind: Correction["kind"]): boolea
 };
 const submit = (owner: Owner, correction: Correction): void => {
   if (!owner.active || owner.status !== "idle") return;
-  owner.affected = (
-    correction.kind === "single" ? [correction.transaction] : correction.transactions
-  ).map((record) => record.id);
+  owner.inlineTransaction =
+    correction.kind === "single" && correction.origin === "inline"
+      ? Option.some(correction.transaction.id)
+      : Option.none();
   const command = prepare(correction);
   if (!currentRevisions(owner, correction) || Option.isNone(command)) {
     owner.status = "rejected";

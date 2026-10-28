@@ -62,7 +62,7 @@
     {
       "cve": "CVE-2026-93753",
       "path": "bun.lock",
-      "reason": "The User explicitly accepted this exact finding for seven days while merging PR #1583 on 2026-10-28 UTC. CI SCA reports deepmerge 4.3.1, a transitive shadcn and @shadcn/registry dependency, with Low severity (CVSS4 2.7). npm registry metadata lists 4.3.1 as latest with no newer published release at acceptance. Application reachability is not established. This retains installed risk rather than remediating it. Review a compatible fix when available under the unchanged release-age policy; rerun SCA and affected checks and remove this record and matching scanner exclusion when resolved. Reference: https://db.fluidattacks.com/vul/CVE-2026-93753",
+      "reason": "Extends the earlier 48-hour approval recorded for PR #1578. The User explicitly accepted this exact finding for seven days while merging PR #1583 on 2026-10-28 UTC. CI SCA reports deepmerge 4.3.1, a transitive shadcn and @shadcn/registry dependency, with Low severity (CVSS4 2.7). npm registry metadata lists 4.3.1 as latest with no newer published release at acceptance. Application reachability is not established. This retains installed risk rather than remediating it. Review a compatible fix when available under the unchanged release-age policy; rerun SCA and affected checks and remove this record and matching scanner exclusion when resolved. Reference: https://db.fluidattacks.com/vul/CVE-2026-93753",
       "until": "2026-11-04T03:36:44Z"
     }
   ]

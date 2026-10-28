@@ -256,7 +256,10 @@ const boundedJson = Effect.fn(function* (
   return yield* decodeJson(text);
 });
 const providerJson = Effect.fn(
-  function* (request: HttpClientRequest.HttpClientRequest, reportDeploymentRejection = false) {
+  function* (
+    request: HttpClientRequest.HttpClientRequest,
+    reportDeploymentRejection: boolean = false
+  ) {
     const client = yield* HttpClient.HttpClient;
     const response = yield* HttpClient.withScope(client)
       .execute(request)

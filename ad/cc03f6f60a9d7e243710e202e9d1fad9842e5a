@@ -1,0 +1,33 @@
+apps/docs/ARCHITECTURE.md
+  s_036f45c3a54b1c::t_c76de1ba3ddc4d 13-16
+apps/docs/package.json
+  s_d9571b3fccd032::t_04c4764a116412 14-15
+package.json
+  s_d9571b3fccd032::t_10bf3180e8c93c 13
+tools/depcruise/graph.mjs
+  s_036f45c3a54b1c::t_f19186401a2d5c 80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "adcc03f6f60a9d7e243710e202e9d1fad9842e5a",
+  "prompts": {},
+  "sessions": {
+    "s_036f45c3a54b1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a180b2-716f-7cd2-8260-834c95b527cb",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

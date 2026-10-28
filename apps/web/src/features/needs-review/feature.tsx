@@ -1,15 +1,16 @@
+import { type ReviewDecisions, type ReviewWorkspaceQuery, makeReviewDecisions } from "./decisions";
 import { ReviewFullState, ReviewWorkspaceLayout } from "@/ui/components/review-workspace";
 import { Button } from "@/ui/components/button";
-import { type AsyncResult, Atom } from "effect/reactivity";
+import { Atom } from "effect/reactivity";
 import { type InboxControl, useInboxControl } from "./inbox-controller";
 import { reviewTitle } from "./presentation";
 import { ReviewToolbar } from "./toolbar";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Navigate, useRouter, useSearch } from "@tanstack/react-router";
 import { Option } from "effect";
-import { type JSX, type ReactNode, useState } from "react";
+import { type JSX, type ReactNode, type RefCallback, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import type { CanonicalSuccess, FidyClient } from "@/transport/client";
+import type { FidyClient } from "@/transport/client";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { ReviewEditor } from "./editor";
@@ -18,13 +19,9 @@ import type { Workspace } from "./model";
 
 import { type Filter, ReviewNavigation } from "./view-navigation";
 
-const { Toaster } = await import("sonner");
+const { Toaster, toast } = await import("sonner");
 
-const makeReviewQuery = (
-  client: FidyClient,
-  filter: Filter,
-  page: number
-): Atom.Atom<AsyncResult.AsyncResult<CanonicalSuccess<"ingestion.getReviewWorkspace">, unknown>> =>
+const makeReviewQuery = (client: FidyClient, filter: Filter, page: number): ReviewWorkspaceQuery =>
   client.query("ingestion", "getReviewWorkspace", {
     query: { status: Option.some(filter), offset: page === 0 ? Option.none() : Option.some(page) },
     reactivityKeys: ["ingestion-review"],
@@ -105,18 +102,28 @@ const ReviewPanel = ({
   if (active && !visited) setVisited(true);
   if (!active && !visited) return <></>;
   return (
-    <div hidden={!active} data-review="panel">
-      <ReviewResources
-        key={`${filter}:${page}`}
-        active={active}
-        filter={filter}
-        select={select}
-        page={page}
-        move={(offset) => select(filter, offset)}
-      />
-    </div>
+    <ReviewResources
+      key={`${filter}:${page}`}
+      active={active}
+      filter={filter}
+      select={select}
+      page={page}
+      move={(offset) => select(filter, offset)}
+    />
   );
 };
+const reviewQueries = (
+  client: FidyClient,
+  filter: Filter,
+  page: number
+): Readonly<{
+  source: ReviewWorkspaceQuery;
+  active: ReviewWorkspaceQuery;
+}> => {
+  const source = makeReviewQuery(client, filter, page);
+  return { source, active: source.pipe(Atom.withRefresh("60 seconds"), Atom.refreshOnWindowFocus) };
+};
+
 const ReviewResources = ({
   active,
   filter,
@@ -131,41 +138,45 @@ const ReviewResources = ({
   select: (status: Filter, offset: number) => void;
 }>): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
-  const [queries] = useState(() => {
-    const source = makeReviewQuery(apiClient, filter, page);
-    return {
-      source,
-      active: source.pipe(Atom.withRefresh("60 seconds"), Atom.refreshOnWindowFocus),
-    };
-  });
+  const [queries] = useState(() => reviewQueries(apiClient, filter, page));
   const query = active ? queries.active : queries.source;
+  const [decisionAtom] = useState(() =>
+    makeReviewDecisions({
+      client: apiClient,
+      query: queries.source,
+      created: () => toast.success("Transacción creada"),
+    })
+  );
+  const decisions = useAtomValue(decisionAtom);
+  const [lifetime] = useState(() => decisionLifetime(decisions));
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
-  if (state._tag !== "Ready") {
-    return (
-      <ReviewUnavailable
-        filter={filter}
-        select={select}
-        refresh={refresh}
-        loading={state._tag !== "Failure"}
-      />
-    );
-  }
   return (
-    <ReadyInbox
-      view={state.value.data}
-      notice={
-        Option.isSome(state.refreshFailure) ? (
-          <ReviewReadFailure refresh={refresh} waiting={state.waiting} />
-        ) : null
-      }
-      disabled={[!active, state.waiting, Option.isSome(state.refreshFailure)].some(Boolean)}
-      page={page}
-      move={move}
-      refresh={refresh}
-      filter={filter}
-      select={select}
-    />
+    <div ref={lifetime} hidden={!active} data-review="panel">
+      {state._tag !== "Ready" ? (
+        <ReviewUnavailable
+          filter={filter}
+          select={select}
+          refresh={refresh}
+          loading={state._tag !== "Failure"}
+        />
+      ) : (
+        <ReadyInbox
+          decisions={decisions}
+          view={state.value.data}
+          notice={
+            Option.isSome(state.refreshFailure) ? (
+              <ReviewReadFailure refresh={refresh} waiting={state.waiting} />
+            ) : null
+          }
+          disabled={[!active, state.waiting, Option.isSome(state.refreshFailure)].some(Boolean)}
+          page={page}
+          move={move}
+          filter={filter}
+          select={select}
+        />
+      )}
+    </div>
   );
 };
 const ReviewUnavailable = ({
@@ -220,12 +231,12 @@ const ReviewReadFailure = ({
   </div>
 );
 const ReadyInbox = ({
+  decisions,
   notice,
   disabled,
   view,
   page,
   move,
-  refresh,
   filter,
   select,
 }: Readonly<{
@@ -236,12 +247,12 @@ const ReadyInbox = ({
   notice: ReactNode;
   page: number;
   move: (offset: number) => void;
-  refresh: () => void;
+  decisions: ReviewDecisions;
 }>): JSX.Element => {
   const [source, setSource] = useState("all");
   const [search, setSearch] = useState("");
   const visible = filterReviewPage({ view, source, search });
-  const inbox = useInboxControl({ view, visibleItems: visible.items, refresh });
+  const inbox = useInboxControl({ view, visibleItems: visible.items, decisions });
   const control = { ...inbox, locked: inbox.locked || disabled };
   const checked = control.checked.filter((id) => visible.items.some((entry) => entry.id === id));
   return (
@@ -336,8 +347,7 @@ const InboxWorkspace = ({
       <ReviewEditor
         key={item.id}
         item={item}
-        finished={control.finished}
-        barrier={control.barrier}
+        decisions={control.decisions}
         disabled={control.locked}
       />
     </div>
@@ -358,3 +368,8 @@ const filterReviewPage = ({
 });
 
 export { ReviewPendingCount } from "./navigation";
+
+const decisionLifetime =
+  (decisions: ReviewDecisions): RefCallback<HTMLDivElement> =>
+  (node) =>
+    node === null ? undefined : decisions.mount();

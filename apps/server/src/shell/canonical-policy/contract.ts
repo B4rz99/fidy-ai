@@ -194,8 +194,6 @@ export type OperationPolicyValue = {
   readonly access: OperationAccess;
   readonly requiredTier: AccessTier;
   readonly agentConfirmation: AgentConfirmation;
-  /** Additional OAuth authority only; hosted and PAT caller contracts remain independent. */
-  readonly oauthApproval: "native" | "first-party";
   readonly kind: CanonicalOperationKind;
 };
 
@@ -221,17 +219,13 @@ export const getOperationPolicy = (endpoint: PolicyAnnotatedOperation): Operatio
  * surface can infer access from an independent scope or eligibility field.
  */
 export const operationPolicy = (
-  policy: OperationPolicyValue | Omit<OperationPolicyValue, "oauthApproval">
+  policy: OperationPolicyValue
 ): Context.Context<OperationPolicy | OpenApi.Override> =>
-  Context.make(OperationPolicy, {
-    ...policy,
-    oauthApproval: "oauthApproval" in policy ? policy.oauthApproval : "native",
-  }).pipe(
+  Context.make(OperationPolicy, policy).pipe(
     Context.add(OpenApi.Override, {
       "x-fidy-access": publishOperationAccess(policy.access),
       "x-fidy-required-tier": policy.requiredTier,
       "x-fidy-agent-confirmation": policy.agentConfirmation,
-      ...(!("oauthApproval" in policy) ? {} : { "x-fidy-oauth-approval": policy.oauthApproval }),
       "x-fidy-operation-kind": policy.kind,
     })
   );

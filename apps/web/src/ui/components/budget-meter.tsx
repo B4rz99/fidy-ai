@@ -33,7 +33,7 @@ export const BudgetBalance = ({
 }: Readonly<{ over: boolean; children: string }>): JSX.Element => (
   <span
     className={cn(
-      "inline-flex rounded-full px-2.5 py-1 text-sm font-medium tabular-nums",
+      "inline-flex min-w-0 max-w-full overflow-x-auto rounded-full px-2.5 py-1 text-sm font-medium whitespace-nowrap tabular-nums",
       over ? "bg-destructive text-destructive-foreground" : "bg-success/30 text-foreground"
     )}
   >

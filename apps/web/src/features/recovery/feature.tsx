@@ -77,7 +77,10 @@ const RotationAction = (props: {
   if (props.state._tag === "FreshSessionRequired") {
     return (
       <div>
-        <Button render={<a aria-label="Iniciar sesión" href="/login?resume=account" />}>
+        <Button
+          contentLayout="wrap"
+          render={<a aria-label="Iniciar sesión" href="/login?resume=account" />}
+        >
           Iniciar sesión
         </Button>
       </div>
@@ -86,11 +89,12 @@ const RotationAction = (props: {
   return (
     <div className="flex flex-wrap gap-2">
       {props.state._tag === "Disclosed" ? (
-        <Button onClick={props.onCopy} type="button">
+        <Button contentLayout="wrap" onClick={props.onCopy} type="button">
           {props.state.copied ? "Copiado" : "Copiar código"}
         </Button>
       ) : (
         <Button
+          contentLayout="wrap"
           disabled={props.state._tag === "Rotating"}
           onClick={props.onStart}
           type="button"

@@ -172,3 +172,27 @@ The result page uses the application shell and reads current Connection/Account 
 claim that transaction or balance import has run. Production institution registration remains empty.
 Live sandbox validation requires a new bank approval after this callback implementation is released;
 the previous registration-only callback discarded its code and cannot be replayed.
+
+## Held-grant recovery verification — 2026-10-27
+
+[PR #1577](https://github.com/B4rz99/fidy-ai/pull/1577) merged as
+`8ecd5e04d68525dbb203ef30631b4c53732a155d`. Its final CI passed every required check,
+including both browser shards: [CI run](https://github.com/B4rz99/fidy-ai/actions/runs/40612124060).
+The focused native protocol, activation and Connections slice passed 97 tests; the final
+refresh-only fixture rerun passed both cases. Fresh independent Standards, Security and Spec
+reviews reported no findings after correcting refresh-only custody. Publication boundaries,
+edge-policy verification, lint, type-aware lint, typecheck and formatting passed.
+
+The complete protected [release](https://github.com/B4rz99/fidy-ai/actions/runs/40614932965)
+passed with customer admission disabled, including candidate/intermediate pairing proofs,
+promotion, normal-traffic probes, retirement and drift verification. A read-only query against
+production schema metadata confirmed all five cleanup columns; it read no customer rows.
+Local startup checks passed for both the candidate and its preceding revision. None of these
+checks establishes a live customer-token cleanup, bank-side cross-grant isolation or a customer
+authorization-to-Accounts roundtrip.
+
+A configuration-only rerun on the same revision can reuse the serving Ingress version. The
+release controller requires fresh versions of both Ingress and Core before staging traffic.
+Stage sandbox profile changes with a reviewed new revision through that release process; do not
+bypass the fresh-pair guard. Keep the existing operator-only admission window bounded to one hour
+and remove its protected profile secret after the controlled test.

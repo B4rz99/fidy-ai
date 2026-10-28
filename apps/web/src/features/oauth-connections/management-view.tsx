@@ -61,6 +61,7 @@ const connectionDetails = (
 const ConnectionAction = ({ connection, busy, revoke }: ConnectionProps): JSX.Element =>
   connection.state === "active" ? (
     <Button
+      contentLayout="wrap"
       type="button"
       variant="destructive-text"
       size="label"
@@ -161,13 +162,20 @@ export const OAuthManagementView = ({
     {Option.match(list.nextCursor, {
       onNone: () => null,
       onSome: (id) => (
-        <Button type="button" variant="outline" disabled={busy} onClick={() => next(id)}>
+        <Button
+          contentLayout="wrap"
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => next(id)}
+        >
           Siguiente página
         </Button>
       ),
     })}
     <div>
       <Button
+        contentLayout="wrap"
         type="button"
         variant="destructive-text"
         size="label"

@@ -1,7 +1,7 @@
 {
-  "trustBoundary": "Fresh same-User first-party decision plus OAuth-authorized native continuation; no independent human-presence attestation",
+  "trustBoundary": "OAuth-authorized client-native decision; no independent human-presence attestation",
   "actualSeam": "Public ingress \u2192 Core \u2192 User coordinator \u2192 canonical mutation and Audit in native D1",
-  "fixture": "Disposable approved OAuth credential injected by local bridge; explicit synthetic first-party browser decision before native acceptance; canned model; pinned native CLIs and PTYs. No Production or inference.",
+  "fixture": "Disposable approved OAuth credential injected by local bridge; no per-operation browser decision; canned model; pinned native CLIs and PTYs. No Production or inference.",
   "results": [
     {
       "host": "claude",
@@ -502,10 +502,10 @@
       "passed": true
     }
   ],
-  "verifiedAt": "2026-10-20T15:03:57.850660+00:00",
+  "verifiedAt": "2026-10-28T03:17:20.506239+00:00",
   "versions": {
     "claude": "2.1.289",
     "codex": "0.160.0"
   },
-  "limitations": "Synthetic first-party browser API decision and OAuth grant; canned loopback model; automated native PTY controls. Built-browser approval is verified separately. No independent human-presence attestation, production onboarding, or live inference."
+  "limitations": "Synthetic OAuth grant; canned loopback model; automated native PTY controls. No per-operation browser decision, independent human-presence attestation, production onboarding, or live inference."
 }

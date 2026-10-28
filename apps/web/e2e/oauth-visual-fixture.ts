@@ -3,7 +3,6 @@ import { Effect } from "effect";
 import { apiOrigin } from "./http-fixtures";
 
 export const reviewReference = "10000000-0000-4000-8000-000000000001";
-export const operationReference = "10000000-0000-4000-8000-000000000002";
 const connection = {
   requestId: reviewReference,
   claimedClientName: "Agente de ejemplo",
@@ -29,23 +28,7 @@ const connection = {
   requestExpiresAt: "2026-10-27T13:15:00Z",
   connectAvailable: true,
 };
-export const operationInput =
-  '{\n  "params": {\n    "id": "10000000-0000-4000-8000-000000000003"\n  }\n}';
-const operation = {
-  reference: operationReference,
-  connectionId: "10000000-0000-4000-8000-000000000004",
-  claimedClientName: "Agente de ejemplo",
-  operation: "budgets.deleteBudget",
-  inputJson: operationInput,
-  effects: [
-    "budgets.deleteBudget: Eliminar el presupuesto 10000000-0000-4000-8000-000000000003, categoría 10000000-0000-4000-8000-000000000005, límite actual 500000 COP.",
-  ],
-  inputDigest: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-  disclosureRevision: "budget-deletion-v1",
-  expiresAtMilliseconds: 1793106300000,
-  approved: false,
-};
-export type ReviewState = "ready" | "loading" | "unavailable" | "approved";
+export type ReviewState = "ready" | "loading" | "unavailable";
 export type ConsentState = "granted" | "loading" | "unavailable" | "revoked" | "signed-out";
 export type MutationState = "success" | "unknown" | "pending";
 
@@ -82,9 +65,7 @@ const consentResponse = (route: Route, state: ConsentState, held: Promise<void>)
 };
 const reviewResponse = (route: Route, state: ReviewState, held: Promise<void>): Promise<void> => {
   if (state === "unavailable") return fulfill(route, {}, missingStatus);
-  const path = new URL(route.request().url()).pathname;
-  const body =
-    path === "/web/oauth/review" ? connection : { ...operation, approved: state === "approved" };
+  const body = connection;
   return state === "loading" ? held.then(() => fulfill(route, body)) : fulfill(route, body);
 };
 const mutationResponse = (
@@ -113,9 +94,7 @@ export const installOAuthReview = Effect.fnUntraced(function* (
     const path = new URL(request.url()).pathname;
     if (request.method() !== "GET") {
       mutations.push({ path, body: request.postData() ?? "" });
-      if (
-        ["/web/oauth/cancel", "/web/oauth/connect", "/web/oauth/operation-decision"].includes(path)
-      ) {
+      if (["/web/oauth/cancel", "/web/oauth/connect"].includes(path)) {
         return mutationResponse(route, options.mutation, held.promise);
       }
       unexpected.push(path);
@@ -127,7 +106,7 @@ export const installOAuthReview = Effect.fnUntraced(function* (
       });
     }
     if (path === "/web/consent") return consentResponse(route, options.consent, held.promise);
-    if (["/web/oauth/review", "/web/oauth/operation-review"].includes(path)) {
+    if (path === "/web/oauth/review") {
       return reviewResponse(route, options.review, held.promise);
     }
     unexpected.push(path);

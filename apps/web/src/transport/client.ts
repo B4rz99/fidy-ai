@@ -57,8 +57,6 @@ export {
   OAuthUnauthenticated,
   OAuthRequestId,
   OAuthReview,
-  OAuthOperationReview,
-  OAuthOperationDecision,
   OAuthReviewChoice,
 } from "@fidy/server/client";
 export {

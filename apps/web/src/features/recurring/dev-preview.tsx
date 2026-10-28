@@ -18,7 +18,7 @@ const datasets: ReadonlyArray<Readonly<{ value: Dataset; label: string }>> = [
   { value: "many", label: "500 rows" },
   { value: "stale", label: "Stale" },
 ];
-const restoreEnvironment = (_element: HTMLDivElement): (() => void) => {
+const restoreEnvironment = (_element: HTMLElement): (() => void) => {
   const root = document.documentElement;
   const fontSize = root.style.fontSize;
   const dark = root.classList.contains("dark");
@@ -70,7 +70,7 @@ export const RecurringDataPreview = (props: PreviewProps): JSX.Element => {
           <FixtureWorkspace key={dataset} props={props} dataset={dataset} />
         )}
       </div>
-      <div
+      <section
         ref={restoreEnvironment}
         aria-label="Recurring stress test"
         className="recurring-stress-controls fixed bottom-3 left-1/2 z-50 flex w-max max-w-[95vw] -translate-x-1/2 flex-wrap justify-center gap-1 rounded-xl border bg-muted p-1 text-foreground shadow-sm"
@@ -104,7 +104,7 @@ export const RecurringDataPreview = (props: PreviewProps): JSX.Element => {
           Dark mode
         </button>
         {dataset === "demo" ? null : <span className="self-center px-2">Fixture · no writes</span>}
-      </div>
+      </section>
     </>
   );
 };

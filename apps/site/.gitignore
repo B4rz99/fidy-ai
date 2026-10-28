@@ -1,0 +1,4 @@
+# Alchemy hashes from this directory; root-relative ignore rules are not rebased.
+.astro/
+test-results/
+playwright-report/

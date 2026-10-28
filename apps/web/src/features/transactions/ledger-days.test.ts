@@ -30,11 +30,11 @@ it("keeps newest days first while sorting within each day and totaling exact amo
     occurredOnText: "27-10-2026",
     dateLabel: "27 de octubre de 2026",
   });
-  const days = presentLedgerDays(
-    [newest, debit, foreign, older],
-    [debit, foreign, older, newest],
-    "es-CO"
-  );
+  const days = presentLedgerDays({
+    rows: [newest, debit, foreign, older],
+    sortedRows: [debit, foreign, older, newest],
+    locale: "es-CO",
+  });
   expect(
     days.map((day) => ({
       date: day.date,
@@ -51,5 +51,5 @@ it("keeps newest days first while sorting within each day and totaling exact amo
     },
     { date: "27-10-2026", label: "27 de octubre de 2026", total: "-$ 0,10", ids: ["Earlier"] },
   ]);
-  expect(presentLedgerDays([], [], "es-CO")).toEqual([]);
+  expect(presentLedgerDays({ rows: [], sortedRows: [], locale: "es-CO" })).toEqual([]);
 });

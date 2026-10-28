@@ -26,11 +26,15 @@ const dailyTotals = (rows: ReadonlyArray<TransactionListRow>, locale: string): s
   ).join(" · ");
 
 /** Canonical date order takes priority over the selected within-day sort. */
-export const presentLedgerDays = (
-  rows: ReadonlyArray<TransactionListRow>,
-  sortedRows: ReadonlyArray<TransactionListRow>,
-  locale: string
-): ReadonlyArray<LedgerDay> => {
+export const presentLedgerDays = ({
+  rows,
+  sortedRows,
+  locale,
+}: Readonly<{
+  rows: ReadonlyArray<TransactionListRow>;
+  sortedRows: ReadonlyArray<TransactionListRow>;
+  locale: string;
+}>): ReadonlyArray<LedgerDay> => {
   const sortedDays = Map.groupBy(sortedRows, (row) => row.occurredOnText);
   return Array.from(
     Map.groupBy(rows, (row) => row.occurredOnText),

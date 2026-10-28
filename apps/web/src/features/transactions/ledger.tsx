@@ -408,11 +408,11 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
   const sortedRows = table.getRowModel().rows;
   const days = useMemo(
     () =>
-      presentLedgerDays(
+      presentLedgerDays({
         rows,
-        sortedRows.map((row) => row.original),
-        props.locale
-      ),
+        sortedRows: sortedRows.map((row) => row.original),
+        locale: props.locale,
+      }),
     [rows, sortedRows, props.locale]
   );
   return (

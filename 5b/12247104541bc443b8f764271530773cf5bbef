@@ -1,0 +1,21 @@
+apps/docs/src/content/docs/acceso/permisos.md
+  s_2c9d6c1daa679a::t_e183292ab49d25 28
+apps/site/public/llms.txt
+  s_2c9d6c1daa679a::t_e183292ab49d25 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5b12247104541bc443b8f764271530773cf5bbef",
+  "prompts": {},
+  "sessions": {
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

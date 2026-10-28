@@ -41,7 +41,9 @@ import {
 } from "../canonical-admission/operations";
 
 const queryLifetimeMilliseconds = 3000;
-const transportLifetimeMilliseconds = 5000;
+const mutationLifetimeMilliseconds = 30000;
+const admissionLifetimeMilliseconds = 5000;
+const transportLifetimeMilliseconds = mutationLifetimeMilliseconds + admissionLifetimeMilliseconds;
 const maximumResidentOwners = 8;
 const maximumResidentLifetimeMilliseconds = 300000;
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
@@ -125,10 +127,17 @@ const dispatchCanonicalTool = (
       });
     })
   );
+const operationLifetime = (operation: CatalogOperation): number =>
+  operation.policy.kind === "mutation" ? mutationLifetimeMilliseconds : queryLifetimeMilliseconds;
 const canonicalDeadline = (
-  input: Readonly<{ admission: ToolAdmission; current: number; continuation: boolean }>
+  input: Readonly<{
+    admission: ToolAdmission;
+    current: number;
+    continuation: boolean;
+    operation: CatalogOperation;
+  }>
 ): number => {
-  const boundedExecution = input.current + queryLifetimeMilliseconds;
+  const boundedExecution = input.current + operationLifetime(input.operation);
   if (input.continuation) return boundedExecution;
   return Math.min(boundedExecution, input.admission.transportDeadlineMilliseconds);
 };
@@ -221,6 +230,7 @@ const executeAdmittedTool = (
         admission: input,
         current: yield* Clock.currentTimeMillis,
         continuation: Option.isSome(work.confirmation),
+        operation,
       }),
       operation: operation.id,
       input: encodedInput,
@@ -235,7 +245,7 @@ const executeAdmittedTool = (
       }),
     });
     const response = yield* dispatchCanonicalTool(input, admission).pipe(
-      Effect.timeout(queryLifetimeMilliseconds)
+      Effect.timeout(operationLifetime(operation))
     );
     if (response.headers.get("fidy-oauth-review") === "1") {
       const requested = yield* requestNativeConfirmation({ response, context, responsePolicy });
@@ -319,7 +329,7 @@ const catalogTools = (scopes: PATScopes): Effect.Effect<CatalogProjection, Schem
     return projection;
   });
 const forwardMcp = (
-  input: Readonly<{ request: Request; coordinator: Coordinator }>,
+  input: Readonly<{ request: Request; coordinator: Coordinator; lifetimeMilliseconds: number }>,
   subject: OAuthCaller,
   body: Uint8Array
 ): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
@@ -337,7 +347,7 @@ const forwardMcp = (
       clientId: subject.clientId,
       resource: subject.resource,
       digest: Array.from(subject.digest),
-      deadlineMilliseconds: (yield* Clock.currentTimeMillis) + transportLifetimeMilliseconds,
+      deadlineMilliseconds: (yield* Clock.currentTimeMillis) + input.lifetimeMilliseconds,
       method: input.request.method,
       headers,
       body: Array.from(body),
@@ -355,19 +365,55 @@ const forwardMcp = (
       )
     );
   });
+const TimedToolCall = Schema.fromJsonString(
+  Schema.Struct({
+    method: Schema.Literal(McpSchema.CallTool._tag),
+    params: Schema.Struct({ name: McpSchema.CallTool.payloadSchema.fields.name }),
+  })
+);
+const requestLifetime = (body: Uint8Array): number => {
+  const call = Schema.decodeOption(TimedToolCall)(new TextDecoder().decode(body));
+  return Option.isSome(call) &&
+    operationCatalog.byId.get(call.value.params.name)?.policy.kind === "mutation"
+    ? transportLifetimeMilliseconds
+    : admissionLifetimeMilliseconds;
+};
 /** Authenticates and transfers bounded MCP work to the User execution boundary, where both protocol runtimes own cleanup. */
 export const handleMcpRequest = (
   input: Readonly<{ request: Request; db: D1Database; coordinator: Coordinator }>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    if (input.request.signal.aborted) return unavailable();
-    const caller = yield* authenticateOAuth({ ...input, current: yield* Clock.currentTimeMillis });
-    if (Option.isNone(caller)) return denied();
-    const body = yield* readBoundedRequestBody(input.request, bodyPolicy);
-    return yield* forwardMcp(input, caller.value.subject, body);
+    const admission = yield* Effect.gen(function* () {
+      if (input.request.signal.aborted) {
+        return { _tag: "Refused" as const, response: unavailable() };
+      }
+      const caller = yield* authenticateOAuth({
+        ...input,
+        current: yield* Clock.currentTimeMillis,
+      });
+      if (Option.isNone(caller)) return { _tag: "Refused" as const, response: denied() };
+      const body = yield* readBoundedRequestBody(input.request, bodyPolicy);
+      return { _tag: "Admitted" as const, subject: caller.value.subject, body };
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: admissionLifetimeMilliseconds,
+        orElse: () => Effect.succeed({ _tag: "Refused" as const, response: unavailable() }),
+      })
+    );
+    if (admission._tag === "Refused") return admission.response;
+    const lifetimeMilliseconds = requestLifetime(admission.body);
+    return yield* forwardMcp(
+      { ...input, lifetimeMilliseconds },
+      admission.subject,
+      admission.body
+    ).pipe(
+      Effect.timeoutOrElse({
+        duration: lifetimeMilliseconds,
+        orElse: () => Effect.succeed(unavailable()),
+      })
+    );
   }).pipe(
     Effect.raceFirst(awaitRequestAbort(input.request)),
-    Effect.timeoutOrElse({ duration: "5 seconds", orElse: () => Effect.succeed(unavailable()) }),
     Effect.catchCause(() => Effect.succeed(unavailable()))
   );
 

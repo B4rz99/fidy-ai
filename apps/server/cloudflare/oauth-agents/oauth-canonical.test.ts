@@ -399,6 +399,79 @@ it("creates a Transaction through the ordinary OAuth mutation with one protected
     })
   ));
 
+it("returns the committed Transaction through MCP when native D1 settlement takes more than five seconds", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture({ scopes: ["read", "write"], lifetimeDays: 7 });
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const commit = fixture.holdMutationCommit();
+      const pending = mcpFixture({
+        ...fixture,
+        bearer: token.access_token,
+        retryKey: Option.none(),
+        method: "tools/call",
+        name: "transactions.createTransaction",
+        args: {
+          payload: {
+            money: { amount: "25000", currency: "COP" },
+            direction: "outflow",
+            occurredAt: "2026-10-28T12:00:00.000Z",
+            notes: "MCP regression capture",
+          },
+        },
+      });
+      yield* wait(commit.waiting);
+      yield* Effect.sleep("6200 millis");
+      commit.release();
+      const response = yield* wait(pending);
+      yield* wait(commit.settled);
+      const body = yield* wait(response.json());
+      expect(body).toMatchObject({
+        result: {
+          isError: false,
+          structuredContent: {
+            data: {
+              money: { amount: "25000", currency: "COP" },
+              notes: "MCP regression capture",
+              revision: 0,
+            },
+          },
+        },
+      });
+      const created = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          result: Schema.Struct({
+            structuredContent: Schema.Struct({ data: Schema.Struct({ id: Schema.String }) }),
+          }),
+        })
+      )(body);
+      const read = yield* wait(
+        mcpFixture({
+          ...fixture,
+          bearer: token.access_token,
+          retryKey: Option.none(),
+          method: "tools/call",
+          name: "transactions.getTransaction",
+          args: { params: { id: created.result.structuredContent.data.id } },
+        })
+      );
+      expect(yield* wait(read.json())).toMatchObject({
+        result: {
+          isError: false,
+          structuredContent: {
+            data: {
+              id: created.result.structuredContent.data.id,
+              revision: 0,
+              money: { amount: "25000", currency: "COP" },
+            },
+          },
+        },
+      });
+    })
+  ));
+
 it("commits an authorized OAuth atomic batch with exact correlated results and one Audit per child", () =>
   Effect.runPromise(
     Effect.gen(function* () {

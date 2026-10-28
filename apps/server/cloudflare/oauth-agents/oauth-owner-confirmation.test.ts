@@ -153,15 +153,6 @@ it.each(nativeOwnerJourneys)(
             }),
           })
         )(yield* wait(review.json()));
-        if (
-          [
-            "memory.revise",
-            "memory.forget",
-            "transactions.updateTransaction",
-            "transactions.deleteTransaction",
-          ].some((operation) => operation === name)
-        ) {
-        }
         const accepted = yield* wait(
           nativeConfirmationCall({
             fixture,

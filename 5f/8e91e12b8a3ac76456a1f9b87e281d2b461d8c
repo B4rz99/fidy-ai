@@ -1,0 +1,20 @@
+apps/server/cloudflare/mcp/runtime.ts
+  s_2c9d6c1daa679a::t_a996ffd93d93fa 332,350,374-375,378-380,386,393-395,402-403,413
+  s_2c9d6c1daa679a::t_9b10cb8d398c72 368-373,376-377,387-392,396-401,404-412
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5f8e91e12b8a3ac76456a1f9b87e281d2b461d8c",
+  "prompts": {},
+  "sessions": {
+    "s_2c9d6c1daa679a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18095-9484-7d33-bf6d-dc1464b4ec77",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

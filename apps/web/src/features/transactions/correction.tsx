@@ -1,14 +1,14 @@
 import { RefreshButton } from "@/ui/components/refresh-button";
-import { useAtomSet } from "@effect/atom-react";
+
 import { BigDecimal, DateTime, Option } from "effect";
 import { useState } from "react";
 import type { FormEvent, JSX } from "react";
-import type { CanonicalInput, FidyClient } from "@/transport/client";
+import type { CanonicalInput } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
-import { makeTransactionCorrection } from "./correction-command";
+import { useTransactionCorrections } from "./correction-context";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import type { Category, Transaction } from "./presentation";
 
@@ -25,15 +25,10 @@ type CorrectionDraft = Readonly<{
 }>;
 type CorrectionProps = Readonly<{
   renderForm: (form: JSX.Element) => JSX.Element;
-  apiClient: FidyClient;
   transaction: Transaction;
   categories: ReadonlyArray<Category>;
   timeZone: string;
-  onSaved: () => void;
   onCancel: () => void;
-  onRefresh: () => void;
-  status: CorrectionStatus;
-  onStatus: (status: CorrectionStatus) => void;
 }>;
 const localDate = (transaction: Transaction, timeZone: string): string =>
   DateTime.formatIsoDate(
@@ -260,30 +255,29 @@ const CorrectionActions = ({
 /** Corrects only explicitly changed facts at the observed revision; an uncertain write is never replayed. */
 export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
   const [draft, setDraft] = useState(() => initialDraft(props.transaction, props.timeZone));
-  const { status, onStatus: setStatus } = props;
-  const [command] = useState(() =>
-    makeTransactionCorrection({ apiClient: props.apiClient, transaction: props.transaction })
-  );
-  const submit = useAtomSet(command);
-  const locked = status === "saving" || status === "uncertain" || status === "rejected";
+  const corrections = useTransactionCorrections();
+  const [invalid, setInvalid] = useState(false);
+  const feedback = corrections.status === "recovering" ? "saving" : corrections.status;
+  const status: CorrectionStatus = feedback === "idle" && invalid ? "invalid" : feedback;
+  const locked = corrections.locked;
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     if (locked) return;
     const changes = correctionChanges(draft, props);
     if (Option.isNone(changes)) {
-      setStatus("invalid");
+      setInvalid(true);
       return;
     }
     if (Object.keys(changes.value).length === 0) {
       props.onCancel();
       return;
     }
-    setStatus("saving");
-    submit({
+    setInvalid(false);
+    corrections.submit({
+      kind: "single",
+      origin: "editor",
+      transaction: props.transaction,
       changes: changes.value,
-      onSaved: props.onSaved,
-      onRejected: () => setStatus("rejected"),
-      onUncertain: () => setStatus("uncertain"),
     });
   };
   return props.renderForm(
@@ -299,7 +293,7 @@ export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
         />
         <DraftNotes draft={draft} onChange={setDraft} />
       </fieldset>
-      <CorrectionFeedback status={status} onRefresh={props.onRefresh} />
+      <CorrectionFeedback status={status} onRefresh={corrections.recover} />
       <CorrectionActions status={status} locked={locked} onCancel={props.onCancel} />
     </form>
   );

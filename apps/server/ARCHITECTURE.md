@@ -167,6 +167,12 @@ through durable progression and recovery. Transaction lookup and PaymentSource c
 distinct evidence and budget rules behind that module; collection and observation share private
 transaction verification. Queue publication remains upstream of observation admission.
 
+Connections owns recovery progression, including hourly attempt retention and five-minute held-grant
+cleanup eligibility. Generic maintenance schedules one recovery tick; the owner attempts due phases
+independently, retains phase-specific operational evidence and reports aggregate failure after the
+remaining phase has run. Interruption stops progression. Durable grant claims and cleanup checkpoints
+remain separate from provider I/O, and unknown authorization outcomes do not authorize replay.
+
 ## 8. Evidence and test boundaries
 
 Core tests exercise pure decisions; contract tests check derived public declarations; provider tests

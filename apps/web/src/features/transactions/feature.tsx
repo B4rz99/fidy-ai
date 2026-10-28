@@ -2,7 +2,10 @@ import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/w
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { DateTime, Effect, Option } from "effect";
-import { useState } from "react";
+import { type RefCallback, useState } from "react";
+import { toast } from "sonner";
+import { TransactionCorrectionContext } from "./correction-context";
+import { type TransactionCorrections, makeTransactionCorrections } from "./corrections";
 import type { JSX } from "react";
 import { Skeleton } from "@/ui/components/skeleton";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
@@ -147,9 +150,9 @@ const queryActivity = ({
 type TransactionQueries = Readonly<{
   categoryState: CanonicalQueryState<Readonly<{ data: ReadonlyArray<Category> }>, unknown>;
   period: ReturnType<typeof deriveCurrentMonthPeriod>;
-  retry: () => void;
   transactionState: CanonicalQueryState<Readonly<{ data: ReadonlyArray<Transaction> }>, unknown>;
   history: HistoryState;
+  corrections: TransactionCorrections;
   onMore: () => void;
   onRetryMore: () => void;
 }>;
@@ -176,21 +179,27 @@ const useTransactionQueries = (period: TransactionQueries["period"]): Transactio
       period: { from: period.from, to: period.to },
     })
   );
+  const [correctionOwner] = useState(() =>
+    makeTransactionCorrections({
+      client: router.options.context.apiClient,
+      firstPage: transactions,
+      categories,
+      history: historyResource.state,
+      historyAction: historyResource.action,
+      saved: () => toast.success("Cambios guardados"),
+    })
+  );
+  const corrections = useAtomValue(correctionOwner);
   const categoryState = useAtomValue(categories).pipe(presentCanonicalQuery);
   const history = useAtomValue(historyResource.state);
   const transactionState = history.query;
   const dispatch = useAtomSet(historyResource.action);
-  const refreshCategories = useAtomRefresh(categories);
-  const retry = (): void => {
-    refreshCategories();
-    dispatch("reset");
-  };
   return {
     categoryState,
     period,
-    retry,
     transactionState,
     history,
+    corrections,
     onMore: () => dispatch("more"),
     onRetryMore: () => dispatch("retry"),
   };
@@ -215,15 +224,25 @@ type TransactionResourceProps = Readonly<{
   period: TransactionQueries["period"];
   dateFilter: Readonly<{ value: string; onChange: (date: string) => void }>;
 }>;
-const TransactionResources = ({
-  currentUser,
-  profileCurrent,
-  period: selectedPeriod,
-  dateFilter,
-}: TransactionResourceProps): JSX.Element => {
-  const router = useRouter();
-  const { categoryState, period, retry, transactionState, history, onMore, onRetryMore } =
-    useTransactionQueries(selectedPeriod);
+const TransactionResources = (props: TransactionResourceProps): JSX.Element => {
+  const queries = useTransactionQueries(props.period);
+  const { corrections } = queries;
+  const [lifetime] = useState<RefCallback<HTMLDivElement>>(
+    () => (): ReturnType<RefCallback<HTMLDivElement>> => corrections.mount()
+  );
+  return (
+    <TransactionCorrectionContext value={Option.some(corrections)}>
+      <div ref={lifetime} className="contents">
+        <TransactionResourceContent {...props} queries={queries} />
+      </div>
+    </TransactionCorrectionContext>
+  );
+};
+const TransactionResourceContent = (
+  props: TransactionResourceProps & Readonly<{ queries: TransactionQueries }>
+): JSX.Element => {
+  const { categoryState, transactionState, corrections } = props.queries;
+  const retry = corrections.recover;
   if (categoryState._tag === "Failure") {
     return (
       <FailedTransactionQuery
@@ -252,6 +271,28 @@ const TransactionResources = ({
   }
 
   return (
+    <ReadyTransactionResources
+      {...props}
+      queries={{ ...props.queries, categoryState, transactionState }}
+    />
+  );
+};
+type ReadyQueries = Omit<TransactionQueries, "categoryState" | "transactionState"> &
+  Readonly<{
+    categoryState: Extract<TransactionQueries["categoryState"], { _tag: "Ready" }>;
+    transactionState: Extract<TransactionQueries["transactionState"], { _tag: "Ready" }>;
+  }>;
+const ReadyTransactionResources = ({
+  currentUser,
+  profileCurrent,
+  dateFilter,
+  queries,
+}: TransactionResourceProps & Readonly<{ queries: ReadyQueries }>): JSX.Element => {
+  const router = useRouter();
+  const { categoryState, period, transactionState, history, corrections, onMore, onRetryMore } =
+    queries;
+  const retry = corrections.recover;
+  return (
     <TransactionWorkspace
       key={history.generation}
       readOnly={false}
@@ -261,6 +302,7 @@ const TransactionResources = ({
       onRetryMore={onRetryMore}
       editable={
         profileCurrent &&
+        !corrections.locked &&
         readyQueryActivity(categoryState, transactionState, retry)._tag === "Current"
       }
       apiClient={router.options.context.apiClient}
@@ -271,7 +313,7 @@ const TransactionResources = ({
       queryNotice={
         <QueryActivityNotice query={readyQueryActivity(categoryState, transactionState, retry)} />
       }
-      onRefresh={retry}
+      onRefresh={corrections.recover}
     />
   );
 };

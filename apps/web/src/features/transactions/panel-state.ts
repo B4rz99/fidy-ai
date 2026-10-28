@@ -6,7 +6,7 @@ export type CaptureStatus = "idle" | "saving" | "saved" | "failed" | "uncertain"
 export type DeletionStatus = "idle" | "saving" | "rejected" | "uncertain";
 export type DetailMode =
   | Readonly<{ _tag: "Viewing" }>
-  | Readonly<{ _tag: "Editing"; status: CorrectionStatus }>
+  | Readonly<{ _tag: "Editing" }>
   | Readonly<{ _tag: "Deleting"; status: DeletionStatus }>;
 export type TransactionPanel =
   | Readonly<{ _tag: "Summary" }>
@@ -19,7 +19,6 @@ export type TransactionPanel =
       _tag: "Bulk";
       stage: "editing";
       transactions: Array.NonEmptyReadonlyArray<Transaction>;
-      status: CorrectionStatus;
     }>
   | Readonly<{ _tag: "Capture"; status: CaptureStatus }>
   | Readonly<{ _tag: "Detail"; id: string; mode: DetailMode }>;

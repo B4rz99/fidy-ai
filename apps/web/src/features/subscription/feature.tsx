@@ -1,14 +1,13 @@
-import {
-  make as makeScopedAtom,
-  useAtom,
-  useAtomRefresh,
-  useAtomSet,
-  useAtomValue,
-} from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Cause, Data, Effect, Array as EffectArray, Option, Redacted } from "effect";
-import { AsyncResult, Atom } from "effect/reactivity";
-import { makeEnrollmentCommand } from "./enrollment-command";
+import { Array as EffectArray, Option, Redacted } from "effect";
+import { Atom } from "effect/reactivity";
+import {
+  type EnrollmentInteraction,
+  type PaymentFlowView,
+  type PaymentSubmissionView,
+  makeEnrollmentInteraction,
+} from "./interaction";
 import { SubscriptionConsentBoundary } from "./consent-boundary";
 import { DaviplataEnrollmentForm } from "./daviplata-form";
 import { DaviplataAuthorizationLock } from "./daviplata-activity";
@@ -23,7 +22,6 @@ import {
   type FormEvent,
   type JSX,
   type RefCallback,
-  type RefObject,
   useRef,
   useState,
 } from "react";
@@ -38,7 +36,6 @@ import { type EnrollmentMethod, type FidyClient } from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import {
-  type PriceId,
   type SubscriptionOfferPresentation,
   type SubscriptionOffers,
   paymentMethodCopy,
@@ -53,7 +50,7 @@ import {
   type PreparedEnrollment,
   makeEnrollmentGateway,
 } from "./enrollment-gateway";
-import { isAwaitingPaymentStatus, paymentStatusRefreshDelay } from "./payment-status";
+import { isAwaitingPaymentStatus } from "./payment-status";
 import {
   ArrowLeft01Icon,
   Calendar03Icon,
@@ -484,7 +481,7 @@ const EnrollmentStatusAction = ({
   current: Exclude<Enrollment, PreparedEnrollment>;
   busy: boolean;
   prepare: (replaceFailedSource?: boolean) => void;
-  refresh: (current: PaymentFlowState) => void;
+  refresh: () => void;
 }>): JSX.Element => {
   if (current.status === "available") {
     return (
@@ -518,19 +515,12 @@ const EnrollmentStatusAction = ({
           ? "Estamos verificando el resultado. No vuelvas a enviar los datos."
           : "Creando tu fuente de pago…"}
       </output>
-      <Button
-        disabled={busy}
-        onClick={() => refresh(enrollmentFlow(current))}
-        type="button"
-        variant="outline"
-      >
+      <Button disabled={busy} onClick={() => refresh()} type="button" variant="outline">
         Consultar estado
       </Button>
     </PaymentFeedback>
   );
 };
-
-const maximumPaymentStatusRefreshes = 65;
 
 const PaymentSubmissionStatus = ({
   submission,
@@ -576,134 +566,12 @@ const PaymentSubmissionStatus = ({
   );
 };
 
-type PaymentFlowState =
-  | Readonly<{ _tag: "Enrollment"; value: Enrollment }>
-  | Readonly<{
-      _tag: "PaymentSubmission";
-      value: PaymentSubmission;
-      billingEmail: string;
-      prepared: Option.Option<PreparedEnrollment>;
-    }>;
-
-type PaymentSubmissionFlowState = Extract<PaymentFlowState, { _tag: "PaymentSubmission" }>;
-
-type ScopedPaymentFlow = Readonly<{
-  flowId: number;
-  state: PaymentFlowState;
-}>;
-
-const enrollmentFlow = (value: Enrollment): PaymentFlowState => ({ _tag: "Enrollment", value });
-const submissionFlow = (
-  value: PaymentSubmission,
-  billingEmail: string,
-  prepared: Option.Option<PreparedEnrollment>
-): PaymentSubmissionFlowState => ({
-  _tag: "PaymentSubmission",
-  value,
-  billingEmail,
-  prepared,
-});
-
-const preparePaymentFlow = Effect.fn(function* (
-  gateway: EnrollmentGateway,
-  priceId: PriceId,
-  options: Readonly<{ method: EnrollmentMethod; replaceFailedSource: boolean }>
-) {
-  const prepared = yield* Effect.tryPromise({
-    try: (signal) =>
-      gateway.prepare(priceId, options.method, {
-        signal,
-        replaceFailedSource: options.replaceFailedSource,
-      }),
-    catch: () => new EnrollmentInteractionFailed(),
-  });
-  if (prepared.status !== "verifying" && prepared.status !== "creating") {
-    return enrollmentFlow(prepared);
-  }
-  const resumed = yield* Effect.tryPromise({
-    try: (signal) => gateway.resume(prepared.enrollmentId, signal),
-    catch: () => new EnrollmentInteractionFailed(),
-  });
-  return Option.match(resumed, {
-    onNone: () => enrollmentFlow(prepared),
-    onSome: ({ submission, billingEmail }) =>
-      submissionFlow(submission, billingEmail, Option.none()),
-  });
-});
-
-const pageIsHidden = (): boolean => globalThis.document.visibilityState === "hidden";
-
-const awaitVisiblePage = (): Effect.Effect<boolean> => {
-  if (!pageIsHidden()) return Effect.succeed(false);
-  return Effect.callback<boolean>((resume) => {
-    const onVisibilityChange = (): void => {
-      if (pageIsHidden()) return;
-      globalThis.document.removeEventListener("visibilitychange", onVisibilityChange);
-      resume(Effect.succeed(true));
-    };
-    globalThis.document.addEventListener("visibilitychange", onVisibilityChange);
-    onVisibilityChange();
-    return Effect.sync(() =>
-      globalThis.document.removeEventListener("visibilitychange", onVisibilityChange)
-    );
-  });
-};
-
-class EnrollmentInteractionFailed extends Data.TaggedError("EnrollmentInteractionFailed")<{}> {}
-
-const refreshPaymentUntilTerminal = Effect.fn(function* (
-  gateway: EnrollmentGateway,
-  initial: PaymentSubmissionFlowState,
-  publish: (current: PaymentSubmissionFlowState) => void
-) {
-  let current = initial;
-  let refreshCount = 0;
-  while (isAwaitingPaymentStatus(current.value) && refreshCount < maximumPaymentStatusRefreshes) {
-    const resumedFromHiddenPage = yield* awaitVisiblePage();
-    if (!resumedFromHiddenPage) yield* Effect.sleep(paymentStatusRefreshDelay(refreshCount));
-    if (pageIsHidden()) continue;
-    refreshCount += 1;
-    const refreshed = yield* Effect.tryPromise({
-      try: (signal) => observePayment(gateway, current, signal),
-      catch: () => new EnrollmentInteractionFailed(),
-    }).pipe(Effect.option);
-    if (Option.isSome(refreshed)) {
-      current = submissionFlow(refreshed.value, current.billingEmail, current.prepared);
-      yield* Effect.sync(() => publish(current));
-    }
-  }
-});
-
-type PaymentRefreshIdentity = Readonly<{
-  enrollmentId: PreparedEnrollment["enrollmentId"];
-  flowId: ScopedPaymentFlow["flowId"];
-}>;
-
-type PaymentStatusRefreshCommand = Readonly<{
-  gateway: EnrollmentGateway;
-  identity: PaymentRefreshIdentity;
-  initial: PaymentSubmissionFlowState;
-  publish: (identity: PaymentRefreshIdentity, current: PaymentSubmissionFlowState) => void;
-}>;
-
-const PaymentStatusRefresh = makeScopedAtom(() =>
-  Atom.fn<PaymentStatusRefreshCommand>()(
-    ({ gateway, identity, initial, publish }) =>
-      refreshPaymentUntilTerminal(gateway, initial, (current) => publish(identity, current)),
-    { concurrent: false }
-  )
-);
-
-const PaymentFlow = makeScopedAtom(() =>
-  Atom.make<Option.Option<ScopedPaymentFlow>>(Option.none())
-);
-
 const TerminalPaymentFeedback = ({
   current,
   busy,
   prepare,
 }: Readonly<{
-  current: PaymentSubmissionFlowState;
+  current: PaymentSubmissionView;
   busy: boolean;
   prepare: (replaceFailedSource?: boolean) => void;
 }>): JSX.Element => {
@@ -719,7 +587,7 @@ const TerminalPaymentFeedback = ({
           Volver a intentar
         </Button>
       )}
-      {canRetry && Option.exists(current.prepared, (prepared) => prepared.method === "card") && (
+      {canRetry && current.canReplaceCard && (
         <Button disabled={busy} onClick={() => prepare(true)} type="button" variant="outline">
           Usar otra tarjeta
         </Button>
@@ -730,12 +598,12 @@ const TerminalPaymentFeedback = ({
 
 const renderPaymentEnrollment = (
   input: DaviplataFormActions & {
-    current: PaymentFlowState;
+    current: PaymentFlowView;
     offer: SubscriptionOfferPresentation;
     busy: boolean;
     prepare: (replaceFailedSource?: boolean) => void;
-    submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
-    refresh: (current: PaymentFlowState) => void;
+    submit: (email: string, fields?: PaymentFields) => void;
+    refresh: () => void;
   }
 ): JSX.Element => {
   const { current, busy, prepare, submit, refresh } = input;
@@ -746,7 +614,7 @@ const renderPaymentEnrollment = (
     return (
       <div className="subscription-payment-status">
         <PaymentSubmissionStatus submission={current.value} />
-        <Button disabled={busy} onClick={() => refresh(current)} type="button" variant="outline">
+        <Button disabled={busy} onClick={() => refresh()} type="button" variant="outline">
           Consultar estado
         </Button>
       </div>
@@ -762,7 +630,7 @@ const renderPaymentEnrollment = (
           onDaviplataSubmitted={input.onDaviplataSubmitted}
           busy={busy}
           enrollment={enrollment}
-          submit={(email, fields) => submit(enrollment, email, fields)}
+          submit={submit}
         />
         {enrollment.method === "card" && enrollment.paymentSourceMode === "reuse" && (
           <Button disabled={busy} onClick={() => prepare(true)} type="button" variant="outline">
@@ -787,12 +655,12 @@ const EnrollmentContent = ({
   submit,
   refresh,
 }: Readonly<{
-  enrollment: Option.Option<PaymentFlowState>;
+  enrollment: Option.Option<PaymentFlowView>;
   offer: SubscriptionOfferPresentation;
   busy: boolean;
   prepare: (replaceFailedSource?: boolean) => void;
-  submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
-  refresh: (current: PaymentFlowState) => void;
+  submit: (email: string, fields?: PaymentFields) => void;
+  refresh: () => void;
 }> &
   DaviplataFormActions): JSX.Element =>
   Option.match(enrollment, {
@@ -822,17 +690,19 @@ const PaymentDetails = ({
   enrollment,
   busy,
   failed,
+  needsRecovery,
   prepare,
   submit,
   refresh,
 }: Readonly<{
-  enrollment: Option.Option<PaymentFlowState>;
+  enrollment: Option.Option<PaymentFlowView>;
   offer: SubscriptionOfferPresentation;
   busy: boolean;
   failed: boolean;
+  needsRecovery: boolean;
   prepare: (replaceFailedSource?: boolean) => void;
-  submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
-  refresh: (current: PaymentFlowState) => void;
+  submit: (email: string, fields?: PaymentFields) => void;
+  refresh: () => void;
   method: EnrollmentMethod;
 }> &
   DaviplataFormActions): JSX.Element => (
@@ -847,11 +717,16 @@ const PaymentDetails = ({
     {failed ? (
       <p role="alert">No pudimos continuar. Revisa los datos o intenta más tarde.</p>
     ) : null}
+    {needsRecovery ? (
+      <Button type="button" disabled={busy} variant="outline" onClick={refresh}>
+        Consultar estado
+      </Button>
+    ) : null}
     <EnrollmentContent
       offer={offer}
       gateway={gateway}
       onDaviplataSubmitted={onDaviplataSubmitted}
-      busy={busy}
+      busy={busy || needsRecovery}
       enrollment={enrollment}
       prepare={prepare}
       refresh={refresh}
@@ -859,274 +734,6 @@ const PaymentDetails = ({
     />
   </section>
 );
-
-type EnrollmentInteraction = Readonly<{
-  enrollment: Option.Option<PaymentFlowState>;
-  busy: boolean;
-  failed: boolean;
-  interrupt: () => void;
-  start: (
-    work: (
-      gateway: EnrollmentGateway
-    ) => Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed>
-  ) => void;
-  reset: () => void;
-}>;
-
-type PaymentFlowSetter = (
-  value:
-    | Option.Option<ScopedPaymentFlow>
-    | ((current: Option.Option<ScopedPaymentFlow>) => Option.Option<ScopedPaymentFlow>)
-) => void;
-
-type PaymentRefreshControl = Readonly<{
-  interrupt: () => void;
-  start: (flowId: number, value: PaymentFlowState) => void;
-}>;
-
-const retainCurrentFlow = (
-  existing: Option.Option<ScopedPaymentFlow>,
-  identity: PaymentRefreshIdentity,
-  current: PaymentSubmissionFlowState
-): Option.Option<ScopedPaymentFlow> =>
-  Option.orElse(
-    Option.map(
-      Option.filter(
-        existing,
-        (active) =>
-          active.flowId === identity.flowId &&
-          active.state._tag === "PaymentSubmission" &&
-          active.state.value.enrollmentId === identity.enrollmentId &&
-          current.value.enrollmentId === identity.enrollmentId
-      ),
-      () => ({ flowId: identity.flowId, state: current })
-    ),
-    () => existing
-  );
-
-const usePaymentRefreshLifetimeRef = (interrupt: () => void): RefCallback<HTMLDivElement> => {
-  const [lifetimeRef] = useState<RefCallback<HTMLDivElement>>(
-    () => (): ReturnType<RefCallback<HTMLDivElement>> => interrupt
-  );
-  return lifetimeRef;
-};
-
-const usePaymentRefresh = (
-  gateway: Option.Option<EnrollmentGateway>,
-  setScopedFlow: PaymentFlowSetter
-): PaymentRefreshControl => {
-  const refreshPaymentStatus = useAtomSet(PaymentStatusRefresh.use());
-  const interrupt = (): void => refreshPaymentStatus(Atom.Interrupt);
-  const start = (flowId: number, value: PaymentFlowState): void => {
-    if (value._tag !== "PaymentSubmission" || !isAwaitingPaymentStatus(value.value)) {
-      interrupt();
-      return;
-    }
-    Option.match(gateway, {
-      onNone: interrupt,
-      onSome: (availableGateway) =>
-        refreshPaymentStatus({
-          gateway: availableGateway,
-          identity: { enrollmentId: value.value.enrollmentId, flowId },
-          initial: value,
-          publish: (identity, current) =>
-            setScopedFlow((existing) => retainCurrentFlow(existing, identity, current)),
-        }),
-    });
-  };
-  return { interrupt, start };
-};
-
-const publishPaymentFlow =
-  (
-    input: Readonly<{
-      activeFlowId: RefObject<number>;
-      flowId: number;
-      setScopedFlow: PaymentFlowSetter;
-      paymentRefresh: PaymentRefreshControl;
-    }>
-  ): ((value: PaymentFlowState) => Effect.Effect<void>) =>
-  (value) =>
-    Effect.sync(() => {
-      if (input.activeFlowId.current !== input.flowId) return;
-      input.setScopedFlow(Option.some({ flowId: input.flowId, state: value }));
-      input.paymentRefresh.start(input.flowId, value);
-    });
-
-const useEnrollmentInteraction = (
-  gateway: Option.Option<EnrollmentGateway>
-): EnrollmentInteraction => {
-  const [scopedFlow, setScopedFlow] = useAtom(PaymentFlow.use());
-  const [command] = useState(() =>
-    makeEnrollmentCommand<PaymentFlowState, EnrollmentInteractionFailed>()
-  );
-  const status = useAtomValue(command.atom);
-  const controlCommand = useAtomSet(command.atom);
-  const activeFlowId = useRef(0);
-  const paymentRefresh = usePaymentRefresh(gateway, setScopedFlow);
-  const interrupt = (): void => {
-    activeFlowId.current += 1;
-    command.clear();
-    controlCommand(Atom.Interrupt);
-    paymentRefresh.interrupt();
-  };
-  const start = (
-    work: (
-      gateway: EnrollmentGateway
-    ) => Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed>
-  ): void => {
-    paymentRefresh.interrupt();
-    activeFlowId.current += 1;
-    const flowId = activeFlowId.current;
-    Option.match(gateway, {
-      onNone: () => undefined,
-      onSome: (availableGateway) => {
-        command.offer(
-          work(availableGateway).pipe(
-            Effect.tap(publishPaymentFlow({ activeFlowId, flowId, setScopedFlow, paymentRefresh }))
-          )
-        );
-        controlCommand(undefined);
-      },
-    });
-  };
-  const reset = (): void => {
-    interrupt();
-    controlCommand(Atom.Reset);
-    setScopedFlow(Option.none());
-  };
-  return {
-    enrollment: Option.map(scopedFlow, (active) => active.state),
-    busy: status.waiting,
-    failed: AsyncResult.isFailure(status) && !Cause.hasInterrupts(status.cause),
-    interrupt,
-    start,
-    reset,
-  };
-};
-
-const observePayment = (
-  gateway: EnrollmentGateway,
-  current: PaymentSubmissionFlowState,
-  signal: AbortSignal
-): Promise<PaymentSubmission> =>
-  current.value.status === "payment-pending"
-    ? gateway.observeBillingAttempt(
-        current.value.enrollmentId,
-        current.value.billingAttempt.id,
-        signal
-      )
-    : gateway.continue(current.value.enrollmentId, current.billingEmail, signal);
-
-const refreshPaymentFlow = (
-  gateway: EnrollmentGateway,
-  current: PaymentFlowState
-): Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed> => {
-  if (current._tag === "PaymentSubmission") {
-    return Effect.tryPromise({
-      try: (signal) => observePayment(gateway, current, signal),
-      catch: () => new EnrollmentInteractionFailed(),
-    }).pipe(Effect.map((value) => submissionFlow(value, current.billingEmail, current.prepared)));
-  }
-  return Effect.tryPromise({
-    try: (signal) => gateway.status(current.value.enrollmentId, signal),
-    catch: () => new EnrollmentInteractionFailed(),
-  }).pipe(Effect.map(enrollmentFlow));
-};
-
-const submitPaymentFlow = (
-  gateway: EnrollmentGateway,
-  input: Readonly<{
-    prepared: PreparedEnrollment;
-    email: string;
-    fields: Option.Option<PaymentFields>;
-  }>
-): Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed> =>
-  Effect.tryPromise({
-    try: (signal) =>
-      gateway.submit(input.prepared, input.email, {
-        fields: input.fields,
-        signal: Option.some(signal),
-      }),
-    catch: () => new EnrollmentInteractionFailed(),
-  }).pipe(
-    Effect.map((submission) => submissionFlow(submission, input.email, Option.some(input.prepared)))
-  );
-
-const PaymentFlowDetails = ({
-  gateway,
-  offer,
-  method,
-  interaction,
-}: Readonly<{
-  gateway: Option.Option<EnrollmentGateway>;
-  offer: SubscriptionOfferPresentation;
-  method: EnrollmentMethod;
-  interaction: EnrollmentInteraction;
-}>): JSX.Element => (
-  <PaymentDetails
-    offer={offer}
-    gateway={gateway}
-    onDaviplataSubmitted={(email, submission) =>
-      interaction.start(() => Effect.succeed(submissionFlow(submission, email, Option.none())))
-    }
-    method={method}
-    busy={interaction.busy}
-    enrollment={interaction.enrollment}
-    failed={interaction.failed}
-    prepare={(replacing = false) =>
-      interaction.start((gateway) =>
-        preparePaymentFlow(gateway, offer.id, { method, replaceFailedSource: replacing })
-      )
-    }
-    refresh={(current) => interaction.start((gateway) => refreshPaymentFlow(gateway, current))}
-    submit={(prepared, email, fields) =>
-      interaction.start((gateway) =>
-        submitPaymentFlow(gateway, {
-          prepared,
-          email,
-          fields: Option.fromNullishOr(fields),
-        })
-      )
-    }
-  />
-);
-
-const enrollmentAvailability = Atom.family((gateway: Option.Option<EnrollmentGateway>) =>
-  Atom.make(
-    Option.match(gateway, {
-      onNone: () => Effect.fail(new EnrollmentInteractionFailed()),
-      onSome: (available) =>
-        Effect.tryPromise({
-          try: (signal) => available.availability(signal),
-          catch: () => new EnrollmentInteractionFailed(),
-        }),
-    })
-  )
-);
-const useEnrollmentMethods = (
-  gateway: Option.Option<EnrollmentGateway>
-): Readonly<{
-  enabledMethods: ReadonlyArray<EnrollmentMethod>;
-  refresh: () => void;
-  waiting: boolean;
-  failed: boolean;
-}> => {
-  const availabilityAtom = enrollmentAvailability(gateway);
-  const availability = useAtomValue(availabilityAtom);
-  const refresh = useAtomRefresh(availabilityAtom);
-  return {
-    enabledMethods: availability._tag === "Success" ? availability.value.enabledMethods : [],
-    refresh,
-    waiting: availability.waiting,
-    failed: AsyncResult.isFailure(availability),
-  };
-};
-const paymentSelectionIsLocked = (current: PaymentFlowState): boolean =>
-  current._tag === "PaymentSubmission" &&
-  (isAwaitingPaymentStatus(current.value) ||
-    (current.value.status === "payment-pending" &&
-      current.value.billingAttempt.status === "succeeded"));
 
 type SubscriptionStandingPresentation = Readonly<{ state: StandingViewState; refresh: () => void }>;
 const hasPaidAccess = (state: StandingViewState): boolean =>
@@ -1139,79 +746,29 @@ type ReadyOffersProps = Readonly<{
   offers: SubscriptionOffers;
   gateway: Option.Option<EnrollmentGateway>;
 }>;
-type SubscriptionSelection = Readonly<{
-  selectedId: Option.Option<PriceId>;
-  method: EnrollmentMethod;
-  checkout: boolean;
-  enabledMethods: ReadonlyArray<EnrollmentMethod>;
-  refreshMethods: () => void;
-  methodsWaiting: boolean;
-  methodsFailed: boolean;
-  interaction: EnrollmentInteraction;
-  presented: ReadonlyArray<SubscriptionOfferPresentation>;
-  disabled: boolean;
-  selectedOffer: Option.Option<SubscriptionOfferPresentation>;
-  canContinue: boolean;
-  selectPrice: (id: PriceId) => void;
-  selectMethod: (method: EnrollmentMethod) => void;
-  changeSelection: () => void;
-  continueToPayment: () => void;
-}>;
+type SubscriptionSelection = EnrollmentInteraction &
+  Readonly<{
+    presented: ReadonlyArray<SubscriptionOfferPresentation>;
+    selectedOffer: Option.Option<SubscriptionOfferPresentation>;
+  }>;
 const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): SubscriptionSelection => {
-  const [selectedId, setSelectedId] = useState<Option.Option<PriceId>>(Option.none);
-  const [method, setMethod] = useState<EnrollmentMethod>("card");
-  const [checkout, setCheckout] = useState(false);
-  const [replaceFailedSource, setReplaceFailedSource] = useState(false);
-  const availability = useEnrollmentMethods(gateway);
-  const { enabledMethods } = availability;
-  const authorizationLocked = useAtomValue(DaviplataAuthorizationLock.use());
-  const interaction = useEnrollmentInteraction(gateway);
+  const authorizationLock = DaviplataAuthorizationLock.use();
+  const [atom] = useState(() => makeEnrollmentInteraction({ offers, gateway, authorizationLock }));
+  const interaction = useAtomValue(atom);
   const presented = offers.map(presentSubscriptionOffer);
-  const disabled =
-    interaction.busy ||
-    authorizationLocked ||
-    Option.exists(interaction.enrollment, paymentSelectionIsLocked);
-  const selectedOffer = Option.flatMap(selectedId, (id) =>
+  const selectedOffer = Option.flatMap(interaction.selectedId, (id) =>
     EffectArray.findFirst(presented, (offer) => offer.id === id)
   );
-  const canContinue = !disabled && Option.isSome(selectedOffer) && enabledMethods.includes(method);
   return {
-    selectedId,
-    method,
-    checkout,
-    enabledMethods,
-    refreshMethods: availability.refresh,
-    methodsWaiting: availability.waiting,
-    methodsFailed: availability.failed,
-    interaction,
+    ...interaction,
     presented,
-    disabled,
     selectedOffer,
-    canContinue,
-    selectPrice: (id: PriceId): void => {
-      setSelectedId(Option.some(id));
-      interaction.reset();
-    },
-    selectMethod: (choice: EnrollmentMethod): void => {
-      if (choice === method) return;
-      setMethod(choice);
-      setReplaceFailedSource(true);
-      interaction.reset();
-    },
-    changeSelection: (): void => {
-      if (disabled) return;
-      interaction.reset();
-      setCheckout(false);
-      requestAnimationFrame(() => document.getElementById("subscription-period-title")?.focus());
-    },
-    continueToPayment: (): void => {
-      if (!canContinue) return;
-      Option.map(selectedOffer, (offer) => {
-        setCheckout(true);
-        interaction.start((gateway) =>
-          preparePaymentFlow(gateway, offer.id, { method, replaceFailedSource })
-        );
-      });
+    changeSelection: () => {
+      const changed = interaction.changeSelection();
+      if (changed) {
+        requestAnimationFrame(() => document.getElementById("subscription-period-title")?.focus());
+      }
+      return changed;
     },
   };
 };
@@ -1287,25 +844,38 @@ const Checkout = ({
     {Option.match(selection.selectedOffer, {
       onNone: () => null,
       onSome: (offer) => (
-        <PaymentFlowDetails
+        <PaymentDetails
           key={`${selection.method}:${offer.id}`}
           gateway={gateway}
           offer={offer}
           method={selection.method}
-          interaction={selection.interaction}
+          enrollment={selection.enrollment}
+          busy={selection.busy}
+          failed={selection.failed}
+          needsRecovery={selection.needsRecovery}
+          prepare={selection.prepare}
+          submit={selection.submit}
+          refresh={selection.refresh}
+          onDaviplataSubmitted={selection.submittedDaviplata}
         />
       ),
     })}
   </>
 );
+const useEnrollmentLifetime = (interaction: EnrollmentInteraction): RefCallback<HTMLDivElement> => {
+  const [lifetimeRef] = useState<RefCallback<HTMLDivElement>>(
+    () => (): ReturnType<RefCallback<HTMLDivElement>> => interaction.mount()
+  );
+  return lifetimeRef;
+};
 const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
   const selection = useSubscriptionSelection(props);
-  const refreshLifetimeRef = usePaymentRefreshLifetimeRef(selection.interaction.interrupt);
+  const lifetimeRef = useEnrollmentLifetime(selection);
   const { standing } = props;
   const paid = hasPaidAccess(standing.state);
   return (
     <div
-      ref={refreshLifetimeRef}
+      ref={lifetimeRef}
       className="subscription-columns"
       data-checkout={selection.checkout}
       data-method={selection.method}
@@ -1336,13 +906,9 @@ const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
 };
 
 const ReadyOffers = ({ offers, gateway, standing }: ReadyOffersProps): JSX.Element => (
-  <PaymentFlow.Provider>
-    <PaymentStatusRefresh.Provider>
-      <DaviplataAuthorizationLock.Provider>
-        <ReadyOffersContent gateway={gateway} offers={offers} standing={standing} />
-      </DaviplataAuthorizationLock.Provider>
-    </PaymentStatusRefresh.Provider>
-  </PaymentFlow.Provider>
+  <DaviplataAuthorizationLock.Provider>
+    <ReadyOffersContent gateway={gateway} offers={offers} standing={standing} />
+  </DaviplataAuthorizationLock.Provider>
 );
 
 const AuthenticationRequired = (): JSX.Element => (

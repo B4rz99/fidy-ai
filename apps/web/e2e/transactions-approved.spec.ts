@@ -8,6 +8,7 @@ const wait = Effect.tryPromise;
 type Journey = Effect.Effect<void, Cause.UnknownError | Schema.SchemaError>;
 const createdStatus = 201;
 const okStatus = 200;
+const unavailableStatus = 503;
 const maximumCounterparty = 120;
 const maximumNotes = 500;
 const maximumSelection = 12;
@@ -198,6 +199,66 @@ const correctionJourney = (page: Page): Journey =>
 test("individual correction clears empty Notes at its revision and cancellation restores keyboard focus", ({
   page,
 }) => Effect.runPromise(correctionJourney(page)));
+const correctionRecoveryJourney = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* installWorkspace(page);
+    const requests: Array<unknown> = [];
+    let failRead = false;
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions?*`, (route) =>
+        route.fulfill({
+          status: failRead ? unavailableStatus : okStatus,
+          contentType: "application/json",
+          body: failRead ? "{}" : response([row(1)]),
+        })
+      )
+    );
+    yield* recordMutation(page, `/transactions/${first.id}`, { requests, outcome: "uncertain" });
+    yield* wait(() => page.goto("/app/transactions"));
+    const trigger = page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true });
+    yield* wait(() => trigger.click());
+    yield* wait(() => page.getByLabel("Notas (opcional)", { exact: true }).fill("Corrección"));
+    yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
+    yield* wait(() =>
+      expect(
+        page.getByRole("form", { name: "Corregir transacción" }).getByRole("alert")
+      ).toContainText("No pudimos confirmar")
+    );
+    yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Editar varias", exact: true })).toBeDisabled()
+    );
+    yield* wait(() => expect(page.locator("#transaction-date-filter")).toBeDisabled());
+    failRead = true;
+    yield* wait(() =>
+      page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click()
+    );
+    yield* wait(() =>
+      expect(
+        page.getByText("No pudimos actualizar las transacciones", { exact: true })
+      ).toBeVisible()
+    );
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Editar varias", exact: true })).toBeDisabled()
+    );
+    expect(requests).toHaveLength(1);
+    failRead = false;
+    yield* wait(() =>
+      page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click()
+    );
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Editar varias", exact: true })).toBeEnabled()
+    );
+    yield* wait(() => trigger.click());
+    yield* wait(() =>
+      expect(page.getByRole("form", { name: "Corregir transacción" })).toBeVisible()
+    );
+    expect(requests).toHaveLength(1);
+  });
+test("Correction uncertainty survives closing the editor and a failed canonical reread without enabling another editing path", ({
+  page,
+}) => Effect.runPromise(correctionRecoveryJourney(page)));
+
 const selectTwelve = (page: Page): Journey =>
   Effect.gen(function* () {
     yield* wait(() => page.goto("/app/transactions"));

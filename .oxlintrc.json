@@ -186,6 +186,7 @@
         "apps/web/src/ui/components/button-variants.ts",
         "apps/web/src/ui/components/table.tsx",
         "apps/web/src/features/transactions/workspace.tsx",
+        "apps/web/src/features/transactions/feature.tsx",
         "apps/web/src/features/transactions/ledger.tsx"
       ],
       "rules": { "import/extensions": "off" }

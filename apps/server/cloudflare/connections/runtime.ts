@@ -1,3 +1,5 @@
+import { observeApplicationOperation } from "../runtime/application-observation/operations";
+import { sweepAttempts } from "./internal/retention";
 import { sweepGrants } from "./internal/cleanup";
 import { digestBytes } from "../secret-material/operations";
 import { projections as erasureProjections } from "./internal/erasure";
@@ -5,7 +7,7 @@ import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
 import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import { protectCanonicalPressure } from "../canonical-admission/operations";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Option, type Redacted, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import {
   type ConnectionBrowserApi,
@@ -14,6 +16,7 @@ import {
 import { connectionBrowserTransport } from "../../src/shell/connections/runtime";
 import { authenticateCanonicalWebSession } from "../web-session/operations";
 import {
+  type ConnectionBankCleanup,
   ConnectionBrowserAdmission,
   ConnectionCallbackAdmission,
   ConnectionRetentionUnavailable,
@@ -34,8 +37,6 @@ const unavailableStatus = 503;
 const maximumBytes = 1024;
 const readDeadlineMilliseconds = 2000;
 const admissionLifetimeMilliseconds = 5000;
-const attemptRetentionMilliseconds = 86400000;
-const maximumRetentionRows = 128;
 
 const callbackRedirect = (browserOrigin: string): Response =>
   new Response(null, {
@@ -132,41 +133,6 @@ export const handleConnectionCallback = (input: BrowserRequest): Effect.Effect<R
     }
     return callbackRedirect(input.browserOrigin);
   }).pipe(Effect.orElseSucceed(() => callbackRedirect(input.browserOrigin)));
-
-/** Erase expired continuation metadata independently of User activity or current Consent. */
-export const sweepConnectionAttempts = (
-  input: Readonly<{ db: D1Database; current: number }>
-): Effect.Effect<void, ConnectionRetentionUnavailable> =>
-  Effect.tryPromise({
-    try: () =>
-      input.db.batch([
-        input.db
-          .prepare(`UPDATE connection_authorizations SET phase='failed',verifier=NULL,handoff_url=NULL WHERE attempt_id IN
-      (SELECT b.attempt_id FROM connection_authorizations b JOIN connection_attempts a ON a.id=b.attempt_id JOIN connections c ON c.id=a.connection_id
-      WHERE a.expires_at_ms<=? AND b.phase!='failed' AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=c.user_id AND q.state<>'Draining') LIMIT ?)`)
-          .bind(input.current, maximumRetentionRows),
-        input.db
-          .prepare(`UPDATE connection_grants SET state='cleanup_required' WHERE attempt_id IN(
-          SELECT g.attempt_id FROM connection_grants g JOIN connection_attempts a ON a.id=g.attempt_id JOIN connections c ON c.id=a.connection_id
-          WHERE g.state IN ('claimed','quarantined') AND a.expires_at_ms<=?
-          AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=c.user_id AND q.state<>'Draining') LIMIT ?)`)
-          .bind(input.current, maximumRetentionRows),
-        input.db
-          .prepare(`UPDATE connections SET state='Action required' WHERE id IN(
-          SELECT c.id FROM connections c JOIN connection_attempts a ON a.connection_id=c.id JOIN connection_grants g ON g.attempt_id=a.id
-          WHERE c.state='Connecting' AND g.state='cleanup_required' AND a.expires_at_ms<=?
-          AND NOT EXISTS(SELECT 1 FROM connection_attempts newer WHERE newer.connection_id=c.id AND newer.rowid>a.rowid)
-          AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=c.user_id AND q.state<>'Draining') LIMIT ?)`)
-          .bind(input.current, maximumRetentionRows),
-        input.db
-          .prepare(`DELETE FROM connection_attempts WHERE id IN
-      (SELECT a.id FROM connection_attempts a WHERE expires_at_ms <= ?
-        AND NOT EXISTS(SELECT 1 FROM connection_authorizations b WHERE b.attempt_id=a.id AND b.consent_id IS NOT NULL)
-        ORDER BY expires_at_ms, id LIMIT ?)`)
-          .bind(input.current - attemptRetentionMilliseconds, maximumRetentionRows),
-      ]),
-    catch: () => new ConnectionRetentionUnavailable(),
-  }).pipe(Effect.asVoid);
 
 type BrowserRequest = Readonly<{
   request: Request;
@@ -279,7 +245,57 @@ export const handleConnectionBrowserRequest = (input: BrowserRequest): Effect.Ef
 export const makeConnectionsErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
 
-/** Recover one due held grant per tick, with a durable lease and no new customer authorization. */
-export const sweepConnectionGrants = (
-  input: Parameters<typeof sweepGrants>[0]
-): ReturnType<typeof sweepGrants> => sweepGrants(input);
+const minuteMilliseconds = 60_000;
+const retentionCadenceMinutes = 60;
+const cleanupCadenceMinutes = 5;
+
+const recoveryPhase = (
+  operation: "connections.attemptRetention" | "connections.grantCleanup",
+  work: Effect.Effect<void, ConnectionRetentionUnavailable>
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const result = yield* Effect.exit(
+      work.pipe(
+        observeApplicationOperation({
+          component: "api",
+          operation,
+          trigger: "schedule",
+          spanOperation: "fidy.operation",
+          workKind: "canonical_operation",
+          metadata: { _tag: "None" },
+        })
+      )
+    );
+    if (Exit.isSuccess(result)) return true;
+    if (Cause.hasInterrupts(result.cause)) return yield* Effect.interrupt;
+    return false;
+  });
+
+/**
+ * Recover expired Connection authority on its scheduled cadence, independently attempting
+ * retention and held-grant cleanup before reporting failure. Interruption stops progression;
+ * provider uncertainty retains its durable cleanup evidence and never replays authorization.
+ */
+export const recoverConnections = (
+  input: Readonly<{
+    db: D1Database;
+    key: Option.Option<Redacted.Redacted<string>>;
+    bank: Option.Option<ConnectionBankCleanup>;
+    scheduledAtEpochMs: number;
+  }>
+): Effect.Effect<void, ConnectionRetentionUnavailable> =>
+  Effect.gen(function* () {
+    const scheduledMinute = Math.floor(input.scheduledAtEpochMs / minuteMilliseconds);
+    let retained = true;
+    if (scheduledMinute % retentionCadenceMinutes === 0) {
+      retained = yield* recoveryPhase(
+        "connections.attemptRetention",
+        sweepAttempts({ db: input.db, current: yield* Clock.currentTimeMillis })
+      );
+    }
+    let cleaned = true;
+    if (scheduledMinute % cleanupCadenceMinutes === 0) {
+      cleaned = yield* recoveryPhase("connections.grantCleanup", sweepGrants(input));
+    }
+    if (!retained || !cleaned) return yield* new ConnectionRetentionUnavailable();
+  });

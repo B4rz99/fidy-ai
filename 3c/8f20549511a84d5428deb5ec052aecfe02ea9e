@@ -19,6 +19,8 @@ apps/web/e2e/text-reflow.spec.ts
   s_f904568ea136da::t_48a6b06eb0bca5 1,3-12,14-18,20-24,26-46,48-72,75-83,87-98,100-110
   s_f904568ea136da::t_e0ca0c47e3b430 73,99
   s_d9571b3fccd032::t_62a6ed7693b5b2 2,13,19,25
+  s_f904568ea136da::t_a0f515650711cd 47,74
+  s_f904568ea136da::t_bc0952c2505813 84-86
 apps/web/src/features/recovery/feature.tsx
   s_f904568ea136da::t_f42fe5649dce3e 92
   s_f904568ea136da::t_8639e9d3b6599e 80-83,96-100,102
@@ -28,6 +30,7 @@ apps/web/src/ui/components/button-variants.ts
 apps/web/src/features/pats/management-view.tsx
   s_f904568ea136da::t_f42fe5649dce3e 143
   s_f904568ea136da::t_8639e9d3b6599e 125-126,128-130,133
+  s_f904568ea136da::t_bc0952c2505813 151-157
 apps/web/src/ui/components/dashboard.css
   s_f904568ea136da::t_f42fe5649dce3e 102,127
   s_f904568ea136da::t_428114dbd4c14f 121-122
@@ -36,6 +39,7 @@ apps/web/src/features/budgets/summary.tsx
   s_f904568ea136da::t_061d1c9ef5c7db 113,116
   s_f904568ea136da::t_428114dbd4c14f 94
   s_f904568ea136da::t_1ea1d52e8f02a8 117-118,120-121
+  s_f904568ea136da::t_bc0952c2505813 119
 apps/web/src/ui/components/card.tsx
   s_f904568ea136da::t_2541e44076e17e 10,20
   s_f904568ea136da::t_8639e9d3b6599e 48-52
@@ -52,6 +56,8 @@ apps/web/src/ui/components/financial-summary-card.css
   s_f904568ea136da::t_915f5f8ef6657a 147
 apps/web/src/features/privacy/feature.tsx
   s_f904568ea136da::t_8639e9d3b6599e 66
+  s_f904568ea136da::t_bc0952c2505813 276-280
+  s_f904568ea136da::t_a0f515650711cd 222
 apps/web/e2e/transactions-approved.spec.ts
   s_f904568ea136da::t_e0ca0c47e3b430 119-121
 apps/web/src/features/transactions/summary.tsx
@@ -59,6 +65,14 @@ apps/web/src/features/transactions/summary.tsx
   s_f904568ea136da::t_f42fe5649dce3e 82-87,90-92
 apps/web/src/features/recurring/dev-preview.tsx
   s_d9571b3fccd032::t_13e0a67b5c7895 21,73,107
+apps/web/src/features/privacy/authorization-copy.tsx
+  s_f904568ea136da::t_bc0952c2505813 63
+apps/web/src/ui/components/settings.css
+  s_f904568ea136da::t_a0f515650711cd 2
+apps/web/src/features/oauth-connections/management-view.tsx
+  s_f904568ea136da::t_bc0952c2505813 64,165-171,178
+apps/web/src/ui/components/subscription.css
+  s_f904568ea136da::t_a0f515650711cd 2,210-211
 ---
 {
   "schema_version": "authorship/3.0.0",

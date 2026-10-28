@@ -5,7 +5,7 @@
   "description": "Isolated Astro checker using the TypeScript 6 compiler API; the workspace TypeScript 7 compiler does not provide that API.",
   "type": "module",
   "devDependencies": {
-    "@astrojs/language-server": "2.17.2",
+    "@astrojs/language-server": "2.17.3",
     "prettier": "3.9.10",
     "prettier-plugin-astro": "1.1.1",
     "typescript": "6.0.3"

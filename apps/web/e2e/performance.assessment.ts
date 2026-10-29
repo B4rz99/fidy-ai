@@ -2,9 +2,11 @@ import type { CDPSession, Page } from "@playwright/test";
 import { type Cause, Config, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 import { boundSessionRequests, signInNavigationPerformanceThroughCore } from "./real-core-fixture";
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 
 const { test, expect } = playwright;
 const dataset = Effect.runSync(Config.String("FIDY_ASSESSMENT").pipe(Config.withDefault("small")));
+const { api: apiOrigin } = browserAcceptanceTopology();
 const actionTimeout = 10_000;
 const readinessTimeout = 20_000;
 const navigationTimeout = 45_000;
@@ -32,6 +34,15 @@ type Sample = {
   longTasks: number[];
   resourceCount: number;
   resourceBytes: number;
+  resources: Array<{
+    path: string;
+    initiator: string;
+    start: number;
+    responseStart: number;
+    end: number;
+    encodedBytes: number;
+    decodedBytes: number;
+  }>;
   domNodes: number;
 };
 type Measure = (
@@ -48,7 +59,7 @@ const observeRequests = (
   const requests: Sample["requests"] = [];
   const pending = new Set<Promise<void>>();
   page.on("response", (response) => {
-    if (!response.url().startsWith("https://127.0.0.1:4174/")) return;
+    if (!response.url().startsWith(`${apiOrigin}/`)) return;
     const entry = {
       path: new URL(response.url()).pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gu, ":id"),
       status: response.status(),
@@ -94,7 +105,9 @@ const paintOpportunity = (): Promise<void> => {
 };
 const browserMetrics = (
   page: Page
-): Promise<Pick<Sample, "longTasks" | "resourceCount" | "resourceBytes" | "domNodes">> =>
+): Promise<
+  Pick<Sample, "longTasks" | "resourceCount" | "resourceBytes" | "resources" | "domNodes">
+> =>
   page.evaluate(() => {
     const entries = performance
       .getEntriesByType("resource")
@@ -106,6 +119,15 @@ const browserMetrics = (
       longTasks: tasks.map((entry) => Number(entry.detail)),
       resourceCount: entries.length,
       resourceBytes: entries.reduce((sum, entry) => sum + entry.encodedBodySize, 0),
+      resources: entries.map((entry) => ({
+        path: new URL(entry.name).pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gu, ":id"),
+        initiator: entry.initiatorType,
+        start: entry.startTime,
+        responseStart: entry.responseStart,
+        end: entry.responseEnd,
+        encodedBytes: entry.encodedBodySize,
+        decodedBytes: entry.decodedBodySize,
+      })),
       domNodes: document.querySelectorAll("*").length,
     };
   });
@@ -358,6 +380,32 @@ const prepareBrowser = Effect.fn(function* (page: Page, cdp: CDPSession, profile
   );
 });
 for (const profile of ["desktop", "mobile-slow"] as const) {
+  test(`measures the first date picker on ${profile}`, ({ page, request, context }) => {
+    const samples: Sample[] = [];
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() =>
+          signInNavigationPerformanceThroughCore({ page, request, identity: "navigationDashboard" })
+        );
+        yield* Effect.tryPromise(() => readyWorkspace(page, routes[0]));
+        const cdp = yield* Effect.tryPromise(() => context.newCDPSession(page));
+        yield* prepareBrowser(page, cdp, profile);
+        yield* makeMeasure(page, samples, profile)(
+          "transactions:first-date-picker",
+          () => page.getByRole("button", { name: "Fecha", exact: true }).click(),
+          () => expect(page.getByRole("grid")).toBeVisible()
+        );
+        yield* Effect.tryPromise(() =>
+          test.info().attach("assessment-samples", {
+            body: json({ dataset, profile, browser: context.browser()?.version(), samples }),
+            contentType: "application/json",
+          })
+        );
+      })
+    );
+  });
+}
+for (const profile of ["desktop", "mobile-slow"] as const) {
   test(`assesses all workspaces on ${profile}`, ({ page, request, context }) => {
     page.setDefaultTimeout(actionTimeout);
     const samples: Sample[] = [];
@@ -446,7 +494,7 @@ test("measures the recurring response independently of the browser body limit", 
       for (const view of ["full", "compact"] as const) {
         const response = yield* Effect.tryPromise(() =>
           api.get(
-            `https://127.0.0.1:4174/recurring-plans?month=2026-10${view === "compact" ? "&view=compact" : ""}`
+            `${apiOrigin}/recurring-plans?month=2026-10${view === "compact" ? "&view=compact" : ""}`
           )
         );
         const bytes = yield* Effect.tryPromise(() => response.body());

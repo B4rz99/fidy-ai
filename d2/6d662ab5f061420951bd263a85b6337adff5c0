@@ -1,0 +1,96 @@
+docs/research/production-browser-admission-proof-2026-10-28.json
+  s_d9571b3fccd032::t_81251f0c1d02f3 31
+  s_d9571b3fccd032::t_de6882e847daf0 1-30,32-38,49
+  s_d9571b3fccd032::t_a7c9be40201ab9 39-48
+docs/research/hosted-infra-proof-independent-2026-10-28.json
+  s_d9571b3fccd032::t_49b9245af24860 1-562,564-570
+  s_d9571b3fccd032::t_bd44f87d1fe5f6 563
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_d9571b3fccd032::t_e7fe1021fa320c 818-826,869
+  s_d9571b3fccd032::t_c2bcd9a715db6e 16,727-728
+  s_d9571b3fccd032::t_2123c17f17740b 17-20,46-51,729-730,732-734,750-759,827-857,859-868
+  s_d9571b3fccd032::t_76d509002d6248 858
+  s_d9571b3fccd032::t_e02b58d3966282 731
+  s_d9571b3fccd032::t_2928f3d3fefbdc 706-709,711-713,715-726
+docs/research/hosted-queue-batch-size-trial-2026-10-28.json
+  s_d9571b3fccd032::t_dec36f5e3030be 1-400
+apps/server/cloudflare/canonical-admission/operations.test.ts
+  s_d9571b3fccd032::t_f9fdff257172a7 151
+  s_d9571b3fccd032::t_6d372826e20f41 17
+  s_d9571b3fccd032::t_4abb355c901ace 252-263
+  s_d9571b3fccd032::t_b96f413cf1a82d 302,306-310
+  s_d9571b3fccd032::t_498d197a6aacb9 303-305,1184-1246
+  s_d9571b3fccd032::t_1771e0f2283c95 1247,1305,1307,1341
+  s_d9571b3fccd032::t_abe30ae07e676b 98-100,135-150,152-173,189-190,193-203,238,242,247,266-282,285-289,291-301,311-317
+  s_d9571b3fccd032::t_bb2e7bd0d9c88d 175-182,184,186-188,204,240-241,243-246,248-251,264-265,290
+  s_d9571b3fccd032::t_2928f3d3fefbdc 1248-1304
+  s_d9571b3fccd032::t_a7c9be40201ab9 1308-1340
+  s_d9571b3fccd032::t_2417a396e809f5 12,97,116,126,128-131,134,174,283-284
+  s_d9571b3fccd032::t_3c7fb65cdb07d5 183,185
+  s_d9571b3fccd032::t_17fc87126b2d4b 191-192,205-209,239
+  s_d9571b3fccd032::t_bd44f87d1fe5f6 210-237
+  s_d9571b3fccd032::t_b2ebca049aa743 318,1306
+apps/server/src/shell/sql-assertions/operations.ts
+  s_d9571b3fccd032::t_aafab030cef114 18-22,30-34
+  s_d9571b3fccd032::t_bd44f87d1fe5f6 23-29
+apps/server/cloudflare/canonical-admission/internal/protection.ts
+  s_d9571b3fccd032::t_bd44f87d1fe5f6 1-4
+  s_d9571b3fccd032::t_85e2daa6de3ade 76-77
+  s_d9571b3fccd032::t_a7c9be40201ab9 89-91,135-137
+  s_d9571b3fccd032::t_2123c17f17740b 11-14,81-88,92
+  s_d9571b3fccd032::t_76d509002d6248 69-75,78-80
+  s_d9571b3fccd032::t_bb2e7bd0d9c88d 10,15-26,28-30,32-34,38-68
+  s_d9571b3fccd032::t_f8309bdfa4fb84 5-7,27,31,35-37
+  s_d9571b3fccd032::t_28cfae11266c03 93
+apps/server/cloudflare/core-http/internal/http.ts
+  s_d9571b3fccd032::t_c96f29ca8cf5e0 31,1452-1460,1465-1466,1515,1688-1689,1701,1703,1709,1733
+  s_d9571b3fccd032::t_2123c17f17740b 1467-1475,1478-1514,1539-1547,1691-1698,1717-1728,1736
+  s_d9571b3fccd032::t_bb2e7bd0d9c88d 1666-1679,1706
+apps/server/cloudflare/web-session/operations.ts
+  s_d9571b3fccd032::t_c2bcd9a715db6e 3-4
+  s_d9571b3fccd032::t_85e2daa6de3ade 31-32
+  s_d9571b3fccd032::t_7dab3653003a64 2,10,15-30
+apps/server/cloudflare/web-session/contract.ts
+  s_d9571b3fccd032::t_7dab3653003a64 3,16-20
+  s_d9571b3fccd032::t_d1e5a711491fac 21
+apps/server/cloudflare/core-http/browser-admission.test.ts
+  s_d9571b3fccd032::t_31c007666bc2d3 7,115-117,138-143,147-151
+  s_d9571b3fccd032::t_bb2e7bd0d9c88d 135-137
+  s_d9571b3fccd032::t_b5a2444f6b219c 1-4,8-114,152-158
+  s_d9571b3fccd032::t_ffebba228a1af3 5-6,118-134,144-146
+apps/server/cloudflare/web-session/internal/authentication.ts
+  s_d9571b3fccd032::t_85e2daa6de3ade 14,88
+  s_d9571b3fccd032::t_31c007666bc2d3 44
+  s_d9571b3fccd032::t_2123c17f17740b 5-9,32-36,45-51,76-81
+  s_d9571b3fccd032::t_7dab3653003a64 21-26,31,43,53-73,82-83,85-86
+  s_d9571b3fccd032::t_76d509002d6248 15-20,74-75
+docs/research/hosted-infra-proof-2026-10-28.json
+  s_d9571b3fccd032::t_e283b1b9ab7dce 1-317,326,333
+  s_d9571b3fccd032::t_c7e3d6b73f5ad9 318-325,327-332
+docs/research/production-history-after-1609-2026-10-28.json
+  s_1cebf747fbaef6::t_87f03d097a0385 1-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d26d662ab5f061420951bd263a85b6337adff5c0",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

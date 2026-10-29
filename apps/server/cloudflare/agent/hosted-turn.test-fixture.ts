@@ -25,7 +25,11 @@ import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
-import { executeStatementExtraction, statementRetention } from "../ingestion/runtime";
+import {
+  executeStatementExtraction,
+  statementRetention,
+  withStatementPublicationWake,
+} from "../ingestion/runtime";
 import { publicationOutage } from "./statement-publication-recovery.test-fixture";
 import { confirmationOutage } from "./statement-recovery.test-fixture";
 import { afterAll, afterEach, expect, vi } from "vitest";
@@ -1113,3 +1117,25 @@ export const seedRecurringReview = ({
     });
     expect(response.status).toBe(200);
   });
+
+export const assertStatementPublicationWake =
+  ({
+    refused,
+    checkpoint,
+  }: Readonly<{
+    refused: boolean;
+    checkpoint: "none" | "stage" | "publication" | "outcome";
+  }>) =>
+  <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.gen(function* () {
+      const wakes: Array<number> = [];
+      const result = yield* work.pipe(
+        withStatementPublicationWake((due) => {
+          wakes.push(due);
+          return Promise.resolve();
+        })
+      );
+      if (refused) expect(wakes).toHaveLength(0);
+      else if (checkpoint === "none") expect(wakes.length).toBeGreaterThan(0);
+      return result;
+    });

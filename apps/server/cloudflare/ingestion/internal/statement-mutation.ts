@@ -18,6 +18,7 @@ import {
   submissionProjection,
 } from "./statement-staging";
 import { statementRefusalResponse } from "./statement-ingestion";
+import { StatementPublicationWake } from "./publication-wake";
 import {
   type TransactionCaller,
   callerAuthority,
@@ -90,6 +91,16 @@ const guardedStatementRefusal =
     );
   };
 
+const wakePublishedSubmission = (
+  submission: Option.Option<StatementSubmission>
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    if (Option.isNone(submission)) return;
+    if (submission.value.status !== "queued" && submission.value.status !== "processing") return;
+    const wake = yield* StatementPublicationWake;
+    yield* wake;
+  });
+
 /** Read only public lifecycle after the unit commits; transient adapter failures get bounded retries. */
 const committedSubmission =
   (config: StatementStagingConfig, publication: PreparedStatementPublication) =>
@@ -107,9 +118,11 @@ const committedSubmission =
       if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause)) {
         return yield* Effect.interrupt;
       }
-      return Exit.isFailure(result)
+      const projected = Exit.isFailure(result)
         ? Option.none()
         : Option.flatMap(result.value, submissionProjection);
+      yield* wakePublishedSubmission(projected);
+      return projected;
     });
 
 const heldPublicationRefusal = ({

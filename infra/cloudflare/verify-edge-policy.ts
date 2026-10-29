@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "0d1ecf628d5f5051f89527d53faa6bce2851ee883b7875c543503d9916641dff";
+const expectedEdgePolicyDigest = "1318324da6007bcadb68c8b0b0f80c0c2401789eba6c43c8d961cdfe6e80b2d9";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/connections/internal/retention.ts", import.meta.url)
@@ -133,6 +133,12 @@ const securityArtifacts = [
   await Bun.file(new URL("../../apps/server/cloudflare/core-worker.ts", import.meta.url)).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/transactions/runtime.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/transactions/internal/recovery-alarm.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/publication-wake.ts", import.meta.url)
   ).text(),
   await Bun.file(new URL("../../apps/server/cloudflare/agent/contract.ts", import.meta.url)).text(),
   await Bun.file(

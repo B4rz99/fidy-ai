@@ -28,6 +28,7 @@ import { it as effectIt } from "@effect/vitest";
 import { NodeFileSystem } from "@effect/platform-node";
 import { readCanonicalSubmission } from "./internal/statement-ingestion";
 import { prepareHeldStatementReviewDecision, prepareHeldStatementSubmission } from "./operations";
+import { withStatementPublicationWake } from "./runtime";
 import assert from "node:assert/strict";
 import { Hex } from "effect/encoding";
 import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
@@ -245,9 +246,10 @@ const corruptFirst = (
   });
 };
 
-const completedSubmission = (
+const retainedSubmission = (
   runtime: Runtime,
-  stagingId: string
+  stagingId: string,
+  status: "queued" | "completed" = "completed"
 ): Effect.Effect<StatementSubmissionId> =>
   Effect.gen(function* () {
     const submissionId = StatementSubmissionId.make("20000000-0000-4000-8000-000000000101");
@@ -255,15 +257,16 @@ const completedSubmission = (
       runtime.database
         .prepare(`INSERT INTO statement_submissions
     (id,user_id,idempotency_key,staging_id,source_format,parser_revision,service_market,locale,time_zone,status,submitted_at_ms,started_at_ms,completed_at_ms,retention_expires_at_ms)
-    VALUES (?, ?, ?, ?, 'csv', 'v1', 'CO', 'es-CO', 'America/Bogota', 'completed', ?, ?, ?, ?)`)
+    VALUES (?, ?, ?, ?, 'csv', 'v1', 'CO', 'es-CO', 'America/Bogota', ?, ?, ?, ?, ?)`)
         .bind(
           submissionId,
           userA,
           "30000000-0000-4000-8000-000000000101",
           stagingId,
+          status,
           startedAtEpochMs,
-          startedAtEpochMs,
-          startedAtEpochMs,
+          status === "completed" ? startedAtEpochMs : null,
+          status === "completed" ? startedAtEpochMs : null,
           startedAtEpochMs + statementStagingLifetime
         )
         .run()
@@ -303,6 +306,44 @@ const digestHex = (bytes: Uint8Array): Promise<string> =>
   crypto.subtle
     .digest("SHA-256", Uint8Array.from(bytes))
     .then((value) => Hex.encode(new Uint8Array(value)));
+
+it.each(["queued", "completed", "unavailable", "foreign"] as const)(
+  "wakes committed queued statement publication without waking terminal replay: %s",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(makeRuntime);
+        const staged = requireValue(
+          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
+        );
+        yield* retainedSubmission(
+          runtime,
+          staged.stagingId,
+          scenario === "completed" ? "completed" : "queued"
+        );
+        const prepared = yield* prepareHeldStatementSubmission(publicationWork(runtime, staged));
+        if (
+          prepared._tag !== "Prepared" ||
+          prepared.mutation.outcome._tag !== "StatementSubmission"
+        ) {
+          return yield* Effect.die(new Error("Expected retained publication readback"));
+        }
+        const alarms: Array<number> = [];
+        const readback = yield* prepared.mutation.outcome.publication
+          .readCommitted(scenario === "foreign" ? userB : userA)
+          .pipe(
+            withStatementPublicationWake((due) => {
+              alarms.push(due);
+              return scenario === "unavailable"
+                ? Promise.reject(new Error("Alarm unavailable"))
+                : Promise.resolve();
+            })
+          );
+        expect(Option.isSome(readback)).toBe(scenario !== "foreign");
+        expect(alarms).toHaveLength(scenario === "completed" || scenario === "foreign" ? 0 : 1);
+      })
+    )
+);
 
 const verifyDelayedUpload = (
   outcome: "interrupted" | "ambiguous-rejection"
@@ -565,7 +606,7 @@ describe("Cloudflare statement byte staging", () => {
           const staged = requireValue(
             yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
           );
-          const submissionId = yield* completedSubmission(runtime, staged.stagingId);
+          const submissionId = yield* retainedSubmission(runtime, staged.stagingId);
           const database = corruptFirst(runtime.database, "SELECT s.id, s.source_format", (row) =>
             Predicate.isObject(row) ? { ...row, [column]: value } : row
           );
@@ -656,7 +697,7 @@ describe("Cloudflare statement byte staging", () => {
         const staged = requireValue(
           yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
         );
-        yield* completedSubmission(runtime, staged.stagingId);
+        yield* retainedSubmission(runtime, staged.stagingId);
         const work = publicationWork(runtime, staged);
         const database = corruptFirst(
           runtime.database,
@@ -684,7 +725,7 @@ describe("Cloudflare statement byte staging", () => {
         const staged = requireValue(
           yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
         );
-        const submissionId = yield* completedSubmission(runtime, staged.stagingId);
+        const submissionId = yield* retainedSubmission(runtime, staged.stagingId);
         const reviewId = "40000000-0000-4000-8000-000000000101";
         const sessionId = "50000000-0000-4000-8000-000000000101";
         yield* fromTestPromise(() =>
@@ -991,7 +1032,7 @@ describe("Cloudflare statement byte staging", () => {
         const staged = requireValue(
           yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
         );
-        const submissionId = yield* completedSubmission(runtime, staged.stagingId);
+        const submissionId = yield* retainedSubmission(runtime, staged.stagingId);
         yield* fromTestPromise(() =>
           runtime.database
             .prepare(

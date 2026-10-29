@@ -1,0 +1,35 @@
+docs/research/production-history-baseline-2026-10-28.json
+  s_1cebf747fbaef6::t_8add2f76762820 1-72
+docs/research/production-placement-trial-2026-10-28.json
+  s_1cebf747fbaef6::t_8add2f76762820 1-175
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_1cebf747fbaef6::t_8add2f76762820 3,642,705-709,720-733,738,742,747-748,752-753,758-764,766-771,774,777,781-788,792
+package.json
+  s_1cebf747fbaef6::t_8add2f76762820 83,96-97
+docs/research/production-performance-pilot-2026-10-28.json
+  s_1cebf747fbaef6::t_8add2f76762820 1-115
+docs/research/production-admission-proof-2026-10-28.json
+  s_1cebf747fbaef6::t_8add2f76762820 1-26
+apps/server/cloudflare/canonical-admission/operations.test.ts
+  s_1cebf747fbaef6::t_8add2f76762820 7,12-13,27,29,71-240
+docs/research/production-api-pilot-2026-10-28.json
+  s_1cebf747fbaef6::t_8add2f76762820 1-15
+bun.lock
+  s_1cebf747fbaef6::t_a5cdc3f39a1c98 186,199-200,575,2041,2043
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f557e2aff58855ef682bb209e1f9f8751bbaef01",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

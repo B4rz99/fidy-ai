@@ -1,8 +1,9 @@
 # Cold startup follow-up — 2026-10-28
 
 The universal 2× and zero-loading targets remain unmet. This follow-up removes hidden artwork
-requests, splits provider-return presentation, and records the critical resource waterfall and
-direct Production observations. It does not establish a universal readiness improvement.
+requests, splits provider-return presentation, updates eligible dependencies blocking SCA, and
+records the critical resource waterfall and direct Production observations. It does not establish
+a universal readiness improvement.
 
 ## Delivery and API evidence
 
@@ -74,14 +75,20 @@ authorization, or customer messages were submitted through the browser.
   did not satisfy the requested experience. Its cold observations remain labeled as a rejected
   candidate rather than final-head evidence.
 - The repository dependency gate required the newly eligible `@cloudflare/workers-types`
-  5.20261022.1 in both existing development manifests. The lockfile changes only those pins; runtime
-  dependencies and the seven-day age policy are unchanged.
+  5.20261022.1 in both existing development manifests.
+- CI then reported nine advisories across Seroval, systeminformation and the Hono Node adapter.
+  Eligible fixes are pinned at 1.6.11, 5.33.16 and 2.1.3 respectively, preserving the seven-day
+  delay and existing vulnerability gates. Seroval is inherited through the browser router;
+  systeminformation and the Node adapter are tooling dependencies. The Node adapter is a major
+  update, so type, infrastructure and browser compatibility are part of validation. The final
+  cold run is separate from the earlier UI-only measurements that used the original dependencies.
 
 ## Method and interpretation
 
 All local comparisons use base revision `67335840a1`, Bun 1.4.1, Chrome 156.0.8078.73, the existing
 heavy synthetic fixture, the same loopback topology and uncompressed preview, and one serial browser
-worker. Each cold document stops the previous page, waits twelve seconds outside measurement to
+worker. The final software revision is `2e5e81fa63`; subsequent report edits do not change that code.
+Each cold document stops the previous page, waits twelve seconds outside measurement to
 refill the unchanged allowance, and clears the browser cache. Mobile uses 390×844, 4× CPU slowdown,
 150 ms latency, 200,000 bytes/s download, and 93,750 bytes/s upload.
 
@@ -104,19 +111,19 @@ All 18 attempted documents reached readiness before and after; these are single 
 
 | Workspace    | Desktop before → final (ms) | Constrained mobile before → final (ms) |
 | ------------ | --------------------------: | -------------------------------------: |
-| transactions |                   781 → 452 |                        10,797 → 10,923 |
-| budgets      |                   751 → 600 |                         10,406 → 9,316 |
-| recurring    |               1,378 → 1,298 |                        12,779 → 11,399 |
-| dashboard    |                   658 → 572 |                        11,451 → 10,084 |
-| review       |                   330 → 368 |                         12,424 → 9,155 |
-| account      |                   620 → 235 |                          8,315 → 7,591 |
-| access       |                   719 → 362 |                          9,179 → 8,906 |
-| upgrade      |                 315 → 1,078 |                          9,044 → 8,851 |
-| privacy      |                   371 → 328 |                          8,865 → 8,155 |
+| transactions |                   781 → 393 |                        10,797 → 10,491 |
+| budgets      |                   751 → 400 |                         10,406 → 9,075 |
+| recurring    |               1,378 → 1,022 |                        12,779 → 10,918 |
+| dashboard    |                   658 → 439 |                        11,451 → 10,692 |
+| review       |                   330 → 327 |                        12,424 → 11,826 |
+| account      |                   620 → 196 |                          8,315 → 7,163 |
+| access       |                   719 → 601 |                          9,179 → 8,573 |
+| upgrade      |                   315 → 654 |                          9,044 → 8,706 |
+| privacy      |                   371 → 249 |                          8,865 → 7,630 |
 
-Transactions did not improve in the final cold mobile observation. Several routes improved,
-others remained similar or regressed; these samples do not support a consistent 2× claim.
-The deterministic improvement is eliminating hidden artwork requests, not a guaranteed page-latency multiplier.
+Cold mobile Transactions remained above ten seconds. These single observations do not support a
+consistent 2× claim or isolate causality from variation between runs. The deterministic improvement
+is eliminating hidden artwork requests, not a guaranteed page-latency multiplier.
 
 ## Reproduction
 
@@ -143,7 +150,8 @@ durations establish live provider latency.
 
 ## Million-Transaction tier and validation
 
-The breaking-tier attempt exhausted the unchanged 600,000 ms web-server preparation budget:
+The breaking-tier attempt used the UI-only code before the SCA dependency refresh and exhausted
+the unchanged 600,000 ms web-server preparation budget:
 `Timed out waiting 600000ms from config.webServer`. Before cancellation, a read-only inspection
 of the isolated native D1 fixture observed 655,000 Transactions for the assessment User at about
 9 minutes 46 seconds of fixture-process lifetime. Production projection triggers remained active.
@@ -151,8 +159,9 @@ The API health listener had not started, and no browser-readiness samples ran. T
 preparation failure, not a million-Transaction page-latency result or a Production failure. The
 million-Transaction readiness tier remains unmeasured; its preparation cost needs its own diagnosis.
 
-Local validation passed 314 web unit tests, repository static verification, and seven focused
-browser cases covering hidden artwork plus Google/Microsoft signup, recovery disclosure, persisted
+Local validation passed 314 web unit tests, 310 Cloudflare infrastructure tests, repository static
+verification, and seven focused browser cases covering hidden artwork plus Google/Microsoft signup,
+recovery disclosure, persisted
 session, denial and cancellation. The original hidden-artwork test failed before the fix and passed
 afterward. Ordinary acceptance/performance deadlines and the assessment's setup deadline were not
 relaxed. The rejected calendar candidate separately passed date-selection and failed-chunk recovery
@@ -183,4 +192,7 @@ copied into this report.
 
 References: [native lazy-loading behavior](https://web.dev/articles/browser-level-image-lazy-loading),
 [React lazy loading](https://react.dev/reference/react/lazy),
-[successful serving release](https://github.com/B4rz99/fidy-ai/actions/runs/40789032350).
+[successful serving release](https://github.com/B4rz99/fidy-ai/actions/runs/40789032350),
+[Seroval advisory](https://github.com/advisories/GHSA-f86p-h4j2-7qgj),
+[Hono Node adapter fix](https://github.com/honojs/node-server/releases/tag/v2.1.3),
+[systeminformation fix](https://github.com/sebhildebrandt/systeminformation/releases/tag/v5.33.16).

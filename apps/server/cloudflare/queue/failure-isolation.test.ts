@@ -4,6 +4,7 @@ import { TelemetryWorkRecord } from "../../src/shell/observability/contract";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import type { WorkerTelemetryEvent } from "../runtime/telemetry/contract";
+import { withErasureRecovery } from "../erasure/runtime";
 import type { CoreQueueEnvironment } from "./contract";
 import { makeCoreQueue } from "./runtime";
 
@@ -368,9 +369,52 @@ it("contains a defective acknowledgement and an ordinary handoff failure in one 
     })
   ));
 
-it.each(["statement", "pairing", "replacement"] as const)(
-  "overlaps independent %s handoffs within a four-message bound",
-  (owner) =>
+const independentHandoffs = [
+  { owner: "statement", limit: 8 },
+  { owner: "pairing", limit: 4 },
+  { owner: "replacement", limit: 4 },
+] as const;
+
+it("fails every parallel handoff closed when required recovery configuration is absent", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      yield* seed(db);
+      let creates = 0;
+      const workflow: Workflow = {
+        create: ({ id } = {}) => {
+          if (id === undefined) return unused();
+          creates += 1;
+          return Promise.resolve(instance(id));
+        },
+        get: unused,
+        createBatch: unused,
+        deleteBatch: unused,
+      };
+      const acknowledged = new Set<number>();
+      yield* Effect.tryPromise(() =>
+        expect(
+          queue(
+            batch(
+              Array.from({ length: 10 }, (_, index) => ({ index, body: body("statement", index) })),
+              acknowledged,
+              1
+            ),
+            withErasureRecovery({
+              ...environment(db, workflow, () => undefined),
+              ERASURE_REQUIRED: "true",
+            })
+          )
+        ).rejects.toBeDefined()
+      );
+      expect(creates).toBe(0);
+      expect(acknowledged.size).toBe(0);
+    })
+  ));
+
+it.each(independentHandoffs)(
+  "overlaps independent $owner handoffs within a $limit-message bound",
+  ({ owner, limit }) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* Effect.tryPromise(() => databases.acquire());
@@ -402,7 +446,7 @@ it.each(["statement", "pairing", "replacement"] as const)(
             creates += 1;
             active += 1;
             maximum = Math.max(maximum, active);
-            if (active === 4) Deferred.doneUnsafe(ready, Effect.void);
+            if (active === limit) Deferred.doneUnsafe(ready, Effect.void);
             return run(Deferred.await(release)).then(() => {
               active -= 1;
               return instance(id);
@@ -426,13 +470,13 @@ it.each(["statement", "pairing", "replacement"] as const)(
         );
         yield* Deferred.await(ready).pipe(
           Effect.timeout(5_000),
-          Effect.tap(() => Effect.sync(() => expect(creates).toBe(4))),
+          Effect.tap(() => Effect.sync(() => expect(creates).toBe(limit))),
           Effect.ensuring(Deferred.succeed(release, undefined)),
           Effect.onError(() => Effect.tryPromise(() => pending).pipe(Effect.ignoreCause))
         );
         yield* Effect.tryPromise(() => pending);
         expect(creates).toBe(10);
-        expect(maximum).toBe(4);
+        expect(maximum).toBe(limit);
         expect(acknowledged.size).toBe(10);
         const attempts = events.flatMap((event) =>
           event.event === "span" && event.data["fidy.work_kind"] === "queue_attempt"
@@ -502,53 +546,56 @@ it("retains input-order failure selection when independent handoffs fail in reve
     })
   ));
 
-it("stops the remaining backlog on interruption without acknowledging four ambiguous creates", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => databases.acquire());
-      yield* seed(db);
-      const started = yield* Deferred.make<void>();
-      const release = yield* Deferred.make<void>();
-      const context = yield* Effect.context<never>();
-      const run = Effect.runPromiseWith(context);
-      let creates = 0;
-      const workflow: Workflow = {
-        create: ({ id } = {}) => {
-          if (id === undefined) return unused();
-          creates += 1;
-          if (creates === 4) Deferred.doneUnsafe(started, Effect.void);
-          return run(Deferred.await(release)).then(() => instance(id));
-        },
-        get: unused,
-        createBatch: unused,
-        deleteBatch: unused,
-      };
-      const records: TelemetryWorkRecord[] = [];
-      const telemetry = makeWorkerTelemetry((record) => records.push(record));
-      const interruptedQueue = makeCoreQueue({
-        ...telemetry,
-        observeWork: (observation, work) =>
-          Effect.gen(function* () {
-            const fiber = yield* telemetry.observeWork(observation, work).pipe(Effect.forkChild);
-            yield* Deferred.await(started);
-            yield* Fiber.interrupt(fiber);
-            return yield* Fiber.join(fiber);
-          }),
-      });
-      const acknowledged = new Set<number>();
-      const messages = Array.from({ length: 10 }, (_, index) => ({
-        index,
-        body: body("statement", index),
-      }));
-      const outcome = yield* Effect.tryPromise(() =>
-        interruptedQueue(
-          batch(messages, acknowledged, 1),
-          environment(db, workflow, () => undefined)
-        )
-      ).pipe(Effect.exit, Effect.ensuring(Deferred.succeed(release, undefined)));
-      expect(outcome._tag).toBe("Failure");
-      expect(creates).toBe(4);
-      expect(acknowledged.size).toBe(0);
-      expect(records.map(({ outcome }) => outcome)).toEqual(["interrupted"]);
-    })
-  ));
+it.each(independentHandoffs)(
+  "stops the $owner backlog on interruption without acknowledging $limit ambiguous creates",
+  ({ owner, limit }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => databases.acquire());
+        yield* seed(db);
+        const started = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const context = yield* Effect.context<never>();
+        const run = Effect.runPromiseWith(context);
+        let creates = 0;
+        const workflow: Workflow = {
+          create: ({ id } = {}) => {
+            if (id === undefined) return unused();
+            creates += 1;
+            if (creates === limit) Deferred.doneUnsafe(started, Effect.void);
+            return run(Deferred.await(release)).then(() => instance(id));
+          },
+          get: unused,
+          createBatch: unused,
+          deleteBatch: unused,
+        };
+        const records: TelemetryWorkRecord[] = [];
+        const telemetry = makeWorkerTelemetry((record) => records.push(record));
+        const interruptedQueue = makeCoreQueue({
+          ...telemetry,
+          observeWork: (observation, work) =>
+            Effect.gen(function* () {
+              const fiber = yield* telemetry.observeWork(observation, work).pipe(Effect.forkChild);
+              yield* Deferred.await(started);
+              yield* Fiber.interrupt(fiber);
+              return yield* Fiber.join(fiber);
+            }),
+        });
+        const acknowledged = new Set<number>();
+        const messages = Array.from({ length: 10 }, (_, index) => ({
+          index,
+          body: body(owner, index),
+        }));
+        const outcome = yield* Effect.tryPromise(() =>
+          interruptedQueue(
+            batch(messages, acknowledged, 1),
+            environment(db, workflow, () => undefined)
+          )
+        ).pipe(Effect.exit, Effect.ensuring(Deferred.succeed(release, undefined)));
+        expect(outcome._tag).toBe("Failure");
+        expect(creates).toBe(limit);
+        expect(acknowledged.size).toBe(0);
+        expect(records.map(({ outcome }) => outcome)).toEqual(["interrupted"]);
+      })
+    )
+);

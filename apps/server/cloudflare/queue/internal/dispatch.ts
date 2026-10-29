@@ -121,10 +121,13 @@ const observeWorkflowMessage = <E>(
     });
   });
 
+// Handoff lookups may overlap; the Workflows and User coordinator retain execution authority.
+const statementHandoffConcurrency = 8;
+
 const receiveWorkflowBatch = <E>(
   batch: MessageBatch<unknown>,
   receive: (message: MessageBatch<unknown>) => Effect.Effect<void, E>,
-  concurrency: 1 | 4 = 1
+  concurrency: 1 | 4 | typeof statementHandoffConcurrency = 1
 ): Effect.Effect<void, E> =>
   Effect.gen(function* () {
     const results = yield* Effect.forEach(
@@ -279,7 +282,7 @@ const receiveWorkQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryU
           environment: { DB: environment.DB, STATEMENT_EXTRACTION_WORKFLOW: workflow },
           messages: entry.messages,
         }),
-      4
+      statementHandoffConcurrency
     ).pipe(Effect.mapError(deliveryFailure));
   }
   return batch.messages.some(

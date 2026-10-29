@@ -1,3 +1,4 @@
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import type { Locator, Page, Route } from "@playwright/test";
 import { ResourceLimited } from "@fidy/server/client";
 import { Effect, Schema } from "effect";
@@ -5,6 +6,7 @@ import { playwright } from "./playwright-runtime";
 import { signInDashboardThroughCore } from "./real-core-fixture";
 
 const { expect, test } = playwright;
+const { operator } = browserAcceptanceTopology();
 const resizeDistance = 100;
 const pointerSteps = 12;
 const successStatus = 200;
@@ -49,7 +51,7 @@ test("a pointer resize submits the canonical edit and retains its weight after r
   Effect.runPromise(
     Effect.gen(function* () {
       const reset = yield* Effect.tryPromise(() =>
-        request.post("http://127.0.0.1:4175/dashboard/reset?dashboard=true")
+        request.post(`${operator}/dashboard/reset?dashboard=true`)
       );
       expect(reset.status()).toBe(noContentStatus);
       yield* Effect.tryPromise(() => signInDashboardThroughCore({ page, request }));

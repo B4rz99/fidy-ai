@@ -287,7 +287,14 @@ export const TransactionExtraction = Transaction.mapFields(
   .annotate({ identifier: "TransactionExtraction" });
 export type TransactionExtraction = typeof TransactionExtraction.Type;
 
+export const maximumTransactionPageSize = 100;
+
 export const TransactionQueryValues = Schema.Struct({
+  /** Bound one history response independently of its keyset position. */
+  limit: Schema.NumberFromString.check(
+    Schema.isInt(),
+    Schema.isBetween({ minimum: 1, maximum: maximumTransactionPageSize })
+  ),
   from: UtcTimestamp,
   to: UtcTimestamp,
   categoryId: CategoryId,

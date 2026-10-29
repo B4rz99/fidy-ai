@@ -14,6 +14,7 @@ import {
   TransactionPresentation,
   TransactionQueryValues,
   TransactionSearchQuery,
+  maximumTransactionPageSize,
 } from "../../../src/core/transactions/contract";
 import { Currency } from "../../../src/core/_shared/money";
 import { effectiveHistoryPage, effectiveTransactionRelation } from "./effective-transaction";
@@ -58,6 +59,7 @@ const Row = Schema.Struct({
   revision: Schema.Int,
 });
 const Query = TransactionQueryValues.mapFields((fields) => ({
+  limit: Schema.OptionFromOptionalKey(fields.limit),
   from: Schema.OptionFromOptionalKey(fields.from),
   to: Schema.OptionFromOptionalKey(fields.to),
   categoryId: Schema.OptionFromOptionalKey(fields.categoryId),
@@ -68,6 +70,7 @@ const Query = TransactionQueryValues.mapFields((fields) => ({
   q: Schema.OptionFromOptionalKey(TransactionSearchQuery.fields.q),
 }));
 const filters = new Set([
+  "limit",
   "from",
   "to",
   "categoryId",
@@ -76,10 +79,10 @@ const filters = new Set([
   "currency",
   "cursor",
 ]);
-const maxFilters = 7;
+const maxFilters = filters.size;
 const maxSearchUrlLength = 2048;
 const minimumSearchLength = 2;
-const pageSize = 100;
+const pageSize = maximumTransactionPageSize;
 const boundarySize = pageSize + 1;
 const failure = (
   code: "unauthenticated" | "validation_failed" | "not_found" | "rate_limited",
@@ -232,7 +235,7 @@ const listStatement = ({ db, userId, query, authority }: HistoryRow): D1Prepared
     userId,
     where: conditions.join(" AND "),
     bindings: values,
-    limit: boundarySize,
+    limit: Option.getOrElse(query.limit, () => pageSize) + 1,
   });
   return db.prepare(page.sql).bind(...page.bindings);
 };
@@ -363,7 +366,8 @@ export const findTransactionPresentation = ({
 
 const presentHistory = (
   rows: D1Result,
-  selection: Pick<Selection, "id" | "request" | "search">
+  selection: Pick<Selection, "id" | "request" | "search">,
+  query: typeof Query.Type
 ): Response => {
   const { id, request } = selection;
   if (Option.isSome(id)) {
@@ -389,10 +393,11 @@ const presentHistory = (
     return unavailable();
   }
   const transactions = decoded.flatMap((item) => (Option.isSome(item) ? [item.value] : []));
-  const visible = transactions.slice(0, pageSize);
+  const size = Option.getOrElse(query.limit, () => pageSize);
+  const visible = transactions.slice(0, size);
   const last = visible.at(-1);
   const next =
-    transactions.length > pageSize && last !== undefined
+    transactions.length > size && last !== undefined
       ? nextTransactionPage({
           cursor: `${DateTime.formatIso(last.occurredAt)}|${DateTime.formatIso(last.createdAt)}|${last.id}`,
           filters: Object.fromEntries(
@@ -609,7 +614,9 @@ const presentPATHistory = (
     return Promise.resolve(Option.isSome(selection.id) ? notFound() : invalid());
   }
   const rows = results[1];
-  return Promise.resolve(rows === undefined ? unavailable() : presentHistory(rows, selection));
+  return Promise.resolve(
+    rows === undefined ? unavailable() : presentHistory(rows, selection, query.value)
+  );
 };
 
 const readOAuthHistory = Effect.fn(function* ({
@@ -647,7 +654,7 @@ const readOAuthHistory = Effect.fn(function* ({
   }
   if (Option.isNone(query)) return invalid();
   const rows = results[0];
-  return rows === undefined ? unavailable() : presentHistory(rows, selection);
+  return rows === undefined ? unavailable() : presentHistory(rows, selection, query.value);
 });
 
 const readAuthorizedHistory = (
@@ -678,7 +685,7 @@ const readAuthorizedHistory = (
     )
     .then(([rows, audit]) => {
       if (audit?.meta.changes !== 1) return noSession();
-      return rows === undefined ? unavailable() : presentHistory(rows, selection);
+      return rows === undefined ? unavailable() : presentHistory(rows, selection, query.value);
     });
 };
 

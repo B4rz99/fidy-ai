@@ -10,6 +10,7 @@ await installTestSchema({ db });
 await erasureRegistry.put("recovery/generation", "initial");
 
 export const fixtureUserId = "24000000-0000-4000-8000-000000000241";
+export const subscriptionReflowUserId = "24000000-0000-4000-8000-000000000681";
 export const firstCardUserId = "24000000-0000-4000-8000-000000000281";
 export const firstDaviplataUserId = "24000000-0000-4000-8000-000000000291";
 const otherUserId = "24000000-0000-4000-8000-000000000261";
@@ -118,6 +119,12 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
   );
 };
 await seedIdentity();
+await seedIdentity({
+  userId: subscriptionReflowUserId,
+  bsuid: "CO.SubscriptionReflow",
+  email: "subscription-reflow@example.com",
+  consentId: "24000000-0000-4000-8000-000000000682",
+});
 await seedIdentity({
   userId: oauthOperationUserId,
   bsuid: "CO.OAuthOperation",
@@ -381,7 +388,12 @@ await db
   .bind(recoveryDisclosureUserId, recoveryDisclosureDigest, now)
   .run();
 
-if (Bun.env.FIDY_ASSESSMENT !== undefined) {
-  const { seedAssessment } = await import("./browser-assessment.test-fixture");
-  await Effect.runPromise(seedAssessment({ db, dataset: Bun.env.FIDY_ASSESSMENT, now }));
-}
+/** Large histories are prepared after the fixture is listening, before any measured browser work. */
+export const prepareBrowserAssessment = (): Promise<void> => {
+  const dataset = Bun.env.FIDY_ASSESSMENT;
+  return dataset === undefined
+    ? Promise.resolve()
+    : import("./browser-assessment.test-fixture").then(({ seedAssessment }) =>
+        Effect.runPromise(seedAssessment({ db, dataset, now }))
+      );
+};

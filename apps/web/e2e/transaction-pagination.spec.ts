@@ -7,6 +7,7 @@ const { expect, test } = playwright;
 test.describe.configure({ mode: "parallel" });
 const category = { id: "24000000-0000-4000-8000-000000000242", label: "Restaurantes" };
 const pageSize = 100;
+const initialPageSize = 25;
 const scrollToEnd = 100_000;
 const unauthorized = 401;
 const multiplePages = pageSize * 2 + 1;
@@ -48,10 +49,11 @@ const pageBody = (fixture: HistoryFixture, url: URL): string => {
     (row) => `${row.occurredAt}|${row.createdAt}|${row.id}` === cursor
   );
   const start = cursor === null ? 0 : previous + 1;
-  const data = fixture.rows.slice(start, start + pageSize);
+  const requestedSize = Number(url.searchParams.get("limit") ?? pageSize);
+  const data = fixture.rows.slice(start, start + requestedSize);
   const last = data.at(-1);
   const next =
-    start + pageSize < fixture.rows.length && last !== undefined
+    start + requestedSize < fixture.rows.length && last !== undefined
       ? [
           {
             tool: "transactions.listTransactions",
@@ -142,7 +144,7 @@ test("loads the next Transaction page only when scrolling to the end", ({ page }
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       yield* wait(() => page.goto("/app/transactions"));
       const rows = page.getByRole("button", { name: /^Ver transacción Registro /u });
-      yield* wait(() => expect(rows).toHaveCount(pageSize));
+      yield* wait(() => expect(rows).toHaveCount(initialPageSize));
       expect(fixture.requests).toHaveLength(1);
       yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
       yield* wait(() => expect(rows).toHaveCount(beyondPage));
@@ -224,8 +226,8 @@ for (const count of [0, pageSize, multiplePages]) {
             ).toBeVisible()
           );
         }
-        yield* wait(() => expect(rows).toHaveCount(Math.min(count, pageSize)));
-        for (let loaded = pageSize; loaded < count; loaded += pageSize) {
+        yield* wait(() => expect(rows).toHaveCount(Math.min(count, initialPageSize)));
+        for (let loaded = initialPageSize; loaded < count; loaded += pageSize) {
           yield* wait(() =>
             page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded()
           );
@@ -239,7 +241,9 @@ for (const count of [0, pageSize, multiplePages]) {
             page.getByRole("button", { name: "Cargar más transacciones", exact: true })
           ).toHaveCount(0)
         );
-        expect(fixture.requests.length).toBe(Math.max(1, Math.ceil(count / pageSize)));
+        expect(fixture.requests.length).toBe(
+          1 + Math.max(0, Math.ceil((count - initialPageSize) / pageSize))
+        );
         for (const request of fixture.requests) {
           expect(request.searchParams.get("from")).toBe(
             fixture.requests[0]?.searchParams.get("from")
@@ -266,7 +270,7 @@ test("retains loaded Transactions on interruption and retries the same bounded p
       );
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
-          pageSize
+          initialPageSize
         )
       );
       yield* wait(() => expect.poll(pendingReceived(fixture)).toBe(true));
@@ -281,7 +285,7 @@ test("retains loaded Transactions on interruption and retries the same bounded p
       );
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
-          pageSize
+          initialPageSize
         )
       );
       fixture.mode = "ready";
@@ -329,7 +333,7 @@ test("refresh clears selection and ignores the old pending continuation", ({ pag
       yield* wait(() => completePending(fixture));
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
-          pageSize
+          initialPageSize
         )
       );
       fixture.mode = "ready";
@@ -398,7 +402,7 @@ test("saving a later Transaction resets pages and reloads its correction without
       yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
-          pageSize
+          initialPageSize
         )
       );
       yield* wait(() => page.mouse.wheel(0, scrollToEnd));

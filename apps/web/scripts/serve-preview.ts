@@ -2,6 +2,47 @@ import { browserAcceptanceTopology } from "../../server/cloudflare/browser-accep
 import { Option } from "effect";
 
 const root = Bun.env.PREVIEW_ROOT ?? "playwright-dist";
+const compression = Bun.env.PREVIEW_COMPRESSION ?? "identity";
+if (compression !== "identity" && compression !== "gzip") {
+  throw new Error("Preview compression must be identity or gzip");
+}
+const compressedFiles = new Map<string, Uint8Array<ArrayBuffer>>();
+if (compression === "gzip") {
+  for await (const path of new Bun.Glob("**/*").scan({ cwd: root, onlyFiles: true })) {
+    if (/\.(css|html|js|json|svg|txt|xml)$/u.test(path)) {
+      const name = `${root}/${path}`;
+      compressedFiles.set(name, Bun.gzipSync(await Bun.file(name).arrayBuffer()));
+    }
+  }
+}
+const fileResponse = (
+  path: string,
+  headers: Readonly<Record<string, string>>,
+  request: Request
+): Response => {
+  const acceptsGzip = (request.headers.get("accept-encoding") ?? "").split(",").some((value) => {
+    const [encoding, ...parameters] = value.trim().split(";");
+    const quality = Number(
+      parameters
+        .find((parameter) => parameter.trim().startsWith("q="))
+        ?.trim()
+        .slice(2) ?? "1"
+    );
+    return encoding === "gzip" && quality > 0 && quality <= 1;
+  });
+  const compressed = acceptsGzip ? compressedFiles.get(path) : undefined;
+  const representationHeaders = compressedFiles.has(path)
+    ? {
+        ...headers,
+        vary: [headers.vary, "Accept-Encoding"].filter((value) => value !== undefined).join(", "),
+      }
+    : headers;
+  return compressed === undefined
+    ? new Response(Bun.file(path), { headers: representationHeaders })
+    : new Response(compressed, {
+        headers: { ...representationHeaders, "content-encoding": "gzip" },
+      });
+};
 const port = Number.parseInt(Bun.env.PREVIEW_PORT ?? "4173", 10);
 const tlsKey = Bun.env.PLAYWRIGHT_TLS_KEY;
 const tlsCertificate = Bun.env.PLAYWRIGHT_TLS_CERT;
@@ -106,18 +147,24 @@ const responseFor = (request: Request): Promise<Response> => {
   return file.exists().then((exists) => {
     if (exists) {
       const extension = candidate.value.slice(candidate.value.lastIndexOf(".")).toLowerCase();
-      return new Response(file, {
-        headers: {
+      return fileResponse(
+        candidate.value,
+        {
           ...policyHeaders,
           "content-type": contentTypes[extension] ?? "application/octet-stream",
         },
-      });
+        request
+      );
     }
     if (pathname.includes(".")) return new Response(null, { status: 404, headers: policyHeaders });
-    const shell = Bun.file(`${root}/index.html`);
-    return new Response(shell, {
-      headers: { ...policyHeaders, "content-type": "text/html; charset=utf-8" },
-    });
+    return fileResponse(
+      `${root}/index.html`,
+      {
+        ...policyHeaders,
+        "content-type": "text/html; charset=utf-8",
+      },
+      request
+    );
   });
 };
 

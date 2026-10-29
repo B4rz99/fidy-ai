@@ -3395,6 +3395,63 @@ for (const scenario of [
     ));
 }
 
+it("bounds requested history pages and keeps variable-size continuations User-owned", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            `WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 8)
+         INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
+         SELECT printf('00000000-0000-4000-8100-%012d',n),CASE WHEN n=8 THEN ? ELSE ? END,
+         '1','COP','outflow',?,1736424000000,1736424000000 FROM seq`
+          )
+          .bind(users[1], users[0], category)
+          .run()
+      );
+      const read = (query: string): Promise<Response> =>
+        sendPublicRequest(
+          db,
+          new Request(`https://api.fidyapp.com/transactions?${query}`, {
+            headers: {
+              origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+            },
+          })
+        );
+      const Page = Schema.Struct({
+        data: Schema.Array(Schema.Struct({ id: Transaction.fields.id })),
+        next: Schema.Array(
+          Schema.Struct({
+            args: Schema.Struct({ query: Schema.Struct({ cursor: Schema.String }) }),
+          })
+        ),
+      });
+      const first = yield* fromTestPromise(() => read("limit=2"));
+      expect(first.status).toBe(200);
+      const page = yield* Schema.decodeUnknownEffect(Page)(
+        yield* fromTestPromise(() => first.json())
+      ).pipe(Effect.orDie);
+      expect(page.data).toHaveLength(2);
+      const cursor = Option.getOrThrow(Option.fromUndefinedOr(page.next[0])).args.query.cursor;
+      const second = yield* fromTestPromise(() => read(`cursor=${encodeURIComponent(cursor)}`));
+      expect(second.status).toBe(200);
+      const remainder = yield* Schema.decodeUnknownEffect(Page)(
+        yield* fromTestPromise(() => second.json())
+      ).pipe(Effect.orDie);
+      expect(remainder.data).toHaveLength(5);
+      expect(remainder.next).toEqual([]);
+      const ids = [...page.data, ...remainder.data].map((row) => row.id);
+      expect(new Set(ids).size).toBe(7);
+      expect(ids).not.toContain("00000000-0000-4000-8100-000000000008");
+      for (const limit of ["0", "101", "1.5", "invalid"]) {
+        expect((yield* fromTestPromise(() => read(`limit=${limit}`))).status).toBe(400);
+      }
+    })
+  ));
+
 it("continues the canonical history beyond its first bounded page without losing tied movements", () =>
   Effect.runPromise(
     Effect.gen(function* () {

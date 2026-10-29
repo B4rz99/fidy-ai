@@ -106,6 +106,10 @@ See [ADR 0009](../../docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.m
 Consent owns current standing and retained disclosure evidence. Exact admitted work can retain its
 original bounded Consent basis; transport payloads and recurring schedules cannot supply that basis.
 Privacy controls remain independently reachable after processing withdrawal or commercial expiry.
+Cookie-only Consent handlers discover the subject and verify the expected browser binding in one
+live session lookup. Core does not repeat that discovery before dispatch. Protected reads and
+coordinated decisions still recheck credential authority in their existing atomic units; no
+session or Consent result is cached across requests.
 
 Provider adapters use published bounded transport contracts. Hosted inference uses Workers AI
 behind its own provider-neutral interface. Security policy owns validation, authenticity, Secret

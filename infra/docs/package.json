@@ -10,6 +10,6 @@
   },
   "dependencies": {
     "alchemy": "2.0.0-beta.80",
-    "effect": "4.0.5"
+    "effect": "4.0.6"
   }
 }

@@ -111,6 +111,7 @@ const signInWithIdentity = ({
     identity:
       | "primary"
       | "firstCard"
+      | "subscriptionReflow"
       | "dashboard"
       | "budget"
       | "budgetEditing"
@@ -233,6 +234,10 @@ export const signInThroughCore = (input: SignInFixture): Promise<void> =>
 /** Signs in a separate User whose first Subscription must tokenize a new card. */
 export const signInFirstCardThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity({ ...input, identity: "firstCard", clockMode: "controlled" });
+
+/** Payment reflow starts with an unpaid User, independent of earlier successful collections. */
+export const signInSubscriptionReflowThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithIdentity({ ...input, identity: "subscriptionReflow", clockMode: "controlled" });
 
 /** Dashboard mutations have their own User so concurrent enrollment cannot reset its document. */
 export const signInDashboardThroughCore = (input: SignInFixture): Promise<void> =>

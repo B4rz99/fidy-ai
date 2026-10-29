@@ -1,1 +1,1 @@
-export const fidyLogoUrl = new URL("./assets/fidy-logo.png", import.meta.url).href;
+export const fidyLogoUrl = new URL("./assets/fidy-logo.webp", import.meta.url).href;

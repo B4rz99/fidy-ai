@@ -141,6 +141,66 @@ const reviewRoute = (route: Route): Promise<void> => {
   });
 };
 
+test("does not open an unvisited editor when its inbox finishes after leaving Review", ({
+  page,
+  request,
+}) => {
+  const requested = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const delivered = Promise.withResolvers<void>();
+  const reads = { detail: 0, material: 0 };
+  const detailReads = (): number => reads.detail;
+  const materialReads = (): number => reads.material;
+  const handler = (route: Route): Promise<void> => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/review-workspace") && url.searchParams.get("limit") !== "0") {
+      requested.resolve();
+      return release.promise.then(() => reviewRoute(route)).then(() => delivered.resolve());
+    }
+    if (url.pathname.endsWith("/material")) reads.material++;
+    else if (url.pathname.endsWith(id)) reads.detail++;
+    return reviewRoute(route);
+  };
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({
+          page,
+          request,
+          identity: "navigationReviewTransactions",
+        })
+      );
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, handler)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => requested.promise);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Transacciones", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeEnabled()
+      );
+      release.resolve();
+      yield* Effect.tryPromise(() => delivered.promise);
+      yield* Effect.tryPromise(() => page.waitForLoadState("networkidle"));
+      expect(reads).toEqual({ detail: 0, material: 0 });
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("link", { name: /Por revisar/u })
+          .first()
+          .click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Valor", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect.poll(detailReads).toBeGreaterThan(0));
+      yield* Effect.tryPromise(() => expect.poll(materialReads).toBeGreaterThan(0));
+    }).pipe(Effect.ensuring(Effect.sync(() => release.resolve())))
+  );
+});
+
 const reviewPageSize = 50;
 const fixtureStart = 1350;
 const uuidTailLength = 12;

@@ -4,13 +4,9 @@ import { Option } from "effect";
 import { type JSX, type ReactNode, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
-import type { BrowserSessionBinding, ProcessingConsentStatus } from "@/transport/client";
+import type { ProcessingConsentStatus } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
-
-const missingSession = (
-  session: CanonicalQueryState<typeof BrowserSessionBinding.Type, unknown>
-): boolean => session._tag === "Ready" && session.value.binding === null;
 
 const ConsentRequired = ({ revoked }: Readonly<{ revoked: boolean }>): JSX.Element => (
   <Alert>
@@ -60,7 +56,7 @@ const ConsentResult = ({
 export const SubscriptionConsentBoundary = ({
   children,
 }: Readonly<{ children: ReactNode }>): JSX.Element => {
-  const client = useRouter().options.context.webAuthClient;
+  const { webAuthClient: client, initialSessionBinding } = useRouter().options.context;
   const [query] = useState(() =>
     client.query("processingConsent", "status", {
       timeToLive: "0 seconds",
@@ -70,9 +66,10 @@ export const SubscriptionConsentBoundary = ({
   const status = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   const { authentication } = useSession();
-  const [binding] = useState(() => client.query("browserSession", "binding", {}));
-  const session = useAtomValue(binding).pipe(presentCanonicalQuery);
-  if (authentication === "expired" || (status._tag === "Failure" && missingSession(session))) {
+  if (
+    authentication === "expired" ||
+    (status._tag === "Failure" && initialSessionBinding === "none")
+  ) {
     return (
       <Alert>
         <AlertTitle>Inicia sesión para activar Pro</AlertTitle>

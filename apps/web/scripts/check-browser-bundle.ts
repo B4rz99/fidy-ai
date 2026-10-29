@@ -182,11 +182,14 @@ const findBrowserEntry = (outputs: BuildOutputs): Option.Option<string> =>
 
 const assertNoDashboardInInitialInputs = (inputs: ReadonlyArray<string>): void => {
   const leaked = inputs.filter(
-    (input) => input.includes("/features/dashboard/") || input.includes("node_modules/recharts/")
+    (input) =>
+      input.includes("/features/dashboard/") ||
+      input.includes("node_modules/recharts/") ||
+      input.includes("/features/needs-review/")
   );
   if (leaked.length > 0) {
     throw new Error(
-      `Dashboard modules entered the public/auth initial chunk:\n${leaked.join("\n")}`
+      `Workspace modules entered the public/auth initial chunk:\n${leaked.join("\n")}`
     );
   }
 };

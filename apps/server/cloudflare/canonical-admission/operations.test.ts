@@ -10,7 +10,7 @@ import { QuotaStatus } from "../../src/core/quotas/contract";
 import { Unavailable } from "../../src/shell/public-http/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
-import { withErasureRecovery } from "../erasure/runtime";
+import { maintenancePerformanceDatabase } from "../maintenance-performance.test-fixture";
 import { executeCanonicalQuery } from "../canonical-operations/operations";
 import {
   protectCanonicalPressure,
@@ -138,7 +138,7 @@ it("finishes browser disclosure and lease release in one guarded batch", () =>
               }
             : Reflect.get(target, property, target),
       });
-      const guarded = withErasureRecovery({ DB: fixture.db, ERASURE_BUCKET: observedBucket }).DB;
+      const guarded = maintenancePerformanceDatabase({ db: fixture.db, bucket: observedBucket });
       const { database, calls } = observeBatches(guarded);
       const response = yield* protectCanonicalRequest({
         ...fixture,

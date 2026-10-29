@@ -17,7 +17,10 @@ Workers do not serve web routes or static assets.
 Effect Atom derives browser transport from the assembled `FidyApi` with
 `AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`. A shared browser HTTP policy
 layer bounds and sanitizes that transport beneath each generated client; the web application does not
-hand-wrap endpoints or declare a second canonical surface. Only GET/HEAD transport failures retry
+hand-wrap endpoints or declare a second canonical surface. Each canonical API client permits two
+active transfers through complete response materialization. Waiting uses the original request deadline;
+interruption removes queued work, and retry pacing releases capacity. This volatile browser budget
+does not replace server admission across tabs and clients. Only GET/HEAD transport failures retry
 once. Canonical requests and safe web-auth reads may additionally retry a decoded `ResourceLimited` refusal with bounded
 `Retry-After` pacing (six retries, delays of one to five seconds) inside the original boundary deadline (15 seconds for canonical requests, 10 seconds for ordinary web-auth reads). This proves non-admission; commercial exhaustion, uncertain mutations, authentication,
 and enrollment refusals never gain automatic replay. Cancellation interrupts pacing as well as

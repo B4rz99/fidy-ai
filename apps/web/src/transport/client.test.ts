@@ -8,6 +8,7 @@ import {
   Effect,
   Exit,
   Fiber,
+  Function,
   Layer,
   Option,
   Redacted,
@@ -167,6 +168,170 @@ describe("subscription enrollment transport", () => {
 });
 
 describe("browser HTTP policy", () => {
+  it.effect("bounds a burst of canonical transfers before the server has to refuse them", () =>
+    Effect.gen(function* () {
+      let active = 0;
+      let peak = 0;
+      let attempts = 0;
+      const acquire = Effect.sync(() => {
+        active++;
+        attempts++;
+        peak = Math.max(peak, active);
+      });
+      const release = Effect.sync(() => {
+        active--;
+      });
+      const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
+        return yield* Effect.acquireUseRelease(
+          acquire,
+          Function.constant(Effect.sleep("1 second").pipe(Effect.as(responseJson(request, {})))),
+          Function.constant(release)
+        );
+      });
+      const client = yield* makePolicyTestClient(
+        Layer.succeed(HttpClient.HttpClient, makeHttpClient(respond))
+      );
+      const burst = yield* Effect.forEach(
+        Array.from({ length: 8 }),
+        () => client.get(`${policyTestOrigin}/categories`),
+        { concurrency: "unbounded" }
+      ).pipe(Effect.forkChild);
+      yield* TestClock.adjust("500 millis");
+      expect(peak).toBe(2);
+      yield* TestClock.adjust("4 seconds");
+      expect(yield* Fiber.join(burst)).toHaveLength(8);
+      expect(attempts).toBe(8);
+      expect(active).toBe(0);
+    })
+  );
+
+  it.effect("interrupts queued transfers without dispatching them or losing a permit", () =>
+    Effect.gen(function* () {
+      const hold = yield* Deferred.make<void>();
+      const ready = yield* Deferred.make<void>();
+      let attempts = 0;
+      const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
+        attempts++;
+        if (attempts === 2) yield* Deferred.succeed(ready, undefined);
+        yield* Deferred.await(hold);
+        return responseJson(request, {});
+      });
+      const client = yield* makePolicyTestClient(
+        Layer.succeed(HttpClient.HttpClient, makeHttpClient(respond))
+      );
+      const first = yield* Effect.forkChild(client.get(`${policyTestOrigin}/categories`));
+      const second = yield* Effect.forkChild(client.get(`${policyTestOrigin}/categories`));
+      yield* Deferred.await(ready);
+      const queued = yield* Effect.forkChild(client.get(`${policyTestOrigin}/transactions`));
+      yield* TestClock.adjust("1 millis");
+      expect(attempts).toBe(2);
+      yield* Fiber.interrupt(queued);
+      yield* Deferred.succeed(hold, undefined);
+      yield* Fiber.join(first);
+      yield* Fiber.join(second);
+      yield* client.get(`${policyTestOrigin}/categories`);
+      expect(attempts).toBe(3);
+    })
+  );
+
+  it.effect("counts transfer queue time inside the original canonical deadline", () =>
+    Effect.gen(function* () {
+      let attempts = 0;
+      const stalled = Effect.suspend(() => {
+        attempts++;
+        return Effect.never;
+      });
+      const client = yield* makePolicyTestClient(
+        Layer.succeed(
+          HttpClient.HttpClient,
+          makeHttpClient(() => stalled)
+        )
+      );
+      const burst = yield* Effect.forEach(
+        Array.from({ length: 3 }),
+        () => client.get(`${policyTestOrigin}/categories`).pipe(Effect.exit),
+        { concurrency: "unbounded" }
+      ).pipe(Effect.forkChild);
+      yield* TestClock.adjust("15 seconds");
+      const results = yield* Fiber.join(burst);
+      expect(results.every(Exit.isFailure)).toBe(true);
+      expect(attempts).toBe(2);
+    })
+  );
+
+  it.effect("holds transfer capacity until response bodies are materialized", () =>
+    Effect.gen(function* () {
+      const bodies: ReadableStream<Uint8Array>[] = [];
+      const controllers: ReadableStreamDefaultController<Uint8Array>[] = [];
+      for (let index = 0; index < 8; index++) {
+        bodies.push(
+          new ReadableStream({
+            start(controller): void {
+              controllers.push(controller);
+            },
+          })
+        );
+      }
+      let attempts = 0;
+      const respond = (
+        request: HttpClientRequest.HttpClientRequest
+      ): Effect.Effect<HttpClientResponse.HttpClientResponse> =>
+        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(bodies[attempts++])));
+      const client = yield* makePolicyTestClient(
+        Layer.succeed(HttpClient.HttpClient, makeHttpClient(respond))
+      );
+      const burst = yield* Effect.forEach(
+        Array.from({ length: 8 }),
+        () => client.get(`${policyTestOrigin}/categories`),
+        { concurrency: "unbounded" }
+      ).pipe(Effect.forkChild);
+      for (let wave = 0; wave < 4; wave++) {
+        yield* TestClock.adjust("1 millis");
+        expect(attempts).toBe((wave + 1) * 2);
+        for (const controller of controllers.slice(wave * 2, wave * 2 + 2)) {
+          controller.enqueue(new TextEncoder().encode("{}"));
+          controller.close();
+        }
+      }
+      expect(yield* Fiber.join(burst)).toHaveLength(8);
+    })
+  );
+
+  it.effect("leaves capacity available while refused requests wait to retry", () =>
+    Effect.gen(function* () {
+      let attempts = 0;
+      const respond = (
+        request: HttpClientRequest.HttpClientRequest
+      ): Effect.Effect<HttpClientResponse.HttpClientResponse> => {
+        attempts++;
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            request.url.endsWith("/refused")
+              ? Response.json(
+                  { error: { code: "rate_limited", message: "Retry later." }, next: [] },
+                  { status: 429, headers: { "retry-after": "5" } }
+                )
+              : Response.json({})
+          )
+        );
+      };
+      const client = yield* makePolicyTestClient(
+        Layer.succeed(HttpClient.HttpClient, makeHttpClient(respond))
+      );
+      const first = yield* Effect.forkChild(client.get(`${policyTestOrigin}/refused`));
+      const second = yield* Effect.forkChild(client.get(`${policyTestOrigin}/refused`));
+      yield* TestClock.adjust("1 millis");
+      expect(attempts).toBe(2);
+      const third = yield* Effect.forkChild(client.get(`${policyTestOrigin}/categories`));
+      yield* TestClock.adjust("1 millis");
+      expect(attempts).toBe(3);
+      expect((yield* Fiber.join(third)).status).toBe(200);
+      yield* Fiber.interrupt(first);
+      yield* Fiber.interrupt(second);
+    })
+  );
+
   it.effect("retries eligible operations only after a declared unadmitted resource refusal", () =>
     Effect.gen(function* () {
       for (const [method, boundary, path] of [

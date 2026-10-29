@@ -1,0 +1,49 @@
+{
+  "scope": "Native D1/R2 full Core HTTP integration with synthetic User/session and real production recovery wrapper. Not deployed response latency.",
+  "baseline": {
+    "revision": "a2d54bfaf8739cb0639d8251d0ad3d931b400eaa",
+    "expectedGenerationReads": 3,
+    "actualGenerationReads": 5,
+    "baselineTestExit": 1,
+    "sourcesRestored": true
+  },
+  "candidate": {
+    "generationReadsPerCanonicalRead": 3,
+    "responseStatus": 200,
+    "freshRecoveryCheckInEveryRemainingDatabaseUnit": true
+  },
+  "cancellationRegression": {
+    "trigger": "Interrupt request after native pressure batch commits but before its promise settles.",
+    "externalBeforeOccupiedSlots": 1,
+    "externalAfterOccupiedSlots": 0,
+    "browserAfterOccupiedSlots": 0,
+    "ownerWorkInvoked": false
+  },
+  "productionTraceAfter1609": {
+    "traceId": "8277c7a459a574bd8527e1aafb1179e5",
+    "coreVersion": "ba07bad1-2d2f-4c2b-9ec2-23febb53d73a",
+    "coreMs": 658,
+    "historyOperationMs": 145,
+    "browserMs": 834.93
+  },
+  "verification": [
+    "Native count assertion fails against baseline a2d54bf: expected 3, observed 5; current sources restored afterwards.",
+    "64 focused native admission, Core HTTP, browser session, mutation recovery and erasure recovery tests pass.",
+    "Wrong mounted browser identity rejected on OAuth, callbacks, payment enrollment, hosted turns, identity, health, support, PAT listing and canonical routes.",
+    "Final owner/disclosure authority, Consent, recovery fencing, per-User burst/concurrency and commercial accounting remain enforced."
+  ],
+  "limitations": [
+    "Latest deployed History median is still 860.55ms against 1297.36ms baseline (1.51x); 2x has not yet been confirmed.",
+    "Candidate production latency awaits deployment and the same controlled browser benchmark.",
+    "Hosted primitive queue and D1 results are synthetic, not end-to-end application throughput or total-bill proof."
+  ],
+  "lostAcknowledgementRegression": {
+    "trigger": "Native D1 batch commits, then its acknowledgement is lost before reaching the caller.",
+    "browserBeforeOccupiedSlots": 1,
+    "externalBeforeOccupiedSlots": 1,
+    "browserAfterOccupiedSlots": 0,
+    "externalAfterOccupiedSlots": 0,
+    "ownerWorkInvoked": false,
+    "scope": "Best-effort reconciliation by server-owned lease id; an ongoing database outage can still defer cleanup to lease expiry."
+  }
+}

@@ -28,6 +28,7 @@ import { handleOAuthRequest } from "../../oauth-agents/runtime";
 import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/memory/contract";
 
 import {
+  protectCanonicalBrowserRequest,
   protectCanonicalRequest,
   protectCanonicalSource,
 } from "../../canonical-admission/operations";
@@ -1448,61 +1449,70 @@ const executeProtectedCanonicalWork = (
     work: executeCanonicalWork(input),
   });
 
+const withBrowserBinding = <E, R>(
+  request: Request,
+  environment: CoreHttpEnvironment,
+  work: Effect.Effect<Response, E, R>
+): Effect.Effect<Response, E, R> =>
+  browserSessionBindingResponse({ request, db: environment.DB }).pipe(
+    Effect.flatMap(Option.match({ onNone: () => work, onSome: Effect.succeed }))
+  );
+
 const authorizedCanonicalResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
   operation: CatalogOperation
-): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const current = yield* Clock.currentTimeMillis;
-    if (!request.headers.has("authorization")) {
-      return yield* Effect.tryPromise({
-        try: () => transactionSession({ request, db: environment.DB, current }),
-        catch: () => undefined,
-      }).pipe(
-        Effect.flatMap((session) => {
-          if (Option.isNone(session)) return Effect.succeed(unauthenticatedTransaction());
-          return executeProtectedCanonicalWork({
-            request,
-            environment,
-            operation,
-            current,
-            subject: session.value,
-          });
-        }),
-        Effect.orElseSucceed(unavailable)
-      );
-    }
-    return yield* resolveCanonicalPATCredential({ request, db: environment.DB, operation }).pipe(
-      Effect.match({
-        onFailure: () =>
-          jsonResponse(
-            JSON.stringify({ error: categoryUnavailable().error, next: [] }),
-            HTTP_SERVICE_UNAVAILABLE
-          ),
-        onSuccess: (authorized) => {
-          if (typeof authorized === "object") return authorized;
-          if (authorized === "user_action_required") return consentRevokedResponse();
-          return jsonResponse(
-            '{"error":{"code":"unauthenticated","message":"Present a valid credential and retry."},"next":[]}',
-            HTTP_UNAUTHORIZED
-          );
-        },
-      }),
-      Effect.filterOrElse(
-        (result): result is Response => result instanceof Response,
-        (subject) =>
-          executeProtectedCanonicalWork({ request, environment, operation, current, subject })
-      ),
-      Effect.filterOrElse(
-        (response) => response.status !== HTTP_UNAUTHORIZED,
-        (response) =>
-          protectCanonicalSource({ db: environment.DB, request, current }).pipe(
-            Effect.map((failure) => (Option.isSome(failure) ? failure.value : response))
-          )
+): Effect.Effect<Response> => {
+  if (!request.headers.has("authorization")) {
+    return Clock.currentTimeMillis.pipe(
+      Effect.flatMap((current) =>
+        protectCanonicalBrowserRequest({
+          request,
+          db: environment.DB,
+          operation,
+          current,
+          work: (subject) => executeCanonicalWork({ request, environment, operation, subject }),
+        })
       )
     );
-  });
+  }
+  return withBrowserBinding(
+    request,
+    environment,
+    Effect.gen(function* () {
+      const current = yield* Clock.currentTimeMillis;
+      return yield* resolveCanonicalPATCredential({ request, db: environment.DB, operation }).pipe(
+        Effect.match({
+          onFailure: () =>
+            jsonResponse(
+              JSON.stringify({ error: categoryUnavailable().error, next: [] }),
+              HTTP_SERVICE_UNAVAILABLE
+            ),
+          onSuccess: (authorized) => {
+            if (typeof authorized === "object") return authorized;
+            if (authorized === "user_action_required") return consentRevokedResponse();
+            return jsonResponse(
+              '{"error":{"code":"unauthenticated","message":"Present a valid credential and retry."},"next":[]}',
+              HTTP_UNAUTHORIZED
+            );
+          },
+        }),
+        Effect.filterOrElse(
+          (result): result is Response => result instanceof Response,
+          (subject) =>
+            executeProtectedCanonicalWork({ request, environment, operation, current, subject })
+        ),
+        Effect.filterOrElse(
+          (response) => response.status !== HTTP_UNAUTHORIZED,
+          (response) =>
+            protectCanonicalSource({ db: environment.DB, request, current }).pipe(
+              Effect.map((failure) => (Option.isSome(failure) ? failure.value : response))
+            )
+        )
+      );
+    })
+  );
+};
 
 const healthResponse = (environment: CoreHttpEnvironment): Response => {
   const configuration = Schema.decodeExit(ReleaseConfiguration)(environment);
@@ -1526,8 +1536,15 @@ const canonicalOrHealthResponse = (
   if (Option.isSome(operation)) {
     return authorizedCanonicalResponse(request, environment, operation.value);
   }
-  if (canonicalRoute(path) || request.method !== "GET") return Effect.succeed(methodNotAllowed());
-  return Effect.succeed(healthResponse(environment));
+  return withBrowserBinding(
+    request,
+    environment,
+    Effect.succeed(
+      canonicalRoute(path) || request.method !== "GET"
+        ? methodNotAllowed()
+        : healthResponse(environment)
+    )
+  );
 };
 
 type RequestExecution = Readonly<{
@@ -1646,6 +1663,20 @@ const supportCoreResponse = (
   return Option.none();
 };
 
+const paymentEnrollmentResponse = (
+  request: Request,
+  environment: CoreHttpEnvironment,
+  publish: PublishAcceptedWork
+): Effect.Effect<Response> =>
+  Effect.tryPromise({
+    try: () =>
+      handlePaymentEnrollment({
+        request,
+        environment: { ...environment, onAccepted: (id) => publish("billing", id) },
+      }),
+    catch: () => undefined,
+  }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.payment-enrollment"));
+
 const dispatchCoreHttp = ({
   bankAuthentication,
   request,
@@ -1654,31 +1685,28 @@ const dispatchCoreHttp = ({
   publish,
 }: RequestExecution): Effect.Effect<Response, never, HttpClient.HttpClient> => {
   const url = new URL(request.url);
+  const bound = <R>(work: Effect.Effect<Response, never, R>): Effect.Effect<Response, never, R> =>
+    withBrowserBinding(request, environment, work);
   if (Object.values(oauthPaths).some((path) => path === url.pathname)) {
-    return handleOAuthRequest({
-      request,
-      db: environment.DB,
-      browserOrigin: environment.BROWSER_ORIGIN,
-      coordinator: environment.USER_TRANSACTION_COORDINATOR,
-    });
+    return bound(
+      handleOAuthRequest({
+        request,
+        db: environment.DB,
+        browserOrigin: environment.BROWSER_ORIGIN,
+        coordinator: environment.USER_TRANSACTION_COORDINATOR,
+      })
+    );
   }
   const reserved = reservedCoreResponse({ request, environment, bankAuthentication }, url.pathname);
-  if (Option.isSome(reserved)) return reserved.value;
+  if (Option.isSome(reserved)) return bound(reserved.value);
   if (["/providers/kapso/callback", "/providers/wompi/billing-events"].includes(url.pathname)) {
-    return providerCallbackEffect(request, environment, publish);
+    return bound(providerCallbackEffect(request, environment, publish));
   }
   if (enrollmentCorePath(url.pathname)) {
-    return Effect.tryPromise({
-      try: () =>
-        handlePaymentEnrollment({
-          request,
-          environment: { ...environment, onAccepted: (id) => publish("billing", id) },
-        }),
-      catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.payment-enrollment"));
+    return bound(paymentEnrollmentResponse(request, environment, publish));
   }
   const directPath = directPathResponse(request, environment);
-  if (Option.isSome(directPath)) return directPath.value;
+  if (Option.isSome(directPath)) return bound(directPath.value);
   const patListing = canonicalOperation({ method: request.method, path: url.pathname }).pipe(
     Option.filter((operation) => operation.id === "pats.listPATs")
   );
@@ -1686,24 +1714,23 @@ const dispatchCoreHttp = ({
     return authorizedCanonicalResponse(request, environment, patListing.value);
   }
   if (ownsWebAuthenticationPath(url.pathname)) {
-    return handleWebAuthentication({
-      request,
-      db: environment.DB,
-      support: {
-        CLOUDFLARE_ACCESS_ISSUER: environment.CLOUDFLARE_ACCESS_ISSUER,
-        CLOUDFLARE_ACCESS_AUDIENCE: environment.CLOUDFLARE_ACCESS_AUDIENCE,
-      },
-      telemetry,
-      publish,
-    });
+    return bound(
+      handleWebAuthentication({
+        request,
+        db: environment.DB,
+        support: {
+          CLOUDFLARE_ACCESS_ISSUER: environment.CLOUDFLARE_ACCESS_ISSUER,
+          CLOUDFLARE_ACCESS_AUDIENCE: environment.CLOUDFLARE_ACCESS_AUDIENCE,
+        },
+        telemetry,
+        publish,
+      })
+    );
   }
   return canonicalOrHealthResponse(request, environment, url.pathname);
 };
 
-/** Validate the mounted browser session identity before any cookie-authorized dispatch. */
+/** Each owner validates browser binding before dispatch; canonical admission combines it with pressure. */
 export const executeCoreHttp = (
   input: RequestExecution
-): Effect.Effect<Response, never, HttpClient.HttpClient> =>
-  browserSessionBindingResponse({ request: input.request, db: input.environment.DB }).pipe(
-    Effect.flatMap(Option.match({ onNone: () => dispatchCoreHttp(input), onSome: Effect.succeed }))
-  );
+): Effect.Effect<Response, never, HttpClient.HttpClient> => dispatchCoreHttp(input);

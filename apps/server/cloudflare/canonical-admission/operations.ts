@@ -13,6 +13,11 @@ import {
   recordAuditedPATUseFromAuthority,
 } from "../../src/shell/tokens/operations";
 import { liveWebSessionAuthority } from "../../src/shell/identity/operations";
+import type { AuthenticatedWebSession } from "../web-session/contract";
+import {
+  prepareBoundCanonicalWebSession,
+  resolveBoundCanonicalWebSession,
+} from "../web-session/operations";
 import {
   prepareCanonicalAdmissionRefusal,
   prepareCanonicalReplayAccess,
@@ -38,7 +43,12 @@ import {
   canonicalRequestProtection,
 } from "./contract";
 import { cryptoHash, validatedCanonicalInput } from "./internal/request-input";
-import { acquireRequest, admitUnresolvedSource, releaseRequest } from "./internal/protection";
+import {
+  acquireBoundBrowserRequest,
+  acquireRequest,
+  admitUnresolvedSource,
+  releaseRequest,
+} from "./internal/protection";
 import { type Replay, claimReplay, completeReplay, retainedReplay } from "./internal/replay";
 
 type RequestCall<E, R> = Readonly<{
@@ -693,22 +703,35 @@ export const protectCanonicalSource = ({
 const executeProtectedRequest = <E, R>(
   input: RequestCall<E, R>
 ): Effect.Effect<Response, never, R> =>
-  Effect.gen(function* () {
-    const id = newId();
-    const protection = yield* acquireRequest({
-      db: input.db,
-      userId: input.caller.value.userId,
-      id,
-      current: input.current,
-    });
-    if (protection !== "accepted") {
-      return yield* discloseCanonicalAllowance({
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const id = newId();
+      const protection = yield* acquireRequest({
         db: input.db,
-        caller: input.caller,
-        response: protection === "rate_limited" ? rateLimited() : unavailable(),
+        userId: input.caller.value.userId,
+        id,
+        current: input.current,
       });
-    }
-    return yield* authorizedCall(input, id).pipe(
+      if (protection !== "accepted") {
+        return yield* restore(
+          discloseCanonicalAllowance({
+            db: input.db,
+            caller: input.caller,
+            response: protection === "rate_limited" ? rateLimited() : unavailable(),
+          })
+        );
+      }
+      return yield* executeAcquiredRequest(input, id, restore);
+    })
+  );
+
+const executeAcquiredRequest = <E, R>(
+  input: RequestCall<E, R>,
+  id: string,
+  restore: <A, E2, R2>(work: Effect.Effect<A, E2, R2>) => Effect.Effect<A, E2, R2>
+): Effect.Effect<Response, never, R> =>
+  restore(
+    authorizedCall(input, id).pipe(
       Effect.catch((failure) =>
         Effect.succeed(
           failure instanceof CanonicalAdmissionUnavailable &&
@@ -724,15 +747,16 @@ const executeProtectedRequest = <E, R>(
           response,
           leaseId: Option.some(id),
         })
-      ),
-      Effect.onExit((exit) =>
-        Exit.isSuccess(exit) && exit.value.leaseReleased
-          ? Effect.void
-          : releaseRequest({ db: input.db, id })
-      ),
-      Effect.map((result) => result.response)
-    );
-  });
+      )
+    )
+  ).pipe(
+    Effect.onExit((exit) =>
+      Exit.isSuccess(exit) && exit.value.leaseReleased
+        ? Effect.void
+        : releaseRequest({ db: input.db, id })
+    ),
+    Effect.map((result) => result.response)
+  );
 
 /** Header disclosure proves only the live User-owned credential and Consent, not business capability. Missing scope or invalid input can still report that User's allowance; failed proof discloses nothing. */
 const finalizeAllowance = ({
@@ -790,6 +814,58 @@ export const discloseCanonicalAllowance = (
 export const protectCanonicalRequest = <E, R>(
   input: RequestCall<E, R>
 ): Effect.Effect<Response, never, R> => executeProtectedRequest(input);
+
+/** Resolve mounted browser proof with native pressure admission; owner work and disclosure still recheck live authority. */
+export const protectCanonicalBrowserRequest = <E, R>(
+  input: Readonly<{
+    db: D1Database;
+    request: Request;
+    operation: CatalogOperation;
+    current: number;
+    work: (subject: AuthenticatedWebSession) => Effect.Effect<Response, E, R>;
+  }>
+): Effect.Effect<Response, never, R> =>
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const prepared = yield* Effect.tryPromise({
+        try: () => prepareBoundCanonicalWebSession(input),
+        catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
+      });
+      if (Option.isNone(prepared)) return noAuthority();
+      const lookup = prepared.value;
+      const id = newId();
+      const admission = yield* acquireBoundBrowserRequest({ ...input, lookup, id });
+      if (typeof admission !== "string") {
+        return yield* executeAcquiredRequest(
+          {
+            ...input,
+            caller: { _tag: "WebSession", value: admission },
+            work: Effect.suspend(() => input.work(admission)),
+          },
+          id,
+          restore
+        );
+      }
+      if (admission === "unauthenticated") return noAuthority();
+      const row = yield* Effect.tryPromise({
+        try: () =>
+          input.db
+            .prepare(lookup.statement.sql)
+            .bind(...lookup.statement.params)
+            .first(),
+        catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
+      });
+      const subject = resolveBoundCanonicalWebSession({ lookup, row });
+      if (Option.isNone(subject)) return noAuthority();
+      return yield* restore(
+        discloseCanonicalAllowance({
+          db: input.db,
+          caller: { _tag: "WebSession", value: subject.value },
+          response: admission === "rate_limited" ? rateLimited() : unavailable(),
+        })
+      );
+    }).pipe(Effect.orElseSucceed(unavailable))
+  );
 
 /** Meter canonical work inside an already pressure-protected MCP invocation under the User coordinator. */
 export const admitCanonicalOperation = <E, R>(

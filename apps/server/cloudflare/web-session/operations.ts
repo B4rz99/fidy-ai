@@ -1,15 +1,35 @@
 import { bindingResponse } from "./internal/binding";
-import { type Effect, Option } from "effect";
+import { type Effect, Option, Schema } from "effect";
+import { WebSessionId } from "../../src/core/web-session/contract";
+import { browserSessionBindingHeader } from "../../src/shell/web-session/contract";
 import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
 import { completePairing, logout } from "./internal/lifecycle";
 import { currentUser } from "./internal/current-user";
 import type {
   AuthenticatedWebSession,
+  BoundWebSessionLookup,
   WebSessionAuthentication,
   WebSessionEstablishment,
   WebSessionRequest,
 } from "./contract";
-import { authenticate } from "./internal/authentication";
+import { authenticate, decodeSessionLookup, prepareSessionLookup } from "./internal/authentication";
+
+/** Prepare exact cookie, mounted identity, expiry and Consent proof for one atomic admission batch. */
+export const prepareBoundCanonicalWebSession = (
+  input: Readonly<{ request: Request; current: number }>
+): Promise<Option.Option<BoundWebSessionLookup>> => {
+  const binding = Schema.decodeUnknownOption(WebSessionId)(
+    input.request.headers.get(browserSessionBindingHeader)
+  );
+  return Option.isNone(binding)
+    ? Promise.resolve(Option.none())
+    : prepareSessionLookup({ ...input, binding, freshness: "live", requireConsent: true });
+};
+
+/** Decode only the row returned by the exact prepared lookup; later work must recheck authority. */
+export const resolveBoundCanonicalWebSession = (
+  input: Readonly<{ lookup: BoundWebSessionLookup; row: unknown }>
+): Option.Option<AuthenticatedWebSession> => decodeSessionLookup(input);
 
 /**
  * Authenticate one browser cookie against authoritative expiry, revocation and optional freshness.

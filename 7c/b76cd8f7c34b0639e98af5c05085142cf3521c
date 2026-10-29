@@ -1,0 +1,24 @@
+package.json
+  s_1cebf747fbaef6::t_d7381ede6ff944 85
+  s_1cebf747fbaef6::t_ebc96886390ad6 70
+apps/server/package.json
+  s_1cebf747fbaef6::t_53c96cf6dc9af4 305
+bun.lock
+  s_1cebf747fbaef6::t_1da40f91e9ded1 16,75,188,1192,1202,2436
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7cb76cd8f7c34b0639e98af5c05085142cf3521c",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

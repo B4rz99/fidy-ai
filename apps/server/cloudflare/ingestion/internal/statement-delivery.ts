@@ -70,11 +70,12 @@ const attempt = <A>(run: () => PromiseLike<A>): Effect.Effect<A, StatementDelive
 export const isStatementExtractionWork = (body: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(Work)(body));
 
-/** Reoffers a bounded page of unsettled D1 intents. A failed send leaves its identity selectable. */
+/** Reoffers a bounded page of unsettled D1 intents. Failed handoffs leave their identity selectable. */
 export const dispatchStatementExtraction = (
   environment: Readonly<{
     DB: D1Database;
     STATEMENT_EXTRACTION_QUEUE: StatementQueue;
+    STATEMENT_EXTRACTION_WORKFLOW: Option.Option<StatementWorkflow>;
   }>
 ): Effect.Effect<void, StatementDeliveryUnavailable> =>
   Effect.gen(function* () {
@@ -103,14 +104,12 @@ export const dispatchStatementExtraction = (
       );
       if (claimed.meta.changes !== 1) continue;
       const offered = yield* Effect.exit(
-        attempt(() =>
-          environment.STATEMENT_EXTRACTION_QUEUE.send({
-            ...trace,
-            version: entry.revision,
-            userId: entry.user_id,
-            submissionId: entry.submission_id,
-          })
-        )
+        offerStatementExtraction(environment, {
+          ...trace,
+          version: entry.revision,
+          userId: entry.user_id,
+          submissionId: entry.submission_id,
+        })
       );
       if (Exit.isFailure(offered)) {
         if (Cause.hasInterrupts(offered.cause)) return yield* Effect.failCause(offered.cause);
@@ -171,6 +170,32 @@ export const receiveStatementExtraction = (
       message.ack();
     }
   }).pipe(Effect.withSpan("ingestion.statementReceive"));
+
+/** Direct handoff accelerates the committed outbox; an unavailable create/get falls back to the
+ * same Queue identity. Both paths use the receiver's current eligibility and stable Workflow id.
+ */
+const offerStatementExtraction = (
+  environment: Readonly<{
+    DB: D1Database;
+    STATEMENT_EXTRACTION_QUEUE: StatementQueue;
+    STATEMENT_EXTRACTION_WORKFLOW: Option.Option<StatementWorkflow>;
+  }>,
+  body: typeof Work.Type
+): Effect.Effect<void, StatementDeliveryUnavailable> =>
+  Effect.gen(function* () {
+    const workflow = environment.STATEMENT_EXTRACTION_WORKFLOW;
+    if (Option.isSome(workflow)) {
+      const delivered = yield* Effect.exit(
+        receiveStatementExtraction({
+          environment: { DB: environment.DB, STATEMENT_EXTRACTION_WORKFLOW: workflow.value },
+          messages: [{ body, ack: (): void => undefined }],
+        })
+      );
+      if (Exit.isSuccess(delivered)) return;
+      if (Cause.hasInterrupts(delivered.cause)) return yield* Effect.failCause(delivered.cause);
+    }
+    yield* attempt(() => environment.STATEMENT_EXTRACTION_QUEUE.send(body));
+  });
 
 /** One private coordinator target; the Workflow never stores bytes, row facts, or credentials. */
 type StatementCoordinator = Readonly<{

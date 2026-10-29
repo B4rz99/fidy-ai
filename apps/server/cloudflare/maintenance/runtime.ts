@@ -265,7 +265,11 @@ const statementActivities = (
     Option.match(environment.STATEMENT_EXTRACTION_QUEUE, {
       onNone: () => Effect.void,
       onSome: (queue) =>
-        dispatchStatementExtraction({ DB: environment.DB, STATEMENT_EXTRACTION_QUEUE: queue }),
+        dispatchStatementExtraction({
+          DB: environment.DB,
+          STATEMENT_EXTRACTION_QUEUE: queue,
+          STATEMENT_EXTRACTION_WORKFLOW: environment.STATEMENT_EXTRACTION_WORKFLOW,
+        }),
     })
   ),
 ];

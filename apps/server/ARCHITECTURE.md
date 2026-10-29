@@ -162,6 +162,14 @@ An ambiguous creation requires an existing-instance lookup; unavailable creation
 back to the Queue with the unchanged identity. The D1 intent and scheduled retry remain the
 recovery path when both offers fail. Neither handoff means extraction has completed.
 
+Committed queued statement readback can wake the owning User coordinator's durable alarm.
+Its dispatcher selects only that User's published intents. One coalesced alarm preserves the
+earliest statement or hosted recovery deadline; the alarm attempts both recovery owners and
+hosted recovery restores any later deadline. Erasure retires the resident alarm scheduler before
+joining pending native writes and clearing the alarm, so late callbacks cannot recreate custody.
+Publication succeeds when a best-effort wake fails; D1 intent and independent cron discovery
+remain authoritative recovery.
+
 Maintenance composes owner discovery, reconciliation and retention without acquiring domain SQL or
 policy. Post-commit publication accelerates durable handoff; scheduled recovery handles missed
 publication. Independent activities retain bounded work, fair discovery and failure isolation.

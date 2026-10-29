@@ -4,8 +4,15 @@ import {
   workTraceHeaders,
 } from "../../runtime/telemetry/operations";
 import type { WorkflowStepConfig } from "cloudflare:workers";
-import { Cause, Clock, Data, Effect, Exit, Option, Result, Schema } from "effect";
-import { StatementCoordinatorActivity, StatementWork } from "../contract";
+import { Cause, Clock, Effect, Exit, Option, Result, Schema } from "effect";
+import {
+  StatementCoordinatorActivity,
+  StatementDeliveryUnavailable,
+  type StatementQueue,
+  StatementWork,
+  type StatementWorkflow,
+  statementWorkflowRetention as retention,
+} from "../contract";
 import { maximumStatementChunkActivities } from "./statement-processing-limits";
 
 const Work = StatementWork;
@@ -32,35 +39,9 @@ const WorkflowState = Schema.Struct({
     "unknown",
   ]),
 });
-const retention = { successRetention: "3 days", errorRetention: "3 days" } as const;
 const dispatchLimit = 32;
 const dispatchCooldownMs = 60_000;
 
-/** Publish only versioned User/submission identity. A resolved send means the Queue accepted an
- * offer, not that extraction completed; a rejected send may still have been accepted, so the
- * outbox retries the same idempotent identity after its cooldown. No bytes or passwords enter it.
- */
-export type StatementQueue = Readonly<{
-  send: (work: typeof Work.Type) => Promise<unknown>;
-}>;
-/** Create one Workflow instance keyed by submission id. A resolved create means the instance
- * exists, not that it finished. If creation rejects ambiguously, get must resolve an existing
- * instance before Queue acknowledgement; a missing/unavailable get must reject for redelivery.
- * get may return an errored instance: the scheduled reconciler inspects status and settles it
- * under the User coordinator. The three-day retention applies to Workflow state only.
- */
-export type StatementWorkflow = Readonly<{
-  create: (options: {
-    id: string;
-    params: typeof Work.Type;
-    retention: typeof retention;
-  }) => Promise<unknown>;
-  get: (id: string) => Promise<unknown>;
-}>;
-
-class StatementDeliveryUnavailable extends Data.TaggedError("StatementDeliveryUnavailable")<{
-  readonly cause: unknown;
-}> {}
 const attempt = <A>(run: () => PromiseLike<A>): Effect.Effect<A, StatementDeliveryUnavailable> =>
   Effect.tryPromise({
     try: () => Promise.resolve(run()),
@@ -74,6 +55,7 @@ export const isStatementExtractionWork = (body: unknown): boolean =>
 export const dispatchStatementExtraction = (
   environment: Readonly<{
     DB: D1Database;
+    userId: Option.Option<string>;
     STATEMENT_EXTRACTION_QUEUE: StatementQueue;
     STATEMENT_EXTRACTION_WORKFLOW: Option.Option<StatementWorkflow>;
   }>
@@ -86,8 +68,9 @@ export const dispatchStatementExtraction = (
         FROM statement_submissions
         WHERE work_published_at_ms IS NOT NULL AND status IN ('queued', 'processing')
           AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms < ?)
+          ${Option.isSome(environment.userId) ? "AND user_id = ?" : ""}
         ORDER BY work_published_at_ms, id LIMIT ?`)
-        .bind(now - dispatchCooldownMs, dispatchLimit)
+        .bind(now - dispatchCooldownMs, ...Option.toArray(environment.userId), dispatchLimit)
         .all()
     );
     const entries = yield* Schema.decodeUnknownEffect(Schema.Array(OutboxRow))(rows.results).pipe(

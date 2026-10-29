@@ -1308,6 +1308,70 @@ it.each(["created", "existing", "unavailable", "expired"] as const)(
     )
 );
 
+it("a User coordinator alarm dispatches only its own published statements", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const submissions: Array<string> = [];
+      for (const index of [0, 1]) {
+        const stagedResponse = yield* fromTestPromise(() =>
+          stageFixture(runtime, { index, body: statementBytes() })
+        );
+        const { data: staged } = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            data: Schema.Struct({
+              stagingId: Schema.String,
+              byteLength: Schema.Finite,
+              sha256: Schema.String,
+            }),
+          })
+        )(yield* fromTestPromise(() => stagedResponse.json()));
+        const submitted = yield* fromTestPromise(() =>
+          publishFixture(runtime, {
+            index,
+            reference: staged,
+            idempotencyKey: `20000000-0000-4000-8000-00000000098${index}`,
+          })
+        );
+        submissions.push((yield* fromTestPromise(() => submissionOf(submitted))).id);
+      }
+      const queued: Array<unknown> = [];
+      const coordinator = new UserTransactionCoordinator(
+        {
+          id: { name: userA },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
+        },
+        {
+          DB: runtime.db,
+          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          STATEMENT_EXTRACTION_QUEUE: {
+            send: (body: unknown): Promise<void> => {
+              queued.push(body);
+              return Promise.resolve();
+            },
+          },
+        }
+      );
+      yield* fromTestPromise(() => coordinator.alarm());
+      expect(queued).toEqual([{ version: 1, userId: userA, submissionId: submissions[0] }]);
+      const unclaimed = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare("SELECT work_last_attempt_at_ms FROM statement_submissions WHERE user_id = ?")
+          .bind(userB)
+          .first()
+      );
+      const decoded = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ work_last_attempt_at_ms: Schema.OptionFromNullOr(Schema.Int) })
+      )(unclaimed);
+      expect(Option.isNone(decoded.work_last_attempt_at_ms)).toBe(true);
+    })
+  ));
+
 it("finishes a durably queued statement after withdrawal without reopening ordinary access or replaying capture", () =>
   Effect.runPromise(
     Effect.gen(function* () {

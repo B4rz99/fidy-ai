@@ -27226,5 +27226,19 @@
       "revision": "f557e2aff58855ef682bb209e1f9f8751bbaef01",
       "integratedTrunkRevision": "a2d54bfaf8739cb0639d8251d0ad3d931b400eaa"
     }
+  },
+  "effectUpdateEligibility": {
+    "retainedFamilyVersion": "4.0.5",
+    "candidateFamilyVersion": "4.0.6",
+    "registryPublishedUtc": {
+      "effect": "2026-10-22T17:47:13.255Z",
+      "@effect/platform-bun": "2026-10-22T18:29:03.133Z",
+      "@effect/platform-node": "2026-10-22T18:30:12.643Z"
+    },
+    "manifestScopedDeferrals": 6,
+    "exclusiveExpiryUtc": "2026-10-29T18:30:12.643Z",
+    "reason": "Satellite update gate became due before core/platform package release delay elapsed. Preserve seven-day delay and coordinated family invariant. No runtime version changes.",
+    "scaResult": "passed on fd74981b2ef161f8865fdb6ce90f7dac1c5bdc9a",
+    "scaJobUrl": "https://github.com/B4rz99/fidy-ai/actions/runs/40812558071/job/123246272698"
   }
 }

@@ -79,7 +79,8 @@ authorization, or customer messages were submitted through the browser.
 
 All local comparisons use base revision `67335840a1`, Bun 1.4.1, Chrome 156.0.8078.73, the existing
 heavy synthetic fixture, the same loopback topology and uncompressed preview, and one serial browser
-worker. The final software revision is `f557e2aff5`; subsequent report edits do not change that code.
+worker. The final software revision is `f557e2aff5`; subsequent report and policy metadata edits
+do not change that software.
 Each cold document stops the previous page, waits twelve seconds outside measurement to
 refill the unchanged allowance, and clears the browser cache. Mobile uses 390×844, 4× CPU slowdown,
 150 ms latency, 200,000 bytes/s download, and 93,750 bytes/s upload.
@@ -174,6 +175,17 @@ After integrating trunk, the default parallel infrastructure run passed 309 test
 original 5,000 ms deadline in the smoke-schema protected-read dependency test at `db.batch`.
 The same revision passed all 310 with `bun run --cwd infra/cloudflare test -- --maxWorkers=1`.
 The single-worker run changed scheduling only; the deadline and assertions were unchanged.
+
+The CI SCA check on `fd74981b2e` passed, but six compatible-update checks became due while CI ran:
+some Effect 4.0.6 satellites were published around 03:26 UTC on October 22. Core Effect, platform-bun
+and platform-node were published later that day, so a full family update would still violate the
+seven-day delay; updating only satellites would violate the repository's shared-version invariant.
+[Six manifest-specific deferrals](../../dependency-policy.json) retain 4.0.5 until the last required
+member becomes eligible at **2026-10-29T18:30:12.643Z**. The exact expiry then requires the coordinated
+update. Existing vulnerability acceptances and SCA exclusions are unchanged. Registry evidence:
+[Effect](https://registry.npmjs.org/effect),
+[platform-bun](https://registry.npmjs.org/@effect/platform-bun),
+[platform-node](https://registry.npmjs.org/@effect/platform-node).
 
 ## Live sandbox protocol evidence
 

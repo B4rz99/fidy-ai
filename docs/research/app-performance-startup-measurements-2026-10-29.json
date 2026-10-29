@@ -310,6 +310,12 @@
       "failed": 0,
       "durationMinutes": 1.8,
       "coverage": "Recurring persistence, pagination, stable reads, uncertain-save recovery, session/admission dependencies and cached navigation."
+    },
+    "effectTraceCompatibility": {
+      "initialCi": "Two memory policy tests and one native governor test rejected new Effect trace annotations in complete Exit object comparisons.",
+      "semanticAssertions": "Require exactly one Fail reason and the same typed domain error, retaining original byte-cap, privacy and no-side-effect assertions.",
+      "localMemoryTestsPassed": 3,
+      "localGovernorTestsPassed": 4
     }
   },
   "goal": "The universal desktop 2x target remains unmet.",
@@ -4071,7 +4077,14 @@
     },
     "productionMatrix": "blocked by inability to reach usable signed-in controls",
     "quotaHypothesis": "User suggested exhausted D1 daily quota. Free-tier reset at 00:00 UTC / 19:00 America/Bogota verified against Cloudflare documentation; account usage not verified.",
-    "source": "https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/"
+    "source": "https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/",
+    "readOnlyTrafficInspection": {
+      "run": "https://github.com/B4rz99/fidy-ai/actions/runs/40974767949",
+      "conclusion": "success; no Production topology drift reported",
+      "databaseProofRequested": false,
+      "sandboxProviderProofRequested": false,
+      "scope": "Inspected existing traffic without changing it; does not establish database availability or quota usage."
+    }
   },
   "requiredLintPatch": {
     "package": "oxlint-tsgolint",
@@ -4080,5 +4093,1212 @@
     "reason": "Existing seven-day dependency admission gate required the patch during final verification.",
     "registryIntegritiesVerified": 7,
     "runtimeImpact": "Development lint tooling only; application dependency versions unchanged."
+  },
+  "committedHeadExtremeDesktop": {
+    "revision": "d159e87324d64963f24261f92f1e0447cbea7159",
+    "testsPassed": 5,
+    "readinessCompleted": 43,
+    "coldRepeats": 1,
+    "summary": {
+      "stats": {
+        "startTime": "2026-10-29T23:40:06.940Z",
+        "duration": 230425.272,
+        "expected": 5,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "profiles": [
+        {
+          "profile": "desktop",
+          "journeys": [
+            {
+              "journey": "transactions:first-date-picker",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [99.61779100000058],
+                "median": 99.61779100000058
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1314],
+                "median": 1314
+              }
+            }
+          ]
+        },
+        {
+          "profile": "desktop",
+          "journeys": [
+            {
+              "journey": "transactions:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [193.88983400000143],
+                "median": 193.88983400000143
+              },
+              "resourceBytes": {
+                "samples": [623477],
+                "median": 623477
+              },
+              "transferredBytes": {
+                "samples": [652577],
+                "median": 652577
+              },
+              "resourceCount": {
+                "samples": [105],
+                "median": 105
+              },
+              "domNodes": {
+                "samples": [1204],
+                "median": 1204
+              }
+            },
+            {
+              "journey": "transactions:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2362.230791000002],
+                "median": 2362.230791000002
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [5],
+                "median": 5
+              },
+              "domNodes": {
+                "samples": [1224],
+                "median": 1224
+              }
+            },
+            {
+              "journey": "transactions:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [6455.160875000001],
+                "median": 6455.160875000001
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [24],
+                "median": 24
+              },
+              "domNodes": {
+                "samples": [2038],
+                "median": 2038
+              }
+            },
+            {
+              "journey": "transactions:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3376.695749999999],
+                "median": 3376.695749999999
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [16],
+                "median": 16
+              },
+              "domNodes": {
+                "samples": [2037],
+                "median": 2037
+              }
+            },
+            {
+              "journey": "transactions:filter",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [59.2486659999995],
+                "median": 59.2486659999995
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1076],
+                "median": 1076
+              }
+            },
+            {
+              "journey": "transactions:scroll-next-page",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3960.589292000004],
+                "median": 3960.589292000004
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [6],
+                "median": 6
+              },
+              "domNodes": {
+                "samples": [5844],
+                "median": 5844
+              }
+            },
+            {
+              "journey": "transactions:open-editor",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [115.37183399999776],
+                "median": 115.37183399999776
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [0],
+                "median": 0
+              },
+              "domNodes": {
+                "samples": [5871],
+                "median": 5871
+              }
+            },
+            {
+              "journey": "transactions:save",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1736.4107089999961],
+                "median": 1736.4107089999961
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [2045],
+                "median": 2045
+              }
+            },
+            {
+              "journey": "budgets:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [4445.6524590000045],
+                "median": 4445.6524590000045
+              },
+              "resourceBytes": {
+                "samples": [567925],
+                "median": 567925
+              },
+              "transferredBytes": {
+                "samples": [596125],
+                "median": 596125
+              },
+              "resourceCount": {
+                "samples": [110],
+                "median": 110
+              },
+              "domNodes": {
+                "samples": [470],
+                "median": 470
+              }
+            },
+            {
+              "journey": "budgets:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [80.54241599999659],
+                "median": 80.54241599999659
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [1237],
+                "median": 1237
+              }
+            },
+            {
+              "journey": "budgets:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [72.35841600000276],
+                "median": 72.35841600000276
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [4],
+                "median": 4
+              },
+              "domNodes": {
+                "samples": [1237],
+                "median": 1237
+              }
+            },
+            {
+              "journey": "budgets:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [83.75825000000623],
+                "median": 83.75825000000623
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [4],
+                "median": 4
+              },
+              "domNodes": {
+                "samples": [1237],
+                "median": 1237
+              }
+            },
+            {
+              "journey": "budgets:previous-month",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [5395.058250000002],
+                "median": 5395.058250000002
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [16],
+                "median": 16
+              },
+              "domNodes": {
+                "samples": [1302],
+                "median": 1302
+              }
+            },
+            {
+              "journey": "recurring:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1413.6780829999916],
+                "median": 1413.6780829999916
+              },
+              "resourceBytes": {
+                "samples": [599712],
+                "median": 599712
+              },
+              "transferredBytes": {
+                "samples": [629112],
+                "median": 629112
+              },
+              "resourceCount": {
+                "samples": [106],
+                "median": 106
+              },
+              "domNodes": {
+                "samples": [1926],
+                "median": 1926
+              }
+            },
+            {
+              "journey": "recurring:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [75.86312500000349],
+                "median": 75.86312500000349
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [0],
+                "median": 0
+              },
+              "domNodes": {
+                "samples": [1975],
+                "median": 1975
+              }
+            },
+            {
+              "journey": "recurring:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [54.87445899999875],
+                "median": 54.87445899999875
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [1975],
+                "median": 1975
+              }
+            },
+            {
+              "journey": "recurring:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [56.30329100000381],
+                "median": 56.30329100000381
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [1975],
+                "median": 1975
+              }
+            },
+            {
+              "journey": "recurring:previous-month",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3376.3679580000025],
+                "median": 3376.3679580000025
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [8],
+                "median": 8
+              },
+              "domNodes": {
+                "samples": [1953],
+                "median": 1953
+              }
+            },
+            {
+              "journey": "dashboard:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3445.9474999999948],
+                "median": 3445.9474999999948
+              },
+              "resourceBytes": {
+                "samples": [659154],
+                "median": 659154
+              },
+              "transferredBytes": {
+                "samples": [685254],
+                "median": 685254
+              },
+              "resourceCount": {
+                "samples": [102],
+                "median": 102
+              },
+              "domNodes": {
+                "samples": [755],
+                "median": 755
+              }
+            },
+            {
+              "journey": "dashboard:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [83.88783300000068],
+                "median": 83.88783300000068
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [811],
+                "median": 811
+              }
+            },
+            {
+              "journey": "dashboard:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [72.09054199999082],
+                "median": 72.09054199999082
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [811],
+                "median": 811
+              }
+            },
+            {
+              "journey": "dashboard:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [73.75733300000138],
+                "median": 73.75733300000138
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [811],
+                "median": 811
+              }
+            },
+            {
+              "journey": "review:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2431.1131659999955],
+                "median": 2431.1131659999955
+              },
+              "resourceBytes": {
+                "samples": [599006],
+                "median": 599006
+              },
+              "transferredBytes": {
+                "samples": [627506],
+                "median": 627506
+              },
+              "resourceCount": {
+                "samples": [108],
+                "median": 108
+              },
+              "domNodes": {
+                "samples": [993],
+                "median": 993
+              }
+            },
+            {
+              "journey": "review:original",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1355.129083000007],
+                "median": 1355.129083000007
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [993],
+                "median": 993
+              }
+            },
+            {
+              "journey": "review:autosave",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1360.551833000005],
+                "median": 1360.551833000005
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [7],
+                "median": 7
+              },
+              "domNodes": {
+                "samples": [994],
+                "median": 994
+              }
+            },
+            {
+              "journey": "review:filter",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [29.701916999998502],
+                "median": 29.701916999998502
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [0],
+                "median": 0
+              },
+              "domNodes": {
+                "samples": [211],
+                "median": 211
+              }
+            },
+            {
+              "journey": "review:next-page",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2361.7095409999893],
+                "median": 2361.7095409999893
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [9],
+                "median": 9
+              },
+              "domNodes": {
+                "samples": [929],
+                "median": 929
+              }
+            },
+            {
+              "journey": "account:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [113.2555410000059],
+                "median": 113.2555410000059
+              },
+              "resourceBytes": {
+                "samples": [509127],
+                "median": 509127
+              },
+              "transferredBytes": {
+                "samples": [532527],
+                "median": 532527
+              },
+              "resourceCount": {
+                "samples": [80],
+                "median": 80
+              },
+              "domNodes": {
+                "samples": [191],
+                "median": 191
+              }
+            },
+            {
+              "journey": "access:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2430.1475840000057],
+                "median": 2430.1475840000057
+              },
+              "resourceBytes": {
+                "samples": [556363],
+                "median": 556363
+              },
+              "transferredBytes": {
+                "samples": [583663],
+                "median": 583663
+              },
+              "resourceCount": {
+                "samples": [98],
+                "median": 98
+              },
+              "domNodes": {
+                "samples": [251],
+                "median": 251
+              }
+            },
+            {
+              "journey": "upgrade:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2402.841791999992],
+                "median": 2402.841791999992
+              },
+              "resourceBytes": {
+                "samples": [539487],
+                "median": 539487
+              },
+              "transferredBytes": {
+                "samples": [563187],
+                "median": 563187
+              },
+              "resourceCount": {
+                "samples": [87],
+                "median": 87
+              },
+              "domNodes": {
+                "samples": [222],
+                "median": 222
+              }
+            },
+            {
+              "journey": "privacy:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1391.9416250000068],
+                "median": 1391.9416250000068
+              },
+              "resourceBytes": {
+                "samples": [522376],
+                "median": 522376
+              },
+              "transferredBytes": {
+                "samples": [546376],
+                "median": 546376
+              },
+              "resourceCount": {
+                "samples": [83],
+                "median": 83
+              },
+              "domNodes": {
+                "samples": [241],
+                "median": 241
+              }
+            }
+          ]
+        },
+        {
+          "profile": "desktop",
+          "journeys": [
+            {
+              "journey": "transactions:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [331.67645800000173],
+                "median": 331.67645800000173
+              },
+              "nativeControlReadyMs": {
+                "samples": [242.80000001192093],
+                "median": 242.80000001192093
+              },
+              "resourceBytes": {
+                "samples": [623477],
+                "median": 623477
+              },
+              "transferredBytes": {
+                "samples": [652577],
+                "median": 652577
+              },
+              "resourceCount": {
+                "samples": [105],
+                "median": 105
+              },
+              "domNodes": {
+                "samples": [1204],
+                "median": 1204
+              }
+            },
+            {
+              "journey": "transactions:cold-open-capture",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [94.50787499999569],
+                "median": 94.50787499999569
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1210],
+                "median": 1210
+              }
+            },
+            {
+              "journey": "transactions:cold-open-calendar",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [116.41645800000697],
+                "median": 116.41645800000697
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1321],
+                "median": 1321
+              }
+            },
+            {
+              "journey": "budgets:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [339.8365829999966],
+                "median": 339.8365829999966
+              },
+              "nativeControlReadyMs": {
+                "samples": [284.0999999642372],
+                "median": 284.0999999642372
+              },
+              "resourceBytes": {
+                "samples": [567925],
+                "median": 567925
+              },
+              "transferredBytes": {
+                "samples": [596125],
+                "median": 596125
+              },
+              "resourceCount": {
+                "samples": [102],
+                "median": 102
+              },
+              "domNodes": {
+                "samples": [468],
+                "median": 468
+              }
+            },
+            {
+              "journey": "recurring:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [437.34775000001537],
+                "median": 437.34775000001537
+              },
+              "nativeControlReadyMs": {
+                "samples": [368.19999998807907],
+                "median": 368.19999998807907
+              },
+              "resourceBytes": {
+                "samples": [599712],
+                "median": 599712
+              },
+              "transferredBytes": {
+                "samples": [629112],
+                "median": 629112
+              },
+              "resourceCount": {
+                "samples": [106],
+                "median": 106
+              },
+              "domNodes": {
+                "samples": [1933],
+                "median": 1933
+              }
+            },
+            {
+              "journey": "dashboard:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [354.3872080000001],
+                "median": 354.3872080000001
+              },
+              "nativeControlReadyMs": {
+                "samples": [264],
+                "median": 264
+              },
+              "resourceBytes": {
+                "samples": [659154],
+                "median": 659154
+              },
+              "transferredBytes": {
+                "samples": [685254],
+                "median": 685254
+              },
+              "resourceCount": {
+                "samples": [96],
+                "median": 96
+              },
+              "domNodes": {
+                "samples": [753],
+                "median": 753
+              }
+            },
+            {
+              "journey": "review:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [355.15154099999927],
+                "median": 355.15154099999927
+              },
+              "nativeControlReadyMs": {
+                "samples": [302.2999999523163],
+                "median": 302.2999999523163
+              },
+              "resourceBytes": {
+                "samples": [599006],
+                "median": 599006
+              },
+              "transferredBytes": {
+                "samples": [627506],
+                "median": 627506
+              },
+              "resourceCount": {
+                "samples": [104],
+                "median": 104
+              },
+              "domNodes": {
+                "samples": [992],
+                "median": 992
+              }
+            },
+            {
+              "journey": "account:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [171.27324999999837],
+                "median": 171.27324999999837
+              },
+              "nativeControlReadyMs": {
+                "samples": [141.69999998807907],
+                "median": 141.69999998807907
+              },
+              "resourceBytes": {
+                "samples": [509127],
+                "median": 509127
+              },
+              "transferredBytes": {
+                "samples": [532527],
+                "median": 532527
+              },
+              "resourceCount": {
+                "samples": [80],
+                "median": 80
+              },
+              "domNodes": {
+                "samples": [191],
+                "median": 191
+              }
+            },
+            {
+              "journey": "access:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [240.70374999998603],
+                "median": 240.70374999998603
+              },
+              "nativeControlReadyMs": {
+                "samples": [203.5],
+                "median": 203.5
+              },
+              "resourceBytes": {
+                "samples": [556363],
+                "median": 556363
+              },
+              "transferredBytes": {
+                "samples": [583663],
+                "median": 583663
+              },
+              "resourceCount": {
+                "samples": [96],
+                "median": 96
+              },
+              "domNodes": {
+                "samples": [249],
+                "median": 249
+              }
+            },
+            {
+              "journey": "upgrade:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [195.0450000000128],
+                "median": 195.0450000000128
+              },
+              "nativeControlReadyMs": {
+                "samples": [176.0999999642372],
+                "median": 176.0999999642372
+              },
+              "resourceBytes": {
+                "samples": [539487],
+                "median": 539487
+              },
+              "transferredBytes": {
+                "samples": [563187],
+                "median": 563187
+              },
+              "resourceCount": {
+                "samples": [84],
+                "median": 84
+              },
+              "domNodes": {
+                "samples": [222],
+                "median": 222
+              }
+            },
+            {
+              "journey": "privacy:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [237.00075000000652],
+                "median": 237.00075000000652
+              },
+              "nativeControlReadyMs": {
+                "samples": [166.89999997615814],
+                "median": 166.89999997615814
+              },
+              "resourceBytes": {
+                "samples": [522376],
+                "median": 522376
+              },
+              "transferredBytes": {
+                "samples": [546376],
+                "median": 546376
+              },
+              "resourceCount": {
+                "samples": [82],
+                "median": 82
+              },
+              "domNodes": {
+                "samples": [241],
+                "median": 241
+              }
+            }
+          ]
+        }
+      ],
+      "payload": [
+        {
+          "dataset": "extreme",
+          "measurements": [
+            {
+              "limit": 50,
+              "bytes": 11910,
+              "pendingCount": 5000,
+              "items": 50
+            },
+            {
+              "limit": 0,
+              "bytes": 64,
+              "pendingCount": 5000,
+              "items": 0
+            }
+          ]
+        }
+      ]
+    },
+    "limitation": "Single observations without a matched extreme baseline; no speedup ratios claimed."
   }
 }

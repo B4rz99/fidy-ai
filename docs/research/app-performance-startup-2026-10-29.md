@@ -182,3 +182,22 @@ and does not prove database availability. No new production latency sample is cl
 The user suggested D1 quota exhaustion. Cloudflare documents free-tier daily read/write failures
 until midnight UTC (19:00 Bogotá), but account usage has not been verified. See
 [Cloudflare's quota enforcement documentation](https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/).
+
+## Committed-head extreme validation and CI compatibility
+
+On runtime source `d159e87324d64963f24261f92f1e0447cbea7159`, the 100,000-Transaction
+assessment again passes all five cases and all 43 readiness observations. This run has one
+isolated cold observation per page; it supplies no matched-baseline speedup ratios. Recurring
+measures 437/368 ms (driver/native). All nine cold arrays and the rapid-navigation results,
+including multi-second admission contention, remain in the companion JSON.
+
+Initial PR CI found three tests comparing complete internal Exit objects against fresh failures.
+The required Effect patch adds trace annotations to named effects. The tests now require exactly
+one Fail reason and the same typed domain error, without comparing incidental trace metadata.
+The original 15,000-byte ASCII/UTF-8 boundaries, privacy checks and absence-of-staging/sending
+assertions remain. Three memory tests and all four governor tests pass locally after the change.
+
+The read-only production traffic inspection
+[40974767949](https://github.com/B4rz99/fidy-ai/actions/runs/40974767949) succeeds and reports no
+topology drift. It requested neither a database proof nor sandbox-provider authentication, and
+made no traffic change. It does not establish D1 availability or confirm quota exhaustion.

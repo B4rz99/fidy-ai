@@ -1,4 +1,4 @@
-import { Predicate, Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 import referenceText from "../../public/reference/openapi.json?raw";
 import { ReferenceArtifact, ReferenceOperation } from "./reference-contract";
 
@@ -57,27 +57,27 @@ export type SchemaView = typeof SchemaView.Type;
 
 export const schemaView = Schema.decodeUnknownSync(SchemaView);
 
-export const schemaTarget = (schema: Schema.JsonObject): string => {
+export const schemaTarget = (schema: Schema.JsonObject): Option.Option<string> => {
   const reference = schemaView(schema).$ref;
-  if (!reference) return "";
+  if (!reference) return Option.none();
   const prefix = "#/components/schemas/";
   if (!reference.startsWith(prefix)) throw new Error("Unsupported public schema reference");
   const name = reference.slice(prefix.length);
   if (!Object.hasOwn(document.components.schemas, name)) {
     throw new Error(`Missing public schema: ${name}`);
   }
-  return name;
+  return Option.some(name);
 };
 
 export const resolveSchema = (schema: Schema.JsonObject): Schema.JsonObject => {
   const target = schemaTarget(schema);
-  return target ? (document.components.schemas[target] ?? schema) : schema;
+  return Option.isSome(target) ? (document.components.schemas[target.value] ?? schema) : schema;
 };
 
 export const schemaType = (schema: Schema.JsonObject): string => {
   const view = schemaView(schema);
   const target = schemaTarget(schema);
-  if (target) return target;
+  if (Option.isSome(target)) return target.value;
   if (view.type) return Predicate.isString(view.type) ? view.type : view.type.join(" | ");
   if (view.anyOf) return "anyOf";
   if (view.oneOf) return "oneOf";

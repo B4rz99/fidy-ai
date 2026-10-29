@@ -1,4 +1,5 @@
 ---
+import { Option } from "effect";
 import { operationFor, schemaTarget } from "../lib/reference";
 import SchemaTable from "./schema-table.astro";
 import ReferenceJson from "./reference-json.astro";
@@ -11,7 +12,9 @@ const scope = declaration["x-fidy-access"].scope;
 const parameters = declaration.parameters;
 const requiredParameters = parameters.filter((parameter) => parameter.required);
 const parameterNote = `${parameters.length} parámetro${parameters.length === 1 ? "" : "s"} HTTP${requiredParameters.length ? ` · ${requiredParameters.map((parameter) => `${parameter.name} (${parameter.in}, obligatorio)`).join(", ")}` : " · opcionales"}`;
-const requestContent = Object.entries(declaration.requestBody?.content ?? {});
+const requestContent = Object.entries(declaration.requestBody?.content ?? {}).map(
+  ([mediaType, content]) => ({ mediaType, content, target: schemaTarget(content.schema) })
+);
 ---
 
 <div class="reference-operation">
@@ -88,13 +91,11 @@ const requestContent = Object.entries(declaration.requestBody?.content ?? {});
       {requestContent.length ? "Cuerpo HTTP" : "Parámetros HTTP"}
     </h2>
     {requestContent.length ? (
-      requestContent.map(([mediaType, content]) => (
+      requestContent.map(({ mediaType, content, target }) => (
         <>
           <p class="reference-schema-name">
-            {schemaTarget(content.schema) ? (
-              <a href={`/referencia/esquemas#schema-${schemaTarget(content.schema)}`}>
-                {schemaTarget(content.schema)}
-              </a>
+            {Option.isSome(target) ? (
+              <a href={`/referencia/esquemas#schema-${target.value}`}>{target.value}</a>
             ) : (
               "Contrato del cuerpo · inline"
             )}
@@ -102,16 +103,14 @@ const requestContent = Object.entries(declaration.requestBody?.content ?? {});
           <SchemaTable schema={content.schema} preview={5} />
           <details class="reference-expansion">
             <summary>
-              Ver contrato completo del cuerpo · {schemaTarget(content.schema) || "inline"}
+              Ver contrato completo del cuerpo · {Option.isSome(target) ? target.value : "inline"}
             </summary>
             <p class="reference-caption">
               {mediaType} · cuerpo {declaration.requestBody?.required ? "obligatorio" : "opcional"}
             </p>
-            {schemaTarget(content.schema) && (
+            {Option.isSome(target) && (
               <p class="reference-caption">
-                <a href={`/referencia/esquemas#schema-${schemaTarget(content.schema)}`}>
-                  Abrir {schemaTarget(content.schema)}
-                </a>
+                <a href={`/referencia/esquemas#schema-${target.value}`}>Abrir {target.value}</a>
               </p>
             )}
             <ReferenceJson label="JSON" value={raw.requestBody ?? {}} />

@@ -133,7 +133,13 @@ html[data-docs-search-open] {
   margin: 0;
 }
 .docs-search-empty {
-  padding: 58px 20px 25px;
+  display: flex;
+  flex-direction: column;
+  min-height: 336px;
+  padding: 58px 20px 0;
+}
+.docs-search-empty p {
+  margin-bottom: 16px;
 }
 .docs-search-empty > svg {
   display: block;
@@ -146,11 +152,13 @@ html[data-docs-search-open] {
   margin: 0 0 14px;
   font-weight: 600;
 }
-.docs-search-clear {
+.docs-search .docs-search-clear {
+  flex-shrink: 0;
+  align-self: flex-start;
   width: 180px;
   height: 40px;
   line-height: 20px;
-  margin-top: 45px;
+  margin-top: auto;
   padding: 10px 14px;
   border: 0;
   border-radius: 8px;

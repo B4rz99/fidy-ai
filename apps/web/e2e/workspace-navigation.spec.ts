@@ -40,6 +40,41 @@ const workspaces = [
   },
 ] as const;
 
+test("keeps closed mobile navigation artwork out of startup and loads it when opened", ({
+  page,
+  request,
+  context,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({
+          page,
+          request,
+          identity: "navigationTransactions",
+        })
+      );
+      const cdp = yield* Effect.tryPromise(() => context.newCDPSession(page));
+      yield* Effect.tryPromise(() => cdp.send("Network.setCacheDisabled", { cacheDisabled: true }));
+      const artwork: string[] = [];
+      page.on("request", (request) => {
+        const path = new URL(request.url()).pathname;
+        if (/\/(?:mascot|habitat-ceiba)(?:-[^/]+)?\.webp$/u.test(path)) artwork.push(path);
+      });
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeEnabled()
+      );
+      expect(artwork).toEqual([]);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Menú de navegación", exact: true }).click()
+      );
+      const artworkCount = (): number => new Set(artwork).size;
+      yield* Effect.tryPromise(() => expect.poll(artworkCount).toBe(2));
+    })
+  ));
+
 for (const workspace of workspaces) {
   test(`returns to ${workspace.name} from cached data while refreshing`, ({ page, request }) =>
     Effect.runPromise(

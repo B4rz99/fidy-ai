@@ -1,6 +1,5 @@
 import { RecurringWorkspace, ReviewWorkspace } from "./workspace-components";
 import { LoginSearch } from "@/session/login-destination";
-import { ProviderReturnFeature } from "@/features/provider-authentication/feature";
 import { Option, Schema } from "effect";
 import {
   BudgetMonth,
@@ -32,6 +31,11 @@ type WebRouterOptions = WebRouterContext &
   Readonly<{
     history: Option.Option<RouterHistory>;
   }>;
+
+const ProviderReturnFeature = lazyRouteComponent(
+  () => import("@/features/provider-authentication/feature"),
+  "ProviderReturnFeature"
+);
 
 const RecurringDigestFeature = lazyRouteComponent(
   () => import("@/features/recurring-digest/feature"),

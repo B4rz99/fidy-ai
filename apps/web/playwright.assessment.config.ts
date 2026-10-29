@@ -1,6 +1,9 @@
 import { defineConfig } from "@playwright/test";
 import base from "./playwright.config";
 import { Config, Effect } from "effect";
+import { browserAcceptanceTopology } from "../server/cloudflare/browser-acceptance/operations";
+
+const topology = browserAcceptanceTopology();
 
 const dataset = Effect.runSync(Config.String("FIDY_ASSESSMENT").pipe(Config.withDefault("")));
 const development =
@@ -29,19 +32,25 @@ export default defineConfig({
   webServer: Array.isArray(base.webServer)
     ? base.webServer.map((server, index) => ({
         ...server,
-        command:
-          development && index === 0
-            ? server.command.replace(
-                /VITE_API_ORIGIN=.*$/u,
-                "VITE_API_ORIGIN=https://127.0.0.1:4174 bun scripts/serve-assessment-dev.ts"
-              )
-            : server.command,
+        command: (development && index === 0
+          ? server.command.replace(
+              /VITE_API_ORIGIN=.*$/u,
+              "VITE_API_ORIGIN=https://127.0.0.1:4174 bun scripts/serve-assessment-dev.ts"
+            )
+          : server.command
+        )
+          .replaceAll("4173", String(topology.appPort))
+          .replaceAll("4174", String(topology.apiPort)),
+        url: server.url
+          ?.replace("4173", String(topology.appPort))
+          .replace("4174", String(topology.apiPort)),
         timeout: 600_000,
         reuseExistingServer: false,
       }))
     : base.webServer,
   use: {
     ...base.use,
+    baseURL: topology.app,
     launchOptions: {
       ...base.use?.launchOptions,
       ...(executablePath === "" ? {} : { executablePath }),

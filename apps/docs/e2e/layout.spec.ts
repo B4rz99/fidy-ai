@@ -16,6 +16,10 @@ test("code panels reserve a compact header and offer scrolling only when needed"
   expect(size?.height).toBeCloseTo(compactCodeHeight, 0);
   const powershell = page.locator('.expressive-code .frame:has(pre[data-language="powershell"])');
   await expect(powershell).toHaveAttribute("data-docs-overflow");
+  const overflowingCodeHeight = 118;
+  await expect
+    .poll(async () => (await powershell.boundingBox())?.height)
+    .toBe(overflowingCodeHeight);
   const code = powershell.locator("pre");
   await code.focus();
   await page.keyboard.press("End");
@@ -33,7 +37,10 @@ test("the drawer closes from its scrim control without locking subsequent naviga
   await expect(page.locator("#starlight__sidebar")).not.toBeVisible();
   await expect(page.locator(".main-frame")).not.toHaveAttribute("inert");
   await page.getByRole("button", { name: "Menú", exact: true }).click();
-  await page.getByRole("link", { name: "CLI", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Primario", exact: true })
+    .getByRole("link", { name: "CLI", exact: true })
+    .click();
   await expect(page.locator("h1")).toHaveText("Instalar y conectar la CLI");
   await page.goBack();
   await expect(page.locator(".main-frame")).not.toHaveAttribute("inert");
@@ -71,9 +78,38 @@ test("the table of contents follows linked access and catalog domain sections", 
     "location"
   );
   await page.goto("/reference");
+  await expect(page.locator('.docs-toc a[href="#operaciones"]')).toHaveAttribute(
+    "aria-current",
+    "location"
+  );
   await page.locator("#dominio-dashboard").evaluate((element) => element.scrollIntoView());
   await expect(page.locator('.docs-toc a[href="#por-dominio"]')).toHaveAttribute(
     "aria-current",
     "location"
   );
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(page.locator('.docs-toc a[href="#operaciones"]')).toHaveAttribute(
+    "aria-current",
+    "location"
+  );
 });
+
+for (const viewport of [desktop, mobile]) {
+  test(`empty search retains approved button type and placement at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Buscar", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Buscar documentación" });
+    await dialog.getByRole("textbox", { name: "Buscar", exact: true }).fill("zxq-no-result");
+    const clear = dialog.getByRole("button", { name: "Limpiar búsqueda", exact: true });
+    await expect(clear).toBeVisible();
+    await expect(clear).toHaveCSS("font-size", "12px");
+    await expect(clear).toHaveCSS("font-weight", "600");
+    const dialogBox = await dialog.boundingBox();
+    const clearBox = await clear.boundingBox();
+    const buttonOffset = 365;
+    expect((clearBox?.y ?? 0) - (dialogBox?.y ?? 0)).toBe(buttonOffset);
+  });
+}

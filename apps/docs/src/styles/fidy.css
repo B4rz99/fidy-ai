@@ -713,8 +713,22 @@ svg {
   padding: 11px 0 12px;
   margin: 0;
   overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #c7c7c7 #606060;
+  scrollbar-width: auto;
+}
+.expressive-code .frame pre::-webkit-scrollbar {
+  width: 6px;
+  height: 3px;
+}
+.expressive-code .frame pre::-webkit-scrollbar-track {
+  margin-inline: 16px;
+  border: 0;
+  border-radius: 2px;
+  background: #606060;
+}
+.expressive-code .frame pre::-webkit-scrollbar-thumb {
+  border: 0;
+  border-radius: 2px;
+  background: #c7c7c7;
 }
 .expressive-code .frame .header {
   position: static;
@@ -784,13 +798,10 @@ svg {
 .expressive-code .frame[data-docs-overflow]::after {
   content: "Desplaza para ver la línea completa";
   display: block;
-  padding: 0 16px 12px;
+  padding: 0 16px 15px;
   color: #c7c7c7;
   font-size: 9px;
   line-height: 16px;
-}
-.expressive-code .frame[data-docs-overflow] pre {
-  padding-bottom: 8px;
 }
 .docs-article-footer {
   display: flex;

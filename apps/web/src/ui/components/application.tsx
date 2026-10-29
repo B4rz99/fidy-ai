@@ -59,6 +59,7 @@ export const ApplicationHabitat = (): JSX.Element => (
       className="application-habitat-plants"
       src={habitat}
       alt=""
+      loading="lazy"
       decoding="async"
       fetchPriority="low"
     />
@@ -66,6 +67,7 @@ export const ApplicationHabitat = (): JSX.Element => (
       className="application-habitat-mascot"
       src={mascot}
       alt=""
+      loading="lazy"
       decoding="async"
       fetchPriority="low"
     />

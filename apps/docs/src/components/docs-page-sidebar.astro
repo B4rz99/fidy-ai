@@ -105,22 +105,51 @@ const links = selectLinks();
       else link.removeAttribute("aria-current");
     }
   };
-  const observer = new IntersectionObserver(
-    (entries) => {
-      const heading = entries.find(
-        (entry) =>
-          entry.isIntersecting &&
-          tocLinks.some((link) => link.hash === `#${tocTarget(entry.target)}`)
-      );
-      if (!heading) return;
-      updateCurrent(tocTarget(heading.target));
-    },
-    { rootMargin: "-120px 0px -60% 0px" }
+  const domainHeadings = document.querySelectorAll<HTMLElement>(
+    '[data-docs-section="por-dominio"]'
   );
-  const linkedIds = new Set(Array.from(tocLinks, (link) => link.hash.slice(1)));
-  document.querySelectorAll("main [id]").forEach((target) => {
-    if (linkedIds.has(target.id) || target.hasAttribute("data-docs-section")) {
-      observer.observe(target);
+  const desktopHeaderHeight = 64;
+  const mobileHeaderHeight = 108;
+  const anchorSpacing = 24;
+  const updateSection = (): void => {
+    const firstLink = tocLinks[0];
+    if (!firstLink) return;
+    const headerHeight = window.matchMedia("(min-width: 800px)").matches
+      ? desktopHeaderHeight
+      : mobileHeaderHeight;
+    // Native anchor scrolling may round a fractional heading position to a CSS pixel.
+    const threshold = headerHeight + anchorSpacing + 1;
+    const targets = tocLinks.flatMap((link) => {
+      const target = document.getElementById(link.hash.slice(1));
+      return target ? [target] : [];
+    });
+    let current = firstLink.hash.slice(1);
+    let closest = Number.NEGATIVE_INFINITY;
+    for (const target of [...targets, ...domainHeadings]) {
+      if (target.getClientRects().length === 0) continue;
+      const top = target.getBoundingClientRect().top;
+      if (top <= threshold && top > closest) {
+        closest = top;
+        current = tocTarget(target);
+      }
     }
-  });
+    updateCurrent(current);
+  };
+  let updatePending = false;
+  const scheduleUpdate = (): void => {
+    if (updatePending) return;
+    updatePending = true;
+    requestAnimationFrame(() => {
+      updatePending = false;
+      updateSection();
+    });
+  };
+  window.addEventListener("scroll", scheduleUpdate, { passive: true });
+  window.addEventListener("resize", scheduleUpdate);
+  window.addEventListener("pageshow", scheduleUpdate);
+  window.addEventListener("hashchange", scheduleUpdate);
+  document.addEventListener("input", scheduleUpdate);
+  document.addEventListener("toggle", scheduleUpdate, true);
+  document.fonts.addEventListener("loadingdone", scheduleUpdate);
+  scheduleUpdate();
 </script>

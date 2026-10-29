@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import type { Page, TestInfo } from "@playwright/test";
+import { Option } from "effect";
 import { visualRoutes } from "./visual-routes";
 
 const ok = 200;
@@ -11,12 +12,27 @@ const viewports = [
   { name: "mobile", width: 390, height: 844 },
 ] as const;
 const themes = ["light", "dark"] as const;
+type SemanticTarget = { heading: string; id: string; schema: Option.Option<string> };
+
+const serializeTarget = (
+  target: Option.Option<SemanticTarget>
+): { heading: string; id: string; schema: string } =>
+  Option.match(target, {
+    onNone: () => ({ heading: "", id: "", schema: "" }),
+    onSome: ({ heading, id, schema }) => ({
+      heading,
+      id,
+      schema: Option.getOrElse(schema, () => ""),
+    }),
+  });
+
 const capture = async (
   page: Page,
   testInfo: TestInfo,
-  target: { name: string; heading: string; id: string; schema: string }
+  target: { name: string; semanticTarget: Option.Option<SemanticTarget> }
 ): Promise<void> => {
-  const { name, ...semanticTarget } = target;
+  const { name } = target;
+  const semanticTarget = serializeTarget(target.semanticTarget);
   const screenshotPath = testInfo.outputPath(`${name}.png`);
   await page.screenshot({ path: screenshotPath, animations: "disabled" });
   const metadata = await page.evaluate(() => ({
@@ -45,7 +61,7 @@ const capture = async (
 };
 
 const captureState = (page: Page, testInfo: TestInfo, name: string): Promise<void> =>
-  capture(page, testInfo, { name, heading: "", id: "", schema: "" });
+  capture(page, testInfo, { name, semanticTarget: Option.none() });
 
 const captureSearch = async (page: Page, testInfo: TestInfo): Promise<void> => {
   await page.getByRole("button", { name: "Buscar", exact: true }).click();
@@ -66,9 +82,11 @@ const captureLower = async (
   route: (typeof visualRoutes)[number]
 ): Promise<void> => {
   let target = page.locator("#_top");
-  if (route.schema) {
-    await page.getByRole("searchbox", { name: "Buscar por nombre de esquema" }).fill(route.schema);
-    target = page.locator(`#schema-${route.schema}`);
+  if (Option.isSome(route.schema)) {
+    await page
+      .getByRole("searchbox", { name: "Buscar por nombre de esquema" })
+      .fill(route.schema.value);
+    target = page.locator(`#schema-${route.schema.value}`);
     await page.getByRole("searchbox", { name: "Buscar por nombre de esquema" }).blur();
     await target.evaluate((element) => element.scrollIntoView());
   } else {
@@ -79,11 +97,13 @@ const captureLower = async (
     target = heading;
     await target.evaluate((element) => element.scrollIntoView());
   }
+  const id = Option.fromNullishOr(await target.getAttribute("id")).pipe(
+    Option.filter((value) => value.length > 0),
+    Option.getOrThrowWith(() => new Error(`Missing anchor ID for ${route.route}: ${route.heading}`))
+  );
   await capture(page, testInfo, {
     name: "lower-semantic",
-    heading: route.heading,
-    id: (await target.getAttribute("id")) ?? "",
-    schema: route.schema,
+    semanticTarget: Option.some({ heading: route.heading, id, schema: route.schema }),
   });
 };
 
@@ -100,9 +120,11 @@ if (captureEnabled) {
             await expect(page.locator("main h1")).toHaveText(route.title);
             await capture(page, testInfo, {
               name: "initial",
-              heading: route.title,
-              id: "_top",
-              schema: "",
+              semanticTarget: Option.some({
+                heading: route.title,
+                id: "_top",
+                schema: Option.none(),
+              }),
             });
             await captureLower(page, testInfo, route);
           });

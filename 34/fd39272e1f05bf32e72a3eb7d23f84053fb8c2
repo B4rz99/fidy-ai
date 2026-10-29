@@ -1,0 +1,22 @@
+docs/research/statement-publication-wakeup-2026-10-29.md
+  s_d9571b3fccd032::t_543fd89fa1d765 46-53
+infra/cloudflare/verify-edge-policy.ts
+  s_d9571b3fccd032::t_543fd89fa1d765 137-142
+  s_d9571b3fccd032::t_4f73c69d5776fd 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34fd39272e1f05bf32e72a3eb7d23f84053fb8c2",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -44,13 +44,17 @@ const themes = [
 </div>
 
 <script>
-  type Theme = "light" | "dark" | "auto";
+  import { Result, Schema } from "effect";
+
+  const Theme = Schema.Literals(["light", "dark", "auto"]);
+  type Theme = typeof Theme.Type;
+  const decodeTheme = Schema.decodeUnknownResult(Theme);
   const themeRoot = document.querySelector(".docs-theme");
   const options = themeRoot?.querySelector<HTMLElement>(".docs-theme-options");
   const trigger = themeRoot?.querySelector<HTMLButtonElement>(".docs-theme-trigger");
   const preferences = window.matchMedia("(prefers-color-scheme: light)");
   const parseTheme = (value: unknown): Theme =>
-    value === "light" || value === "dark" ? value : "auto";
+    Result.getOrElse(decodeTheme(value), (): Theme => "auto");
   const readTheme = (): Theme => {
     try {
       return parseTheme(window.localStorage.getItem("starlight-theme"));

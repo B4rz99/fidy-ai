@@ -83,14 +83,23 @@ const requestContent = Object.entries(declaration.requestBody?.content ?? {});
       </div>
     </dl>
   </section>
-  <section aria-labelledby="cuerpo-http">
+  <section aria-labelledby={requestContent.length ? "cuerpo-http" : "parametros-http"}>
     <h2 id={requestContent.length ? "cuerpo-http" : "parametros-http"}>
       {requestContent.length ? "Cuerpo HTTP" : "Parámetros HTTP"}
     </h2>
     {requestContent.length ? (
       requestContent.map(([mediaType, content]) => (
         <>
-          <SchemaTable schema={content.schema} preview={4} />
+          <p class="reference-schema-name">
+            {schemaTarget(content.schema) ? (
+              <a href={`/referencia/esquemas#schema-${schemaTarget(content.schema)}`}>
+                {schemaTarget(content.schema)}
+              </a>
+            ) : (
+              "Contrato del cuerpo · inline"
+            )}
+          </p>
+          <SchemaTable schema={content.schema} preview={5} />
           <details class="reference-expansion">
             <summary>
               Ver contrato completo del cuerpo · {schemaTarget(content.schema) || "inline"}

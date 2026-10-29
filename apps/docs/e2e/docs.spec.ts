@@ -1,5 +1,5 @@
 import { AxeBuilder } from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { type Page, expect, test } from "@playwright/test";
 
 const ok = 200;
 const missing = 404;
@@ -46,6 +46,8 @@ test("search finds a task and copy Markdown returns the source without browser o
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain("# Registrar y corregir transacciones");
   expect(copied).toContain('"expectedRevision": 0');
+  const originalMarkdown = await context.request.get("/transacciones/registrar-corregir.md");
+  expect(copied).toBe(await originalMarkdown.text());
   await page.getByRole("button", { name: "Buscar", exact: false }).click();
   await page.getByRole("textbox", { name: "Buscar", exact: true }).fill("corregir");
   await expect(
@@ -116,11 +118,124 @@ test("reader theme choices persist without replacing automatic system preference
 
 test("search query text cannot inject markup into the documentation", async ({ page }) => {
   await page.goto("/");
+  const initialTitle = await page.title();
   await page.getByRole("button", { name: "Buscar", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Buscar documentación" });
   const input = dialog.getByRole("textbox", { name: "Buscar", exact: true });
-  await input.fill('<img src=x onerror="document.title=123">zxq-no-result');
-  await expect(dialog.getByRole("heading", { name: "Sin resultados" })).toBeVisible();
+  const query = '<img src=x onerror="document.title=123">zxq-no-result';
+  await input.fill(query);
+  await expect(dialog.getByRole("status")).toHaveText(/^\d+ resultados$/u);
+  await expect(input).toHaveValue(query);
   await expect(dialog.locator("img")).toHaveCount(0);
-  await expect(page).not.toHaveTitle("123");
+  await expect(page).toHaveTitle(initialTitle);
+});
+
+test("an invalid stored theme falls back to the current system preference", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.addInitScript(() => window.localStorage.setItem("starlight-theme", "unknown-theme"));
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.getByRole("button", { name: "Elegir tema" }).click();
+  await expect(page.getByRole("radio", { name: "Automático", exact: true })).toBeChecked();
+  await page.keyboard.press("Escape");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
+
+const searchBoundaryModule = `
+export async function options() {}
+export async function search(term) {
+  const examples = {
+    trusted: [{ url: "/conectar/mcp" }],
+    hostile: [
+      { url: "https://example.invalid/conectar/mcp" },
+      { url: "//example.invalid/conectar/mcp" },
+      { url: "javascript:document.title='Injected'" },
+      { url: "data:text/html,<img src=x onerror=alert(1)>" },
+      { url: "/unknown-document" }
+    ],
+    mixed: [
+      { url: "https://example.invalid/conectar/mcp" },
+      { url: "/transacciones/registrar-corregir", meta: { title: "<img src=x onerror=alert(1)>" } },
+      { url: "/unknown-document" }
+    ],
+    malformed: [{ url: "/conectar/mcp" }, { url: 42 }],
+    invalidUrl: [{ url: "/conectar/mcp" }, { url: "http://[" }]
+  };
+  if (term === "invalidResponse") return { results: "not an array" };
+  return { results: (examples[term] ?? []).map(value => ({ data: async () => value })) };
+}
+`;
+const installSearchBoundary = async (page: Page): Promise<void> => {
+  await page.route("**/pagefind/pagefind.js", (route) =>
+    route.fulfill({ contentType: "text/javascript", body: searchBoundaryModule })
+  );
+};
+
+test("search results cannot introduce an external destination or unknown documentation link", async ({
+  page,
+}) => {
+  await installSearchBoundary(page);
+  await page.goto("/");
+  const initialTitle = await page.title();
+  await page.getByRole("button", { name: "Buscar", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Buscar documentación" });
+  const input = dialog.getByRole("textbox", { name: "Buscar", exact: true });
+  await input.fill("hostile");
+  await expect(dialog.getByRole("heading", { name: "Sin resultados" })).toBeVisible();
+  await expect(dialog.getByRole("link")).toHaveCount(0);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL("/");
+  await expect(page).toHaveTitle(initialTitle);
+  await expect(dialog.locator("img")).toHaveCount(0);
+  await input.fill("mixed");
+  await expect(dialog.getByRole("status")).toHaveText("1 resultados");
+  const result = dialog.getByRole("link");
+  await expect(result).toHaveCount(1);
+  await expect(result).toHaveAttribute("href", "/transacciones/registrar-corregir");
+  await expect(result).toContainText("Registrar y corregir transacciones");
+  await expect(dialog.locator("img")).toHaveCount(0);
+  await result.click();
+  await expect(page).toHaveURL("/transacciones/registrar-corregir");
+});
+
+for (const query of ["malformed", "invalidUrl", "invalidResponse"]) {
+  test(`search clears previously valid results when the returned ${query} contract is invalid`, async ({
+    page,
+  }) => {
+    await installSearchBoundary(page);
+    await page.goto("/");
+    const initialTitle = await page.title();
+    await page.getByRole("button", { name: "Buscar", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Buscar documentación" });
+    const input = dialog.getByRole("textbox", { name: "Buscar", exact: true });
+    await input.fill("trusted");
+    await expect(dialog.getByRole("link")).toHaveAttribute("href", "/conectar/mcp");
+    await input.fill(query);
+    await expect(dialog.getByRole("status")).toHaveText(
+      "No se pudo cargar la búsqueda. Cierra e inténtalo de nuevo."
+    );
+    await expect(dialog.getByRole("link")).toHaveCount(0);
+    await expect(dialog.locator("img")).toHaveCount(0);
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL("/");
+    await expect(page).toHaveTitle(initialTitle);
+  });
+}
+
+test("medium-width home readers retain one working Markdown action pair", async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 900 });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/");
+  const markdown = page.getByRole("link", { name: "Ver Markdown", exact: true });
+  const copy = page.getByRole("button", { name: "Copiar Markdown", exact: true });
+  await expect(markdown).toHaveCount(1);
+  await expect(copy).toHaveCount(1);
+  await expect(markdown).toHaveAttribute("href", "/index.md");
+  await copy.click();
+  await expect(page.getByRole("status")).toContainText("Markdown copiado");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("# Guía de Fidy");
 });

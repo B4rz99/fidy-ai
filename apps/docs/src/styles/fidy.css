@@ -340,7 +340,10 @@ svg {
   white-space: nowrap;
 }
 .docs-title {
-  margin-bottom: 24px;
+  margin-bottom: 8px;
+}
+.docs-operation-title {
+  margin-bottom: 14px;
 }
 .page-actions {
   display: flex;
@@ -397,6 +400,9 @@ svg {
   content: "✓";
   color: var(--docs-link);
   font-size: 20px;
+}
+.docs-copy-toast[data-copy-state="error"]::before {
+  content: "!";
 }
 .docs-toc h2 {
   margin: 0 0 14px;
@@ -471,6 +477,7 @@ svg {
 }
 .docs-mobile-section,
 .docs-mobile-toc,
+.docs-drawer-close,
 .docs-mobile-home-actions {
   display: none;
 }
@@ -491,7 +498,7 @@ svg {
   color: var(--docs-muted);
   font-size: 19px;
   line-height: 32px;
-  margin: 0 0 21px;
+  margin: 0 0 27px;
 }
 .docs-primary-button {
   display: inline-flex;
@@ -510,15 +517,19 @@ svg {
 .docs-primary-button:hover {
   background: var(--fidy-button-primary-hover-background);
 }
+.docs-home-lead .docs-primary-button {
+  width: 205px;
+}
 .docs-home-intro {
   color: var(--docs-muted);
-  margin: 21px 0 34px;
+  margin: 21px 0 33px;
   font-size: 16px;
   line-height: 26px;
 }
 .docs-journeys > a {
   border-top: 1px solid var(--docs-border);
-  padding: 21px 0 22px;
+  padding: 21px 0 27px;
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 16px;
@@ -526,7 +537,17 @@ svg {
   text-decoration: none;
 }
 .docs-journeys > a > svg {
-  margin: 10px 4px 0 auto;
+  flex-shrink: 0;
+  position: absolute;
+  top: 31px;
+  right: 4px;
+  margin: 0;
+}
+.docs-journeys > a > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  padding-right: 10px;
+  transform: translateY(-6px);
 }
 .docs-journey-icon {
   display: flex;
@@ -668,12 +689,17 @@ svg {
 .expressive-code {
   --ec-codeFontFml: "DejaVu Sans Mono", monospace;
   --ec-codeFontSize: 13px;
-  --ec-codeLineHeight: 21px;
+  --ec-codeLineHt: 21px;
+  --ec-codePadBlk: 0px;
+  --ec-codePadInl: 16px;
+  --ec-frm-inlBtnFg: #c7c7c7;
+  --ec-frm-inlBtnBrdOpa: 0;
   --ec-codeBg: #202020;
   --ec-codeFg: #c7c7c7;
   --ec-brdCol: var(--docs-border);
   --ec-brdRad: 10px;
-  margin-bottom: 24px;
+  margin-top: 25px;
+  margin-bottom: 19px;
 }
 .expressive-code .frame {
   background: #202020;
@@ -684,7 +710,7 @@ svg {
 .expressive-code .frame pre {
   background: #202020;
   border: none;
-  padding: 13px 0 18px;
+  padding: 11px 0 12px;
   margin: 0;
   overflow-x: auto;
   scrollbar-width: thin;
@@ -699,6 +725,7 @@ svg {
   background: #202020;
   height: 38px;
   padding: 0 16px;
+  justify-content: flex-start;
 }
 .expressive-code .frame .header::before {
   display: none;
@@ -707,6 +734,8 @@ svg {
   display: none;
 }
 .expressive-code .frame .header::after {
+  position: static;
+  border: none;
   content: "CÓDIGO";
   color: #c7c7c7;
   font:
@@ -752,13 +781,16 @@ svg {
 .expressive-code .frame pre[data-language="json"] span {
   color: #b5db7e;
 }
-.expressive-code .frame::after {
+.expressive-code .frame[data-docs-overflow]::after {
   content: "Desplaza para ver la línea completa";
   display: block;
   padding: 0 16px 12px;
   color: #c7c7c7;
   font-size: 9px;
   line-height: 16px;
+}
+.expressive-code .frame[data-docs-overflow] pre {
+  padding-bottom: 8px;
 }
 .docs-article-footer {
   display: flex;
@@ -792,6 +824,10 @@ svg {
   font-size: 44px;
   font-weight: 600;
   line-height: 59px;
+  color: var(--docs-text);
+}
+.docs-not-found .docs-primary-button {
+  width: 185px;
 }
 .docs-not-found p {
   margin: 0 0 32px;
@@ -825,6 +861,9 @@ svg {
   }
   .docs-context {
     display: none;
+  }
+  .docs-mobile-home-actions {
+    display: block;
   }
   .docs-header {
     grid-template-columns: 248px minmax(0, 1fr) auto;
@@ -880,6 +919,7 @@ svg {
     height: calc(100dvh - 64px);
     margin: 0;
     background: var(--docs-surface);
+    overflow: visible;
   }
   .sidebar-pane::backdrop {
     background: #3c3c3c;
@@ -887,6 +927,29 @@ svg {
   }
   .docs-nav-scroll {
     padding-top: 29px;
+  }
+  .docs-nav-group li a,
+  .docs-nav-domain li a {
+    width: 224px;
+  }
+  .sl-menu-button:has(~ :popover-open) .open-menu {
+    display: block;
+  }
+  .sl-menu-button .close-menu {
+    display: none;
+  }
+  .docs-drawer-close {
+    position: fixed;
+    top: 75px;
+    left: calc(min(330px, 100vw - 60px) + 8px);
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: white;
   }
   .docs-nav-agent {
     height: 90px;
@@ -921,7 +984,7 @@ svg {
     font-size: 10.5px;
     color: var(--docs-muted);
   }
-  .docs-mobile-section button {
+  .docs-mobile-section :is(button, a) {
     display: flex;
     gap: 26px;
     align-items: center;
@@ -931,6 +994,7 @@ svg {
     background: none;
     font-size: 10.5px;
     color: var(--docs-text);
+    text-decoration: none;
   }
   .docs-mobile-toc:popover-open {
     display: block;
@@ -999,7 +1063,10 @@ svg {
     display: block;
   }
   .docs-title {
-    margin-bottom: 24px;
+    margin-bottom: 8px;
+  }
+  .docs-operation-title {
+    margin-bottom: 14px;
   }
   .page-actions {
     margin-top: 12px;
@@ -1018,6 +1085,9 @@ svg {
   .docs-mobile-home-actions {
     display: block;
   }
+  .docs-home-title {
+    margin-bottom: 14px;
+  }
   .docs-home-title h1 {
     font-size: 38px;
     line-height: 52px;
@@ -1025,10 +1095,11 @@ svg {
   .docs-home-description {
     font-size: 16px;
     line-height: 27px;
+    margin-bottom: 28px;
   }
   .docs-home-intro {
-    margin-top: 21px;
-    margin-bottom: 34px;
+    margin-top: 23px;
+    margin-bottom: 31px;
   }
   .docs-journeys > a {
     gap: 16px;

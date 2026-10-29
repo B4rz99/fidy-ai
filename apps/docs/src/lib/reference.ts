@@ -1,5 +1,6 @@
 import { Predicate, Schema } from "effect";
 import referenceText from "../../public/reference/openapi.json?raw";
+import { ReferenceArtifact, ReferenceOperation } from "./reference-contract";
 
 const Content = Schema.Record(Schema.String, Schema.Struct({ schema: Schema.JsonObject }));
 const Parameter = Schema.Struct({
@@ -10,10 +11,7 @@ const Parameter = Schema.Struct({
   schema: Schema.JsonObject,
 });
 const Operation = Schema.Struct({
-  operationId: Schema.String.check(
-    Schema.isPattern(/^[a-zA-Z][a-zA-Z0-9]*\.[a-zA-Z][a-zA-Z0-9]*$/u)
-  ),
-  description: Schema.optionalKey(Schema.String),
+  ...ReferenceOperation.fields,
   parameters: Schema.Array(Parameter),
   requestBody: Schema.optionalKey(
     Schema.Struct({ content: Content, required: Schema.optionalKey(Schema.Boolean) })
@@ -22,25 +20,8 @@ const Operation = Schema.Struct({
     Schema.String,
     Schema.Struct({ description: Schema.String, content: Schema.optionalKey(Content) })
   ),
-  "x-fidy-access": Schema.Struct({
-    type: Schema.Literal("user-owned-agent-scoped"),
-    scope: Schema.Union([
-      Schema.Struct({
-        evaluation: Schema.Literal("operation"),
-        capability: Schema.Literals(["read", "write", "dashboard"]),
-      }),
-      Schema.Struct({ evaluation: Schema.Literal("children") }),
-    ]),
-  }),
-  "x-fidy-agent-confirmation": Schema.Literals(["required", "not-required"]),
-  "x-fidy-operation-kind": Schema.Literals(["query", "mutation"]),
-  "x-fidy-required-tier": Schema.Literals(["free", "pro"]),
 });
-const Artifact = Schema.Struct({
-  paths: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.JsonObject)),
-  components: Schema.Struct({ schemas: Schema.Record(Schema.String, Schema.JsonObject) }),
-});
-const document = Schema.decodeUnknownSync(Schema.fromJsonString(Artifact))(referenceText);
+const document = Schema.decodeUnknownSync(Schema.fromJsonString(ReferenceArtifact))(referenceText);
 
 export const referenceOperations = Object.entries(document.paths)
   .flatMap(([path, methods]) =>

@@ -73,6 +73,15 @@ const domains = [...new Set(operations.map((page) => page.data.title.split(".")[
     ))
   )}
 </div>
+<button
+  class="docs-drawer-close"
+  type="button"
+  popovertarget="starlight__sidebar"
+  popovertargetaction="hide"
+  aria-label="Cerrar menú"
+>
+  <Icon name="close" size={22} />
+</button>
 <div class="docs-nav-agent">
   <a href="/llms.txt">
     <Icon name="code" size={18} />

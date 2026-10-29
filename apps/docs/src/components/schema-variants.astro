@@ -1,0 +1,21 @@
+---
+import type { Schema } from "effect";
+import { schemaTarget, schemaType } from "../lib/reference";
+
+type Props = { variants: ReadonlyArray<Schema.JsonObject> };
+const { variants } = Astro.props;
+---
+
+<ul>
+  {variants.map((variant) => (
+    <li>
+      {schemaTarget(variant) ? (
+        <a href={`/referencia/esquemas#schema-${schemaTarget(variant)}`}>
+          <code>{schemaType(variant)}</code>
+        </a>
+      ) : (
+        <code>{schemaType(variant)}</code>
+      )}
+    </li>
+  ))}
+</ul>

@@ -277,7 +277,7 @@
         "apps/site/{astro,playwright}.config.ts",
         "apps/docs/{astro,playwright}.config.ts",
         "apps/site/e2e/{site,agent-readiness}.spec.ts",
-        "apps/docs/e2e/{docs,visual}.spec.ts"
+        "apps/docs/e2e/{docs,visual,reference,layout}.spec.ts"
       ],
       "rules": {
         "import/extensions": "off"

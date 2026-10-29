@@ -2,14 +2,27 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
+/** @type {(html: string, name: string) => string} */
+const propertyRow = (html, name) => {
+  const table = html.match(/<table\b[^>]*>[\s\S]*?<\/table>/u)?.[0];
+  assert.ok(table, "Missing property table");
+  const rows = Array.from(table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gu), (match) => match[1]);
+  const row = rows.find((candidate) => candidate.includes(`<code>${name}</code>`));
+  assert.ok(row, `Missing property row: ${name}`);
+  return row;
+};
+
+/** @type {(html: string, name: string) => void} */
+const assertRequired = (html, name) => {
+  assert.match(propertyRow(html, name), /<span[^>]*>\s*obligatorio\s*<\/span>/u);
+};
+
 await test("readers can identify required transaction fields without interpreting the raw contract", async () => {
   const html = await readFile(
     new URL("../dist/reference/transactions.createtransaction/index.html", import.meta.url),
     "utf8"
   );
-  assert.ok(
-    /<tr[^>]*>[\s\S]*?<code>occurredAt<\/code>[\s\S]*?obligatorio[\s\S]*?<\/tr>/u.test(html)
-  );
+  assertRequired(html, "occurredAt");
   assert.match(html, /Cuerpo HTTP/u);
   assert.match(html, /Respuestas y errores/u);
   assert.match(html, /Unavailable/u);
@@ -34,7 +47,7 @@ await test("all published schemas remain individually readable with named proper
   assert.ok(html.includes('id="schema-ValidationFailedEncoded"'));
   assert.ok(html.includes('id="schema-TransactionOccurredAt"'));
   assert.ok(html.includes("JSON completo"));
-  assert.ok(/<code>cap<\/code>[\s\S]*?obligatorio/u.test(html));
+  assertRequired(html, "cap");
 });
 
 await test("path parameters, inline batch permissions and union bodies remain explicit beside request bodies", async () => {
@@ -50,7 +63,7 @@ await test("path parameters, inline batch permissions and union bodies remain ex
     "utf8"
   );
   assert.ok(batch.includes("Se evalúan los permisos de cada operación del lote."));
-  assert.ok(/<code>calls<\/code>[\s\S]*?obligatorio/u.test(batch));
+  assertRequired(batch, "calls");
   const union = await readFile(
     new URL("../dist/reference/dashboard.applydashboardedit/index.html", import.meta.url),
     "utf8"
@@ -66,4 +79,28 @@ await test("operations without HTTP parameters retain their explicit empty param
   );
   assert.ok(html.includes("Esta operación no declara parámetros HTTP."));
   assert.ok(html.includes('id="parametros-http"'));
+});
+
+await test("parameter-only operations label their parameter region with its own heading", async () => {
+  const html = await readFile(
+    new URL("../dist/reference/budgets.listbudgets/index.html", import.meta.url),
+    "utf8"
+  );
+  assert.match(
+    html,
+    /<section aria-labelledby="parametros-http">\s*<h2 id="parametros-http">\s*Parámetros HTTP\s*<\/h2>/u
+  );
+});
+
+await test("empty parameter JSON stays keyboard readable without an unconditional scrolling instruction", async () => {
+  const html = await readFile(
+    new URL("../dist/reference/budgets.listbudgets/index.html", import.meta.url),
+    "utf8"
+  );
+  const parameters = html.match(
+    /<section aria-labelledby="parametros-http">[\s\S]*?<\/section>/u
+  )?.[0];
+  assert.ok(parameters, "Missing parameters region");
+  assert.match(parameters, /<pre\b[^>]*tabindex="0"/u);
+  assert.match(parameters, /<div class="reference-json-footer" hidden>/u);
 });

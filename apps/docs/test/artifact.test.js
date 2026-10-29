@@ -55,3 +55,9 @@ await test("all generated documentation and reference links resolve inside the p
     })
   );
 });
+
+await test("missing pages contain one recovery heading instead of the default 404 hero", async () => {
+  const html = await readFile(new URL("../dist/404.html", import.meta.url), "utf8");
+  assert.equal(Array.from(html.matchAll(/<h1\b/gu)).length, 1);
+  assert.match(html, /Esta página no está aquí\./u);
+});

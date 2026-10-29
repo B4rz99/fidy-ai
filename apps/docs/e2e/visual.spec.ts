@@ -11,7 +11,12 @@ const viewports = [
   { name: "mobile", width: 390, height: 844 },
 ] as const;
 const themes = ["light", "dark"] as const;
-const capture = async (page: Page, testInfo: TestInfo, name: string): Promise<void> => {
+const capture = async (
+  page: Page,
+  testInfo: TestInfo,
+  target: { name: string; heading: string; id: string; schema: string }
+): Promise<void> => {
+  const { name, ...semanticTarget } = target;
   const screenshotPath = testInfo.outputPath(`${name}.png`);
   await page.screenshot({ path: screenshotPath, animations: "disabled" });
   const metadata = await page.evaluate(() => ({
@@ -29,6 +34,7 @@ const capture = async (page: Page, testInfo: TestInfo, name: string): Promise<vo
       {
         commit: process.env.DOCS_CAPTURE_SHA,
         screenshotPath,
+        semanticTarget,
         ...metadata,
       },
       undefined,
@@ -38,17 +44,47 @@ const capture = async (page: Page, testInfo: TestInfo, name: string): Promise<vo
   expect(metadata.horizontalOverflow, `${name}: horizontal viewport overflow`).toBe(false);
 };
 
+const captureState = (page: Page, testInfo: TestInfo, name: string): Promise<void> =>
+  capture(page, testInfo, { name, heading: "", id: "", schema: "" });
+
 const captureSearch = async (page: Page, testInfo: TestInfo): Promise<void> => {
   await page.getByRole("button", { name: "Buscar", exact: true }).click();
-  await capture(page, testInfo, "search-idle");
+  await captureState(page, testInfo, "search-idle");
   const input = page.getByRole("textbox", { name: "Buscar", exact: true });
   await input.fill("transacciones");
   await expect(page.getByRole("dialog").getByRole("link").first()).toBeVisible();
-  await capture(page, testInfo, "search");
+  await captureState(page, testInfo, "search");
   await input.fill("zxq-no-result");
   await expect(page.getByRole("heading", { name: "Sin resultados" })).toBeVisible();
-  await capture(page, testInfo, "search-empty");
+  await captureState(page, testInfo, "search-empty");
   await page.keyboard.press("Escape");
+};
+
+const captureLower = async (
+  page: Page,
+  testInfo: TestInfo,
+  route: (typeof visualRoutes)[number]
+): Promise<void> => {
+  let target = page.locator("#_top");
+  if (route.schema) {
+    await page.getByRole("searchbox", { name: "Buscar por nombre de esquema" }).fill(route.schema);
+    target = page.locator(`#schema-${route.schema}`);
+    await page.getByRole("searchbox", { name: "Buscar por nombre de esquema" }).blur();
+    await target.evaluate((element) => element.scrollIntoView());
+  } else {
+    const heading =
+      route.route === "/reference"
+        ? page.locator("#dominio-dashboard")
+        : page.getByRole("heading", { name: route.heading, exact: true }).first();
+    target = heading;
+    await target.evaluate((element) => element.scrollIntoView());
+  }
+  await capture(page, testInfo, {
+    name: "lower-semantic",
+    heading: route.heading,
+    id: (await target.getAttribute("id")) ?? "",
+    schema: route.schema,
+  });
 };
 
 if (captureEnabled) {
@@ -62,22 +98,13 @@ if (captureEnabled) {
             expect(response?.status()).toBe(ok);
             await page.evaluate(() => document.fonts.ready);
             await expect(page.locator("main h1")).toHaveText(route.title);
-            await capture(page, testInfo, "initial");
-            if (route.schema) {
-              await page
-                .getByRole("searchbox", { name: "Buscar por nombre de esquema" })
-                .fill(route.schema);
-              await page
-                .locator(`#schema-${route.schema}`)
-                .evaluate((element) => element.scrollIntoView());
-            } else {
-              const heading =
-                route.route === "/reference"
-                  ? page.locator("#dominio-dashboard")
-                  : page.getByRole("heading", { name: route.heading, exact: true }).first();
-              await heading.evaluate((element) => element.scrollIntoView());
-            }
-            await capture(page, testInfo, "lower-semantic");
+            await capture(page, testInfo, {
+              name: "initial",
+              heading: route.title,
+              id: "_top",
+              schema: "",
+            });
+            await captureLower(page, testInfo, route);
           });
         }
         test("search, theme, copy and missing-page states", async ({ page, context }, testInfo) => {
@@ -86,26 +113,30 @@ if (captureEnabled) {
           await page.evaluate(() => document.fonts.ready);
           await captureSearch(page, testInfo);
           await page.getByRole("button", { name: "Elegir tema" }).click();
-          await capture(page, testInfo, "theme");
+          await page
+            .getByRole("radio", { name: theme === "light" ? "Claro" : "Oscuro", exact: true })
+            .check();
+          await page.getByRole("button", { name: "Elegir tema" }).click();
+          await captureState(page, testInfo, "theme");
           await page.keyboard.press("Escape");
           await page.getByRole("button", { name: "Copiar Markdown", exact: true }).click();
           await expect(page.locator("[data-copy-status]:visible")).toHaveText("Markdown copiado");
           await page.evaluate(() => window.scrollTo(0, 0));
-          await capture(page, testInfo, "copy");
+          await captureState(page, testInfo, "copy");
           expect((await page.goto("/no-existe-esta-pagina"))?.status()).toBe(missing);
           await page.evaluate(() => document.fonts.ready);
-          await capture(page, testInfo, "404");
+          await captureState(page, testInfo, "404");
         });
         if (viewport.name === "mobile") {
           test("drawer and table of contents states", async ({ page }, testInfo) => {
             await page.goto("/");
             await page.evaluate(() => document.fonts.ready);
             await page.getByRole("button", { name: "Menú", exact: true }).click();
-            await capture(page, testInfo, "drawer");
+            await captureState(page, testInfo, "drawer");
             await page.keyboard.press("Escape");
             await page.goto("/conectar/cli");
             await page.getByRole("button", { name: "En esta página", exact: true }).click();
-            await capture(page, testInfo, "toc");
+            await captureState(page, testInfo, "toc");
           });
         }
       });

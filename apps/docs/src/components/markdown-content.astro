@@ -37,3 +37,22 @@ const { id } = Astro.locals.starlightRoute;
     )}
   </>
 )}
+<script>
+  const codePanels = document.querySelectorAll<HTMLElement>(".expressive-code pre");
+  const updateOverflow = (panel: HTMLElement): void => {
+    const overflow = panel.scrollWidth > panel.clientWidth;
+    panel.closest(".frame")?.toggleAttribute("data-docs-overflow", overflow);
+    if (overflow) panel.setAttribute("tabindex", "0");
+    else panel.removeAttribute("tabindex");
+  };
+  const resizeObserver = new ResizeObserver((entries) => {
+    entries.forEach(({ target }) => {
+      if (target instanceof HTMLElement) updateOverflow(target);
+    });
+  });
+  codePanels.forEach((panel) => {
+    updateOverflow(panel);
+    resizeObserver.observe(panel);
+  });
+  document.fonts.addEventListener("loadingdone", () => codePanels.forEach(updateOverflow));
+</script>

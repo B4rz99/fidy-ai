@@ -1,0 +1,46 @@
+---
+import { type schemaProperties, schemaTarget, schemaType } from "../lib/reference";
+
+type Props = {
+  rows: ReadonlyArray<{
+    property: ReturnType<typeof schemaProperties>[number];
+    visibility: "all" | "desktop" | "mobile";
+  }>;
+};
+const { rows } = Astro.props;
+---
+
+<table class="reference-properties">
+  <thead>
+    <tr>
+      <th scope="col">Propiedad</th>
+      <th scope="col">Tipo / contrato</th>
+    </tr>
+  </thead>
+  <tbody>
+    {rows.map(({ property, visibility }) => (
+      <tr
+        class:list={{
+          "reference-desktop-row": visibility === "desktop",
+          "reference-mobile-row": visibility === "mobile",
+        }}
+      >
+        <td>
+          <code>{property.name}</code>
+          <span class:list={["reference-required", { "is-required": property.required }]}>
+            {property.required ? "obligatorio" : "opcional"}
+          </span>
+        </td>
+        <td>
+          {schemaTarget(property.schema) ? (
+            <a href={`/referencia/esquemas#schema-${schemaTarget(property.schema)}`}>
+              <code>{schemaType(property.schema)}</code>
+            </a>
+          ) : (
+            <code>{schemaType(property.schema)}</code>
+          )}
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>

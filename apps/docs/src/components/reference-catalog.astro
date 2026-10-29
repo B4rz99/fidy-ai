@@ -21,7 +21,7 @@ const domains = Array.from(new Set(referenceOperations.map((operation) => operat
       const operations = referenceOperations.filter((operation) => operation.domain === domain);
       return (
         <section data-reference-group aria-labelledby={`dominio-${domain}`}>
-          <h2 id={`dominio-${domain}`}>
+          <h2 id={`dominio-${domain}`} data-docs-section="por-dominio">
             {domain} <span class="reference-chip">{operations.length}</span>
           </h2>
           <ul>

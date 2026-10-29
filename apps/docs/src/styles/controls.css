@@ -147,7 +147,9 @@ html[data-docs-search-open] {
   font-weight: 600;
 }
 .docs-search-clear {
-  min-height: 40px;
+  width: 180px;
+  height: 40px;
+  line-height: 20px;
   margin-top: 45px;
   padding: 10px 14px;
   border: 0;

@@ -27,8 +27,10 @@ const markdownPath = `/${id || "index"}.md`;
         const response = await fetch(path, { credentials: "omit", redirect: "error" });
         if (!response.ok) throw new Error("Markdown unavailable");
         await navigator.clipboard.writeText(await response.text());
+        status.dataset.copyState = "success";
         status.textContent = "Markdown copiado";
       } catch {
+        status.dataset.copyState = "error";
         status.textContent = "No se pudo copiar. Usa «Ver Markdown».";
       } finally {
         button.disabled = false;

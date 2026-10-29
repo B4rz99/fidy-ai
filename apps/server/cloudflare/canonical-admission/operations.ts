@@ -1,6 +1,6 @@
 import { OAuthNativeReview } from "../oauth-confirmation/contract";
 import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
 import { UserActionRequired } from "../../src/shell/public-http/contract";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
@@ -639,7 +639,7 @@ const authorizedCall = <E, R>(
 ): Effect.Effect<Response, E | CanonicalAdmissionUnavailable | Schema.SchemaError, R> =>
   Effect.gen(function* () {
     if (input.caller._tag === "WebSession") {
-      return yield* disclose({ ...input, scopes: [] }, yield* input.work);
+      return yield* input.work;
     }
     const primaryFailure = yield* primaryScopeFailure(input);
     if (Option.isSome(primaryFailure)) {
@@ -702,7 +702,11 @@ const executeProtectedRequest = <E, R>(
       current: input.current,
     });
     if (protection !== "accepted") {
-      return protection === "rate_limited" ? rateLimited() : unavailable();
+      return yield* discloseCanonicalAllowance({
+        db: input.db,
+        caller: input.caller,
+        response: protection === "rate_limited" ? rateLimited() : unavailable(),
+      });
     }
     return yield* authorizedCall(input, id).pipe(
       Effect.catch((failure) =>
@@ -713,51 +717,79 @@ const executeProtectedRequest = <E, R>(
             : unavailable()
         )
       ),
-      Effect.ensuring(releaseRequest({ db: input.db, id }))
+      Effect.flatMap((response) =>
+        finalizeAllowance({
+          db: input.db,
+          caller: input.caller,
+          response,
+          leaseId: Option.some(id),
+        })
+      ),
+      Effect.onExit((exit) =>
+        Exit.isSuccess(exit) && exit.value.leaseReleased
+          ? Effect.void
+          : releaseRequest({ db: input.db, id })
+      ),
+      Effect.map((result) => result.response)
     );
   });
 
 /** Header disclosure proves only the live User-owned credential and Consent, not business capability. Missing scope or invalid input can still report that User's allowance; failed proof discloses nothing. */
-export const discloseCanonicalAllowance = ({
+const finalizeAllowance = ({
   db,
   caller,
   response,
+  leaseId,
 }: Readonly<{
   db: D1Database;
   caller: AuthorizedCanonicalCaller;
   response: Response;
-}>): Effect.Effect<Response> =>
+  leaseId: Option.Option<string>;
+}>): Effect.Effect<Readonly<{ response: Response; leaseReleased: boolean }>> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
     const authority = credentialAt(caller, current);
-    const rows = yield* batch(
-      db,
-      prepareAuthorizedQuotaRead({
+    const rows = yield* batch(db, [
+      ...prepareAuthorizedQuotaRead({
         db,
         userId: caller.value.userId,
         current,
         authority: proof(authority),
-      })
-    );
+      }),
+      ...Option.toArray(
+        Option.map(leaseId, (id) =>
+          db.prepare("DELETE FROM canonical_request_leases WHERE id = ?").bind(id)
+        )
+      ),
+    ]);
     const status = decodeQuotaStatus({ row: rows[1]?.results[0], current });
-    return Option.isSome(status) ? attachStanding(response, status.value, current) : noAuthority();
+    return {
+      response: Option.isSome(status)
+        ? attachStanding(response, status.value, current)
+        : noAuthority(),
+      leaseReleased: Option.isSome(leaseId),
+    };
   }).pipe(
     Effect.catch((failure) =>
-      quotaFailure(failure.cause) === "authority"
+      (quotaFailure(failure.cause) === "authority"
         ? deniedDisclosure(response)
         : Effect.succeed(unavailable())
+      ).pipe(Effect.map((response) => ({ response, leaseReleased: false })))
     )
+  );
+
+/** Prove the live credential and Consent again before disclosing standing. */
+export const discloseCanonicalAllowance = (
+  input: Readonly<{ db: D1Database; caller: AuthorizedCanonicalCaller; response: Response }>
+): Effect.Effect<Response> =>
+  finalizeAllowance({ ...input, leaseId: Option.none() }).pipe(
+    Effect.map((result) => result.response)
   );
 
 /** Decorate all authenticated outcomes, including validation, protection and dependency refusals, without spending a commercial unit or relaxing owner disclosure authority. */
 export const protectCanonicalRequest = <E, R>(
   input: RequestCall<E, R>
-): Effect.Effect<Response, never, R> =>
-  executeProtectedRequest(input).pipe(
-    Effect.flatMap((response) =>
-      discloseCanonicalAllowance({ db: input.db, caller: input.caller, response })
-    )
-  );
+): Effect.Effect<Response, never, R> => executeProtectedRequest(input);
 
 /** Meter canonical work inside an already pressure-protected MCP invocation under the User coordinator. */
 export const admitCanonicalOperation = <E, R>(

@@ -5,6 +5,16 @@ import type { Schema } from "effect";
 type Props = { value: Schema.Json; label: string };
 const { value, label } = Astro.props;
 const code = JSON.stringify(value, undefined, 2);
+const codeTheme = {
+  name: "fidy-json",
+  colors: { "editor.background": "#202020", "editor.foreground": "#FFF6EF" },
+  tokenColors: [
+    {
+      scope: ["string", "constant.numeric", "constant.language"],
+      settings: { foreground: "#B5DB7E" },
+    },
+  ],
+};
 ---
 
 <div class="reference-json">
@@ -30,13 +40,37 @@ const code = JSON.stringify(value, undefined, 2);
       </svg>
     </button>
   </div>
-  <Code code={code} lang="json" theme="github-dark" />
-  <div class="reference-json-footer">
+  <Code code={code} lang="json" theme={codeTheme} />
+  <div class="reference-json-footer" hidden>
     Desliza para ver el código completo <span aria-hidden="true">↔</span>
   </div>
   <span class="reference-copy-status" role="status" aria-live="polite"></span>
 </div>
 <script>
+  const codePanels = document.querySelectorAll<HTMLElement>(".reference-json pre");
+  const updateOverflow = (panel: HTMLElement): void => {
+    const footer = panel
+      .closest(".reference-json")
+      ?.querySelector<HTMLElement>(".reference-json-footer");
+    if (!footer) return;
+    const horizontal = panel.scrollWidth > panel.clientWidth;
+    const vertical = panel.scrollHeight > panel.clientHeight;
+    footer.hidden = !horizontal && !vertical;
+    const direction = footer.querySelector("span");
+    if (direction) direction.textContent = `${horizontal ? "↔" : ""} ${vertical ? "↕" : ""}`.trim();
+  };
+  const resizeObserver = new ResizeObserver((entries) => {
+    entries.forEach(({ target }) => {
+      if (target instanceof HTMLElement) updateOverflow(target);
+    });
+  });
+  codePanels.forEach((panel) => {
+    updateOverflow(panel);
+    resizeObserver.observe(panel);
+  });
+  document.fonts.addEventListener("loadingdone", () => codePanels.forEach(updateOverflow));
+  document.fonts.ready.then(() => codePanels.forEach(updateOverflow));
+
   document.querySelectorAll<HTMLButtonElement>("[data-reference-copy]").forEach((button) => {
     button.addEventListener("click", async () => {
       const container = button.closest(".reference-json");

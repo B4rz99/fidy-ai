@@ -1,0 +1,25 @@
+apps/server/cloudflare/insights/governor.test.ts
+  s_1cebf747fbaef6::t_b943ad25ee6cd8 3,27-34,89,118
+apps/server/src/shell/memory/memory-policy.test.ts
+  s_1cebf747fbaef6::t_b943ad25ee6cd8 3,10-17,48,70
+docs/research/app-performance-startup-2026-10-29.md
+  s_1cebf747fbaef6::t_df205b9e7c8924 185-203
+docs/research/app-performance-startup-measurements-2026-10-29.json
+  s_1cebf747fbaef6::t_f7418327301884 313-318,4080-4087,4096-5302
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "667ebef1b9b82e229ce33390bee87a6623c926b5",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

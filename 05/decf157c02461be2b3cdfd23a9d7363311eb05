@@ -1,0 +1,44 @@
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_d9571b3fccd032::t_09cd6625d654e1 126-127,130-132,140-143,160-161,173-174,275-282
+  s_d9571b3fccd032::t_0e5ddb68d9af6c 133-139
+docs/research/production-read-proof-after-1612-2026-10-29.json
+  s_d9571b3fccd032::t_af5802ded89643 1-1044
+apps/server/cloudflare/queue/failure-isolation.test.ts
+  s_d9571b3fccd032::t_fbebaf0e81c68d 295,505,511,516-517,519-520,539-542,548,550
+  s_d9571b3fccd032::t_8fcbbaa40297ff 6,381-382,389-395,416,418-419,421,437-438,446-447,456,461-473,477-486,502-503
+  s_d9571b3fccd032::t_043413b28cfa76 371-380,396-415,417,422-436,457-460,504
+  s_d9571b3fccd032::t_3bce9b3a33ee51 383-388,439-445,448-455,475,487-501
+  s_d9571b3fccd032::t_42f4c450ef9315 29,420,474,476
+apps/server/cloudflare/queue/handoff-worker.fixture.ts
+  s_d9571b3fccd032::t_4fda8439e2e1b6 1-5,14-18,26-27,32-36,38-50,52-53,55-56,81-82,97-102,106
+  s_d9571b3fccd032::t_fbebaf0e81c68d 103-105
+  s_d9571b3fccd032::t_4ea0510098551c 10-12
+  s_d9571b3fccd032::t_e835a02d3b9e0d 6-9
+  s_d9571b3fccd032::t_0ec07234410a5c 13
+  s_d9571b3fccd032::t_c965612fe9e69b 19-21,23-25
+  s_d9571b3fccd032::t_e6efc56d62b0c1 28-31
+  s_d9571b3fccd032::t_8110e7fb34a79c 37
+  s_d9571b3fccd032::t_192492c8ce9d9e 51
+  s_d9571b3fccd032::t_2eccc686b8dc34 54
+  s_d9571b3fccd032::t_3c00bae9da91e2 57-59,78-80
+  s_d9571b3fccd032::t_6ef172b8e55d4a 83-85,94-96
+  s_d9571b3fccd032::t_d04b2d11bf7d3f 22,60-77,86-93
+docs/research/hosted-workflow-handoff-proof-2026-10-29.json
+  s_d9571b3fccd032::t_1f46647a138e25 1-484
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "05decf157c02461be2b3cdfd23a9d7363311eb05",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

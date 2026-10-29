@@ -136,6 +136,15 @@ external acknowledgments remain distinct from verified cleanup. Metadata outlive
 then expires after external completion. The [cutover contracts](../../docs/operations/database-cutover-1428.md)
 own migration prerequisites, provider evidence and release gates.
 
+A naked browser Category GET can compose mounted-cookie authentication, User pressure, the
+bounded Category projection, its Audit record and quota standing into one
+native D1 batch under one fresh recovery-generation fence. Cookie digest, expiry, revocation and
+Consent remain predicates in that batch. Standing rechecks the same exact credential selection.
+The native-only read counts existing live request leases against the unchanged two-request cap
+inside the serialized D1 transaction, and preserves rate pacing and expired-lease cleanup. It
+needs no transient lease to cover work outside the transaction. This capability is limited to the Category read. Authorization headers retain
+credential precedence. A lost batch response never replays owner work; a refusal rechecks current authority. Presentation performs no provider or domain work.
+
 ## 6. Hosted execution and delivery
 
 Agent owns one hosted runtime inside User coordination: context assembly, inference, canonical

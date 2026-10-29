@@ -269,7 +269,9 @@ test("verifies public OAuth discovery and keeps MCP tools authenticated", async 
   const metadata = await request.get(
     "https://api.fidyapp.com/.well-known/oauth-protected-resource/mcp"
   );
-  expect(metadata.status()).toBe(ok);
+  expect(metadata.status(), `OAuth discovery: ${metadata.headers()["cf-ray"] ?? "no ray"}`).toBe(
+    ok
+  );
   expect(metadata.headers()["content-type"]).toContain("application/json");
   expect(await metadata.json()).toMatchObject({
     resource: "https://api.fidyapp.com/mcp",

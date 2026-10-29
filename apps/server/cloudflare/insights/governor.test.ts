@@ -1,6 +1,6 @@
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
-import { Effect, Exit, Option, Schema } from "effect";
+import { Effect, Exit, Option, Result, Schema } from "effect";
 import {
   InsightTemplateConfiguration,
   WeeklyQuestionTemplateConfiguration,
@@ -79,7 +79,7 @@ it.live("rejects a corrupt retained question origin without staging or sending w
         .run()
     );
     assert.deepStrictEqual(
-      yield* Effect.exit(
+      yield* Effect.result(
         executeProactivityWork({
           userId,
           work: { kind: "weekly-question", version: 1, userId, id },
@@ -107,7 +107,7 @@ it.live("rejects a corrupt retained question origin without staging or sending w
           },
         })
       ),
-      Exit.fail(new InsightUnavailable())
+      Result.fail(new InsightUnavailable())
     );
     expect(
       yield* Effect.tryPromise(() =>

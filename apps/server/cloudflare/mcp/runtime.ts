@@ -179,7 +179,7 @@ const decodeToolResponse = (
     });
     const allowedIds = new Set(operationCatalog.operations.filter(available).map(({ id }) => id));
     const projected = projectMcpSchemas({ operation, catalog: operationCatalog, allowedIds });
-    yield* Schema.decodeEffect(projected.output)(result.structuredContent ?? null);
+    yield* Schema.decodeUnknownEffect(projected.output)(result.structuredContent ?? null);
     const allowance = Schema.decodeOption(Schema.toCodecJson(CanonicalAllowance))({
       allowance: response.headers.get(canonicalAllowanceHeaders.allowance),
       limit: response.headers.get(canonicalAllowanceHeaders.limit),
@@ -201,6 +201,15 @@ const decodeToolResponse = (
     });
   });
 
+const nativeRetryKey = (
+  context: McpSchema.McpRequestContext["Service"]
+): Effect.Effect<Option.Option<Schema.Json>, Schema.SchemaError> => {
+  const wire = context.requestMetadata?.[mcpCanonicalMetadata.retryKey];
+  return wire === undefined
+    ? Effect.succeedNone
+    : Schema.decodeUnknownEffect(Schema.Json)(wire).pipe(Effect.asSome);
+};
+
 const executeAdmittedTool = (
   input: ToolAdmission,
   work: Readonly<{
@@ -219,6 +228,7 @@ const executeAdmittedTool = (
     const confirmation = readNativeConfirmation({ context, supplied: work.confirmation });
     if (confirmation._tag === "Invalid") return yield* toolFailure(operation);
     const encodedInput = yield* Schema.decodeUnknownEffect(Schema.Json)(payload);
+    const retryKey = yield* nativeRetryKey(context);
     const admission = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthCanonicalAdmission))({
       userId: input.subject.userId,
       connectionId: input.subject.oauthConnectionId,
@@ -234,11 +244,7 @@ const executeAdmittedTool = (
       }),
       operation: operation.id,
       input: encodedInput,
-      ...(context.requestMetadata?.[mcpCanonicalMetadata.retryKey] === undefined
-        ? {}
-        : {
-            retryKey: context.requestMetadata[mcpCanonicalMetadata.retryKey],
-          }),
+      ...Option.match(retryKey, { onNone: () => ({}), onSome: (retryKey) => ({ retryKey }) }),
       ...Option.match(confirmation.attempt, {
         onNone: () => ({}),
         onSome: (confirmation) => ({ confirmation }),

@@ -1,0 +1,70 @@
+---
+import type { Schema } from "effect";
+import { resolveSchema, schemaProperties, schemaType, schemaView } from "../lib/reference";
+import ReferenceJson from "./reference-json.astro";
+import SchemaProperties from "./schema-properties.astro";
+import SchemaVariants from "./schema-variants.astro";
+
+type Props = { schema: Schema.JsonObject; preview: number };
+const { schema, preview } = Astro.props;
+const properties = schemaProperties(schema);
+const view = schemaView(resolveSchema(schema));
+const variants = view.anyOf ?? view.oneOf ?? view.allOf ?? [];
+const variantLabel = view.allOf
+  ? "Todas estas condiciones del contrato:"
+  : "Una de estas variantes del contrato:";
+const mobilePreview = Math.min(preview, 4);
+const rows = properties.slice(0, preview).map((property, index) => ({
+  property,
+  visibility: index < mobilePreview ? ("all" as const) : ("desktop" as const),
+}));
+const remainder = properties.slice(mobilePreview).map((property, index) => ({
+  property,
+  visibility: index < preview - mobilePreview ? ("mobile" as const) : ("all" as const),
+}));
+---
+
+{properties.length > 0 ? (
+  <>
+    <SchemaProperties rows={rows} />
+    {remainder.length > 0 && (
+      <details
+        class:list={[
+          "reference-expansion",
+          { "reference-mobile-expansion": properties.length <= preview },
+        ]}
+      >
+        <summary>
+          <span class="reference-desktop-summary">
+            Ver todas las {properties.length} propiedades ({properties.length - preview} más)
+          </span>
+          <span class="reference-mobile-summary">
+            Ver todas las {properties.length} propiedades ({properties.length - mobilePreview} más)
+          </span>
+        </summary>
+        <SchemaProperties rows={remainder} />
+      </details>
+    )}
+  </>
+) : variants.length > 0 ? (
+  <div class="reference-variants">
+    <p>{variantLabel}</p>
+    <SchemaVariants variants={variants.slice(0, 4)} />
+    {variants.length > 4 ? (
+      <details class="reference-expansion">
+        <summary>Ver las {variants.length} variantes y el JSON completo</summary>
+        <SchemaVariants variants={variants.slice(4)} />
+        <ReferenceJson label="JSON" value={resolveSchema(schema)} />
+        <p class="reference-caption">
+          {variants.length} variantes; la definición completa conserva todas sus condiciones.
+        </p>
+      </details>
+    ) : (
+      <p class="reference-caption">
+        {variants.length} variantes; la definición completa conserva todas sus condiciones.
+      </p>
+    )}
+  </div>
+) : (
+  <p class="reference-caption">Contrato {schemaType(schema)} · consulta su definición completa.</p>
+)}

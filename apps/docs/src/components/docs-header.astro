@@ -1,0 +1,23 @@
+---
+import Search from "./docs-search.astro";
+import ThemeSelect from "./docs-theme.astro";
+import Icon from "./docs-icon.astro";
+---
+
+<div class="docs-header">
+  <div class="docs-brand">
+    <a href="/">
+      <img src="/fidy-logo.png" alt="Fidy · Inicio" width="86" height="54" />
+    </a>
+    <span>Docs</span>
+  </div>
+  <div class="docs-header-search">
+    <Search />
+  </div>
+  <div class="docs-header-tools">
+    <a class="docs-product-link" href="https://app.fidyapp.com">
+      Ir a Fidy <Icon name="external" size={17} />
+    </a>
+    <ThemeSelect />
+  </div>
+</div>

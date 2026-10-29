@@ -26,9 +26,19 @@ export default defineConfig({
     starlight({
       title: "Fidy · Guías",
       description: "Guías de Fidy para personas y sus propios agentes.",
-      components: { MarkdownContent: "./src/components/markdown-content.astro" },
+      components: {
+        Header: "./src/components/docs-header.astro",
+        Sidebar: "./src/components/docs-sidebar.astro",
+        PageTitle: "./src/components/docs-page-title.astro",
+        PageSidebar: "./src/components/docs-page-sidebar.astro",
+        ContentPanel: "./src/components/docs-content-panel.astro",
+        TwoColumnContent: "./src/components/docs-columns.astro",
+        Footer: "./src/components/docs-footer.astro",
+        MarkdownContent: "./src/components/markdown-content.astro",
+      },
       social: [{ icon: "external", label: "Abrir Fidy", href: "https://app.fidyapp.com" }],
       lastUpdated: false,
+      routeMiddleware: "./src/route-middleware.ts",
       locales: { root: { label: "Español", lang: "es" } },
       customCss: ["./src/styles/fidy.css"],
       sidebar: [

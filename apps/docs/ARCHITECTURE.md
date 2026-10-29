@@ -22,8 +22,12 @@ operation alternatives and retains only reachable component schemas. Generated o
 schema documentation and the public OpenAPI subset are committed snapshots. Ordinary builds do
 not read server artifacts or regenerate the reference. Guides and examples are manually authored.
 
-Fidy design tokens and bundled Poppins fonts supply branding. Starlight provides navigation,
-localized UI, code-copy controls and search. Static styles permit inline style attributes used by
+Fidy design tokens, the product logo and bundled Poppins/DejaVu Sans Mono fonts supply branding.
+Fidy components own the responsive documentation shell, grouped navigation, contextual Markdown
+actions and theme controls. Starlight owns the static content pipeline and code-copy controls;
+Pagefind supplies same-origin search. Search results activate only known maintained document routes.
+Structured operation and schema views decode the committed public OpenAPI subset at build time;
+they retain complete JSON and leave the maintained Markdown exports unchanged. Static styles permit inline style attributes used by
 Starlight/Expressive Code, while scripts remain limited to self and exact hashes. Pagefind requires
 WebAssembly compilation, so script policy permits `wasm-unsafe-eval`, not arbitrary JavaScript eval.
 Starlight's unprocessed inline-script whitespace differs from Astro's collected hashes; the final

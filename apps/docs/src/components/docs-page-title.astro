@@ -1,0 +1,39 @@
+---
+import { pageGroup } from "../lib/navigation";
+import MarkdownActions from "./markdown-actions.astro";
+
+const { id, entry } = Astro.locals.starlightRoute;
+const operation = id.startsWith("reference/");
+const [domain, operationName] = entry.data.title.split(".");
+const words = operationName?.match(/[A-Z]?[a-z]+|[A-Z]+(?![a-z])|[0-9]+/gu) ?? [];
+---
+
+{id !== "404" && (
+  <div
+    class:list={["docs-title", { "docs-home-title": id === "", "docs-operation-title": operation }]}
+  >
+    <p class="docs-breadcrumb">
+      {pageGroup(id)}
+      {operation && ` / ${domain}`}
+    </p>
+    <h1 id="_top">
+      {operation ? (
+        <>
+          <span class="docs-operation-domain">{domain}.</span>
+          <wbr />
+          <span>
+            {words.map((word) => (
+              <>
+                {word}
+                <wbr />
+              </>
+            ))}
+          </span>
+        </>
+      ) : (
+        entry.data.title
+      )}
+    </h1>
+    {id !== "" && <MarkdownActions />}
+  </div>
+)}

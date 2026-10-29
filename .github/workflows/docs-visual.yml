@@ -1,0 +1,51 @@
+name: Docs visual evidence
+
+on:
+  pull_request:
+    branches: [trunk]
+    paths:
+      - apps/docs/**
+      - design/**
+      - bun.lock
+      - package.json
+      - .github/workflows/docs-visual.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-visual-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+      - uses: ./.github/actions/bun-install
+      - name: Install Chromium for real browser evidence
+        run: bunx playwright install --with-deps chromium
+      - name: Verify documentation and capture all routes and states
+        env:
+          DOCS_VISUAL_CAPTURE: "1"
+          DOCS_CAPTURE_SHA: ${{ github.event.pull_request.head.sha }}
+          ASTRO_TELEMETRY_DISABLED: "1"
+        run: |
+          bun run docs:build
+          bun run docs:test
+          bun run --cwd apps/docs test:browser
+      - name: Preserve actual browser screenshots and metadata
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docs-browser-evidence-${{ github.event.pull_request.head.sha }}
+          path: apps/docs/test-results/
+          if-no-files-found: error
+          retention-days: 14

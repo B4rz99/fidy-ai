@@ -43,6 +43,14 @@ use the actual failure owner to settle synthetic no-op work rather than bypassin
 
 ## Validation and limits
 
+The security review covers the changed coordinator and hosted Turn entry points plus the new
+alarm scheduler and publication-wake helpers. The wake carries only a deadline, follows committed
+owner readback, and dispatches with the named coordinator's UserId. It grants no credential,
+provider access, or extraction authority. The existing authoritative ingestion checks still apply.
+Retirement fences late callbacks before clearing the alarm; native tests exercise concurrent writes,
+failed writes, erasure, and foreign-User isolation. The reviewed edge-policy manifest now includes
+both new helpers so subsequent edits also invalidate its digest. Edge rules and grants are unchanged.
+
 The queued-readback regression first failed with no scheduled wake. Native adapter tests now cover
 queued and terminal readback, foreign User isolation, optional wake failure, competing deadlines,
 retirement during an in-flight write and recovery after a rejected native write. Fresh WhatsApp

@@ -14,7 +14,7 @@ const resourceLimitedStatus = 429;
 const observeEditResponse = Effect.fnUntraced(function* (route: Route, committed: unknown[]) {
   const response = yield* Effect.tryPromise(() => route.fetch({ maxRetries: 0 }));
   if (response.status() === resourceLimitedStatus) {
-    const body = yield* Effect.tryPromise(() => response.json());
+    const body: unknown = yield* Effect.tryPromise(() => response.json());
     yield* Schema.decodeUnknownEffect(Schema.toCodecJson(ResourceLimited))(body);
   } else {
     expect(response.status()).toBe(successStatus);

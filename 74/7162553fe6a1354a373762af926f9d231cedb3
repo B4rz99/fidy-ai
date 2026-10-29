@@ -1,0 +1,45 @@
+docs/research/production-history-baseline-2026-10-28.json
+  s_d9571b3fccd032::t_82342ee91e5c00 1-61,72
+  s_d9571b3fccd032::t_fefe14fda2b315 62-71
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_d9571b3fccd032::t_9b756100eb3b42 752-753,758-764,767-769,792
+  s_d9571b3fccd032::t_c9770d9c783dda 774
+  s_d9571b3fccd032::t_af9ebb08e5d841 777
+  s_d9571b3fccd032::t_874e54b5f39850 3,642,705-709,720-733,738,742,747-748,766,770-771,781-786
+  s_d9571b3fccd032::t_9516461c0d98c4 787-788
+docs/research/production-admission-proof-2026-10-28.json
+  s_d9571b3fccd032::t_c26ea271c39ae6 1-26
+docs/research/production-api-pilot-2026-10-28.json
+  s_d9571b3fccd032::t_c26ea271c39ae6 12-14
+  s_d9571b3fccd032::t_6dbe06d9ab5e7f 1-11,15
+docs/research/production-placement-trial-2026-10-28.json
+  s_d9571b3fccd032::t_9a22e2ff390b56 1-175
+apps/server/cloudflare/canonical-admission/operations.test.ts
+  s_d9571b3fccd032::t_16f86a9fe41b15 71-73,194-198
+  s_d9571b3fccd032::t_61fbe52e90f9ba 75,77,80-83
+  s_d9571b3fccd032::t_af9ebb08e5d841 95-117,119-120,126-128,143-144,146-150,153-161,164-187,190-192,199-200,202-214,217-239
+  s_d9571b3fccd032::t_f138bd50088918 7,12-13,27,29,129-132,140-142,152
+  s_d9571b3fccd032::t_86eed4c309ce5c 133-134,136-139
+  s_d9571b3fccd032::t_7480957e09dea6 74,76
+  s_d9571b3fccd032::t_ff5a218bcec10b 90-94,118,121-125,162-163,188-189,215-216,240
+  s_d9571b3fccd032::t_92e2b238541227 135
+  s_d9571b3fccd032::t_3bd36f367ebd55 78-79,84-89,145,151,193,201
+docs/research/production-performance-pilot-2026-10-28.json
+  s_d9571b3fccd032::t_3a9365e01cff3b 1-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "747162553fe6a1354a373762af926f9d231cedb3",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -9,10 +9,12 @@ import { CanonicalAllowance, canonicalAllowanceHeaders } from "../../src/shell/q
 import { QuotaStatus } from "../../src/core/quotas/contract";
 import { Unavailable } from "../../src/shell/public-http/contract";
 import { UserId } from "../../src/core/identity/contract";
+import { browserSessionBindingHeader } from "../../src/shell/web-session/contract";
 import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
 import { maintenancePerformanceDatabase } from "../maintenance-performance.test-fixture";
 import { executeCanonicalQuery } from "../canonical-operations/operations";
 import {
+  protectCanonicalBrowserRequest,
   protectCanonicalPressure,
   protectCanonicalRequest,
   protectCanonicalSource,
@@ -92,6 +94,10 @@ const browserSetup = Effect.gen(function* () {
   const { db, current } = fixture;
   const pairingId = "50000000-0000-4000-8000-000000000001";
   const sessionId = "60000000-0000-4000-8000-000000000001";
+  const token = "c".repeat(43);
+  const browserDigest = new Uint8Array(
+    yield* io(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)))
+  );
   yield* io(() =>
     db.batch([
       db
@@ -107,7 +113,7 @@ const browserSetup = Effect.gen(function* () {
           sessionId,
           pairingId,
           userId,
-          digest,
+          browserDigest,
           current,
           current + 600_000,
           current + 3_600_000,
@@ -117,10 +123,198 @@ const browserSetup = Effect.gen(function* () {
   );
   const browserCaller: AuthorizedCanonicalCaller = {
     _tag: "WebSession",
-    value: { id: sessionId, userId, digest },
+    value: { id: sessionId, userId, digest: browserDigest },
   };
-  return { ...fixture, caller: browserCaller };
+  const request = new Request("https://core.internal/transactions", {
+    headers: { cookie: `__Host-fidy_session=${token}`, [browserSessionBindingHeader]: sessionId },
+  });
+  return { ...fixture, caller: browserCaller, request };
 });
+
+it("resolves mounted browser proof and acquires pressure in one guarded native unit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* browserSetup;
+      const { bucket } = yield* io(() => storage.acquire());
+      yield* io(() => bucket.put("recovery/generation", "initial"));
+      const generationReads = vi.fn();
+      const observedBucket = new Proxy(bucket, {
+        get: (target, property): unknown =>
+          property === "get"
+            ? (key: string): ReturnType<R2Bucket["get"]> => {
+                generationReads();
+                return target.get(key);
+              }
+            : Reflect.get(target, property, target),
+      });
+      const db = maintenancePerformanceDatabase({ db: fixture.db, bucket: observedBucket });
+      const work = vi.fn((subject: typeof fixture.caller.value) =>
+        Effect.sync(() => {
+          expect(subject).toEqual(fixture.caller.value);
+          return Response.json({ data: [], next: [] });
+        })
+      );
+      const response = yield* protectCanonicalBrowserRequest({
+        ...fixture,
+        db,
+        operation: operation("transactions.listTransactions"),
+        work,
+      });
+      expect(response.status).toBe(200);
+      expect(work).toHaveBeenCalledTimes(1);
+      expect(reportedAllowance(response).remaining).toBe(50);
+      expect(generationReads).toHaveBeenCalledTimes(2);
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+        )
+      ).toEqual({ total: 0 });
+    })
+  ));
+
+const invalidBrowserHeaders = ({
+  request,
+  invalid,
+}: Readonly<{ request: Request; invalid: string }>): Headers => {
+  const headers = new Headers(request.headers);
+  if (invalid === "missing binding") headers.delete(browserSessionBindingHeader);
+  if (invalid === "missing cookie") headers.delete("cookie");
+  if (invalid === "forged cookie") headers.set("cookie", `__Host-fidy_session=${"d".repeat(43)}`);
+  if (invalid === "duplicate cookie") {
+    headers.append("cookie", `; __Host-fidy_session=${"c".repeat(43)}`);
+  }
+  return headers;
+};
+
+for (const invalid of [
+  "missing binding",
+  "missing cookie",
+  "forged cookie",
+  "different session",
+  "duplicate cookie",
+  "revoked",
+  "expired",
+  "withdrawn Consent",
+] as const) {
+  it(`rejects ${invalid} before browser pressure or owner work`, () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* browserSetup;
+        const { db, current } = fixture;
+        const headers = invalidBrowserHeaders({ request: fixture.request, invalid });
+        if (invalid === "different session") {
+          const otherUserId = "10000000-0000-4000-8000-000000000002";
+          const otherPairingId = "50000000-0000-4000-8000-000000000002";
+          const otherSessionId = "60000000-0000-4000-8000-000000000002";
+          const otherDigest = new Uint8Array(32).fill(2);
+          yield* io(() =>
+            db.batch([
+              db
+                .prepare(
+                  "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
+                )
+                .bind(otherUserId, current),
+              db
+                .prepare(
+                  "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,user_id,state,created_at_ms,expires_at_ms) VALUES (?,'LMNP-QRST',?,?,'consumed',?,?)"
+                )
+                .bind(otherPairingId, otherDigest, otherUserId, current, current + 600000),
+              db
+                .prepare(
+                  "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES (?,?,?,?,?,?,?,?)"
+                )
+                .bind(
+                  otherSessionId,
+                  otherPairingId,
+                  otherUserId,
+                  otherDigest,
+                  current,
+                  current + 600000,
+                  current + 3600000,
+                  current + 7776000000
+                ),
+            ])
+          );
+          headers.set(browserSessionBindingHeader, "60000000-0000-4000-8000-000000000002");
+        }
+        if (invalid === "revoked") {
+          yield* io(() =>
+            db.prepare("UPDATE web_sessions SET revoked_at_ms = ?").bind(current).run()
+          );
+        }
+        if (invalid === "expired") {
+          yield* io(() =>
+            db.prepare("UPDATE web_sessions SET idle_expires_at_ms = ?").bind(current).run()
+          );
+        }
+        if (invalid === "withdrawn Consent") {
+          yield* io(() =>
+            db.batch([
+              db
+                .prepare(
+                  "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)"
+                )
+                .bind("grant", userId, current, current),
+              db
+                .prepare(
+                  "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)"
+                )
+                .bind("withdrawal", userId, "grant", fixture.caller.value.id, current),
+            ])
+          );
+        }
+        const work = vi.fn(() => Effect.succeed(Response.json({ private: "must not escape" })));
+        const response = yield* protectCanonicalBrowserRequest({
+          ...fixture,
+          request: new Request(fixture.request, { headers }),
+          operation: operation("transactions.listTransactions"),
+          work,
+        });
+        expect(response.status).toBe(401);
+        expect(work).not.toHaveBeenCalled();
+        expect(response.headers.get(canonicalAllowanceHeaders.remaining)).toBeNull();
+        for (const table of ["canonical_request_leases", "canonical_request_buckets"] as const) {
+          expect(
+            yield* io(() => db.prepare(`SELECT count(*) AS total FROM ${table}`).first())
+          ).toEqual({ total: 0 });
+        }
+      })
+    ));
+}
+
+it("enforces the shared browser burst and rolls back a refused lease", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* browserSetup;
+      const work = vi.fn(() => Effect.succeed(Response.json({ data: [], next: [] })));
+      const call = (): Effect.Effect<Response> =>
+        protectCanonicalBrowserRequest({
+          ...fixture,
+          operation: operation("transactions.listTransactions"),
+          work,
+        });
+      for (let index = 0; index < 10; index++) expect((yield* call()).status).toBe(200);
+      const response = yield* call();
+      expect(response.status).toBe(429);
+      expect(response.headers.get("retry-after")).toBe("1");
+      expect(reportedAllowance(response).remaining).toBe(50);
+      expect(work).toHaveBeenCalledTimes(10);
+      const external = yield* protectCanonicalRequest({
+        ...fixture,
+        caller,
+        request: new Request("https://core.internal/transactions"),
+        operation: operation("transactions.listTransactions"),
+        work: Effect.succeed(Response.json({ private: "must not escape" })),
+      });
+      expect(external.status).toBe(429);
+      expect(reportedAllowance(external).remaining).toBe(50);
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+        )
+      ).toEqual({ total: 0 });
+    })
+  ));
 
 it("finishes browser disclosure and lease release in one guarded batch", () =>
   Effect.runPromise(
@@ -987,3 +1181,161 @@ it("expires replay bodies at the original deadline in indexed bounded batches", 
       expect(yield* io(count)).toBe(1976);
     })
   ));
+
+it("retains browser concurrency limits without consuming a refused slot or burst token", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* browserSetup;
+      yield* io(() =>
+        fixture.db.batch([
+          fixture.db
+            .prepare("INSERT INTO canonical_request_leases VALUES ('held-1',?,?)")
+            .bind(userId, fixture.current + 90000),
+          fixture.db
+            .prepare("INSERT INTO canonical_request_leases VALUES ('held-2',?,?)")
+            .bind(userId, fixture.current + 90000),
+        ])
+      );
+      const work = vi.fn(() => Effect.succeed(Response.json({ private: "must not escape" })));
+      const response = yield* protectCanonicalBrowserRequest({
+        ...fixture,
+        operation: operation("transactions.listTransactions"),
+        work,
+      });
+      expect(response.status).toBe(429);
+      expect(reportedAllowance(response).remaining).toBe(50);
+      expect(work).not.toHaveBeenCalled();
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+        )
+      ).toEqual({ total: 2 });
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_buckets").first()
+        )
+      ).toEqual({ total: 0 });
+    })
+  ));
+
+it("rechecks a bound browser credential before disclosing completed work", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* browserSetup;
+      const response = yield* protectCanonicalBrowserRequest({
+        ...fixture,
+        operation: operation("transactions.listTransactions"),
+        work: () =>
+          io(() =>
+            fixture.db
+              .prepare("UPDATE web_sessions SET revoked_at_ms = ?")
+              .bind(fixture.current)
+              .run()
+          ).pipe(Effect.as(Response.json({ private: "must not escape" }))),
+      });
+      expect(response.status).toBe(401);
+      expect(yield* io(() => response.text())).not.toContain("must not escape");
+      expect(response.headers.get(canonicalAllowanceHeaders.remaining)).toBeNull();
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+        )
+      ).toEqual({ total: 0 });
+    })
+  ));
+
+for (const transport of ["browser", "external"] as const) {
+  it(`cleans a committed ${transport} slot when interruption arrives during native admission`, () =>
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fixture = yield* browserSetup;
+          const committed = yield* Deferred.make<void>();
+          const settle = yield* Deferred.make<void>();
+          const runWithServices = Effect.runPromiseWith(yield* Effect.context<never>());
+          let first = true;
+          const db: D1Database = {
+            prepare: fixture.db.prepare.bind(fixture.db),
+            batch: <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
+              fixture.db.batch<Row>(statements).then((rows) => {
+                if (!first) return rows;
+                first = false;
+                return runWithServices(
+                  Deferred.succeed(committed, undefined).pipe(
+                    Effect.andThen(Deferred.await(settle)),
+                    Effect.as(rows)
+                  )
+                );
+              }),
+            exec: fixture.db.exec.bind(fixture.db),
+            dump: fixture.db.dump.bind(fixture.db),
+            withSession: fixture.db.withSession.bind(fixture.db),
+          };
+          const work = vi.fn(() => Effect.succeed(Response.json({ private: "must not escape" })));
+          const call =
+            transport === "browser"
+              ? protectCanonicalBrowserRequest({
+                  ...fixture,
+                  db,
+                  operation: operation("transactions.listTransactions"),
+                  work,
+                })
+              : protectCanonicalRequest({
+                  ...fixture,
+                  db,
+                  caller,
+                  operation: operation("transactions.listTransactions"),
+                  work: Effect.suspend(work),
+                });
+          const running = yield* Effect.forkChild(call);
+          yield* Deferred.await(committed);
+          const stopping = yield* Effect.forkChild(Fiber.interrupt(running));
+          yield* Effect.yieldNow;
+          yield* Deferred.succeed(settle, undefined);
+          yield* Fiber.join(stopping);
+          expect(work).not.toHaveBeenCalled();
+          expect(
+            yield* io(() =>
+              fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+            )
+          ).toEqual({ total: 0 });
+        })
+      )
+    ));
+}
+
+for (const transport of ["browser", "external"] as const) {
+  it(`cleans an uncertain ${transport} reservation after a lost native acknowledgement`, () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* browserSetup;
+        let first = true;
+        const db: D1Database = {
+          prepare: fixture.db.prepare.bind(fixture.db),
+          batch: <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
+            fixture.db.batch<Row>(statements).then((rows) => {
+              if (first) {
+                first = false;
+                throw new Error("Native commit acknowledgement lost");
+              }
+              return rows;
+            }),
+          exec: fixture.db.exec.bind(fixture.db),
+          dump: fixture.db.dump.bind(fixture.db),
+          withSession: fixture.db.withSession.bind(fixture.db),
+        };
+        const work = vi.fn(() => Effect.succeed(Response.json({ private: "must not escape" })));
+        const input = { ...fixture, db, operation: operation("transactions.listTransactions") };
+        const response = yield* transport === "browser"
+          ? protectCanonicalBrowserRequest({ ...input, work })
+          : protectCanonicalRequest({ ...input, caller, work: Effect.suspend(work) });
+        expect(response.status).toBe(503);
+        expect(work).not.toHaveBeenCalled();
+        expect(
+          yield* io(() =>
+            fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+          )
+        ).toEqual({ total: 0 });
+      })
+    ));
+}

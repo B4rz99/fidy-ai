@@ -1,0 +1,1044 @@
+{
+  "scope": "Production authenticated browser read before/after PR1612 with replication, same existing account and in-app tab. Metadata only; no financial response bodies.",
+  "candidateRevision": "55e992057302ffecff406e7ff8fbde831659ed61",
+  "deployment": "https://github.com/B4rz99/fidy-ai/actions/runs/40822244401",
+  "method": {
+    "refreshesPerBlock": 12,
+    "warmupRefreshes": 4,
+    "measuredRefreshes": 8,
+    "refreshIntervalMilliseconds": 2000,
+    "readsPerRefresh": ["GET /categories", "GET /transactions"],
+    "sampleUnit": "HTTP request completed duration from browser Network timestamps",
+    "workerMetricsUnit": "GraphQL CPU and wall quantiles are microseconds; memory is V8 isolate bytes at invocation",
+    "controls": [
+      "Same account, view, tab and response scale",
+      "No browser reload or request-cache mode change between blocks",
+      "Rate limits and authorization gates preserved",
+      "Release health checked around each block; exact revisions retained"
+    ],
+    "limitations": [
+      "Serial before/after, not simultaneous pinned-version A/B; network, placement and warm state can vary.",
+      "Historical 1297ms baseline lacked this explicit four-refresh warm-up/pacing; 2.54\u20132.66x is a historical cumulative point estimate, not solely the effect of PR1612.",
+      "Immediate control improvement is 1.24\u20131.30x for History and 1.08\u20131.29x for Categories.",
+      "Only eight measured samples per endpoint per block; these do not establish global latency tails or maximum throughput.",
+      "Original worker metric window includes 18 MIA requests versus 16 matched reads; CPU comparison has a request-mix and warm-state limitation.",
+      "CPU sample P50 varies between candidate blocks, so uniform 2x CPU reduction is not established.",
+      "V8 isolate memory includes shared state and garbage collection; not per-request allocation or proof of 2x memory/total billing improvement."
+    ]
+  },
+  "summary": {
+    "history": {
+      "controlMedianMs": 635.7905000040773,
+      "candidateBlockMediansMs": [511.20300000184216, 487.71150001266506],
+      "factorsAgainstImmediateControl": [1.2437143365782013, 1.3036200704464973],
+      "factorsAgainstHistoricalBaseline": [2.5378528686164303, 2.6600931082541828]
+    },
+    "categories": {
+      "controlMedianMs": 576.2729999842122,
+      "candidateBlockMediansMs": [531.5880000125617, 446.31449998996686],
+      "factorsAgainstImmediateControl": [1.0840594595261643, 1.2911814426758863]
+    }
+  },
+  "historicalBaseline": {
+    "artifact": "production-history-baseline-2026-10-28.json",
+    "revision": "67335840a1274c57b513dea6218e864e7d1cb912",
+    "medianMs": 1297.3580000000002
+  },
+  "control": {
+    "scope": "Same signed-in in-app account and page; four warm-up refreshes followed by eight measured refreshes; each refresh fetches categories and History. Starts paced two seconds apart to retain the fixed per-User protection envelope.",
+    "revision": "2cfae8d7fe703803a1d5b9369f460dd54af21b59",
+    "intervalMs": 2000,
+    "warmup": [
+      {
+        "iteration": 0,
+        "history": [
+          {
+            "status": 200,
+            "elapsedMs": 1171.4720000163652,
+            "ttfbMs": 1172.1650000254158,
+            "encodedBytes": 1050,
+            "traceId": "82521929ccaaf82c0b8e4f8efc28a19e",
+            "date": "Thu, 29 Oct 2026 05:09:37 GMT"
+          }
+        ],
+        "categories": [
+          {
+            "status": 200,
+            "elapsedMs": 1148.8749999844003,
+            "ttfbMs": 1149.3049999990035,
+            "encodedBytes": 1081,
+            "traceId": "004761c55c3c4769f449ecbc6f6e02b8",
+            "date": "Thu, 29 Oct 2026 05:09:37 GMT"
+          }
+        ]
+      },
+      {
+        "iteration": 1,
+        "history": [
+          {
+            "status": 200,
+            "elapsedMs": 639.0510000055656,
+            "ttfbMs": 639.973999990616,
+            "encodedBytes": 1048,
+            "traceId": "b4851371e8f0dfc329897a4e01372247",
+            "date": "Thu, 29 Oct 2026 05:09:39 GMT"
+          }
+        ],
+        "categories": [
+          {
+            "status": 200,
+            "elapsedMs": 762.1229999931529,
+            "ttfbMs": 763.2340000127442,
+            "encodedBytes": 1046,
+            "traceId": "9802f156f32ebe457c84dd6637f36b43",
+            "date": "Thu, 29 Oct 2026 05:09:39 GMT"
+          }
+        ]
+      },
+      {
+        "iteration": 2,
+        "history": [
+          {
+            "status": 200,
+            "elapsedMs": 622.1929999883287,
+            "ttfbMs": 622.6909999968484,
+            "encodedBytes": 1053,
+            "traceId": "32c3dcd17ce977fae0e36eb5e2677efb",
+            "date": "Thu, 29 Oct 2026 05:09:41 GMT"
+          }
+        ],
+        "categories": [
+          {
+            "status": 200,
+            "elapsedMs": 983.6210000212304,
+            "ttfbMs": 984.1740000119898,
+            "encodedBytes": 1049,
+            "traceId": "e2b2efe92367da71b160340db98e39f4",
+            "date": "Thu, 29 Oct 2026 05:09:41 GMT"
+          }
+        ]
+      },
+      {
+        "iteration": 3,
+        "history": [
+          {
+            "status": 200,
+            "elapsedMs": 629.5199999876786,
+            "ttfbMs": 630.0460000056773,
+            "encodedBytes": 1053,
+            "traceId": "eea61525b2618e5a60d361f871eef64c",
+            "date": "Thu, 29 Oct 2026 05:09:43 GMT"
+          }
+        ],
+        "categories": [
+          {
+            "status": 200,
+            "elapsedMs": 616.8199999956414,
+            "ttfbMs": 617.3959999869112,
+            "encodedBytes": 1048,
+            "traceId": "ae1470c7dadd2a63e9fdc7dd64867f2c",
+            "date": "Thu, 29 Oct 2026 05:09:43 GMT"
+          }
+        ]
+      }
+    ],
+    "measured": [
+      {
+        "iteration": 4,
+        "history": [
+          {
+            "status": 200,
+            "elapsedMs": 695.7490000058897,
+            "ttfbMs": 704.6310000005178,
+            "encodedBytes": 1046,
+            "traceId": "b119c44fab6111c18dc9cee51eca9957",
+            "date": "Thu, 29 Oct 2026 05:09:45 GMT"
+          }
+        ],
+        "categories": [
+          {
+            "status": 200,
+            "elapsedMs": 693.2110000052489,
+            "ttfbMs": 695.0770000112243,
+            "encodedBytes": 1044,
+            "traceId": "1a29d85a2bef54ea762804276d2043e4",
+            "date": "Thu, 29 Oct 2026 05:09:45 GMT"
+          }
+        ]
+      },
+      {
+        "iteration": 5,
+        "history": [
+          {
+            "status": 200,
+            "elapsedMs": 764.3639999732841,
+            "ttfbMs": 766.8889999913517,
+            "encodedBytes": 1054,
+            "traceId": "b628ffe0e06b9e4d16ab6034f654c55d",
+            "date": "Thu, 29 Oct 2026 05:09:47 GMT"
+          }
+        ],
+        "categories": [
+          {
+            "status": 200,
+            "elapsedMs": 578.3909999881871,
+            "ttfbMs": 579.42299998831,
+            "encodedBytes": 1043,
+            "traceId": "c2334b8a628986cca522a0baa55b3d8d",
+            "date": "Thu, 29 Oct 2026 05:09:47 GMT"
+          }
+        ]
+      },
+      {
+        "iteration": 6,
+        "history": [
+          {
+            "status": 200,
+            "elapsedMs": 595.1890000142157,
+            "ttfbMs": 604.9740000162274,
+            "encodedBytes": 1045,
+            "traceId": "c232ac18ef1d86b2816c6e6712d82dc1",
+            "date": "Thu, 29 Oct 2026 05:09:49 GMT"
+          }
+        ],
+        "categories": [
+          {
+            "status": 200,
+            "elapsedMs": 593.5739999986254,
+            "ttfbMs": 595.024000009289,
+            "encodedBytes": 1048,
+            "traceId": "316beed88f126ec930d418eb68604a12",
+            "date": "Thu, 29 Oct 2026 05:09:49 GMT"
+          }
+        ]
+      },
+      {
+        "iteration": 7,
+        "history": [
+          {
+            "status": 200,
+            "elapsedMs": 839.520999987144,
+            "ttfbMs": 840.6620000023395,
+            "encodedBytes": 1044,
+            "traceId": "d2f7c011241f0519c4b5fc8715c4ef06",
+            "date": "Thu, 29 Oct 2026 05:09:51 GMT"
+          }
+        ],
+        "categories": [
+          {
+            "status": 200,
+            "elapsedMs": 653.3420000050683,
+            "ttfbMs": 654.301000002306,
+            "encodedBytes": 1042,
+            "traceId": "fc39d09937e6e4ffa9cd1e9ae4febe6c",
+            "date": "Thu, 29 Oct 2026 05:09:51 GMT"
+          }
+        ]
+      },
+      {
+        "iteration": 8,
+        "history": [
+          {
+            "status": 200,
+            "elapsedMs": 653.9770000090357,
+            "ttfbMs": 655.4060000053141,
+            "encodedBytes": 1049,
+            "traceId": "9375a8713173f2314e21b00ba7739a47",
+            "date": "Thu, 29 Oct 2026 05:09:53 GMT"
+          }
+        ],
+        "categories": [
+          {
+            "status": 200,
+            "elapsedMs": 574.1549999802373,
+            "ttfbMs": 575.3659999754746,
+            "encodedBytes": 1044,
+            "traceId": "df035bbe12d0edc517fc81736d47612e",
+            "date": "Thu, 29 Oct 2026 05:09:53 GMT"
+          }
+        ]
+      },
+      {
+        "iteration": 9,
+        "history": [
+          {
+            "status": 200,
+            "elapsedMs": 571.3689999829512,
+            "ttfbMs": 571.8979999946896,
+            "encodedBytes": 1049,
+            "traceId": "2cfd36843fcc496bef9f87c19f75ff9f",
+            "date": "Thu, 29 Oct 2026 05:09:55 GMT"
+          }
+        ],
+        "categories": [
+          {
+            "status": 200,
+            "elapsedMs": 563.8839999737684,
+            "ttfbMs": 565.108999988297,
+            "encodedBytes": 1045,
+            "traceId": "60851cde28ddc1b09bc206f11ae6d766",
+            "date": "Thu, 29 Oct 2026 05:09:55 GMT"
+          }
+        ]
+      },
+      {
+        "iteration": 10,
+        "history": [
+          {
+            "status": 200,
+            "elapsedMs": 583.9210000121966,
+            "ttfbMs": 584.476000018185,
+            "encodedBytes": 1050,
+            "traceId": "ce7e6269f545aec7cdbd77a8136794d0",
+            "date": "Thu, 29 Oct 2026 05:09:57 GMT"
+          }
+        ],
+        "categories": [
+          {
+            "status": 200,
+            "elapsedMs": 568.9969999948516,
+            "ttfbMs": 570.6689999788068,
+            "encodedBytes": 1039,
+            "traceId": "ae88ccac28446257d68195ab7670be21",
+            "date": "Thu, 29 Oct 2026 05:09:57 GMT"
+          }
+        ]
+      },
+      {
+        "iteration": 11,
+        "history": [
+          {
+            "status": 200,
+            "elapsedMs": 617.603999999119,
+            "ttfbMs": 618.3819999860134,
+            "encodedBytes": 1051,
+            "traceId": "ba11089d178777a9d643bdbbbad8800b",
+            "date": "Thu, 29 Oct 2026 05:09:59 GMT"
+          }
+        ],
+        "categories": [
+          {
+            "status": 200,
+            "elapsedMs": 557.8389999864157,
+            "ttfbMs": 558.4359999920707,
+            "encodedBytes": 1041,
+            "traceId": "96cf744971f7c058e8e85c31d2a13c95",
+            "date": "Thu, 29 Oct 2026 05:09:59 GMT"
+          }
+        ]
+      }
+    ],
+    "waitIssue": false,
+    "mediansMs": {
+      "history": 635.7905000040773,
+      "categories": 576.2729999842122
+    },
+    "healthAfter": {
+      "contractDigest": "935282207549fbc70a15632d74d3b9a4ee2c04a37380ac82ab67a9da68428b38",
+      "gitRevision": "2cfae8d7fe703803a1d5b9369f460dd54af21b59",
+      "status": "available"
+    },
+    "revisionStable": true,
+    "healthBefore": {
+      "contractDigest": "935282207549fbc70a15632d74d3b9a4ee2c04a37380ac82ab67a9da68428b38",
+      "gitRevision": "2cfae8d7fe703803a1d5b9369f460dd54af21b59",
+      "status": "available"
+    }
+  },
+  "candidateBlocks": [
+    {
+      "scope": "production same-account browser read benchmark",
+      "revision": "55e992057302ffecff406e7ff8fbde831659ed61",
+      "intervalMs": 2000,
+      "warmup": [
+        {
+          "iteration": 0,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 550.9529999981169,
+              "ttfbMs": 552.4460000160616,
+              "encodedBytes": 590,
+              "traceId": "c104048387956e20bc26faf94adb0543",
+              "date": "Thu, 29 Oct 2026 05:20:35 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 479.46100000990555,
+              "ttfbMs": 481.0859999852255,
+              "encodedBytes": 615,
+              "traceId": "f17a7f6e9fed0ef581c6e00d0150537d",
+              "date": "Thu, 29 Oct 2026 05:20:35 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 1,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 1282.1220000041649,
+              "ttfbMs": 1282.941999990726,
+              "encodedBytes": 1083,
+              "traceId": "28f6ff552d2d4030c261752a3db9e299",
+              "date": "Thu, 29 Oct 2026 05:20:37 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 1380.8070000086445,
+              "ttfbMs": 1382.9269999987446,
+              "encodedBytes": 1043,
+              "traceId": "96722c7ae2ff1b4101df6945e93b4e13",
+              "date": "Thu, 29 Oct 2026 05:20:37 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 2,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 559.6620000142138,
+              "ttfbMs": 561.9880000012927,
+              "encodedBytes": 1051,
+              "traceId": "7d7a84d2710a79e0348e8d2bd1ad5565",
+              "date": "Thu, 29 Oct 2026 05:20:39 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 555.491000006441,
+              "ttfbMs": 556.2689999933355,
+              "encodedBytes": 1047,
+              "traceId": "fff30c6a35b5963317fbfa60b004dba0",
+              "date": "Thu, 29 Oct 2026 05:20:39 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 3,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 457.77300000190735,
+              "ttfbMs": 458.6319999943953,
+              "encodedBytes": 1056,
+              "traceId": "c6067b32de0db2550d46feaad68da3db",
+              "date": "Thu, 29 Oct 2026 05:20:41 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 1281.6279999969993,
+              "ttfbMs": 1282.7070000057574,
+              "encodedBytes": 1052,
+              "traceId": "6e90f71af6c9c3dcb518be7b1bc2845a",
+              "date": "Thu, 29 Oct 2026 05:20:41 GMT"
+            }
+          ]
+        }
+      ],
+      "measured": [
+        {
+          "iteration": 4,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 571.0789999866392,
+              "ttfbMs": 572.6710000017192,
+              "encodedBytes": 1049,
+              "traceId": "b3ae6f817621e4103955c9ae80c1a55d",
+              "date": "Thu, 29 Oct 2026 05:20:43 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 750.560000014957,
+              "ttfbMs": 751.4090000186116,
+              "encodedBytes": 1051,
+              "traceId": "9f195a87034055a4fb2750165b0bd09f",
+              "date": "Thu, 29 Oct 2026 05:20:43 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 5,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 477.3690000001807,
+              "ttfbMs": 478.1939999957103,
+              "encodedBytes": 1056,
+              "traceId": "8d9b7c2889210c3fb9576caf1b82db0d",
+              "date": "Thu, 29 Oct 2026 05:20:45 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 547.5830000068527,
+              "ttfbMs": 548.4400000132155,
+              "encodedBytes": 1046,
+              "traceId": "8ef4339d1bb96a1de4775a9ca6b97b73",
+              "date": "Thu, 29 Oct 2026 05:20:45 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 6,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 516.9319999986328,
+              "ttfbMs": 517.9320000170264,
+              "encodedBytes": 1050,
+              "traceId": "9cb642f2c18358c174586aedd030a723",
+              "date": "Thu, 29 Oct 2026 05:20:47 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 810.5520000099204,
+              "ttfbMs": 811.6389999922831,
+              "encodedBytes": 1044,
+              "traceId": "a3c578c4464d9c954e38b81d3deca3f1",
+              "date": "Thu, 29 Oct 2026 05:20:47 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 7,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 464.8579999920912,
+              "ttfbMs": 466.0919999878388,
+              "encodedBytes": 1050,
+              "traceId": "df99419c881aa2927b08fcddbec47a41",
+              "date": "Thu, 29 Oct 2026 05:20:49 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 557.5410000164993,
+              "ttfbMs": 558.5250000003725,
+              "encodedBytes": 1044,
+              "traceId": "64544ff03b6be3237fd19bf0dc72f193",
+              "date": "Thu, 29 Oct 2026 05:20:49 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 8,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 523.7129999732133,
+              "ttfbMs": 526.0049999924377,
+              "encodedBytes": 1049,
+              "traceId": "dfe5ee9fe50e14f56ddf63d4c38719e1",
+              "date": "Thu, 29 Oct 2026 05:20:51 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 515.5930000182707,
+              "ttfbMs": 517.0760000182781,
+              "encodedBytes": 1047,
+              "traceId": "6dffbd9384e53bf4e373e76c274293ca",
+              "date": "Thu, 29 Oct 2026 05:20:51 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 9,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 505.4740000050515,
+              "ttfbMs": 506.015999999363,
+              "encodedBytes": 1055,
+              "traceId": "ceea3ceeaf36daed3bebdab2d33a97db",
+              "date": "Thu, 29 Oct 2026 05:20:53 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 472.72600000724196,
+              "ttfbMs": 473.5400000063237,
+              "encodedBytes": 1046,
+              "traceId": "ba9d2a31bfed059e6fad27ab3a9e83cb",
+              "date": "Thu, 29 Oct 2026 05:20:53 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 10,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 661.3590000197291,
+              "ttfbMs": 663.3030000084545,
+              "encodedBytes": 1054,
+              "traceId": "b6297dabaf6712a6e66f883e767eb202",
+              "date": "Thu, 29 Oct 2026 05:20:55 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 494.27100000320934,
+              "ttfbMs": 495.4870000074152,
+              "encodedBytes": 1047,
+              "traceId": "23ece5ea0d0e05e643980976da9c6035",
+              "date": "Thu, 29 Oct 2026 05:20:55 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 11,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 455.77900001080707,
+              "ttfbMs": 456.41700000851415,
+              "encodedBytes": 1052,
+              "traceId": "cfa2eacf45cc3dd4caca9aee8fd8b84e",
+              "date": "Thu, 29 Oct 2026 05:20:57 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 459.08100000815466,
+              "ttfbMs": 462.13699999498203,
+              "encodedBytes": 1044,
+              "traceId": "6a9d49e9c7420032fc7549b295bcce2d",
+              "date": "Thu, 29 Oct 2026 05:20:57 GMT"
+            }
+          ]
+        }
+      ],
+      "waitIssue": false,
+      "healthAfter": {
+        "contractDigest": "935282207549fbc70a15632d74d3b9a4ee2c04a37380ac82ab67a9da68428b38",
+        "gitRevision": "55e992057302ffecff406e7ff8fbde831659ed61",
+        "status": "available"
+      },
+      "revisionStable": true,
+      "healthBefore": {
+        "contractDigest": "935282207549fbc70a15632d74d3b9a4ee2c04a37380ac82ab67a9da68428b38",
+        "gitRevision": "55e992057302ffecff406e7ff8fbde831659ed61",
+        "status": "available"
+      }
+    },
+    {
+      "scope": "production same-account replication",
+      "revision": "55e992057302ffecff406e7ff8fbde831659ed61",
+      "intervalMs": 2000,
+      "warmup": [
+        {
+          "iteration": 0,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 475.91199999442324,
+              "ttfbMs": 476.5780000016093,
+              "encodedBytes": 616,
+              "traceId": "c5961326ce66b7a40ef4b0295ff63021",
+              "date": "Thu, 29 Oct 2026 05:23:05 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 1416.2729999807198,
+              "ttfbMs": 1417.0539999904577,
+              "encodedBytes": 1082,
+              "traceId": "6eb828f3ec7067749c0224301461414d",
+              "date": "Thu, 29 Oct 2026 05:23:06 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 1,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 519.4769999943674,
+              "ttfbMs": 520.4369999992196,
+              "encodedBytes": 1055,
+              "traceId": "1a985be4b966a508c6b36d616d1215e5",
+              "date": "Thu, 29 Oct 2026 05:23:07 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 524.3590000027325,
+              "ttfbMs": 527.5740000070073,
+              "encodedBytes": 1049,
+              "traceId": "488671d7b5ef5c19707ba1249ea2bef6",
+              "date": "Thu, 29 Oct 2026 05:23:07 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 2,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 705.4619999835268,
+              "ttfbMs": 706.5779999829829,
+              "encodedBytes": 1047,
+              "traceId": "e22dda016cc69c7c1849839631407a58",
+              "date": "Thu, 29 Oct 2026 05:23:09 GMT"
+            }
+          ],
+          "categories": []
+        },
+        {
+          "iteration": 3,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 660.3609999874607,
+              "ttfbMs": 662.369999976363,
+              "encodedBytes": 1050,
+              "traceId": "b236e07bb1f27dd22a255c3121fca93e",
+              "date": "Thu, 29 Oct 2026 05:23:11 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 449.3769999826327,
+              "ttfbMs": 449.89399999030866,
+              "encodedBytes": 1045,
+              "traceId": "308111bd89bfb821359c60fb116b7918",
+              "date": "Thu, 29 Oct 2026 05:23:11 GMT"
+            }
+          ]
+        }
+      ],
+      "measured": [
+        {
+          "iteration": 4,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 617.0580000034533,
+              "ttfbMs": 617.9040000133682,
+              "encodedBytes": 1050,
+              "traceId": "fece4a8a59b10aabbbe6aa07a093dd57",
+              "date": "Thu, 29 Oct 2026 05:23:13 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 467.15099998982623,
+              "ttfbMs": 467.87600000970997,
+              "encodedBytes": 1044,
+              "traceId": "a9996de2d39cb722d4ba86d6fa9d0727",
+              "date": "Thu, 29 Oct 2026 05:23:13 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 5,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 649.2600000055972,
+              "ttfbMs": 651.2619999994058,
+              "encodedBytes": 1047,
+              "traceId": "d4cc38aaa96147bdae146f702fc8ba98",
+              "date": "Thu, 29 Oct 2026 05:23:15 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 441.51499998406507,
+              "ttfbMs": 442.1569999831263,
+              "encodedBytes": 1042,
+              "traceId": "cb157d6dd4ce259168fc9a626d4c62c6",
+              "date": "Thu, 29 Oct 2026 05:23:15 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 6,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 461.7240000225138,
+              "ttfbMs": 462.40400001988746,
+              "encodedBytes": 1051,
+              "traceId": "04bacd12462d0ab4ef2f9a0a714a39b0",
+              "date": "Thu, 29 Oct 2026 05:23:17 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 488.99600000004284,
+              "ttfbMs": 489.5010000036564,
+              "encodedBytes": 1051,
+              "traceId": "a2ae7ca9af7c5ffa3864f16774db26f7",
+              "date": "Thu, 29 Oct 2026 05:23:17 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 7,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 728.3100000058766,
+              "ttfbMs": 729.8799999989569,
+              "encodedBytes": 1050,
+              "traceId": "e29e1cf7286c6d053e9873d0b1533f3f",
+              "date": "Thu, 29 Oct 2026 05:23:19 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 434.9159999983385,
+              "ttfbMs": 435.3709999995772,
+              "encodedBytes": 1043,
+              "traceId": "61da6548c0268fe42b900fb90a5ab9e4",
+              "date": "Thu, 29 Oct 2026 05:23:19 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 8,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 470.0920000032056,
+              "ttfbMs": 470.5590000085067,
+              "encodedBytes": 1061,
+              "traceId": "22311baaa81f8fa53076922895b07199",
+              "date": "Thu, 29 Oct 2026 05:23:21 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 437.03699999605305,
+              "ttfbMs": 437.66200001118705,
+              "encodedBytes": 1040,
+              "traceId": "7e1fd8a03cd95402bbbc373e693727e4",
+              "date": "Thu, 29 Oct 2026 05:23:21 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 9,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 505.3310000221245,
+              "ttfbMs": 506.1459999997169,
+              "encodedBytes": 1045,
+              "traceId": "c47f8d1d502cc99e12c2c3ed4f38f04d",
+              "date": "Thu, 29 Oct 2026 05:23:23 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 930.1429999759421,
+              "ttfbMs": 932.2289999981876,
+              "encodedBytes": 1042,
+              "traceId": "5b5f99744f13f975df3a0bf4ed62e537",
+              "date": "Thu, 29 Oct 2026 05:23:23 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 10,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 445.93999997596256,
+              "ttfbMs": 446.630999998888,
+              "encodedBytes": 1044,
+              "traceId": "4dee1048f96211129029e64e9a62c649",
+              "date": "Thu, 29 Oct 2026 05:23:25 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 451.11399999586865,
+              "ttfbMs": 453.3829999854788,
+              "encodedBytes": 1045,
+              "traceId": "f837642cf72e426722373175d76cc34b",
+              "date": "Thu, 29 Oct 2026 05:23:25 GMT"
+            }
+          ]
+        },
+        {
+          "iteration": 11,
+          "history": [
+            {
+              "status": 200,
+              "elapsedMs": 422.7520000131335,
+              "ttfbMs": 423.25600000913255,
+              "encodedBytes": 1051,
+              "traceId": "9c597fff9f50c7a5ff3c8c25c3d013bb",
+              "date": "Thu, 29 Oct 2026 05:23:27 GMT"
+            }
+          ],
+          "categories": [
+            {
+              "status": 200,
+              "elapsedMs": 402.0979999913834,
+              "ttfbMs": 404.8639999818988,
+              "encodedBytes": 1044,
+              "traceId": "80b3d20d31c576b64211b95b97238a72",
+              "date": "Thu, 29 Oct 2026 05:23:27 GMT"
+            }
+          ]
+        }
+      ],
+      "waitIssue": false,
+      "healthAfter": {
+        "contractDigest": "935282207549fbc70a15632d74d3b9a4ee2c04a37380ac82ab67a9da68428b38",
+        "gitRevision": "55e992057302ffecff406e7ff8fbde831659ed61",
+        "status": "available"
+      },
+      "revisionStable": true
+    }
+  ],
+  "workerMetrics": {
+    "control": {
+      "data": {
+        "viewer": {
+          "accounts": [
+            {
+              "workersInvocationsAdaptive": [
+                {
+                  "dimensions": {
+                    "coloCode": "MIA",
+                    "scriptVersion": "41926371-7e19-498d-940b-eecb55e6da92",
+                    "status": "success"
+                  },
+                  "quantiles": {
+                    "cpuTimeP50": 10762,
+                    "cpuTimeP95": 12190,
+                    "memoryUsageBytesP50": 27424268,
+                    "wallTimeP50": 460087,
+                    "wallTimeP95": 551511
+                  },
+                  "sum": {
+                    "errors": 0,
+                    "requests": 16
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "errors": null
+    },
+    "candidateFirst": {
+      "data": {
+        "viewer": {
+          "accounts": [
+            {
+              "workersInvocationsAdaptive": [
+                {
+                  "dimensions": {
+                    "coloCode": "DFW",
+                    "scriptVersion": "772112ae-38d9-403e-ae5c-13937c7c74a6",
+                    "status": "success"
+                  },
+                  "quantiles": {
+                    "cpuTimeP50": 9298,
+                    "cpuTimeP95": 14325,
+                    "memoryUsageBytesP50": 24829084,
+                    "wallTimeP50": 184686,
+                    "wallTimeP95": 1353634
+                  },
+                  "sum": {
+                    "errors": 0,
+                    "requests": 2
+                  }
+                },
+                {
+                  "dimensions": {
+                    "coloCode": "MIA",
+                    "scriptVersion": "772112ae-38d9-403e-ae5c-13937c7c74a6",
+                    "status": "success"
+                  },
+                  "quantiles": {
+                    "cpuTimeP50": 11646,
+                    "cpuTimeP95": 17028,
+                    "memoryUsageBytesP50": 25325478,
+                    "wallTimeP50": 367940,
+                    "wallTimeP95": 438779
+                  },
+                  "sum": {
+                    "errors": 0,
+                    "requests": 16
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "errors": null
+    },
+    "candidateRepeat": {
+      "data": {
+        "viewer": {
+          "accounts": [
+            {
+              "workersInvocationsAdaptive": [
+                {
+                  "dimensions": {
+                    "coloCode": "MIA",
+                    "scriptVersion": "772112ae-38d9-403e-ae5c-13937c7c74a6",
+                    "status": "success"
+                  },
+                  "quantiles": {
+                    "cpuTimeP50": 9774,
+                    "cpuTimeP95": 29311,
+                    "memoryUsageBytesP50": 25841900,
+                    "wallTimeP50": 323301,
+                    "wallTimeP95": 392642
+                  },
+                  "sum": {
+                    "errors": 0,
+                    "requests": 16
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "errors": null
+    }
+  },
+  "interpretation": "History exceeds the historical 2x median target in both deployed blocks. Four-times History, every-endpoint two-times latency, global throughput, queue tails, isolate memory and total bill are not confirmed."
+}

@@ -1,0 +1,123 @@
+docs/research/generation-control-prototype-proof-2026-10-29.json
+  s_d9571b3fccd032::t_8e3431544a013c 22-26,4251-4255,7097-7100,7134-7138
+  s_d9571b3fccd032::t_e074e61dd2b960 1-21,27-4250,4256-7096,7101-7133,7139-7204
+apps/server/cloudflare/ingestion/runtime.ts
+  s_d9571b3fccd032::t_3088f85ac6d15d 48
+  s_d9571b3fccd032::t_0786f0480afcc5 7-8,49-50,52-56,58
+  s_d9571b3fccd032::t_7184ee7d6562ff 61-62
+  s_d9571b3fccd032::t_f02e6ac4706131 4,59-60
+  s_d9571b3fccd032::t_87091541ddb2fa 14-15
+  s_d9571b3fccd032::t_ea3a8c374edad1 51,57
+docs/research/generation-and-handoff-cleanup-2026-10-29.json
+  s_d9571b3fccd032::t_45f7b92102d051 1-175
+docs/research/direct-statement-handoff-2026-10-29.md
+  s_d9571b3fccd032::t_6c1ec8f8605511 1-14,21-48
+  s_d9571b3fccd032::t_8e3431544a013c 15-20
+apps/web/package.json
+  s_d9571b3fccd032::t_0d84146e40d66f 62
+apps/server/ARCHITECTURE.md
+  s_d9571b3fccd032::t_3088f85ac6d15d 159-164
+  s_d9571b3fccd032::t_36acfa4ef11e96 165-172
+docs/research/generation-control-prototype-2026-10-29.md
+  s_d9571b3fccd032::t_8a257db23995d7 1-33
+apps/server/cloudflare/maintenance/runtime.ts
+  s_d9571b3fccd032::t_d85f4beabbe828 268-270,272
+  s_d9571b3fccd032::t_443e603437eb14 271
+infra/cloudflare/package.json
+  s_d9571b3fccd032::t_0d84146e40d66f 26
+apps/server/cloudflare/ingestion/internal/statement-delivery.ts
+  s_d9571b3fccd032::t_443e603437eb14 60,164,169,174
+  s_d9571b3fccd032::t_d85f4beabbe828 90-95,157-163,165-168,170-173,175-181
+  s_d9571b3fccd032::t_3088f85ac6d15d 54
+  s_d9571b3fccd032::t_7400aa531ee973 182
+  s_d9571b3fccd032::t_0786f0480afcc5 58,71
+  s_d9571b3fccd032::t_2133002936b11e 73
+  s_d9571b3fccd032::t_2ef59ba1e56265 7-15
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_d9571b3fccd032::t_985fd8945779e5 1226,1270,1283,1466,1627,1645
+  s_d9571b3fccd032::t_ab43a7c8e2df60 1238,1292-1305
+  s_d9571b3fccd032::t_b183d16bb7315f 1239-1252,1265-1269,1271-1282,1284-1289,1291,1306-1310
+  s_d9571b3fccd032::t_6a692b149b1039 1253-1264,1290
+  s_d9571b3fccd032::t_89a7176b1350d5 1368-1370
+  s_d9571b3fccd032::t_7c03c62ad845c2 1350-1351
+  s_d9571b3fccd032::t_d3f4951c37f127 1311,1374
+  s_d9571b3fccd032::t_2133002936b11e 1312-1342,1346-1349,1352,1354-1367,1372-1373
+  s_d9571b3fccd032::t_3e83ac660ab98b 1343-1345,1353,1371
+apps/server/package.json
+  s_d9571b3fccd032::t_0d84146e40d66f 311
+docs/research/hosted-direct-statement-handoff-proof-2026-10-29.json
+  s_d9571b3fccd032::t_0d84146e40d66f 1-4,11-709,716-1009,1024-1025
+  s_d9571b3fccd032::t_8e3431544a013c 5-10,710-715
+  s_d9571b3fccd032::t_aa51175fc9ca30 1010-1023
+bun.lock
+  s_d9571b3fccd032::t_2e4f62de82806d 81,149,166,2252,2514
+apps/server/cloudflare/agent/hosted-turn.test-fixture.ts
+  s_d9571b3fccd032::t_87091541ddb2fa 28
+  s_d9571b3fccd032::t_a72446f288e642 29-32,1120-1141
+docs/research/statement-publication-wakeup-2026-10-29.md
+  s_d9571b3fccd032::t_f5a5084cdfa263 1-45,54-61,64-67
+  s_d9571b3fccd032::t_0fe41bae1139a2 62-63
+  s_d9571b3fccd032::t_543fd89fa1d765 46-53
+apps/server/cloudflare/transactions/internal/recovery-alarm.test.ts
+  s_d9571b3fccd032::t_99555031687425 2-3,7,30,62
+  s_d9571b3fccd032::t_2133002936b11e 8-10,12-13,17,19-20,22,24-25,27-29,31-33,35-37,41-42,44-45,48-51,53-55,60-61,63-65,67-68,72-75,77-78,81-83,85-86,90-91
+  s_d9571b3fccd032::t_89a7176b1350d5 5-6,14-15,38-39,69-70
+  s_d9571b3fccd032::t_57f3e72af1a26c 1,4,11,16,18,21,23,26,34,40,43,46-47,52,56-59,66,71,76,79-80,84,87-89
+apps/server/cloudflare/agent/internal/service.ts
+  s_d9571b3fccd032::t_2133002936b11e 1
+  s_d9571b3fccd032::t_7184ee7d6562ff 566,626,698
+apps/server/cloudflare/transactions/internal/recovery-alarm.ts
+  s_d9571b3fccd032::t_40bc38013b3cc4 1-2,4-8
+  s_d9571b3fccd032::t_2133002936b11e 32-34,36,38-42,45-52
+  s_d9571b3fccd032::t_99555031687425 3,9-31,43-44,53-55
+  s_d9571b3fccd032::t_8faf303d20dccb 35,37
+apps/server/cloudflare/ingestion/internal/publication-wake.ts
+  s_d9571b3fccd032::t_7184ee7d6562ff 11-21
+  s_d9571b3fccd032::t_f02e6ac4706131 1-8
+  s_d9571b3fccd032::t_2133002936b11e 9-10
+docs/research/hosted-statement-wakeup-proof-2026-10-29.json
+  s_d9571b3fccd032::t_f5a5084cdfa263 1-1280,1284
+  s_d9571b3fccd032::t_1a7cb07004e967 1281-1283
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_d9571b3fccd032::t_f8db49326c1825 249,609,700,728,1035
+  s_d9571b3fccd032::t_f02e6ac4706131 31,251-252,260,266,268-269,311,313-315,324,329-331,344-346
+  s_d9571b3fccd032::t_2133002936b11e 316-323,325-328,332-341
+  s_d9571b3fccd032::t_d3f4951c37f127 310,312,342-343
+  s_d9571b3fccd032::t_26e8950abdb052 347
+apps/server/cloudflare/transactions/runtime.ts
+  s_d9571b3fccd032::t_99555031687425 2,39-43,161,684,702,773,790,795-796,890-891,924
+  s_d9571b3fccd032::t_a729785876432d 160
+  s_d9571b3fccd032::t_7184ee7d6562ff 863,892-901,909-910
+  s_d9571b3fccd032::t_fc3ed4017c3daf 107-111
+  s_d9571b3fccd032::t_2133002936b11e 902-908,911-920
+  s_d9571b3fccd032::t_2c065b475beb29 925
+apps/server/cloudflare/ingestion/internal/statement-mutation.ts
+  s_d9571b3fccd032::t_0786f0480afcc5 21,121,125
+  s_d9571b3fccd032::t_89a7176b1350d5 94-96
+  s_d9571b3fccd032::t_4a35c024cee775 97-103,124
+apps/server/cloudflare/agent/hosted-statement-turn.test.ts
+  s_d9571b3fccd032::t_7c7388b5b87561 25,272-274
+apps/server/cloudflare/ingestion/contract.ts
+  s_d9571b3fccd032::t_67e503de56becd 113-148
+docs/research/statement-wakeup-cleanup-2026-10-29.json
+  s_d9571b3fccd032::t_e843c50eb60771 1-346
+infra/cloudflare/verify-edge-policy.ts
+  s_d9571b3fccd032::t_543fd89fa1d765 137-142
+  s_d9571b3fccd032::t_4f73c69d5776fd 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "90bdfb2aae31a4ca952ca021103a8fbfbb8fb6fc",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

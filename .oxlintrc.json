@@ -77,6 +77,7 @@
           "mjs": "always",
           "css": "always",
           "html": "always",
+          "json": "always",
           "astro": "always",
           "woff2": "always"
         }
@@ -276,7 +277,7 @@
         "apps/site/{astro,playwright}.config.ts",
         "apps/docs/{astro,playwright}.config.ts",
         "apps/site/e2e/{site,agent-readiness}.spec.ts",
-        "apps/docs/e2e/docs.spec.ts"
+        "apps/docs/e2e/{docs,visual}.spec.ts"
       ],
       "rules": {
         "import/extensions": "off"

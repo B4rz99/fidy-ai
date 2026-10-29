@@ -1,0 +1,174 @@
+---
+import { operationFor, schemaTarget } from "../lib/reference";
+import SchemaTable from "./schema-table.astro";
+import ReferenceJson from "./reference-json.astro";
+import "../styles/reference.css";
+
+type Props = { id: string };
+const operation = operationFor(Astro.props.id);
+const { declaration, method, path, raw } = operation;
+const scope = declaration["x-fidy-access"].scope;
+const parameters = declaration.parameters;
+const requiredParameters = parameters.filter((parameter) => parameter.required);
+const parameterNote = `${parameters.length} parámetro${parameters.length === 1 ? "" : "s"} HTTP${requiredParameters.length ? ` · ${requiredParameters.map((parameter) => `${parameter.name} (${parameter.in}, obligatorio)`).join(", ")}` : " · opcionales"}`;
+const requestContent = Object.entries(declaration.requestBody?.content ?? {});
+---
+
+<div class="reference-operation">
+  <div class="reference-endpoint">
+    <span class="reference-chip is-accent">{method}</span>
+    <code>{path}</code>
+  </div>
+  {parameters.length > 0 && (
+    <a class="reference-parameter-note" href="#parametros-http">
+      {parameterNote} · Ver contrato
+    </a>
+  )}
+  <p id="descripcion" class="reference-description">
+    {declaration.description}
+  </p>
+  <section id="acceso" class="reference-access" aria-label="Acceso">
+    <dl>
+      <div>
+        <dt>Permiso</dt>
+        <dd>
+          <span class="reference-chip is-accent">
+            {scope.evaluation === "children" ? "por operación" : scope.capability}
+          </span>
+        </dd>
+      </div>
+      <div>
+        <dt>Plan requerido</dt>
+        <dd>
+          <span class="reference-chip">{declaration["x-fidy-required-tier"]}</span>
+        </dd>
+      </div>
+      <div>
+        <dt>Tipo</dt>
+        <dd>
+          <span class="reference-chip">{declaration["x-fidy-operation-kind"]}</span>
+        </dd>
+      </div>
+      <div class="reference-confirmation">
+        <dt>Confirmación</dt>
+        <dd>
+          <span class="reference-chip">{declaration["x-fidy-agent-confirmation"]}</span>
+        </dd>
+      </div>
+    </dl>
+    {scope.evaluation === "children" && <p>Se evalúan los permisos de cada operación del lote.</p>}
+  </section>
+  <section aria-labelledby="interfaces">
+    <h2 id="interfaces">Interfaces</h2>
+    <dl class="reference-interfaces">
+      <div>
+        <dt>MCP</dt>
+        <dd>
+          <code>{declaration.operationId}</code>
+        </dd>
+      </div>
+      <div>
+        <dt>CLI</dt>
+        <dd>
+          <code>fidy {declaration.operationId.replace(".", " ")} --help</code>
+        </dd>
+      </div>
+      <div>
+        <dt>API</dt>
+        <dd>
+          <code>
+            {method} https://api.fidyapp.com{path}
+          </code>
+        </dd>
+      </div>
+    </dl>
+  </section>
+  <section aria-labelledby="cuerpo-http">
+    <h2 id={requestContent.length ? "cuerpo-http" : "parametros-http"}>
+      {requestContent.length ? "Cuerpo HTTP" : "Parámetros HTTP"}
+    </h2>
+    {requestContent.length ? (
+      requestContent.map(([mediaType, content]) => (
+        <>
+          <SchemaTable schema={content.schema} preview={4} />
+          <details class="reference-expansion">
+            <summary>
+              Ver contrato completo del cuerpo · {schemaTarget(content.schema) || "inline"}
+            </summary>
+            <p class="reference-caption">
+              {mediaType} · cuerpo {declaration.requestBody?.required ? "obligatorio" : "opcional"}
+            </p>
+            {schemaTarget(content.schema) && (
+              <p class="reference-caption">
+                <a href={`/referencia/esquemas#schema-${schemaTarget(content.schema)}`}>
+                  Abrir {schemaTarget(content.schema)}
+                </a>
+              </p>
+            )}
+            <ReferenceJson label="JSON" value={raw.requestBody ?? {}} />
+          </details>
+        </>
+      ))
+    ) : (
+      <ReferenceJson label="JSON" value={raw.parameters ?? []} />
+    )}
+  </section>
+  {requestContent.length > 0 && (
+    <section aria-labelledby="parametros-http">
+      <h2 id="parametros-http">Parámetros HTTP</h2>
+      {parameters.length === 0 && <p>Esta operación no declara parámetros HTTP.</p>}
+      {parameters.map((parameter) => (
+        <p class="reference-parameter-note">
+          <code>{parameter.name}</code> · {parameter.in} ·{" "}
+          {parameter.required ? "obligatorio" : "opcional"}
+        </p>
+      ))}
+      <ReferenceJson label="JSON" value={raw.parameters ?? []} />
+    </section>
+  )}
+  {requestContent.length === 0 && (
+    <section aria-labelledby="cuerpo-http">
+      <h2 id="cuerpo-http">Cuerpo HTTP</h2>
+      <p>Esta operación no declara cuerpo HTTP.</p>
+    </section>
+  )}
+  <section aria-labelledby="respuestas-y-errores">
+    <h2 id="respuestas-y-errores">Respuestas y errores</h2>
+    <div class="reference-responses">
+      {Object.entries(declaration.responses).map(([status, response]) => (
+        <details>
+          <summary>
+            <span class:list={["reference-chip", { "is-accent": status.startsWith("2") }]}>
+              {status}
+            </span>
+            <span>{response.description}</span>
+          </summary>
+          {Object.entries(response.content ?? {}).map(([mediaType, content]) => (
+            <div class="reference-response-contract">
+              <p class="reference-caption">{mediaType}</p>
+              <SchemaTable schema={content.schema} preview={4} />
+              <ReferenceJson label="JSON" value={content.schema} />
+            </div>
+          ))}
+          {!response.content && (
+            <p class="reference-caption">Esta respuesta no declara cuerpo HTTP.</p>
+          )}
+        </details>
+      ))}
+    </div>
+    <details class="reference-expansion">
+      <summary>
+        Ver las {Object.keys(declaration.responses).length} respuestas declaradas · JSON completo
+      </summary>
+      <ReferenceJson label="JSON" value={raw.responses ?? {}} />
+    </details>
+  </section>
+  <p class="reference-caption">
+    MCP: los argumentos exactos se descubren en tu cliente según tus permisos.
+  </p>
+  <p class="reference-caption">
+    Referencia generada. Consulta las <a href="/">guías</a> para explicaciones y ejemplos en
+    español. Los <code>$ref</code> se resuelven en <a href="/referencia/esquemas">los esquemas</a> y
+    en el <a href="/reference/openapi.json">OpenAPI público</a>.
+  </p>
+</div>

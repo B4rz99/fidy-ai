@@ -1,0 +1,38 @@
+---
+import Icon from "./docs-icon.astro";
+
+const { id } = Astro.locals.starlightRoute;
+const markdownPath = `/${id || "index"}.md`;
+---
+
+<div class="page-actions" data-pagefind-ignore>
+  <a href={markdownPath}>
+    Ver Markdown <Icon name="external" size={14} />
+  </a>
+  <button type="button" data-copy-markdown={markdownPath}>
+    Copiar Markdown <Icon name="copy" size={14} />
+  </button>
+  <span class="docs-copy-toast" data-copy-status role="status" aria-live="polite"></span>
+</div>
+<script>
+  const buttons = document.querySelectorAll<HTMLButtonElement>("[data-copy-markdown]");
+  for (const button of buttons) {
+    button.addEventListener("click", async () => {
+      const path = button.dataset.copyMarkdown;
+      const status = button.parentElement?.querySelector<HTMLElement>("[data-copy-status]");
+      if (!path || !status) return;
+      button.disabled = true;
+      status.textContent = "";
+      try {
+        const response = await fetch(path, { credentials: "omit", redirect: "error" });
+        if (!response.ok) throw new Error("Markdown unavailable");
+        await navigator.clipboard.writeText(await response.text());
+        status.textContent = "Markdown copiado";
+      } catch {
+        status.textContent = "No se pudo copiar. Usa «Ver Markdown».";
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+</script>

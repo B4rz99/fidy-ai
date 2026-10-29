@@ -1,0 +1,89 @@
+---
+import { Icon } from "@astrojs/starlight/components";
+import "../styles/controls.css";
+
+const themes = [
+  { value: "light", label: "Claro" },
+  { value: "dark", label: "Oscuro" },
+  { value: "auto", label: "Automático" },
+];
+---
+
+<div class="docs-theme">
+  <button
+    class="docs-theme-trigger"
+    type="button"
+    popovertarget="docs-theme-options"
+    aria-label="Elegir tema"
+  >
+    <Icon name="sun" size="21px" />
+    <Icon name="down-caret" size="16px" class="docs-theme-caret" />
+  </button>
+  <div id="docs-theme-options" popover="auto" class="docs-theme-options">
+    <fieldset>
+      <legend class="sr-only">Tema de la documentación</legend>
+      {themes.map(({ value, label }) => (
+        <label>
+          <input type="radio" name="docs-theme" value={value} checked={value === "auto"} />
+          <span>{label}</span>
+          <svg
+            viewBox="0 0 24 24"
+            width="17"
+            height="17"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path d="m5 12 4 4L19 6" />
+          </svg>
+        </label>
+      ))}
+    </fieldset>
+  </div>
+</div>
+
+<script>
+  type Theme = "light" | "dark" | "auto";
+  const themeRoot = document.querySelector(".docs-theme");
+  const options = themeRoot?.querySelector<HTMLElement>(".docs-theme-options");
+  const trigger = themeRoot?.querySelector<HTMLButtonElement>(".docs-theme-trigger");
+  const preferences = window.matchMedia("(prefers-color-scheme: light)");
+  const parseTheme = (value: unknown): Theme =>
+    value === "light" || value === "dark" ? value : "auto";
+  const readTheme = (): Theme => {
+    try {
+      return parseTheme(window.localStorage.getItem("starlight-theme"));
+    } catch {
+      return "auto";
+    }
+  };
+  let selected = readTheme();
+  const applyTheme = (theme: Theme): void => {
+    selected = theme;
+    const systemTheme = preferences.matches ? "light" : "dark";
+    document.documentElement.dataset.theme = theme === "auto" ? systemTheme : theme;
+    themeRoot?.querySelectorAll<HTMLInputElement>("input").forEach((input) => {
+      input.checked = input.value === theme;
+    });
+  };
+  applyTheme(selected);
+  themeRoot?.addEventListener("change", (event) => {
+    if (!(event.target instanceof HTMLInputElement)) return;
+    const theme = parseTheme(event.target.value);
+    applyTheme(theme);
+    try {
+      window.localStorage.setItem("starlight-theme", theme === "auto" ? "" : theme);
+    } catch {
+      // A blocked preference store must not prevent selecting a theme for this page.
+    }
+    options?.hidePopover();
+    trigger?.focus();
+  });
+  preferences.addEventListener("change", () => {
+    if (selected === "auto") applyTheme("auto");
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key === "starlight-theme") applyTheme(parseTheme(event.newValue));
+  });
+</script>

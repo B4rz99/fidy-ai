@@ -1,0 +1,54 @@
+---
+import { Code } from "astro:components";
+import type { Schema } from "effect";
+
+type Props = { value: Schema.Json; label: string };
+const { value, label } = Astro.props;
+const code = JSON.stringify(value, undefined, 2);
+---
+
+<div class="reference-json">
+  <div class="reference-json-heading">
+    <span>{label}</span>
+    <button
+      type="button"
+      data-reference-copy
+      aria-label={`Copiar ${label}`}
+      title={`Copiar ${label}`}
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        aria-hidden="true"
+      >
+        <rect x="8" y="8" width="12" height="13" rx="2" />
+        <path d="M15 3H4v13" />
+      </svg>
+    </button>
+  </div>
+  <Code code={code} lang="json" theme="github-dark" />
+  <div class="reference-json-footer">
+    Desliza para ver el código completo <span aria-hidden="true">↔</span>
+  </div>
+  <span class="reference-copy-status" role="status" aria-live="polite"></span>
+</div>
+<script>
+  document.querySelectorAll<HTMLButtonElement>("[data-reference-copy]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const container = button.closest(".reference-json");
+      const code = container?.querySelector("pre code")?.textContent;
+      const status = container?.querySelector("[role=status]");
+      if (!code || !status) return;
+      try {
+        await navigator.clipboard.writeText(code);
+        status.textContent = "Código copiado";
+      } catch {
+        status.textContent = "No se pudo copiar. Selecciona el código para copiarlo.";
+      }
+    });
+  });
+</script>

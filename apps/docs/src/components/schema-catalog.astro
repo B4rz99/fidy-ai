@@ -1,0 +1,57 @@
+---
+import { referenceSchemas, schemaType } from "../lib/reference";
+import ReferenceFilter from "./reference-filter.astro";
+import ReferenceJson from "./reference-json.astro";
+import SchemaTable from "./schema-table.astro";
+import "../styles/reference.css";
+---
+
+<div class="schema-catalog" data-reference-catalog>
+  <p>Los nombres de esquema corresponden al OpenAPI público.</p>
+  <div id="explorar-esquemas">
+    <ReferenceFilter
+      label="Buscar por nombre de esquema"
+      placeholder="Buscar por nombre de esquema"
+    />
+  </div>
+  {referenceSchemas.map(([name, schema], index) => (
+    <details
+      class="schema-entry"
+      id={`schema-${name}`}
+      data-reference-item={name}
+      open={index === 0}
+    >
+      <summary>
+        <h2>{name}</h2>
+      </summary>
+      <div class="schema-entry-content">
+        <p class="schema-kind">
+          <span class="reference-chip">{schemaType(schema)}</span>
+          <span>Esquema del contrato</span>
+        </p>
+        <div id={index === 0 ? "propiedades" : undefined}>
+          <SchemaTable schema={schema} preview={5} />
+        </div>
+        <h3 id={index === 0 ? "json-completo" : undefined}>JSON completo</h3>
+        <ReferenceJson label="JSON" value={schema} />
+      </div>
+    </details>
+  ))}
+</div>
+<script>
+  const revealSchema = (): void => {
+    const target = document.getElementById(window.location.hash.slice(1));
+    if (!(target instanceof HTMLDetailsElement) || !target.classList.contains("schema-entry")) {
+      return;
+    }
+    const catalog = target.closest("[data-reference-catalog]");
+    const input = catalog?.querySelector<HTMLInputElement>("[data-reference-filter]");
+    if (input && input.value) {
+      input.value = "";
+      input.dispatchEvent(new Event("input"));
+    }
+    target.open = true;
+  };
+  revealSchema();
+  window.addEventListener("hashchange", revealSchema);
+</script>

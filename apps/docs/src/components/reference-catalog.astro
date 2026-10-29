@@ -1,0 +1,54 @@
+---
+import { referenceOperations } from "../lib/reference";
+import ReferenceFilter from "./reference-filter.astro";
+import "../styles/reference.css";
+
+const domains = Array.from(new Set(referenceOperations.map((operation) => operation.domain)));
+---
+
+<div class="reference-catalog" data-reference-catalog>
+  <p id="permisos-y-acceso">
+    Los permisos efectivos dependen de tu conexión. Esta referencia no concede acceso.
+  </p>
+  <div id="operaciones">
+    <ReferenceFilter
+      label="Filtrar operaciones"
+      placeholder={`Filtrar ${referenceOperations.length} operaciones…`}
+    />
+  </div>
+  <div id="por-dominio">
+    {domains.map((domain) => {
+      const operations = referenceOperations.filter((operation) => operation.domain === domain);
+      return (
+        <section data-reference-group aria-labelledby={`dominio-${domain}`}>
+          <h2 id={`dominio-${domain}`}>
+            {domain} <span class="reference-chip">{operations.length}</span>
+          </h2>
+          <ul>
+            {operations.map((operation) => (
+              <li
+                data-reference-item={`${operation.declaration.operationId} ${operation.method} ${operation.path}`}
+              >
+                <a href={`/reference/${operation.declaration.operationId.toLowerCase()}`}>
+                  <span class="reference-chip is-accent">{operation.method}</span>
+                  <span>{operation.name}</span>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    aria-hidden="true"
+                  >
+                    <path d="M4 12h16m-6-6 6 6-6 6" />
+                  </svg>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      );
+    })}
+  </div>
+</div>

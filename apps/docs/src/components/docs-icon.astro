@@ -1,0 +1,43 @@
+---
+type Props = {
+  name:
+    | "arrow"
+    | "external"
+    | "copy"
+    | "code"
+    | "book"
+    | "search"
+    | "shield"
+    | "chevron"
+    | "close"
+    | "check";
+  size: number;
+};
+const { name, size } = Astro.props;
+const paths = {
+  arrow: "M4 12h16m-6-6 6 6-6 6",
+  external: "M5 19 19 5m-9 0h9v9",
+  copy: "M7 7h12v13H7zM4 15V3h11",
+  code: "m8 5-6 7 6 7m8-14 6 7-6 7m-2-16-4 18",
+  book: "M3 3h18v18H3zM12 3v18",
+  search: "M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0m-1 6 6 6",
+  shield: "m12 2 9 4-2 10-7 6-7-6L3 6z",
+  chevron: "m7 9 5 5 5-5",
+  close: "m5 5 14 14M19 5 5 19",
+  check: "m4 12 6 6L21 5",
+};
+---
+
+<svg
+  width={size}
+  height={size}
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.6"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+>
+  <path d={paths[name]} />
+</svg>

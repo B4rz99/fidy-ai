@@ -1,0 +1,113 @@
+---
+import type { Schema } from "effect";
+import {
+  resolveSchema,
+  schemaProperties,
+  schemaTarget,
+  schemaType,
+  schemaView,
+} from "../lib/reference";
+
+type Props = { schema: Schema.JsonObject; preview: number };
+const { schema, preview } = Astro.props;
+const properties = schemaProperties(schema);
+const view = schemaView(resolveSchema(schema));
+const variants = view.anyOf ?? view.oneOf ?? view.allOf ?? [];
+const variantLabel = view.allOf
+  ? "Todas estas condiciones del contrato:"
+  : "Una de estas variantes del contrato:";
+const rows = properties.slice(0, preview);
+const remainder = properties.slice(preview);
+---
+
+{properties.length > 0 ? (
+  <>
+    <table class="reference-properties">
+      <thead>
+        <tr>
+          <th scope="col">Propiedad</th>
+          <th scope="col">Tipo / contrato</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((property) => (
+          <tr>
+            <td>
+              <code>{property.name}</code>
+              <span class:list={["reference-required", { "is-required": property.required }]}>
+                {property.required ? "obligatorio" : "opcional"}
+              </span>
+            </td>
+            <td>
+              {schemaTarget(property.schema) ? (
+                <a href={`/referencia/esquemas#schema-${schemaTarget(property.schema)}`}>
+                  <code>{schemaType(property.schema)}</code>
+                </a>
+              ) : (
+                <code>{schemaType(property.schema)}</code>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    {remainder.length > 0 && (
+      <details class="reference-expansion">
+        <summary>
+          Ver todas las {properties.length} propiedades ({remainder.length} más)
+        </summary>
+        <table class="reference-properties">
+          <thead>
+            <tr>
+              <th scope="col">Propiedad</th>
+              <th scope="col">Tipo / contrato</th>
+            </tr>
+          </thead>
+          <tbody>
+            {remainder.map((property) => (
+              <tr>
+                <td>
+                  <code>{property.name}</code>
+                  <span class:list={["reference-required", { "is-required": property.required }]}>
+                    {property.required ? "obligatorio" : "opcional"}
+                  </span>
+                </td>
+                <td>
+                  {schemaTarget(property.schema) ? (
+                    <a href={`/referencia/esquemas#schema-${schemaTarget(property.schema)}`}>
+                      <code>{schemaType(property.schema)}</code>
+                    </a>
+                  ) : (
+                    <code>{schemaType(property.schema)}</code>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+    )}
+  </>
+) : variants.length > 0 ? (
+  <div class="reference-variants">
+    <p>{variantLabel}</p>
+    <ul>
+      {variants.map((variant) => (
+        <li>
+          {schemaTarget(variant) ? (
+            <a href={`/referencia/esquemas#schema-${schemaTarget(variant)}`}>
+              <code>{schemaType(variant)}</code>
+            </a>
+          ) : (
+            <code>{schemaType(variant)}</code>
+          )}
+        </li>
+      ))}
+    </ul>
+    <p class="reference-caption">
+      {variants.length} variantes; la definición completa conserva todas sus condiciones.
+    </p>
+  </div>
+) : (
+  <p class="reference-caption">Contrato {schemaType(schema)} · consulta su definición completa.</p>
+)}

@@ -1,0 +1,261 @@
+---
+import { getCollection } from "astro:content";
+import { Icon } from "@astrojs/starlight/components";
+import "../styles/controls.css";
+
+const documentSection = (id: string): string => {
+  if (id.startsWith("reference")) return "Referencia";
+  if (id.startsWith("conectar")) return "Conectar mi agente";
+  if (id.startsWith("transacciones") || id.startsWith("consultar")) return "Tus transacciones";
+  return "Guías de Fidy";
+};
+const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((entry) => ({
+  href: entry.id === "index" ? "/" : `/${entry.id}`,
+  title: entry.data.title,
+  description: entry.data.description ?? "",
+  section: documentSection(entry.id),
+}));
+---
+
+<div class="docs-search">
+  <button
+    class="docs-search-trigger"
+    type="button"
+    aria-label="Buscar"
+    aria-keyshortcuts="Control+K Meta+K"
+    aria-haspopup="dialog"
+    disabled
+  >
+    <Icon name="magnifier" size="20px" />
+    <span>Buscar en la documentación</span>
+    <kbd>Ctrl K</kbd>
+  </button>
+  <dialog class="docs-search-dialog" aria-label="Buscar documentación">
+    <div class="docs-search-input-row">
+      <Icon name="magnifier" size="20px" />
+      <input
+        type="text"
+        inputmode="search"
+        aria-label="Buscar"
+        placeholder="Buscar documentación"
+        autocomplete="off"
+        maxlength="200"
+      />
+      <button class="docs-search-close" type="button" aria-label="Cerrar búsqueda">
+        <Icon name="close" size="22px" />
+      </button>
+    </div>
+    <div class="docs-search-body">
+      <section class="docs-search-idle">
+        <h2>¿Qué quieres hacer con Fidy?</h2>
+        <p>Busca una guía, una operación o un esquema.</p>
+      </section>
+      <section class="docs-search-empty" hidden>
+        <Icon name="magnifier" size="40px" />
+        <h2>Sin resultados</h2>
+        <p>
+          No encontramos páginas para “<span data-search-term></span>”. Prueba con MCP, permisos o
+          transacciones.
+        </p>
+        <button class="docs-search-clear" type="button">
+          Limpiar búsqueda
+        </button>
+      </section>
+      <p class="docs-search-status" role="status" aria-live="polite"></p>
+      <p class="docs-search-results-label" hidden>
+        RESULTADOS DE DOCUMENTACIÓN
+      </p>
+      <ul class="docs-search-results" hidden>
+        {documents.map((document) => (
+          <li hidden>
+            <a href={document.href} class="pagefind-ui__result-link">
+              <span class="docs-search-section">{document.section}</span>
+              <span class="docs-search-title">{document.title}</span>
+              <span class="docs-search-description">{document.description}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+    <footer class="docs-search-help" aria-hidden="true">
+      <span>↑ ↓ &nbsp;Navegar</span>
+      <span>Enter &nbsp;Abrir</span>
+      <span>Esc &nbsp;Cerrar</span>
+    </footer>
+  </dialog>
+</div>
+
+<script>
+  import { Option, Schema } from "effect";
+
+  type PagefindResult = {
+    data: () => Promise<unknown>;
+  };
+  type PagefindClient = {
+    options: (options: { noWorker: boolean }) => Promise<void>;
+    search: (term: string) => Promise<{ results: ReadonlyArray<PagefindResult> }>;
+  };
+  const SearchDocument = Schema.Struct({ url: Schema.String });
+  const decodeDocument = Schema.decodeUnknownSync(SearchDocument);
+  const searchRoot = document.querySelector(".docs-search");
+  const dialog = searchRoot?.querySelector("dialog");
+  const openButton = searchRoot?.querySelector<HTMLButtonElement>(".docs-search-trigger");
+  const input = dialog?.querySelector("input");
+  const results = dialog?.querySelector<HTMLUListElement>(".docs-search-results");
+  const resultLabel = dialog?.querySelector<HTMLElement>(".docs-search-results-label");
+  const idle = dialog?.querySelector<HTMLElement>(".docs-search-idle");
+  const empty = dialog?.querySelector<HTMLElement>(".docs-search-empty");
+  const status = dialog?.querySelector<HTMLElement>(".docs-search-status");
+  const termLabel = dialog?.querySelector<HTMLElement>("[data-search-term]");
+  const resultItems = new Map(
+    Array.from(results?.querySelectorAll("li") ?? [], (item) => [
+      item.querySelector("a")?.getAttribute("href"),
+      item,
+    ])
+  );
+  const debounceMilliseconds = 180;
+  let searchVersion = 0;
+  let debounceTimer = Option.none<ReturnType<typeof setTimeout>>();
+  let client = Option.none<Promise<PagefindClient>>();
+
+  const loadSearch = async (): Promise<PagefindClient> => {
+    if (Option.isSome(client)) return client.value;
+    const path = "/pagefind/pagefind.js";
+    const pending = import(/* @vite-ignore */ path).then(async (loaded: PagefindClient) => {
+      await loaded.options({ noWorker: true });
+      return loaded;
+    });
+    client = Option.some(pending);
+    return pending;
+  };
+  const cancelDebounce = (): void => {
+    if (Option.isSome(debounceTimer)) clearTimeout(debounceTimer.value);
+    debounceTimer = Option.none();
+  };
+  const setStatus = (message: string): void => {
+    if (status) status.textContent = message;
+  };
+  const searchIsCurrent = (version: number): boolean =>
+    version === searchVersion && dialog?.open === true;
+
+  const resetResults = (): void => {
+    resultItems.forEach((item) => {
+      item.hidden = true;
+      item.removeAttribute("data-selected");
+    });
+    if (results) results.hidden = true;
+    if (resultLabel) resultLabel.hidden = true;
+    if (empty) empty.hidden = true;
+    if (status) status.textContent = "";
+  };
+
+  const appendResult = (path: string): void => {
+    const target = new URL(path, window.location.origin);
+    if (target.origin !== window.location.origin) return;
+    const item = resultItems.get(target.pathname.replace(/\/$/u, "") || "/");
+    if (!item) return;
+    item.hidden = false;
+    results?.append(item);
+  };
+  const showResults = (paths: ReadonlyArray<string>, term: string): void => {
+    if (!results || !resultLabel || !empty || !termLabel) return;
+    resetResults();
+    paths.forEach(appendResult);
+    const count = results.querySelectorAll("li:not([hidden])").length;
+    results.hidden = count === 0;
+    resultLabel.hidden = count === 0;
+    empty.hidden = count !== 0;
+    termLabel.textContent = term;
+    setStatus(count ? `${count} resultados` : "");
+    results.querySelector("li:not([hidden])")?.setAttribute("data-selected", "");
+  };
+
+  const runSearch = async (term: string, version: number): Promise<void> => {
+    try {
+      const search = await loadSearch();
+      const response = await search.search(term);
+      const pages = await Promise.all(
+        response.results.map(async (result) => decodeDocument(await result.data()).url)
+      );
+      if (!searchIsCurrent(version)) return;
+      showResults(pages, term);
+    } catch {
+      if (!searchIsCurrent(version)) return;
+      resetResults();
+      setStatus("No se pudo cargar la búsqueda. Cierra e inténtalo de nuevo.");
+      client = Option.none();
+    }
+  };
+
+  const updateSearch = (): void => {
+    searchVersion += 1;
+    cancelDebounce();
+    resetResults();
+    const term = input?.value.trim() ?? "";
+    if (idle) idle.hidden = term.length > 0;
+    if (!term) return;
+    if (status) status.textContent = "Buscando…";
+    const version = searchVersion;
+    debounceTimer = Option.some(setTimeout(() => runSearch(term, version), debounceMilliseconds));
+  };
+
+  const openSearch = (): void => {
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    document.documentElement.setAttribute("data-docs-search-open", "");
+    input?.focus();
+    updateSearch();
+  };
+
+  const focusResult = (links: ReadonlyArray<HTMLAnchorElement>, direction: number): void => {
+    const focused = links.findIndex((link) => link === document.activeElement);
+    let next = (focused + direction + links.length) % links.length;
+    if (focused === -1) next = direction === 1 ? 0 : links.length - 1;
+    resultItems.forEach((item) => item.removeAttribute("data-selected"));
+    links[next]?.closest("li")?.setAttribute("data-selected", "");
+    links[next]?.focus();
+  };
+  const openFirstResult = (event: KeyboardEvent, links: ReadonlyArray<HTMLAnchorElement>): void => {
+    if (document.activeElement !== input) return;
+    event.preventDefault();
+    links[0]?.click();
+  };
+  const navigateResults = (event: KeyboardEvent): void => {
+    if (!results) return;
+    const links = Array.from(results.querySelectorAll<HTMLAnchorElement>("li:not([hidden]) a"));
+    if (links.length === 0) return;
+    if (event.key === "Enter") {
+      openFirstResult(event, links);
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    focusResult(links, event.key === "ArrowDown" ? 1 : -1);
+  };
+
+  if (openButton) openButton.disabled = false;
+  openButton?.addEventListener("click", openSearch);
+  input?.addEventListener("input", updateSearch);
+  dialog?.querySelector(".docs-search-close")?.addEventListener("click", () => dialog.close());
+  dialog?.querySelector(".docs-search-clear")?.addEventListener("click", () => {
+    if (input) input.value = "";
+    updateSearch();
+    input?.focus();
+  });
+  dialog?.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog?.addEventListener("keydown", navigateResults);
+  dialog?.addEventListener("close", () => {
+    searchVersion += 1;
+    cancelDebounce();
+    document.documentElement.removeAttribute("data-docs-search-open");
+    openButton?.focus();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k") return;
+    event.preventDefault();
+    if (dialog?.open) dialog.close();
+    else openSearch();
+  });
+</script>

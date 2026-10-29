@@ -1,0 +1,114 @@
+---
+import { pageGroup } from "../lib/navigation";
+import Icon from "./docs-icon.astro";
+import MarkdownActions from "./markdown-actions.astro";
+
+const { id, headings } = Astro.locals.starlightRoute;
+const operationHeadings = [
+  { slug: "descripcion", text: "Descripción" },
+  { slug: "acceso", text: "Acceso" },
+  { slug: "interfaces", text: "Interfaces" },
+  { slug: "parametros-http", text: "Parámetros HTTP" },
+  { slug: "cuerpo-http", text: "Cuerpo HTTP" },
+  { slug: "respuestas-y-errores", text: "Respuestas y errores" },
+];
+const catalogHeadings = [
+  { slug: "operaciones", text: "Operaciones" },
+  { slug: "por-dominio", text: "Por dominio" },
+  { slug: "permisos-y-acceso", text: "Permisos y acceso" },
+];
+const schemaHeadings = [
+  { slug: "explorar-esquemas", text: "Explorar esquemas" },
+  { slug: "propiedades", text: "Propiedades" },
+  { slug: "json-completo", text: "JSON completo" },
+];
+const selectLinks = (): ReadonlyArray<{ slug: string; text: string }> => {
+  if (id.startsWith("reference/")) return operationHeadings;
+  if (id === "reference") return catalogHeadings;
+  if (id === "referencia/esquemas") return schemaHeadings;
+  return headings.filter((heading) => heading.depth === 2);
+};
+const links = selectLinks();
+---
+
+<div class="docs-mobile-section">
+  <span>{pageGroup(id)}</span>
+  <button type="button" popovertarget="docs-mobile-toc">
+    En esta página <Icon name="chevron" size={15} />
+  </button>
+</div>
+<nav class="docs-mobile-toc" id="docs-mobile-toc" popover aria-label="En esta página">
+  <div class="docs-mobile-toc-title">
+    <strong>En esta página</strong>
+    <button
+      type="button"
+      popovertarget="docs-mobile-toc"
+      popovertargetaction="hide"
+      aria-label="Cerrar índice"
+    >
+      <Icon name="close" size={18} />
+    </button>
+  </div>
+  <ul>
+    {links.map((link, index) => (
+      <li>
+        <a href={`#${link.slug}`} aria-current={index === 0 ? "location" : undefined}>
+          {link.text}
+        </a>
+      </li>
+    ))}
+  </ul>
+</nav>
+<div class="docs-desktop-context">
+  <nav class="docs-toc" aria-labelledby="docs-toc-title">
+    <h2 id="docs-toc-title">En esta página</h2>
+    <ul>
+      {links.map((link, index) => (
+        <li>
+          <a href={`#${link.slug}`} aria-current={index === 0 ? "location" : undefined}>
+            {link.text}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+  <div class="docs-agent-context">
+    <strong>Llévalo a tu agente</strong>
+    <p>
+      Abre o copia el contenido
+      <br />
+      en formato Markdown.
+    </p>
+    {id === "" ? (
+      <MarkdownActions />
+    ) : (
+      <a href="/llms.txt">
+        Abrir llms.txt <Icon name="external" size={15} />
+      </a>
+    )}
+  </div>
+</div>
+<script>
+  const mobileToc = document.querySelector<HTMLElement>("#docs-mobile-toc");
+  mobileToc?.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", () => mobileToc.hidePopover());
+  });
+  window.addEventListener("pageshow", () => mobileToc?.hidePopover());
+  const tocLinks = document.querySelectorAll<HTMLAnchorElement>(".docs-toc a, .docs-mobile-toc a");
+  const updateCurrent = (id: string): void => {
+    for (const link of tocLinks) {
+      if (link.hash === `#${id}`) link.setAttribute("aria-current", "location");
+      else link.removeAttribute("aria-current");
+    }
+  };
+  const observer = new IntersectionObserver(
+    (entries) => {
+      const heading = entries.find((entry) => entry.isIntersecting);
+      if (heading) updateCurrent(heading.target.id);
+    },
+    { rootMargin: "-120px 0px -60% 0px" }
+  );
+  document
+    .querySelectorAll("main h2[id], main h3[id], main [data-docs-section]")
+    .forEach((heading) => observer.observe(heading));
+</script>

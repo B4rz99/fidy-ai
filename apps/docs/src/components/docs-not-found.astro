@@ -1,0 +1,24 @@
+---
+import Icon from "./docs-icon.astro";
+---
+
+<section class="docs-not-found">
+  <span class="docs-status-chip">404</span>
+  <h1 id="_top">Esta página no está aquí.</h1>
+  <p>
+    Puede que el enlace haya cambiado. Vuelve a la guía o busca lo que necesitas en la
+    documentación.
+  </p>
+  <a class="docs-primary-button" href="/">
+    <Icon name="arrow" size={18} />
+    Volver a la guía
+  </a>
+  <button type="button" data-docs-open-search>
+    Buscar en la documentación
+  </button>
+</section>
+<script>
+  document.querySelector("[data-docs-open-search]")?.addEventListener("click", () => {
+    document.querySelector<HTMLButtonElement>(".docs-search-trigger")?.click();
+  });
+</script>

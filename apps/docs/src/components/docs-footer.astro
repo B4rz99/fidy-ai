@@ -1,0 +1,10 @@
+---
+const { id } = Astro.locals.starlightRoute;
+---
+
+{id !== "404" && (
+  <footer class="docs-article-footer">
+    <a href="/llms.txt">Para tu agente · llms.txt</a>
+    <a href="https://app.fidyapp.com">Ir a Fidy ↗</a>
+  </footer>
+)}

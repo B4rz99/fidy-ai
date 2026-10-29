@@ -48,7 +48,9 @@ test("search finds a task and copy Markdown returns the source without browser o
   expect(copied).toContain('"expectedRevision": 0');
   await page.getByRole("button", { name: "Buscar", exact: false }).click();
   await page.getByRole("textbox", { name: "Buscar", exact: true }).fill("corregir");
-  await expect(page.locator(".pagefind-ui__result-link").first()).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Buscar documentación" }).getByRole("link").first()
+  ).toBeVisible();
   await page.keyboard.press("Escape");
   expect(errors).toEqual([]);
 });
@@ -70,4 +72,55 @@ test("mobile navigation and the guide remain accessible without horizontal page 
       (violation) => violation.impact === "serious" || violation.impact === "critical"
     )
   ).toEqual([]);
+});
+
+test("readers can recover from an empty search and open a guide by keyboard", async ({ page }) => {
+  await page.goto("/");
+  const openSearch = page.getByRole("button", { name: "Buscar", exact: true });
+  await openSearch.click();
+  const search = page.getByRole("dialog", { name: "Buscar documentación" });
+  await expect(search.getByText("¿Qué quieres hacer con Fidy?", { exact: true })).toBeVisible();
+  const input = search.getByRole("textbox", { name: "Buscar", exact: true });
+  await input.fill("zxq-no-result");
+  await expect(search.getByRole("heading", { name: "Sin resultados" })).toBeVisible();
+  await search.getByRole("button", { name: "Limpiar búsqueda" }).click();
+  await expect(input).toBeFocused();
+  await input.fill("corregir");
+  await expect(
+    search.getByRole("link", { name: "Registrar y corregir transacciones" })
+  ).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("h1")).toHaveText("Registrar y corregir transacciones");
+  await page.keyboard.press("Control+k");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Buscar", exact: true })).toBeFocused();
+});
+
+test("reader theme choices persist without replacing automatic system preferences", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Elegir tema" }).click();
+  await page.getByRole("radio", { name: "Oscuro", exact: true }).check();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "Elegir tema" }).click();
+  await page.getByRole("radio", { name: "Automático", exact: true }).check();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
+
+test("search query text cannot inject markup into the documentation", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Buscar", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Buscar documentación" });
+  const input = dialog.getByRole("textbox", { name: "Buscar", exact: true });
+  await input.fill('<img src=x onerror="document.title=123">zxq-no-result');
+  await expect(dialog.getByRole("heading", { name: "Sin resultados" })).toBeVisible();
+  await expect(dialog.locator("img")).toHaveCount(0);
+  await expect(page).not.toHaveTitle("123");
 });

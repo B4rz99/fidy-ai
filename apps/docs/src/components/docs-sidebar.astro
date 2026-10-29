@@ -1,0 +1,84 @@
+---
+import { getCollection } from "astro:content";
+import { guideGroups } from "../lib/navigation";
+import Icon from "./docs-icon.astro";
+
+const { id, entry } = Astro.locals.starlightRoute;
+const referencePage = id.startsWith("reference/");
+const domain = entry.data.title.split(".")[0];
+const operations = (await getCollection("docs")).filter(
+  (page) => page.id.startsWith("reference/") && !page.data.draft
+);
+const domains = [...new Set(operations.map((page) => page.data.title.split(".")[0] ?? ""))].sort(
+  (left, right) => {
+    if (left === domain) return -1;
+    if (right === domain) return 1;
+    return left.localeCompare(right);
+  }
+);
+---
+
+<div class="docs-nav-scroll">
+  {referencePage ? (
+    <>
+      <div class="docs-nav-guides">
+        <p class="docs-nav-label">Documentación</p>
+        <a href="/">
+          Guías de Fidy <Icon name="chevron" size={15} />
+        </a>
+      </div>
+      <p class="docs-nav-label">Referencia</p>
+      <a class="docs-nav-all" href="/reference">
+        Todas las operaciones
+      </a>
+      {domains.map((name) => (
+        <details class="docs-nav-domain" open={name === domain}>
+          <summary>
+            {name}
+            <Icon name="chevron" size={15} />
+          </summary>
+          <ul>
+            {operations
+              .filter((page) => page.data.title.startsWith(`${name}.`))
+              .sort((left, right) => left.data.title.localeCompare(right.data.title))
+              .map((page) => (
+                <li>
+                  <a href={`/${page.id}`} aria-current={page.id === id ? "page" : undefined}>
+                    {page.data.title.split(".")[1]}
+                  </a>
+                </li>
+              ))}
+          </ul>
+        </details>
+      ))}
+    </>
+  ) : (
+    guideGroups.map((group) => (
+      <section class="docs-nav-group">
+        <h2 class="docs-nav-label">{group.title}</h2>
+        <ul>
+          {group.links.map((link) => (
+            <li>
+              <a
+                href={link.href}
+                aria-label={"accessibleLabel" in link ? link.accessibleLabel : undefined}
+                aria-current={link.href === `/${id}` ? "page" : undefined}
+              >
+                {link.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))
+  )}
+</div>
+<div class="docs-nav-agent">
+  <a href="/llms.txt">
+    <Icon name="code" size={18} />
+    <span>
+      <strong>Para tu agente</strong>
+      <small>llms.txt · Markdown</small>
+    </span>
+  </a>
+</div>

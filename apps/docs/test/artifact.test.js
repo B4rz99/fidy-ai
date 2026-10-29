@@ -11,6 +11,14 @@ await test("serves a Spanish task-first documentation home as static HTML", asyn
   assert.match(html, /https:\/\/docs\.fidyapp\.com\//u);
 });
 
+await test("readers can return through the Fidy brand and reach agent documentation without product navigation", async () => {
+  const html = await readFile(new URL("../dist/conectar/mcp/index.html", import.meta.url), "utf8");
+  assert.match(html, /<a[^>]+href="\/"[^>]*>[\s\S]*?<img[^>]+alt="Fidy · Inicio"/u);
+  assert.match(html, /href="\/llms\.txt"/u);
+  assert.match(html, /href="\/reference"/u);
+  assert.doesNotMatch(html, /href="\/(?:dashboard|transactions|budgets)"/u);
+});
+
 await test("offers the same guide to readers and agents through Markdown and llms.txt", async () => {
   const markdown = await readFile(new URL("../dist/index.md", import.meta.url), "utf8");
   assert.match(markdown, /# Guía de Fidy/u);

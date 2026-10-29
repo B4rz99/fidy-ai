@@ -94,7 +94,9 @@ test("readers can recover from an empty search and open a guide by keyboard", as
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
   await expect(page.locator("h1")).toHaveText("Registrar y corregir transacciones");
+  await expect(openSearch).toBeEnabled();
   await page.keyboard.press("Control+k");
+  await expect(search).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Buscar", exact: true })).toBeFocused();
 });

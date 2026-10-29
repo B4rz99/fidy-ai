@@ -1,0 +1,175 @@
+{
+  "release": "67335840a1274c57b513dea6218e864e7d1cb912",
+  "scope": "Signed-in production GET /transactions; existing account; sequential UI refreshes; metadata only",
+  "baselineMedianMs": 1297.358,
+  "trial": [
+    {
+      "status": 200,
+      "elapsedMs": 2687.524000008125,
+      "ttfbMs": 2687.9710000066552,
+      "encodedBytes": 1071,
+      "traceId": "20fe5b292d84551a30d8fcaa0e6c9ab6",
+      "placement": "remote-DFW",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:30:15 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 3098.3410000044387,
+      "ttfbMs": 3099.1870000143535,
+      "encodedBytes": 1111,
+      "traceId": "d04f4d9c5a64ac9a31f9df57e650ed2f",
+      "placement": "remote-DFW",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:31:03 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 3790.9039999940433,
+      "ttfbMs": 3792.5579999864567,
+      "encodedBytes": 1070,
+      "traceId": "9627910d8daa0f8216049440e35a9930",
+      "placement": "remote-DFW",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:31:07 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 2544.3519999971613,
+      "ttfbMs": 2544.8779999860562,
+      "encodedBytes": 1071,
+      "traceId": "eeaac1c19d7672c8e70088a271610d1f",
+      "placement": "remote-DFW",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:31:09 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 2271.03299999726,
+      "ttfbMs": 2271.3950000179466,
+      "encodedBytes": 1070,
+      "traceId": "1c53607b6a6babe18a9991dd75ca44f9",
+      "placement": "remote-DFW",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:31:12 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 2012.1070000168402,
+      "ttfbMs": 2013.6580000107642,
+      "encodedBytes": 1070,
+      "traceId": "21e0b3985449399163126d0e0fc4fe64",
+      "placement": "remote-DFW",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:31:18 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 1682.5510000053328,
+      "ttfbMs": 1683.1400000082795,
+      "encodedBytes": 1069,
+      "traceId": "c8a49195efe22df6a78117cd55f3c317",
+      "placement": "remote-DFW",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:31:20 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 2619.9090000009164,
+      "ttfbMs": 2620.6100000126753,
+      "encodedBytes": 1074,
+      "traceId": "4ccad32806ad69c51b4dfdaed9c924de",
+      "placement": "remote-DFW",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:31:32 GMT"
+    }
+  ],
+  "restoration": [
+    {
+      "status": 200,
+      "elapsedMs": 2248.066000000108,
+      "ttfbMs": 2252.360000013141,
+      "encodedBytes": 1055,
+      "traceId": "6e5820be3fc1689be6ec843fc82c6614",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:31:55 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 1383.2170000241604,
+      "ttfbMs": 1384.0610000188462,
+      "encodedBytes": 1050,
+      "traceId": "3efcda1392fd2c60e7da284956e46c69",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:32:05 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 1488.1689999892842,
+      "ttfbMs": 1488.681999995606,
+      "encodedBytes": 1047,
+      "traceId": "3c529ff5ab128a3780959aa9c384121e",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:32:07 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 1907.640999997966,
+      "ttfbMs": 1908.2000000053085,
+      "encodedBytes": 1050,
+      "traceId": "35b5f8ee14a063b1cced6b397514717b",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:32:09 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 1607.2410000197124,
+      "ttfbMs": 1607.9120000067633,
+      "encodedBytes": 1054,
+      "traceId": "27a8dd0827cded2eda638092d6bea68b",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:32:11 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 1445.5569999990985,
+      "ttfbMs": 1446.0480000125244,
+      "encodedBytes": 1049,
+      "traceId": "49cf84b23ca55bdb52092f66b55bfa2c",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:32:12 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 1321.5090000012424,
+      "ttfbMs": 1323.1220000016037,
+      "encodedBytes": 1047,
+      "traceId": "1fba757ef23aeca1b114d3876390f7b1",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:32:14 GMT"
+    },
+    {
+      "status": 200,
+      "elapsedMs": 3912.460000021383,
+      "ttfbMs": 3913.2690000114962,
+      "encodedBytes": 1056,
+      "traceId": "40a1bc661dd6218e6efaa23dcb25cbe1",
+      "serverTiming": "cfExtPri",
+      "date": "Thu, 29 Oct 2026 02:32:49 GMT"
+    }
+  ],
+  "finalPlacement": "Default",
+  "outcome": "Smart Placement routed to remote-DFW but was slower; restored Default. This is a short blocked A/B/A trial, not randomized historical-release proof.",
+  "summary": {
+    "trial": {
+      "samples": 8,
+      "medianMs": 2582.130499999039,
+      "allSuccessful": true
+    },
+    "restoration": {
+      "samples": 8,
+      "medianMs": 1547.7050000044983,
+      "allSuccessful": true
+    }
+  }
+}

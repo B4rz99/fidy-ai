@@ -4,12 +4,13 @@ import {
 } from "../../src/shell/canonical-catalog/contract";
 import { type AuthorizedCanonicalCaller } from "./contract";
 import { Clock, Data, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
-import { afterAll, expect, it } from "vitest";
+import { type Mock, afterAll, expect, it, vi } from "vitest";
 import { CanonicalAllowance, canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
 import { QuotaStatus } from "../../src/core/quotas/contract";
 import { Unavailable } from "../../src/shell/public-http/contract";
 import { UserId } from "../../src/core/identity/contract";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
+import { withErasureRecovery } from "../erasure/runtime";
 import { executeCanonicalQuery } from "../canonical-operations/operations";
 import {
   protectCanonicalPressure,
@@ -23,7 +24,9 @@ class TestFailure extends Data.TaggedError("TestFailure")<{ cause: unknown }> {}
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, TestFailure> =>
   Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 const databases = isolatedTestDatabases();
+const storage = isolatedTestStorage();
 afterAll(() => databases.dispose());
+afterAll(() => storage.dispose());
 const userId = UserId.make("10000000-0000-4000-8000-000000000001");
 const patId = "20000000-0000-4000-8000-000000000001";
 const digest = new Uint8Array(32).fill(1);
@@ -65,6 +68,176 @@ const setup = Effect.gen(function* () {
   return { db, current };
 });
 type Fixture = Readonly<{ db: D1Database; current: number }>;
+const observeBatches = (
+  db: D1Database
+): Readonly<{
+  database: D1Database;
+  calls: Mock<(statements: D1PreparedStatement[]) => void>;
+}> => {
+  const calls = vi.fn<(statements: D1PreparedStatement[]) => void>();
+  const database: D1Database = {
+    prepare: db.prepare.bind(db),
+    batch: <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> => {
+      calls(statements);
+      return db.batch<Row>(statements);
+    },
+    exec: db.exec.bind(db),
+    dump: db.dump.bind(db),
+    withSession: db.withSession.bind(db),
+  };
+  return { database, calls };
+};
+const browserSetup = Effect.gen(function* () {
+  const fixture = yield* setup;
+  const { db, current } = fixture;
+  const pairingId = "50000000-0000-4000-8000-000000000001";
+  const sessionId = "60000000-0000-4000-8000-000000000001";
+  yield* io(() =>
+    db.batch([
+      db
+        .prepare(
+          "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,user_id,state,created_at_ms,expires_at_ms) VALUES (?,'BCDF-GHJK',?,?,'consumed',?,?)"
+        )
+        .bind(pairingId, digest, userId, current, current + 600_000),
+      db
+        .prepare(
+          "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES (?,?,?,?,?,?,?,?)"
+        )
+        .bind(
+          sessionId,
+          pairingId,
+          userId,
+          digest,
+          current,
+          current + 600_000,
+          current + 3_600_000,
+          current + 7_776_000_000
+        ),
+    ])
+  );
+  const browserCaller: AuthorizedCanonicalCaller = {
+    _tag: "WebSession",
+    value: { id: sessionId, userId, digest },
+  };
+  return { ...fixture, caller: browserCaller };
+});
+
+it("finishes browser disclosure and lease release in one guarded batch", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* browserSetup;
+      const { bucket } = yield* io(() => storage.acquire());
+      yield* io(() => bucket.put("recovery/generation", "initial"));
+      const generationReads = vi.fn();
+      const observedBucket = new Proxy(bucket, {
+        get: (target, property): unknown =>
+          property === "get"
+            ? (key: string): ReturnType<R2Bucket["get"]> => {
+                generationReads();
+                return target.get(key);
+              }
+            : Reflect.get(target, property, target),
+      });
+      const guarded = withErasureRecovery({ DB: fixture.db, ERASURE_BUCKET: observedBucket }).DB;
+      const { database, calls } = observeBatches(guarded);
+      const response = yield* protectCanonicalRequest({
+        ...fixture,
+        db: database,
+        operation: operation("transactions.listTransactions"),
+        request: new Request("https://core.internal/transactions"),
+        work: Effect.succeed(Response.json({ data: [], next: [] })),
+      });
+      expect(response.status).toBe(200);
+      expect(reportedAllowance(response).remaining).toBe(50);
+      expect(generationReads).toHaveBeenCalledTimes(2);
+      expect(calls).toHaveBeenCalledTimes(2);
+      expect(calls.mock.calls[1]?.[0]).toHaveLength(3);
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+        )
+      ).toEqual({ total: 0 });
+    })
+  ));
+
+it("withholds the body after browser revocation and releases the rolled-back lease", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* browserSetup;
+      const response = yield* protectCanonicalRequest({
+        ...fixture,
+        operation: operation("transactions.listTransactions"),
+        request: new Request("https://core.internal/transactions"),
+        work: io(() =>
+          fixture.db
+            .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
+            .bind(fixture.current, fixture.caller.value.id)
+            .run()
+        ).pipe(Effect.as(Response.json({ private: "must not escape" }))),
+      });
+      expect(response.status).toBe(401);
+      expect(yield* io(() => response.text())).not.toContain("must not escape");
+      expect(response.headers.get(canonicalAllowanceHeaders.remaining)).toBeNull();
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+        )
+      ).toEqual({ total: 0 });
+    })
+  ));
+
+it("fails closed and releases the lease when final disclosure is unavailable", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* browserSetup;
+      const { database, calls } = observeBatches(fixture.db);
+      calls
+        .mockImplementationOnce(() => undefined)
+        .mockImplementationOnce(() => {
+          throw new Error("final disclosure unavailable");
+        });
+      const response = yield* protectCanonicalRequest({
+        ...fixture,
+        db: database,
+        operation: operation("transactions.listTransactions"),
+        request: new Request("https://core.internal/transactions"),
+        work: Effect.succeed(Response.json({ private: "must not escape" })),
+      });
+      expect(response.status).toBe(503);
+      expect(yield* io(() => response.text())).not.toContain("must not escape");
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+        )
+      ).toEqual({ total: 0 });
+    })
+  ));
+
+it("releases an admitted browser lease when work is interrupted", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* browserSetup;
+        const started = yield* Deferred.make<void>();
+        const running = yield* Effect.forkScoped(
+          protectCanonicalRequest({
+            ...fixture,
+            operation: operation("transactions.listTransactions"),
+            request: new Request("https://core.internal/transactions"),
+            work: Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+          })
+        );
+        yield* Deferred.await(started);
+        yield* Fiber.interrupt(running);
+        expect(
+          yield* io(() =>
+            fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+          )
+        ).toEqual({ total: 0 });
+      })
+    )
+  ));
+
 const reportedAllowance = (response: Response): CanonicalAllowance =>
   Schema.decodeSync(Schema.toCodecJson(CanonicalAllowance))({
     allowance: response.headers.get(canonicalAllowanceHeaders.allowance),

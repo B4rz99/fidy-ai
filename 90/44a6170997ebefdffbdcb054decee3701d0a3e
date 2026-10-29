@@ -1,0 +1,56 @@
+docs/research/generation-control-prototype-proof-2026-10-29.json
+  s_d9571b3fccd032::t_8e3431544a013c 22-26,4251-4255,7097-7100,7134-7138
+  s_d9571b3fccd032::t_e074e61dd2b960 1-21,27-4250,4256-7096,7101-7133,7139-7204
+apps/server/cloudflare/ingestion/runtime.ts
+  s_d9571b3fccd032::t_3088f85ac6d15d 44
+docs/research/generation-and-handoff-cleanup-2026-10-29.json
+  s_d9571b3fccd032::t_45f7b92102d051 1-175
+docs/research/direct-statement-handoff-2026-10-29.md
+  s_d9571b3fccd032::t_6c1ec8f8605511 1-14,21-48
+  s_d9571b3fccd032::t_8e3431544a013c 15-20
+apps/web/package.json
+  s_d9571b3fccd032::t_0d84146e40d66f 62
+apps/server/ARCHITECTURE.md
+  s_d9571b3fccd032::t_3088f85ac6d15d 159-164
+docs/research/generation-control-prototype-2026-10-29.md
+  s_d9571b3fccd032::t_8a257db23995d7 1-33
+apps/server/cloudflare/maintenance/runtime.ts
+  s_d9571b3fccd032::t_d85f4beabbe828 268-270,272
+  s_d9571b3fccd032::t_443e603437eb14 271
+infra/cloudflare/package.json
+  s_d9571b3fccd032::t_0d84146e40d66f 26
+apps/server/cloudflare/ingestion/internal/statement-delivery.ts
+  s_d9571b3fccd032::t_443e603437eb14 78,181,186,191
+  s_d9571b3fccd032::t_d85f4beabbe828 107-112,174-180,182-185,187-190,192-198
+  s_d9571b3fccd032::t_3088f85ac6d15d 73
+  s_d9571b3fccd032::t_7400aa531ee973 199
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_d9571b3fccd032::t_985fd8945779e5 1226,1270,1283,1402,1563,1581
+  s_d9571b3fccd032::t_ab43a7c8e2df60 1238,1292-1305
+  s_d9571b3fccd032::t_b183d16bb7315f 1239-1252,1265-1269,1271-1282,1284-1289,1291,1306-1310
+  s_d9571b3fccd032::t_6a692b149b1039 1253-1264,1290
+apps/server/package.json
+  s_d9571b3fccd032::t_0d84146e40d66f 311
+docs/research/hosted-direct-statement-handoff-proof-2026-10-29.json
+  s_d9571b3fccd032::t_0d84146e40d66f 1-4,11-709,716-1009,1024-1025
+  s_d9571b3fccd032::t_8e3431544a013c 5-10,710-715
+  s_d9571b3fccd032::t_aa51175fc9ca30 1010-1023
+bun.lock
+  s_d9571b3fccd032::t_2e4f62de82806d 81,149,166,2252,2514
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9044a6170997ebefdffbdcb054decee3701d0a3e",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

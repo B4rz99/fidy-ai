@@ -1,0 +1,27 @@
+infra/cloudflare/package.json
+  s_d9571b3fccd032::t_015659b1f6ceba 20
+apps/server/package.json
+  s_d9571b3fccd032::t_015659b1f6ceba 300
+package.json
+  s_d9571b3fccd032::t_015659b1f6ceba 83,96-97,99
+apps/server/cloudflare/canonical-admission/operations.test.ts
+  s_d9571b3fccd032::t_b3944003deebcd 13,141
+bun.lock
+  s_d9571b3fccd032::t_f5f5f8697a915e 70,160,186,199-200,202,377,575,2041,2043,2111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e790ac71b00498217d9e6172d7346d36d91e708",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

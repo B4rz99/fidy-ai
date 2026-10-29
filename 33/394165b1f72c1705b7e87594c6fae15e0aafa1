@@ -1,0 +1,23 @@
+apps/docs/e2e/docs.spec.ts
+  s_d9571b3fccd032::t_7ba1005dc2f496 97,99
+apps/web/e2e/dashboard-pointer-resize.spec.ts
+  s_d9571b3fccd032::t_7ba1005dc2f496 2-3,12,26-27,31,67-68,87,93
+  s_d9571b3fccd032::t_941b631f95cb78 1,14-25,28-30
+  s_d9571b3fccd032::t_b59d78b1daf7b7 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "33394165b1f72c1705b7e87594c6fae15e0aafa1",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

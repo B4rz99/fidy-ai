@@ -1,0 +1,25 @@
+docs/research/app-performance-cold-start-2026-10-28.md
+  s_1cebf747fbaef6::t_30e3ae5b46e819 82,100-108
+  s_1cebf747fbaef6::t_961f1c24708672 116-124,127-129
+  s_1cebf747fbaef6::t_58268de9e19f7b 173-177
+  s_1cebf747fbaef6::t_a0ad7b9d81fc0d 109
+docs/research/app-performance-cold-start-2026-10-28.json
+  s_1cebf747fbaef6::t_76b4a619489a2d 17837,20159,22312-22360,22362-23391,23393-24688,24690-25656,25658-25710,25712-25746,25748-26624,26626-26648,26650-26684,26686-26732,26734-26762,26764-27023,27178-27183,27185-27193,27199,27205-27228
+  s_1cebf747fbaef6::t_961f1c24708672 22361,23392,24689,25657,25711,25747,26625,26649,26685,26733,26763
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fd74981b2ef161f8865fdb6ce90f7dac1c5bdc9a",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,84 @@
+apps/server/ARCHITECTURE.md
+  s_d9571b3fccd032::t_36acfa4ef11e96 165-172
+apps/server/cloudflare/agent/hosted-turn.test-fixture.ts
+  s_d9571b3fccd032::t_87091541ddb2fa 28
+  s_d9571b3fccd032::t_a72446f288e642 29-32,1120-1141
+docs/research/statement-publication-wakeup-2026-10-29.md
+  s_d9571b3fccd032::t_f5a5084cdfa263 1-53,56-59
+  s_d9571b3fccd032::t_0fe41bae1139a2 54-55
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_d9571b3fccd032::t_89a7176b1350d5 1368-1370
+  s_d9571b3fccd032::t_7c03c62ad845c2 1350-1351
+  s_d9571b3fccd032::t_d3f4951c37f127 1311,1374
+  s_d9571b3fccd032::t_2133002936b11e 1312-1342,1346-1349,1352,1354-1367,1372-1373
+  s_d9571b3fccd032::t_3e83ac660ab98b 1343-1345,1353,1371
+apps/server/cloudflare/transactions/internal/recovery-alarm.test.ts
+  s_d9571b3fccd032::t_99555031687425 2-3,7,30,62
+  s_d9571b3fccd032::t_2133002936b11e 8-10,12-13,17,19-20,22,24-25,27-29,31-33,35-37,41-42,44-45,48-51,53-55,60-61,63-65,67-68,72-75,77-78,81-83,85-86,90-91
+  s_d9571b3fccd032::t_89a7176b1350d5 5-6,14-15,38-39,69-70
+  s_d9571b3fccd032::t_57f3e72af1a26c 1,4,11,16,18,21,23,26,34,40,43,46-47,52,56-59,66,71,76,79-80,84,87-89
+apps/server/cloudflare/agent/internal/service.ts
+  s_d9571b3fccd032::t_2133002936b11e 1
+  s_d9571b3fccd032::t_7184ee7d6562ff 566,626,698
+apps/server/cloudflare/transactions/internal/recovery-alarm.ts
+  s_d9571b3fccd032::t_40bc38013b3cc4 1-2,4-8
+  s_d9571b3fccd032::t_2133002936b11e 32-34,36,38-42,45-52
+  s_d9571b3fccd032::t_99555031687425 3,9-31,43-44,53-55
+  s_d9571b3fccd032::t_8faf303d20dccb 35,37
+apps/server/cloudflare/ingestion/internal/publication-wake.ts
+  s_d9571b3fccd032::t_7184ee7d6562ff 11-21
+  s_d9571b3fccd032::t_f02e6ac4706131 1-8
+  s_d9571b3fccd032::t_2133002936b11e 9-10
+docs/research/hosted-statement-wakeup-proof-2026-10-29.json
+  s_d9571b3fccd032::t_f5a5084cdfa263 1-1280,1284
+  s_d9571b3fccd032::t_1a7cb07004e967 1281-1283
+apps/server/cloudflare/ingestion/runtime.ts
+  s_d9571b3fccd032::t_0786f0480afcc5 7-8,49-50,52-56,58
+  s_d9571b3fccd032::t_7184ee7d6562ff 61-62
+  s_d9571b3fccd032::t_f02e6ac4706131 4,59-60
+  s_d9571b3fccd032::t_87091541ddb2fa 14-15
+  s_d9571b3fccd032::t_ea3a8c374edad1 51,57
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_d9571b3fccd032::t_f8db49326c1825 249,609,700,728,1035
+  s_d9571b3fccd032::t_f02e6ac4706131 31,251-252,260,266,268-269,311,313-315,324,329-331,344-346
+  s_d9571b3fccd032::t_2133002936b11e 316-323,325-328,332-341
+  s_d9571b3fccd032::t_d3f4951c37f127 310,312,342-343
+  s_d9571b3fccd032::t_26e8950abdb052 347
+apps/server/cloudflare/transactions/runtime.ts
+  s_d9571b3fccd032::t_99555031687425 2,39-43,161,684,702,773,790,795-796,890-891,924
+  s_d9571b3fccd032::t_a729785876432d 160
+  s_d9571b3fccd032::t_7184ee7d6562ff 863,892-901,909-910
+  s_d9571b3fccd032::t_fc3ed4017c3daf 107-111
+  s_d9571b3fccd032::t_2133002936b11e 902-908,911-920
+  s_d9571b3fccd032::t_2c065b475beb29 925
+apps/server/cloudflare/ingestion/internal/statement-mutation.ts
+  s_d9571b3fccd032::t_0786f0480afcc5 21,121,125
+  s_d9571b3fccd032::t_89a7176b1350d5 94-96
+  s_d9571b3fccd032::t_4a35c024cee775 97-103,124
+apps/server/cloudflare/ingestion/internal/statement-delivery.ts
+  s_d9571b3fccd032::t_0786f0480afcc5 58,71
+  s_d9571b3fccd032::t_2133002936b11e 73
+  s_d9571b3fccd032::t_2ef59ba1e56265 7-15
+apps/server/cloudflare/agent/hosted-statement-turn.test.ts
+  s_d9571b3fccd032::t_7c7388b5b87561 25,272-274
+apps/server/cloudflare/ingestion/contract.ts
+  s_d9571b3fccd032::t_67e503de56becd 113-148
+docs/research/statement-wakeup-cleanup-2026-10-29.json
+  s_d9571b3fccd032::t_e843c50eb60771 1-346
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "83988e3efbb66f5f435b493c6851203e1f767dcb",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

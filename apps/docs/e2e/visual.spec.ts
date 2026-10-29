@@ -206,6 +206,10 @@ if (captureEnabled) {
             await page.goto("/conectar/cli");
             await page.getByRole("button", { name: "En esta página", exact: true }).click();
             await captureState(page, evidence, "toc");
+            const toc = page.locator(".docs-mobile-toc:popover-open");
+            const bounds = Option.getOrThrow(Option.fromNullishOr(await toc.boundingBox()));
+            expect(bounds).toMatchObject({ x: 12, y: 120, width: 366, height: 412 });
+            expect(bounds.x + bounds.width).toBeLessThanOrEqual((await clientViewport(page)).width);
           });
         }
       });

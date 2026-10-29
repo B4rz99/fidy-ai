@@ -1,0 +1,1025 @@
+{
+  "prefix": "fidy-direct-handoff-5985da96",
+  "scope": "Matched private hosted production dispatch and Queue receiver, own synthetic D1/R2, real no-op child Workflow. Dispatch-start to confirmed Workflow existence excludes cron discovery, Workflow startup and extraction. Prior startup deadline failure is retained separately. No public ingress or application providers.",
+  "resources": [
+    ["database", "d1/database/01354c19-93e6-4976-a382-405bd718ed0b"],
+    ["bucket", "r2/buckets/fidy-direct-handoff-5985da96"],
+    ["queue", "queues/b4aeb4ebc02c435eaef7d5bc0178e178"],
+    ["worker", "workers/scripts/fidy-direct-handoff-5985da96"],
+    ["workflow", "workflows/fidy-direct-handoff-5985da96-probe"],
+    ["workflow", "workflows/fidy-direct-handoff-5985da96-child"]
+  ],
+  "samples": [
+    {
+      "pair": 0,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 4896,
+      "dispatchOfferMs": 657,
+      "parentId": "cf46080b-c7c4-4044-9953-ead4153b497a",
+      "childId": "b54f2500-b7c9-41d6-bf0f-12d0efedd55b",
+      "startedAt": 1793287998704,
+      "childStartedAt": 1793288004656,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 0,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1250,
+      "dispatchOfferMs": 1250,
+      "parentId": "ef6ee212-b023-4a11-aff0-678b12837d03",
+      "childId": "d387418a-585c-4385-b437-fd8f347d3b92",
+      "startedAt": 1793288012119,
+      "childStartedAt": 1793288013822,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 1,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1178,
+      "dispatchOfferMs": 1178,
+      "parentId": "df6493b7-48ed-4476-9945-fb296fab3319",
+      "childId": "30927548-169f-4ce9-911d-ce180b37a4a8",
+      "startedAt": 1793288018080,
+      "childStartedAt": 1793288020266,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 1,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 3234,
+      "dispatchOfferMs": 357,
+      "parentId": "58fae90d-3884-4666-bfae-1ded69c8fa04",
+      "childId": "d674abaf-9152-443e-bbc0-cda88f818998",
+      "startedAt": 1793288025343,
+      "childStartedAt": 1793288029599,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 2,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 6002,
+      "dispatchOfferMs": 243,
+      "parentId": "140ecf4d-0db2-493c-8383-d5acc264d18b",
+      "childId": "2a6da2e5-23fc-4b9e-8791-a7e8f7cc86d6",
+      "startedAt": 1793288033264,
+      "childStartedAt": 1793288040158,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 2,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1250,
+      "dispatchOfferMs": 1250,
+      "parentId": "b26b95d6-d480-4c42-bb35-aefedfa3a7d6",
+      "childId": "d670718e-6163-444a-8e26-91c8d2f2fa17",
+      "startedAt": 1793288044265,
+      "childStartedAt": 1793288046116,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 3,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1062,
+      "dispatchOfferMs": 1062,
+      "parentId": "8d42d692-3495-44c8-99fc-5150b9bd24f2",
+      "childId": "ff8f2688-012b-4654-bc14-ed2baee972cd",
+      "startedAt": 1793288050470,
+      "childStartedAt": 1793288052860,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 3,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 6611,
+      "dispatchOfferMs": 358,
+      "parentId": "401b56b0-fb9f-4167-92f3-2d7c05e8ff2b",
+      "childId": "68b2f577-5a56-430a-8d27-2c879e2c11b0",
+      "startedAt": 1793288057645,
+      "childStartedAt": 1793288065352,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 4,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 4825,
+      "dispatchOfferMs": 703,
+      "parentId": "3f249542-b681-4eaa-84ff-dd17816deaee",
+      "childId": "a1c9a525-8e6b-4d2c-9ec3-457ebcd6a6b9",
+      "startedAt": 1793288069462,
+      "childStartedAt": 1793288075222,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 4,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1608,
+      "dispatchOfferMs": 1608,
+      "parentId": "1989041a-454c-4ace-9929-891faff9d8b0",
+      "childId": "f672a4f5-0152-4ac6-aa22-15e0234c9901",
+      "startedAt": 1793288079590,
+      "childStartedAt": 1793288082174,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 5,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 930,
+      "dispatchOfferMs": 930,
+      "parentId": "26f1e5b1-ebfe-4f55-8083-eb59066795d8",
+      "childId": "9d081086-b8fa-4a93-9e42-f7bd1108fdb5",
+      "startedAt": 1793288085936,
+      "childStartedAt": 1793288087522,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 5,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 2936,
+      "dispatchOfferMs": 579,
+      "parentId": "f4e0d7fa-5913-4c53-a3e7-da180466c2ba",
+      "childId": "e054c331-8205-4e7b-830c-88ed9e4b30ac",
+      "startedAt": 1793288091746,
+      "childStartedAt": 1793288095027,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 6,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 10825,
+      "dispatchOfferMs": 245,
+      "parentId": "4211e609-70de-4540-85a8-b5bd32f73e07",
+      "childId": "db2b30fd-7eff-4184-bc83-eef26cf02dda",
+      "startedAt": 1793288099325,
+      "childStartedAt": 1793288111510,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 6,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1127,
+      "dispatchOfferMs": 1127,
+      "parentId": "4938a040-1145-4f51-9ea4-8ea35b44463d",
+      "childId": "f100c863-09fd-4828-9ad6-9d657434fa48",
+      "startedAt": 1793288115738,
+      "childStartedAt": 1793288118526,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 7,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 965,
+      "dispatchOfferMs": 965,
+      "parentId": "a8d32eba-6b0c-4e77-947c-d4c593e59f31",
+      "childId": "73b00928-c5bd-4ee6-a3b0-8d9707a72f7e",
+      "startedAt": 1793288122751,
+      "childStartedAt": 1793288124875,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 7,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 5904,
+      "dispatchOfferMs": 463,
+      "parentId": "136d3df8-3ee3-4ec8-a01b-20af6a1c8449",
+      "childId": "d5d48986-e82b-4113-ac46-51390a7ae3d2",
+      "startedAt": 1793288130381,
+      "childStartedAt": 1793288136955,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 8,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 2338,
+      "dispatchOfferMs": 440,
+      "parentId": "b6258e9b-8275-4d68-9b47-006c06a42a1e",
+      "childId": "51b0eb1a-ade6-4ea3-96d8-84b149601e90",
+      "startedAt": 1793288141882,
+      "childStartedAt": 1793288145370,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 8,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1372,
+      "dispatchOfferMs": 1372,
+      "parentId": "6244ef74-ab57-4828-b689-1656ca34982c",
+      "childId": "9823da5e-1283-44ec-aada-fd82ae51b5f8",
+      "startedAt": 1793288149241,
+      "childStartedAt": 1793288151227,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 9,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1222,
+      "dispatchOfferMs": 1222,
+      "parentId": "c17630a5-13f8-4f7e-bb05-d545d696fcb3",
+      "childId": "77b78b78-736d-43cb-8989-90e233a7cd39",
+      "startedAt": 1793288154839,
+      "childStartedAt": 1793288156524,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 9,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 5549,
+      "dispatchOfferMs": 462,
+      "parentId": "f50a5b69-fde2-489d-a8f7-0fbf166a6d7b",
+      "childId": "1172c2ca-cba5-41f1-a468-8461058be908",
+      "startedAt": 1793288161445,
+      "childStartedAt": 1793288167576,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 10,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 1285,
+      "dispatchOfferMs": 332,
+      "parentId": "f1c2d287-dbad-4ba1-9913-4c8bc8456bc6",
+      "childId": "2c902728-57fc-47af-9923-5d5fb98628f8",
+      "startedAt": 1793288171235,
+      "childStartedAt": 1793288173048,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 10,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1324,
+      "dispatchOfferMs": 1324,
+      "parentId": "68761a7a-34fd-4133-b30d-420596ea09a6",
+      "childId": "4c9664fc-ec47-49ce-a2f9-5db203aedc0c",
+      "startedAt": 1793288178383,
+      "childStartedAt": 1793288181011,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 11,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1561,
+      "dispatchOfferMs": 1561,
+      "parentId": "8c5fc3b3-5662-4020-8bd4-102163f62dbf",
+      "childId": "092348fd-0658-494a-b556-698a5f5f2220",
+      "startedAt": 1793288185526,
+      "childStartedAt": 1793288188088,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 11,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 4753,
+      "dispatchOfferMs": 391,
+      "parentId": "770c74bc-af17-4672-8d69-0c86d4400009",
+      "childId": "fd6cc4e1-c014-49d3-8986-35f04c1afea1",
+      "startedAt": 1793288192970,
+      "childStartedAt": 1793288198328,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 12,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 1893,
+      "dispatchOfferMs": 431,
+      "parentId": "fd0647fc-438c-47bb-bb30-f3c3f3f31ae3",
+      "childId": "3e974f63-6ea4-4006-8ba7-5cbd0e6920c3",
+      "startedAt": 1793288204157,
+      "childStartedAt": 1793288206859,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 12,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1026,
+      "dispatchOfferMs": 1026,
+      "parentId": "b880c2b5-43d4-4bf8-9e66-3f07dd6fc84b",
+      "childId": "d06c98af-1a0d-4b92-a900-8045f22b9142",
+      "startedAt": 1793288211673,
+      "childStartedAt": 1793288213203,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 13,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1014,
+      "dispatchOfferMs": 1014,
+      "parentId": "9b1ba483-869f-458b-aa5d-45217917b7de",
+      "childId": "9bb44d8d-4e03-4dc9-a665-485119dbd613",
+      "startedAt": 1793288217543,
+      "childStartedAt": 1793288218895,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 13,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 4477,
+      "dispatchOfferMs": 414,
+      "parentId": "4e295706-dcc2-4cff-aef4-ea5463353116",
+      "childId": "77a0842f-bf1c-45d8-8a06-d01bbf9097b5",
+      "startedAt": 1793288223499,
+      "childStartedAt": 1793288228318,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 14,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 1627,
+      "dispatchOfferMs": 297,
+      "parentId": "52eb95e5-1bd5-400f-bf01-957ac332b4c2",
+      "childId": "10c39d95-675c-46bb-a068-50e43b7a6af8",
+      "startedAt": 1793288232600,
+      "childStartedAt": 1793288234806,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 14,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1441,
+      "dispatchOfferMs": 1441,
+      "parentId": "c81376d3-04a8-480a-a4f8-c0e2a4cc41ae",
+      "childId": "8bee7222-4e78-41a2-bfc4-21c5ce68e467",
+      "startedAt": 1793288239529,
+      "childStartedAt": 1793288241648,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 15,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 708,
+      "dispatchOfferMs": 708,
+      "parentId": "3aa6d895-2349-4a42-a4f5-342fcc2a046b",
+      "childId": "c0b64d45-0a97-4dbb-930e-b793a0004754",
+      "startedAt": 1793288246231,
+      "childStartedAt": 1793288248594,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 15,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 5193,
+      "dispatchOfferMs": 553,
+      "parentId": "2bbbc279-0ad3-44b7-96b1-b39d65a1754b",
+      "childId": "64432e80-3a37-4777-b01b-3bd62e3f8641",
+      "startedAt": 1793288252937,
+      "childStartedAt": 1793288258537,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 16,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 1689,
+      "dispatchOfferMs": 395,
+      "parentId": "0e6e3d75-1139-4ab4-b3ff-47597c3fa4a1",
+      "childId": "95deef22-b266-4fee-a2da-d673a8ca1a13",
+      "startedAt": 1793288262150,
+      "childStartedAt": 1793288264637,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 16,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1055,
+      "dispatchOfferMs": 1055,
+      "parentId": "e74bbc8e-2dc6-4541-ab7d-dd300f460b28",
+      "childId": "8b8b2db7-effe-4c43-a164-9d625aae4e8c",
+      "startedAt": 1793288269156,
+      "childStartedAt": 1793288270673,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 17,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1379,
+      "dispatchOfferMs": 1379,
+      "parentId": "171ebd94-ca05-48b6-9ae6-d962d22e732d",
+      "childId": "2025e2cf-3b01-4711-bfd1-13d3190ff5b5",
+      "startedAt": 1793288274748,
+      "childStartedAt": 1793288277037,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 17,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 2304,
+      "dispatchOfferMs": 446,
+      "parentId": "bf97cc73-43df-4f9f-a797-3a12a68bb900",
+      "childId": "11545fa4-8b8c-44cb-86b8-c248e0868564",
+      "startedAt": 1793288281417,
+      "childStartedAt": 1793288284546,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 18,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 5353,
+      "dispatchOfferMs": 365,
+      "parentId": "d43b48b4-c9ab-4aa8-ae2f-c5800ea5401f",
+      "childId": "e941b2ca-cf18-4d38-96df-3f360c906ba3",
+      "startedAt": 1793288289000,
+      "childStartedAt": 1793288295189,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 18,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 763,
+      "dispatchOfferMs": 763,
+      "parentId": "bd64e0ca-8fbe-4089-9ef7-8fea4bf34500",
+      "childId": "1a07fbe6-50df-47ce-900e-d9d160459c21",
+      "startedAt": 1793288299077,
+      "childStartedAt": 1793288300435,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 19,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1539,
+      "dispatchOfferMs": 1539,
+      "parentId": "18aee1da-0464-454f-b867-d30c64687ff0",
+      "childId": "a142e71a-02c8-4740-8d4f-1061ec3193a5",
+      "startedAt": 1793288304700,
+      "childStartedAt": 1793288306638,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 19,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 2902,
+      "dispatchOfferMs": 328,
+      "parentId": "db12096d-50b2-46cf-8309-d7ceecba4987",
+      "childId": "148c7130-ecd8-4a01-9085-07848e0705fb",
+      "startedAt": 1793288312040,
+      "childStartedAt": 1793288315360,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 20,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 5131,
+      "dispatchOfferMs": 503,
+      "parentId": "8b4b3e0c-70c9-4d24-890e-85e9ea923d3c",
+      "childId": "385aea76-5e83-4efe-bd66-68536accaedc",
+      "startedAt": 1793288320455,
+      "childStartedAt": 1793288327235,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 20,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1184,
+      "dispatchOfferMs": 1184,
+      "parentId": "201cb298-80ae-454c-8007-0af27c4e4b64",
+      "childId": "4a613047-9097-4799-ab7d-416e9d9aa2eb",
+      "startedAt": 1793288331202,
+      "childStartedAt": 1793288333006,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 21,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 881,
+      "dispatchOfferMs": 881,
+      "parentId": "1f440d19-d7aa-463c-a991-4b9004250a0d",
+      "childId": "9a1d86d5-364c-49d3-98cc-bddea87823a7",
+      "startedAt": 1793288338523,
+      "childStartedAt": 1793288339916,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 21,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 6981,
+      "dispatchOfferMs": 409,
+      "parentId": "435ea1b7-70a6-41a5-8067-7a82d48b26f0",
+      "childId": "360b9e06-896e-40dc-8a1f-e01b788b04d7",
+      "startedAt": 1793288344273,
+      "childStartedAt": 1793288352207,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 22,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 4862,
+      "dispatchOfferMs": 432,
+      "parentId": "f4e4da8e-7dec-42ee-92d5-6045899e6099",
+      "childId": "d814444a-69d9-429a-a562-e9173a66c899",
+      "startedAt": 1793288356127,
+      "childStartedAt": 1793288361659,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 22,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1126,
+      "dispatchOfferMs": 1126,
+      "parentId": "c6e96a05-1832-42c2-be62-b7a2860bd5cf",
+      "childId": "7d5c1ccb-e8da-4805-8fde-a7a39d9c3cba",
+      "startedAt": 1793288366396,
+      "childStartedAt": 1793288368144,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 23,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 1009,
+      "dispatchOfferMs": 1009,
+      "parentId": "bf24915c-7f0c-4b28-b607-862778533b29",
+      "childId": "75edd0e0-f5b6-4c82-83e3-497ff5f36f25",
+      "startedAt": 1793288372870,
+      "childStartedAt": 1793288374477,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    },
+    {
+      "pair": 23,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 6529,
+      "dispatchOfferMs": 734,
+      "parentId": "22a05a1c-81f6-42ee-8529-9d4dc0e20047",
+      "childId": "55627fb0-753a-4396-bcbc-811fa4846cc3",
+      "startedAt": 1793288379592,
+      "childStartedAt": 1793288387545,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    }
+  ],
+  "warmup": [
+    {
+      "pair": -2,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 4645,
+      "dispatchOfferMs": 636,
+      "parentId": "8c294c30-38cb-4970-9acd-684ef9e911f4",
+      "childId": "4f4bf131-5ddc-47e3-8b4d-1f20844ace03",
+      "startedAt": 1793287963410,
+      "childStartedAt": null,
+      "childStateAtObservation": "queued",
+      "attempt": 1
+    },
+    {
+      "pair": -2,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 961,
+      "dispatchOfferMs": 961,
+      "parentId": "e83d6f50-2ed2-40e3-b9cc-8cdb5f2d0646",
+      "childId": "8c81f341-810e-4c6d-980c-bdaa8c6adc61",
+      "startedAt": 1793287973256,
+      "childStartedAt": null,
+      "childStateAtObservation": "queued",
+      "attempt": 1
+    },
+    {
+      "pair": -1,
+      "variant": "direct",
+      "dispatchToWorkflowAcceptedMs": 832,
+      "dispatchOfferMs": 832,
+      "parentId": "9a92ab7f-69c8-4f1e-9c39-21c16fccd089",
+      "childId": "c3f1fb9f-f96b-4c4a-b147-73eaa13a3a79",
+      "startedAt": 1793287980912,
+      "childStartedAt": null,
+      "childStateAtObservation": "queued",
+      "attempt": 1
+    },
+    {
+      "pair": -1,
+      "variant": "queue",
+      "dispatchToWorkflowAcceptedMs": 4314,
+      "dispatchOfferMs": 370,
+      "parentId": "fe91f325-f908-474e-b95a-576b91ad24ee",
+      "childId": "4ccc83b6-ebdc-4d5c-99b1-a9d5ffff5a04",
+      "startedAt": 1793287989051,
+      "childStartedAt": 1793287994265,
+      "childStateAtObservation": "complete",
+      "attempt": 1
+    }
+  ],
+  "cleanup": [
+    {
+      "kind": "consumer",
+      "deleted": true
+    },
+    {
+      "kind": "workflow",
+      "path": "workflows/fidy-direct-handoff-5985da96-child",
+      "deleted": true
+    },
+    {
+      "kind": "workflow",
+      "path": "workflows/fidy-direct-handoff-5985da96-probe",
+      "deleted": true
+    },
+    {
+      "kind": "worker",
+      "path": "workers/scripts/fidy-direct-handoff-5985da96",
+      "deleted": true
+    },
+    {
+      "kind": "queue",
+      "path": "queues/b4aeb4ebc02c435eaef7d5bc0178e178",
+      "deleted": true
+    },
+    {
+      "kind": "bucket",
+      "path": "r2/buckets/fidy-direct-handoff-5985da96",
+      "deleted": true
+    },
+    {
+      "kind": "database",
+      "path": "d1/database/01354c19-93e6-4976-a382-405bd718ed0b",
+      "deleted": true
+    }
+  ],
+  "consumerSettings": [
+    {
+      "script": "fidy-direct-handoff-5985da96",
+      "settings": {
+        "batch_size": 10,
+        "max_retries": 3,
+        "max_wait_time_ms": 0,
+        "retry_delay": 0
+      },
+      "consumer_id": "e93ef3b2d886465ea6086ac68e42fd26",
+      "type": "worker"
+    }
+  ],
+  "pending": {
+    "variant": "queue",
+    "parentId": "22a05a1c-81f6-42ee-8529-9d4dc0e20047",
+    "childId": "55627fb0-753a-4396-bcbc-811fa4846cc3"
+  },
+  "summary": {
+    "queue": {
+      "medianMs": 4843.5,
+      "p95Ms": 6981
+    },
+    "direct": {
+      "medianMs": 1152.5,
+      "p95Ms": 1561
+    },
+    "medianSpeedup": 4.202603036876356,
+    "p95Speedup": 4.472133247918001
+  },
+  "startupExperiment": {
+    "prefix": "fidy-direct-handoff-87537976",
+    "scope": "Matched private hosted production dispatch and Queue receiver, own synthetic D1/R2, real no-op child Workflow. Dispatch-start to child-start timing excludes cron discovery and extraction. No public ingress or application providers.",
+    "resources": [
+      ["database", "d1/database/0e68d892-1ee9-4646-9f92-53bb6e8b1c65"],
+      ["bucket", "r2/buckets/fidy-direct-handoff-87537976"],
+      ["queue", "queues/13cbe33db8a64fd2b36b048d3bc67911"],
+      ["worker", "workers/scripts/fidy-direct-handoff-87537976"],
+      ["workflow", "workflows/fidy-direct-handoff-87537976-probe"],
+      ["workflow", "workflows/fidy-direct-handoff-87537976-child"]
+    ],
+    "samples": [
+      {
+        "pair": 0,
+        "variant": "queue",
+        "dispatchToChildStartMs": 3106,
+        "dispatchOfferMs": 332,
+        "parentId": "0d255744-d8c4-4d7b-b5fa-7785e80e7787",
+        "childId": "6b0c7d18-06a9-49fc-9326-2d06c9f17b4b",
+        "startedAt": 1793287490666,
+        "childStartedAt": 1793287493772
+      },
+      {
+        "pair": 0,
+        "variant": "direct",
+        "dispatchToChildStartMs": 1678,
+        "dispatchOfferMs": 970,
+        "parentId": "b5bacd86-23fb-462d-83ee-14dccc5247b8",
+        "childId": "fac75708-97b6-43bb-ba9f-d1f77ddd9748",
+        "startedAt": 1793287498419,
+        "childStartedAt": 1793287500097
+      },
+      {
+        "pair": 1,
+        "variant": "direct",
+        "dispatchToChildStartMs": 9139,
+        "dispatchOfferMs": 663,
+        "parentId": "44a4996b-4b96-4d37-bc12-d31082aff5f0",
+        "childId": "5b1dcd73-fd51-4718-874c-998e72fd80b7",
+        "startedAt": 1793287509024,
+        "childStartedAt": 1793287518163
+      },
+      {
+        "pair": 1,
+        "variant": "queue",
+        "dispatchToChildStartMs": 7174,
+        "dispatchOfferMs": 395,
+        "parentId": "0185c683-83d1-4f36-8291-781e03b1de7f",
+        "childId": "8995868d-6b41-48d3-b356-d25f3ce4ad9e",
+        "startedAt": 1793287531393,
+        "childStartedAt": 1793287538567
+      },
+      {
+        "pair": 2,
+        "variant": "queue",
+        "dispatchToChildStartMs": 6866,
+        "dispatchOfferMs": 275,
+        "parentId": "0bfb6b3a-df69-4f5c-8ae9-9aa3335905a0",
+        "childId": "510535ac-be35-452f-b10c-818077eed588",
+        "startedAt": 1793287543393,
+        "childStartedAt": 1793287550259
+      },
+      {
+        "pair": 2,
+        "variant": "direct",
+        "dispatchToChildStartMs": 4582,
+        "dispatchOfferMs": 651,
+        "parentId": "f37b27e3-db00-490d-9ec8-834a9b3f82ba",
+        "childId": "b8213313-6305-4de7-ba2a-65beb4ff7cf0",
+        "startedAt": 1793287555149,
+        "childStartedAt": 1793287559731
+      },
+      {
+        "pair": 3,
+        "variant": "direct",
+        "dispatchToChildStartMs": 2248,
+        "dispatchOfferMs": 1587,
+        "parentId": "793defa7-365e-4325-88ba-63ae088a9763",
+        "childId": "3c098aee-be5f-4881-90d3-41d9cafc84a0",
+        "startedAt": 1793287564509,
+        "childStartedAt": 1793287566757
+      },
+      {
+        "pair": 3,
+        "variant": "queue",
+        "dispatchToChildStartMs": 6884,
+        "dispatchOfferMs": 387,
+        "parentId": "25918987-cc00-4679-a50a-cd8fe9df947d",
+        "childId": "6e76d206-5247-4556-b2b1-fef80e7c2b09",
+        "startedAt": 1793287571530,
+        "childStartedAt": 1793287578414
+      },
+      {
+        "pair": 4,
+        "variant": "queue",
+        "dispatchToChildStartMs": 7046,
+        "dispatchOfferMs": 329,
+        "parentId": "2be1072b-84eb-46dd-94d4-1ccdeeeb72e0",
+        "childId": "16a73c61-db83-446c-bd3a-47739d25aa81",
+        "startedAt": 1793287581912,
+        "childStartedAt": 1793287588958
+      },
+      {
+        "pair": 4,
+        "variant": "direct",
+        "dispatchToChildStartMs": 1492,
+        "dispatchOfferMs": 757,
+        "parentId": "feea15af-7d67-4a90-9ae6-e9d8bfd15716",
+        "childId": "977af62b-f292-4596-b184-81aec4f4c3ad",
+        "startedAt": 1793287592298,
+        "childStartedAt": 1793287593790
+      },
+      {
+        "pair": 5,
+        "variant": "direct",
+        "dispatchToChildStartMs": 1720,
+        "dispatchOfferMs": 1281,
+        "parentId": "c261b181-667e-41b6-bb72-6d34a65dcd58",
+        "childId": "ca909a15-a937-4fb1-8e9f-f31e1e9f97a8",
+        "startedAt": 1793287597657,
+        "childStartedAt": 1793287599377
+      },
+      {
+        "pair": 5,
+        "variant": "queue",
+        "dispatchToChildStartMs": 6194,
+        "dispatchOfferMs": 593,
+        "parentId": "5b235d14-d7a9-4392-907d-6f0e487b1bf5",
+        "childId": "977321b1-a0ae-4087-8122-c72580367898",
+        "startedAt": 1793287603416,
+        "childStartedAt": 1793287609610
+      },
+      {
+        "pair": 6,
+        "variant": "queue",
+        "dispatchToChildStartMs": 7561,
+        "dispatchOfferMs": 342,
+        "parentId": "8478455e-1fff-4b44-a452-2a6952f0e8d1",
+        "childId": "405939bd-d881-44c4-bd13-f301e81bc761",
+        "startedAt": 1793287613549,
+        "childStartedAt": 1793287621110
+      },
+      {
+        "pair": 6,
+        "variant": "direct",
+        "dispatchToChildStartMs": 2005,
+        "dispatchOfferMs": 1133,
+        "parentId": "5db549aa-4b3a-43f0-8298-044d48bf0e5d",
+        "childId": "85a9c915-0e12-4d47-8b1d-76624fcc9766",
+        "startedAt": 1793287624860,
+        "childStartedAt": 1793287626865
+      },
+      {
+        "pair": 7,
+        "variant": "direct",
+        "dispatchToChildStartMs": 1349,
+        "dispatchOfferMs": 962,
+        "parentId": "2f5ea914-03df-417c-94cc-209d14d597a7",
+        "childId": "2773a1cc-5dde-4313-a13b-56af38e817e4",
+        "startedAt": 1793287630836,
+        "childStartedAt": 1793287632185
+      },
+      {
+        "pair": 7,
+        "variant": "queue",
+        "dispatchToChildStartMs": 5874,
+        "dispatchOfferMs": 324,
+        "parentId": "c3438163-6741-476e-85b3-d5de692fefdd",
+        "childId": "4959c4c7-887f-4c7e-9624-d5bf9b1dc659",
+        "startedAt": 1793287636049,
+        "childStartedAt": 1793287641923
+      }
+    ],
+    "warmup": [
+      {
+        "pair": -2,
+        "variant": "queue",
+        "dispatchToChildStartMs": 7338,
+        "dispatchOfferMs": 423,
+        "parentId": "1f308d74-eb03-4ec6-ae38-c3c4b5658964",
+        "childId": "6e07e020-379f-4c3a-baee-ba7456a90df7",
+        "startedAt": 1793287456490,
+        "childStartedAt": 1793287463828
+      },
+      {
+        "pair": -2,
+        "variant": "direct",
+        "dispatchToChildStartMs": 4678,
+        "dispatchOfferMs": 1491,
+        "parentId": "7008882d-aa8e-4256-88ca-6add4bf220a5",
+        "childId": "b8ea8feb-56d8-49ad-8701-40fd7f24223c",
+        "startedAt": 1793287467296,
+        "childStartedAt": 1793287471974
+      },
+      {
+        "pair": -1,
+        "variant": "direct",
+        "dispatchToChildStartMs": 1570,
+        "dispatchOfferMs": 958,
+        "parentId": "b41de1b7-0356-4316-8536-75580db4d4eb",
+        "childId": "e878516f-f3bd-4917-b255-84fc5786c555",
+        "startedAt": 1793287475471,
+        "childStartedAt": 1793287477041
+      },
+      {
+        "pair": -1,
+        "variant": "queue",
+        "dispatchToChildStartMs": 5123,
+        "dispatchOfferMs": 506,
+        "parentId": "c21f0a45-f1cb-4664-9558-aa50b20f9ad8",
+        "childId": "60407b01-b9e2-4891-807f-a0b9f299d9a7",
+        "startedAt": 1793287481468,
+        "childStartedAt": 1793287486591
+      }
+    ],
+    "cleanup": [
+      {
+        "kind": "workflow",
+        "path": "workflows/fidy-direct-handoff-87537976-child",
+        "deleted": true
+      },
+      {
+        "kind": "workflow",
+        "path": "workflows/fidy-direct-handoff-87537976-probe",
+        "deleted": true
+      },
+      {
+        "kind": "worker",
+        "path": "workers/scripts/fidy-direct-handoff-87537976",
+        "deleted": false,
+        "error": "Cloudflare HTTP 403; codes [10064]"
+      },
+      {
+        "kind": "queue",
+        "path": "queues/13cbe33db8a64fd2b36b048d3bc67911",
+        "deleted": false,
+        "error": "Cloudflare HTTP 400; codes [11005]"
+      },
+      {
+        "kind": "bucket",
+        "path": "r2/buckets/fidy-direct-handoff-87537976",
+        "deleted": true
+      },
+      {
+        "kind": "database",
+        "path": "d1/database/0e68d892-1ee9-4646-9f92-53bb6e8b1c65",
+        "deleted": true
+      }
+    ],
+    "consumerSettings": [
+      {
+        "script": "fidy-direct-handoff-87537976",
+        "settings": {
+          "batch_size": 10,
+          "max_retries": 3,
+          "max_wait_time_ms": 0,
+          "retry_delay": 0
+        },
+        "consumer_id": "4a149c5e84b24e6182f0169ac5d86628",
+        "type": "worker"
+      }
+    ],
+    "failure": "Owned Workflow deadline"
+  },
+  "startupExperimentCleanupRepair": {
+    "steps": [
+      "consumer removed",
+      "workers/scripts/fidy-direct-handoff-87537976 deleted",
+      "queues/13cbe33db8a64fd2b36b048d3bc67911 deleted"
+    ],
+    "absenceAudit": [
+      {
+        "path": "d1/database/0e68d892-1ee9-4646-9f92-53bb6e8b1c65",
+        "httpCode": 404
+      },
+      {
+        "path": "r2/buckets/fidy-direct-handoff-87537976",
+        "httpCode": 404
+      },
+      {
+        "path": "queues/13cbe33db8a64fd2b36b048d3bc67911",
+        "httpCode": 404
+      },
+      {
+        "path": "workers/scripts/fidy-direct-handoff-87537976",
+        "httpCode": 404
+      },
+      {
+        "path": "workflows/fidy-direct-handoff-87537976-probe",
+        "httpCode": 404
+      },
+      {
+        "path": "workflows/fidy-direct-handoff-87537976-child",
+        "httpCode": 404
+      }
+    ]
+  },
+  "sources": {
+    "fidy-build-direct-handoff.ts": "const root='/Users/obarbozaa/.codex/worktrees/6dc1/fidy-ai';\nconst source=`import {WorkflowEntrypoint} from 'cloudflare:workers';import {Effect,Option} from 'effect';\nimport {dispatchStatementExtraction} from '${root}/apps/server/cloudflare/ingestion/runtime.ts';\nimport {withErasureRecovery} from '${root}/apps/server/cloudflare/erasure/runtime.ts';\nimport {makeCoreQueue} from '${root}/apps/server/cloudflare/queue/runtime.ts';\nimport {makeWorkerTelemetry} from '${root}/apps/server/cloudflare/runtime/telemetry/operations.ts';\nconst consume=makeCoreQueue(makeWorkerTelemetry(()=>undefined));\nconst unavailable=()=>Promise.reject(new Error('No coordinator authorized'));\nexport default{fetch(){return new Response(null,{status:404})},async queue(batch,env){const receipts=[];const messages=batch.messages.map(m=>({id:m.id,timestamp:m.timestamp,attempts:m.attempts,body:m.body,ack(){receipts.push({id:m.body.submissionId,acceptedAt:Date.now(),attempt:m.attempts});m.ack();},retry(options){m.retry(options);}}));await consume({queue:batch.queue,metadata:batch.metadata,messages,ackAll:()=>batch.ackAll(),retryAll:options=>batch.retryAll(options)},withErasureRecovery({...env,STATEMENT_EXTRACTION_WORKFLOW:env.CHILD,USER_TRANSACTION_COORDINATOR:{getByName:()=>({fetch:unavailable})}}));if(receipts.length)await env.DB.batch(receipts.map(r=>env.DB.prepare('INSERT INTO receipts VALUES (?,?,?) ON CONFLICT(id) DO NOTHING').bind(r.id,r.acceptedAt,r.attempt)));}};\nexport class DispatchProbe extends WorkflowEntrypoint{run(event,step){const {id,variant}=event.payload;if(!/^[a-f0-9-]{36}$/.test(id)||!['queue','direct'].includes(variant))throw new Error('Invalid probe');return step.do('dispatch',{retries:{limit:0,delay:1},timeout:'30 seconds'},async()=>{const current=Date.now();await this.env.DB.prepare(\"INSERT INTO statement_submissions VALUES (?,?,'queued',?,?,NULL)\").bind(id,'10000000-0000-4000-8000-000000000001',current+600000,current).run();if(await this.env.ERASURE_BUCKET.get('recovery/generation')===null)await this.env.ERASURE_BUCKET.put('recovery/generation','initial');const environment=withErasureRecovery({...this.env,ERASURE_REQUIRED:'true'}),startedAt=Date.now();await Effect.runPromise(dispatchStatementExtraction({DB:environment.DB,STATEMENT_EXTRACTION_QUEUE:this.env.OFFERS,STATEMENT_EXTRACTION_WORKFLOW:variant==='direct'?Option.some(this.env.CHILD):Option.none()}));return{id,variant,startedAt,offeredAt:Date.now()};});}}\nexport class DispatchChild extends WorkflowEntrypoint{run(){return Promise.resolve({synthetic:true,startedAt:Date.now()});}}\n`;\nawait Bun.write('/tmp/fidy-direct-handoff-worker.ts',source);\nconst built=await Bun.build({entrypoints:['/tmp/fidy-direct-handoff-worker.ts'],target:'browser',tsconfig:root+'/apps/server/tsconfig.json',external:['cloudflare:workers','node:*'],plugins:[{name:'repo-packages',setup(build){build.onResolve({filter:/^effect(\\/.*)?$/},args=>({path:Bun.resolveSync(args.path,root+'/apps/server')}));}}]});if(!built.success)throw new Error(String(built.logs));await Bun.write('/tmp/fidy-direct-handoff-worker.mjs',built.outputs[0]);console.log('Built native direct/Queue handoff comparison',built.outputs[0].size);\n",
+    "fidy-run-direct-handoff.py": "import importlib.util,json,pathlib,subprocess,secrets,time,uuid,statistics\ns=importlib.util.spec_from_file_location('cf','/tmp/fidy-category-cf-read.py');cf=importlib.util.module_from_spec(s);s.loader.exec_module(cf)\nprefix='fidy-direct-handoff-'+secrets.token_hex(4);folder=pathlib.Path('/tmp')/prefix;folder.mkdir(mode=0o700);result={'prefix':prefix,'scope':'Matched private hosted production dispatch and Queue receiver, own synthetic D1/R2, real no-op child Workflow. Dispatch-start to confirmed Workflow existence excludes cron discovery, Workflow startup and extraction. Prior startup deadline failure is retained separately. No public ingress or application providers.','resources':[],'samples':[],'warmup':[],'cleanup':[]};output=pathlib.Path('/tmp/fidy-direct-handoff-proof.json')\ndef save():output.write_text(json.dumps(result,indent=2)+'\\n');(folder/'resources.json').write_text(json.dumps(result,indent=2)+'\\n')\ndef api(path,body=None,method=None):return cf.api('accounts/'+cf.ACCOUNT+'/'+path,body,method)\ndef sql(statement,params=[]):return api('d1/database/'+db['uuid']+'/query',{'sql':statement,'params':params})['result']\ndef wait_instance(workflow,identity):\n deadline=time.monotonic()+120\n while time.monotonic()<deadline:\n  try:r=api('workflows/'+workflow+'/instances/'+identity)['result']\n  except RuntimeError as error:\n   if 'HTTP 404;'not in str(error)and'HTTP 5'not in str(error):raise\n   time.sleep(.5);continue\n  if r.get('status')=='complete':return json.loads(r['output'])if isinstance(r['output'],str)else r['output']\n  if r.get('status')in['errored','terminated']:raise RuntimeError('Owned Workflow failed: '+json.dumps(r.get('error')))\n  time.sleep(.5)\n raise RuntimeError('Owned Workflow deadline: '+workflow+' '+identity+' '+json.dumps({k:r.get(k)for k in ['status','error']}))\ntry:\n db=api('d1/database',{'name':prefix,'primary_location_hint':'enam'})['result'];result['resources'].append(['database','d1/database/'+db['uuid']]);save();sql(\"CREATE TABLE statement_submissions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,status TEXT NOT NULL,retention_expires_at_ms INTEGER NOT NULL,work_published_at_ms INTEGER,work_last_attempt_at_ms INTEGER) STRICT;CREATE TABLE erasure_control(kind TEXT PRIMARY KEY,generation TEXT NOT NULL);INSERT INTO erasure_control VALUES('published','initial');CREATE TABLE receipts(id TEXT PRIMARY KEY,accepted_at_ms INTEGER NOT NULL,attempt INTEGER NOT NULL) STRICT;\")\n api('r2/buckets',{'name':prefix,'locationHint':'enam'});result['resources'].append(['bucket','r2/buckets/'+prefix]);save();queue=api('queues',{'queue_name':prefix})['result'];result['resources'].append(['queue','queues/'+queue['queue_id']]);save()\n workflows=[{'binding':'PROBE','name':prefix+'-probe','class_name':'DispatchProbe'},{'binding':'CHILD','name':prefix+'-child','class_name':'DispatchChild'}];result['resources'].append(['worker','workers/scripts/'+prefix]);result['resources'].extend(['workflow','workflows/'+w['name']]for w in workflows);save()\n (folder/'worker.mjs').write_bytes(pathlib.Path('/tmp/fidy-direct-handoff-worker.mjs').read_bytes());config={'name':prefix,'main':'worker.mjs','account_id':cf.ACCOUNT,'compatibility_date':'2026-09-08','workers_dev':False,'preview_urls':False,'d1_databases':[{'binding':'DB','database_name':prefix,'database_id':db['uuid']}],'r2_buckets':[{'binding':'ERASURE_BUCKET','bucket_name':prefix}],'vars':{'ERASURE_REQUIRED':'true'},'queues':{'producers':[{'binding':'OFFERS','queue':prefix}],'consumers':[{'queue':prefix,'max_batch_size':10,'max_batch_timeout':0,'max_retries':3}]},'workflows':workflows};(folder/'wrangler.json').write_text(json.dumps(config));p=subprocess.run([cf.BUN,str(cf.ROOT/'node_modules/.bin/wrangler'),'deploy','--config',str(folder/'wrangler.json')],cwd=cf.ROOT,capture_output=True,text=True,timeout=90)\n if p.returncode:raise RuntimeError('Owned probe deployment failed: '+p.stderr[-1200:])\n result['consumerSettings']=api('queues/'+queue['queue_id'])['result']['consumers'];save();print('Private direct/Queue handoff comparison deployed',flush=True)\n for pair in range(-2,24):\n  for variant in (['queue','direct']if pair%2==0 else['direct','queue']):\n   identity=str(uuid.uuid4());parent=str(uuid.uuid4());api('workflows/'+prefix+'-probe/instances',{'instance_id':parent,'location_hint':'enam','params':{'id':identity,'variant':variant}});result['pending']={'variant':variant,'parentId':parent,'childId':identity};save();producer=wait_instance(prefix+'-probe',parent)\n   if variant=='direct':accepted=producer['offeredAt'];attempt=1\n   else:\n    deadline=time.monotonic()+120;rows=[]\n    while time.monotonic()<deadline:\n     rows=sql('SELECT accepted_at_ms,attempt FROM receipts WHERE id=?',[identity])[0]['results']\n     if rows:break\n     time.sleep(.5)\n    assert len(rows)==1,'Queue handoff receipt deadline: '+identity\n    accepted=rows[0]['accepted_at_ms'];attempt=rows[0]['attempt']\n   elapsed=accepted-producer['startedAt'];assert attempt==1 and 0<elapsed<120000\n   childDetail=api('workflows/'+prefix+'-child/instances/'+identity)['result'];childOutput=childDetail.get('output');childOutput=json.loads(childOutput)if isinstance(childOutput,str)else childOutput;childState=childDetail.get('status');childStart=childOutput.get('startedAt')if isinstance(childOutput,dict)else None\n   result['warmup'if pair<0 else'samples'].append({'pair':pair,'variant':variant,'dispatchToWorkflowAcceptedMs':elapsed,'dispatchOfferMs':producer['offeredAt']-producer['startedAt'],'parentId':parent,'childId':identity,'startedAt':producer['startedAt'],'childStartedAt':childStart,'childStateAtObservation':childState,'attempt':attempt});save();sql(\"UPDATE statement_submissions SET status='completed',work_published_at_ms=NULL WHERE id=?\",[identity])\n  print('Handoff pair '+str(pair)+' complete',flush=True)\n result['summary']={}\n for variant in ['queue','direct']:\n  values=sorted(r['dispatchToWorkflowAcceptedMs']for r in result['samples']if r['variant']==variant);result['summary'][variant]={'medianMs':statistics.median(values),'p95Ms':values[22]}\n result['summary']['medianSpeedup']=result['summary']['queue']['medianMs']/result['summary']['direct']['medianMs'];result['summary']['p95Speedup']=result['summary']['queue']['p95Ms']/result['summary']['direct']['p95Ms'];save();print(result['summary'],flush=True)\nexcept Exception as error:result['failure']=str(error);save();print(str(error),flush=True)\nfinally:\n if 'queue'in locals():\n  try:\n   detail=api('queues/'+queue['queue_id'])['result']\n   for consumer in detail.get('consumers',[]):\n    assert consumer.get('script',consumer.get('script_name'))==prefix\n    api('queues/'+queue['queue_id']+'/consumers/'+consumer['consumer_id'],method='DELETE')\n   result['cleanup'].append({'kind':'consumer','deleted':True})\n  except Exception as error:result['cleanup'].append({'kind':'consumer','deleted':False,'error':str(error)})\n for kind,path in reversed(result['resources']):\n  try:\n   if kind=='bucket':\n    try:api(path+'/objects/recovery%2Fgeneration',method='DELETE')\n    except RuntimeError as error:\n     if 'HTTP 404;'not in str(error):raise\n   api(path,method='DELETE');result['cleanup'].append({'kind':kind,'path':path,'deleted':True})\n  except Exception as error:result['cleanup'].append({'kind':kind,'path':path,'deleted':False,'error':str(error)})\n save();print('Owned probe cleanup: '+str(result['cleanup']),flush=True)\n"
+  },
+  "candidateSource": {
+    "apps/server/cloudflare/ingestion/internal/statement-delivery.ts": "import {\n  captureWorkTrace,\n  sanitizeWorkTrace,\n  workTraceHeaders,\n} from \"../../runtime/telemetry/operations\";\nimport type { WorkflowStepConfig } from \"cloudflare:workers\";\nimport { Cause, Clock, Data, Effect, Exit, Option, Result, Schema } from \"effect\";\nimport { StatementCoordinatorActivity, StatementWork } from \"../contract\";\nimport { maximumStatementChunkActivities } from \"./statement-processing-limits\";\n\nconst Work = StatementWork;\nconst CoordinatorWork = StatementCoordinatorActivity;\nconst OutboxRow = Schema.Struct({\n  user_id: Schema.String.check(Schema.isUUID()),\n  submission_id: StatementWork.fields.submissionId,\n  revision: Schema.Literal(1),\n});\nconst SubmissionState = Schema.Struct({\n  status: Schema.Literals([\"queued\", \"processing\", \"completed\", \"failed\"]),\n});\nconst WorkflowState = Schema.Struct({\n  status: Schema.Literals([\n    \"queued\",\n    \"running\",\n    \"paused\",\n    \"errored\",\n    \"terminated\",\n    \"complete\",\n    \"waiting\",\n    \"waitingForPause\",\n    \"rollingBack\",\n    \"unknown\",\n  ]),\n});\nconst retention = { successRetention: \"3 days\", errorRetention: \"3 days\" } as const;\nconst dispatchLimit = 32;\nconst dispatchCooldownMs = 60_000;\n\n/** Publish only versioned User/submission identity. A resolved send means the Queue accepted an\n * offer, not that extraction completed; a rejected send may still have been accepted, so the\n * outbox retries the same idempotent identity after its cooldown. No bytes or passwords enter it.\n */\nexport type StatementQueue = Readonly<{\n  send: (work: typeof Work.Type) => Promise<unknown>;\n}>;\n/** Create one Workflow instance keyed by submission id. A resolved create means the instance\n * exists, not that it finished. If creation rejects ambiguously, get must resolve an existing\n * instance before Queue acknowledgement; a missing/unavailable get must reject for redelivery.\n * get may return an errored instance: the scheduled reconciler inspects status and settles it\n * under the User coordinator. The three-day retention applies to Workflow state only.\n */\nexport type StatementWorkflow = Readonly<{\n  create: (options: {\n    id: string;\n    params: typeof Work.Type;\n    retention: typeof retention;\n  }) => Promise<unknown>;\n  get: (id: string) => Promise<unknown>;\n}>;\n\nclass StatementDeliveryUnavailable extends Data.TaggedError(\"StatementDeliveryUnavailable\")<{\n  readonly cause: unknown;\n}> {}\nconst attempt = <A>(run: () => PromiseLike<A>): Effect.Effect<A, StatementDeliveryUnavailable> =>\n  Effect.tryPromise({\n    try: () => Promise.resolve(run()),\n    catch: (cause) => new StatementDeliveryUnavailable({ cause }),\n  });\n\nexport const isStatementExtractionWork = (body: unknown): boolean =>\n  Option.isSome(Schema.decodeUnknownOption(Work)(body));\n\n/** Reoffers a bounded page of unsettled D1 intents. Failed handoffs leave their identity selectable. */\nexport const dispatchStatementExtraction = (\n  environment: Readonly<{\n    DB: D1Database;\n    STATEMENT_EXTRACTION_QUEUE: StatementQueue;\n    STATEMENT_EXTRACTION_WORKFLOW: Option.Option<StatementWorkflow>;\n  }>\n): Effect.Effect<void, StatementDeliveryUnavailable> =>\n  Effect.gen(function* () {\n    const trace = yield* captureWorkTrace;\n    const now = yield* Clock.currentTimeMillis;\n    const rows = yield* attempt(() =>\n      environment.DB.prepare(`SELECT user_id, id AS submission_id, 1 AS revision\n        FROM statement_submissions\n        WHERE work_published_at_ms IS NOT NULL AND status IN ('queued', 'processing')\n          AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms < ?)\n        ORDER BY work_published_at_ms, id LIMIT ?`)\n        .bind(now - dispatchCooldownMs, dispatchLimit)\n        .all()\n    );\n    const entries = yield* Schema.decodeUnknownEffect(Schema.Array(OutboxRow))(rows.results).pipe(\n      Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))\n    );\n    let failed = false;\n    for (const entry of entries) {\n      const claimed = yield* attempt(() =>\n        environment.DB.prepare(`UPDATE statement_submissions SET work_last_attempt_at_ms = ?\n          WHERE work_published_at_ms IS NOT NULL AND id = ? AND user_id = ?\n          AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms < ?)`)\n          .bind(now, entry.submission_id, entry.user_id, now - dispatchCooldownMs)\n          .run()\n      );\n      if (claimed.meta.changes !== 1) continue;\n      const offered = yield* Effect.exit(\n        offerStatementExtraction(environment, {\n          ...trace,\n          version: entry.revision,\n          userId: entry.user_id,\n          submissionId: entry.submission_id,\n        })\n      );\n      if (Exit.isFailure(offered)) {\n        if (Cause.hasInterrupts(offered.cause)) return yield* Effect.failCause(offered.cause);\n        failed = true;\n      }\n    }\n    if (failed) return yield* new StatementDeliveryUnavailable({ cause: \"queue_unavailable\" });\n  }).pipe(Effect.withSpan(\"ingestion.statementDispatch\"));\n\n/** Decode before looking up authority; forged and stale work cannot start an extraction. */\nexport const receiveStatementExtraction = (\n  input: Readonly<{\n    environment: Readonly<{ DB: D1Database; STATEMENT_EXTRACTION_WORKFLOW: StatementWorkflow }>;\n    messages: ReadonlyArray<Readonly<{ body: unknown; ack: () => void }>>;\n  }>\n): Effect.Effect<void, StatementDeliveryUnavailable> =>\n  Effect.gen(function* () {\n    const now = yield* Clock.currentTimeMillis;\n    for (const message of input.messages) {\n      const work = Schema.decodeUnknownOption(Work)(message.body);\n      if (Option.isNone(work)) {\n        message.ack();\n        continue;\n      }\n      const row = yield* attempt(() =>\n        input.environment.DB.prepare(`SELECT status FROM statement_submissions\n          WHERE id = ? AND user_id = ? AND retention_expires_at_ms > ?`)\n          .bind(work.value.submissionId, work.value.userId, now)\n          .first()\n      );\n      if (row === null) {\n        message.ack();\n        continue;\n      }\n      const submission = yield* Schema.decodeUnknownEffect(SubmissionState)(row).pipe(\n        Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))\n      );\n      if (submission.status === \"completed\" || submission.status === \"failed\") {\n        message.ack();\n        continue;\n      }\n      const params = yield* sanitizeWorkTrace(work.value);\n      const started = yield* Effect.exit(\n        attempt(() =>\n          input.environment.STATEMENT_EXTRACTION_WORKFLOW.create({\n            id: work.value.submissionId,\n            params,\n            retention,\n          })\n        )\n      );\n      if (Exit.isFailure(started)) {\n        if (Cause.hasInterrupts(started.cause)) return yield* Effect.failCause(started.cause);\n        yield* attempt(() =>\n          input.environment.STATEMENT_EXTRACTION_WORKFLOW.get(work.value.submissionId)\n        );\n      }\n      message.ack();\n    }\n  }).pipe(Effect.withSpan(\"ingestion.statementReceive\"));\n\n/** Direct handoff accelerates the committed outbox; an unavailable create/get falls back to the\n * same Queue identity. Both paths use the receiver's current eligibility and stable Workflow id.\n */\nconst offerStatementExtraction = (\n  environment: Readonly<{\n    DB: D1Database;\n    STATEMENT_EXTRACTION_QUEUE: StatementQueue;\n    STATEMENT_EXTRACTION_WORKFLOW: Option.Option<StatementWorkflow>;\n  }>,\n  body: typeof Work.Type\n): Effect.Effect<void, StatementDeliveryUnavailable> =>\n  Effect.gen(function* () {\n    const workflow = environment.STATEMENT_EXTRACTION_WORKFLOW;\n    if (Option.isSome(workflow)) {\n      const delivered = yield* Effect.exit(\n        receiveStatementExtraction({\n          environment: { DB: environment.DB, STATEMENT_EXTRACTION_WORKFLOW: workflow.value },\n          messages: [{ body, ack: (): void => undefined }],\n        })\n      );\n      if (Exit.isSuccess(delivered)) return;\n      if (Cause.hasInterrupts(delivered.cause)) return yield* Effect.failCause(delivered.cause);\n    }\n    yield* attempt(() => environment.STATEMENT_EXTRACTION_QUEUE.send(body));\n  });\n\n/** One private coordinator target; the Workflow never stores bytes, row facts, or credentials. */\ntype StatementCoordinator = Readonly<{\n  getByName: (name: string) => Pick<Fetcher, \"fetch\">;\n}>;\n\nconst workflowState = (\n  workflow: Pick<StatementWorkflow, \"get\">,\n  id: string\n): Effect.Effect<typeof WorkflowState.Type, StatementDeliveryUnavailable> =>\n  Effect.gen(function* () {\n    const instance = yield* attempt(() => workflow.get(id));\n    const statusMethod =\n      typeof instance === \"object\" && instance !== null && \"status\" in instance\n        ? instance.status\n        : undefined;\n    if (typeof statusMethod !== \"function\") {\n      return yield* new StatementDeliveryUnavailable({ cause: \"Workflow status unavailable\" });\n    }\n    const status = yield* attempt(() => {\n      const result: unknown = statusMethod.call(instance);\n      return Promise.resolve(result);\n    });\n    return yield* Schema.decodeUnknownEffect(WorkflowState)(status).pipe(\n      Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))\n    );\n  });\n\n/** Reconcile failed or completed Workflow instances whose final report activity also exhausted.\n * The authoritative submission remains nonterminal until its own User coordinator settles it.\n * A bounded rotating scan prevents an active Workflow from hiding a later errored one.\n */\nexport const reconcileStatementExtraction = (\n  input: Readonly<{\n    DB: D1Database;\n    STATEMENT_EXTRACTION_WORKFLOW: Pick<StatementWorkflow, \"get\">;\n    USER_TRANSACTION_COORDINATOR: StatementCoordinator;\n  }>\n): Effect.Effect<void, StatementDeliveryUnavailable> =>\n  Effect.gen(function* () {\n    const now = yield* Clock.currentTimeMillis;\n    const selected = yield* attempt(() =>\n      input.DB.prepare(`SELECT user_id, id AS submission_id, 1 AS revision\n      FROM statement_submissions\n      WHERE work_published_at_ms IS NOT NULL AND work_published_at_ms > 0\n        AND status IN ('queued', 'processing') AND retention_expires_at_ms > ?\n      ORDER BY work_last_reconciled_at_ms, work_published_at_ms, id LIMIT ?`)\n        .bind(now, dispatchLimit)\n        .all()\n    );\n    const work = yield* Schema.decodeUnknownEffect(Schema.Array(OutboxRow))(selected.results).pipe(\n      Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))\n    );\n    for (const row of work) {\n      yield* attempt(() =>\n        input.DB.prepare(\n          `UPDATE statement_submissions SET work_last_reconciled_at_ms = ? WHERE work_published_at_ms IS NOT NULL AND id = ? AND user_id = ?`\n        )\n          .bind(now, row.submission_id, row.user_id)\n          .run()\n      );\n      const state = yield* Effect.result(\n        workflowState(input.STATEMENT_EXTRACTION_WORKFLOW, row.submission_id)\n      );\n      if (Result.isFailure(state)) continue;\n      if (![\"errored\", \"terminated\", \"complete\"].includes(state.success.status)) continue;\n      yield* attempt(() =>\n        coordinatedStatementStep(\n          input.USER_TRANSACTION_COORDINATOR,\n          { version: row.revision, userId: row.user_id, submissionId: row.submission_id },\n          \"StatementFailed\"\n        )\n      );\n    }\n  }).pipe(Effect.withSpan(\"ingestion.statementReconcile\"));\n\ntype Activity = <A extends boolean>(\n  name: string,\n  options: WorkflowStepConfig,\n  run: () => Promise<A>\n) => Promise<A>;\nconst HTTP_OK = 200;\nconst HTTP_ACCEPTED = 202;\n\nconst coordinatedStatementStep = (\n  coordinator: StatementCoordinator,\n  work: typeof Work.Type,\n  kind: \"StatementWork\" | \"StatementFailed\"\n): Promise<boolean> =>\n  Effect.runPromise(\n    Effect.gen(function* () {\n      const safeWork = yield* sanitizeWorkTrace(work);\n      const traceHeaders = yield* workTraceHeaders(safeWork);\n      const body = yield* Schema.encodeEffect(Schema.fromJsonString(CoordinatorWork))({\n        _tag: kind,\n        ...safeWork,\n      }).pipe(Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause })));\n      const result = yield* Effect.tryPromise({\n        try: () =>\n          coordinator.getByName(work.userId).fetch(\n            new Request(\"https://coordinator.internal/statement-work\", {\n              method: \"POST\",\n              headers: { \"content-type\": \"application/json\", ...traceHeaders },\n              body,\n            })\n          ),\n        catch: (cause) => new StatementDeliveryUnavailable({ cause }),\n      });\n      if (\n        result.status !== HTTP_OK &&\n        !(kind === \"StatementWork\" && result.status === HTTP_ACCEPTED)\n      ) {\n        return yield* new StatementDeliveryUnavailable({ cause: \"coordinator_unavailable\" });\n      }\n      return result.status === HTTP_ACCEPTED;\n    })\n  );\n\n/** Runs an identity-only activity under the User's coordination boundary. */\nexport const runStatementExtractionWorkflow = (\n  input: Readonly<{\n    payload: unknown;\n    coordinator: StatementCoordinator;\n    activity: Activity;\n  }>\n): Promise<void> => {\n  const work = Schema.decodeUnknownOption(Work)(input.payload);\n  if (Option.isNone(work)) return Promise.resolve();\n  return Effect.runPromise(\n    Effect.gen(function* () {\n      let finished = false;\n      for (let index = 0; index < maximumStatementChunkActivities; index += 1) {\n        const outcome = yield* Effect.exit(\n          Effect.tryPromise({\n            try: () =>\n              input.activity(\n                `finalize-statement-chunk-v1-${index}`,\n                { retries: { limit: 2, delay: \"1 minute\", backoff: \"exponential\" } },\n                () => coordinatedStatementStep(input.coordinator, work.value, \"StatementWork\")\n              ),\n            catch: (cause) => new StatementDeliveryUnavailable({ cause }),\n          })\n        );\n        if (Exit.isFailure(outcome)) {\n          if (Cause.hasInterrupts(outcome.cause)) return yield* Effect.failCause(outcome.cause);\n          break;\n        }\n        if (!outcome.value) {\n          finished = true;\n          break;\n        }\n      }\n      if (finished) return;\n      yield* Effect.tryPromise({\n        try: () =>\n          input.activity(\n            \"report-statement-interruption-v1\",\n            { retries: { limit: 2, delay: \"1 minute\", backoff: \"exponential\" } },\n            () => coordinatedStatementStep(input.coordinator, work.value, \"StatementFailed\")\n          ),\n        catch: (cause) => new StatementDeliveryUnavailable({ cause }),\n      });\n    })\n  );\n};\n",
+    "apps/server/cloudflare/maintenance/runtime.ts": "import { makeBancolombiaSandboxCleanup } from \"../bancolombia-authentication/runtime\";\nimport { sweepProviderAuthentication } from \"../provider-authentication/runtime\";\nimport { sweepRecoveryEvidence } from \"../recovery/runtime\";\nimport { Clock, Effect, Option, Redacted } from \"effect\";\nimport { makeAuditRetention } from \"../../src/shell/audit/runtime\";\nimport {\n  type CoreMaintenanceInput,\n  EmailScheduleUnavailable,\n  type ScheduledActivity,\n  type ScheduledOperation,\n  type ScheduledWorkFailed,\n} from \"./contract\";\nimport { executeDueSchedule } from \"./operations\";\nimport { sweepCanonicalAdmission } from \"../canonical-admission/runtime\";\nimport { sweepCommercialAllowances } from \"../quotas/runtime\";\nimport type { ForwardedEmailEnvironment } from \"../ingestion/contract\";\nimport { makePlatformMaintenance } from \"../runtime/runtime\";\nimport { makeAgentRetention } from \"../agent/runtime\";\nimport { sweepExpiredWorkersAiAdmission } from \"../ai/runtime\";\nimport { recoverPendingDisclosures, sweepExpiredConsent } from \"../consent/ingress/runtime\";\nimport {\n  dispatchBrowserPairingEmail,\n  dispatchEmailReplacement,\n  reconcileBrowserPairingEmail,\n  reconcileEmailReplacement,\n} from \"../email-authentication/runtime\";\nimport {\n  dispatchBillingCollection,\n  dispatchBillingPriceNotices,\n  dispatchRefunds,\n  dispatchSubscriptionCancellations,\n  dispatchSubscriptionRenewals,\n  dispatchVoidVerification,\n  reconcileBillingCandidates,\n  sweepExpiredEnrollmentAdmission,\n} from \"../subscription/runtime\";\nimport {\n  dispatchForwardedEmail,\n  dispatchStatementExtraction,\n  expireStatementReviewEvidence,\n  reconcileStatementExtraction,\n  statementRetention,\n  sweepExpiredUploadAdmission,\n  sweepForwardedEmail,\n  sweepMediaSubmissions,\n  sweepReviewDrafts,\n} from \"../ingestion/runtime\";\nimport { sweepProactivityConsentOffers } from \"../consent/runtime\";\nimport { sweepExpiredPATPairings } from \"../tokens/runtime\";\nimport { sweepOAuthConfirmation } from \"../oauth-confirmation/runtime\";\nimport { recoverConnections } from \"../connections/runtime\";\nimport { advanceProactivityWork } from \"../insights/runtime\";\nimport { advanceRecurringWork } from \"../recurring/runtime\";\nimport { repairDashboardProjections } from \"../transactions/runtime\";\nimport { dispatchWhatsAppWork, sweepExpiredWhatsAppWindows } from \"../whatsapp/runtime\";\n\nconst activity = <E>(\n  operation: ScheduledOperation,\n  work: Effect.Effect<unknown, E>\n): ScheduledActivity => ({ operation, work: work.pipe(Effect.mapError(() => undefined)) });\n\nconst emailActivities = (environment: CoreMaintenanceInput): ReadonlyArray<ScheduledActivity> => [\n  activity(\n    \"browserPairing.email.dispatch\",\n    Option.match(environment.BROWSER_PAIRING_EMAIL_QUEUE, {\n      onNone: () => Effect.void,\n      onSome: (queue) =>\n        dispatchBrowserPairingEmail({\n          DB: environment.DB,\n          BROWSER_PAIRING_EMAIL_QUEUE: queue,\n          identity: Option.none(),\n        }),\n    })\n  ),\n  activity(\"browserPairing.email.reconcile\", reconcileBrowserPairingEmail(environment.DB)),\n  activity(\n    \"emailReplacement.dispatch\",\n    Option.match(environment.EMAIL_REPLACEMENT_QUEUE, {\n      onNone: () => Effect.void,\n      onSome: (queue) =>\n        dispatchEmailReplacement({\n          DB: environment.DB,\n          EMAIL_REPLACEMENT_QUEUE: queue,\n          identity: Option.none(),\n        }),\n    })\n  ),\n  activity(\"emailReplacement.reconcile\", reconcileEmailReplacement(environment.DB)),\n];\n\nconst billingActivities = (environment: CoreMaintenanceInput): ReadonlyArray<ScheduledActivity> => [\n  activity(\"billing.renewal.dispatch\", dispatchSubscriptionRenewals(environment)),\n  activity(\n    \"billing.cancellation.dispatch\",\n    Option.match(environment.BILLING_COLLECTION_QUEUE, {\n      onNone: () => Effect.void,\n      onSome: (queue) =>\n        dispatchSubscriptionCancellations({ DB: environment.DB, BILLING_COLLECTION_QUEUE: queue }),\n    })\n  ),\n  activity(\n    \"billing.priceNotice.dispatch\",\n    Option.match(environment.BILLING_COLLECTION_QUEUE, {\n      onNone: () => Effect.void,\n      onSome: (queue) =>\n        dispatchBillingPriceNotices({ DB: environment.DB, BILLING_COLLECTION_QUEUE: queue }),\n    })\n  ),\n  activity(\n    \"billing.refund.reconcile\",\n    Option.match(environment.BILLING_COLLECTION_QUEUE, {\n      onNone: () => Effect.void,\n      onSome: (queue) =>\n        dispatchVoidVerification({ DB: environment.DB, BILLING_COLLECTION_QUEUE: queue }),\n    })\n  ),\n  activity(\n    \"billing.refund.dispatch\",\n    Option.match(environment.BILLING_COLLECTION_QUEUE, {\n      onNone: () => Effect.void,\n      onSome: (queue) => dispatchRefunds({ DB: environment.DB, BILLING_COLLECTION_QUEUE: queue }),\n    })\n  ),\n  activity(\n    \"billing.collection.dispatch\",\n    Option.match(environment.BILLING_COLLECTION_QUEUE, {\n      onNone: () => Effect.void,\n      onSome: (queue) =>\n        dispatchBillingCollection({\n          DB: environment.DB,\n          BILLING_COLLECTION_QUEUE: queue,\n          identity: Option.none(),\n        }),\n    })\n  ),\n  activity(\n    \"billing.collection.reconcile\",\n    Option.match(environment.BILLING_COLLECTION_WORKFLOW, {\n      onNone: () => Effect.void,\n      onSome: (workflow) =>\n        reconcileBillingCandidates({ DB: environment.DB, BILLING_COLLECTION_WORKFLOW: workflow }),\n    })\n  ),\n];\n\nconst channelActivities = (\n  environment: CoreMaintenanceInput,\n  nowEpochMs: number\n): ReadonlyArray<ScheduledActivity> => [\n  activity(\"consent.sweep\", sweepExpiredConsent(environment.DB)()),\n  activity(\"consent.proactivityOfferRetention\", sweepProactivityConsentOffers(environment.DB)),\n  activity(\n    \"consent.disclosureRecovery\",\n    recoverPendingDisclosures({\n      db: environment.DB,\n      apiKey: environment.KAPSO_API_KEY,\n      sandboxPhoneNumberId: Option.fromNullishOr(environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),\n    })\n  ),\n  activity(\n    \"hostedTurn.whatsapp.dispatch\",\n    Option.match(environment.HOSTED_WHATSAPP_QUEUE, {\n      onNone: () => Effect.void,\n      onSome: (queue) => dispatchWhatsAppWork({ db: environment.DB, queue, userId: Option.none() }),\n    })\n  ),\n  activity(\n    \"hostedTurn.whatsapp.windowSweep\",\n    sweepExpiredWhatsAppWindows({ db: environment.DB, now: nowEpochMs })\n  ),\n  activity(\"hostedTurn.sweep\", makeAgentRetention({ db: environment.DB }).sweep(nowEpochMs)),\n];\n\nconst stagingActivities = (\n  environment: CoreMaintenanceInput,\n  nowEpochMs: number\n): ReadonlyArray<ScheduledActivity> => {\n  const staging = Option.map(environment.STATEMENT_STAGING_BUCKET, (bucket) =>\n    statementRetention({\n      bucket,\n      database: environment.DB,\n      nowEpochMs: () => nowEpochMs,\n    })\n  );\n  return [\n    activity(\n      \"ingestion.submissionRetention\",\n      Option.match(staging, {\n        onNone: () => Effect.void,\n        onSome: (retention) => retention.expireSubmissions,\n      })\n    ),\n    activity(\n      \"ingestion.stagingSweep\",\n      Option.match(staging, {\n        onNone: () => Effect.void,\n        onSome: (retention) => retention.sweepStaging,\n      })\n    ),\n  ];\n};\n\nconst admissionActivities = (\n  environment: CoreMaintenanceInput,\n  nowEpochMs: number\n): ReadonlyArray<ScheduledActivity> => [\n  activity(\n    \"ingestion.mediaRetention\",\n    sweepMediaSubmissions({ db: environment.DB, now: nowEpochMs })\n  ),\n  activity(\n    \"ingestion.uploadAdmissionSweep\",\n    sweepExpiredUploadAdmission({ db: environment.DB, now: nowEpochMs })\n  ),\n  activity(\n    \"agent.workersAiAdmissionSweep\",\n    sweepExpiredWorkersAiAdmission({ db: environment.DB, now: nowEpochMs })\n  ),\n  activity(\n    \"billing.cardPreparationAdmissionSweep\",\n    sweepExpiredEnrollmentAdmission({ db: environment.DB, now: nowEpochMs })\n  ),\n  activity(\n    \"provider.authenticationRetention\",\n    sweepProviderAuthentication({ db: environment.DB, current: nowEpochMs })\n  ),\n  activity(\n    \"canonical.admissionRetention\",\n    sweepCanonicalAdmission({ db: environment.DB, current: nowEpochMs })\n  ),\n  activity(\n    \"oauth.confirmationRetention\",\n    sweepOAuthConfirmation({ db: environment.DB, current: nowEpochMs })\n  ),\n  activity(\n    \"quota.consumptionRetention\",\n    sweepCommercialAllowances({ db: environment.DB, current: nowEpochMs })\n  ),\n];\n\nconst statementActivities = (\n  environment: CoreMaintenanceInput\n): ReadonlyArray<ScheduledActivity> => [\n  activity(\n    \"ingestion.reviewEvidenceExpiry\",\n    Option.match(environment.STATEMENT_STAGING_BUCKET, {\n      onNone: () => Effect.void,\n      onSome: () => expireStatementReviewEvidence({ DB: environment.DB }),\n    })\n  ),\n  activity(\n    \"ingestion.statementReconcile\",\n    Option.match(environment.STATEMENT_EXTRACTION_WORKFLOW, {\n      onNone: () => Effect.void,\n      onSome: (workflow) =>\n        reconcileStatementExtraction({\n          DB: environment.DB,\n          STATEMENT_EXTRACTION_WORKFLOW: workflow,\n          USER_TRANSACTION_COORDINATOR: environment.USER_TRANSACTION_COORDINATOR,\n        }),\n    })\n  ),\n  activity(\n    \"ingestion.statementDispatch\",\n    Option.match(environment.STATEMENT_EXTRACTION_QUEUE, {\n      onNone: () => Effect.void,\n      onSome: (queue) =>\n        dispatchStatementExtraction({\n          DB: environment.DB,\n          STATEMENT_EXTRACTION_QUEUE: queue,\n          STATEMENT_EXTRACTION_WORKFLOW: environment.STATEMENT_EXTRACTION_WORKFLOW,\n        }),\n    })\n  ),\n];\n\n/**\n * Run one Core tick through published owner runtimes. Work starts at execution time, with one\n * shared decision instant for sweeps that accept it. Owners retain their own policy and authority;\n * independent failures are reported only after the remaining activities have been attempted.\n */\nexport const runCoreMaintenance = (\n  input:\n    | CoreMaintenanceInput\n    | Readonly<{ environment: CoreMaintenanceInput; scheduledAtEpochMs: number }>\n): Effect.Effect<void, ScheduledWorkFailed> =>\n  Effect.gen(function* () {\n    const nowEpochMs = yield* Clock.currentTimeMillis;\n    const environment = \"environment\" in input ? input.environment : input;\n    const platform = makePlatformMaintenance(environment);\n    yield* executeDueSchedule({\n      activities: [\n        activity(\"async.health\", platform.inspectHealth()),\n        activity(\n          \"ingestion.reviewDraftExpiry\",\n          sweepReviewDrafts({ db: environment.DB, current: nowEpochMs })\n        ),\n        activity(\n          \"audit.retention\",\n          makeAuditRetention({ database: environment.DB }).sweep(nowEpochMs)\n        ),\n        activity(\"recovery.retention\", sweepRecoveryEvidence({ db: environment.DB, nowEpochMs })),\n        activity(\"operational.canary.publish\", platform.publishCanary(nowEpochMs)),\n        ...emailActivities(environment),\n        ...billingActivities(environment),\n        ...channelActivities(environment, nowEpochMs),\n        activity(\"patPairing.sweep\", sweepExpiredPATPairings(environment.DB)),\n        activity(\"dashboard.projectionRepair\", repairDashboardProjections(environment.DB)),\n        activity(\"recurring.evaluate\", advanceRecurringWork(environment)),\n        activity(\"insights.weekly.dispatch\", advanceProactivityWork(environment)),\n        ...stagingActivities(environment, nowEpochMs),\n        activity(\n          \"connections.recovery\",\n          recoverConnections({\n            db: environment.DB,\n            key: Option.map(\n              Option.fromUndefinedOr(environment.BANCOLOMBIA_SANDBOX_GRANT_KEY),\n              Redacted.make\n            ),\n            bank: makeBancolombiaSandboxCleanup(environment),\n            scheduledAtEpochMs: \"environment\" in input ? input.scheduledAtEpochMs : nowEpochMs,\n          })\n        ),\n        ...admissionActivities(environment, nowEpochMs),\n        ...statementActivities(environment),\n      ],\n      nowEpochMs: \"environment\" in input ? input.scheduledAtEpochMs : nowEpochMs,\n    });\n  });\n\n/** Attempt Email retention and delivery independently without widening the Email Worker's bindings. */\nexport const runEmailMaintenance = (\n  input:\n    | ForwardedEmailEnvironment\n    | Readonly<{ environment: ForwardedEmailEnvironment; scheduledAtEpochMs: number }>\n): Effect.Effect<void, EmailScheduleUnavailable> =>\n  Effect.flatMap(Clock.currentTimeMillis, (nowEpochMs) => {\n    const environment = \"environment\" in input ? input.environment : input;\n    return executeDueSchedule({\n      activities: [\n        activity(\"forwarded-email.sweep\", sweepForwardedEmail(environment)),\n        activity(\"forwarded-email.dispatch\", dispatchForwardedEmail(environment)),\n      ],\n      nowEpochMs: \"environment\" in input ? input.scheduledAtEpochMs : nowEpochMs,\n    });\n  }).pipe(Effect.mapError(() => new EmailScheduleUnavailable()));\n"
+  },
+  "childStartSummary": {
+    "queue": {
+      "medianMs": 5566.0,
+      "p95Ms": 7953,
+      "maxMs": 12185
+    },
+    "direct": {
+      "medianMs": 1894.5,
+      "p95Ms": 2628,
+      "maxMs": 2788
+    },
+    "medianSpeedup": 2.937978358405912,
+    "p95Speedup": 3.026255707762557
+  }
+}

@@ -156,6 +156,12 @@ Queues carry bounded versioned identities/facts; Cloudflare Workflows run durabl
 Effect inside owned steps. Workers recheck retained owner state on redelivery. D1 records domain
 intent, authorization and provider outcomes; workflow progress cannot substitute for them.
 
+Statement dispatch first offers a claimed, committed intent directly to its stable Workflow.
+The same receiver checks current submission ownership, retention and state on either path.
+An ambiguous creation requires an existing-instance lookup; unavailable creation and lookup fall
+back to the Queue with the unchanged identity. The D1 intent and scheduled retry remain the
+recovery path when both offers fail. Neither handoff means extraction has completed.
+
 Maintenance composes owner discovery, reconciliation and retention without acquiring domain SQL or
 policy. Post-commit publication accelerates durable handoff; scheduled recovery handles missed
 publication. Independent activities retain bounded work, fair discovery and failure isolation.

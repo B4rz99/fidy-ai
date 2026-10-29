@@ -1223,6 +1223,7 @@ it("offers eligible statement identities in publication order even after an earl
       const offered: Array<unknown> = [];
       yield* dispatchStatementExtraction({
         DB: runtime.db,
+        STATEMENT_EXTRACTION_WORKFLOW: Option.none(),
         STATEMENT_EXTRACTION_QUEUE: {
           send: (body) => {
             offered.push(body);
@@ -1233,6 +1234,79 @@ it("offers eligible statement identities in publication order even after an earl
       expect(offered).toEqual(identities);
     })
   ));
+
+it.each(["created", "existing", "unavailable", "expired"] as const)(
+  "tries the committed statement Workflow before Queue fallback: %s",
+  (outcome) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const staged = yield* fromTestPromise(() => stageOne(runtime));
+        const submitted = yield* fromTestPromise(() =>
+          publishFixture(runtime, {
+            index: 0,
+            reference: staged.staged,
+            idempotencyKey: "20000000-0000-4000-8000-000000000985",
+          })
+        );
+        const submission = yield* fromTestPromise(() => submissionOf(submitted));
+        const clock = yield* Clock.Clock;
+        const liveTime = yield* Clock.currentTimeMillis;
+        const current = outcome === "expired" ? liveTime + 365 * dayMilliseconds : liveTime;
+        const dispatchClock: Clock.Clock = {
+          currentTimeMillisUnsafe: () => current,
+          currentTimeMillis: Effect.succeed(current),
+          currentTimeNanosUnsafe: () => BigInt(current) * 1_000_000n,
+          currentTimeNanos: Effect.succeed(BigInt(current) * 1_000_000n),
+          monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+          monotonicTimeNanos: clock.monotonicTimeNanos,
+          sleep: (duration) => clock.sleep(duration),
+        };
+        const created: Array<unknown> = [];
+        const lookedUp: Array<string> = [];
+        const queued: Array<unknown> = [];
+        yield* dispatchStatementExtraction({
+          DB: runtime.db,
+          STATEMENT_EXTRACTION_WORKFLOW: Option.some({
+            create: (options) => {
+              created.push(options);
+              return outcome === "created"
+                ? Promise.resolve({})
+                : Promise.reject(new Error("Ambiguous create"));
+            },
+            get: (id) => {
+              lookedUp.push(id);
+              return outcome === "existing"
+                ? Promise.resolve({})
+                : Promise.reject(new Error("Workflow unavailable"));
+            },
+          }),
+          STATEMENT_EXTRACTION_QUEUE: {
+            send: (body) => {
+              queued.push(body);
+              return Promise.resolve();
+            },
+          },
+        }).pipe(Effect.provideService(Clock.Clock, dispatchClock));
+        const work = { version: 1, userId: userA, submissionId: submission.id };
+        expect(created).toEqual(
+          outcome === "expired"
+            ? []
+            : [
+                {
+                  id: submission.id,
+                  params: work,
+                  retention: { successRetention: "3 days", errorRetention: "3 days" },
+                },
+              ]
+        );
+        expect(lookedUp).toEqual(
+          outcome === "created" || outcome === "expired" ? [] : [submission.id]
+        );
+        expect(queued).toEqual(outcome === "unavailable" ? [work] : []);
+      })
+    )
+);
 
 it("finishes a durably queued statement after withdrawal without reopening ordinary access or replaying capture", () =>
   Effect.runPromise(
@@ -1325,6 +1399,7 @@ it(
         const offered: Array<unknown> = [];
         yield* dispatchStatementExtraction({
           DB: runtime.db,
+          STATEMENT_EXTRACTION_WORKFLOW: Option.none(),
           STATEMENT_EXTRACTION_QUEUE: {
             send: (body) => {
               offered.push(body);
@@ -1485,6 +1560,7 @@ it(
         const failed = yield* Effect.exit(
           dispatchStatementExtraction({
             DB: runtime.db,
+            STATEMENT_EXTRACTION_WORKFLOW: Option.none(),
             STATEMENT_EXTRACTION_QUEUE: { send: () => Promise.reject(new Error("Queue down")) },
           })
         );
@@ -1502,6 +1578,7 @@ it(
         const offered: Array<unknown> = [];
         yield* dispatchStatementExtraction({
           DB: runtime.db,
+          STATEMENT_EXTRACTION_WORKFLOW: Option.none(),
           STATEMENT_EXTRACTION_QUEUE: {
             send: (body) => {
               offered.push(body);

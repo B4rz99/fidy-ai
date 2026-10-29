@@ -41,7 +41,7 @@ import { expireStatementReviewEvidence as expireReview } from "./internal/statem
 /** Bounded inactive-User cleanup of expired media locators, held capacity and aged accountability. */
 export const sweepMediaSubmissions: typeof sweepMedia = (input) => sweepMedia(input);
 
-/** Reoffer bounded committed extraction identities; a Queue offer never authorizes extraction. */
+/** Reoffer committed extraction identities directly to their Workflow, with Queue fallback. */
 export const dispatchStatementExtraction: typeof dispatchStatements = (input) =>
   dispatchStatements(input);
 /** Decode Queue work and check current owner state before handing the stable identity to its Workflow. */

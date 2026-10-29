@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
-import { DateTime, Effect, Exit, Option } from "effect";
+import { DateTime, Effect, Option, Result } from "effect";
 import { Memory, MemoryCapacityExceeded, MemoryId, MemoryText } from "~/core/memory/contract";
 import { approvedWorkersAiModel } from "~/shell/hosted-inference/contract";
 import { HostedInference } from "~/shell/hosted-inference/operations";
@@ -33,15 +33,12 @@ it.effect("admits the complete ASCII aggregate at 15,000 bytes and rejects one e
       )
     ).toBe(candidate);
 
-    const exit = yield* countAndAdmitMemory(current, memory(7, "a".repeat(554))).pipe(
+    const result = yield* countAndAdmitMemory(current, memory(7, "a".repeat(554))).pipe(
       Effect.provideService(HostedInference, inference),
-      Effect.exit
+      Effect.result
     );
-    assert.deepStrictEqual(
-      Exit.mapError(exit, (failure) => failure),
-      Exit.fail(new MemoryCapacityExceeded())
-    );
-    expect(String(exit)).not.toContain("a".repeat(554));
+    assert.deepStrictEqual(result, Result.fail(new MemoryCapacityExceeded()));
+    expect(String(result)).not.toContain("a".repeat(554));
   })
 );
 
@@ -58,14 +55,11 @@ it.effect("counts UTF-8 bytes in the replaced aggregate and refuses a revision a
       )
     ).toBe(replacement);
 
-    const exit = yield* countAndAdmitMemoryRevision(
+    const result = yield* countAndAdmitMemoryRevision(
       current,
       memory(0, "é".repeat(1_388) + "aa")
-    ).pipe(Effect.provideService(HostedInference, inference), Effect.exit);
-    assert.deepStrictEqual(
-      Exit.mapError(exit, (failure) => failure),
-      Exit.fail(new MemoryCapacityExceeded())
-    );
-    expect(String(exit)).not.toContain("é".repeat(1_388));
+    ).pipe(Effect.provideService(HostedInference, inference), Effect.result);
+    assert.deepStrictEqual(result, Result.fail(new MemoryCapacityExceeded()));
+    expect(String(result)).not.toContain("é".repeat(1_388));
   })
 );

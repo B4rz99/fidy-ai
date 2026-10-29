@@ -17834,7 +17834,7 @@
       ]
     },
     {
-      "stage": "final",
+      "stage": "ui-with-first-security-fixes",
       "dataset": "heavy",
       "profile": "desktop",
       "browser": "156.0.8078.73",
@@ -20156,7 +20156,7 @@
       ]
     },
     {
-      "stage": "final",
+      "stage": "ui-with-first-security-fixes",
       "dataset": "heavy",
       "profile": "mobile-slow",
       "browser": "156.0.8078.73",
@@ -22308,6 +22308,4464 @@
           "domNodes": 244
         }
       ]
+    },
+    {
+      "stage": "final",
+      "dataset": "heavy",
+      "profile": "desktop",
+      "browser": "156.0.8078.73",
+      "samples": [
+        {
+          "journey": "transactions:isolated-cold-document",
+          "elapsedMs": 1713.4405829999996,
+          "outcome": "ready",
+          "loadingObservations": 1,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 165.171,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 18.322,
+              "bytes": 50
+            },
+            {
+              "path": "/web/consent",
+              "status": 200,
+              "durationMs": 55.559,
+              "bytes": 38
+            },
+            {
+              "path": "/user",
+              "status": 200,
+              "durationMs": 24.316,
+              "bytes": 260
+            },
+            {
+              "path": "/categories",
+              "status": 200,
+              "durationMs": 39.58,
+              "bytes": 1086
+            },
+            {
+              "path": "/transactions",
+              "status": 200,
+              "durationMs": 39.92,
+              "bytes": 29003
+            }
+          ],
+          "longTasks": [109],
+          "resourceCount": 109,
+          "resourceBytes": 3230544,
+          "resources": [
+            {
+              "path": "/assets/index-DY4prfAp.js",
+              "initiator": "script",
+              "start": 564.0999999940395,
+              "responseStart": 583.0999999940395,
+              "end": 583.4000000059605,
+              "encodedBytes": 227672,
+              "decodedBytes": 227672
+            },
+            {
+              "path": "/assets/react-sySUN5R7.js",
+              "initiator": "other",
+              "start": 564.2999999821186,
+              "responseStart": 591.9000000059605,
+              "end": 592.2999999821186,
+              "encodedBytes": 8539,
+              "decodedBytes": 8539
+            },
+            {
+              "path": "/assets/react-dom-p5-f7VGD.js",
+              "initiator": "other",
+              "start": 567.7999999821186,
+              "responseStart": 594.5999999940395,
+              "end": 594.6999999880791,
+              "encodedBytes": 3853,
+              "decodedBytes": 3853
+            },
+            {
+              "path": "/assets/RegistryContext-DneK90WZ.js",
+              "initiator": "other",
+              "start": 567.7999999821186,
+              "responseStart": 592,
+              "end": 592.4000000059605,
+              "encodedBytes": 204639,
+              "decodedBytes": 204639
+            },
+            {
+              "path": "/assets/client-CFXI9Ly8.js",
+              "initiator": "other",
+              "start": 572.1999999880791,
+              "responseStart": 595.1999999880791,
+              "end": 595.4000000059605,
+              "encodedBytes": 187875,
+              "decodedBytes": 187875
+            },
+            {
+              "path": "/assets/session-context-DadKOe14.js",
+              "initiator": "other",
+              "start": 572.2999999821186,
+              "responseStart": 598.4000000059605,
+              "end": 598.4000000059605,
+              "encodedBytes": 292,
+              "decodedBytes": 292
+            },
+            {
+              "path": "/assets/crypto-BdL391F0.js",
+              "initiator": "other",
+              "start": 572.2999999821186,
+              "responseStart": 597.6999999880791,
+              "end": 598,
+              "encodedBytes": 3253,
+              "decodedBytes": 3253
+            },
+            {
+              "path": "/assets/utils-qyHl_yuu.js",
+              "initiator": "other",
+              "start": 572.4000000059605,
+              "responseStart": 602,
+              "end": 602.1999999880791,
+              "encodedBytes": 107,
+              "decodedBytes": 107
+            },
+            {
+              "path": "/assets/jsx-runtime-COQnYV8f.js",
+              "initiator": "other",
+              "start": 572.4000000059605,
+              "responseStart": 600.9000000059605,
+              "end": 601.0999999940395,
+              "encodedBytes": 424,
+              "decodedBytes": 424
+            },
+            {
+              "path": "/assets/link-C6op39hF.js",
+              "initiator": "other",
+              "start": 572.4000000059605,
+              "responseStart": 605.4000000059605,
+              "end": 605.5,
+              "encodedBytes": 4197,
+              "decodedBytes": 4197
+            },
+            {
+              "path": "/assets/matchContext-DGQpDSE-.js",
+              "initiator": "other",
+              "start": 572.4000000059605,
+              "responseStart": 612.5,
+              "end": 612.5999999940395,
+              "encodedBytes": 55332,
+              "decodedBytes": 55332
+            },
+            {
+              "path": "/assets/useMatch-KWF0wnAO.js",
+              "initiator": "other",
+              "start": 572.5,
+              "responseStart": 606.5,
+              "end": 606.5999999940395,
+              "encodedBytes": 2351,
+              "decodedBytes": 2351
+            },
+            {
+              "path": "/assets/useParams-BjqCtO1H.js",
+              "initiator": "other",
+              "start": 572.5,
+              "responseStart": 609.6999999880791,
+              "end": 609.6999999880791,
+              "encodedBytes": 258,
+              "decodedBytes": 258
+            },
+            {
+              "path": "/assets/useSearch-CTPkIWHD.js",
+              "initiator": "other",
+              "start": 572.5,
+              "responseStart": 622.0999999940395,
+              "end": 622.2999999821186,
+              "encodedBytes": 218,
+              "decodedBytes": 218
+            },
+            {
+              "path": "/assets/useNavigate-BNupIypg.js",
+              "initiator": "other",
+              "start": 572.5,
+              "responseStart": 613.0999999940395,
+              "end": 613.1999999880791,
+              "encodedBytes": 380,
+              "decodedBytes": 380
+            },
+            {
+              "path": "/assets/Match-DYFyqi6V.js",
+              "initiator": "other",
+              "start": 572.5,
+              "responseStart": 609.1999999880791,
+              "end": 609.1999999880791,
+              "encodedBytes": 4669,
+              "decodedBytes": 4669
+            },
+            {
+              "path": "/assets/index-CPaPuFSO.css",
+              "initiator": "link",
+              "start": 572.5999999940395,
+              "responseStart": 592.4000000059605,
+              "end": 592.5,
+              "encodedBytes": 84866,
+              "decodedBytes": 84866
+            },
+            {
+              "path": "/assets/workspace-components-DltaxjAr.js",
+              "initiator": "other",
+              "start": 572.5999999940395,
+              "responseStart": 618.5999999940395,
+              "end": 618.7999999821186,
+              "encodedBytes": 3841,
+              "decodedBytes": 3841
+            },
+            {
+              "path": "/assets/login-destination-C4H5Mv8n.js",
+              "initiator": "other",
+              "start": 572.5999999940395,
+              "responseStart": 625.2999999821186,
+              "end": 625.5,
+              "encodedBytes": 759,
+              "decodedBytes": 759
+            },
+            {
+              "path": "/assets/subscription-enrollment-context-D6Q4WAhG.js",
+              "initiator": "other",
+              "start": 572.5999999940395,
+              "responseStart": 619.1999999880791,
+              "end": 619.1999999880791,
+              "encodedBytes": 320,
+              "decodedBytes": 320
+            },
+            {
+              "path": "/assets/preload-helper-BEyK2XXa.js",
+              "initiator": "other",
+              "start": 572.5999999940395,
+              "responseStart": 615.7999999821186,
+              "end": 615.9000000059605,
+              "encodedBytes": 1521,
+              "decodedBytes": 1521
+            },
+            {
+              "path": "/web/session/binding",
+              "initiator": "fetch",
+              "start": 940.1999999880791,
+              "responseStart": 0,
+              "end": 1105.199999988079,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/assets/Poppins-Regular-dDwLtfIe.woff2",
+              "initiator": "css",
+              "start": 942.9000000059605,
+              "responseStart": 1031.7999999821186,
+              "end": 1032.2999999821186,
+              "encodedBytes": 51564,
+              "decodedBytes": 51564
+            },
+            {
+              "path": "/assets/application-frame-Bt8YN7jS.js",
+              "initiator": "script",
+              "start": 1120,
+              "responseStart": 1121.9000000059605,
+              "end": 1122.199999988079,
+              "encodedBytes": 6222,
+              "decodedBytes": 6222
+            },
+            {
+              "path": "/assets/useRouterState-DobHkYlF.js",
+              "initiator": "script",
+              "start": 1120.0999999940395,
+              "responseStart": 1123,
+              "end": 1123.0999999940395,
+              "encodedBytes": 213,
+              "decodedBytes": 213
+            },
+            {
+              "path": "/assets/useRenderElement-BLSNGsl3.js",
+              "initiator": "script",
+              "start": 1120.199999988079,
+              "responseStart": 1124.7999999821186,
+              "end": 1124.9000000059605,
+              "encodedBytes": 9180,
+              "decodedBytes": 9180
+            },
+            {
+              "path": "/assets/button-ByhHMB4W.js",
+              "initiator": "script",
+              "start": 1120.199999988079,
+              "responseStart": 1123.7999999821186,
+              "end": 1124.4000000059605,
+              "encodedBytes": 34042,
+              "decodedBytes": 34042
+            },
+            {
+              "path": "/assets/canonical-query-DsY1iW8g.js",
+              "initiator": "script",
+              "start": 1120.2999999821186,
+              "responseStart": 1125.5,
+              "end": 1125.5999999940395,
+              "encodedBytes": 680,
+              "decodedBytes": 680
+            },
+            {
+              "path": "/assets/feature-EhpX3oxT.js",
+              "initiator": "script",
+              "start": 1120.2999999821186,
+              "responseStart": 1126.0999999940395,
+              "end": 1126.2999999821186,
+              "encodedBytes": 20293,
+              "decodedBytes": 20293
+            },
+            {
+              "path": "/assets/HugeiconsIcon-CgO2AFQZ.js",
+              "initiator": "script",
+              "start": 1120.2999999821186,
+              "responseStart": 1128.4000000059605,
+              "end": 1128.5,
+              "encodedBytes": 902,
+              "decodedBytes": 902
+            },
+            {
+              "path": "/assets/Alert02Icon-Cb_Wz6Pv.js",
+              "initiator": "script",
+              "start": 1120.4000000059605,
+              "responseStart": 1126.4000000059605,
+              "end": 1126.5,
+              "encodedBytes": 821,
+              "decodedBytes": 821
+            },
+            {
+              "path": "/assets/ArrowDown01Icon-DDfnNeUj.js",
+              "initiator": "script",
+              "start": 1120.4000000059605,
+              "responseStart": 1126.5999999940395,
+              "end": 1126.5999999940395,
+              "encodedBytes": 190,
+              "decodedBytes": 190
+            },
+            {
+              "path": "/assets/ArrowRight01Icon-CpyfVR64.js",
+              "initiator": "script",
+              "start": 1120.5,
+              "responseStart": 1127.5999999940395,
+              "end": 1127.699999988079,
+              "encodedBytes": 190,
+              "decodedBytes": 190
+            },
+            {
+              "path": "/assets/Calendar03Icon-DcAo2VXN.js",
+              "initiator": "script",
+              "start": 1120.5999999940395,
+              "responseStart": 1128.5999999940395,
+              "end": 1128.699999988079,
+              "encodedBytes": 1663,
+              "decodedBytes": 1663
+            },
+            {
+              "path": "/assets/Cancel01Icon-BeNMMUFU.js",
+              "initiator": "script",
+              "start": 1120.5999999940395,
+              "responseStart": 1128.7999999821186,
+              "end": 1129,
+              "encodedBytes": 174,
+              "decodedBytes": 174
+            },
+            {
+              "path": "/assets/InformationCircleIcon-BxAcce07.js",
+              "initiator": "script",
+              "start": 1120.699999988079,
+              "responseStart": 1129.199999988079,
+              "end": 1129.2999999821186,
+              "encodedBytes": 540,
+              "decodedBytes": 540
+            },
+            {
+              "path": "/assets/theme-DUpT3uwv.js",
+              "initiator": "script",
+              "start": 1120.699999988079,
+              "responseStart": 1131.7999999821186,
+              "end": 1131.9000000059605,
+              "encodedBytes": 1841,
+              "decodedBytes": 1841
+            },
+            {
+              "path": "/assets/Wallet01Icon-DX6vOXVQ.js",
+              "initiator": "script",
+              "start": 1120.7999999821186,
+              "responseStart": 1130.2999999821186,
+              "end": 1130.2999999821186,
+              "encodedBytes": 960,
+              "decodedBytes": 960
+            },
+            {
+              "path": "/assets/alert-CH7C0i0e.js",
+              "initiator": "script",
+              "start": 1120.7999999821186,
+              "responseStart": 1130.9000000059605,
+              "end": 1130.9000000059605,
+              "encodedBytes": 1679,
+              "decodedBytes": 1679
+            },
+            {
+              "path": "/assets/popover-DC58a-bA.js",
+              "initiator": "script",
+              "start": 1120.7999999821186,
+              "responseStart": 1131.199999988079,
+              "end": 1131.2999999821186,
+              "encodedBytes": 11156,
+              "decodedBytes": 11156
+            },
+            {
+              "path": "/assets/useOpenInteractionType-BGzZG7AY.js",
+              "initiator": "script",
+              "start": 1120.9000000059605,
+              "responseStart": 1131.5,
+              "end": 1131.5999999940395,
+              "encodedBytes": 51392,
+              "decodedBytes": 51392
+            },
+            {
+              "path": "/assets/visuallyHidden-CmQ9ItcI.js",
+              "initiator": "script",
+              "start": 1120.9000000059605,
+              "responseStart": 1133.5,
+              "end": 1133.5,
+              "encodedBytes": 203,
+              "decodedBytes": 203
+            },
+            {
+              "path": "/assets/useOnMount-CDavj5WP.js",
+              "initiator": "script",
+              "start": 1121,
+              "responseStart": 1132,
+              "end": 1132.0999999940395,
+              "encodedBytes": 1386,
+              "decodedBytes": 1386
+            },
+            {
+              "path": "/assets/stateAttributesMapping-BsEql924.js",
+              "initiator": "script",
+              "start": 1121,
+              "responseStart": 1132.7999999821186,
+              "end": 1132.9000000059605,
+              "encodedBytes": 3158,
+              "decodedBytes": 3158
+            },
+            {
+              "path": "/assets/useTimeout-CsN0ajn5.js",
+              "initiator": "script",
+              "start": 1121,
+              "responseStart": 1132.9000000059605,
+              "end": 1133.0999999940395,
+              "encodedBytes": 467,
+              "decodedBytes": 467
+            },
+            {
+              "path": "/assets/feature-BoS_FFXf.css",
+              "initiator": "link",
+              "start": 1121.199999988079,
+              "responseStart": 1127.7999999821186,
+              "end": 1128,
+              "encodedBytes": 4737,
+              "decodedBytes": 4737
+            },
+            {
+              "path": "/assets/useTriggerFocusGuards-IOX2awYo.js",
+              "initiator": "script",
+              "start": 1121.199999988079,
+              "responseStart": 1133.2999999821186,
+              "end": 1133.4000000059605,
+              "encodedBytes": 36203,
+              "decodedBytes": 36203
+            },
+            {
+              "path": "/assets/feature-BLWIW8QK.js",
+              "initiator": "script",
+              "start": 1121.2999999821186,
+              "responseStart": 1135.2999999821186,
+              "end": 1135.5999999940395,
+              "encodedBytes": 9236,
+              "decodedBytes": 9236
+            },
+            {
+              "path": "/assets/CreditCardIcon-BKho1sB0.js",
+              "initiator": "script",
+              "start": 1121.4000000059605,
+              "responseStart": 1133.699999988079,
+              "end": 1133.9000000059605,
+              "encodedBytes": 929,
+              "decodedBytes": 929
+            },
+            {
+              "path": "/assets/CrownIcon-DoHIdtwM.js",
+              "initiator": "script",
+              "start": 1121.4000000059605,
+              "responseStart": 1134,
+              "end": 1134,
+              "encodedBytes": 1440,
+              "decodedBytes": 1440
+            },
+            {
+              "path": "/assets/Home01Icon-CtlfDZqB.js",
+              "initiator": "script",
+              "start": 1121.4000000059605,
+              "responseStart": 1135,
+              "end": 1135.0999999940395,
+              "encodedBytes": 575,
+              "decodedBytes": 575
+            },
+            {
+              "path": "/assets/Menu01Icon-Di7gUquh.js",
+              "initiator": "script",
+              "start": 1121.5,
+              "responseStart": 1138,
+              "end": 1138.199999988079,
+              "encodedBytes": 381,
+              "decodedBytes": 381
+            },
+            {
+              "path": "/assets/brand-BhwFFB-d.js",
+              "initiator": "script",
+              "start": 1121.5999999940395,
+              "responseStart": 1136.5,
+              "end": 1136.5999999940395,
+              "encodedBytes": 87,
+              "decodedBytes": 87
+            },
+            {
+              "path": "/assets/Settings01Icon-tBLYLmm0.js",
+              "initiator": "script",
+              "start": 1121.5999999940395,
+              "responseStart": 1139.0999999940395,
+              "end": 1139.2999999821186,
+              "encodedBytes": 2411,
+              "decodedBytes": 2411
+            },
+            {
+              "path": "/assets/feature-De-IYpxw.css",
+              "initiator": "link",
+              "start": 1121.699999988079,
+              "responseStart": 1129.7999999821186,
+              "end": 1129.9000000059605,
+              "encodedBytes": 14131,
+              "decodedBytes": 14131
+            },
+            {
+              "path": "/assets/transactions-page-Bi1j-cQn.js",
+              "initiator": "script",
+              "start": 1121.9000000059605,
+              "responseStart": 1137.0999999940395,
+              "end": 1137.2999999821186,
+              "encodedBytes": 111096,
+              "decodedBytes": 111096
+            },
+            {
+              "path": "/assets/icon-indicator-BaVwVcUS.js",
+              "initiator": "script",
+              "start": 1122,
+              "responseStart": 1137.5,
+              "end": 1137.5,
+              "encodedBytes": 935,
+              "decodedBytes": 935
+            },
+            {
+              "path": "/assets/ArrowUpRight01Icon-C9pA22LI.js",
+              "initiator": "script",
+              "start": 1122,
+              "responseStart": 1141.699999988079,
+              "end": 1141.7999999821186,
+              "encodedBytes": 240,
+              "decodedBytes": 240
+            },
+            {
+              "path": "/assets/category-visual-Be45h02v.js",
+              "initiator": "script",
+              "start": 1122.0999999940395,
+              "responseStart": 1139.699999988079,
+              "end": 1139.9000000059605,
+              "encodedBytes": 6601,
+              "decodedBytes": 6601
+            },
+            {
+              "path": "/assets/Delete02Icon-CsyBlwAn.js",
+              "initiator": "script",
+              "start": 1122.199999988079,
+              "responseStart": 1140,
+              "end": 1140.199999988079,
+              "encodedBytes": 994,
+              "decodedBytes": 994
+            },
+            {
+              "path": "/assets/FilterHorizontalIcon-BD-jVvJt.js",
+              "initiator": "script",
+              "start": 1122.199999988079,
+              "responseStart": 1140.5999999940395,
+              "end": 1140.5999999940395,
+              "encodedBytes": 1532,
+              "decodedBytes": 1532
+            },
+            {
+              "path": "/assets/PencilIcon-BlCKeN3e.js",
+              "initiator": "script",
+              "start": 1122.2999999821186,
+              "responseStart": 1141,
+              "end": 1141.199999988079,
+              "encodedBytes": 945,
+              "decodedBytes": 945
+            },
+            {
+              "path": "/assets/workspace-layout-Kk-Eh7Js.js",
+              "initiator": "script",
+              "start": 1122.2999999821186,
+              "responseStart": 1143.2999999821186,
+              "end": 1143.4000000059605,
+              "encodedBytes": 1696,
+              "decodedBytes": 1696
+            },
+            {
+              "path": "/assets/refresh-button-FV3uuPJb.js",
+              "initiator": "script",
+              "start": 1122.4000000059605,
+              "responseStart": 1142,
+              "end": 1142.199999988079,
+              "encodedBytes": 357,
+              "decodedBytes": 357
+            },
+            {
+              "path": "/assets/Tick02Icon-Bq3vnQVu.js",
+              "initiator": "script",
+              "start": 1122.4000000059605,
+              "responseStart": 1142.5,
+              "end": 1142.699999988079,
+              "encodedBytes": 841,
+              "decodedBytes": 841
+            },
+            {
+              "path": "/assets/table-DPw744xH.js",
+              "initiator": "script",
+              "start": 1122.4000000059605,
+              "responseStart": 1142.699999988079,
+              "end": 1142.7999999821186,
+              "encodedBytes": 1794,
+              "decodedBytes": 1794
+            },
+            {
+              "path": "/assets/checkbox-BscCSdxY.js",
+              "initiator": "script",
+              "start": 1122.5,
+              "responseStart": 1143.0999999940395,
+              "end": 1143.4000000059605,
+              "encodedBytes": 6512,
+              "decodedBytes": 6512
+            },
+            {
+              "path": "/assets/useControlled-CYEdRssO.js",
+              "initiator": "script",
+              "start": 1122.5,
+              "responseStart": 1144.5,
+              "end": 1144.5999999940395,
+              "encodedBytes": 249,
+              "decodedBytes": 249
+            },
+            {
+              "path": "/assets/useLabelableId--GayC5zM.js",
+              "initiator": "script",
+              "start": 1122.699999988079,
+              "responseStart": 1143.9000000059605,
+              "end": 1144,
+              "encodedBytes": 2456,
+              "decodedBytes": 2456
+            },
+            {
+              "path": "/assets/label-CRVZhTRu.js",
+              "initiator": "script",
+              "start": 1122.7999999821186,
+              "responseStart": 1144.0999999940395,
+              "end": 1144.199999988079,
+              "encodedBytes": 467,
+              "decodedBytes": 467
+            },
+            {
+              "path": "/assets/input-kYg0-SPZ.js",
+              "initiator": "script",
+              "start": 1122.7999999821186,
+              "responseStart": 1144.7999999821186,
+              "end": 1144.9000000059605,
+              "encodedBytes": 2876,
+              "decodedBytes": 2876
+            },
+            {
+              "path": "/assets/canonical-query-feedback-DwbWht4Q.js",
+              "initiator": "script",
+              "start": 1122.9000000059605,
+              "responseStart": 1145.4000000059605,
+              "end": 1145.7999999821186,
+              "encodedBytes": 489,
+              "decodedBytes": 489
+            },
+            {
+              "path": "/assets/choice-dropdown-Bwmp9uaL.js",
+              "initiator": "script",
+              "start": 1122.9000000059605,
+              "responseStart": 1145.199999988079,
+              "end": 1145.699999988079,
+              "encodedBytes": 46892,
+              "decodedBytes": 46892
+            },
+            {
+              "path": "/assets/workspace-query-Bf-TfVIm.js",
+              "initiator": "script",
+              "start": 1123,
+              "responseStart": 1144.5999999940395,
+              "end": 1144.5999999940395,
+              "encodedBytes": 200,
+              "decodedBytes": 200
+            },
+            {
+              "path": "/assets/money-1Dv41AB9.js",
+              "initiator": "script",
+              "start": 1123,
+              "responseStart": 1147.0999999940395,
+              "end": 1147.4000000059605,
+              "encodedBytes": 1560,
+              "decodedBytes": 1560
+            },
+            {
+              "path": "/assets/dist-ymEZZdgR.js",
+              "initiator": "script",
+              "start": 1123.0999999940395,
+              "responseStart": 1146,
+              "end": 1146.2999999821186,
+              "encodedBytes": 33531,
+              "decodedBytes": 33531
+            },
+            {
+              "path": "/assets/canonical-input--hXjJKN1.js",
+              "initiator": "script",
+              "start": 1123.0999999940395,
+              "responseStart": 1147,
+              "end": 1147.199999988079,
+              "encodedBytes": 209,
+              "decodedBytes": 209
+            },
+            {
+              "path": "/assets/skeleton-G3DDhUfv.js",
+              "initiator": "script",
+              "start": 1123.0999999940395,
+              "responseStart": 1147.5,
+              "end": 1147.7999999821186,
+              "encodedBytes": 268,
+              "decodedBytes": 268
+            },
+            {
+              "path": "/assets/calendar-field-CryT7yP0.js",
+              "initiator": "script",
+              "start": 1123.199999988079,
+              "responseStart": 1148,
+              "end": 1148.4000000059605,
+              "encodedBytes": 80640,
+              "decodedBytes": 80640
+            },
+            {
+              "path": "/assets/compact-date-DKyfFy_Y.js",
+              "initiator": "script",
+              "start": 1123.2999999821186,
+              "responseStart": 1147.9000000059605,
+              "end": 1148,
+              "encodedBytes": 322,
+              "decodedBytes": 322
+            },
+            {
+              "path": "/assets/ArrowLeft01Icon-BJdQ1Oac.js",
+              "initiator": "script",
+              "start": 1123.2999999821186,
+              "responseStart": 1148.5,
+              "end": 1148.699999988079,
+              "encodedBytes": 191,
+              "decodedBytes": 191
+            },
+            {
+              "path": "/assets/transactions-page-C3sk5Oej.css",
+              "initiator": "link",
+              "start": 1123.4000000059605,
+              "responseStart": 1129.4000000059605,
+              "end": 1129.4000000059605,
+              "encodedBytes": 26367,
+              "decodedBytes": 26367
+            },
+            {
+              "path": "/web/session/binding",
+              "initiator": "fetch",
+              "start": 1176.199999988079,
+              "responseStart": 0,
+              "end": 1194.5,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/web/consent",
+              "initiator": "fetch",
+              "start": 1182.2999999821186,
+              "responseStart": 0,
+              "end": 1237.7999999821186,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/assets/fidy-logo-B9D5jpJk.png",
+              "initiator": "img",
+              "start": 1188.9000000059605,
+              "responseStart": 1190.0999999940395,
+              "end": 1190.2999999821186,
+              "encodedBytes": 55568,
+              "decodedBytes": 55568
+            },
+            {
+              "path": "/assets/Poppins-SemiBold-a0jdhGrK.woff2",
+              "initiator": "css",
+              "start": 1194,
+              "responseStart": 1205,
+              "end": 1205.4000000059605,
+              "encodedBytes": 51500,
+              "decodedBytes": 51500
+            },
+            {
+              "path": "/assets/mascot-Bka3HkpI.webp",
+              "initiator": "img",
+              "start": 1199.7999999821186,
+              "responseStart": 1204,
+              "end": 1204.5,
+              "encodedBytes": 425584,
+              "decodedBytes": 425584
+            },
+            {
+              "path": "/assets/habitat-ceiba-bGAXen_K.webp",
+              "initiator": "img",
+              "start": 1199.7999999821186,
+              "responseStart": 1201.4000000059605,
+              "end": 1203.0999999940395,
+              "encodedBytes": 1109578,
+              "decodedBytes": 1109578
+            },
+            {
+              "path": "/assets/feature-Dffo3XQT.js",
+              "initiator": "script",
+              "start": 1210.199999988079,
+              "responseStart": 1211.7999999821186,
+              "end": 1212.0999999940395,
+              "encodedBytes": 35801,
+              "decodedBytes": 35801
+            },
+            {
+              "path": "/assets/Clock01Icon-Caopc-kj.js",
+              "initiator": "script",
+              "start": 1210.199999988079,
+              "responseStart": 1213.4000000059605,
+              "end": 1214,
+              "encodedBytes": 230,
+              "decodedBytes": 230
+            },
+            {
+              "path": "/assets/File01Icon-BdHcSNrJ.js",
+              "initiator": "script",
+              "start": 1210.2999999821186,
+              "responseStart": 1214.4000000059605,
+              "end": 1214.699999988079,
+              "encodedBytes": 945,
+              "decodedBytes": 945
+            },
+            {
+              "path": "/assets/Loading03Icon-BcN5iSGp.js",
+              "initiator": "script",
+              "start": 1210.2999999821186,
+              "responseStart": 1216.199999988079,
+              "end": 1216.2999999821186,
+              "encodedBytes": 877,
+              "decodedBytes": 877
+            },
+            {
+              "path": "/assets/Mail01Icon-qGLuNJQs.js",
+              "initiator": "script",
+              "start": 1210.2999999821186,
+              "responseStart": 1216.5999999940395,
+              "end": 1216.699999988079,
+              "encodedBytes": 860,
+              "decodedBytes": 860
+            },
+            {
+              "path": "/assets/badge-CqRhwPvb.js",
+              "initiator": "script",
+              "start": 1210.4000000059605,
+              "responseStart": 1215.5999999940395,
+              "end": 1215.699999988079,
+              "encodedBytes": 1508,
+              "decodedBytes": 1508
+            },
+            {
+              "path": "/assets/PauseCircleIcon-DzzxNb4l.js",
+              "initiator": "script",
+              "start": 1210.4000000059605,
+              "responseStart": 1217.0999999940395,
+              "end": 1217.0999999940395,
+              "encodedBytes": 239,
+              "decodedBytes": 239
+            },
+            {
+              "path": "/assets/feature-DIj4BkOz.css",
+              "initiator": "link",
+              "start": 1210.5,
+              "responseStart": 1215.199999988079,
+              "end": 1215.4000000059605,
+              "encodedBytes": 11661,
+              "decodedBytes": 11661
+            },
+            {
+              "path": "/assets/stringifyLocale-CkHjdQTJ.js",
+              "initiator": "script",
+              "start": 1210.5,
+              "responseStart": 1217.2999999821186,
+              "end": 1217.7999999821186,
+              "encodedBytes": 99,
+              "decodedBytes": 99
+            },
+            {
+              "path": "/assets/empty-CHbN2YFD.js",
+              "initiator": "script",
+              "start": 1210.5,
+              "responseStart": 1217.699999988079,
+              "end": 1217.9000000059605,
+              "encodedBytes": 1331,
+              "decodedBytes": 1331
+            },
+            {
+              "path": "/assets/searchable-choice-dropdown-ClL6R7Sk.js",
+              "initiator": "script",
+              "start": 1210.5,
+              "responseStart": 1217.9000000059605,
+              "end": 1218.0999999940395,
+              "encodedBytes": 38219,
+              "decodedBytes": 38219
+            },
+            {
+              "path": "/assets/dist-DHS8QGvC.js",
+              "initiator": "script",
+              "start": 1220,
+              "responseStart": 1220.7999999821186,
+              "end": 1221.0999999940395,
+              "encodedBytes": 56,
+              "decodedBytes": 56
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "initiator": "fetch",
+              "start": 1222.5999999940395,
+              "responseStart": 0,
+              "end": 1223.199999988079,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/user",
+              "initiator": "fetch",
+              "start": 1239.2999999821186,
+              "responseStart": 0,
+              "end": 1263.5999999940395,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "initiator": "fetch",
+              "start": 1242.0999999940395,
+              "responseStart": 0,
+              "end": 1242.5,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/categories",
+              "initiator": "fetch",
+              "start": 1273.5999999940395,
+              "responseStart": 0,
+              "end": 1313.0999999940395,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/transactions",
+              "initiator": "fetch",
+              "start": 1274.0999999940395,
+              "responseStart": 0,
+              "end": 1314,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "initiator": "fetch",
+              "start": 1315.699999988079,
+              "responseStart": 0,
+              "end": 1359.5,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/assets/Poppins-Bold-B-vfrz4s.woff2",
+              "initiator": "css",
+              "start": 1367.0999999940395,
+              "responseStart": 1387.7999999821186,
+              "end": 1388.0999999940395,
+              "encodedBytes": 51024,
+              "decodedBytes": 51024
+            },
+            {
+              "path": "/assets/Poppins-Medium-CgYQMvHF.woff2",
+              "initiator": "css",
+              "start": 1377.9000000059605,
+              "responseStart": 1388.5,
+              "end": 1388.699999988079,
+              "encodedBytes": 50792,
+              "decodedBytes": 50792
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "initiator": "fetch",
+              "start": 1396.699999988079,
+              "responseStart": 0,
+              "end": 1398.5999999940395,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            }
+          ],
+          "domNodes": 4080
+        },
+        {
+          "journey": "budgets:isolated-cold-document",
+          "elapsedMs": 814.8245420000021,
+          "outcome": "ready",
+          "loadingObservations": 3,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 107.431,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 10.362,
+              "bytes": 50
+            },
+            {
+              "path": "/user",
+              "status": 200,
+              "durationMs": 29.654,
+              "bytes": 260
+            },
+            {
+              "path": "/categories",
+              "status": 200,
+              "durationMs": 58.217,
+              "bytes": 1086
+            },
+            {
+              "path": "/budget-status",
+              "status": 200,
+              "durationMs": 112.716,
+              "bytes": 29913
+            },
+            {
+              "path": "/budgets",
+              "status": 200,
+              "durationMs": 71.032,
+              "bytes": 15572
+            }
+          ],
+          "longTasks": [66],
+          "resourceCount": 108,
+          "resourceBytes": 3084318,
+          "domNodes": 358
+        },
+        {
+          "journey": "recurring:isolated-cold-document",
+          "elapsedMs": 960.6434580000059,
+          "outcome": "ready",
+          "loadingObservations": 4,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 41.071,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 10.666,
+              "bytes": 50
+            },
+            {
+              "path": "/user",
+              "status": 200,
+              "durationMs": 32.933,
+              "bytes": 260
+            },
+            {
+              "path": "/categories",
+              "status": 200,
+              "durationMs": 48.769,
+              "bytes": 1086
+            },
+            {
+              "path": "/recurring-plans",
+              "status": 200,
+              "durationMs": 203.99,
+              "bytes": 127932
+            },
+            {
+              "path": "/recurring-series",
+              "status": 200,
+              "durationMs": 42.405,
+              "bytes": 70
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "status": 200,
+              "durationMs": 24.829,
+              "bytes": 11863
+            }
+          ],
+          "longTasks": [],
+          "resourceCount": 113,
+          "resourceBytes": 3124628,
+          "domNodes": 1940
+        },
+        {
+          "journey": "dashboard:isolated-cold-document",
+          "elapsedMs": 433.31670799999847,
+          "outcome": "ready",
+          "loadingObservations": 4,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 23.924,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 10.951,
+              "bytes": 50
+            },
+            {
+              "path": "/dashboard/view",
+              "status": 404,
+              "durationMs": 59.886,
+              "bytes": 124
+            },
+            {
+              "path": "/dashboard/catalog",
+              "status": 200,
+              "durationMs": 52.92,
+              "bytes": 1008
+            },
+            {
+              "path": "/dashboard/initialize",
+              "status": 200,
+              "durationMs": 39.393,
+              "bytes": 971
+            },
+            {
+              "path": "/dashboard/view",
+              "status": 200,
+              "durationMs": 76.911,
+              "bytes": 8288
+            }
+          ],
+          "longTasks": [],
+          "resourceCount": 105,
+          "resourceBytes": 3480944,
+          "resources": [
+            {
+              "path": "/assets/index-DY4prfAp.js",
+              "initiator": "script",
+              "start": 11.100000023841858,
+              "responseStart": 13.900000005960464,
+              "end": 14.400000005960464,
+              "encodedBytes": 227672,
+              "decodedBytes": 227672
+            },
+            {
+              "path": "/assets/react-sySUN5R7.js",
+              "initiator": "other",
+              "start": 11.300000011920929,
+              "responseStart": 16.30000001192093,
+              "end": 16.5,
+              "encodedBytes": 8539,
+              "decodedBytes": 8539
+            },
+            {
+              "path": "/assets/react-dom-p5-f7VGD.js",
+              "initiator": "other",
+              "start": 11.400000005960464,
+              "responseStart": 18.900000005960464,
+              "end": 19.100000023841858,
+              "encodedBytes": 3853,
+              "decodedBytes": 3853
+            },
+            {
+              "path": "/assets/crypto-BdL391F0.js",
+              "initiator": "other",
+              "start": 11.400000005960464,
+              "responseStart": 19.5,
+              "end": 19.80000001192093,
+              "encodedBytes": 3253,
+              "decodedBytes": 3253
+            },
+            {
+              "path": "/assets/client-CFXI9Ly8.js",
+              "initiator": "other",
+              "start": 11.400000005960464,
+              "responseStart": 21.900000005960464,
+              "end": 22.5,
+              "encodedBytes": 187875,
+              "decodedBytes": 187875
+            },
+            {
+              "path": "/assets/RegistryContext-DneK90WZ.js",
+              "initiator": "other",
+              "start": 11.400000005960464,
+              "responseStart": 18.30000001192093,
+              "end": 18.600000023841858,
+              "encodedBytes": 204639,
+              "decodedBytes": 204639
+            },
+            {
+              "path": "/assets/session-context-DadKOe14.js",
+              "initiator": "other",
+              "start": 11.5,
+              "responseStart": 21,
+              "end": 21,
+              "encodedBytes": 292,
+              "decodedBytes": 292
+            },
+            {
+              "path": "/assets/utils-qyHl_yuu.js",
+              "initiator": "other",
+              "start": 11.5,
+              "responseStart": 23.900000005960464,
+              "end": 24.100000023841858,
+              "encodedBytes": 107,
+              "decodedBytes": 107
+            },
+            {
+              "path": "/assets/jsx-runtime-COQnYV8f.js",
+              "initiator": "other",
+              "start": 11.5,
+              "responseStart": 25,
+              "end": 25.200000017881393,
+              "encodedBytes": 424,
+              "decodedBytes": 424
+            },
+            {
+              "path": "/assets/link-C6op39hF.js",
+              "initiator": "other",
+              "start": 11.600000023841858,
+              "responseStart": 24.600000023841858,
+              "end": 24.700000017881393,
+              "encodedBytes": 4197,
+              "decodedBytes": 4197
+            },
+            {
+              "path": "/assets/useMatch-KWF0wnAO.js",
+              "initiator": "other",
+              "start": 11.600000023841858,
+              "responseStart": 24.80000001192093,
+              "end": 24.900000005960464,
+              "encodedBytes": 2351,
+              "decodedBytes": 2351
+            },
+            {
+              "path": "/assets/useParams-BjqCtO1H.js",
+              "initiator": "other",
+              "start": 11.600000023841858,
+              "responseStart": 25.400000005960464,
+              "end": 26.100000023841858,
+              "encodedBytes": 258,
+              "decodedBytes": 258
+            },
+            {
+              "path": "/assets/matchContext-DGQpDSE-.js",
+              "initiator": "other",
+              "start": 11.600000023841858,
+              "responseStart": 24.30000001192093,
+              "end": 24.5,
+              "encodedBytes": 55332,
+              "decodedBytes": 55332
+            },
+            {
+              "path": "/assets/Match-DYFyqi6V.js",
+              "initiator": "other",
+              "start": 11.600000023841858,
+              "responseStart": 28,
+              "end": 28.100000023841858,
+              "encodedBytes": 4669,
+              "decodedBytes": 4669
+            },
+            {
+              "path": "/assets/useSearch-CTPkIWHD.js",
+              "initiator": "other",
+              "start": 11.700000017881393,
+              "responseStart": 26.600000023841858,
+              "end": 27,
+              "encodedBytes": 218,
+              "decodedBytes": 218
+            },
+            {
+              "path": "/assets/useNavigate-BNupIypg.js",
+              "initiator": "other",
+              "start": 11.800000011920929,
+              "responseStart": 27.600000023841858,
+              "end": 27.700000017881393,
+              "encodedBytes": 380,
+              "decodedBytes": 380
+            },
+            {
+              "path": "/assets/subscription-enrollment-context-D6Q4WAhG.js",
+              "initiator": "other",
+              "start": 11.800000011920929,
+              "responseStart": 28.600000023841858,
+              "end": 28.600000023841858,
+              "encodedBytes": 320,
+              "decodedBytes": 320
+            },
+            {
+              "path": "/assets/login-destination-C4H5Mv8n.js",
+              "initiator": "other",
+              "start": 11.800000011920929,
+              "responseStart": 28.900000005960464,
+              "end": 29,
+              "encodedBytes": 759,
+              "decodedBytes": 759
+            },
+            {
+              "path": "/assets/preload-helper-BEyK2XXa.js",
+              "initiator": "other",
+              "start": 11.800000011920929,
+              "responseStart": 29.200000017881393,
+              "end": 29.200000017881393,
+              "encodedBytes": 1521,
+              "decodedBytes": 1521
+            },
+            {
+              "path": "/assets/workspace-components-DltaxjAr.js",
+              "initiator": "other",
+              "start": 11.800000011920929,
+              "responseStart": 29.400000005960464,
+              "end": 29.5,
+              "encodedBytes": 3841,
+              "decodedBytes": 3841
+            },
+            {
+              "path": "/assets/index-CPaPuFSO.css",
+              "initiator": "link",
+              "start": 11.900000005960464,
+              "responseStart": 20.600000023841858,
+              "end": 20.600000023841858,
+              "encodedBytes": 84866,
+              "decodedBytes": 84866
+            },
+            {
+              "path": "/web/session/binding",
+              "initiator": "fetch",
+              "start": 85.30000001192093,
+              "responseStart": 0,
+              "end": 109.2000000178814,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/assets/Poppins-Regular-dDwLtfIe.woff2",
+              "initiator": "css",
+              "start": 96.10000002384186,
+              "responseStart": 102.60000002384186,
+              "end": 102.90000000596046,
+              "encodedBytes": 51564,
+              "decodedBytes": 51564
+            },
+            {
+              "path": "/assets/application-frame-Bt8YN7jS.js",
+              "initiator": "script",
+              "start": 116.80000001192093,
+              "responseStart": 118,
+              "end": 118.10000002384186,
+              "encodedBytes": 6222,
+              "decodedBytes": 6222
+            },
+            {
+              "path": "/assets/useRouterState-DobHkYlF.js",
+              "initiator": "script",
+              "start": 117,
+              "responseStart": 118.2000000178814,
+              "end": 118.30000001192093,
+              "encodedBytes": 213,
+              "decodedBytes": 213
+            },
+            {
+              "path": "/assets/useRenderElement-BLSNGsl3.js",
+              "initiator": "script",
+              "start": 117,
+              "responseStart": 119.40000000596046,
+              "end": 119.5,
+              "encodedBytes": 9180,
+              "decodedBytes": 9180
+            },
+            {
+              "path": "/assets/button-ByhHMB4W.js",
+              "initiator": "script",
+              "start": 117,
+              "responseStart": 119.10000002384186,
+              "end": 119.2000000178814,
+              "encodedBytes": 34042,
+              "decodedBytes": 34042
+            },
+            {
+              "path": "/assets/canonical-query-DsY1iW8g.js",
+              "initiator": "script",
+              "start": 117.10000002384186,
+              "responseStart": 119.7000000178814,
+              "end": 119.90000000596046,
+              "encodedBytes": 680,
+              "decodedBytes": 680
+            },
+            {
+              "path": "/assets/HugeiconsIcon-CgO2AFQZ.js",
+              "initiator": "script",
+              "start": 117.2000000178814,
+              "responseStart": 118.80000001192093,
+              "end": 118.90000000596046,
+              "encodedBytes": 902,
+              "decodedBytes": 902
+            },
+            {
+              "path": "/assets/feature-EhpX3oxT.js",
+              "initiator": "script",
+              "start": 117.2000000178814,
+              "responseStart": 120.10000002384186,
+              "end": 120.30000001192093,
+              "encodedBytes": 20293,
+              "decodedBytes": 20293
+            },
+            {
+              "path": "/assets/Alert02Icon-Cb_Wz6Pv.js",
+              "initiator": "script",
+              "start": 117.2000000178814,
+              "responseStart": 122.5,
+              "end": 122.7000000178814,
+              "encodedBytes": 821,
+              "decodedBytes": 821
+            },
+            {
+              "path": "/assets/ArrowDown01Icon-DDfnNeUj.js",
+              "initiator": "script",
+              "start": 117.30000001192093,
+              "responseStart": 120.60000002384186,
+              "end": 120.7000000178814,
+              "encodedBytes": 190,
+              "decodedBytes": 190
+            },
+            {
+              "path": "/assets/ArrowRight01Icon-CpyfVR64.js",
+              "initiator": "script",
+              "start": 117.40000000596046,
+              "responseStart": 122.2000000178814,
+              "end": 122.60000002384186,
+              "encodedBytes": 190,
+              "decodedBytes": 190
+            },
+            {
+              "path": "/assets/Calendar03Icon-DcAo2VXN.js",
+              "initiator": "script",
+              "start": 117.40000000596046,
+              "responseStart": 123.10000002384186,
+              "end": 123.2000000178814,
+              "encodedBytes": 1663,
+              "decodedBytes": 1663
+            },
+            {
+              "path": "/assets/Cancel01Icon-BeNMMUFU.js",
+              "initiator": "script",
+              "start": 117.40000000596046,
+              "responseStart": 123.10000002384186,
+              "end": 123.30000001192093,
+              "encodedBytes": 174,
+              "decodedBytes": 174
+            },
+            {
+              "path": "/assets/InformationCircleIcon-BxAcce07.js",
+              "initiator": "script",
+              "start": 117.5,
+              "responseStart": 122.90000000596046,
+              "end": 122.90000000596046,
+              "encodedBytes": 540,
+              "decodedBytes": 540
+            },
+            {
+              "path": "/assets/theme-DUpT3uwv.js",
+              "initiator": "script",
+              "start": 117.60000002384186,
+              "responseStart": 123.7000000178814,
+              "end": 123.80000001192093,
+              "encodedBytes": 1841,
+              "decodedBytes": 1841
+            },
+            {
+              "path": "/assets/Wallet01Icon-DX6vOXVQ.js",
+              "initiator": "script",
+              "start": 117.60000002384186,
+              "responseStart": 123.90000000596046,
+              "end": 124,
+              "encodedBytes": 960,
+              "decodedBytes": 960
+            },
+            {
+              "path": "/assets/alert-CH7C0i0e.js",
+              "initiator": "script",
+              "start": 117.7000000178814,
+              "responseStart": 124.30000001192093,
+              "end": 124.30000001192093,
+              "encodedBytes": 1679,
+              "decodedBytes": 1679
+            },
+            {
+              "path": "/assets/popover-DC58a-bA.js",
+              "initiator": "script",
+              "start": 117.7000000178814,
+              "responseStart": 124.5,
+              "end": 124.60000002384186,
+              "encodedBytes": 11156,
+              "decodedBytes": 11156
+            },
+            {
+              "path": "/assets/visuallyHidden-CmQ9ItcI.js",
+              "initiator": "script",
+              "start": 117.80000001192093,
+              "responseStart": 124.10000002384186,
+              "end": 124.2000000178814,
+              "encodedBytes": 203,
+              "decodedBytes": 203
+            },
+            {
+              "path": "/assets/useOpenInteractionType-BGzZG7AY.js",
+              "initiator": "script",
+              "start": 117.80000001192093,
+              "responseStart": 124.7000000178814,
+              "end": 124.80000001192093,
+              "encodedBytes": 51392,
+              "decodedBytes": 51392
+            },
+            {
+              "path": "/assets/useOnMount-CDavj5WP.js",
+              "initiator": "script",
+              "start": 117.80000001192093,
+              "responseStart": 125.80000001192093,
+              "end": 126,
+              "encodedBytes": 1386,
+              "decodedBytes": 1386
+            },
+            {
+              "path": "/assets/useTimeout-CsN0ajn5.js",
+              "initiator": "script",
+              "start": 118,
+              "responseStart": 124.90000000596046,
+              "end": 124.90000000596046,
+              "encodedBytes": 467,
+              "decodedBytes": 467
+            },
+            {
+              "path": "/assets/useTriggerFocusGuards-IOX2awYo.js",
+              "initiator": "script",
+              "start": 118,
+              "responseStart": 125.30000001192093,
+              "end": 125.30000001192093,
+              "encodedBytes": 36203,
+              "decodedBytes": 36203
+            },
+            {
+              "path": "/assets/stateAttributesMapping-BsEql924.js",
+              "initiator": "script",
+              "start": 118,
+              "responseStart": 126.2000000178814,
+              "end": 126.2000000178814,
+              "encodedBytes": 3158,
+              "decodedBytes": 3158
+            },
+            {
+              "path": "/assets/feature-BoS_FFXf.css",
+              "initiator": "link",
+              "start": 118.10000002384186,
+              "responseStart": 121.2000000178814,
+              "end": 121.60000002384186,
+              "encodedBytes": 4737,
+              "decodedBytes": 4737
+            },
+            {
+              "path": "/assets/feature-BLWIW8QK.js",
+              "initiator": "script",
+              "start": 118.2000000178814,
+              "responseStart": 125.5,
+              "end": 125.60000002384186,
+              "encodedBytes": 9236,
+              "decodedBytes": 9236
+            },
+            {
+              "path": "/assets/CreditCardIcon-BKho1sB0.js",
+              "initiator": "script",
+              "start": 118.2000000178814,
+              "responseStart": 126.30000001192093,
+              "end": 126.5,
+              "encodedBytes": 929,
+              "decodedBytes": 929
+            },
+            {
+              "path": "/assets/CrownIcon-DoHIdtwM.js",
+              "initiator": "script",
+              "start": 118.30000001192093,
+              "responseStart": 126.7000000178814,
+              "end": 126.7000000178814,
+              "encodedBytes": 1440,
+              "decodedBytes": 1440
+            },
+            {
+              "path": "/assets/Home01Icon-CtlfDZqB.js",
+              "initiator": "script",
+              "start": 118.40000000596046,
+              "responseStart": 127.5,
+              "end": 127.7000000178814,
+              "encodedBytes": 575,
+              "decodedBytes": 575
+            },
+            {
+              "path": "/assets/Menu01Icon-Di7gUquh.js",
+              "initiator": "script",
+              "start": 118.40000000596046,
+              "responseStart": 127.80000001192093,
+              "end": 127.80000001192093,
+              "encodedBytes": 381,
+              "decodedBytes": 381
+            },
+            {
+              "path": "/assets/brand-BhwFFB-d.js",
+              "initiator": "script",
+              "start": 118.5,
+              "responseStart": 128.2000000178814,
+              "end": 128.30000001192093,
+              "encodedBytes": 87,
+              "decodedBytes": 87
+            },
+            {
+              "path": "/assets/Settings01Icon-tBLYLmm0.js",
+              "initiator": "script",
+              "start": 118.5,
+              "responseStart": 132,
+              "end": 132.2000000178814,
+              "encodedBytes": 2411,
+              "decodedBytes": 2411
+            },
+            {
+              "path": "/assets/feature-De-IYpxw.css",
+              "initiator": "link",
+              "start": 118.60000002384186,
+              "responseStart": 123.40000000596046,
+              "end": 123.5,
+              "encodedBytes": 14131,
+              "decodedBytes": 14131
+            },
+            {
+              "path": "/assets/feature-EkdRydZg.js",
+              "initiator": "script",
+              "start": 118.80000001192093,
+              "responseStart": 128.40000000596046,
+              "end": 128.5,
+              "encodedBytes": 97,
+              "decodedBytes": 97
+            },
+            {
+              "path": "/assets/feature-B2udELNi.js",
+              "initiator": "script",
+              "start": 118.90000000596046,
+              "responseStart": 129.40000000596046,
+              "end": 129.5,
+              "encodedBytes": 84,
+              "decodedBytes": 84
+            },
+            {
+              "path": "/assets/dashboard-page-CIKVa9Zd.js",
+              "initiator": "script",
+              "start": 119,
+              "responseStart": 130,
+              "end": 131.30000001192093,
+              "encodedBytes": 483518,
+              "decodedBytes": 483518
+            },
+            {
+              "path": "/assets/ArrowUpRight01Icon-C9pA22LI.js",
+              "initiator": "script",
+              "start": 119.10000002384186,
+              "responseStart": 132.7000000178814,
+              "end": 132.80000001192093,
+              "encodedBytes": 240,
+              "decodedBytes": 240
+            },
+            {
+              "path": "/assets/icon-indicator-BaVwVcUS.js",
+              "initiator": "script",
+              "start": 119.10000002384186,
+              "responseStart": 133.80000001192093,
+              "end": 133.80000001192093,
+              "encodedBytes": 935,
+              "decodedBytes": 935
+            },
+            {
+              "path": "/assets/category-visual-Be45h02v.js",
+              "initiator": "script",
+              "start": 119.2000000178814,
+              "responseStart": 133.10000002384186,
+              "end": 133.2000000178814,
+              "encodedBytes": 6601,
+              "decodedBytes": 6601
+            },
+            {
+              "path": "/assets/PencilIcon-BlCKeN3e.js",
+              "initiator": "script",
+              "start": 119.2000000178814,
+              "responseStart": 133.40000000596046,
+              "end": 133.40000000596046,
+              "encodedBytes": 945,
+              "decodedBytes": 945
+            },
+            {
+              "path": "/assets/Tick02Icon-Bq3vnQVu.js",
+              "initiator": "script",
+              "start": 119.30000001192093,
+              "responseStart": 133.5,
+              "end": 133.60000002384186,
+              "encodedBytes": 841,
+              "decodedBytes": 841
+            },
+            {
+              "path": "/assets/refresh-button-FV3uuPJb.js",
+              "initiator": "script",
+              "start": 119.30000001192093,
+              "responseStart": 134.90000000596046,
+              "end": 134.90000000596046,
+              "encodedBytes": 357,
+              "decodedBytes": 357
+            },
+            {
+              "path": "/assets/input-kYg0-SPZ.js",
+              "initiator": "script",
+              "start": 119.40000000596046,
+              "responseStart": 134,
+              "end": 134,
+              "encodedBytes": 2876,
+              "decodedBytes": 2876
+            },
+            {
+              "path": "/assets/useLabelableId--GayC5zM.js",
+              "initiator": "script",
+              "start": 119.40000000596046,
+              "responseStart": 134.2000000178814,
+              "end": 134.30000001192093,
+              "encodedBytes": 2456,
+              "decodedBytes": 2456
+            },
+            {
+              "path": "/assets/empty-CHbN2YFD.js",
+              "initiator": "script",
+              "start": 119.5,
+              "responseStart": 134.5,
+              "end": 134.7000000178814,
+              "encodedBytes": 1331,
+              "decodedBytes": 1331
+            },
+            {
+              "path": "/assets/canonical-query-feedback-DwbWht4Q.js",
+              "initiator": "script",
+              "start": 119.5,
+              "responseStart": 134.60000002384186,
+              "end": 134.7000000178814,
+              "encodedBytes": 489,
+              "decodedBytes": 489
+            },
+            {
+              "path": "/assets/money-1Dv41AB9.js",
+              "initiator": "script",
+              "start": 119.60000002384186,
+              "responseStart": 134.90000000596046,
+              "end": 135,
+              "encodedBytes": 1560,
+              "decodedBytes": 1560
+            },
+            {
+              "path": "/assets/progress-C30YkO0e.js",
+              "initiator": "script",
+              "start": 119.60000002384186,
+              "responseStart": 135.40000000596046,
+              "end": 135.5,
+              "encodedBytes": 2685,
+              "decodedBytes": 2685
+            },
+            {
+              "path": "/assets/workspace-query-Bf-TfVIm.js",
+              "initiator": "script",
+              "start": 119.60000002384186,
+              "responseStart": 135.7000000178814,
+              "end": 135.7000000178814,
+              "encodedBytes": 200,
+              "decodedBytes": 200
+            },
+            {
+              "path": "/assets/stringifyLocale-CkHjdQTJ.js",
+              "initiator": "script",
+              "start": 119.7000000178814,
+              "responseStart": 136.5,
+              "end": 136.60000002384186,
+              "encodedBytes": 99,
+              "decodedBytes": 99
+            },
+            {
+              "path": "/assets/skeleton-G3DDhUfv.js",
+              "initiator": "script",
+              "start": 119.7000000178814,
+              "responseStart": 136.80000001192093,
+              "end": 136.90000000596046,
+              "encodedBytes": 268,
+              "decodedBytes": 268
+            },
+            {
+              "path": "/assets/dashboard-page-BrJPnbRs.css",
+              "initiator": "link",
+              "start": 119.90000000596046,
+              "responseStart": 128,
+              "end": 128.10000002384186,
+              "encodedBytes": 7824,
+              "decodedBytes": 7824
+            },
+            {
+              "path": "/web/session/binding",
+              "initiator": "fetch",
+              "start": 159.2000000178814,
+              "responseStart": 0,
+              "end": 170,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/dashboard/view",
+              "initiator": "fetch",
+              "start": 168.2000000178814,
+              "responseStart": 0,
+              "end": 227.90000000596046,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/assets/fidy-logo-B9D5jpJk.png",
+              "initiator": "img",
+              "start": 172.60000002384186,
+              "responseStart": 173.60000002384186,
+              "end": 173.80000001192093,
+              "encodedBytes": 55568,
+              "decodedBytes": 55568
+            },
+            {
+              "path": "/assets/Poppins-SemiBold-a0jdhGrK.woff2",
+              "initiator": "css",
+              "start": 175.60000002384186,
+              "responseStart": 178.60000002384186,
+              "end": 178.90000000596046,
+              "encodedBytes": 51500,
+              "decodedBytes": 51500
+            },
+            {
+              "path": "/assets/feature-Dffo3XQT.js",
+              "initiator": "script",
+              "start": 180.30000001192093,
+              "responseStart": 181.5,
+              "end": 181.60000002384186,
+              "encodedBytes": 35801,
+              "decodedBytes": 35801
+            },
+            {
+              "path": "/assets/Clock01Icon-Caopc-kj.js",
+              "initiator": "script",
+              "start": 180.40000000596046,
+              "responseStart": 181.90000000596046,
+              "end": 182,
+              "encodedBytes": 230,
+              "decodedBytes": 230
+            },
+            {
+              "path": "/assets/File01Icon-BdHcSNrJ.js",
+              "initiator": "script",
+              "start": 180.40000000596046,
+              "responseStart": 182.10000002384186,
+              "end": 182.2000000178814,
+              "encodedBytes": 945,
+              "decodedBytes": 945
+            },
+            {
+              "path": "/assets/Loading03Icon-BcN5iSGp.js",
+              "initiator": "script",
+              "start": 180.40000000596046,
+              "responseStart": 182.30000001192093,
+              "end": 182.30000001192093,
+              "encodedBytes": 877,
+              "decodedBytes": 877
+            },
+            {
+              "path": "/assets/Mail01Icon-qGLuNJQs.js",
+              "initiator": "script",
+              "start": 180.5,
+              "responseStart": 182.7000000178814,
+              "end": 182.7000000178814,
+              "encodedBytes": 860,
+              "decodedBytes": 860
+            },
+            {
+              "path": "/assets/PauseCircleIcon-DzzxNb4l.js",
+              "initiator": "script",
+              "start": 180.5,
+              "responseStart": 182.90000000596046,
+              "end": 183.10000002384186,
+              "encodedBytes": 239,
+              "decodedBytes": 239
+            },
+            {
+              "path": "/assets/badge-CqRhwPvb.js",
+              "initiator": "script",
+              "start": 180.5,
+              "responseStart": 183.2000000178814,
+              "end": 183.2000000178814,
+              "encodedBytes": 1508,
+              "decodedBytes": 1508
+            },
+            {
+              "path": "/assets/checkbox-BscCSdxY.js",
+              "initiator": "script",
+              "start": 180.5,
+              "responseStart": 183.40000000596046,
+              "end": 183.5,
+              "encodedBytes": 6512,
+              "decodedBytes": 6512
+            },
+            {
+              "path": "/assets/useControlled-CYEdRssO.js",
+              "initiator": "script",
+              "start": 180.5,
+              "responseStart": 184.40000000596046,
+              "end": 184.5,
+              "encodedBytes": 249,
+              "decodedBytes": 249
+            },
+            {
+              "path": "/assets/workspace-layout-Kk-Eh7Js.js",
+              "initiator": "script",
+              "start": 180.5,
+              "responseStart": 184.7000000178814,
+              "end": 184.80000001192093,
+              "encodedBytes": 1696,
+              "decodedBytes": 1696
+            },
+            {
+              "path": "/assets/label-CRVZhTRu.js",
+              "initiator": "script",
+              "start": 180.60000002384186,
+              "responseStart": 188.80000001192093,
+              "end": 189.10000002384186,
+              "encodedBytes": 467,
+              "decodedBytes": 467
+            },
+            {
+              "path": "/assets/choice-dropdown-Bwmp9uaL.js",
+              "initiator": "script",
+              "start": 180.7000000178814,
+              "responseStart": 185.10000002384186,
+              "end": 185.30000001192093,
+              "encodedBytes": 46892,
+              "decodedBytes": 46892
+            },
+            {
+              "path": "/assets/searchable-choice-dropdown-ClL6R7Sk.js",
+              "initiator": "script",
+              "start": 180.7000000178814,
+              "responseStart": 185.90000000596046,
+              "end": 186.30000001192093,
+              "encodedBytes": 38219,
+              "decodedBytes": 38219
+            },
+            {
+              "path": "/assets/ArrowLeft01Icon-BJdQ1Oac.js",
+              "initiator": "script",
+              "start": 180.80000001192093,
+              "responseStart": 187.30000001192093,
+              "end": 187.60000002384186,
+              "encodedBytes": 191,
+              "decodedBytes": 191
+            },
+            {
+              "path": "/assets/compact-date-DKyfFy_Y.js",
+              "initiator": "script",
+              "start": 180.80000001192093,
+              "responseStart": 188.5,
+              "end": 188.60000002384186,
+              "encodedBytes": 322,
+              "decodedBytes": 322
+            },
+            {
+              "path": "/assets/calendar-field-CryT7yP0.js",
+              "initiator": "script",
+              "start": 180.80000001192093,
+              "responseStart": 186.7000000178814,
+              "end": 187,
+              "encodedBytes": 80640,
+              "decodedBytes": 80640
+            },
+            {
+              "path": "/assets/feature-DIj4BkOz.css",
+              "initiator": "link",
+              "start": 180.90000000596046,
+              "responseStart": 183.80000001192093,
+              "end": 183.90000000596046,
+              "encodedBytes": 11661,
+              "decodedBytes": 11661
+            },
+            {
+              "path": "/assets/habitat-ceiba-bGAXen_K.webp",
+              "initiator": "img",
+              "start": 183.60000002384186,
+              "responseStart": 190.2000000178814,
+              "end": 192,
+              "encodedBytes": 1109578,
+              "decodedBytes": 1109578
+            },
+            {
+              "path": "/assets/mascot-Bka3HkpI.webp",
+              "initiator": "img",
+              "start": 183.60000002384186,
+              "responseStart": 192.7000000178814,
+              "end": 193.2000000178814,
+              "encodedBytes": 425584,
+              "decodedBytes": 425584
+            },
+            {
+              "path": "/dashboard/catalog",
+              "initiator": "fetch",
+              "start": 185.5,
+              "responseStart": 0,
+              "end": 238.40000000596046,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/assets/dist-DHS8QGvC.js",
+              "initiator": "script",
+              "start": 194.90000000596046,
+              "responseStart": 195.7000000178814,
+              "end": 195.90000000596046,
+              "encodedBytes": 56,
+              "decodedBytes": 56
+            },
+            {
+              "path": "/assets/dist-ymEZZdgR.js",
+              "initiator": "script",
+              "start": 194.90000000596046,
+              "responseStart": 196,
+              "end": 196.10000002384186,
+              "encodedBytes": 33531,
+              "decodedBytes": 33531
+            },
+            {
+              "path": "/dashboard/initialize",
+              "initiator": "fetch",
+              "start": 229.80000001192093,
+              "responseStart": 0,
+              "end": 269.10000002384186,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "initiator": "fetch",
+              "start": 240.60000002384186,
+              "responseStart": 0,
+              "end": 240.90000000596046,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/dashboard/view",
+              "initiator": "fetch",
+              "start": 271.10000002384186,
+              "responseStart": 0,
+              "end": 348,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "initiator": "fetch",
+              "start": 271.90000000596046,
+              "responseStart": 0,
+              "end": 272.30000001192093,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "initiator": "fetch",
+              "start": 379.10000002384186,
+              "responseStart": 0,
+              "end": 381.5,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            }
+          ],
+          "domNodes": 775
+        },
+        {
+          "journey": "review:isolated-cold-document",
+          "elapsedMs": 336.3100000000122,
+          "outcome": "ready",
+          "loadingObservations": 2,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 29.717,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 8.269,
+              "bytes": 50
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "status": 200,
+              "durationMs": 42.195,
+              "bytes": 11863
+            },
+            {
+              "path": "/categories",
+              "status": 200,
+              "durationMs": 31.388,
+              "bytes": 1086
+            },
+            {
+              "path": "/ingestion/review-workspace/:id",
+              "status": 200,
+              "durationMs": 36.266,
+              "bytes": 276
+            },
+            {
+              "path": "/ingestion/review-workspace/:id/material",
+              "status": 200,
+              "durationMs": 34.462,
+              "bytes": 112
+            }
+          ],
+          "longTasks": [],
+          "resourceCount": 94,
+          "resourceBytes": 3027160,
+          "domNodes": 985
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 225.94691699999385,
+          "outcome": "ready",
+          "loadingObservations": 0,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 27.456,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 8.975,
+              "bytes": 50
+            }
+          ],
+          "longTasks": [],
+          "resourceCount": 94,
+          "resourceBytes": 2991009,
+          "domNodes": 205
+        },
+        {
+          "journey": "access:isolated-cold-document",
+          "elapsedMs": 319.21908399999666,
+          "outcome": "ready",
+          "loadingObservations": 2,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 24.27,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 10.744,
+              "bytes": 50
+            },
+            {
+              "path": "/pats",
+              "status": 200,
+              "durationMs": 47.812,
+              "bytes": 30
+            },
+            {
+              "path": "/web/oauth/connections",
+              "status": 200,
+              "durationMs": 53.85,
+              "bytes": 36
+            }
+          ],
+          "longTasks": [],
+          "resourceCount": 103,
+          "resourceBytes": 3085080,
+          "domNodes": 256
+        },
+        {
+          "journey": "upgrade:isolated-cold-document",
+          "elapsedMs": 323.2988340000011,
+          "outcome": "ready",
+          "loadingObservations": 1,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 20.726,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 9.701,
+              "bytes": 50
+            },
+            {
+              "path": "/web/consent",
+              "status": 200,
+              "durationMs": 28.033,
+              "bytes": 38
+            },
+            {
+              "path": "/subscription/status",
+              "status": 200,
+              "durationMs": 33.607,
+              "bytes": 174
+            },
+            {
+              "path": "/subscription/offers",
+              "status": 200,
+              "durationMs": 35.273,
+              "bytes": 1071
+            },
+            {
+              "path": "/web/subscription/payment-enrollments/availability",
+              "status": 200,
+              "durationMs": 17.067,
+              "bytes": 47
+            }
+          ],
+          "longTasks": [],
+          "resourceCount": 78,
+          "resourceBytes": 2851701,
+          "domNodes": 215
+        },
+        {
+          "journey": "privacy:isolated-cold-document",
+          "elapsedMs": 238.82454100000905,
+          "outcome": "ready",
+          "loadingObservations": 0,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 23.163,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 8.88,
+              "bytes": 50
+            },
+            {
+              "path": "/web/consent",
+              "status": 200,
+              "durationMs": 26.321,
+              "bytes": 38
+            }
+          ],
+          "longTasks": [],
+          "resourceCount": 76,
+          "resourceBytes": 2789735,
+          "domNodes": 234
+        }
+      ]
+    },
+    {
+      "stage": "final",
+      "dataset": "heavy",
+      "profile": "mobile-slow",
+      "browser": "156.0.8078.73",
+      "samples": [
+        {
+          "journey": "transactions:isolated-cold-document",
+          "elapsedMs": 10112.86841700002,
+          "outcome": "ready",
+          "loadingObservations": 20,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 156.298,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 159.798,
+              "bytes": 50
+            },
+            {
+              "path": "/web/consent",
+              "status": 200,
+              "durationMs": 154.49,
+              "bytes": 38
+            },
+            {
+              "path": "/user",
+              "status": 200,
+              "durationMs": 200.056,
+              "bytes": 260
+            },
+            {
+              "path": "/categories",
+              "status": 200,
+              "durationMs": -1,
+              "bytes": -1
+            },
+            {
+              "path": "/transactions",
+              "status": 200,
+              "durationMs": -1,
+              "bytes": -1
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "status": 200,
+              "durationMs": -1,
+              "bytes": -1
+            }
+          ],
+          "longTasks": [159, 73, 145],
+          "resourceCount": 102,
+          "resourceBytes": 1593566,
+          "resources": [
+            {
+              "path": "/assets/index-DY4prfAp.js",
+              "initiator": "script",
+              "start": 172.90000000596046,
+              "responseStart": 174.7000000178814,
+              "end": 4471.4000000059605,
+              "encodedBytes": 227672,
+              "decodedBytes": 227672
+            },
+            {
+              "path": "/assets/react-sySUN5R7.js",
+              "initiator": "other",
+              "start": 173.10000002384186,
+              "responseStart": 182.5,
+              "end": 571.2000000178814,
+              "encodedBytes": 8539,
+              "decodedBytes": 8539
+            },
+            {
+              "path": "/assets/RegistryContext-DneK90WZ.js",
+              "initiator": "other",
+              "start": 173.90000000596046,
+              "responseStart": 183.2000000178814,
+              "end": 4358.200000017881,
+              "encodedBytes": 204639,
+              "decodedBytes": 204639
+            },
+            {
+              "path": "/assets/crypto-BdL391F0.js",
+              "initiator": "other",
+              "start": 174.10000002384186,
+              "responseStart": 184.10000002384186,
+              "end": 466.60000002384186,
+              "encodedBytes": 3253,
+              "decodedBytes": 3253
+            },
+            {
+              "path": "/assets/react-dom-p5-f7VGD.js",
+              "initiator": "other",
+              "start": 174.10000002384186,
+              "responseStart": 181.2000000178814,
+              "end": 488.90000000596046,
+              "encodedBytes": 3853,
+              "decodedBytes": 3853
+            },
+            {
+              "path": "/assets/session-context-DadKOe14.js",
+              "initiator": "other",
+              "start": 174.10000002384186,
+              "responseStart": 489.60000002384186,
+              "end": 675.5,
+              "encodedBytes": 292,
+              "decodedBytes": 292
+            },
+            {
+              "path": "/assets/client-CFXI9Ly8.js",
+              "initiator": "other",
+              "start": 174.10000002384186,
+              "responseStart": 181.80000001192093,
+              "end": 4177.800000011921,
+              "encodedBytes": 187875,
+              "decodedBytes": 187875
+            },
+            {
+              "path": "/assets/jsx-runtime-COQnYV8f.js",
+              "initiator": "other",
+              "start": 174.2000000178814,
+              "responseStart": 572.3000000119209,
+              "end": 750.5,
+              "encodedBytes": 424,
+              "decodedBytes": 424
+            },
+            {
+              "path": "/assets/utils-qyHl_yuu.js",
+              "initiator": "other",
+              "start": 174.2000000178814,
+              "responseStart": 676.3000000119209,
+              "end": 856.8000000119209,
+              "encodedBytes": 107,
+              "decodedBytes": 107
+            },
+            {
+              "path": "/assets/link-C6op39hF.js",
+              "initiator": "other",
+              "start": 174.2000000178814,
+              "responseStart": 858,
+              "end": 1185.1000000238419,
+              "encodedBytes": 4197,
+              "decodedBytes": 4197
+            },
+            {
+              "path": "/assets/matchContext-DGQpDSE-.js",
+              "initiator": "other",
+              "start": 174.2000000178814,
+              "responseStart": 751.2000000178814,
+              "end": 2430.7000000178814,
+              "encodedBytes": 55332,
+              "decodedBytes": 55332
+            },
+            {
+              "path": "/assets/useMatch-KWF0wnAO.js",
+              "initiator": "other",
+              "start": 174.7000000178814,
+              "responseStart": 1185.800000011921,
+              "end": 1463.1000000238419,
+              "encodedBytes": 2351,
+              "decodedBytes": 2351
+            },
+            {
+              "path": "/assets/Match-DYFyqi6V.js",
+              "initiator": "other",
+              "start": 174.7000000178814,
+              "responseStart": 1464,
+              "end": 1793.9000000059605,
+              "encodedBytes": 4669,
+              "decodedBytes": 4669
+            },
+            {
+              "path": "/assets/useParams-BjqCtO1H.js",
+              "initiator": "other",
+              "start": 174.80000001192093,
+              "responseStart": 1797,
+              "end": 1987.7000000178814,
+              "encodedBytes": 258,
+              "decodedBytes": 258
+            },
+            {
+              "path": "/assets/useSearch-CTPkIWHD.js",
+              "initiator": "other",
+              "start": 174.80000001192093,
+              "responseStart": 1989,
+              "end": 2183.800000011921,
+              "encodedBytes": 218,
+              "decodedBytes": 218
+            },
+            {
+              "path": "/assets/useNavigate-BNupIypg.js",
+              "initiator": "script",
+              "start": 186.80000001192093,
+              "responseStart": 2184.5,
+              "end": 2379.100000023842,
+              "encodedBytes": 380,
+              "decodedBytes": 380
+            },
+            {
+              "path": "/assets/preload-helper-BEyK2XXa.js",
+              "initiator": "script",
+              "start": 186.80000001192093,
+              "responseStart": 2379.800000011921,
+              "end": 2604.300000011921,
+              "encodedBytes": 1521,
+              "decodedBytes": 1521
+            },
+            {
+              "path": "/assets/workspace-components-DltaxjAr.js",
+              "initiator": "script",
+              "start": 186.90000000596046,
+              "responseStart": 2433,
+              "end": 2730.300000011921,
+              "encodedBytes": 3841,
+              "decodedBytes": 3841
+            },
+            {
+              "path": "/assets/subscription-enrollment-context-D6Q4WAhG.js",
+              "initiator": "script",
+              "start": 187.2000000178814,
+              "responseStart": 2604.9000000059605,
+              "end": 2791.600000023842,
+              "encodedBytes": 320,
+              "decodedBytes": 320
+            },
+            {
+              "path": "/assets/login-destination-C4H5Mv8n.js",
+              "initiator": "script",
+              "start": 187.2000000178814,
+              "responseStart": 2730.800000011921,
+              "end": 2933.7000000178814,
+              "encodedBytes": 759,
+              "decodedBytes": 759
+            },
+            {
+              "path": "/assets/index-CPaPuFSO.css",
+              "initiator": "link",
+              "start": 187.30000001192093,
+              "responseStart": 467.80000001192093,
+              "end": 2821.5,
+              "encodedBytes": 84866,
+              "decodedBytes": 84866
+            },
+            {
+              "path": "/web/session/binding",
+              "initiator": "fetch",
+              "start": 4667,
+              "responseStart": 0,
+              "end": 4822.9000000059605,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/assets/Poppins-Regular-dDwLtfIe.woff2",
+              "initiator": "css",
+              "start": 4685.9000000059605,
+              "responseStart": 4708.800000011921,
+              "end": 5454,
+              "encodedBytes": 51564,
+              "decodedBytes": 51564
+            },
+            {
+              "path": "/assets/application-frame-Bt8YN7jS.js",
+              "initiator": "script",
+              "start": 4856.200000017881,
+              "responseStart": 4857.100000023842,
+              "end": 5161,
+              "encodedBytes": 6222,
+              "decodedBytes": 6222
+            },
+            {
+              "path": "/assets/useRouterState-DobHkYlF.js",
+              "initiator": "script",
+              "start": 4857,
+              "responseStart": 4857.4000000059605,
+              "end": 5026.700000017881,
+              "encodedBytes": 213,
+              "decodedBytes": 213
+            },
+            {
+              "path": "/assets/button-ByhHMB4W.js",
+              "initiator": "script",
+              "start": 4857.600000023842,
+              "responseStart": 4858.100000023842,
+              "end": 5737.800000011921,
+              "encodedBytes": 34042,
+              "decodedBytes": 34042
+            },
+            {
+              "path": "/assets/canonical-query-DsY1iW8g.js",
+              "initiator": "script",
+              "start": 4857.700000017881,
+              "responseStart": 4858.4000000059605,
+              "end": 5086.4000000059605,
+              "encodedBytes": 680,
+              "decodedBytes": 680
+            },
+            {
+              "path": "/assets/useRenderElement-BLSNGsl3.js",
+              "initiator": "script",
+              "start": 4857.700000017881,
+              "responseStart": 4858.300000011921,
+              "end": 5235.300000011921,
+              "encodedBytes": 9180,
+              "decodedBytes": 9180
+            },
+            {
+              "path": "/assets/HugeiconsIcon-CgO2AFQZ.js",
+              "initiator": "script",
+              "start": 4857.700000017881,
+              "responseStart": 5289.5,
+              "end": 5521.4000000059605,
+              "encodedBytes": 902,
+              "decodedBytes": 902
+            },
+            {
+              "path": "/assets/feature-EhpX3oxT.js",
+              "initiator": "script",
+              "start": 4857.700000017881,
+              "responseStart": 5236.600000023842,
+              "end": 5806.5,
+              "encodedBytes": 20293,
+              "decodedBytes": 20293
+            },
+            {
+              "path": "/assets/Alert02Icon-Cb_Wz6Pv.js",
+              "initiator": "script",
+              "start": 4858.5,
+              "responseStart": 5455.200000017881,
+              "end": 5664.300000011921,
+              "encodedBytes": 821,
+              "decodedBytes": 821
+            },
+            {
+              "path": "/assets/ArrowDown01Icon-DDfnNeUj.js",
+              "initiator": "script",
+              "start": 4858.700000017881,
+              "responseStart": 5522.700000017881,
+              "end": 5700.5,
+              "encodedBytes": 190,
+              "decodedBytes": 190
+            },
+            {
+              "path": "/assets/ArrowRight01Icon-CpyfVR64.js",
+              "initiator": "script",
+              "start": 4859.100000023842,
+              "responseStart": 5590.100000023842,
+              "end": 5761.200000017881,
+              "encodedBytes": 190,
+              "decodedBytes": 190
+            },
+            {
+              "path": "/assets/Calendar03Icon-DcAo2VXN.js",
+              "initiator": "script",
+              "start": 4859.100000023842,
+              "responseStart": 5665.4000000059605,
+              "end": 5836.4000000059605,
+              "encodedBytes": 1663,
+              "decodedBytes": 1663
+            },
+            {
+              "path": "/assets/Cancel01Icon-BeNMMUFU.js",
+              "initiator": "script",
+              "start": 4859.100000023842,
+              "responseStart": 5701,
+              "end": 5858.4000000059605,
+              "encodedBytes": 174,
+              "decodedBytes": 174
+            },
+            {
+              "path": "/assets/InformationCircleIcon-BxAcce07.js",
+              "initiator": "script",
+              "start": 4859.200000017881,
+              "responseStart": 5738.300000011921,
+              "end": 5895.200000017881,
+              "encodedBytes": 540,
+              "decodedBytes": 540
+            },
+            {
+              "path": "/assets/theme-DUpT3uwv.js",
+              "initiator": "script",
+              "start": 4859.200000017881,
+              "responseStart": 5761.700000017881,
+              "end": 5926.300000011921,
+              "encodedBytes": 1841,
+              "decodedBytes": 1841
+            },
+            {
+              "path": "/assets/Wallet01Icon-DX6vOXVQ.js",
+              "initiator": "script",
+              "start": 4859.300000011921,
+              "responseStart": 5807.100000023842,
+              "end": 5971.800000011921,
+              "encodedBytes": 960,
+              "decodedBytes": 960
+            },
+            {
+              "path": "/assets/alert-CH7C0i0e.js",
+              "initiator": "script",
+              "start": 4860.200000017881,
+              "responseStart": 5820.600000023842,
+              "end": 5986.5,
+              "encodedBytes": 1679,
+              "decodedBytes": 1679
+            },
+            {
+              "path": "/assets/popover-DC58a-bA.js",
+              "initiator": "script",
+              "start": 4860.200000017881,
+              "responseStart": 5837,
+              "end": 6106.5,
+              "encodedBytes": 11156,
+              "decodedBytes": 11156
+            },
+            {
+              "path": "/assets/useOpenInteractionType-BGzZG7AY.js",
+              "initiator": "script",
+              "start": 4860.200000017881,
+              "responseStart": 5859.100000023842,
+              "end": 6653.200000017881,
+              "encodedBytes": 51392,
+              "decodedBytes": 51392
+            },
+            {
+              "path": "/assets/visuallyHidden-CmQ9ItcI.js",
+              "initiator": "script",
+              "start": 4860.300000011921,
+              "responseStart": 5895.9000000059605,
+              "end": 6069.100000023842,
+              "encodedBytes": 203,
+              "decodedBytes": 203
+            },
+            {
+              "path": "/assets/useOnMount-CDavj5WP.js",
+              "initiator": "script",
+              "start": 4861.100000023842,
+              "responseStart": 5927,
+              "end": 6121.5,
+              "encodedBytes": 1386,
+              "decodedBytes": 1386
+            },
+            {
+              "path": "/assets/stateAttributesMapping-BsEql924.js",
+              "initiator": "script",
+              "start": 4861.200000017881,
+              "responseStart": 5972.200000017881,
+              "end": 6173.5,
+              "encodedBytes": 3158,
+              "decodedBytes": 3158
+            },
+            {
+              "path": "/assets/useTimeout-CsN0ajn5.js",
+              "initiator": "script",
+              "start": 4861.4000000059605,
+              "responseStart": 5987.200000017881,
+              "end": 6158.4000000059605,
+              "encodedBytes": 467,
+              "decodedBytes": 467
+            },
+            {
+              "path": "/assets/useTriggerFocusGuards-IOX2awYo.js",
+              "initiator": "script",
+              "start": 4861.4000000059605,
+              "responseStart": 6070.100000023842,
+              "end": 6758.200000017881,
+              "encodedBytes": 36203,
+              "decodedBytes": 36203
+            },
+            {
+              "path": "/assets/feature-BoS_FFXf.css",
+              "initiator": "link",
+              "start": 4861.9000000059605,
+              "responseStart": 5027.800000011921,
+              "end": 5288.9000000059605,
+              "encodedBytes": 4737,
+              "decodedBytes": 4737
+            },
+            {
+              "path": "/assets/feature-BLWIW8QK.js",
+              "initiator": "script",
+              "start": 4862.4000000059605,
+              "responseStart": 6107.200000017881,
+              "end": 6450.4000000059605,
+              "encodedBytes": 9236,
+              "decodedBytes": 9236
+            },
+            {
+              "path": "/assets/CreditCardIcon-BKho1sB0.js",
+              "initiator": "script",
+              "start": 4862.700000017881,
+              "responseStart": 6122.100000023842,
+              "end": 6331.4000000059605,
+              "encodedBytes": 929,
+              "decodedBytes": 929
+            },
+            {
+              "path": "/assets/CrownIcon-DoHIdtwM.js",
+              "initiator": "script",
+              "start": 4862.700000017881,
+              "responseStart": 6159,
+              "end": 6383.700000017881,
+              "encodedBytes": 1440,
+              "decodedBytes": 1440
+            },
+            {
+              "path": "/assets/Home01Icon-CtlfDZqB.js",
+              "initiator": "script",
+              "start": 4862.800000011921,
+              "responseStart": 6173.9000000059605,
+              "end": 6369.100000023842,
+              "encodedBytes": 575,
+              "decodedBytes": 575
+            },
+            {
+              "path": "/assets/Menu01Icon-Di7gUquh.js",
+              "initiator": "script",
+              "start": 4862.800000011921,
+              "responseStart": 6332.100000023842,
+              "end": 6503.300000011921,
+              "encodedBytes": 381,
+              "decodedBytes": 381
+            },
+            {
+              "path": "/assets/Settings01Icon-tBLYLmm0.js",
+              "initiator": "script",
+              "start": 4862.9000000059605,
+              "responseStart": 6369.800000011921,
+              "end": 6593.300000011921,
+              "encodedBytes": 2411,
+              "decodedBytes": 2411
+            },
+            {
+              "path": "/assets/brand-BhwFFB-d.js",
+              "initiator": "script",
+              "start": 4863.600000023842,
+              "responseStart": 6384,
+              "end": 6555.800000011921,
+              "encodedBytes": 87,
+              "decodedBytes": 87
+            },
+            {
+              "path": "/assets/feature-De-IYpxw.css",
+              "initiator": "link",
+              "start": 4864.100000023842,
+              "responseStart": 5087.700000017881,
+              "end": 5589,
+              "encodedBytes": 14131,
+              "decodedBytes": 14131
+            },
+            {
+              "path": "/assets/transactions-page-Bi1j-cQn.js",
+              "initiator": "script",
+              "start": 4864.600000023842,
+              "responseStart": 6451,
+              "end": 8092.800000011921,
+              "encodedBytes": 111096,
+              "decodedBytes": 111096
+            },
+            {
+              "path": "/assets/icon-indicator-BaVwVcUS.js",
+              "initiator": "script",
+              "start": 4865.200000017881,
+              "responseStart": 6504.100000023842,
+              "end": 6697.600000023842,
+              "encodedBytes": 935,
+              "decodedBytes": 935
+            },
+            {
+              "path": "/assets/ArrowUpRight01Icon-C9pA22LI.js",
+              "initiator": "script",
+              "start": 4865.4000000059605,
+              "responseStart": 6558.700000017881,
+              "end": 6727.600000023842,
+              "encodedBytes": 240,
+              "decodedBytes": 240
+            },
+            {
+              "path": "/assets/Delete02Icon-CsyBlwAn.js",
+              "initiator": "script",
+              "start": 4865.800000011921,
+              "responseStart": 6653.800000011921,
+              "end": 6841.5,
+              "encodedBytes": 994,
+              "decodedBytes": 994
+            },
+            {
+              "path": "/assets/category-visual-Be45h02v.js",
+              "initiator": "script",
+              "start": 4865.800000011921,
+              "responseStart": 6593.9000000059605,
+              "end": 6856.5,
+              "encodedBytes": 6601,
+              "decodedBytes": 6601
+            },
+            {
+              "path": "/assets/FilterHorizontalIcon-BD-jVvJt.js",
+              "initiator": "script",
+              "start": 4865.9000000059605,
+              "responseStart": 6698.100000023842,
+              "end": 6877.700000017881,
+              "encodedBytes": 1532,
+              "decodedBytes": 1532
+            },
+            {
+              "path": "/assets/PencilIcon-BlCKeN3e.js",
+              "initiator": "script",
+              "start": 4866,
+              "responseStart": 6728.100000023842,
+              "end": 6908.300000011921,
+              "encodedBytes": 945,
+              "decodedBytes": 945
+            },
+            {
+              "path": "/assets/workspace-layout-Kk-Eh7Js.js",
+              "initiator": "script",
+              "start": 4866.700000017881,
+              "responseStart": 6758.800000011921,
+              "end": 6938.9000000059605,
+              "encodedBytes": 1696,
+              "decodedBytes": 1696
+            },
+            {
+              "path": "/assets/refresh-button-FV3uuPJb.js",
+              "initiator": "script",
+              "start": 4866.700000017881,
+              "responseStart": 6842.100000023842,
+              "end": 7006.5,
+              "encodedBytes": 357,
+              "decodedBytes": 357
+            },
+            {
+              "path": "/assets/Tick02Icon-Bq3vnQVu.js",
+              "initiator": "script",
+              "start": 4867,
+              "responseStart": 6857.200000017881,
+              "end": 7036.4000000059605,
+              "encodedBytes": 841,
+              "decodedBytes": 841
+            },
+            {
+              "path": "/assets/table-DPw744xH.js",
+              "initiator": "script",
+              "start": 4867.100000023842,
+              "responseStart": 6878.300000011921,
+              "end": 7058.200000017881,
+              "encodedBytes": 1794,
+              "decodedBytes": 1794
+            },
+            {
+              "path": "/assets/useControlled-CYEdRssO.js",
+              "initiator": "script",
+              "start": 4867.100000023842,
+              "responseStart": 6939.5,
+              "end": 7111.600000023842,
+              "encodedBytes": 249,
+              "decodedBytes": 249
+            },
+            {
+              "path": "/assets/checkbox-BscCSdxY.js",
+              "initiator": "script",
+              "start": 4867.100000023842,
+              "responseStart": 6909.100000023842,
+              "end": 7141.5,
+              "encodedBytes": 6512,
+              "decodedBytes": 6512
+            },
+            {
+              "path": "/assets/useLabelableId--GayC5zM.js",
+              "initiator": "script",
+              "start": 4867.800000011921,
+              "responseStart": 7007.700000017881,
+              "end": 7200.4000000059605,
+              "encodedBytes": 2456,
+              "decodedBytes": 2456
+            },
+            {
+              "path": "/assets/label-CRVZhTRu.js",
+              "initiator": "script",
+              "start": 4868,
+              "responseStart": 7037.100000023842,
+              "end": 7208.300000011921,
+              "encodedBytes": 467,
+              "decodedBytes": 467
+            },
+            {
+              "path": "/assets/input-kYg0-SPZ.js",
+              "initiator": "script",
+              "start": 4868,
+              "responseStart": 7058.800000011921,
+              "end": 7253.300000011921,
+              "encodedBytes": 2876,
+              "decodedBytes": 2876
+            },
+            {
+              "path": "/assets/choice-dropdown-Bwmp9uaL.js",
+              "initiator": "script",
+              "start": 4868.300000011921,
+              "responseStart": 7112.700000017881,
+              "end": 8071.5,
+              "encodedBytes": 46892,
+              "decodedBytes": 46892
+            },
+            {
+              "path": "/assets/canonical-query-feedback-DwbWht4Q.js",
+              "initiator": "script",
+              "start": 4868.4000000059605,
+              "responseStart": 7142,
+              "end": 7313.9000000059605,
+              "encodedBytes": 489,
+              "decodedBytes": 489
+            },
+            {
+              "path": "/assets/workspace-query-Bf-TfVIm.js",
+              "initiator": "script",
+              "start": 4868.5,
+              "responseStart": 7201,
+              "end": 7373,
+              "encodedBytes": 200,
+              "decodedBytes": 200
+            },
+            {
+              "path": "/assets/money-1Dv41AB9.js",
+              "initiator": "script",
+              "start": 4869,
+              "responseStart": 7208.700000017881,
+              "end": 7410.100000023842,
+              "encodedBytes": 1560,
+              "decodedBytes": 1560
+            },
+            {
+              "path": "/assets/skeleton-G3DDhUfv.js",
+              "initiator": "script",
+              "start": 4869.100000023842,
+              "responseStart": 7253.800000011921,
+              "end": 7433.800000011921,
+              "encodedBytes": 268,
+              "decodedBytes": 268
+            },
+            {
+              "path": "/assets/canonical-input--hXjJKN1.js",
+              "initiator": "script",
+              "start": 4869.200000017881,
+              "responseStart": 7373.5,
+              "end": 7546.5,
+              "encodedBytes": 209,
+              "decodedBytes": 209
+            },
+            {
+              "path": "/assets/dist-ymEZZdgR.js",
+              "initiator": "script",
+              "start": 4869.200000017881,
+              "responseStart": 7314.600000023842,
+              "end": 8122.600000023842,
+              "encodedBytes": 33531,
+              "decodedBytes": 33531
+            },
+            {
+              "path": "/assets/ArrowLeft01Icon-BJdQ1Oac.js",
+              "initiator": "script",
+              "start": 4869.800000011921,
+              "responseStart": 7434.200000017881,
+              "end": 7621.300000011921,
+              "encodedBytes": 191,
+              "decodedBytes": 191
+            },
+            {
+              "path": "/assets/calendar-field-CryT7yP0.js",
+              "initiator": "script",
+              "start": 4869.800000011921,
+              "responseStart": 7410.700000017881,
+              "end": 8392.800000011921,
+              "encodedBytes": 80640,
+              "decodedBytes": 80640
+            },
+            {
+              "path": "/assets/compact-date-DKyfFy_Y.js",
+              "initiator": "script",
+              "start": 4869.9000000059605,
+              "responseStart": 7547.200000017881,
+              "end": 7733.800000011921,
+              "encodedBytes": 322,
+              "decodedBytes": 322
+            },
+            {
+              "path": "/assets/transactions-page-C3sk5Oej.css",
+              "initiator": "link",
+              "start": 4870.700000017881,
+              "responseStart": 5162.4000000059605,
+              "end": 5820,
+              "encodedBytes": 26367,
+              "decodedBytes": 26367
+            },
+            {
+              "path": "/web/session/binding",
+              "initiator": "fetch",
+              "start": 8436.600000023842,
+              "responseStart": 0,
+              "end": 8595.600000023842,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/web/consent",
+              "initiator": "fetch",
+              "start": 8448.90000000596,
+              "responseStart": 0,
+              "end": 8602.700000017881,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/assets/fidy-logo-B9D5jpJk.png",
+              "initiator": "img",
+              "start": 8467.40000000596,
+              "responseStart": 8468.200000017881,
+              "end": 9421.300000011921,
+              "encodedBytes": 55568,
+              "decodedBytes": 55568
+            },
+            {
+              "path": "/assets/feature-Dffo3XQT.js",
+              "initiator": "script",
+              "start": 8601.5,
+              "responseStart": 8603.100000023842,
+              "end": 9570.200000017881,
+              "encodedBytes": 35801,
+              "decodedBytes": 35801
+            },
+            {
+              "path": "/assets/Clock01Icon-Caopc-kj.js",
+              "initiator": "script",
+              "start": 8601.700000017881,
+              "responseStart": 8603.300000011921,
+              "end": 8767.600000023842,
+              "encodedBytes": 230,
+              "decodedBytes": 230
+            },
+            {
+              "path": "/assets/File01Icon-BdHcSNrJ.js",
+              "initiator": "script",
+              "start": 8601.700000017881,
+              "responseStart": 8603.40000000596,
+              "end": 8820.100000023842,
+              "encodedBytes": 945,
+              "decodedBytes": 945
+            },
+            {
+              "path": "/assets/Loading03Icon-BcN5iSGp.js",
+              "initiator": "script",
+              "start": 8601.700000017881,
+              "responseStart": 8603.600000023842,
+              "end": 8827.5,
+              "encodedBytes": 877,
+              "decodedBytes": 877
+            },
+            {
+              "path": "/assets/Mail01Icon-qGLuNJQs.js",
+              "initiator": "script",
+              "start": 8602.40000000596,
+              "responseStart": 8604.700000017881,
+              "end": 8836.600000023842,
+              "encodedBytes": 860,
+              "decodedBytes": 860
+            },
+            {
+              "path": "/assets/PauseCircleIcon-DzzxNb4l.js",
+              "initiator": "script",
+              "start": 8602.5,
+              "responseStart": 8828.200000017881,
+              "end": 9016.700000017881,
+              "encodedBytes": 239,
+              "decodedBytes": 239
+            },
+            {
+              "path": "/assets/badge-CqRhwPvb.js",
+              "initiator": "script",
+              "start": 8602.5,
+              "responseStart": 8837.200000017881,
+              "end": 9099,
+              "encodedBytes": 1508,
+              "decodedBytes": 1508
+            },
+            {
+              "path": "/assets/stringifyLocale-CkHjdQTJ.js",
+              "initiator": "script",
+              "start": 8602.90000000596,
+              "responseStart": 9100.200000017881,
+              "end": 9293.5,
+              "encodedBytes": 99,
+              "decodedBytes": 99
+            },
+            {
+              "path": "/assets/empty-CHbN2YFD.js",
+              "initiator": "script",
+              "start": 8602.90000000596,
+              "responseStart": 9240.90000000596,
+              "end": 9466.600000023842,
+              "encodedBytes": 1331,
+              "decodedBytes": 1331
+            },
+            {
+              "path": "/assets/searchable-choice-dropdown-ClL6R7Sk.js",
+              "initiator": "script",
+              "start": 8602.90000000596,
+              "responseStart": 9017.90000000596,
+              "end": 9863.90000000596,
+              "encodedBytes": 38219,
+              "decodedBytes": 38219
+            },
+            {
+              "path": "/assets/feature-DIj4BkOz.css",
+              "initiator": "link",
+              "start": 8603,
+              "responseStart": 8768.800000011921,
+              "end": 9240,
+              "encodedBytes": 11661,
+              "decodedBytes": 11661
+            },
+            {
+              "path": "/user",
+              "initiator": "fetch",
+              "start": 8614.800000011921,
+              "responseStart": 0,
+              "end": 8814.100000023842,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/assets/Poppins-SemiBold-a0jdhGrK.woff2",
+              "initiator": "css",
+              "start": 8626.700000017881,
+              "responseStart": 8822.700000017881,
+              "end": 9893.200000017881,
+              "encodedBytes": 51500,
+              "decodedBytes": 51500
+            },
+            {
+              "path": "/categories",
+              "initiator": "fetch",
+              "start": 8825,
+              "responseStart": 0,
+              "end": 9069.300000011921,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/transactions",
+              "initiator": "fetch",
+              "start": 8827.200000017881,
+              "responseStart": 0,
+              "end": 9691.5,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/assets/dist-DHS8QGvC.js",
+              "initiator": "script",
+              "start": 9941.40000000596,
+              "responseStart": 9942.200000017881,
+              "end": 10110.40000000596,
+              "encodedBytes": 56,
+              "decodedBytes": 56
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "initiator": "fetch",
+              "start": 10115.90000000596,
+              "responseStart": 0,
+              "end": 10463.90000000596,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            }
+          ],
+          "domNodes": 4092
+        },
+        {
+          "journey": "budgets:isolated-cold-document",
+          "elapsedMs": 9055.491083,
+          "outcome": "ready",
+          "loadingObservations": 24,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 155.408,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 163.921,
+              "bytes": 50
+            },
+            {
+              "path": "/user",
+              "status": 200,
+              "durationMs": 155.043,
+              "bytes": 260
+            },
+            {
+              "path": "/budget-status",
+              "status": 200,
+              "durationMs": -1,
+              "bytes": -1
+            },
+            {
+              "path": "/categories",
+              "status": 200,
+              "durationMs": -1,
+              "bytes": -1
+            },
+            {
+              "path": "/budgets",
+              "status": 200,
+              "durationMs": -1,
+              "bytes": -1
+            }
+          ],
+          "longTasks": [158, 69, 56],
+          "resourceCount": 99,
+          "resourceBytes": 1384137,
+          "domNodes": 365
+        },
+        {
+          "journey": "recurring:isolated-cold-document",
+          "elapsedMs": 10576.022291000001,
+          "outcome": "ready",
+          "loadingObservations": 31,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 161.353,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 164.016,
+              "bytes": 50
+            },
+            {
+              "path": "/user",
+              "status": 200,
+              "durationMs": 156.761,
+              "bytes": 260
+            },
+            {
+              "path": "/categories",
+              "status": 200,
+              "durationMs": -1,
+              "bytes": -1
+            },
+            {
+              "path": "/recurring-plans",
+              "status": 200,
+              "durationMs": -1,
+              "bytes": -1
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "status": 200,
+              "durationMs": 216.428,
+              "bytes": 11863
+            },
+            {
+              "path": "/recurring-series",
+              "status": 200,
+              "durationMs": 158.725,
+              "bytes": 70
+            }
+          ],
+          "longTasks": [158, 61, 103],
+          "resourceCount": 107,
+          "resourceBytes": 1589466,
+          "domNodes": 1950
+        },
+        {
+          "journey": "dashboard:isolated-cold-document",
+          "elapsedMs": 10593.872083000024,
+          "outcome": "ready",
+          "loadingObservations": 4,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 168.128,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 167.006,
+              "bytes": 50
+            },
+            {
+              "path": "/dashboard/view",
+              "status": 200,
+              "durationMs": -1,
+              "bytes": -1
+            },
+            {
+              "path": "/dashboard/catalog",
+              "status": 200,
+              "durationMs": 235.308,
+              "bytes": 1008
+            }
+          ],
+          "longTasks": [192, 186, 302],
+          "resourceCount": 92,
+          "resourceBytes": 1694944,
+          "resources": [
+            {
+              "path": "/assets/index-DY4prfAp.js",
+              "initiator": "script",
+              "start": 170.59999999403954,
+              "responseStart": 174.59999999403954,
+              "end": 4471.5,
+              "encodedBytes": 227672,
+              "decodedBytes": 227672
+            },
+            {
+              "path": "/assets/react-sySUN5R7.js",
+              "initiator": "other",
+              "start": 170.7000000178814,
+              "responseStart": 175.90000000596046,
+              "end": 572.5,
+              "encodedBytes": 8539,
+              "decodedBytes": 8539
+            },
+            {
+              "path": "/assets/crypto-BdL391F0.js",
+              "initiator": "other",
+              "start": 171.40000000596046,
+              "responseStart": 176.59999999403954,
+              "end": 444.90000000596046,
+              "encodedBytes": 3253,
+              "decodedBytes": 3253
+            },
+            {
+              "path": "/assets/react-dom-p5-f7VGD.js",
+              "initiator": "other",
+              "start": 171.40000000596046,
+              "responseStart": 176.2000000178814,
+              "end": 481.09999999403954,
+              "encodedBytes": 3853,
+              "decodedBytes": 3853
+            },
+            {
+              "path": "/assets/client-CFXI9Ly8.js",
+              "initiator": "other",
+              "start": 171.40000000596046,
+              "responseStart": 178.40000000596046,
+              "end": 4179.5,
+              "encodedBytes": 187875,
+              "decodedBytes": 187875
+            },
+            {
+              "path": "/assets/RegistryContext-DneK90WZ.js",
+              "initiator": "other",
+              "start": 171.40000000596046,
+              "responseStart": 177.7000000178814,
+              "end": 4360.0999999940395,
+              "encodedBytes": 204639,
+              "decodedBytes": 204639
+            },
+            {
+              "path": "/assets/session-context-DadKOe14.js",
+              "initiator": "other",
+              "start": 171.5,
+              "responseStart": 481.5,
+              "end": 662.0999999940395,
+              "encodedBytes": 292,
+              "decodedBytes": 292
+            },
+            {
+              "path": "/assets/jsx-runtime-COQnYV8f.js",
+              "initiator": "other",
+              "start": 172,
+              "responseStart": 573.2000000178814,
+              "end": 759.5999999940395,
+              "encodedBytes": 424,
+              "decodedBytes": 424
+            },
+            {
+              "path": "/assets/utils-qyHl_yuu.js",
+              "initiator": "other",
+              "start": 172,
+              "responseStart": 663.0999999940395,
+              "end": 850.0999999940395,
+              "encodedBytes": 107,
+              "decodedBytes": 107
+            },
+            {
+              "path": "/assets/link-C6op39hF.js",
+              "initiator": "other",
+              "start": 172,
+              "responseStart": 851.2000000178814,
+              "end": 1178.5999999940395,
+              "encodedBytes": 4197,
+              "decodedBytes": 4197
+            },
+            {
+              "path": "/assets/useMatch-KWF0wnAO.js",
+              "initiator": "other",
+              "start": 172,
+              "responseStart": 1179.7000000178814,
+              "end": 1465,
+              "encodedBytes": 2351,
+              "decodedBytes": 2351
+            },
+            {
+              "path": "/assets/matchContext-DGQpDSE-.js",
+              "initiator": "other",
+              "start": 172,
+              "responseStart": 760.5999999940395,
+              "end": 2438.800000011921,
+              "encodedBytes": 55332,
+              "decodedBytes": 55332
+            },
+            {
+              "path": "/assets/Match-DYFyqi6V.js",
+              "initiator": "other",
+              "start": 172.40000000596046,
+              "responseStart": 1465.5999999940395,
+              "end": 1800,
+              "encodedBytes": 4669,
+              "decodedBytes": 4669
+            },
+            {
+              "path": "/assets/useParams-BjqCtO1H.js",
+              "initiator": "other",
+              "start": 172.40000000596046,
+              "responseStart": 1811.7000000178814,
+              "end": 1989.2000000178814,
+              "encodedBytes": 258,
+              "decodedBytes": 258
+            },
+            {
+              "path": "/assets/useSearch-CTPkIWHD.js",
+              "initiator": "other",
+              "start": 172.40000000596046,
+              "responseStart": 1990,
+              "end": 2185.0999999940395,
+              "encodedBytes": 218,
+              "decodedBytes": 218
+            },
+            {
+              "path": "/assets/useNavigate-BNupIypg.js",
+              "initiator": "script",
+              "start": 183.59999999403954,
+              "responseStart": 2185.800000011921,
+              "end": 2379.7000000178814,
+              "encodedBytes": 380,
+              "decodedBytes": 380
+            },
+            {
+              "path": "/assets/preload-helper-BEyK2XXa.js",
+              "initiator": "script",
+              "start": 183.59999999403954,
+              "responseStart": 2380.4000000059605,
+              "end": 2596.9000000059605,
+              "encodedBytes": 1521,
+              "decodedBytes": 1521
+            },
+            {
+              "path": "/assets/workspace-components-DltaxjAr.js",
+              "initiator": "script",
+              "start": 183.59999999403954,
+              "responseStart": 2439.7000000178814,
+              "end": 2740.300000011921,
+              "encodedBytes": 3841,
+              "decodedBytes": 3841
+            },
+            {
+              "path": "/assets/subscription-enrollment-context-D6Q4WAhG.js",
+              "initiator": "script",
+              "start": 184.30000001192093,
+              "responseStart": 2597.5999999940395,
+              "end": 2785.0999999940395,
+              "encodedBytes": 320,
+              "decodedBytes": 320
+            },
+            {
+              "path": "/assets/index-CPaPuFSO.css",
+              "initiator": "link",
+              "start": 184.30000001192093,
+              "responseStart": 446.2000000178814,
+              "end": 2792.7000000178814,
+              "encodedBytes": 84866,
+              "decodedBytes": 84866
+            },
+            {
+              "path": "/assets/login-destination-C4H5Mv8n.js",
+              "initiator": "script",
+              "start": 184.30000001192093,
+              "responseStart": 2741.2000000178814,
+              "end": 2950,
+              "encodedBytes": 759,
+              "decodedBytes": 759
+            },
+            {
+              "path": "/web/session/binding",
+              "initiator": "fetch",
+              "start": 4718.0999999940395,
+              "responseStart": 0,
+              "end": 4885,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/assets/Poppins-Regular-dDwLtfIe.woff2",
+              "initiator": "css",
+              "start": 4727.700000017881,
+              "responseStart": 5049.800000011921,
+              "end": 5971.5,
+              "encodedBytes": 51564,
+              "decodedBytes": 51564
+            },
+            {
+              "path": "/assets/application-frame-Bt8YN7jS.js",
+              "initiator": "script",
+              "start": 5150.200000017881,
+              "responseStart": 5151,
+              "end": 5454.0999999940395,
+              "encodedBytes": 6222,
+              "decodedBytes": 6222
+            },
+            {
+              "path": "/assets/useRouterState-DobHkYlF.js",
+              "initiator": "script",
+              "start": 5150.800000011921,
+              "responseStart": 5151.4000000059605,
+              "end": 5319.800000011921,
+              "encodedBytes": 213,
+              "decodedBytes": 213
+            },
+            {
+              "path": "/assets/useRenderElement-BLSNGsl3.js",
+              "initiator": "script",
+              "start": 5151.0999999940395,
+              "responseStart": 5151.9000000059605,
+              "end": 5522.0999999940395,
+              "encodedBytes": 9180,
+              "decodedBytes": 9180
+            },
+            {
+              "path": "/assets/button-ByhHMB4W.js",
+              "initiator": "script",
+              "start": 5151.0999999940395,
+              "responseStart": 5151.800000011921,
+              "end": 6032.200000017881,
+              "encodedBytes": 34042,
+              "decodedBytes": 34042
+            },
+            {
+              "path": "/assets/canonical-query-DsY1iW8g.js",
+              "initiator": "script",
+              "start": 5151.200000017881,
+              "responseStart": 5152.0999999940395,
+              "end": 5378.800000011921,
+              "encodedBytes": 680,
+              "decodedBytes": 680
+            },
+            {
+              "path": "/assets/feature-EhpX3oxT.js",
+              "initiator": "script",
+              "start": 5151.300000011921,
+              "responseStart": 5522.700000017881,
+              "end": 6069.700000017881,
+              "encodedBytes": 20293,
+              "decodedBytes": 20293
+            },
+            {
+              "path": "/assets/HugeiconsIcon-CgO2AFQZ.js",
+              "initiator": "script",
+              "start": 5152.0999999940395,
+              "responseStart": 5590.4000000059605,
+              "end": 5829,
+              "encodedBytes": 902,
+              "decodedBytes": 902
+            },
+            {
+              "path": "/assets/ArrowDown01Icon-DDfnNeUj.js",
+              "initiator": "script",
+              "start": 5152.200000017881,
+              "responseStart": 5829.5999999940395,
+              "end": 6002.9000000059605,
+              "encodedBytes": 190,
+              "decodedBytes": 190
+            },
+            {
+              "path": "/assets/Alert02Icon-Cb_Wz6Pv.js",
+              "initiator": "script",
+              "start": 5152.200000017881,
+              "responseStart": 5818.5,
+              "end": 6025.4000000059605,
+              "encodedBytes": 821,
+              "decodedBytes": 821
+            },
+            {
+              "path": "/assets/ArrowRight01Icon-CpyfVR64.js",
+              "initiator": "script",
+              "start": 5152.300000011921,
+              "responseStart": 5898.0999999940395,
+              "end": 6062,
+              "encodedBytes": 190,
+              "decodedBytes": 190
+            },
+            {
+              "path": "/assets/Calendar03Icon-DcAo2VXN.js",
+              "initiator": "script",
+              "start": 5152.9000000059605,
+              "responseStart": 5972.700000017881,
+              "end": 6136.4000000059605,
+              "encodedBytes": 1663,
+              "decodedBytes": 1663
+            },
+            {
+              "path": "/assets/Cancel01Icon-BeNMMUFU.js",
+              "initiator": "script",
+              "start": 5153,
+              "responseStart": 6004.5,
+              "end": 6158.800000011921,
+              "encodedBytes": 174,
+              "decodedBytes": 174
+            },
+            {
+              "path": "/assets/InformationCircleIcon-BxAcce07.js",
+              "initiator": "script",
+              "start": 5153,
+              "responseStart": 6026.200000017881,
+              "end": 6181.200000017881,
+              "encodedBytes": 540,
+              "decodedBytes": 540
+            },
+            {
+              "path": "/assets/theme-DUpT3uwv.js",
+              "initiator": "script",
+              "start": 5153.0999999940395,
+              "responseStart": 6032.700000017881,
+              "end": 6197.700000017881,
+              "encodedBytes": 1841,
+              "decodedBytes": 1841
+            },
+            {
+              "path": "/assets/Wallet01Icon-DX6vOXVQ.js",
+              "initiator": "script",
+              "start": 5153.700000017881,
+              "responseStart": 6063.0999999940395,
+              "end": 6227.5999999940395,
+              "encodedBytes": 960,
+              "decodedBytes": 960
+            },
+            {
+              "path": "/assets/alert-CH7C0i0e.js",
+              "initiator": "script",
+              "start": 5153.700000017881,
+              "responseStart": 6070.300000011921,
+              "end": 6243,
+              "encodedBytes": 1679,
+              "decodedBytes": 1679
+            },
+            {
+              "path": "/assets/popover-DC58a-bA.js",
+              "initiator": "script",
+              "start": 5153.800000011921,
+              "responseStart": 6136.9000000059605,
+              "end": 6445.200000017881,
+              "encodedBytes": 11156,
+              "decodedBytes": 11156
+            },
+            {
+              "path": "/assets/useOpenInteractionType-BGzZG7AY.js",
+              "initiator": "script",
+              "start": 5153.9000000059605,
+              "responseStart": 6159.300000011921,
+              "end": 6985.4000000059605,
+              "encodedBytes": 51392,
+              "decodedBytes": 51392
+            },
+            {
+              "path": "/assets/visuallyHidden-CmQ9ItcI.js",
+              "initiator": "script",
+              "start": 5154.700000017881,
+              "responseStart": 6181.800000011921,
+              "end": 6347.5999999940395,
+              "encodedBytes": 203,
+              "decodedBytes": 203
+            },
+            {
+              "path": "/assets/useOnMount-CDavj5WP.js",
+              "initiator": "script",
+              "start": 5154.9000000059605,
+              "responseStart": 6198.200000017881,
+              "end": 6392.4000000059605,
+              "encodedBytes": 1386,
+              "decodedBytes": 1386
+            },
+            {
+              "path": "/assets/useTimeout-CsN0ajn5.js",
+              "initiator": "script",
+              "start": 5155.0999999940395,
+              "responseStart": 6243.5,
+              "end": 6421.300000011921,
+              "encodedBytes": 467,
+              "decodedBytes": 467
+            },
+            {
+              "path": "/assets/stateAttributesMapping-BsEql924.js",
+              "initiator": "script",
+              "start": 5155.0999999940395,
+              "responseStart": 6228.9000000059605,
+              "end": 6451.700000017881,
+              "encodedBytes": 3158,
+              "decodedBytes": 3158
+            },
+            {
+              "path": "/assets/useTriggerFocusGuards-IOX2awYo.js",
+              "initiator": "script",
+              "start": 5155.200000017881,
+              "responseStart": 6348.200000017881,
+              "end": 7000.200000017881,
+              "encodedBytes": 36203,
+              "decodedBytes": 36203
+            },
+            {
+              "path": "/assets/feature-BoS_FFXf.css",
+              "initiator": "link",
+              "start": 5156,
+              "responseStart": 5320.700000017881,
+              "end": 5589.700000017881,
+              "encodedBytes": 4737,
+              "decodedBytes": 4737
+            },
+            {
+              "path": "/assets/CreditCardIcon-BKho1sB0.js",
+              "initiator": "script",
+              "start": 5156.4000000059605,
+              "responseStart": 6422.9000000059605,
+              "end": 6625.4000000059605,
+              "encodedBytes": 929,
+              "decodedBytes": 929
+            },
+            {
+              "path": "/assets/Home01Icon-CtlfDZqB.js",
+              "initiator": "script",
+              "start": 5156.4000000059605,
+              "responseStart": 6452.4000000059605,
+              "end": 6639.200000017881,
+              "encodedBytes": 575,
+              "decodedBytes": 575
+            },
+            {
+              "path": "/assets/CrownIcon-DoHIdtwM.js",
+              "initiator": "script",
+              "start": 5156.4000000059605,
+              "responseStart": 6446,
+              "end": 6669.800000011921,
+              "encodedBytes": 1440,
+              "decodedBytes": 1440
+            },
+            {
+              "path": "/assets/feature-BLWIW8QK.js",
+              "initiator": "script",
+              "start": 5156.4000000059605,
+              "responseStart": 6393.9000000059605,
+              "end": 6736.5999999940395,
+              "encodedBytes": 9236,
+              "decodedBytes": 9236
+            },
+            {
+              "path": "/assets/Menu01Icon-Di7gUquh.js",
+              "initiator": "script",
+              "start": 5157.200000017881,
+              "responseStart": 6626.800000011921,
+              "end": 6797.800000011921,
+              "encodedBytes": 381,
+              "decodedBytes": 381
+            },
+            {
+              "path": "/assets/brand-BhwFFB-d.js",
+              "initiator": "script",
+              "start": 5157.200000017881,
+              "responseStart": 6671.9000000059605,
+              "end": 6848.9000000059605,
+              "encodedBytes": 87,
+              "decodedBytes": 87
+            },
+            {
+              "path": "/assets/Settings01Icon-tBLYLmm0.js",
+              "initiator": "script",
+              "start": 5157.200000017881,
+              "responseStart": 6639.800000011921,
+              "end": 6871.300000011921,
+              "encodedBytes": 2411,
+              "decodedBytes": 2411
+            },
+            {
+              "path": "/assets/feature-De-IYpxw.css",
+              "initiator": "link",
+              "start": 5157.9000000059605,
+              "responseStart": 5379.300000011921,
+              "end": 5896.200000017881,
+              "encodedBytes": 14131,
+              "decodedBytes": 14131
+            },
+            {
+              "path": "/assets/feature-EkdRydZg.js",
+              "initiator": "script",
+              "start": 5158.700000017881,
+              "responseStart": 6738.700000017881,
+              "end": 6909.800000011921,
+              "encodedBytes": 97,
+              "decodedBytes": 97
+            },
+            {
+              "path": "/assets/feature-B2udELNi.js",
+              "initiator": "script",
+              "start": 5159.200000017881,
+              "responseStart": 6799.800000011921,
+              "end": 6970,
+              "encodedBytes": 84,
+              "decodedBytes": 84
+            },
+            {
+              "path": "/assets/dashboard-page-CIKVa9Zd.js",
+              "initiator": "script",
+              "start": 5159.9000000059605,
+              "responseStart": 6850.200000017881,
+              "end": 9655.200000017881,
+              "encodedBytes": 483518,
+              "decodedBytes": 483518
+            },
+            {
+              "path": "/assets/icon-indicator-BaVwVcUS.js",
+              "initiator": "script",
+              "start": 5160,
+              "responseStart": 6873.300000011921,
+              "end": 7045.300000011921,
+              "encodedBytes": 935,
+              "decodedBytes": 935
+            },
+            {
+              "path": "/assets/ArrowUpRight01Icon-C9pA22LI.js",
+              "initiator": "script",
+              "start": 5160.300000011921,
+              "responseStart": 6910.700000017881,
+              "end": 7067.700000017881,
+              "encodedBytes": 240,
+              "decodedBytes": 240
+            },
+            {
+              "path": "/assets/category-visual-Be45h02v.js",
+              "initiator": "script",
+              "start": 5160.4000000059605,
+              "responseStart": 6971.0999999940395,
+              "end": 7254.5,
+              "encodedBytes": 6601,
+              "decodedBytes": 6601
+            },
+            {
+              "path": "/assets/PencilIcon-BlCKeN3e.js",
+              "initiator": "script",
+              "start": 5160.5,
+              "responseStart": 6986.0999999940395,
+              "end": 7186.300000011921,
+              "encodedBytes": 945,
+              "decodedBytes": 945
+            },
+            {
+              "path": "/assets/Tick02Icon-Bq3vnQVu.js",
+              "initiator": "script",
+              "start": 5160.5999999940395,
+              "responseStart": 7001.200000017881,
+              "end": 7208.800000011921,
+              "encodedBytes": 841,
+              "decodedBytes": 841
+            },
+            {
+              "path": "/assets/refresh-button-FV3uuPJb.js",
+              "initiator": "script",
+              "start": 5161.300000011921,
+              "responseStart": 7046.200000017881,
+              "end": 7224,
+              "encodedBytes": 357,
+              "decodedBytes": 357
+            },
+            {
+              "path": "/assets/input-kYg0-SPZ.js",
+              "initiator": "script",
+              "start": 5161.300000011921,
+              "responseStart": 7068.200000017881,
+              "end": 7285,
+              "encodedBytes": 2876,
+              "decodedBytes": 2876
+            },
+            {
+              "path": "/assets/useLabelableId--GayC5zM.js",
+              "initiator": "script",
+              "start": 5161.300000011921,
+              "responseStart": 7187.0999999940395,
+              "end": 7389,
+              "encodedBytes": 2456,
+              "decodedBytes": 2456
+            },
+            {
+              "path": "/assets/canonical-query-feedback-DwbWht4Q.js",
+              "initiator": "script",
+              "start": 5161.800000011921,
+              "responseStart": 7224.5,
+              "end": 7397.700000017881,
+              "encodedBytes": 489,
+              "decodedBytes": 489
+            },
+            {
+              "path": "/assets/empty-CHbN2YFD.js",
+              "initiator": "script",
+              "start": 5161.800000011921,
+              "responseStart": 7209.700000017881,
+              "end": 7411.9000000059605,
+              "encodedBytes": 1331,
+              "decodedBytes": 1331
+            },
+            {
+              "path": "/assets/workspace-query-Bf-TfVIm.js",
+              "initiator": "script",
+              "start": 5162.300000011921,
+              "responseStart": 7255.300000011921,
+              "end": 7419.800000011921,
+              "encodedBytes": 200,
+              "decodedBytes": 200
+            },
+            {
+              "path": "/assets/money-1Dv41AB9.js",
+              "initiator": "script",
+              "start": 5162.300000011921,
+              "responseStart": 7285.800000011921,
+              "end": 7464.800000011921,
+              "encodedBytes": 1560,
+              "decodedBytes": 1560
+            },
+            {
+              "path": "/assets/stringifyLocale-CkHjdQTJ.js",
+              "initiator": "script",
+              "start": 5162.300000011921,
+              "responseStart": 7398.200000017881,
+              "end": 7569.800000011921,
+              "encodedBytes": 99,
+              "decodedBytes": 99
+            },
+            {
+              "path": "/assets/progress-C30YkO0e.js",
+              "initiator": "script",
+              "start": 5162.300000011921,
+              "responseStart": 7389.5999999940395,
+              "end": 7584.700000017881,
+              "encodedBytes": 2685,
+              "decodedBytes": 2685
+            },
+            {
+              "path": "/assets/skeleton-G3DDhUfv.js",
+              "initiator": "script",
+              "start": 5162.9000000059605,
+              "responseStart": 7412.5,
+              "end": 7592.700000017881,
+              "encodedBytes": 268,
+              "decodedBytes": 268
+            },
+            {
+              "path": "/assets/dashboard-page-BrJPnbRs.css",
+              "initiator": "link",
+              "start": 5163.0999999940395,
+              "responseStart": 5454.800000011921,
+              "end": 5815.4000000059605,
+              "encodedBytes": 7824,
+              "decodedBytes": 7824
+            },
+            {
+              "path": "/web/session/binding",
+              "initiator": "fetch",
+              "start": 9773.09999999404,
+              "responseStart": 0,
+              "end": 9939.300000011921,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/dashboard/view",
+              "initiator": "fetch",
+              "start": 9826.5,
+              "responseStart": 0,
+              "end": 10052,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            },
+            {
+              "path": "/assets/fidy-logo-B9D5jpJk.png",
+              "initiator": "img",
+              "start": 9849.90000000596,
+              "responseStart": 9851,
+              "end": 10778.800000011921,
+              "encodedBytes": 55568,
+              "decodedBytes": 55568
+            },
+            {
+              "path": "/assets/feature-Dffo3XQT.js",
+              "initiator": "script",
+              "start": 9978.700000017881,
+              "responseStart": 9979.800000011921,
+              "end": 10795.200000017881,
+              "encodedBytes": 35801,
+              "decodedBytes": 35801
+            },
+            {
+              "path": "/assets/Clock01Icon-Caopc-kj.js",
+              "initiator": "script",
+              "start": 9978.800000011921,
+              "responseStart": 9980.09999999404,
+              "end": 10150.300000011921,
+              "encodedBytes": 230,
+              "decodedBytes": 230
+            },
+            {
+              "path": "/assets/File01Icon-BdHcSNrJ.js",
+              "initiator": "script",
+              "start": 9978.90000000596,
+              "responseStart": 9980.300000011921,
+              "end": 10195.200000017881,
+              "encodedBytes": 945,
+              "decodedBytes": 945
+            },
+            {
+              "path": "/assets/Loading03Icon-BcN5iSGp.js",
+              "initiator": "script",
+              "start": 9979.700000017881,
+              "responseStart": 9980.5,
+              "end": 10209.300000011921,
+              "encodedBytes": 877,
+              "decodedBytes": 877
+            },
+            {
+              "path": "/assets/Mail01Icon-qGLuNJQs.js",
+              "initiator": "script",
+              "start": 9979.800000011921,
+              "responseStart": 9981.59999999404,
+              "end": 10216.09999999404,
+              "encodedBytes": 860,
+              "decodedBytes": 860
+            },
+            {
+              "path": "/assets/PauseCircleIcon-DzzxNb4l.js",
+              "initiator": "script",
+              "start": 9979.800000011921,
+              "responseStart": 10195.90000000596,
+              "end": 10375.5,
+              "encodedBytes": 239,
+              "decodedBytes": 239
+            },
+            {
+              "path": "/assets/workspace-layout-Kk-Eh7Js.js",
+              "initiator": "script",
+              "start": 9979.800000011921,
+              "responseStart": 10209.90000000596,
+              "end": 10433.700000017881,
+              "encodedBytes": 1696,
+              "decodedBytes": 1696
+            },
+            {
+              "path": "/assets/badge-CqRhwPvb.js",
+              "initiator": "script",
+              "start": 9979.90000000596,
+              "responseStart": 10216.700000017881,
+              "end": 10450,
+              "encodedBytes": 1508,
+              "decodedBytes": 1508
+            },
+            {
+              "path": "/assets/useControlled-CYEdRssO.js",
+              "initiator": "script",
+              "start": 9979.90000000596,
+              "responseStart": 10450.700000017881,
+              "end": 10630.40000000596,
+              "encodedBytes": 249,
+              "decodedBytes": 249
+            },
+            {
+              "path": "/assets/checkbox-BscCSdxY.js",
+              "initiator": "script",
+              "start": 9979.90000000596,
+              "responseStart": 10434.5,
+              "end": 10742.09999999404,
+              "encodedBytes": 6512,
+              "decodedBytes": 6512
+            },
+            {
+              "path": "/assets/label-CRVZhTRu.js",
+              "initiator": "script",
+              "start": 9980.59999999404,
+              "responseStart": 10539.700000017881,
+              "end": 10720.09999999404,
+              "encodedBytes": 467,
+              "decodedBytes": 467
+            },
+            {
+              "path": "/assets/ArrowLeft01Icon-BJdQ1Oac.js",
+              "initiator": "script",
+              "start": 9981,
+              "responseStart": 10779.300000011921,
+              "end": 10960,
+              "encodedBytes": 191,
+              "decodedBytes": 191
+            },
+            {
+              "path": "/assets/feature-DIj4BkOz.css",
+              "initiator": "link",
+              "start": 9981.09999999404,
+              "responseStart": 10150.90000000596,
+              "end": 10538.700000017881,
+              "encodedBytes": 11661,
+              "decodedBytes": 11661
+            },
+            {
+              "path": "/assets/compact-date-DKyfFy_Y.js",
+              "initiator": "script",
+              "start": 9981.09999999404,
+              "responseStart": 10796.09999999404,
+              "end": 10988.90000000596,
+              "encodedBytes": 322,
+              "decodedBytes": 322
+            },
+            {
+              "path": "/dashboard/catalog",
+              "initiator": "fetch",
+              "start": 10005,
+              "responseStart": 0,
+              "end": 10239.90000000596,
+              "encodedBytes": 0,
+              "decodedBytes": 0
+            }
+          ],
+          "domNodes": 782
+        },
+        {
+          "journey": "review:isolated-cold-document",
+          "elapsedMs": 10162.095791999978,
+          "outcome": "ready",
+          "loadingObservations": 7,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 614.476,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 169.286,
+              "bytes": 50
+            },
+            {
+              "path": "/ingestion/review-workspace",
+              "status": 200,
+              "durationMs": -1,
+              "bytes": -1
+            },
+            {
+              "path": "/ingestion/review-workspace/:id",
+              "status": 200,
+              "durationMs": 177.16,
+              "bytes": 276
+            },
+            {
+              "path": "/categories",
+              "status": 200,
+              "durationMs": -1,
+              "bytes": -1
+            },
+            {
+              "path": "/ingestion/review-workspace/:id/material",
+              "status": 200,
+              "durationMs": 181.138,
+              "bytes": 112
+            }
+          ],
+          "longTasks": [220, 60, 143, 66],
+          "resourceCount": 92,
+          "resourceBytes": 1491998,
+          "domNodes": 997
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 8341.574625000008,
+          "outcome": "ready",
+          "loadingObservations": 0,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 282.609,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 158.731,
+              "bytes": 50
+            }
+          ],
+          "longTasks": [311, 62, 57, 141],
+          "resourceCount": 74,
+          "resourceBytes": 1102739,
+          "domNodes": 212
+        },
+        {
+          "journey": "access:isolated-cold-document",
+          "elapsedMs": 8671.26441599999,
+          "outcome": "ready",
+          "loadingObservations": 5,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 158.224,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 158.272,
+              "bytes": 50
+            },
+            {
+              "path": "/pats",
+              "status": 200,
+              "durationMs": 156.009,
+              "bytes": 30
+            },
+            {
+              "path": "/web/oauth/connections",
+              "status": 200,
+              "durationMs": 202.787,
+              "bytes": 36
+            }
+          ],
+          "longTasks": [203, 142],
+          "resourceCount": 88,
+          "resourceBytes": 1203321,
+          "domNodes": 263
+        },
+        {
+          "journey": "upgrade:isolated-cold-document",
+          "elapsedMs": 8711.420417000016,
+          "outcome": "ready",
+          "loadingObservations": 3,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 169.767,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 162.409,
+              "bytes": 50
+            },
+            {
+              "path": "/web/consent",
+              "status": 200,
+              "durationMs": 159.779,
+              "bytes": 38
+            },
+            {
+              "path": "/subscription/status",
+              "status": 200,
+              "durationMs": 162.096,
+              "bytes": 174
+            },
+            {
+              "path": "/subscription/offers",
+              "status": 200,
+              "durationMs": -1,
+              "bytes": -1
+            },
+            {
+              "path": "/web/subscription/payment-enrollments/availability",
+              "status": 200,
+              "durationMs": 171.654,
+              "bytes": 47
+            }
+          ],
+          "longTasks": [205, 87],
+          "resourceCount": 76,
+          "resourceBytes": 1316539,
+          "domNodes": 225
+        },
+        {
+          "journey": "privacy:isolated-cold-document",
+          "elapsedMs": 8000.527167000051,
+          "outcome": "ready",
+          "loadingObservations": 0,
+          "requests": [
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 154.497,
+              "bytes": 50
+            },
+            {
+              "path": "/web/session/binding",
+              "status": 200,
+              "durationMs": 156.591,
+              "bytes": 50
+            },
+            {
+              "path": "/web/consent",
+              "status": 200,
+              "durationMs": 156.958,
+              "bytes": 38
+            }
+          ],
+          "longTasks": [223, 106],
+          "resourceCount": 74,
+          "resourceBytes": 1254573,
+          "domNodes": 244
+        }
+      ]
     }
   ],
   "datePickerExperiment": {
@@ -22717,19 +27175,56 @@
     "repositoryStaticVerification": "passed",
     "hiddenArtworkRegression": "failed before fix, passed after fix",
     "ordinaryDeadlines": "unchanged",
-    "cloudflareInfrastructureTests": 310
+    "cloudflareInfrastructureTests": 310,
+    "infrastructureDiagnostic": {
+      "defaultParallelAfterTrunk": "309 passed, one 5000ms timeout in smoke-schema protected-read dependency test at db.batch",
+      "serialCommand": "bun run --cwd infra/cloudflare test -- --maxWorkers=1",
+      "testDeadlines": "unchanged"
+    }
   },
-  "finalCodeRevision": "2e5e81fa630701f296736427ac81bc7a806e610a",
+  "finalCodeRevision": "f557e2aff58855ef682bb209e1f9f8751bbaef01",
+  "integratedTrunkRevision": "a2d54bfaf8739cb0639d8251d0ad3d931b400eaa",
+  "integratedDependencies": {
+    "seroval": "1.7.0",
+    "seroval-plugins": "1.6.12",
+    "@hono/node-server": "2.1.5",
+    "systeminformation": "5.33.16"
+  },
+  "integrationCaveat": "Final observations include the concurrent trunk canonical-admission round-trip reduction and newer dependency fixes; they cannot isolate the artwork or route split effect.",
   "dependencyRefresh": {
     "seroval": "1.6.11",
     "systeminformation": "5.33.16",
     "@hono/node-server": "2.1.3",
     "reason": "Nine advisory findings blocked CI. All selected fixes were older than the unchanged seven-day delay.",
-    "scope": "Seroval affects router serialization; systeminformation and the Node adapter are tooling transitive dependencies. All earlier local runs used the preceding pins.",
+    "scope": "Seroval affects router serialization; systeminformation and the Node adapter are tooling transitive dependencies. Only ui-with-first-security-fixes used these pins; final uses the newer versions already merged on trunk, recorded separately.",
     "publishedUtc": {
       "seroval": "2026-10-18T11:47:50Z",
       "systeminformation": "2026-10-19T15:53:51Z",
       "@hono/node-server": "2026-09-29T06:10:34Z"
+    }
+  },
+  "stageSources": {
+    "before": {
+      "baseRevision": "67335840a1274c57b513dea6218e864e7d1cb912",
+      "note": "Assessment instrumentation only"
+    },
+    "artwork-only": {
+      "baseRevision": "67335840a1274c57b513dea6218e864e7d1cb912",
+      "patchArtifact": "reports/performance/cold-start/artwork-stage.patch"
+    },
+    "calendar-candidate-rejected": {
+      "baseRevision": "67335840a1274c57b513dea6218e864e7d1cb912",
+      "patchArtifact": "reports/performance/cold-start/calendar-candidate.patch"
+    },
+    "ui-only-before-security": {
+      "revision": "48155b6dae10ef76cd97978ed12e105679c4ddd3"
+    },
+    "ui-with-first-security-fixes": {
+      "revision": "2e5e81fa630701f296736427ac81bc7a806e610a"
+    },
+    "final": {
+      "revision": "f557e2aff58855ef682bb209e1f9f8751bbaef01",
+      "integratedTrunkRevision": "a2d54bfaf8739cb0639d8251d0ad3d931b400eaa"
     }
   }
 }

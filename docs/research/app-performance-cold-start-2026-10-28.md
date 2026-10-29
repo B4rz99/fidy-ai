@@ -74,20 +74,12 @@ authorization, or customer messages were submitted through the browser.
   on desktop and from 307 to 724 ms under constrained mobile. Moving that wait onto an interaction
   did not satisfy the requested experience. Its cold observations remain labeled as a rejected
   candidate rather than final-head evidence.
-- The repository dependency gate required the newly eligible `@cloudflare/workers-types`
-  5.20261022.1 in both existing development manifests.
-- CI then reported nine advisories across Seroval, systeminformation and the Hono Node adapter.
-  Eligible fixes are pinned at 1.6.11, 5.33.16 and 2.1.3 respectively, preserving the seven-day
-  delay and existing vulnerability gates. Seroval is inherited through the browser router;
-  systeminformation and the Node adapter are tooling dependencies. The Node adapter is a major
-  update, so type, infrastructure and browser compatibility are part of validation. The final
-  cold run is separate from the earlier UI-only measurements that used the original dependencies.
 
 ## Method and interpretation
 
 All local comparisons use base revision `67335840a1`, Bun 1.4.1, Chrome 156.0.8078.73, the existing
 heavy synthetic fixture, the same loopback topology and uncompressed preview, and one serial browser
-worker. The final software revision is `2e5e81fa63`; subsequent report edits do not change that code.
+worker. The final software revision is `f557e2aff5`; subsequent report edits do not change that code.
 Each cold document stops the previous page, waits twelve seconds outside measurement to
 refill the unchanged allowance, and clears the browser cache. Mobile uses 390×844, 4× CPU slowdown,
 150 ms latency, 200,000 bytes/s download, and 93,750 bytes/s upload.
@@ -105,25 +97,36 @@ resource waterfalls are included for each stage. Raw Playwright reports for all 
 the ignored `reports/performance/cold-start/` directory. Rejected-candidate and artwork-only runs
 remain separate from the final implementation.
 
+An intermediate revision (`2e5e81fa63`) fixed nine CI advisory findings with Seroval 1.6.11,
+systeminformation 5.33.16 and Hono Node adapter 2.1.3. Its observations remain under
+`ui-with-first-security-fixes`. Concurrent trunk revision `a2d54bfaf8` then landed the canonical
+admission round-trip reduction and newer eligible pins: Seroval 1.7.0, seroval-plugins 1.6.12,
+Hono Node adapter 2.1.5 and systeminformation 5.33.16. The final software integrates that trunk
+revision without downgrading its pins; those dependency changes are already part of trunk.
+Workers types are 5.20261022.1. The seven-day delay and vulnerability gates remain unchanged.
+Final before/after observations therefore include the concurrent server change and dependency
+refresh, and cannot isolate the artwork or route split effect.
+
 ## Final local cold observations
 
 All 18 attempted documents reached readiness before and after; these are single observations.
 
 | Workspace    | Desktop before → final (ms) | Constrained mobile before → final (ms) |
 | ------------ | --------------------------: | -------------------------------------: |
-| transactions |                   781 → 393 |                        10,797 → 10,491 |
-| budgets      |                   751 → 400 |                         10,406 → 9,075 |
-| recurring    |               1,378 → 1,022 |                        12,779 → 10,918 |
-| dashboard    |                   658 → 439 |                        11,451 → 10,692 |
-| review       |                   330 → 327 |                        12,424 → 11,826 |
-| account      |                   620 → 196 |                          8,315 → 7,163 |
-| access       |                   719 → 601 |                          9,179 → 8,573 |
-| upgrade      |                   315 → 654 |                          9,044 → 8,706 |
-| privacy      |                   371 → 249 |                          8,865 → 7,630 |
+| transactions |                 781 → 1,713 |                        10,797 → 10,113 |
+| budgets      |                   751 → 815 |                         10,406 → 9,055 |
+| recurring    |                 1,378 → 961 |                        12,779 → 10,576 |
+| dashboard    |                   658 → 433 |                        11,451 → 10,594 |
+| review       |                   330 → 336 |                        12,424 → 10,162 |
+| account      |                   620 → 226 |                          8,315 → 8,342 |
+| access       |                   719 → 319 |                          9,179 → 8,671 |
+| upgrade      |                   315 → 323 |                          9,044 → 8,711 |
+| privacy      |                   371 → 239 |                          8,865 → 8,001 |
 
 Cold mobile Transactions remained above ten seconds. These single observations do not support a
-consistent 2× claim or isolate causality from variation between runs. The deterministic improvement
-is eliminating hidden artwork requests, not a guaranteed page-latency multiplier.
+consistent 2× claim or isolate causality from variation between runs. Desktop Transactions was
+slower in the integrated observation (781 → 1,713 ms); the regression is retained. The deterministic
+improvement is eliminating hidden artwork requests, not a guaranteed page-latency multiplier.
 
 ## Reproduction
 
@@ -166,6 +169,11 @@ session, denial and cancellation. The original hidden-artwork test failed before
 afterward. Ordinary acceptance/performance deadlines and the assessment's setup deadline were not
 relaxed. The rejected calendar candidate separately passed date-selection and failed-chunk recovery
 checks before being reverted for its measured first-use regression.
+
+After integrating trunk, the default parallel infrastructure run passed 309 tests and hit the
+original 5,000 ms deadline in the smoke-schema protected-read dependency test at `db.batch`.
+The same revision passed all 310 with `bun run --cwd infra/cloudflare test -- --maxWorkers=1`.
+The single-worker run changed scheduling only; the deadline and assertions were unchanged.
 
 ## Live sandbox protocol evidence
 

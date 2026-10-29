@@ -1,0 +1,26 @@
+docs/research/hosted-workflow-handoff-eight-proof-2026-10-29.json
+  s_d9571b3fccd032::t_b0201653a72a7c 1-670
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_d9571b3fccd032::t_d05c365c2edd76 124-126,130,285
+apps/server/cloudflare/queue/failure-isolation.test.ts
+  s_d9571b3fccd032::t_ce611dd30400ec 7,377-378
+  s_d9571b3fccd032::t_0179887034b281 379-413
+  s_d9571b3fccd032::t_219b57efc3e686 372-376,414-417,449,473,479,549-550,601
+  s_d9571b3fccd032::t_80e7a8fce7597d 551-600
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7bb9d1c4724c9c2d5b0a910487d761e835f3c1aa",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

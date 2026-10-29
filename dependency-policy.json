@@ -90,12 +90,6 @@
   ],
   "acceptedVulnerabilities": [
     {
-      "cve": "CVE-2026-111181",
-      "path": "bun.lock",
-      "reason": "The User explicitly selected retaining vulnerable versions with temporary acceptance on 2026-10-24 UTC for PR #1529, and clarified acceptance only until corrected versions reach seven days. body-parser 2.3.0 remains vulnerable: a crafted compressed request with trailing bytes can trigger an uncaught decoder error and process crash; application reachability is not asserted. Fixed 2.4.0 becomes eligible under the unchanged seven-day minimumReleaseAge at 2026-10-29T11:39:38.614Z; this acceptance expires at that exact instant. This is accepted installed risk, not remediation. Keep request bounds and all other checks active. Upgrade once eligible, rerun SCA and affected verification, then remove this record and its exact matching scanner exclusion. Upstream: https://github.com/advisories/GHSA-27r3-jxmh-p828",
-      "until": "2026-10-29T11:39:38.614Z"
-    },
-    {
       "cve": "CVE-2026-93753",
       "path": "bun.lock",
       "reason": "The User explicitly accepted this scoped installed risk on 2026-10-28 UTC for PR #1581 until 2026-11-04 UTC. deepmerge 4.3.1 is inherited through shadcn and @shadcn/registry tooling; malicious merge inputs can poison the returned object prototype. Application reachability is not asserted. npm has no patched release as of acceptance. This is risk acceptance, not remediation. Keep the seven-day minimumReleaseAge and all other checks active. Before expiry, replace the dependency or upgrade to an eligible corrected release, rerun SCA and affected verification, and remove this record and its exact matching scanner exclusion. Upstream: https://github.com/TehShrike/deepmerge/issues/273",

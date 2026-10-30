@@ -1,19 +1,13 @@
 import type { JSX } from "react";
 import { LoadingRegion } from "./loading-skeletons";
 import { Skeleton } from "./skeleton";
+import { RecurringMonthControlsSkeleton } from "./recurring-month-controls-loading";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./table";
 import "./recurring.css";
 
 const MonthlySummary = (): JSX.Element => (
   <section data-recurring-slot="monthly-overview">
-    <div data-recurring-slot="month-controls">
-      <Skeleton className="h-6 w-44" />
-      <div className="flex items-center gap-3">
-        <Skeleton className="size-8" />
-        <Skeleton className="size-8" />
-        <Skeleton className="h-9 w-20" />
-      </div>
-    </div>
+    <RecurringMonthControlsSkeleton />
     <div data-recurring-slot="summary">
       {[0, 1, 2].map((kind) => (
         <section key={kind} data-recurring-slot="summary-kind">

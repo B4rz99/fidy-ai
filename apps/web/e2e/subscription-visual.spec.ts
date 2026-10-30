@@ -1,5 +1,5 @@
 import { acceptSubscriptionContracts } from "./subscription-interactions";
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 import { apiOrigin } from "./http-fixtures";
@@ -906,4 +906,77 @@ for (const path of ["/UPGRADE", "/upgrade/"]) {
         })
       ));
   }
+}
+
+type PaymentGeometry = Readonly<{ x: number; y: number; width: number; height: number }>;
+const resetScroll = (): void => window.scrollTo(0, 0);
+const holdPreparation =
+  (release: Promise<void>) =>
+  (route: Route): Promise<void> =>
+    release.then(() => route.fallback());
+const paymentControlBounds = (elements: ReadonlyArray<Element>): ReadonlyArray<PaymentGeometry> =>
+  elements.map((element) => {
+    const { x, y, width, height } = element.getBoundingClientRect();
+    return { x, y, width, height };
+  });
+
+const expectPaymentGeometry = (
+  loading: ReadonlyArray<PaymentGeometry>,
+  loaded: ReadonlyArray<PaymentGeometry>
+): void => {
+  expect(loaded.length).toBeGreaterThan(0);
+  expect(loading).toHaveLength(loaded.length);
+  for (const [index, part] of loaded.entries()) {
+    for (const axis of ["x", "y", "width", "height"] as const) {
+      expect(
+        Math.abs((loading[index]?.[axis] ?? Number.POSITIVE_INFINITY) - part[axis]),
+        `${index} ${axis}`
+      ).toBeLessThanOrEqual(1);
+    }
+  }
+};
+const expectLoadingPaymentGeometry = Effect.fnUntraced(function* (page: Page, method: MethodLabel) {
+  yield* openSubscription(page, { viewport: desktop, theme: "light" });
+  const release = Promise.withResolvers<void>();
+  yield* Effect.tryPromise(() =>
+    page.route(
+      `${apiOrigin}/web/subscription/payment-enrollments/prepare`,
+      holdPreparation(release.promise)
+    )
+  );
+  try {
+    yield* chooseMonthly(page);
+    yield* continueWith(page, method);
+    const pending = page.getByRole("status", { name: "Cargando formulario" });
+    yield* Effect.tryPromise(() => expect(pending).toBeVisible());
+    yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
+    yield* Effect.tryPromise(() => page.evaluate(resetScroll));
+    const loadingFields = yield* Effect.tryPromise(() =>
+      pending.locator(".subscription-field").evaluateAll(paymentControlBounds)
+    );
+    const loadingSubmit = yield* Effect.tryPromise(() =>
+      pending.locator(".subscription-form > [data-slot=skeleton]").evaluateAll(paymentControlBounds)
+    );
+    release.resolve();
+    yield* Effect.tryPromise(() => expect(pending).toHaveCount(0));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Correo de facturación", { exact: true })).toBeVisible()
+    );
+    yield* Effect.tryPromise(() => page.evaluate(resetScroll));
+    const loadedFields = yield* Effect.tryPromise(() =>
+      page.locator(".subscription-form .subscription-field").evaluateAll(paymentControlBounds)
+    );
+    const loadedSubmit = yield* Effect.tryPromise(() =>
+      page.locator(".subscription-form > [type=submit]").evaluateAll(paymentControlBounds)
+    );
+    expect(loadingSubmit).toHaveLength(1);
+    expectPaymentGeometry(loadingFields, loadedFields);
+    expectPaymentGeometry(loadingSubmit, loadedSubmit);
+  } finally {
+    release.resolve();
+  }
+});
+for (const method of ["tarjeta", "Nequi", "DaviPlata"] as const) {
+  test(`Subscription ${method} loading preserves desktop field and submit geometry`, ({ page }) =>
+    Effect.runPromise(expectLoadingPaymentGeometry(page, method)));
 }

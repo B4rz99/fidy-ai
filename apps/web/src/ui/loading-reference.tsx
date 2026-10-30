@@ -66,7 +66,9 @@ const previews = [
     name: "Transacciones · página siguiente",
     frame: "transaction-rows",
     context: "Se añade al final del historial; las filas cargadas permanecen visibles.",
-    render: (): JSX.Element => <TransactionRowsSkeleton />,
+    render: (): JSX.Element => (
+      <TransactionRowsSkeleton visibility={{ category: true, type: true }} />
+    ),
   },
   {
     name: "Por revisar · entrada",

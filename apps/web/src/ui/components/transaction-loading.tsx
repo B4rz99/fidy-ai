@@ -5,40 +5,62 @@ import { Table, TableBody, TableCell, TableRow } from "./table";
 import "./transactions.css";
 
 const placeholderRows = 6;
-const LedgerRows = (): JSX.Element => (
-  <div className="transaction-ledger" data-category-visible="false" data-type-visible="false">
+type LedgerVisibility = Readonly<{ category: boolean; type: boolean }>;
+export const TransactionSkeletonRows = ({
+  phase,
+}: Readonly<{ phase: "initial" | "continuation" }>): JSX.Element => (
+  <>
+    {phase === "initial" ? (
+      <TableRow data-date-group="true" aria-hidden="true">
+        <TableCell colSpan={4}>
+          <div>
+            <Skeleton className="h-[18px] w-32" />
+          </div>
+        </TableCell>
+      </TableRow>
+    ) : null}
+    {Array.from({ length: placeholderRows }, (_, row) => (
+      <TableRow key={row} aria-hidden="true" className="motion-reduce:[&_*]:animate-none">
+        <TableCell>
+          <div className="flex min-w-0 items-center gap-3">
+            <Skeleton className="transaction-identity-icon size-8 shrink-0 rounded-full" />
+            <div className="grid flex-1 gap-1">
+              <Skeleton className="h-[21px] w-44 max-w-full" />
+              <Skeleton className="transaction-category-inline h-[17px] w-24" />
+            </div>
+          </div>
+        </TableCell>
+        <TableCell className="hidden @min-[600px]/ledger:table-cell">
+          <Skeleton className="h-[18px] w-24 max-w-full" />
+        </TableCell>
+        <TableCell className="hidden @min-[481px]/ledger:table-cell">
+          <Skeleton className={phase === "initial" ? "h-[18px] w-20" : "h-[18px] w-full"} />
+        </TableCell>
+        <TableCell>
+          <Skeleton className={phase === "initial" ? "ml-auto h-[20px] w-24" : "h-[20px] w-full"} />
+        </TableCell>
+      </TableRow>
+    ))}
+  </>
+);
+const LedgerRows = ({ visibility }: Readonly<{ visibility: LedgerVisibility }>): JSX.Element => (
+  <div
+    className="transaction-ledger"
+    data-category-visible={visibility.category}
+    data-type-visible={visibility.type}
+  >
     <Table>
       <TableBody>
-        <TableRow data-date-group="true">
-          <TableCell colSpan={2}>
-            <div>
-              <Skeleton className="h-[18px] w-32" />
-            </div>
-          </TableCell>
-        </TableRow>
-        {Array.from({ length: placeholderRows }, (_, row) => (
-          <TableRow key={row}>
-            <TableCell>
-              <div className="flex min-w-0 items-center gap-3">
-                <Skeleton className="transaction-identity-icon size-8 shrink-0 rounded-full" />
-                <div className="grid flex-1 gap-1">
-                  <Skeleton className="h-[21px] w-44 max-w-full" />
-                  <Skeleton className="transaction-category-inline h-[17px] w-24" />
-                </div>
-              </div>
-            </TableCell>
-            <TableCell>
-              <Skeleton className="h-[20px] w-24" />
-            </TableCell>
-          </TableRow>
-        ))}
+        <TransactionSkeletonRows phase="initial" />
       </TableBody>
     </Table>
   </div>
 );
-export const TransactionRowsSkeleton = (): JSX.Element => (
+export const TransactionRowsSkeleton = ({
+  visibility,
+}: Readonly<{ visibility: LedgerVisibility }>): JSX.Element => (
   <LoadingRegion label="Cargando transacciones">
-    <LedgerRows />
+    <LedgerRows visibility={visibility} />
   </LoadingRegion>
 );
 const SummarySkeleton = (): JSX.Element => (
@@ -117,7 +139,7 @@ export const TransactionsSkeleton = ({
               <Skeleton className="h-[38px] w-24" />
             </div>
           </div>
-          <LedgerRows />
+          <LedgerRows visibility={{ category: true, type: true }} />
         </div>
         <aside data-transaction-slot="transaction-context-panel">
           <SummarySkeleton />

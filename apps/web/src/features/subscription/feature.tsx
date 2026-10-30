@@ -1,3 +1,4 @@
+import { SubscriptionIntroduction } from "@/ui/components/subscription-introduction";
 import { SubscriptionInputDecoration } from "@/ui/components/subscription-input-decoration";
 import { Input } from "@/ui/components/input";
 import { Button } from "@/ui/components/button";
@@ -373,12 +374,7 @@ const NequiFormContents = ({
       <NequiAwaiting />
     ) : (
       <>
-        <div>
-          <h3 className="subscription-form-heading">Antes de autorizar</h3>
-          <p className="subscription-form-description">
-            Ingresa la información para continuar con la suscripción.
-          </p>
-        </div>
+        <SubscriptionIntroduction method="nequi" />
         <NequiNumberField
           required={!awaitingApproval}
           disabled={busy}

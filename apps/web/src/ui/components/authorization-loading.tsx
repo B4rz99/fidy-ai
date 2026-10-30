@@ -37,7 +37,7 @@ export const AuthorizationSkeleton = (): JSX.Element => (
         </div>
         <div className="oauth-duration">
           {[0, 1, 2, 3].map((duration) => (
-            <Skeleton key={duration} className="h-11 w-full" />
+            <Skeleton key={duration} data-slot="button" className="h-11 w-full" />
           ))}
         </div>
         <div className="oauth-expiration">
@@ -50,8 +50,8 @@ export const AuthorizationSkeleton = (): JSX.Element => (
           <Skeleton className="h-[22px] w-3/4" />
         </div>
         <div className="oauth-actions">
-          <Skeleton className="h-11 w-full" />
-          <Skeleton className="h-11 w-full" />
+          <Skeleton data-slot="button" className="h-11 w-full" />
+          <Skeleton data-slot="button" className="h-11 w-full" />
         </div>
       </aside>
     </div>

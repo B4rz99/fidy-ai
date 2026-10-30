@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import { LoadingRegion } from "./loading-skeletons";
 import { Skeleton } from "./skeleton";
+import { SubscriptionIntroduction } from "./subscription-introduction";
 import "./subscription.css";
 
 export const SubscriptionStandingSkeleton = (): JSX.Element => (
@@ -9,9 +10,9 @@ export const SubscriptionStandingSkeleton = (): JSX.Element => (
       <Skeleton className="size-[58px] rounded-full" />
       <div className="subscription-standing-copy grid gap-2">
         <Skeleton className="h-[30px] w-40" />
-        <Skeleton className="h-[26px] w-full" />
+        <Skeleton className="h-[1lh] w-full" />
       </div>
-      <Skeleton className="h-11 w-28" />
+      <Skeleton data-slot="button" className="h-11 w-28" />
     </div>
   </LoadingRegion>
 );
@@ -19,54 +20,73 @@ export const PaymentMethodsSkeleton = (): JSX.Element => (
   <LoadingRegion label="Consultando métodos de pago">
     <div className="subscription-methods">
       {[0, 1, 2].map((method) => (
-        <Skeleton key={method} className="h-[62px] w-36 max-w-full" />
+        <Skeleton key={method} data-slot="button" className="h-[62px] w-36 max-w-full" />
       ))}
     </div>
   </LoadingRegion>
 );
 const PaymentField = (): JSX.Element => (
   <div className="subscription-field">
-    <Skeleton className="h-6 w-32" />
+    <Skeleton className="h-[1lh] w-32 max-w-full" />
     <Skeleton className="h-[52px] w-full" />
   </div>
 );
-export const PaymentFormSkeleton = ({
-  method,
-}: Readonly<{ method: "card" | "nequi" | "daviplata" }>): JSX.Element => (
-  <LoadingRegion label="Cargando formulario">
-    <div className="subscription-form">
-      <PaymentField />
-      {method === "card" ? (
+type PaymentMethod = "card" | "nequi" | "daviplata";
+const PaymentFields = ({ method }: Readonly<{ method: PaymentMethod }>): JSX.Element => {
+  switch (method) {
+    case "card":
+      return (
         <>
-          <PaymentField />
           <div className="subscription-card-fields">
             <PaymentField />
             <PaymentField />
             <PaymentField />
+            <PaymentField />
           </div>
-        </>
-      ) : (
-        <>
           <PaymentField />
-          {method === "daviplata" ? (
-            <div className="subscription-document-fields">
-              <PaymentField />
-              <PaymentField />
-            </div>
-          ) : null}
         </>
-      )}
+      );
+    case "nequi":
+      return (
+        <>
+          <SubscriptionIntroduction method="nequi" />
+          <PaymentField />
+          <PaymentField />
+        </>
+      );
+    case "daviplata":
+      return (
+        <>
+          <div className="subscription-document-fields">
+            <SubscriptionIntroduction method="daviplata" />
+            <PaymentField />
+            <PaymentField />
+          </div>
+          <PaymentField />
+        </>
+      );
+  }
+};
+export const PaymentFormSkeleton = ({
+  method,
+}: Readonly<{ method: PaymentMethod }>): JSX.Element => (
+  <LoadingRegion label="Cargando formulario">
+    <div className="subscription-form">
+      <PaymentFields method={method} />
       <div className="subscription-consents">
         {[0, 1].map((consent) => (
           <div key={consent} className="subscription-consent">
-            <Skeleton className="size-5 shrink-0" />
-            <Skeleton className="h-12 w-full" />
+            <Skeleton data-slot="checkbox" className="size-6 shrink-0" />
+            <Skeleton className="h-[1lh] w-full" />
           </div>
         ))}
       </div>
-      <div className="subscription-form-actions">
-        <Skeleton className="h-[52px] w-full" />
-      </div>
+      {method === "card" ? (
+        <p className="subscription-charge-summary">
+          <Skeleton className="h-[1lh] w-full" />
+        </p>
+      ) : null}
+      <Skeleton className="h-14 w-full" />
     </div>
   </LoadingRegion>
 );
@@ -106,7 +126,7 @@ export const OffersSkeleton = (): JSX.Element => (
           <Skeleton className="h-5 w-3/4" />
         </section>
         <div className="subscription-continue">
-          <Skeleton className="h-[52px] w-full max-w-[350px]" />
+          <Skeleton data-slot="button" className="h-[50px] w-full max-w-[350px]" />
         </div>
       </div>
       <aside className="subscription-summary" data-checkout="false">

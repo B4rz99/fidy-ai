@@ -11,6 +11,9 @@ const viewports = [
   { name: "mobile", width: 390, height: 844 },
 ];
 const themes = ["light", "dark"] as const;
+const reviewControlCount = 6;
+const controlHeights = (elements: ReadonlyArray<Element>): ReadonlyArray<number> =>
+  elements.map((element) => element.getBoundingClientRect().height);
 const destinations = [
   {
     name: "connection",
@@ -265,12 +268,19 @@ for (const destination of destinations) {
           "oauth-client",
         ].map((name) => ({ name, selector: `.${name}` }));
         const loadingFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
+        const controls = page.locator(
+          ".oauth-duration > [data-slot=button], .oauth-actions > [data-slot=button]"
+        );
+        const loadingHeights = yield* Effect.tryPromise(() => controls.evaluateAll(controlHeights));
         observed.release();
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("button", { name: destination.action, exact: true })).toBeVisible()
         );
         const loadedFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
         expectSameLoadingFrame(loadingFrame, loadedFrame);
+        const loadedHeights = yield* Effect.tryPromise(() => controls.evaluateAll(controlHeights));
+        expect(loadingHeights).toHaveLength(reviewControlCount);
+        expect(loadingHeights).toEqual(loadedHeights);
         expect(observed.unexpected).toEqual([]);
         expect(observed.mutations).toEqual([]);
       })

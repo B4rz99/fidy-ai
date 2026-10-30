@@ -1,4 +1,3 @@
-import { TransactionRowsSkeleton } from "@/ui/components/transaction-loading";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Toaster, toast } from "sonner";
 import { use, useState } from "react";
@@ -606,7 +605,7 @@ const WorkspaceContent = ({
           refreshDisabled={refreshLocked(panel, corrections)}
         />
         <TransactionLedger
-          partial={props.continuation !== "complete"}
+          continuation={props.continuation}
           toolbar={<WorkspaceToolbar filters={filters} onFilters={onFilters} disabled={locked} />}
           readOnly={props.readOnly === true}
           canEdit={props.editable}
@@ -619,6 +618,7 @@ const WorkspaceContent = ({
           renderCategory={(row, disabled) => renderCategoryCell(row, disabled, props)}
           onSelect={(id) => onPanel(detailPanel(id, props.editable))}
         />
+        <ContinuationControl {...props} editing={panelEditing(panel)} />
       </div>
       <WorkspaceContext panel={panel} onPanel={onPanel} busy={correctionBusy}>
         <WorkspacePanel
@@ -662,13 +662,7 @@ const ContinuationControl = (
   };
   if (props.continuation === "complete") return <></>;
   const continuation =
-    props.continuation === "loading" ? (
-      <div className="w-full">
-        <TransactionRowsSkeleton />
-      </div>
-    ) : (
-      <span>{continuationLabels[props.continuation]}</span>
-    );
+    props.continuation === "loading" ? null : <span>{continuationLabels[props.continuation]}</span>;
   return (
     <div
       ref={attachContinuation}
@@ -742,7 +736,6 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
           visible={visible}
           rows={rows}
         />
-        <ContinuationControl {...props} editing={editing} />
       </TransactionSurface>
     </>
   );

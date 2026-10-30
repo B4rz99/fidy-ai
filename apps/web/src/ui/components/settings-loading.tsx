@@ -30,7 +30,10 @@ export const AccessListSkeleton = ({
               <TableRow key={row}>
                 {columns.map((name) => (
                   <TableCell density="compact" key={name}>
-                    <Skeleton className={name === "Permisos" ? "h-9 w-32" : "h-6 w-24"} />
+                    <Skeleton
+                      data-slot={name === "Acción" ? "button" : "skeleton"}
+                      className={name === "Permisos" ? "h-9 w-32" : "h-6 w-24"}
+                    />
                   </TableCell>
                 ))}
               </TableRow>
@@ -57,14 +60,14 @@ export const PATCreationSkeleton = (): JSX.Element => (
       <div className="settings-token-form">
         <div className="grid gap-2">
           <Skeleton className="h-6 w-16" />
-          <Skeleton className="h-11 w-full" />
+          <Skeleton data-slot="input" className="h-11 w-full" />
           <Skeleton className="h-[21px] w-full" />
         </div>
         <div>
           <Skeleton className="mb-2 h-6 w-20" />
           {[0, 1, 2].map((scope) => (
             <div key={scope} className="settings-scope-option">
-              <Skeleton className="size-5 shrink-0" />
+              <Skeleton data-slot="checkbox" className="size-5 shrink-0" />
               <div className="grid flex-1 gap-1">
                 <Skeleton className="h-6 w-32" />
                 <Skeleton className="h-[21px] w-full" />
@@ -74,10 +77,10 @@ export const PATCreationSkeleton = (): JSX.Element => (
         </div>
         <div className="settings-token-lifetime">
           <Skeleton className="h-6 w-20" />
-          <Skeleton className="h-11 w-full" />
+          <Skeleton data-slot="dropdown-menu-trigger" className="h-11 w-full" />
         </div>
         <div className="settings-token-submit">
-          <Skeleton className="h-11 w-full" />
+          <Skeleton data-slot="button" className="h-11 w-full" />
           <Skeleton className="h-[21px] w-full" />
         </div>
       </div>
@@ -152,11 +155,11 @@ export const PrivacyAuthorizationSkeleton = (): JSX.Element => (
   <LoadingRegion label="Consultando autorización">
     <div className="settings-section-actions">
       <div className="flex items-center gap-3">
-        <Skeleton className="size-5 shrink-0" />
+        <Skeleton data-slot="checkbox" className="size-5 shrink-0" />
         <Skeleton className="h-6 w-full" />
       </div>
       <div>
-        <Skeleton className="h-11 w-48" />
+        <Skeleton data-slot="button" className="h-11 w-48" />
       </div>
     </div>
   </LoadingRegion>
@@ -173,11 +176,11 @@ export const ConsentRenewalSkeleton = (): JSX.Element => (
       <Skeleton className="h-11 w-full" />
       <Skeleton className="h-6 w-3/4" />
       <div className="flex items-center gap-3">
-        <Skeleton className="size-5 shrink-0" />
+        <Skeleton data-slot="checkbox" className="size-5 shrink-0" />
         <Skeleton className="h-6 w-full" />
       </div>
       <div>
-        <Skeleton className="h-11 w-48" />
+        <Skeleton data-slot="button" className="h-11 w-48" />
       </div>
     </section>
   </LoadingRegion>

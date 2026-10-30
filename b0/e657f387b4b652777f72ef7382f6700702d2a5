@@ -1,0 +1,41 @@
+docs/research/app-performance-production-desktop-2026-10-29.json
+  s_1cebf747fbaef6::t_ca450d99399595 2054,2859-2865,2877-2883,2895-2901,2913-2919,2931-2937,2949-2955,2967-2972,2984-2989,3001-3005,3017-3023,3035-3041,3053-3059,3071-3073,3085-3087,3099-3101,3112,3122,3132,3143-3144,3156-3157,3169-3170,3182-3184,3196-3198,3210-3212,3224-3225,3238-3239,3252-3253,3256-3297,3351,3353,3357,3361-3383
+  s_1cebf747fbaef6::t_70335927ed0d5b 2785-2841,2843-2858,2866-2876,2884-2894,2902-2912,2920-2930,2938-2948,2956-2966,2973-2983,2990-3000,3006-3016,3024-3034,3042-3052,3060-3070,3074-3084,3088-3098,3102-3111,3113-3121,3123-3131,3133-3142,3145-3155,3158-3168,3171-3181,3185-3195,3199-3209,3213-3223,3228-3237,3242-3251,3298-3350,3352,3354-3356
+  s_1cebf747fbaef6::t_57578944d752e2 3226-3227,3240-3241,3254-3255,3358-3360
+apps/server/cloudflare/transactions/peer-reads.test.ts
+  s_1cebf747fbaef6::t_d8240892ff6057 8,16,325-349,351-356,358-384
+  s_1cebf747fbaef6::t_5e438c12ef05ed 350
+  s_1cebf747fbaef6::t_8bc3f20d077578 357,385-386
+apps/server/cloudflare/recurring-plans/internal/query.ts
+  s_1cebf747fbaef6::t_5ce5e6dc5be0fb 28,41-67,146,158,173,176,183,230,233,257
+apps/server/cloudflare/transactions/contract.ts
+  s_1cebf747fbaef6::t_838a812d83b98a 56
+  s_1cebf747fbaef6::t_4cbe122534d6d4 49,55
+docs/research/app-performance-production-desktop-2026-10-29.md
+  s_1cebf747fbaef6::t_ca450d99399595 275-330
+apps/server/cloudflare/transactions/internal/planning-read.ts
+  s_1cebf747fbaef6::t_4cbe122534d6d4 14,35-36,90,99,103-105,109,111-112,119-120
+  s_1cebf747fbaef6::t_838a812d83b98a 95,113,115,123-128
+  s_1cebf747fbaef6::t_5ce5e6dc5be0fb 106-108,114,116-118
+apps/server/cloudflare/recurring-plans/internal/facts.ts
+  s_1cebf747fbaef6::t_5ce5e6dc5be0fb 28-32
+  s_1cebf747fbaef6::t_4cbe122534d6d4 27,33-34,44
+apps/server/cloudflare/recurring-plans/internal/query-cost.test.ts
+  s_1cebf747fbaef6::t_9a9bced1db177b 22-96,98-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b0e657f387b4b652777f72ef7382f6700702d2a5",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

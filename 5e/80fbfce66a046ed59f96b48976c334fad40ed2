@@ -1,0 +1,36 @@
+docs/research/dashboard-range-read-plan-2026-10-30.md
+  s_d9571b3fccd032::t_ecb13954ac4bab 1-76
+  s_d9571b3fccd032::t_41855eee69cdab 77-79
+  s_d9571b3fccd032::t_7673e39c1a5441 80-92
+apps/server/cloudflare/dashboard/internal/dashboard-view.test.ts
+  s_d9571b3fccd032::t_b2ef52a366e0c2 2,109,128-159,163-167
+  s_d9571b3fccd032::t_98474b4323601f 160-162
+  s_d9571b3fccd032::t_2a1147f787e9d4 110-127,203-209,211-214,216-220,232-239,241-247,249-250
+  s_d9571b3fccd032::t_3bd6cbeb89c58c 11,170-202,222-226,230-231,251-252,255-272
+  s_d9571b3fccd032::t_cf1aa2e009a7e0 168-169,210,215,221,227-229,240,248,253-254
+apps/server/cloudflare/transactions/internal/dashboard-projection.ts
+  s_d9571b3fccd032::t_98474b4323601f 170-188,195-208,210-217,220,224-225,227-229,231-255
+  s_d9571b3fccd032::t_38cbc2bbcd6292 169,189-194,209,257
+apps/server/ARCHITECTURE.md
+  s_d9571b3fccd032::t_5bcc3f090e2c18 166-169
+apps/server/cloudflare/dashboard/internal/dashboard-view.ts
+  s_d9571b3fccd032::t_cdea2b1275808e 14-17,97-113,115-120,122
+apps/server/cloudflare/transactions/operations.ts
+  s_d9571b3fccd032::t_7cd66b67f8af5a 27,200-203
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5e80fbfce66a046ed59f96b48976c334fad40ed2",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -49,14 +49,13 @@ The user chose to remain on Free and verify recovery after midnight UTC on 30 Oc
 [production benchmark budget](../operations/production-benchmark-budget.md). A fresh account-wide
 preflight now refuses exhausted headroom; the native fixture additionally reserves each bounded
 batch/request, checks actual row metadata, and restores usage from completed Workflow steps.
-Its meter has local checks; hosted validation still requires fresh headroom. The next hosted
+Its meter has local checks; the first successful hosted comparison is recorded below. The next hosted
 comparison pins the baseline Effect family to 4.0.5 and candidate family to 4.0.6, matching the
 release dependency change. Any observed release ratio includes that dependency update.
 
 Capture a healthy authenticated production baseline before promotion, then repeat the same paced
 requests, account, dataset and browser after deployment. Retain failures, report sample counts and
 verify response equivalence. Keep issue #1589 open: universal 2x improvement remains unconfirmed.
-
 
 ## Reset verification on 30 October
 
@@ -72,7 +71,7 @@ its read estimate. No timed trial completed. Local reproduction identifies the f
 schema statements as 5,099 reads against the temporary runner's 5,000-read reservation; the
 complete schema remains 8,299 reads and 1,474 writes locally. The temporary runner's batch
 read reservation was raised to 10,000 within the unchanged 100,000-read/5,000-write experiment
-ceiling. This correction has not been revalidated hosted. All six provisioned resources
+ceiling. The corrected continuation is recorded below. All six provisioned resources
 independently returned HTTP 404 after cleanup. Retain the failed attempt in accounting before
 any further experiment; do not reset its spent allowance by using a different resource name.
 
@@ -80,3 +79,28 @@ The scheduled run could list in-app tabs but could not access the signed-in page
 connection. An authenticated production baseline is therefore still missing. Keep the PR in
 draft until that baseline and controlled hosted evidence are available; do not infer browser
 recovery or a production speedup from the public checks.
+
+## Hosted continuation
+
+Cloudflare account analytics independently confirmed the deleted failed fixture spent 8,299
+reads and 1,474 writes. The continuation carried a larger reservation of 20,000 reads and
+2,000 writes for that attempt into the same 100,000-read/5,000-write ceiling. It used two
+ABBA blocks rather than three, with four eight-read bursts per variant. Fresh account-wide
+preflight remained mandatory before provisioning and each block. Cloudflare's documented
+[account-based rate limiting](https://developers.cloudflare.com/analytics/graphql-api/account-based-rate-limiting/)
+header (`X-Rate-Limit-Type: account-based`) isolated these analytics requests from the busy
+per-user query quota; credentials and the Free plan were unchanged.
+
+The [retained hosted observations](browser-category-snapshot-hosted-2026-10-30.json) contain
+64 HTTP 200 completions and zero refusals. Median burst completion was 2,358.5 ms for the
+baseline and 811.5 ms for the candidate: **2.91x faster** in this synthetic native comparison.
+Maximum observed burst completion was 2,719 ms versus 1,520 ms (**1.79x**); four bursts per
+variant do not establish a reliable tail percentile. All projections were empty; this does
+not establish production, populated-data, provider extraction, CPU, memory or invoice gains.
+Both variants used the same browser policy; baseline server Effect was 4.0.5 and candidate
+4.0.6, so the ratio includes that dependency change.
+
+The meter ended at 31,395 reads and 4,614 writes including its conservative prior-attempt
+reservation; measured writes across both fixtures were 4,088. All six continuation resources
+independently returned HTTP 404 after cleanup. Signed-in production baseline and candidate
+verification are still blocked by browser access; the candidate remains in draft.

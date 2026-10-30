@@ -36,23 +36,6 @@ type Queries = Readonly<{
   ) => QueryResource<CanonicalSuccess<"recurringPlans.getRecurringWorkspace">, WorkspaceError>;
   categories: ReturnType<typeof workspaceCategoriesQuery>;
 }>;
-const queryResource = <A, E>({
-  source,
-  apiClient,
-  keys,
-}: Readonly<{
-  source: Atom.Atom<AsyncResult.AsyncResult<A, E>>;
-  apiClient: FidyClient;
-  keys: ReadonlyArray<string>;
-}>): QueryResource<A, E> => ({
-  source,
-  // Keep the prepared observation alive through the loader-to-React subscription gap.
-  view: source.pipe(
-    apiClient.runtime.factory.withReactivity(keys),
-    revalidateWorkspaceQuery,
-    Atom.setIdleTTL("400 millis")
-  ),
-});
 type Commands = Readonly<{
   queries: Queries;
   write: Atom.AtomResultFn<
@@ -62,23 +45,24 @@ type Commands = Readonly<{
   >;
   refresh: Atom.AtomResultFn<Query, boolean, never>;
 }>;
-class WorkspaceKey extends Data.Class<Query> {}
+class WorkspaceKey extends Data.Class<Query & Readonly<{ apiClient: FidyClient }>> {}
 const workspaceKey = "recurring-plans";
-const makeQueries = Atom.family((apiClient: FidyClient): Queries => {
-  const workspace = Atom.family((query: Query) =>
-    apiClient
-      .query("recurringPlans", "getRecurringWorkspace", {
-        query,
-        ...workspaceQueryRetention,
-      })
-      .pipe((source) =>
-        queryResource({ source, apiClient, keys: [workspaceKey, "recurring-resume"] })
-      )
-  );
-  return {
-    workspace: (query) => workspace(new WorkspaceKey(query)),
-    categories: workspaceCategoriesQuery(apiClient),
-  };
+const workspaceSources = Atom.family(({ apiClient, ...query }: WorkspaceKey) =>
+  apiClient.query("recurringPlans", "getRecurringWorkspace", { query, ...workspaceQueryRetention })
+);
+const workspaceViews = Atom.family((key: WorkspaceKey) =>
+  workspaceSources(key).pipe(
+    key.apiClient.runtime.factory.withReactivity([workspaceKey, "recurring-resume"]),
+    revalidateWorkspaceQuery,
+    Atom.setIdleTTL("400 millis")
+  )
+);
+const makeQueries = (apiClient: FidyClient): Queries => ({
+  workspace: (query) => {
+    const key = new WorkspaceKey({ ...query, apiClient });
+    return { source: workspaceSources(key), view: workspaceViews(key) };
+  },
+  categories: workspaceCategoriesQuery(apiClient),
 });
 const makeCommands = (apiClient: FidyClient): Commands => {
   const queries = makeQueries(apiClient);

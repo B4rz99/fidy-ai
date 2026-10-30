@@ -152,3 +152,40 @@ it.live("retains prepared metadata while the first fresh read is pending", () =>
     }
   })
 );
+
+it.live("keeps mounted taxonomy atoms stable through collection and an equivalent lookup", () =>
+  Effect.gen(function* () {
+    let reads = 0;
+    const http = HttpClient.make((request) => {
+      reads += 1;
+      return Effect.succeed(HttpClientResponse.fromWeb(request, metadataResponse("Mercado")));
+    });
+    const client = makeFidyClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: Layer.succeed(HttpClient.HttpClient, http),
+    });
+    const registry = AtomRegistry.make();
+    const { source, view } = workspaceCategoriesQuery(client);
+    const mounts = [registry.mount(view)];
+    try {
+      yield* AtomRegistry.getResult(registry, view);
+      expect(reads).toBe(1);
+      for (let turn = 0; turn < 5; turn += 1) {
+        yield* Effect.sleep("20 millis");
+        Bun.gc(true);
+      }
+      const now = yield* Clock.currentTimeMillis;
+      vi.spyOn(Date, "now").mockReturnValue(now + 6000);
+      const equivalent = workspaceCategoriesQuery(client);
+      expect(equivalent.source).toBe(source);
+      expect(equivalent.view).toBe(view);
+      mounts.push(registry.mount(equivalent.view));
+      yield* Effect.sleep("30 millis");
+      expect(reads).toBe(1);
+    } finally {
+      vi.restoreAllMocks();
+      for (const unmount of mounts) unmount();
+      registry.dispose();
+    }
+  })
+);

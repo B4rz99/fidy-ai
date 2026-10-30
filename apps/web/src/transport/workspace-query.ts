@@ -77,33 +77,41 @@ export const workspaceProfileQuery: (client: FidyClient) => ProfileQuery = Atom.
   (client: FidyClient) => workspaceMetadataQuery(client).pipe(revalidateWorkspaceQuery)
 );
 /** The browser's metadata projection supplies taxonomy; other transports can read it separately. */
-export const workspaceCategoriesQuery: (client: FidyClient) => Readonly<{
+const workspaceCategoriesSource: (client: FidyClient) => CategoriesQuery = Atom.family(
+  (client: FidyClient) => {
+    const individual = client.query("categories", "listCategories", {
+      ...workspaceQueryRetention,
+      reactivityKeys: ["recurring-resume"],
+    });
+    const metadata = workspaceMetadataQuery(client);
+    const source: CategoriesQuery = Atom.readable(
+      (get) => {
+        const profile = get(metadata);
+        const categories = Option.flatMap(AsyncResult.value(profile), (value) => value.categories);
+        if (Option.isSome(categories)) {
+          return AsyncResult.map(profile, () => ({ data: categories.value, next: [] }));
+        }
+        return AsyncResult.isInitial(profile)
+          ? AsyncResult.initial(profile.waiting)
+          : get(individual);
+      },
+      (refresh) => {
+        refresh(metadata);
+        refresh(individual);
+      }
+    );
+    return source;
+  }
+);
+const workspaceCategoriesView = Atom.family((client: FidyClient) =>
+  workspaceCategoriesSource(client).pipe(revalidateWorkspaceQuery)
+);
+export const workspaceCategoriesQuery = (
+  client: FidyClient
+): Readonly<{
   source: CategoriesQuery;
   view: CategoriesQuery;
-}> = Atom.family((client: FidyClient) => {
-  const individual = client.query("categories", "listCategories", {
-    ...workspaceQueryRetention,
-    reactivityKeys: ["recurring-resume"],
-  });
-  const metadata = workspaceMetadataQuery(client);
-  const source: CategoriesQuery = Atom.readable(
-    (get) => {
-      const profile = get(metadata);
-      const categories = Option.flatMap(AsyncResult.value(profile), (value) => value.categories);
-      if (Option.isSome(categories)) {
-        return AsyncResult.map(profile, () => ({ data: categories.value, next: [] }));
-      }
-      return AsyncResult.isInitial(profile)
-        ? AsyncResult.initial(profile.waiting)
-        : get(individual);
-    },
-    (refresh) => {
-      refresh(metadata);
-      refresh(individual);
-    }
-  );
-  return { source, view: revalidateWorkspaceQuery(source) };
-});
+}> => ({ source: workspaceCategoriesSource(client), view: workspaceCategoriesView(client) });
 export const workspaceDashboardCatalogQuery: (client: FidyClient) => CatalogQuery = Atom.family(
   (client: FidyClient) =>
     client

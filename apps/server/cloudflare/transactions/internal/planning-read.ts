@@ -11,6 +11,7 @@ import { decodeTransactionRow } from "./transaction-history";
 
 const maximumSelection = 128;
 const maximumRanges = 2;
+const maximumReferences = 4096;
 const decodeFacts = (rows: ReadonlyArray<unknown>): Option.Option<PlanningTransactionFacts> =>
   Option.map(
     Option.all(rows.slice(0, maximumSelection).map(decodeTransactionRow)),
@@ -31,8 +32,8 @@ const idsStatement = ({
 }>): D1PreparedStatement => {
   const query = effectiveHistoryPage({
     userId,
-    where: `user_id = ? AND id IN (${ids.map(() => "?").join(",")})`,
-    bindings: [userId, ...ids],
+    where: "user_id = ? AND id IN (SELECT value FROM json_each(?))",
+    bindings: [userId, Schema.encodeSync(Schema.fromJsonString(Schema.Array(Schema.String)))(ids)],
     limit: maximumSelection + 1,
   });
   return db.prepare(query.sql).bind(...query.bindings);
@@ -86,25 +87,43 @@ export const readPlanningTransactions = ({
     return decodeFacts(rows.results);
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
-/** At most two independently capped ranges and the caller's read share one database round trip. */
+/** Independently capped ranges, references and the caller's read share one database snapshot. */
 export const readPlanningTransactionSnapshot = <A>({
   db,
   userId,
   ranges,
+  ids,
   snapshot,
 }: PlanningTransactionRead<A>): Effect.Effect<Option.Option<PlanningTransactionSnapshot<A>>> =>
   Effect.gen(function* () {
-    if (ranges.length > maximumRanges) return Option.none();
+    if (ranges.length > maximumRanges || ids.length > maximumReferences) return Option.none();
     const statements = yield* Effect.forEach(ranges, (range) =>
       rangeStatement({ db, userId, range })
     );
+    const references = [...new Set(ids)];
+    const selections: D1PreparedStatement[] = [];
+    for (let index = 0; index < references.length; index += maximumSelection) {
+      selections.push(
+        idsStatement({ db, userId, ids: references.slice(index, index + maximumSelection) })
+      );
+    }
     const [context, ...pages] = yield* Effect.tryPromise(() =>
-      db.batch([snapshot.statement, ...statements])
+      db.batch([snapshot.statement, ...statements, ...selections])
     );
-    if (context === undefined || pages.length !== ranges.length) return Option.none();
+    if (context === undefined || pages.length !== ranges.length + selections.length) {
+      return Option.none();
+    }
+    const selected = Option.all(
+      pages.slice(ranges.length).map((page) => decodeFacts(page.results))
+    ).pipe(
+      Option.filter((groups) => groups.every((group) => group.complete)),
+      Option.map((groups) => groups.flatMap((group) => group.transactions))
+    );
     const observed = snapshot.decode(context.results);
-    return Option.map(observed, (value) => ({
-      snapshot: value,
-      ranges: pages.map((page) => decodeFacts(page.results)),
-    }));
+    if (Option.isNone(observed) || Option.isNone(selected)) return Option.none();
+    return Option.some({
+      snapshot: observed.value,
+      ranges: pages.slice(0, ranges.length).map((page) => decodeFacts(page.results)),
+      selected: selected.value,
+    });
   }).pipe(Effect.orElseSucceed(() => Option.none()));

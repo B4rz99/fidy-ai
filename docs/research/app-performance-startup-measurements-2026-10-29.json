@@ -1,0 +1,5304 @@
+{
+  "date": "2026-10-29",
+  "trackingIssue": 1593,
+  "status": "Desktop heavy and extreme measurements completed; app-wide 2x remains unmet. Million-record preparation timed out; deployed matrix awaits restored production sign-in.",
+  "scope": "Desktop only. Earlier mobile observations are historical and are not part of the current target.",
+  "baseline": "7cb76cd8f7c34b0639e98af5c05085142cf3521c",
+  "methodology": {
+    "dataset": {
+      "transactions": 10000,
+      "plans": 100,
+      "revisions": 12,
+      "review": 1000,
+      "currencies": 4
+    },
+    "viewport": "1280x720",
+    "cpuRate": 1,
+    "network": "unthrottled loopback TLS",
+    "previewCompression": "gzip on both baseline and candidate",
+    "coldRepeats": 3,
+    "coldAdmissionRefillSeconds": 12,
+    "readiness": "Named usable controls and two animation frames; browser-native first control observation recorded separately.",
+    "limits": [
+      "Three observations are descriptive medians, not confidence intervals.",
+      "Driver readiness includes polling and automation overhead.",
+      "The initial candidate comparison predates subsequent Review startup and Consent-navigation fixes and is not final-head evidence.",
+      "Local synthetic data and authenticated production data are distinct workloads.",
+      "No live provider timings or million-Transaction results yet."
+    ]
+  },
+  "checkpointComparisons": [
+    {
+      "journey": "transactions:isolated-cold-document",
+      "before": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [439.7927920000002, 482.025667000009, 545.3632919999945],
+        "nativeMs": [379.7000000178814, 421.90000000596046, 491],
+        "driverMedianMs": 482.025667000009,
+        "nativeMedianMs": 421.90000000596046
+      },
+      "after": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [335.31304100000125, 337.6294999999809, 658.9510829999927],
+        "nativeMs": [305, 276.30000001192093, 544],
+        "driverMedianMs": 337.6294999999809,
+        "nativeMedianMs": 305
+      },
+      "driverSpeedup": 1.427676393798635,
+      "nativeSpeedup": 1.3832786885441326
+    },
+    {
+      "journey": "transactions:cold-open-capture",
+      "before": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [161.0578749999986, 157.8289999999979, 143.21595899999375],
+        "nativeMs": [379.7000000178814, 421.90000000596046, 491],
+        "driverMedianMs": 157.8289999999979,
+        "nativeMedianMs": 421.90000000596046
+      },
+      "after": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [111.58791599999677, 130.21816600000602, 112.86079199999222],
+        "nativeMs": [305, 276.30000001192093, 544],
+        "driverMedianMs": 112.86079199999222,
+        "nativeMedianMs": 305
+      },
+      "driverSpeedup": 1.398439592733044,
+      "nativeSpeedup": 1.3832786885441326
+    },
+    {
+      "journey": "transactions:cold-open-calendar",
+      "before": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [114.51729100000011, 114.36829099999159, 149.13520800002152],
+        "nativeMs": [379.7000000178814, 421.90000000596046, 491],
+        "driverMedianMs": 114.51729100000011,
+        "nativeMedianMs": 421.90000000596046
+      },
+      "after": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [97.38983299999745, 98.42075000001932, 94.77479100000346],
+        "nativeMs": [305, 276.30000001192093, 544],
+        "driverMedianMs": 97.38983299999745,
+        "nativeMedianMs": 305
+      },
+      "driverSpeedup": 1.1758649488597348,
+      "nativeSpeedup": 1.3832786885441326
+    },
+    {
+      "journey": "budgets:isolated-cold-document",
+      "before": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [366.06462500000634, 339.74079099998926, 344.1824170000036],
+        "nativeMs": [318.39999997615814, 263.40000000596046, 303.7000000178814],
+        "driverMedianMs": 344.1824170000036,
+        "nativeMedianMs": 303.7000000178814
+      },
+      "after": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [426.95208399999683, 394.77483400001074, 1433.3642499999842],
+        "nativeMs": [362.09999999403954, 290.90000000596046, 1324.300000011921],
+        "driverMedianMs": 426.95208399999683,
+        "nativeMedianMs": 362.09999999403954
+      },
+      "driverSpeedup": 0.8061382761631073,
+      "nativeSpeedup": 0.8387185860891482
+    },
+    {
+      "journey": "recurring:isolated-cold-document",
+      "before": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [464.73541600000317, 758.3490419999871, 454.4266249999637],
+        "nativeMs": [414.90000000596046, 632, 365.59999999403954],
+        "driverMedianMs": 464.73541600000317,
+        "nativeMedianMs": 414.90000000596046
+      },
+      "after": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [598.4904580000002, 445.727458999987, 673.481584000052],
+        "nativeMs": [510.59999999403954, 367, 558.3000000119209],
+        "driverMedianMs": 598.4904580000002,
+        "nativeMedianMs": 510.59999999403954
+      },
+      "driverSpeedup": 0.7765126574499255,
+      "nativeSpeedup": 0.8125734430293846
+    },
+    {
+      "journey": "dashboard:isolated-cold-document",
+      "before": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [436.36833399999887, 394.76624999998603, 385.28604099998483],
+        "nativeMs": [331.40000000596046, 357.09999999403954, 341.40000000596046],
+        "driverMedianMs": 394.76624999998603,
+        "nativeMedianMs": 341.40000000596046
+      },
+      "after": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [369.3002919999999, 505.2705840000126, 354.66199999995297],
+        "nativeMs": [321.7999999821186, 377.5, 260.59999999403954],
+        "driverMedianMs": 369.3002919999999,
+        "nativeMedianMs": 321.7999999821186
+      },
+      "driverSpeedup": 1.0689573188855916,
+      "nativeSpeedup": 1.0609073959755468
+    },
+    {
+      "journey": "review:isolated-cold-document",
+      "before": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [393.00720799999544, 378.85933300000033, 352.534290999989],
+        "nativeMs": [334.5, 316.30000001192093, 259],
+        "driverMedianMs": 378.85933300000033,
+        "nativeMedianMs": 316.30000001192093
+      },
+      "after": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [326.4746670000022, 285.4731249999895, 376.7001670000027],
+        "nativeMs": [237.69999998807907, 246.5, 285.40000000596046],
+        "driverMedianMs": 326.4746670000022,
+        "nativeMedianMs": 246.5
+      },
+      "driverSpeedup": 1.1604555308421458,
+      "nativeSpeedup": 1.2831643002512005
+    },
+    {
+      "journey": "account:isolated-cold-document",
+      "before": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [230.3475000000035, 189.9126250000263, 246.74225000001024],
+        "nativeMs": [163.59999999403954, 152.60000002384186, 159.90000000596046],
+        "driverMedianMs": 230.3475000000035,
+        "nativeMedianMs": 159.90000000596046
+      },
+      "after": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [188.70595900001354, 217.06908399998792, 312.0022089999984],
+        "nativeMs": [152.30000001192093, 152.59999999403954, 267.09999999403954],
+        "driverMedianMs": 217.06908399998792,
+        "nativeMedianMs": 152.59999999403954
+      },
+      "driverSpeedup": 1.0611713826553777,
+      "nativeSpeedup": 1.0478374836972875
+    },
+    {
+      "journey": "access:isolated-cold-document",
+      "before": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [923.8035830000008, 251.62395799998194, 268.23212500003865],
+        "nativeMs": [663.9000000059605, 177.7000000178814, 199.69999998807907],
+        "driverMedianMs": 268.23212500003865,
+        "nativeMedianMs": 199.69999998807907
+      },
+      "after": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [261.27712499999325, 893.4599170000001, 619.9664170000469],
+        "nativeMs": [204.30000001192093, 654.7000000178814, 505.2000000178814],
+        "driverMedianMs": 619.9664170000469,
+        "nativeMedianMs": 505.2000000178814
+      },
+      "driverSpeedup": 0.4326558949724826,
+      "nativeSpeedup": 0.39528899442005294
+    },
+    {
+      "journey": "upgrade:isolated-cold-document",
+      "before": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [424.294167, 251.94324999998207, 240.93454099999508],
+        "nativeMs": [352.69999998807907, 226.39999997615814, 219.30000001192093],
+        "driverMedianMs": 251.94324999998207,
+        "nativeMedianMs": 226.39999997615814
+      },
+      "after": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [235.578416999997, 575.6052090000012, 385.96166600001743],
+        "nativeMs": [199.90000000596046, 482, 279.39999997615814],
+        "driverMedianMs": 385.96166600001743,
+        "nativeMedianMs": 279.39999997615814
+      },
+      "driverSpeedup": 0.6527675471272598,
+      "nativeSpeedup": 0.8103078024175998
+    },
+    {
+      "journey": "privacy:isolated-cold-document",
+      "before": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [231.85679200000595, 237.78645799998776, 249.751540999976],
+        "nativeMs": [174.7999999821186, 164, 193],
+        "driverMedianMs": 237.78645799998776,
+        "nativeMedianMs": 174.7999999821186
+      },
+      "after": {
+        "attempts": 3,
+        "successes": 3,
+        "driverMs": [376.04899999999907, 760.3115000000107, 616.1652919999906],
+        "nativeMs": [337, 547.6999999880791, 487.2000000178814],
+        "driverMedianMs": 616.1652919999906,
+        "nativeMedianMs": 487.2000000178814
+      },
+      "driverSpeedup": 0.3859134246724033,
+      "nativeSpeedup": 0.3587848932177813
+    }
+  ],
+  "payloadProof": {
+    "pendingReviewItems": 1000,
+    "defaultRows": 50,
+    "defaultBodyBytes": 11863,
+    "countOnlyRows": 0,
+    "countOnlyBodyBytes": 64,
+    "meaning": "Logical JSON response bytes; not an application speedup."
+  },
+  "checks": {
+    "webUnit": {
+      "passed": 319
+    },
+    "focusedAuthority": {
+      "passed": 77
+    },
+    "lint": "passed",
+    "webTypes": "passed",
+    "serverTypes": "passed",
+    "policy": "passed",
+    "dependencyBoundaries": "passed",
+    "bundle": "passed",
+    "completeBrowser": {
+      "passed": 364,
+      "skipped": 3,
+      "failed": 0,
+      "baseRevision": "7cb76cd8f7c34b0639e98af5c05085142cf3521c"
+    },
+    "refreshedWebUnit": {
+      "passed": 319,
+      "failed": 0
+    },
+    "refreshedNativeFocused": {
+      "passed": 280,
+      "skipped": 1,
+      "failed": 0
+    },
+    "finalFullBrowserAfterDependencyRefresh": {
+      "passed": 365,
+      "skipped": 3,
+      "failed": 0,
+      "durationMinutes": 12.5
+    },
+    "refreshedFullStaticVerification": "passed",
+    "latestStatic": "passed with required oxlint-tsgolint 7.0.2005 patch",
+    "latestProductionWebBuild": "passed",
+    "finalRecurringBrowser": {
+      "passed": 19,
+      "failed": 0,
+      "durationMinutes": 1.8,
+      "coverage": "Recurring persistence, pagination, stable reads, uncertain-save recovery, session/admission dependencies and cached navigation."
+    },
+    "effectTraceCompatibility": {
+      "initialCi": "Two memory policy tests and one native governor test rejected new Effect trace annotations in complete Exit object comparisons.",
+      "semanticAssertions": "Require exactly one Fail reason and the same typed domain error, retaining original byte-cap, privacy and no-side-effect assertions.",
+      "localMemoryTestsPassed": 3,
+      "localGovernorTestsPassed": 4
+    }
+  },
+  "goal": "The universal desktop 2x target remains unmet.",
+  "diagnosticHeavyAssessment": {
+    "baseRevision": "90bdfb2aae31a4ca952ca021103a8fbfbb8fb6fc",
+    "tests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "samples": {
+      "attempted": 65,
+      "ready": 65
+    },
+    "controlledLatencyComparison": false,
+    "limitation": "Concurrent system activity and another checkout type-aware lint were observed. Preserve observations; do not claim matched speedups.",
+    "transactionsWarmReturns": [
+      {
+        "elapsedMs": 3425.875791999999,
+        "outcome": "ready",
+        "requests": [
+          {
+            "path": "/ingestion/review-workspace",
+            "status": 200,
+            "durationMs": 20.083,
+            "bytes": 11863
+          },
+          {
+            "path": "/ingestion/review-workspace/:id",
+            "status": 429,
+            "durationMs": 31.507,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace/:id/material",
+            "status": 429,
+            "durationMs": 30.109,
+            "bytes": 130
+          },
+          {
+            "path": "/web/consent",
+            "status": 429,
+            "durationMs": 14.612,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace/:id/material",
+            "status": 429,
+            "durationMs": 40.918,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace/:id",
+            "status": 200,
+            "durationMs": 47.024,
+            "bytes": 276
+          },
+          {
+            "path": "/web/consent",
+            "status": 429,
+            "durationMs": 11.556,
+            "bytes": 130
+          },
+          {
+            "path": "/web/consent",
+            "status": 429,
+            "durationMs": 22.739,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace/:id/material",
+            "status": 200,
+            "durationMs": 49.765,
+            "bytes": 112
+          },
+          {
+            "path": "/web/consent",
+            "status": 200,
+            "durationMs": 14.387,
+            "bytes": 38
+          },
+          {
+            "path": "/ingestion/review-workspace",
+            "status": 429,
+            "durationMs": 19.99,
+            "bytes": 130
+          }
+        ]
+      },
+      {
+        "elapsedMs": 6448.230584000001,
+        "outcome": "ready",
+        "requests": [
+          {
+            "path": "/ingestion/review-workspace",
+            "status": 429,
+            "durationMs": 44.599,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace/:id",
+            "status": 429,
+            "durationMs": 45.673,
+            "bytes": 130
+          },
+          {
+            "path": "/web/consent",
+            "status": 429,
+            "durationMs": 18.58,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace/:id/material",
+            "status": 429,
+            "durationMs": 20.572,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace",
+            "status": 200,
+            "durationMs": 47.933,
+            "bytes": 11863
+          },
+          {
+            "path": "/ingestion/review-workspace/:id",
+            "status": 429,
+            "durationMs": 47.935,
+            "bytes": 130
+          },
+          {
+            "path": "/web/consent",
+            "status": 429,
+            "durationMs": 21.459,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace/:id/material",
+            "status": 200,
+            "durationMs": 34.629,
+            "bytes": 112
+          },
+          {
+            "path": "/ingestion/review-workspace/:id",
+            "status": 200,
+            "durationMs": 33.027,
+            "bytes": 276
+          },
+          {
+            "path": "/web/consent",
+            "status": 429,
+            "durationMs": 15.141,
+            "bytes": 130
+          },
+          {
+            "path": "/web/consent",
+            "status": 200,
+            "durationMs": 31.001,
+            "bytes": 38
+          },
+          {
+            "path": "/ingestion/review-workspace",
+            "status": 429,
+            "durationMs": 39.493,
+            "bytes": 130
+          },
+          {
+            "path": "/user",
+            "status": 200,
+            "durationMs": 26.167,
+            "bytes": 260
+          },
+          {
+            "path": "/categories",
+            "status": 429,
+            "durationMs": 25.167,
+            "bytes": 130
+          },
+          {
+            "path": "/transactions",
+            "status": 429,
+            "durationMs": 19.906,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace",
+            "status": 200,
+            "durationMs": 44.782,
+            "bytes": 64
+          },
+          {
+            "path": "/categories",
+            "status": 429,
+            "durationMs": 27.572,
+            "bytes": 130
+          },
+          {
+            "path": "/transactions",
+            "status": 429,
+            "durationMs": 16.077,
+            "bytes": 130
+          },
+          {
+            "path": "/categories",
+            "status": 200,
+            "durationMs": 26.995,
+            "bytes": 1086
+          },
+          {
+            "path": "/transactions",
+            "status": 429,
+            "durationMs": 21.033,
+            "bytes": 130
+          },
+          {
+            "path": "/transactions",
+            "status": 200,
+            "durationMs": 28.89,
+            "bytes": 7491
+          }
+        ]
+      },
+      {
+        "elapsedMs": 3387.9180419999975,
+        "outcome": "ready",
+        "requests": [
+          {
+            "path": "/ingestion/review-workspace",
+            "status": 429,
+            "durationMs": 27.245,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace/:id",
+            "status": 429,
+            "durationMs": 27.507,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace/:id/material",
+            "status": 429,
+            "durationMs": 17.537,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace",
+            "status": 429,
+            "durationMs": 17.379,
+            "bytes": 130
+          },
+          {
+            "path": "/web/consent",
+            "status": 429,
+            "durationMs": 11.399,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace",
+            "status": 200,
+            "durationMs": 48.242,
+            "bytes": 11863
+          },
+          {
+            "path": "/ingestion/review-workspace/:id",
+            "status": 429,
+            "durationMs": 48.184,
+            "bytes": 130
+          },
+          {
+            "path": "/web/consent",
+            "status": 429,
+            "durationMs": 16.132,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace/:id/material",
+            "status": 429,
+            "durationMs": 17.348,
+            "bytes": 130
+          },
+          {
+            "path": "/web/consent",
+            "status": 429,
+            "durationMs": 17.907,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace/:id",
+            "status": 200,
+            "durationMs": 36.365,
+            "bytes": 276
+          },
+          {
+            "path": "/ingestion/review-workspace/:id/material",
+            "status": 429,
+            "durationMs": 12.884,
+            "bytes": 130
+          },
+          {
+            "path": "/web/consent",
+            "status": 200,
+            "durationMs": 31.761,
+            "bytes": 38
+          },
+          {
+            "path": "/ingestion/review-workspace/:id/material",
+            "status": 429,
+            "durationMs": 19.53,
+            "bytes": 130
+          },
+          {
+            "path": "/ingestion/review-workspace",
+            "status": 429,
+            "durationMs": 16.596,
+            "bytes": 130
+          },
+          {
+            "path": "/user",
+            "status": 200,
+            "durationMs": 25.159,
+            "bytes": 260
+          }
+        ]
+      }
+    ],
+    "rawArtifact": "reports/performance/startup-2026-10-29/gzip-desktop-final-heavy-host-load.json",
+    "sourceManifest": "reports/performance/startup-2026-10-29/desktop-final-source-manifest.json"
+  },
+  "lateInboxRegression": {
+    "before": {
+      "detailRequestsAfterLeaving": 1,
+      "materialRequestsAfterLeaving": 1,
+      "testResult": "failed as expected"
+    },
+    "after": {
+      "detailRequestsAfterLeaving": 0,
+      "materialRequestsAfterLeaving": 0,
+      "focusedBrowserChecksPassed": 5
+    },
+    "behavior": "Defer only an inbox editor that has never been displayed; retain an already displayed editor and its original."
+  },
+  "requiredDependencyRefresh": {
+    "effectFamily": {
+      "before": "4.0.5",
+      "after": "4.0.6"
+    },
+    "reactRouter": {
+      "before": "1.170.45",
+      "after": "1.170.46"
+    },
+    "reason": "Compatible patches reached the existing seven-day admission age and the dependency gate required them.",
+    "newLockedIdentitiesIntegrityChecked": 11,
+    "registryIntegrityFailures": 0,
+    "behavior": "Use unknown-input decoders at MCP boundaries and validate the optional retry metadata as JSON before typed encoding."
+  },
+  "finalHeavyDesktop": {
+    "baseRevision": "90bdfb2aae31a4ca952ca021103a8fbfbb8fb6fc",
+    "sourceManifest": "reports/performance/startup-2026-10-29/desktop-refreshed-source-manifest.json",
+    "rawArtifact": "reports/performance/startup-2026-10-29/gzip-desktop-refreshed-heavy-quiet.json",
+    "coordination": "Other checkout confirmed no new browser/build/broad checks for the measurement window; 20-second host snapshots retained. This does not prove complete host isolation.",
+    "tests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "readinessObservations": {
+      "ready": 65,
+      "attempted": 65
+    },
+    "coldComparisons": [
+      {
+        "journey": "transactions:isolated-cold-document",
+        "before": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [439.7927920000002, 482.025667000009, 545.3632919999945],
+          "nativeMs": [379.7000000178814, 421.90000000596046, 491],
+          "driverMedianMs": 482.025667000009,
+          "nativeMedianMs": 421.90000000596046
+        },
+        "after": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [299.101874999993, 256.07962499998393, 339.5043749999604],
+          "nativeMs": [241.80000001192093, 223.20000004768372, 250.30000001192093],
+          "driverMedianMs": 299.101874999993,
+          "nativeMedianMs": 241.80000001192093
+        },
+        "driverSpeedup": 1.611576881622759,
+        "nativeSpeedup": 1.7448304383174544
+      },
+      {
+        "journey": "budgets:isolated-cold-document",
+        "before": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [366.06462500000634, 339.74079099998926, 344.1824170000036],
+          "nativeMs": [318.39999997615814, 263.40000000596046, 303.7000000178814],
+          "driverMedianMs": 344.1824170000036,
+          "nativeMedianMs": 303.7000000178814
+        },
+        "after": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [315.4915000000037, 391.0866249999963, 3406.2903749999823],
+          "nativeMs": [230, 305.69999998807907, 3139.599999964237],
+          "driverMedianMs": 391.0866249999963,
+          "nativeMedianMs": 305.69999998807907
+        },
+        "driverSpeedup": 0.8800669595898528,
+        "nativeSpeedup": 0.9934576383046265
+      },
+      {
+        "journey": "recurring:isolated-cold-document",
+        "before": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [464.73541600000317, 758.3490419999871, 454.4266249999637],
+          "nativeMs": [414.90000000596046, 632, 365.59999999403954],
+          "driverMedianMs": 464.73541600000317,
+          "nativeMedianMs": 414.90000000596046
+        },
+        "after": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [455.8007090000028, 971.7218749999884, 1618.5379579999717],
+          "nativeMs": [405.30000001192093, 477.80000001192093, 1325],
+          "driverMedianMs": 971.7218749999884,
+          "nativeMedianMs": 477.80000001192093
+        },
+        "driverSpeedup": 0.47825970368322596,
+        "nativeSpeedup": 0.8683549602252174
+      },
+      {
+        "journey": "dashboard:isolated-cold-document",
+        "before": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [436.36833399999887, 394.76624999998603, 385.28604099998483],
+          "nativeMs": [331.40000000596046, 357.09999999403954, 341.40000000596046],
+          "driverMedianMs": 394.76624999998603,
+          "nativeMedianMs": 341.40000000596046
+        },
+        "after": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [369.7221669999999, 428.3439580000122, 384.85754100000486],
+          "nativeMs": [330.60000002384186, 366.19999998807907, 346],
+          "driverMedianMs": 384.85754100000486,
+          "nativeMedianMs": 346
+        },
+        "driverSpeedup": 1.0257464332756339,
+        "nativeSpeedup": 0.9867052023293655
+      },
+      {
+        "journey": "review:isolated-cold-document",
+        "before": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [393.00720799999544, 378.85933300000033, 352.534290999989],
+          "nativeMs": [334.5, 316.30000001192093, 259],
+          "driverMedianMs": 378.85933300000033,
+          "nativeMedianMs": 316.30000001192093
+        },
+        "after": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [339.6477920000034, 322.5389579999901, 308.02462500002],
+          "nativeMs": [249.10000002384186, 232.19999998807907, 251.80000001192093],
+          "driverMedianMs": 322.5389579999901,
+          "nativeMedianMs": 249.10000002384186
+        },
+        "driverSpeedup": 1.1746157281255059,
+        "nativeSpeedup": 1.2697711761607677
+      },
+      {
+        "journey": "account:isolated-cold-document",
+        "before": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [230.3475000000035, 189.9126250000263, 246.74225000001024],
+          "nativeMs": [163.59999999403954, 152.60000002384186, 159.90000000596046],
+          "driverMedianMs": 230.3475000000035,
+          "nativeMedianMs": 159.90000000596046
+        },
+        "after": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [190.74279200000456, 265.03899999998976, 186.98941699997522],
+          "nativeMs": [149.60000002384186, 174.5, 146.20000004768372],
+          "driverMedianMs": 190.74279200000456,
+          "nativeMedianMs": 149.60000002384186
+        },
+        "driverSpeedup": 1.2076341002704731,
+        "nativeSpeedup": 1.0688502672491784
+      },
+      {
+        "journey": "access:isolated-cold-document",
+        "before": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [923.8035830000008, 251.62395799998194, 268.23212500003865],
+          "nativeMs": [663.9000000059605, 177.7000000178814, 199.69999998807907],
+          "driverMedianMs": 268.23212500003865,
+          "nativeMedianMs": 199.69999998807907
+        },
+        "after": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [254.63454100000672, 548.9464170000283, 259.8669579999987],
+          "nativeMs": [197.69999998807907, 438.39999997615814, 206.29999995231628],
+          "driverMedianMs": 259.8669579999987,
+          "nativeMedianMs": 206.29999995231628
+        },
+        "driverSpeedup": 1.032190190951633,
+        "nativeSpeedup": 0.9680077558615476
+      },
+      {
+        "journey": "upgrade:isolated-cold-document",
+        "before": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [424.294167, 251.94324999998207, 240.93454099999508],
+          "nativeMs": [352.69999998807907, 226.39999997615814, 219.30000001192093],
+          "driverMedianMs": 251.94324999998207,
+          "nativeMedianMs": 226.39999997615814
+        },
+        "after": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [221.62625000000116, 223.8583750000107, 219.24904200003948],
+          "nativeMs": [181.30000001192093, 188.10000002384186, 179.5],
+          "driverMedianMs": 221.62625000000116,
+          "nativeMedianMs": 181.30000001192093
+        },
+        "driverSpeedup": 1.136793362699503,
+        "nativeSpeedup": 1.2487589628310634
+      },
+      {
+        "journey": "privacy:isolated-cold-document",
+        "before": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [231.85679200000595, 237.78645799998776, 249.751540999976],
+          "nativeMs": [174.7999999821186, 164, 193],
+          "driverMedianMs": 237.78645799998776,
+          "nativeMedianMs": 174.7999999821186
+        },
+        "after": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [220.95262499997625, 206.42875000002095, 209.33133300003828],
+          "nativeMs": [149.0999999642372, 148.89999997615814, 153.0999999642372],
+          "driverMedianMs": 209.33133300003828,
+          "nativeMedianMs": 149.0999999642372
+        },
+        "driverSpeedup": 1.1359334247393547,
+        "nativeSpeedup": 1.1723675387259942
+      }
+    ],
+    "additionalObservations": [
+      {
+        "journey": "transactions:first-date-picker",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [139.4135000000024],
+          "nativeMs": [],
+          "driverMedianMs": 139.4135000000024,
+          "nativeMedianMs": null
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "transactions:cold-document",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [194.59316600000238],
+          "nativeMs": [156.39999997615814],
+          "driverMedianMs": 194.59316600000238,
+          "nativeMedianMs": 156.39999997615814
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "transactions:warm-1",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [2336.4609580000033],
+          "nativeMs": [156.39999997615814],
+          "driverMedianMs": 2336.4609580000033,
+          "nativeMedianMs": 156.39999997615814
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "transactions:warm-2",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [2382.015875000001],
+          "nativeMs": [156.39999997615814],
+          "driverMedianMs": 2382.015875000001,
+          "nativeMedianMs": 156.39999997615814
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "transactions:warm-3",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [7420.676124999998],
+          "nativeMs": [156.39999997615814],
+          "driverMedianMs": 7420.676124999998,
+          "nativeMedianMs": 156.39999997615814
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "transactions:filter",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [57.187000000005355],
+          "nativeMs": [156.39999997615814],
+          "driverMedianMs": 57.187000000005355,
+          "nativeMedianMs": 156.39999997615814
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "transactions:scroll-next-page",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [1938.7222910000055],
+          "nativeMs": [156.39999997615814],
+          "driverMedianMs": 1938.7222910000055,
+          "nativeMedianMs": 156.39999997615814
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "transactions:open-editor",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [131.78399999999965],
+          "nativeMs": [156.39999997615814],
+          "driverMedianMs": 131.78399999999965,
+          "nativeMedianMs": 156.39999997615814
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "transactions:save",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [1098.5872499999969],
+          "nativeMs": [156.39999997615814],
+          "driverMedianMs": 1098.5872499999969,
+          "nativeMedianMs": 156.39999997615814
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "budgets:cold-document",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [2450.8894999999975],
+          "nativeMs": [2251],
+          "driverMedianMs": 2450.8894999999975,
+          "nativeMedianMs": 2251
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "budgets:warm-1",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [54.616125000000466],
+          "nativeMs": [2251],
+          "driverMedianMs": 54.616125000000466,
+          "nativeMedianMs": 2251
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "budgets:warm-2",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [68.71729100000084],
+          "nativeMs": [2251],
+          "driverMedianMs": 68.71729100000084,
+          "nativeMedianMs": 2251
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "budgets:warm-3",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [56.52795799999876],
+          "nativeMs": [2251],
+          "driverMedianMs": 56.52795799999876,
+          "nativeMedianMs": 2251
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "budgets:previous-month",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [3379.794375000005],
+          "nativeMs": [2251],
+          "driverMedianMs": 3379.794375000005,
+          "nativeMedianMs": 2251
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "recurring:cold-document",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [1423.8082080000022],
+          "nativeMs": [1189.5999999642372],
+          "driverMedianMs": 1423.8082080000022,
+          "nativeMedianMs": 1189.5999999642372
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "recurring:warm-1",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [80.28683399999863],
+          "nativeMs": [1189.5999999642372],
+          "driverMedianMs": 80.28683399999863,
+          "nativeMedianMs": 1189.5999999642372
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "recurring:warm-2",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [55.76516700000502],
+          "nativeMs": [1189.5999999642372],
+          "driverMedianMs": 55.76516700000502,
+          "nativeMedianMs": 1189.5999999642372
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "recurring:warm-3",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [58.01900000000023],
+          "nativeMs": [1189.5999999642372],
+          "driverMedianMs": 58.01900000000023,
+          "nativeMedianMs": 1189.5999999642372
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "recurring:previous-month",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [2373.0225000000064],
+          "nativeMs": [1189.5999999642372],
+          "driverMedianMs": 2373.0225000000064,
+          "nativeMedianMs": 1189.5999999642372
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "dashboard:cold-document",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [3415.1815419999984],
+          "nativeMs": [3306.099999964237],
+          "driverMedianMs": 3415.1815419999984,
+          "nativeMedianMs": 3306.099999964237
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "dashboard:warm-1",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [85.63850000000093],
+          "nativeMs": [3306.099999964237],
+          "driverMedianMs": 85.63850000000093,
+          "nativeMedianMs": 3306.099999964237
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "dashboard:warm-2",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [81.77354200000264],
+          "nativeMs": [3306.099999964237],
+          "driverMedianMs": 81.77354200000264,
+          "nativeMedianMs": 3306.099999964237
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "dashboard:warm-3",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [82.22149999999965],
+          "nativeMs": [3306.099999964237],
+          "driverMedianMs": 82.22149999999965,
+          "nativeMedianMs": 3306.099999964237
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "review:cold-document",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [3414.0031660000022],
+          "nativeMs": [3212.800000011921],
+          "driverMedianMs": 3414.0031660000022,
+          "nativeMedianMs": 3212.800000011921
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "review:original",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [1354.6282500000016],
+          "nativeMs": [3212.800000011921],
+          "driverMedianMs": 1354.6282500000016,
+          "nativeMedianMs": 3212.800000011921
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "review:autosave",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [326.64041700000234],
+          "nativeMs": [3212.800000011921],
+          "driverMedianMs": 326.64041700000234,
+          "nativeMedianMs": 3212.800000011921
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "review:filter",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [29.68604100000084],
+          "nativeMs": [3212.800000011921],
+          "driverMedianMs": 29.68604100000084,
+          "nativeMedianMs": 3212.800000011921
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "review:next-page",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [2361.2975829999996],
+          "nativeMs": [3212.800000011921],
+          "driverMedianMs": 2361.2975829999996,
+          "nativeMedianMs": 3212.800000011921
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "account:cold-document",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [112.31100000000151],
+          "nativeMs": [76.10000002384186],
+          "driverMedianMs": 112.31100000000151,
+          "nativeMedianMs": 76.10000002384186
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "access:cold-document",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [128.91300000000047],
+          "nativeMs": [94.19999998807907],
+          "driverMedianMs": 128.91300000000047,
+          "nativeMedianMs": 94.19999998807907
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "upgrade:cold-document",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [3378.6383750000023],
+          "nativeMs": [3231.900000035763],
+          "driverMedianMs": 3378.6383750000023,
+          "nativeMedianMs": 3231.900000035763
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "privacy:cold-document",
+        "before": {
+          "attempts": 0,
+          "successes": 0,
+          "driverMs": [],
+          "nativeMs": [],
+          "driverMedianMs": null,
+          "nativeMedianMs": null
+        },
+        "after": {
+          "attempts": 1,
+          "successes": 1,
+          "driverMs": [1376.67687499999],
+          "nativeMs": [1117.1000000238419],
+          "driverMedianMs": 1376.67687499999,
+          "nativeMedianMs": 1117.1000000238419
+        },
+        "driverSpeedup": null,
+        "nativeSpeedup": null
+      },
+      {
+        "journey": "transactions:cold-open-capture",
+        "before": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [161.0578749999986, 157.8289999999979, 143.21595899999375],
+          "nativeMs": [379.7000000178814, 421.90000000596046, 491],
+          "driverMedianMs": 157.8289999999979,
+          "nativeMedianMs": 421.90000000596046
+        },
+        "after": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [95.10699999998906, 95.32616699999198, 139.13850000000093],
+          "nativeMs": [241.80000001192093, 223.20000004768372, 250.30000001192093],
+          "driverMedianMs": 95.32616699999198,
+          "nativeMedianMs": 241.80000001192093
+        },
+        "driverSpeedup": 1.6556734102191604,
+        "nativeSpeedup": 1.7448304383174544
+      },
+      {
+        "journey": "transactions:cold-open-calendar",
+        "before": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [114.51729100000011, 114.36829099999159, 149.13520800002152],
+          "nativeMs": [379.7000000178814, 421.90000000596046, 491],
+          "driverMedianMs": 114.51729100000011,
+          "nativeMedianMs": 421.90000000596046
+        },
+        "after": {
+          "attempts": 3,
+          "successes": 3,
+          "driverMs": [98.63066599999729, 98.77304199998616, 119.01662499998929],
+          "nativeMs": [241.80000001192093, 223.20000004768372, 250.30000001192093],
+          "driverMedianMs": 98.77304199998616,
+          "nativeMedianMs": 241.80000001192093
+        },
+        "driverSpeedup": 1.1593982394509643,
+        "nativeSpeedup": 1.7448304383174544
+      }
+    ]
+  },
+  "candidateContractDigest": "601bd69a4a42aeb9d4317f7aef8bf71092da08ad2e78c277c8565b4d85c11b8f",
+  "reviewedEdgePolicyDigest": "8d406e43704a408a30abe4854579450f849cea5a79f1cab9ba13e7a00c7f6b6e",
+  "extremeDesktopAssessment": {
+    "transactions": 100000,
+    "coldRepeats": 1,
+    "tests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "readiness": {
+      "attempted": 43,
+      "ready": 43
+    },
+    "results": {
+      "stats": {
+        "startTime": "2026-10-29T22:12:56.869Z",
+        "duration": 273086.956,
+        "expected": 5,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "profiles": [
+        {
+          "profile": "desktop",
+          "journeys": [
+            {
+              "journey": "transactions:first-date-picker",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [91.20249999999942],
+                "median": 91.20249999999942
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1314],
+                "median": 1314
+              }
+            }
+          ]
+        },
+        {
+          "profile": "desktop",
+          "journeys": [
+            {
+              "journey": "transactions:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [186.6001670000005],
+                "median": 186.6001670000005
+              },
+              "resourceBytes": {
+                "samples": [623477],
+                "median": 623477
+              },
+              "transferredBytes": {
+                "samples": [652577],
+                "median": 652577
+              },
+              "resourceCount": {
+                "samples": [105],
+                "median": 105
+              },
+              "domNodes": {
+                "samples": [1204],
+                "median": 1204
+              }
+            },
+            {
+              "journey": "transactions:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2361.529834000001],
+                "median": 2361.529834000001
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [6],
+                "median": 6
+              },
+              "domNodes": {
+                "samples": [1224],
+                "median": 1224
+              }
+            },
+            {
+              "journey": "transactions:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [6934.326459],
+                "median": 6934.326459
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [22],
+                "median": 22
+              },
+              "domNodes": {
+                "samples": [2038],
+                "median": 2038
+              }
+            },
+            {
+              "journey": "transactions:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3392.522291000001],
+                "median": 3392.522291000001
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [16],
+                "median": 16
+              },
+              "domNodes": {
+                "samples": [2037],
+                "median": 2037
+              }
+            },
+            {
+              "journey": "transactions:filter",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [42.78662500000064],
+                "median": 42.78662500000064
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1076],
+                "median": 1076
+              }
+            },
+            {
+              "journey": "transactions:scroll-next-page",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2944.410542000005],
+                "median": 2944.410542000005
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [5844],
+                "median": 5844
+              }
+            },
+            {
+              "journey": "transactions:open-editor",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [115.85679199999868],
+                "median": 115.85679199999868
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [0],
+                "median": 0
+              },
+              "domNodes": {
+                "samples": [5871],
+                "median": 5871
+              }
+            },
+            {
+              "journey": "transactions:save",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1618.435040999997],
+                "median": 1618.435040999997
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [2045],
+                "median": 2045
+              }
+            },
+            {
+              "journey": "budgets:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3414.858208000005],
+                "median": 3414.858208000005
+              },
+              "resourceBytes": {
+                "samples": [567925],
+                "median": 567925
+              },
+              "transferredBytes": {
+                "samples": [596125],
+                "median": 596125
+              },
+              "resourceCount": {
+                "samples": [109],
+                "median": 109
+              },
+              "domNodes": {
+                "samples": [469],
+                "median": 469
+              }
+            },
+            {
+              "journey": "budgets:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [53.06225000000268],
+                "median": 53.06225000000268
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [519],
+                "median": 519
+              }
+            },
+            {
+              "journey": "budgets:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [54.44562500000029],
+                "median": 54.44562500000029
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [519],
+                "median": 519
+              }
+            },
+            {
+              "journey": "budgets:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [57.580000000001746],
+                "median": 57.580000000001746
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [519],
+                "median": 519
+              }
+            },
+            {
+              "journey": "budgets:previous-month",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3379.2547080000004],
+                "median": 3379.2547080000004
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [7],
+                "median": 7
+              },
+              "domNodes": {
+                "samples": [489],
+                "median": 489
+              }
+            },
+            {
+              "journey": "recurring:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1429.8197500000024],
+                "median": 1429.8197500000024
+              },
+              "resourceBytes": {
+                "samples": [599712],
+                "median": 599712
+              },
+              "transferredBytes": {
+                "samples": [629112],
+                "median": 629112
+              },
+              "resourceCount": {
+                "samples": [107],
+                "median": 107
+              },
+              "domNodes": {
+                "samples": [1926],
+                "median": 1926
+              }
+            },
+            {
+              "journey": "recurring:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [73.20362499999464],
+                "median": 73.20362499999464
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [0],
+                "median": 0
+              },
+              "domNodes": {
+                "samples": [1975],
+                "median": 1975
+              }
+            },
+            {
+              "journey": "recurring:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [85.86349999999948],
+                "median": 85.86349999999948
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [1975],
+                "median": 1975
+              }
+            },
+            {
+              "journey": "recurring:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [53.05599999999686],
+                "median": 53.05599999999686
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [1975],
+                "median": 1975
+              }
+            },
+            {
+              "journey": "recurring:previous-month",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [342.8600409999999],
+                "median": 342.8600409999999
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [1975],
+                "median": 1975
+              }
+            },
+            {
+              "journey": "dashboard:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3429.475459000001],
+                "median": 3429.475459000001
+              },
+              "resourceBytes": {
+                "samples": [659154],
+                "median": 659154
+              },
+              "transferredBytes": {
+                "samples": [685254],
+                "median": 685254
+              },
+              "resourceCount": {
+                "samples": [102],
+                "median": 102
+              },
+              "domNodes": {
+                "samples": [755],
+                "median": 755
+              }
+            },
+            {
+              "journey": "dashboard:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [60.098417000001064],
+                "median": 60.098417000001064
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [811],
+                "median": 811
+              }
+            },
+            {
+              "journey": "dashboard:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [79.32091700000456],
+                "median": 79.32091700000456
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [812],
+                "median": 812
+              }
+            },
+            {
+              "journey": "dashboard:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [79.35750000000553],
+                "median": 79.35750000000553
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [812],
+                "median": 812
+              }
+            },
+            {
+              "journey": "review:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [4450.193416000002],
+                "median": 4450.193416000002
+              },
+              "resourceBytes": {
+                "samples": [599006],
+                "median": 599006
+              },
+              "transferredBytes": {
+                "samples": [627506],
+                "median": 627506
+              },
+              "resourceCount": {
+                "samples": [108],
+                "median": 108
+              },
+              "domNodes": {
+                "samples": [994],
+                "median": 994
+              }
+            },
+            {
+              "journey": "review:original",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [18.640917000004265],
+                "median": 18.640917000004265
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [0],
+                "median": 0
+              },
+              "domNodes": {
+                "samples": [994],
+                "median": 994
+              }
+            },
+            {
+              "journey": "review:autosave",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [353.8075420000023],
+                "median": 353.8075420000023
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [5],
+                "median": 5
+              },
+              "domNodes": {
+                "samples": [994],
+                "median": 994
+              }
+            },
+            {
+              "journey": "review:filter",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [52.0010839999959],
+                "median": 52.0010839999959
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [211],
+                "median": 211
+              }
+            },
+            {
+              "journey": "review:next-page",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2358.350209000004],
+                "median": 2358.350209000004
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [8],
+                "median": 8
+              },
+              "domNodes": {
+                "samples": [929],
+                "median": 929
+              }
+            },
+            {
+              "journey": "account:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [147.79062500000146],
+                "median": 147.79062500000146
+              },
+              "resourceBytes": {
+                "samples": [521515],
+                "median": 521515
+              },
+              "transferredBytes": {
+                "samples": [545215],
+                "median": 545215
+              },
+              "resourceCount": {
+                "samples": [82],
+                "median": 82
+              },
+              "domNodes": {
+                "samples": [193],
+                "median": 193
+              }
+            },
+            {
+              "journey": "access:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [217.74570899999526],
+                "median": 217.74570899999526
+              },
+              "resourceBytes": {
+                "samples": [556363],
+                "median": 556363
+              },
+              "transferredBytes": {
+                "samples": [583663],
+                "median": 583663
+              },
+              "resourceCount": {
+                "samples": [97],
+                "median": 97
+              },
+              "domNodes": {
+                "samples": [250],
+                "median": 250
+              }
+            },
+            {
+              "journey": "upgrade:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2399.6348330000037],
+                "median": 2399.6348330000037
+              },
+              "resourceBytes": {
+                "samples": [539487],
+                "median": 539487
+              },
+              "transferredBytes": {
+                "samples": [563187],
+                "median": 563187
+              },
+              "resourceCount": {
+                "samples": [87],
+                "median": 87
+              },
+              "domNodes": {
+                "samples": [222],
+                "median": 222
+              }
+            },
+            {
+              "journey": "privacy:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [144.27249999999185],
+                "median": 144.27249999999185
+              },
+              "resourceBytes": {
+                "samples": [522376],
+                "median": 522376
+              },
+              "transferredBytes": {
+                "samples": [546376],
+                "median": 546376
+              },
+              "resourceCount": {
+                "samples": [82],
+                "median": 82
+              },
+              "domNodes": {
+                "samples": [241],
+                "median": 241
+              }
+            }
+          ]
+        },
+        {
+          "profile": "desktop",
+          "journeys": [
+            {
+              "journey": "transactions:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [950.653416000001],
+                "median": 950.653416000001
+              },
+              "nativeControlReadyMs": {
+                "samples": [855.1999999880791],
+                "median": 855.1999999880791
+              },
+              "resourceBytes": {
+                "samples": [623477],
+                "median": 623477
+              },
+              "transferredBytes": {
+                "samples": [652577],
+                "median": 652577
+              },
+              "resourceCount": {
+                "samples": [105],
+                "median": 105
+              },
+              "domNodes": {
+                "samples": [1204],
+                "median": 1204
+              }
+            },
+            {
+              "journey": "transactions:cold-open-capture",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [244.58229200000642],
+                "median": 244.58229200000642
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1212],
+                "median": 1212
+              }
+            },
+            {
+              "journey": "transactions:cold-open-calendar",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [147.52633299998706],
+                "median": 147.52633299998706
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [0],
+                "median": 0
+              },
+              "domNodes": {
+                "samples": [1321],
+                "median": 1321
+              }
+            },
+            {
+              "journey": "budgets:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1701.201749999993],
+                "median": 1701.201749999993
+              },
+              "nativeControlReadyMs": {
+                "samples": [1456.199999988079],
+                "median": 1456.199999988079
+              },
+              "resourceBytes": {
+                "samples": [567925],
+                "median": 567925
+              },
+              "transferredBytes": {
+                "samples": [596125],
+                "median": 596125
+              },
+              "resourceCount": {
+                "samples": [101],
+                "median": 101
+              },
+              "domNodes": {
+                "samples": [470],
+                "median": 470
+              }
+            },
+            {
+              "journey": "recurring:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1952.9004590000113],
+                "median": 1952.9004590000113
+              },
+              "nativeControlReadyMs": {
+                "samples": [1442.7000000476837],
+                "median": 1442.7000000476837
+              },
+              "resourceBytes": {
+                "samples": [599712],
+                "median": 599712
+              },
+              "transferredBytes": {
+                "samples": [629112],
+                "median": 629112
+              },
+              "resourceCount": {
+                "samples": [105],
+                "median": 105
+              },
+              "domNodes": {
+                "samples": [1935],
+                "median": 1935
+              }
+            },
+            {
+              "journey": "dashboard:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [460.29083299999184],
+                "median": 460.29083299999184
+              },
+              "nativeControlReadyMs": {
+                "samples": [418.80000001192093],
+                "median": 418.80000001192093
+              },
+              "resourceBytes": {
+                "samples": [671542],
+                "median": 671542
+              },
+              "transferredBytes": {
+                "samples": [697942],
+                "median": 697942
+              },
+              "resourceCount": {
+                "samples": [109],
+                "median": 109
+              },
+              "domNodes": {
+                "samples": [755],
+                "median": 755
+              }
+            },
+            {
+              "journey": "review:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [323.375875000027],
+                "median": 323.375875000027
+              },
+              "nativeControlReadyMs": {
+                "samples": [270.69999998807907],
+                "median": 270.69999998807907
+              },
+              "resourceBytes": {
+                "samples": [599006],
+                "median": 599006
+              },
+              "transferredBytes": {
+                "samples": [627506],
+                "median": 627506
+              },
+              "resourceCount": {
+                "samples": [105],
+                "median": 105
+              },
+              "domNodes": {
+                "samples": [994],
+                "median": 994
+              }
+            },
+            {
+              "journey": "account:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [187.64012500000536],
+                "median": 187.64012500000536
+              },
+              "nativeControlReadyMs": {
+                "samples": [152],
+                "median": 152
+              },
+              "resourceBytes": {
+                "samples": [521515],
+                "median": 521515
+              },
+              "transferredBytes": {
+                "samples": [545215],
+                "median": 545215
+              },
+              "resourceCount": {
+                "samples": [82],
+                "median": 82
+              },
+              "domNodes": {
+                "samples": [193],
+                "median": 193
+              }
+            },
+            {
+              "journey": "access:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [935.1487919999927],
+                "median": 935.1487919999927
+              },
+              "nativeControlReadyMs": {
+                "samples": [683.8000000119209],
+                "median": 683.8000000119209
+              },
+              "resourceBytes": {
+                "samples": [556363],
+                "median": 556363
+              },
+              "transferredBytes": {
+                "samples": [583663],
+                "median": 583663
+              },
+              "resourceCount": {
+                "samples": [97],
+                "median": 97
+              },
+              "domNodes": {
+                "samples": [251],
+                "median": 251
+              }
+            },
+            {
+              "journey": "upgrade:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [737.9475840000086],
+                "median": 737.9475840000086
+              },
+              "nativeControlReadyMs": {
+                "samples": [581.0999999642372],
+                "median": 581.0999999642372
+              },
+              "resourceBytes": {
+                "samples": [539487],
+                "median": 539487
+              },
+              "transferredBytes": {
+                "samples": [563187],
+                "median": 563187
+              },
+              "resourceCount": {
+                "samples": [84],
+                "median": 84
+              },
+              "domNodes": {
+                "samples": [222],
+                "median": 222
+              }
+            },
+            {
+              "journey": "privacy:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [267.5240000000049],
+                "median": 267.5240000000049
+              },
+              "nativeControlReadyMs": {
+                "samples": [211.19999998807907],
+                "median": 211.19999998807907
+              },
+              "resourceBytes": {
+                "samples": [522376],
+                "median": 522376
+              },
+              "transferredBytes": {
+                "samples": [546376],
+                "median": 546376
+              },
+              "resourceCount": {
+                "samples": [82],
+                "median": 82
+              },
+              "domNodes": {
+                "samples": [241],
+                "median": 241
+              }
+            }
+          ]
+        }
+      ],
+      "payload": [
+        {
+          "dataset": "extreme",
+          "measurements": [
+            {
+              "limit": 50,
+              "bytes": 11910,
+              "pendingCount": 5000,
+              "items": 50
+            },
+            {
+              "limit": 0,
+              "bytes": 64,
+              "pendingCount": 5000,
+              "items": 0
+            }
+          ]
+        }
+      ]
+    },
+    "rawArtifact": "reports/performance/startup-2026-10-29/gzip-desktop-refreshed-extreme.json",
+    "limit": "One observation per journey; no matched baseline or speedup claim. Unrelated git/system CPU activity was observed."
+  },
+  "recurringConversionRegression": {
+    "command": "bun --cwd apps/server --bun vitest run --config cloudflare/vitest.config.ts cloudflare/recurring-plans/internal/query-cost.test.ts cloudflare/recurring-plans/recurring-plans.test.ts",
+    "before": {
+      "transactionDateConversions": 100,
+      "plans": 100,
+      "timeZones": 2
+    },
+    "after": {
+      "maximumTransactionDateConversions": 2,
+      "matchesAndAllocationOrder": "unchanged"
+    },
+    "nativeTests": {
+      "passed": 22,
+      "skipped": 1
+    },
+    "focusedBefore": {
+      "driverMedianMs": 561,
+      "nativeMedianMs": 512
+    },
+    "focusedAfterInitial": {
+      "driverMedianMs": 486,
+      "nativeMedianMs": 440,
+      "limitation": "One sample overlapped an already-running workflow; retained without excluding its result."
+    }
+  },
+  "postRecurringHeavyDesktop": {
+    "raw": "reports/performance/startup-2026-10-29/gzip-desktop-recurring-fixed-heavy.json",
+    "sourceManifest": "reports/performance/startup-2026-10-29/desktop-recurring-fixed-source-manifest.json",
+    "testsPassed": 5,
+    "readinessCompleted": 65,
+    "summary": {
+      "stats": {
+        "startTime": "2026-10-29T23:18:23.359Z",
+        "duration": 444257.356,
+        "expected": 5,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "profiles": [
+        {
+          "profile": "desktop",
+          "journeys": [
+            {
+              "journey": "transactions:first-date-picker",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [102.93825000000106],
+                "median": 102.93825000000106
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1334],
+                "median": 1334
+              }
+            }
+          ]
+        },
+        {
+          "profile": "desktop",
+          "journeys": [
+            {
+              "journey": "transactions:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [254.6982919999973],
+                "median": 254.6982919999973
+              },
+              "resourceBytes": {
+                "samples": [623477],
+                "median": 623477
+              },
+              "transferredBytes": {
+                "samples": [652577],
+                "median": 652577
+              },
+              "resourceCount": {
+                "samples": [105],
+                "median": 105
+              },
+              "domNodes": {
+                "samples": [1224],
+                "median": 1224
+              }
+            },
+            {
+              "journey": "transactions:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2353.651917000003],
+                "median": 2353.651917000003
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [6],
+                "median": 6
+              },
+              "domNodes": {
+                "samples": [1244],
+                "median": 1244
+              }
+            },
+            {
+              "journey": "transactions:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2366.8803750000006],
+                "median": 2366.8803750000006
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [12],
+                "median": 12
+              },
+              "domNodes": {
+                "samples": [2057],
+                "median": 2057
+              }
+            },
+            {
+              "journey": "transactions:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [6423.541417],
+                "median": 6423.541417
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [24],
+                "median": 24
+              },
+              "domNodes": {
+                "samples": [2058],
+                "median": 2058
+              }
+            },
+            {
+              "journey": "transactions:filter",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [73.41066599999613],
+                "median": 73.41066599999613
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1077],
+                "median": 1077
+              }
+            },
+            {
+              "journey": "transactions:scroll-next-page",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [937.0611669999998],
+                "median": 937.0611669999998
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [5866],
+                "median": 5866
+              }
+            },
+            {
+              "journey": "transactions:open-editor",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [126.38583300000028],
+                "median": 126.38583300000028
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [0],
+                "median": 0
+              },
+              "domNodes": {
+                "samples": [5890],
+                "median": 5890
+              }
+            },
+            {
+              "journey": "transactions:save",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1103.5259159999987],
+                "median": 1103.5259159999987
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [2065],
+                "median": 2065
+              }
+            },
+            {
+              "journey": "budgets:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2480.0117089999985],
+                "median": 2480.0117089999985
+              },
+              "resourceBytes": {
+                "samples": [567925],
+                "median": 567925
+              },
+              "transferredBytes": {
+                "samples": [596125],
+                "median": 596125
+              },
+              "resourceCount": {
+                "samples": [107],
+                "median": 107
+              },
+              "domNodes": {
+                "samples": [353],
+                "median": 353
+              }
+            },
+            {
+              "journey": "budgets:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [109.27729100000579],
+                "median": 109.27729100000579
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [4],
+                "median": 4
+              },
+              "domNodes": {
+                "samples": [1120],
+                "median": 1120
+              }
+            },
+            {
+              "journey": "budgets:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [60.460125000005064],
+                "median": 60.460125000005064
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [4],
+                "median": 4
+              },
+              "domNodes": {
+                "samples": [1120],
+                "median": 1120
+              }
+            },
+            {
+              "journey": "budgets:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [73.39491599999747],
+                "median": 73.39491599999747
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [4],
+                "median": 4
+              },
+              "domNodes": {
+                "samples": [1121],
+                "median": 1121
+              }
+            },
+            {
+              "journey": "budgets:previous-month",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [149.46262500000012],
+                "median": 149.46262500000012
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [4],
+                "median": 4
+              },
+              "domNodes": {
+                "samples": [1121],
+                "median": 1121
+              }
+            },
+            {
+              "journey": "recurring:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3459.124499999998],
+                "median": 3459.124499999998
+              },
+              "resourceBytes": {
+                "samples": [599712],
+                "median": 599712
+              },
+              "transferredBytes": {
+                "samples": [629112],
+                "median": 629112
+              },
+              "resourceCount": {
+                "samples": [110],
+                "median": 110
+              },
+              "domNodes": {
+                "samples": [1927],
+                "median": 1927
+              }
+            },
+            {
+              "journey": "recurring:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [93.81208300000435],
+                "median": 93.81208300000435
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [4],
+                "median": 4
+              },
+              "domNodes": {
+                "samples": [2701],
+                "median": 2701
+              }
+            },
+            {
+              "journey": "recurring:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [57.040500000002794],
+                "median": 57.040500000002794
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [4],
+                "median": 4
+              },
+              "domNodes": {
+                "samples": [2701],
+                "median": 2701
+              }
+            },
+            {
+              "journey": "recurring:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [5469.969375000001],
+                "median": 5469.969375000001
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [22],
+                "median": 22
+              },
+              "domNodes": {
+                "samples": [2766],
+                "median": 2766
+              }
+            },
+            {
+              "journey": "recurring:previous-month",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [261.4307920000065],
+                "median": 261.4307920000065
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [2757],
+                "median": 2757
+              }
+            },
+            {
+              "journey": "dashboard:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [4486.9105409999975],
+                "median": 4486.9105409999975
+              },
+              "resourceBytes": {
+                "samples": [671542],
+                "median": 671542
+              },
+              "transferredBytes": {
+                "samples": [697942],
+                "median": 697942
+              },
+              "resourceCount": {
+                "samples": [102],
+                "median": 102
+              },
+              "domNodes": {
+                "samples": [767],
+                "median": 767
+              }
+            },
+            {
+              "journey": "dashboard:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [74.96695799999725],
+                "median": 74.96695799999725
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [824],
+                "median": 824
+              }
+            },
+            {
+              "journey": "dashboard:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [79.94350000000122],
+                "median": 79.94350000000122
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [824],
+                "median": 824
+              }
+            },
+            {
+              "journey": "dashboard:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [83.35325000000012],
+                "median": 83.35325000000012
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [824],
+                "median": 824
+              }
+            },
+            {
+              "journey": "review:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [4469.6966669999965],
+                "median": 4469.6966669999965
+              },
+              "resourceBytes": {
+                "samples": [599006],
+                "median": 599006
+              },
+              "transferredBytes": {
+                "samples": [627506],
+                "median": 627506
+              },
+              "resourceCount": {
+                "samples": [109],
+                "median": 109
+              },
+              "domNodes": {
+                "samples": [994],
+                "median": 994
+              }
+            },
+            {
+              "journey": "review:original",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [858.924457999994],
+                "median": 858.924457999994
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [994],
+                "median": 994
+              }
+            },
+            {
+              "journey": "review:autosave",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [355.58641600000556],
+                "median": 355.58641600000556
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [5],
+                "median": 5
+              },
+              "domNodes": {
+                "samples": [994],
+                "median": 994
+              }
+            },
+            {
+              "journey": "review:filter",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [56.281749999994645],
+                "median": 56.281749999994645
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [211],
+                "median": 211
+              }
+            },
+            {
+              "journey": "review:next-page",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1348.2242090000072],
+                "median": 1348.2242090000072
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [6],
+                "median": 6
+              },
+              "domNodes": {
+                "samples": [929],
+                "median": 929
+              }
+            },
+            {
+              "journey": "account:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [125.90437499999825],
+                "median": 125.90437499999825
+              },
+              "resourceBytes": {
+                "samples": [521515],
+                "median": 521515
+              },
+              "transferredBytes": {
+                "samples": [545215],
+                "median": 545215
+              },
+              "resourceCount": {
+                "samples": [82],
+                "median": 82
+              },
+              "domNodes": {
+                "samples": [193],
+                "median": 193
+              }
+            },
+            {
+              "journey": "access:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [236.09399999999732],
+                "median": 236.09399999999732
+              },
+              "resourceBytes": {
+                "samples": [556363],
+                "median": 556363
+              },
+              "transferredBytes": {
+                "samples": [583663],
+                "median": 583663
+              },
+              "resourceCount": {
+                "samples": [97],
+                "median": 97
+              },
+              "domNodes": {
+                "samples": [250],
+                "median": 250
+              }
+            },
+            {
+              "journey": "upgrade:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3375.6362079999963],
+                "median": 3375.6362079999963
+              },
+              "resourceBytes": {
+                "samples": [539487],
+                "median": 539487
+              },
+              "transferredBytes": {
+                "samples": [563187],
+                "median": 563187
+              },
+              "resourceCount": {
+                "samples": [88],
+                "median": 88
+              },
+              "domNodes": {
+                "samples": [222],
+                "median": 222
+              }
+            },
+            {
+              "journey": "privacy:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [206.38237500000105],
+                "median": 206.38237500000105
+              },
+              "resourceBytes": {
+                "samples": [522376],
+                "median": 522376
+              },
+              "transferredBytes": {
+                "samples": [546376],
+                "median": 546376
+              },
+              "resourceCount": {
+                "samples": [82],
+                "median": 82
+              },
+              "domNodes": {
+                "samples": [241],
+                "median": 241
+              }
+            }
+          ]
+        },
+        {
+          "profile": "desktop",
+          "journeys": [
+            {
+              "journey": "transactions:isolated-cold-document",
+              "attempts": 3,
+              "ready": 3,
+              "outcomes": ["ready", "ready", "ready"],
+              "elapsedMs": {
+                "samples": [363.252250000005, 856.6582920000073, 365.99633400002494],
+                "median": 365.99633400002494
+              },
+              "nativeControlReadyMs": {
+                "samples": [321.30000001192093, 757.1999999880791, 323],
+                "median": 323
+              },
+              "resourceBytes": {
+                "samples": [623477, 623477, 623477],
+                "median": 623477
+              },
+              "transferredBytes": {
+                "samples": [652577, 652577, 652577],
+                "median": 652577
+              },
+              "resourceCount": {
+                "samples": [105, 105, 105],
+                "median": 105
+              },
+              "domNodes": {
+                "samples": [1224, 1224, 1224],
+                "median": 1224
+              }
+            },
+            {
+              "journey": "transactions:cold-open-capture",
+              "attempts": 3,
+              "ready": 3,
+              "outcomes": ["ready", "ready", "ready"],
+              "elapsedMs": {
+                "samples": [111.45091700000921, 125.3304159999825, 127.67054200003622],
+                "median": 125.3304159999825
+              },
+              "resourceBytes": {
+                "samples": [0, 0, 0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0, 0, 0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1, 1, 1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1230, 1231, 1230],
+                "median": 1230
+              }
+            },
+            {
+              "journey": "transactions:cold-open-calendar",
+              "attempts": 3,
+              "ready": 3,
+              "outcomes": ["ready", "ready", "ready"],
+              "elapsedMs": {
+                "samples": [116.07758300000569, 129.883582999988, 115.8377089999849],
+                "median": 116.07758300000569
+              },
+              "resourceBytes": {
+                "samples": [0, 0, 0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0, 0, 0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1, 1, 1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1341, 1341, 1341],
+                "median": 1341
+              }
+            },
+            {
+              "journey": "budgets:isolated-cold-document",
+              "attempts": 3,
+              "ready": 3,
+              "outcomes": ["ready", "ready", "ready"],
+              "elapsedMs": {
+                "samples": [357.078582999995, 512.5196659999783, 1045.5097500000265],
+                "median": 512.5196659999783
+              },
+              "nativeControlReadyMs": {
+                "samples": [286.80000001192093, 407.19999998807907, 545.2000000476837],
+                "median": 407.19999998807907
+              },
+              "resourceBytes": {
+                "samples": [567925, 567925, 567925],
+                "median": 567925
+              },
+              "transferredBytes": {
+                "samples": [596125, 596125, 596125],
+                "median": 596125
+              },
+              "resourceCount": {
+                "samples": [102, 103, 103],
+                "median": 103
+              },
+              "domNodes": {
+                "samples": [352, 352, 354],
+                "median": 352
+              }
+            },
+            {
+              "journey": "recurring:isolated-cold-document",
+              "attempts": 3,
+              "ready": 3,
+              "outcomes": ["ready", "ready", "ready"],
+              "elapsedMs": {
+                "samples": [355.55679100001, 513.5713329999999, 688.1609170000302],
+                "median": 513.5713329999999
+              },
+              "nativeControlReadyMs": {
+                "samples": [310.80000001192093, 426.5, 588.1000000238419],
+                "median": 426.5
+              },
+              "resourceBytes": {
+                "samples": [599712, 599712, 599712],
+                "median": 599712
+              },
+              "transferredBytes": {
+                "samples": [629112, 629112, 629112],
+                "median": 629112
+              },
+              "resourceCount": {
+                "samples": [106, 106, 106],
+                "median": 106
+              },
+              "domNodes": {
+                "samples": [1933, 1933, 1933],
+                "median": 1933
+              }
+            },
+            {
+              "journey": "dashboard:isolated-cold-document",
+              "attempts": 3,
+              "ready": 3,
+              "outcomes": ["ready", "ready", "ready"],
+              "elapsedMs": {
+                "samples": [307.7634590000089, 349.5914579999808, 414.1757499999949],
+                "median": 349.5914579999808
+              },
+              "nativeControlReadyMs": {
+                "samples": [271.89999997615814, 295.0999999642372, 366.5999999642372],
+                "median": 295.0999999642372
+              },
+              "resourceBytes": {
+                "samples": [659154, 659154, 659154],
+                "median": 659154
+              },
+              "transferredBytes": {
+                "samples": [685254, 685254, 685254],
+                "median": 685254
+              },
+              "resourceCount": {
+                "samples": [94, 94, 94],
+                "median": 94
+              },
+              "domNodes": {
+                "samples": [749, 765, 749],
+                "median": 749
+              }
+            },
+            {
+              "journey": "review:isolated-cold-document",
+              "attempts": 3,
+              "ready": 3,
+              "outcomes": ["ready", "ready", "ready"],
+              "elapsedMs": {
+                "samples": [329.46945799997775, 434.1282910000009, 329.365541999985],
+                "median": 329.46945799997775
+              },
+              "nativeControlReadyMs": {
+                "samples": [236.79999995231628, 352.10000002384186, 264.80000001192093],
+                "median": 264.80000001192093
+              },
+              "resourceBytes": {
+                "samples": [599006, 599006, 599006],
+                "median": 599006
+              },
+              "transferredBytes": {
+                "samples": [627506, 627506, 627506],
+                "median": 627506
+              },
+              "resourceCount": {
+                "samples": [104, 104, 104],
+                "median": 104
+              },
+              "domNodes": {
+                "samples": [992, 992, 992],
+                "median": 992
+              }
+            },
+            {
+              "journey": "account:isolated-cold-document",
+              "attempts": 3,
+              "ready": 3,
+              "outcomes": ["ready", "ready", "ready"],
+              "elapsedMs": {
+                "samples": [184.9393750000163, 250.6911250000121, 264.1388329999754],
+                "median": 250.6911250000121
+              },
+              "nativeControlReadyMs": {
+                "samples": [159.80000001192093, 209.69999998807907, 218.69999998807907],
+                "median": 209.69999998807907
+              },
+              "resourceBytes": {
+                "samples": [509127, 509127, 509127],
+                "median": 509127
+              },
+              "transferredBytes": {
+                "samples": [532527, 532527, 532527],
+                "median": 532527
+              },
+              "resourceCount": {
+                "samples": [80, 80, 80],
+                "median": 80
+              },
+              "domNodes": {
+                "samples": [191, 191, 191],
+                "median": 191
+              }
+            },
+            {
+              "journey": "access:isolated-cold-document",
+              "attempts": 3,
+              "ready": 3,
+              "outcomes": ["ready", "ready", "ready"],
+              "elapsedMs": {
+                "samples": [350.28316700001596, 852.2816250000033, 559.3820000000414],
+                "median": 559.3820000000414
+              },
+              "nativeControlReadyMs": {
+                "samples": [243.20000004768372, 650.2000000476837, 366.5],
+                "median": 366.5
+              },
+              "resourceBytes": {
+                "samples": [556363, 556363, 556363],
+                "median": 556363
+              },
+              "transferredBytes": {
+                "samples": [583663, 583663, 583663],
+                "median": 583663
+              },
+              "resourceCount": {
+                "samples": [96, 96, 96],
+                "median": 96
+              },
+              "domNodes": {
+                "samples": [249, 249, 249],
+                "median": 249
+              }
+            },
+            {
+              "journey": "upgrade:isolated-cold-document",
+              "attempts": 3,
+              "ready": 3,
+              "outcomes": ["ready", "ready", "ready"],
+              "elapsedMs": {
+                "samples": [240.2121669999906, 373.55395800003316, 319.32004199997755],
+                "median": 319.32004199997755
+              },
+              "nativeControlReadyMs": {
+                "samples": [206.60000002384186, 307.0999999642372, 247.39999997615814],
+                "median": 247.39999997615814
+              },
+              "resourceBytes": {
+                "samples": [539487, 539487, 539487],
+                "median": 539487
+              },
+              "transferredBytes": {
+                "samples": [563187, 563187, 563187],
+                "median": 563187
+              },
+              "resourceCount": {
+                "samples": [84, 84, 84],
+                "median": 84
+              },
+              "domNodes": {
+                "samples": [222, 222, 222],
+                "median": 222
+              }
+            },
+            {
+              "journey": "privacy:isolated-cold-document",
+              "attempts": 3,
+              "ready": 3,
+              "outcomes": ["ready", "ready", "ready"],
+              "elapsedMs": {
+                "samples": [234.295208000025, 322.70054199994775, 223.13704200001666],
+                "median": 234.295208000025
+              },
+              "nativeControlReadyMs": {
+                "samples": [161.89999997615814, 214.19999998807907, 183.5999999642372],
+                "median": 183.5999999642372
+              },
+              "resourceBytes": {
+                "samples": [522376, 522376, 522376],
+                "median": 522376
+              },
+              "transferredBytes": {
+                "samples": [546376, 546376, 546376],
+                "median": 546376
+              },
+              "resourceCount": {
+                "samples": [82, 82, 82],
+                "median": 82
+              },
+              "domNodes": {
+                "samples": [241, 241, 241],
+                "median": 241
+              }
+            }
+          ]
+        }
+      ],
+      "payload": [
+        {
+          "dataset": "heavy",
+          "measurements": [
+            {
+              "limit": 50,
+              "bytes": 11910,
+              "pendingCount": 1000,
+              "items": 50
+            },
+            {
+              "limit": 0,
+              "bytes": 64,
+              "pendingCount": 1000,
+              "items": 0
+            }
+          ]
+        }
+      ]
+    },
+    "limitation": "Peer held new heavy checks. Ordinary desktop/browser work continued; no claim of complete host isolation. Native readiness and driver timing remain distinct. Several routes still exceed baseline."
+  },
+  "millionRecordPreparation": {
+    "applicationSamples": 0,
+    "outcome": "unmeasured",
+    "attempts": [
+      {
+        "stage": "server startup",
+        "outcome": "Native D1 transport/socket failure"
+      },
+      {
+        "stage": "standalone native seed",
+        "batchSize": 1000,
+        "budgetSeconds": 120,
+        "outcome": "timeout; progress observed through 200000 inserts"
+      },
+      {
+        "stage": "standalone native seed",
+        "batchSize": 10000,
+        "budgetSeconds": 120,
+        "outcome": "timeout; progress observed through 250000 inserts"
+      },
+      {
+        "stage": "assessment beforeAll preparation",
+        "budgetSeconds": 600,
+        "outcome": "timeout before page measurements"
+      }
+    ],
+    "raw": "reports/performance/startup-2026-10-29/gzip-desktop-breaking-preparation-timeout.json",
+    "invariants": "Same native schema and triggers; no page-readiness threshold or existing test deadline increased."
+  },
+  "productionAvailability": {
+    "observedAtUtc": "2026-10-29T23:23:35Z",
+    "gitRevision": "90bdfb2aae31a4ca952ca021103a8fbfbb8fb6fc",
+    "healthStatus": "available",
+    "signInPairingStatus": 503,
+    "signInPairingBody": {
+      "status": "unavailable"
+    },
+    "productionMatrix": "blocked by inability to reach usable signed-in controls",
+    "quotaHypothesis": "User suggested exhausted D1 daily quota. Free-tier reset at 00:00 UTC / 19:00 America/Bogota verified against Cloudflare documentation; account usage not verified.",
+    "source": "https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/",
+    "readOnlyTrafficInspection": {
+      "run": "https://github.com/B4rz99/fidy-ai/actions/runs/40974767949",
+      "conclusion": "success; no Production topology drift reported",
+      "databaseProofRequested": false,
+      "sandboxProviderProofRequested": false,
+      "scope": "Inspected existing traffic without changing it; does not establish database availability or quota usage."
+    }
+  },
+  "requiredLintPatch": {
+    "package": "oxlint-tsgolint",
+    "before": "7.0.2004",
+    "after": "7.0.2005",
+    "reason": "Existing seven-day dependency admission gate required the patch during final verification.",
+    "registryIntegritiesVerified": 7,
+    "runtimeImpact": "Development lint tooling only; application dependency versions unchanged."
+  },
+  "committedHeadExtremeDesktop": {
+    "revision": "d159e87324d64963f24261f92f1e0447cbea7159",
+    "testsPassed": 5,
+    "readinessCompleted": 43,
+    "coldRepeats": 1,
+    "summary": {
+      "stats": {
+        "startTime": "2026-10-29T23:40:06.940Z",
+        "duration": 230425.272,
+        "expected": 5,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "profiles": [
+        {
+          "profile": "desktop",
+          "journeys": [
+            {
+              "journey": "transactions:first-date-picker",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [99.61779100000058],
+                "median": 99.61779100000058
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1314],
+                "median": 1314
+              }
+            }
+          ]
+        },
+        {
+          "profile": "desktop",
+          "journeys": [
+            {
+              "journey": "transactions:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [193.88983400000143],
+                "median": 193.88983400000143
+              },
+              "resourceBytes": {
+                "samples": [623477],
+                "median": 623477
+              },
+              "transferredBytes": {
+                "samples": [652577],
+                "median": 652577
+              },
+              "resourceCount": {
+                "samples": [105],
+                "median": 105
+              },
+              "domNodes": {
+                "samples": [1204],
+                "median": 1204
+              }
+            },
+            {
+              "journey": "transactions:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2362.230791000002],
+                "median": 2362.230791000002
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [5],
+                "median": 5
+              },
+              "domNodes": {
+                "samples": [1224],
+                "median": 1224
+              }
+            },
+            {
+              "journey": "transactions:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [6455.160875000001],
+                "median": 6455.160875000001
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [24],
+                "median": 24
+              },
+              "domNodes": {
+                "samples": [2038],
+                "median": 2038
+              }
+            },
+            {
+              "journey": "transactions:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3376.695749999999],
+                "median": 3376.695749999999
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [16],
+                "median": 16
+              },
+              "domNodes": {
+                "samples": [2037],
+                "median": 2037
+              }
+            },
+            {
+              "journey": "transactions:filter",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [59.2486659999995],
+                "median": 59.2486659999995
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1076],
+                "median": 1076
+              }
+            },
+            {
+              "journey": "transactions:scroll-next-page",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3960.589292000004],
+                "median": 3960.589292000004
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [6],
+                "median": 6
+              },
+              "domNodes": {
+                "samples": [5844],
+                "median": 5844
+              }
+            },
+            {
+              "journey": "transactions:open-editor",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [115.37183399999776],
+                "median": 115.37183399999776
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [0],
+                "median": 0
+              },
+              "domNodes": {
+                "samples": [5871],
+                "median": 5871
+              }
+            },
+            {
+              "journey": "transactions:save",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1736.4107089999961],
+                "median": 1736.4107089999961
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [2045],
+                "median": 2045
+              }
+            },
+            {
+              "journey": "budgets:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [4445.6524590000045],
+                "median": 4445.6524590000045
+              },
+              "resourceBytes": {
+                "samples": [567925],
+                "median": 567925
+              },
+              "transferredBytes": {
+                "samples": [596125],
+                "median": 596125
+              },
+              "resourceCount": {
+                "samples": [110],
+                "median": 110
+              },
+              "domNodes": {
+                "samples": [470],
+                "median": 470
+              }
+            },
+            {
+              "journey": "budgets:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [80.54241599999659],
+                "median": 80.54241599999659
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [1237],
+                "median": 1237
+              }
+            },
+            {
+              "journey": "budgets:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [72.35841600000276],
+                "median": 72.35841600000276
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [4],
+                "median": 4
+              },
+              "domNodes": {
+                "samples": [1237],
+                "median": 1237
+              }
+            },
+            {
+              "journey": "budgets:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [83.75825000000623],
+                "median": 83.75825000000623
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [4],
+                "median": 4
+              },
+              "domNodes": {
+                "samples": [1237],
+                "median": 1237
+              }
+            },
+            {
+              "journey": "budgets:previous-month",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [5395.058250000002],
+                "median": 5395.058250000002
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [16],
+                "median": 16
+              },
+              "domNodes": {
+                "samples": [1302],
+                "median": 1302
+              }
+            },
+            {
+              "journey": "recurring:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1413.6780829999916],
+                "median": 1413.6780829999916
+              },
+              "resourceBytes": {
+                "samples": [599712],
+                "median": 599712
+              },
+              "transferredBytes": {
+                "samples": [629112],
+                "median": 629112
+              },
+              "resourceCount": {
+                "samples": [106],
+                "median": 106
+              },
+              "domNodes": {
+                "samples": [1926],
+                "median": 1926
+              }
+            },
+            {
+              "journey": "recurring:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [75.86312500000349],
+                "median": 75.86312500000349
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [0],
+                "median": 0
+              },
+              "domNodes": {
+                "samples": [1975],
+                "median": 1975
+              }
+            },
+            {
+              "journey": "recurring:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [54.87445899999875],
+                "median": 54.87445899999875
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [1975],
+                "median": 1975
+              }
+            },
+            {
+              "journey": "recurring:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [56.30329100000381],
+                "median": 56.30329100000381
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [1975],
+                "median": 1975
+              }
+            },
+            {
+              "journey": "recurring:previous-month",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3376.3679580000025],
+                "median": 3376.3679580000025
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [8],
+                "median": 8
+              },
+              "domNodes": {
+                "samples": [1953],
+                "median": 1953
+              }
+            },
+            {
+              "journey": "dashboard:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [3445.9474999999948],
+                "median": 3445.9474999999948
+              },
+              "resourceBytes": {
+                "samples": [659154],
+                "median": 659154
+              },
+              "transferredBytes": {
+                "samples": [685254],
+                "median": 685254
+              },
+              "resourceCount": {
+                "samples": [102],
+                "median": 102
+              },
+              "domNodes": {
+                "samples": [755],
+                "median": 755
+              }
+            },
+            {
+              "journey": "dashboard:warm-1",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [83.88783300000068],
+                "median": 83.88783300000068
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [811],
+                "median": 811
+              }
+            },
+            {
+              "journey": "dashboard:warm-2",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [72.09054199999082],
+                "median": 72.09054199999082
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [811],
+                "median": 811
+              }
+            },
+            {
+              "journey": "dashboard:warm-3",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [73.75733300000138],
+                "median": 73.75733300000138
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [3],
+                "median": 3
+              },
+              "domNodes": {
+                "samples": [811],
+                "median": 811
+              }
+            },
+            {
+              "journey": "review:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2431.1131659999955],
+                "median": 2431.1131659999955
+              },
+              "resourceBytes": {
+                "samples": [599006],
+                "median": 599006
+              },
+              "transferredBytes": {
+                "samples": [627506],
+                "median": 627506
+              },
+              "resourceCount": {
+                "samples": [108],
+                "median": 108
+              },
+              "domNodes": {
+                "samples": [993],
+                "median": 993
+              }
+            },
+            {
+              "journey": "review:original",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1355.129083000007],
+                "median": 1355.129083000007
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [2],
+                "median": 2
+              },
+              "domNodes": {
+                "samples": [993],
+                "median": 993
+              }
+            },
+            {
+              "journey": "review:autosave",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1360.551833000005],
+                "median": 1360.551833000005
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [7],
+                "median": 7
+              },
+              "domNodes": {
+                "samples": [994],
+                "median": 994
+              }
+            },
+            {
+              "journey": "review:filter",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [29.701916999998502],
+                "median": 29.701916999998502
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [0],
+                "median": 0
+              },
+              "domNodes": {
+                "samples": [211],
+                "median": 211
+              }
+            },
+            {
+              "journey": "review:next-page",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2361.7095409999893],
+                "median": 2361.7095409999893
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [9],
+                "median": 9
+              },
+              "domNodes": {
+                "samples": [929],
+                "median": 929
+              }
+            },
+            {
+              "journey": "account:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [113.2555410000059],
+                "median": 113.2555410000059
+              },
+              "resourceBytes": {
+                "samples": [509127],
+                "median": 509127
+              },
+              "transferredBytes": {
+                "samples": [532527],
+                "median": 532527
+              },
+              "resourceCount": {
+                "samples": [80],
+                "median": 80
+              },
+              "domNodes": {
+                "samples": [191],
+                "median": 191
+              }
+            },
+            {
+              "journey": "access:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2430.1475840000057],
+                "median": 2430.1475840000057
+              },
+              "resourceBytes": {
+                "samples": [556363],
+                "median": 556363
+              },
+              "transferredBytes": {
+                "samples": [583663],
+                "median": 583663
+              },
+              "resourceCount": {
+                "samples": [98],
+                "median": 98
+              },
+              "domNodes": {
+                "samples": [251],
+                "median": 251
+              }
+            },
+            {
+              "journey": "upgrade:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [2402.841791999992],
+                "median": 2402.841791999992
+              },
+              "resourceBytes": {
+                "samples": [539487],
+                "median": 539487
+              },
+              "transferredBytes": {
+                "samples": [563187],
+                "median": 563187
+              },
+              "resourceCount": {
+                "samples": [87],
+                "median": 87
+              },
+              "domNodes": {
+                "samples": [222],
+                "median": 222
+              }
+            },
+            {
+              "journey": "privacy:cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [1391.9416250000068],
+                "median": 1391.9416250000068
+              },
+              "resourceBytes": {
+                "samples": [522376],
+                "median": 522376
+              },
+              "transferredBytes": {
+                "samples": [546376],
+                "median": 546376
+              },
+              "resourceCount": {
+                "samples": [83],
+                "median": 83
+              },
+              "domNodes": {
+                "samples": [241],
+                "median": 241
+              }
+            }
+          ]
+        },
+        {
+          "profile": "desktop",
+          "journeys": [
+            {
+              "journey": "transactions:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [331.67645800000173],
+                "median": 331.67645800000173
+              },
+              "nativeControlReadyMs": {
+                "samples": [242.80000001192093],
+                "median": 242.80000001192093
+              },
+              "resourceBytes": {
+                "samples": [623477],
+                "median": 623477
+              },
+              "transferredBytes": {
+                "samples": [652577],
+                "median": 652577
+              },
+              "resourceCount": {
+                "samples": [105],
+                "median": 105
+              },
+              "domNodes": {
+                "samples": [1204],
+                "median": 1204
+              }
+            },
+            {
+              "journey": "transactions:cold-open-capture",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [94.50787499999569],
+                "median": 94.50787499999569
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1210],
+                "median": 1210
+              }
+            },
+            {
+              "journey": "transactions:cold-open-calendar",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [116.41645800000697],
+                "median": 116.41645800000697
+              },
+              "resourceBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "transferredBytes": {
+                "samples": [0],
+                "median": 0
+              },
+              "resourceCount": {
+                "samples": [1],
+                "median": 1
+              },
+              "domNodes": {
+                "samples": [1321],
+                "median": 1321
+              }
+            },
+            {
+              "journey": "budgets:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [339.8365829999966],
+                "median": 339.8365829999966
+              },
+              "nativeControlReadyMs": {
+                "samples": [284.0999999642372],
+                "median": 284.0999999642372
+              },
+              "resourceBytes": {
+                "samples": [567925],
+                "median": 567925
+              },
+              "transferredBytes": {
+                "samples": [596125],
+                "median": 596125
+              },
+              "resourceCount": {
+                "samples": [102],
+                "median": 102
+              },
+              "domNodes": {
+                "samples": [468],
+                "median": 468
+              }
+            },
+            {
+              "journey": "recurring:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [437.34775000001537],
+                "median": 437.34775000001537
+              },
+              "nativeControlReadyMs": {
+                "samples": [368.19999998807907],
+                "median": 368.19999998807907
+              },
+              "resourceBytes": {
+                "samples": [599712],
+                "median": 599712
+              },
+              "transferredBytes": {
+                "samples": [629112],
+                "median": 629112
+              },
+              "resourceCount": {
+                "samples": [106],
+                "median": 106
+              },
+              "domNodes": {
+                "samples": [1933],
+                "median": 1933
+              }
+            },
+            {
+              "journey": "dashboard:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [354.3872080000001],
+                "median": 354.3872080000001
+              },
+              "nativeControlReadyMs": {
+                "samples": [264],
+                "median": 264
+              },
+              "resourceBytes": {
+                "samples": [659154],
+                "median": 659154
+              },
+              "transferredBytes": {
+                "samples": [685254],
+                "median": 685254
+              },
+              "resourceCount": {
+                "samples": [96],
+                "median": 96
+              },
+              "domNodes": {
+                "samples": [753],
+                "median": 753
+              }
+            },
+            {
+              "journey": "review:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [355.15154099999927],
+                "median": 355.15154099999927
+              },
+              "nativeControlReadyMs": {
+                "samples": [302.2999999523163],
+                "median": 302.2999999523163
+              },
+              "resourceBytes": {
+                "samples": [599006],
+                "median": 599006
+              },
+              "transferredBytes": {
+                "samples": [627506],
+                "median": 627506
+              },
+              "resourceCount": {
+                "samples": [104],
+                "median": 104
+              },
+              "domNodes": {
+                "samples": [992],
+                "median": 992
+              }
+            },
+            {
+              "journey": "account:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [171.27324999999837],
+                "median": 171.27324999999837
+              },
+              "nativeControlReadyMs": {
+                "samples": [141.69999998807907],
+                "median": 141.69999998807907
+              },
+              "resourceBytes": {
+                "samples": [509127],
+                "median": 509127
+              },
+              "transferredBytes": {
+                "samples": [532527],
+                "median": 532527
+              },
+              "resourceCount": {
+                "samples": [80],
+                "median": 80
+              },
+              "domNodes": {
+                "samples": [191],
+                "median": 191
+              }
+            },
+            {
+              "journey": "access:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [240.70374999998603],
+                "median": 240.70374999998603
+              },
+              "nativeControlReadyMs": {
+                "samples": [203.5],
+                "median": 203.5
+              },
+              "resourceBytes": {
+                "samples": [556363],
+                "median": 556363
+              },
+              "transferredBytes": {
+                "samples": [583663],
+                "median": 583663
+              },
+              "resourceCount": {
+                "samples": [96],
+                "median": 96
+              },
+              "domNodes": {
+                "samples": [249],
+                "median": 249
+              }
+            },
+            {
+              "journey": "upgrade:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [195.0450000000128],
+                "median": 195.0450000000128
+              },
+              "nativeControlReadyMs": {
+                "samples": [176.0999999642372],
+                "median": 176.0999999642372
+              },
+              "resourceBytes": {
+                "samples": [539487],
+                "median": 539487
+              },
+              "transferredBytes": {
+                "samples": [563187],
+                "median": 563187
+              },
+              "resourceCount": {
+                "samples": [84],
+                "median": 84
+              },
+              "domNodes": {
+                "samples": [222],
+                "median": 222
+              }
+            },
+            {
+              "journey": "privacy:isolated-cold-document",
+              "attempts": 1,
+              "ready": 1,
+              "outcomes": ["ready"],
+              "elapsedMs": {
+                "samples": [237.00075000000652],
+                "median": 237.00075000000652
+              },
+              "nativeControlReadyMs": {
+                "samples": [166.89999997615814],
+                "median": 166.89999997615814
+              },
+              "resourceBytes": {
+                "samples": [522376],
+                "median": 522376
+              },
+              "transferredBytes": {
+                "samples": [546376],
+                "median": 546376
+              },
+              "resourceCount": {
+                "samples": [82],
+                "median": 82
+              },
+              "domNodes": {
+                "samples": [241],
+                "median": 241
+              }
+            }
+          ]
+        }
+      ],
+      "payload": [
+        {
+          "dataset": "extreme",
+          "measurements": [
+            {
+              "limit": 50,
+              "bytes": 11910,
+              "pendingCount": 5000,
+              "items": 50
+            },
+            {
+              "limit": 0,
+              "bytes": 64,
+              "pendingCount": 5000,
+              "items": 0
+            }
+          ]
+        }
+      ]
+    },
+    "limitation": "Single observations without a matched extreme baseline; no speedup ratios claimed."
+  }
+}

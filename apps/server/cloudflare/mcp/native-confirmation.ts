@@ -17,7 +17,7 @@ export const readNativeConfirmation = (
   if (Option.isSome(input.supplied)) return { _tag: "Valid", attempt: input.supplied };
   const context = input.context;
   if (context.requestState !== undefined) {
-    const attempt = Schema.decodeOption(OAuthConfirmationAttempt)({
+    const attempt = Schema.decodeUnknownOption(OAuthConfirmationAttempt)({
       _tag: "Decision",
       reference: context.requestState,
       response: context.inputResponses?.review ?? null,

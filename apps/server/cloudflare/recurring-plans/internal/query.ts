@@ -20,6 +20,7 @@ import { readPlanningTransactions } from "../../transactions/operations";
 import { linkedTransactions, planningFact } from "./facts";
 import { RecurringPlanningUnavailable } from "../contract";
 import { displayDocument } from "./display";
+import { type Transaction } from "../../../src/core/transactions/contract";
 
 type Query = typeof RecurringWorkspaceQuery.Type;
 const monthLength = 7;
@@ -100,18 +101,33 @@ export const automaticProjection = ({
     const items = [previousMonth(month), month, nextMonth].flatMap((selected) =>
       projectRecurringMonth({ document, month: selected, now })
     );
-    const pairs = items.flatMap((item) =>
-      recurringMatchCandidates({
-        document,
-        items: [item],
-        facts: facts.map((transaction) =>
-          planningFact({ transaction, timeZone: item.plan.timeZone })
-        ),
-      })
-    );
-    const matches = uniqueRecurringMatches(pairs);
+    const matches = automaticMatches({ document, items, transactions: facts });
     return matchedProjection(document, matches);
   });
+
+/** Reuse date conversion only within this projection; never retain live facts between reads. */
+export const automaticMatches = ({
+  document,
+  items,
+  transactions,
+}: Readonly<{
+  document: RecurringDocument;
+  items: Parameters<typeof recurringMatchCandidates>[0]["items"];
+  transactions: ReadonlyArray<Transaction>;
+}>): ReturnType<typeof uniqueRecurringMatches> => {
+  const factsByTimeZone = new Map<string, ReadonlyArray<ReturnType<typeof planningFact>>>();
+  const pairs = items.flatMap((item) => {
+    const timeZone = item.plan.timeZone;
+    let facts = factsByTimeZone.get(timeZone);
+    if (facts === undefined) {
+      facts = transactions.map((transaction) => planningFact({ transaction, timeZone }));
+      factsByTimeZone.set(timeZone, facts);
+    }
+    return recurringMatchCandidates({ document, items: [item], facts });
+  });
+  return uniqueRecurringMatches(pairs);
+};
+
 type WorkspaceWork = Readonly<{
   db: D1Database;
   userId: string;

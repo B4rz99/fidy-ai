@@ -41,6 +41,32 @@ can correlate a transport receipt, but runtime/render failures and schema decodi
 server receipt correlation. Navigation and component interactions are not recorded, and there is no
 session recording or automatic reproduction of User content.
 
+Needs Review publishes navigation separately from its lazy workspace through `feature.tsx`.
+The route preloads both the retained workspace and its route wrapper before navigation commits,
+so a second presentation suspension cannot retain the previous route's Consent reader.
+
+Transactions and Dashboard
+commit their existing query owners while their presentation modules load. Capture and calendar
+code load before the Transactions workspace becomes usable rather than moving that cost to its
+first interaction. Poppins uses Latin subsets with the original fonts retained for other scripts. Sidebar artwork
+uses display-density variants, retaining the originals for the larger access screen.
+
+After the application boundary latches the browser session, the initial Budgets
+and Recurring routes may mount the same session-registry profile query before presentation loads.
+Transactions starts ordinary reads only after its fresh Consent gate, preserving Privacy-only
+access after withdrawal. Its navigation count shares the page's fresh Consent query and mounts
+ordinary reads only after Granted, including on a full reload of read-only history. Consent remains owned by each page's existing zero-idle-TTL query and fresh-read gate. The
+immutable initial binding only classifies unauthenticated failures and navigation display; every
+protected request retains the bound header, server checks, and authentication-lifetime cancellation.
+
+Navigation requests Review counts with a zero-row window; the Review workspace retains its
+default 50-record window and the same User-scoped counts and authority checks.
+
+Transactions requests 25 records for its initial view, then uses the existing default 100-record
+continuations. The canonical query accepts an integer limit from 1 through 100, defaulting to 100;
+the User-owned keyset cursor remains valid across page sizes. Display summaries still describe
+only loaded records, and reaching the continuation retains access to the remaining history.
+
 ## 2. Behavioral ownership
 
 The web application is organized by behavioral ownership rather than route visibility. Publicly

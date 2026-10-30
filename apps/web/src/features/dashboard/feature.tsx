@@ -1,7 +1,9 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Option } from "effect";
 import type { AsyncResult } from "effect/reactivity";
-import { type JSX, useState } from "react";
+import { type JSX, Suspense, useState } from "react";
+import { lazyRouteComponent } from "@tanstack/react-router";
+import { LoadingDashboard } from "./loading";
 import { Button } from "@/ui/components/button";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
@@ -9,10 +11,15 @@ import type { FidyClient } from "@/transport/client";
 import { type DashboardEditorError, useDashboardEditing } from "./editing";
 import type { DashboardView } from "./presentation";
 import { type DashboardLoadPhase, dashboardQuery } from "./query";
-import {
-  DashboardRouteContent as DashboardRoutePresentation,
-  DashboardViewComponent,
-} from "./view";
+
+const DashboardRoutePresentation = lazyRouteComponent(
+  () => import("./view"),
+  "DashboardRouteContent"
+);
+const DashboardViewComponent = lazyRouteComponent(() => import("./view"), "DashboardViewComponent");
+// Start the full view before the query finishes, including first-interaction controls.
+DashboardRoutePresentation.preload?.()?.catch(() => undefined);
+DashboardViewComponent.preload?.()?.catch(() => undefined);
 
 export const DashboardFeature = ({
   apiClient,
@@ -22,12 +29,14 @@ export const DashboardFeature = ({
   const phase = useAtomValue(dashboard.phase);
   const refresh = useAtomRefresh(dashboard.result);
   return (
-    <DashboardRouteContent
-      apiClient={apiClient}
-      result={result}
-      phase={phase}
-      onRefresh={refresh}
-    />
+    <Suspense fallback={<LoadingDashboard />}>
+      <DashboardRouteContent
+        apiClient={apiClient}
+        result={result}
+        phase={phase}
+        onRefresh={refresh}
+      />
+    </Suspense>
   );
 };
 

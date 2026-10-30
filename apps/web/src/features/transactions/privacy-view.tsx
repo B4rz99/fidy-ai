@@ -1,11 +1,15 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link, lazyRouteComponent, useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
-import { type JSX, useState } from "react";
+import { type JSX, Suspense, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
-import { TransactionWorkspace } from "./workspace";
 import { privacyTransactionHistory } from "./privacy-history";
+
+const TransactionWorkspace = lazyRouteComponent(
+  () => import("./workspace"),
+  "TransactionWorkspace"
+);
 
 const ReadOnlyNotice = (): JSX.Element => (
   <div className="m-5">
@@ -55,24 +59,26 @@ export const PrivacyTransactions = (): JSX.Element => {
     );
   }
   return (
-    <TransactionWorkspace
-      key={history.generation}
-      readOnly
-      dateFilter={{ value: date, onChange: setDate }}
-      editable={false}
-      apiClient={router.options.context.apiClient}
-      currentUser={state.value.presentation}
-      categories={state.value.categories}
-      transactions={state.value.data}
-      period={{
-        monthLabel: "Transacciones guardadas",
-        timeZone: state.value.presentation.timeZone,
-      }}
-      continuation={history.continuation}
-      onMore={() => dispatch("more")}
-      onRetryMore={() => dispatch("retry")}
-      onRefresh={() => dispatch("reset")}
-      queryNotice={<ReadOnlyNotice />}
-    />
+    <Suspense fallback={<output className="p-5">Cargando transacciones…</output>}>
+      <TransactionWorkspace
+        key={history.generation}
+        readOnly
+        dateFilter={{ value: date, onChange: setDate }}
+        editable={false}
+        apiClient={router.options.context.apiClient}
+        currentUser={state.value.presentation}
+        categories={state.value.categories}
+        transactions={state.value.data}
+        period={{
+          monthLabel: "Transacciones guardadas",
+          timeZone: state.value.presentation.timeZone,
+        }}
+        continuation={history.continuation}
+        onMore={() => dispatch("more")}
+        onRetryMore={() => dispatch("retry")}
+        onRefresh={() => dispatch("reset")}
+        queryNotice={<ReadOnlyNotice />}
+      />
+    </Suspense>
   );
 };

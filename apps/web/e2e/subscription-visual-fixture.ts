@@ -1,3 +1,4 @@
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import type { Page, Route } from "@playwright/test";
 import { Effect, Schema } from "effect";
 import {
@@ -11,7 +12,7 @@ import { apiOrigin, installUser, makeUser, response } from "./http-fixtures";
 const successStatus = 200;
 const missingStatus = 404;
 const unavailableStatus = 503;
-const appOrigin = "https://127.0.0.1:4173";
+const appOrigin = browserAcceptanceTopology().app;
 const enrollmentPath = "/web/subscription/payment-enrollments";
 const enrollmentId = "15520000-0000-4000-8000-000000000001";
 const attemptId = "15520000-0000-4000-8000-000000000002";

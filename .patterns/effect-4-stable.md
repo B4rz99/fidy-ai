@@ -1,7 +1,7 @@
 # Selected stable Effect source
 
-The application uses exact **effect@4.0.5**, coordinated platform/SQL/Atom packages at
-4.0.5 and **alchemy@2.0.0-beta.80**. Topic notes cite source files and symbols in these selected
+The application uses exact **effect@4.0.6**, coordinated platform/SQL/Atom packages at
+4.0.6 and **alchemy@2.0.0-beta.80**. Topic notes cite source files and symbols in these selected
 packages. Verify against the installed release before adopting an upstream example; matching
 package version strings alone do not establish identical source.
 
@@ -19,7 +19,7 @@ the published 4.0.4 source. Use it for upstream tests, examples, and investigati
 a newer behavior exists in the pinned application. `.repos/alchemy` remains an older snapshot;
 the installed beta.80 source plus `patches/alchemy@2.0.0-beta.80.patch` defines the selected behavior.
 For a fresh checkout, install the admitted frozen graph first. Published source is also
-available at `https://unpkg.com/effect@4.0.5/src/<module>.ts` and
+available at `https://unpkg.com/effect@4.0.6/src/<module>.ts` and
 `https://unpkg.com/alchemy@2.0.0-beta.80/src/<module>.ts`; the latter does not contain Fidy's patch.
 
 | Topic                    | Current public namespace / source                                                               |

@@ -56,7 +56,7 @@ const readWorkspace = ({
             current,
             subject.userId,
             ...params,
-            reviewPageSize,
+            query.value.limit ?? reviewPageSize,
             Option.getOrElse(query.value.offset, () => 0)
           ),
         ...reviewAudit({

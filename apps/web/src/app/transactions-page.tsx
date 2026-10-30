@@ -1,7 +1,6 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
-import { AsyncResult } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import type { ProcessingConsentStatus } from "@/transport/client";
@@ -19,7 +18,7 @@ const currentConsent = <E,>(
 
 /** Privacy reads use their own cookie proof after ordinary access ends; product views retain SignedInContent. */
 export const TransactionsPage = (): JSX.Element => {
-  const client = useRouter().options.context.webAuthClient;
+  const { webAuthClient: client, initialSessionBinding } = useRouter().options.context;
   const [query] = useState(() =>
     client.query("processingConsent", "status", {
       timeToLive: "0 seconds",
@@ -27,17 +26,8 @@ export const TransactionsPage = (): JSX.Element => {
     })
   );
   const status = useAtomValue(query).pipe(presentCanonicalQuery);
-  const [binding] = useState(() => client.query("browserSession", "binding", {}));
-  const session = useAtomValue(binding);
   const refresh = useAtomRefresh(query);
-  if (
-    status._tag === "Failure" &&
-    AsyncResult.match(session, {
-      onInitial: () => false,
-      onFailure: () => false,
-      onSuccess: ({ value }) => Option.isNone(Option.fromNullishOr(value.binding)),
-    })
-  ) {
+  if (status._tag === "Failure" && initialSessionBinding === "none") {
     return <AccessRefused />;
   }
   const consent = currentConsent(status);

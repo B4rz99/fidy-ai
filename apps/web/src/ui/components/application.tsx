@@ -9,6 +9,10 @@ import "./application.css";
 
 const mascot = new URL("../assets/access/mascot.webp", import.meta.url).href;
 const habitat = new URL("../assets/access/habitat-ceiba.webp", import.meta.url).href;
+const habitat384 = new URL("../assets/access/habitat-ceiba-384.webp", import.meta.url).href;
+const habitat768 = new URL("../assets/access/habitat-ceiba-768.webp", import.meta.url).href;
+const mascot192 = new URL("../assets/access/mascot-192.webp", import.meta.url).href;
+const mascot384 = new URL("../assets/access/mascot-384.webp", import.meta.url).href;
 
 export const ApplicationSurface = ({
   children,
@@ -57,7 +61,9 @@ export const ApplicationHabitat = (): JSX.Element => (
   <div className="application-habitat" aria-hidden="true">
     <img
       className="application-habitat-plants"
-      src={habitat}
+      src={habitat384}
+      srcSet={`${habitat384} 384w, ${habitat768} 768w, ${habitat} 1536w`}
+      sizes="360px"
       alt=""
       loading="lazy"
       decoding="async"
@@ -65,7 +71,9 @@ export const ApplicationHabitat = (): JSX.Element => (
     />
     <img
       className="application-habitat-mascot"
-      src={mascot}
+      src={mascot192}
+      srcSet={`${mascot192} 192w, ${mascot384} 384w, ${mascot} 1024w`}
+      sizes="175px"
       alt=""
       loading="lazy"
       decoding="async"

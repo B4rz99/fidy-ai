@@ -1,3 +1,4 @@
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { acceptSubscriptionContracts } from "./subscription-interactions";
 import type { APIRequestContext, Page, Response } from "@playwright/test";
 import { type Cause, Config, Data, Effect, Option, Schema } from "effect";
@@ -19,8 +20,7 @@ test.skip(
 test.describe.configure({ mode: "serial" });
 const measurementTimeoutMilliseconds = 300_000;
 test.setTimeout(measurementTimeoutMilliseconds);
-const api = "https://127.0.0.1:4174";
-const operator = "http://127.0.0.1:4175";
+const { api, operator } = browserAcceptanceTopology();
 const Cost = Schema.Struct({ rowsRead: Schema.Int, rowsWritten: Schema.Int });
 const cancelledWindowMilliseconds = 20_000;
 const observationWindowMilliseconds = 60_000;

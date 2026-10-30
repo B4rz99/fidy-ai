@@ -1,9 +1,11 @@
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import type { APIRequestContext, Locator, Page, Route } from "@playwright/test";
 import { Effect, Option } from "effect";
 import { playwright } from "./playwright-runtime";
 import { signInDashboardThroughCore } from "./real-core-fixture";
 
 const { expect, test } = playwright;
+const { operator } = browserAcceptanceTopology();
 test.use({ trace: "retain-on-failure" });
 const successStatus = 200;
 const resourceLimitedStatus = 429;
@@ -16,7 +18,7 @@ const openDashboard = Effect.fnUntraced(function* ({
   request,
 }: Readonly<{ page: Page; request: APIRequestContext }>) {
   const reset = yield* Effect.tryPromise(() =>
-    request.post("http://127.0.0.1:4175/dashboard/reset?dashboard=true")
+    request.post(`${operator}/dashboard/reset?dashboard=true`)
   );
   expect(reset.status()).toBe(noContentStatus);
   yield* Effect.tryPromise(() => signInDashboardThroughCore({ page, request }));

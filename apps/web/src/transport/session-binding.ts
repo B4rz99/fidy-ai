@@ -57,11 +57,13 @@ export const loadBrowserSessionBinding = ({
     const context = yield* Layer.build(
       FetchHttpClient.layer.pipe(browserHttpClientLayer("web-auth", apiOrigin))
     );
-    const client = yield* HttpApiClient.makeWith(WebAuthApi, {
+    const binding = yield* HttpApiClient.endpoint(WebAuthApi, {
+      group: "browserSession",
+      endpoint: "binding",
       baseUrl: apiOrigin,
       httpClient: Context.get(context, HttpClient.HttpClient),
     });
-    const result = yield* client.browserSession.binding();
+    const result = yield* binding();
     return result.binding ?? "none";
   }).pipe(Effect.scoped);
 

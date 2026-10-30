@@ -1,3 +1,4 @@
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { acceptSubscriptionContracts } from "./subscription-interactions";
 import { PaymentEnrollmentId, ResourceLimited } from "@fidy/server/client";
 import type { APIRequestContext, APIResponse, Page, Route } from "@playwright/test";
@@ -19,8 +20,7 @@ import {
 
 const { expect, test } = playwright;
 
-const api = "https://127.0.0.1:4174";
-const appOrigin = "https://127.0.0.1:4173";
+const { api, app: appOrigin, operator } = browserAcceptanceTopology();
 const ok = 200;
 const created = 201;
 const forbidden = 403;
@@ -196,9 +196,9 @@ test("fresh and concurrent Dashboard first use explicitly initializes through au
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      expect(
-        (yield* fromPlaywright(request.post("http://127.0.0.1:4175/dashboard/reset"))).status()
-      ).toBe(noContent);
+      expect((yield* fromPlaywright(request.post(`${operator}/dashboard/reset`))).status()).toBe(
+        noContent
+      );
       yield* fromPlaywright(signInFirstCardThroughCore({ page, request }));
       for (const path of ["/dashboard", "/dashboard/view"]) {
         const absent = yield* inspectCanonicalSnapshot(page, `${api}${path}`);
@@ -333,7 +333,7 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
         send: () =>
           boundSessionRequests(page.request).get(`${api}/categories`, {
             headers: {
-              origin: "https://127.0.0.1:4173",
+              origin: appOrigin,
             },
           }),
       });
@@ -352,7 +352,7 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
         send: () =>
           boundSessionRequests(page.request).post(`${api}/transactions`, {
             headers: {
-              origin: "https://127.0.0.1:4173",
+              origin: appOrigin,
             },
             data: {
               money: {
@@ -501,7 +501,7 @@ test("replaces a verified EmailCredential through public operations after fixtur
         expect(page.getByText("Enviamos un código a nuevo@example.com.")).toBeVisible()
       );
       const delivered = yield* fromPlaywright(
-        request.post("http://127.0.0.1:4175/email/replacement/deliver")
+        request.post(`${operator}/email/replacement/deliver`)
       );
       expect(delivered.status()).toBe(noContent);
       const code = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
@@ -600,15 +600,15 @@ test("submits reused-source Subscription enrollment through real public and Core
   Effect.runPromise(
     Effect.gen(function* () {
       const billingAttemptId = yield* submitReusedCard(page, request);
-      expect(
-        (yield* fromPlaywright(request.post("http://127.0.0.1:4175/billing/collect"))).status()
-      ).toBe(noContent);
+      expect((yield* fromPlaywright(request.post(`${operator}/billing/collect`))).status()).toBe(
+        noContent
+      );
       const settled = yield* fromPlaywright(
         boundSessionRequests(page.request).get(
           `${api}/web/subscription/billing-attempts/${billingAttemptId}`,
           {
             headers: {
-              origin: "https://127.0.0.1:4173",
+              origin: appOrigin,
             },
           }
         )
@@ -622,7 +622,7 @@ test("submits reused-source Subscription enrollment through real public and Core
         send: () =>
           boundSessionRequests(page.request).get(`${api}/subscription/status`, {
             headers: {
-              origin: "https://127.0.0.1:4173",
+              origin: appOrigin,
             },
           }),
       });
@@ -725,9 +725,9 @@ test("tokenizes a first card without an email-login credential through real publ
       expect(submitted.body).toMatchObject({
         status: "payment-pending",
       });
-      expect(
-        (yield* fromPlaywright(request.post("http://127.0.0.1:4175/billing/collect"))).status()
-      ).toBe(noContent);
+      expect((yield* fromPlaywright(request.post(`${operator}/billing/collect`))).status()).toBe(
+        noContent
+      );
       yield* fromPlaywright(
         expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible({
           timeout: 20_000,
@@ -923,9 +923,9 @@ test("authorizes DaviPlata directly in the built browser and grants paid Pro onl
           ],
         },
       });
-      expect(
-        (yield* fromPlaywright(request.post("http://127.0.0.1:4175/billing/collect"))).status()
-      ).toBe(noContent);
+      expect((yield* fromPlaywright(request.post(`${operator}/billing/collect`))).status()).toBe(
+        noContent
+      );
       yield* fromPlaywright(
         expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible({
           timeout: 20_000,

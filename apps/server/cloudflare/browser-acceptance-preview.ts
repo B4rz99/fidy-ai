@@ -12,6 +12,7 @@ import {
   makeCoreWorker,
   runBillingCollectionWorkflow,
 } from "./browser-acceptance-core-module";
+import { browserAcceptanceTopologies } from "./browser-acceptance/contract";
 import { browserAcceptanceTopology } from "./browser-acceptance/operations";
 import { newId } from "./secret-material/operations";
 import {
@@ -27,6 +28,7 @@ import {
   oauthOperationUserId,
   paginationUserId,
   pairingUserId,
+  prepareBrowserAssessment,
   privacyErasureUserId,
   privacyRenewalUserId,
   privacyUserId,
@@ -34,6 +36,7 @@ import {
   recurringIsolatedIdentities,
   recurringSummaryUserId,
   recurringUserId,
+  subscriptionReflowUserId,
 } from "./browser-acceptance-seed";
 import { observeBrowserCost } from "./browser-cost/operations";
 import {
@@ -73,15 +76,30 @@ const publicPort = selectedTopology.apiPort;
 const operatorPort = selectedTopology.operatorPort;
 const browserOrigin = browserOrigins.acceptance;
 const isolatedBrowserOrigin = selectedTopology.app;
-const bridgeBrowserOrigin = (response: Response): Response => {
-  if (
-    acceptanceMode === "shared" ||
-    response.headers.get("access-control-allow-origin") !== browserOrigin
-  ) {
-    return response;
+/** Isolated sockets retain the shared fixture's exact public coordinates inside native policy. */
+const bridgeIngressRequest = (request: Request): Request => {
+  const url = new URL(request.url);
+  if (acceptanceMode === "shared" || url.origin !== selectedTopology.api) {
+    return new Request(request);
   }
+  const canonical = new URL(browserAcceptanceTopologies.shared.api);
+  url.host = canonical.host;
+  const ingress = new Request(url, request);
+  if (ingress.headers.get("host") === new URL(selectedTopology.api).host) {
+    ingress.headers.set("host", canonical.host);
+  }
+  return ingress;
+};
+const bridgeBrowserOrigin = (response: Response): Response => {
+  if (acceptanceMode === "shared") return response;
   const headers = new Headers(response.headers);
-  headers.set("access-control-allow-origin", isolatedBrowserOrigin);
+  if (headers.get("access-control-allow-origin") === browserOrigin) {
+    headers.set("access-control-allow-origin", isolatedBrowserOrigin);
+  }
+  const location = headers.get("location");
+  if (location?.startsWith(`${browserOrigin}/`) === true) {
+    headers.set("location", `${isolatedBrowserOrigin}${location.slice(browserOrigin.length)}`);
+  }
   return new Response(response.body, { status: response.status, headers });
 };
 
@@ -436,6 +454,7 @@ const fixtureIdentities = [
   { key: "budgetEditing", userId: budgetEditingUserId },
   { key: "pagination", userId: paginationUserId },
   { key: "firstCard", userId: firstCardUserId },
+  { key: "subscriptionReflow", userId: subscriptionReflowUserId },
   { key: "pairing", userId: pairingUserId },
 ];
 const approvedFixtureUser = (parameters: URLSearchParams): string =>
@@ -443,12 +462,44 @@ const approvedFixtureUser = (parameters: URLSearchParams): string =>
     Option.match({ onNone: () => fixtureUserId, onSome: ({ userId }) => userId })
   );
 const connectionFixture = makeConnectionFixture(firstCardUserId);
+const assessmentAcceptedStatus = 202;
+const assessmentReadyStatus = 200;
+type AssessmentPreparation = "unprepared" | "preparing" | "ready" | "failed";
+const assessmentPreparation: { status: AssessmentPreparation } = { status: "unprepared" };
+const assessmentOperator = (request: Request): Option.Option<Response> => {
+  if (
+    Bun.env.FIDY_ASSESSMENT === undefined ||
+    !["GET", "POST"].some((method) => operatorRoute(request, "/assessment/prepare", method))
+  ) {
+    return Option.none();
+  }
+  if (request.method === "POST" && assessmentPreparation.status === "unprepared") {
+    assessmentPreparation.status = "preparing";
+    prepareBrowserAssessment().then(
+      () => {
+        assessmentPreparation.status = "ready";
+      },
+      () => {
+        assessmentPreparation.status = "failed";
+      }
+    );
+  }
+  return Option.some(
+    Response.json(assessmentPreparation, {
+      status: request.method === "POST" ? assessmentAcceptedStatus : assessmentReadyStatus,
+      headers: { "cache-control": "no-store" },
+    })
+  );
+};
 const operator = Bun.serve({
   hostname: "127.0.0.1",
   port: operatorPort,
   fetch: (request) => {
     synchronizeAcceptanceClock();
     if (request.headers.has("origin")) return new Response(null, { status: 403 });
+
+    const assessment = assessmentOperator(request);
+    if (Option.isSome(assessment)) return assessment.value;
 
     if (operatorRoute(request, "/assertion", "GET")) {
       return assertion().then(
@@ -548,7 +599,7 @@ const server = Bun.serve({
   tls: { cert: Bun.file(certificate), key: Bun.file(key) },
   fetch: (request) => {
     synchronizeAcceptanceClock();
-    const ingress = new Request(request);
+    const ingress = bridgeIngressRequest(request);
     ingress.headers.set(
       "cf-connecting-ip",
       request.headers.get("x-acceptance-source") ?? "127.0.0.1"
@@ -570,6 +621,7 @@ const server = Bun.serve({
       .then(bridgeBrowserOrigin)
       .then((response) => {
         response.headers.set("x-acceptance-clock", "controlled");
+
         return response;
       });
   },

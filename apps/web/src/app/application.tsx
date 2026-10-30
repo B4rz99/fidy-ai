@@ -35,6 +35,7 @@ const AuthenticationRouter = ({
       webAuthClient: makeWebAuthClient({ apiOrigin, session }),
       hostedTurnClient: makeHostedTurnClient({ apiOrigin, session }),
       history: Option.none(),
+      initialSessionBinding: session.binding,
     })
   );
   return <RouterProvider router={router} />;

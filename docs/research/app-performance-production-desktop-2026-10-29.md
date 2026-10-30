@@ -241,3 +241,34 @@ Cloudflare documents that D1 Free daily read/write limit errors clear at
 The observed recovery strongly supports the user's quota hypothesis. Account-level usage
 and a quota-specific database error were not obtained, so exhaustion is not confirmed.
 The API health response alone is not a database-availability proof.
+
+## Cloudflare diagnostics
+
+Read-only diagnostics used the existing Wrangler OAuth session. D1 query insights for the
+preceding day, ordered by average execution duration, returned 20 statements; the largest
+average was 4.700 ms. These aggregates are not correlated to individual browser requests.
+The database reports ENAM placement and disabled read replication. Its rolling 24-hour usage
+is not evidence of exhaustion during the earlier sign-in failure.
+
+Worker analytics for 2026-10-29 04:10:13 through 2026-10-30 04:10:13 UTC report Core CPU
+P50/P99 of 9.085/36.564 ms and wall-time P50/P99 of 503.568/26,102.236 ms. The live GraphQL
+schema explicitly describes both quantile fields in microseconds; the JSON retains raw values
+and those definitions. These are mixed-traffic aggregates, not page response times. Cloudflare
+[defines wall time](https://developers.cloudflare.com/workers/observability/metrics-and-analytics/)
+to include I/O waits and work after sending the response. A separate last-hour status query
+reported 308 successful and 27 client-disconnected invocations, with no counted runtime errors;
+that does not resolve the earlier failure. Core and Ingress settings both report empty placement
+configuration. [Placement](https://developers.cloudflare.com/workers/configuration/placement/)
+can reduce database round-trip latency, but the installed staged release path does not apply
+script-level placement changes during a zero-traffic version upload. No placement change was made.
+
+Filtered live diagnostics on revision `228da62e` observed a Dashboard-window Core fetch with
+2,994 ms recorded work latency (3,000 ms wall / 9 ms CPU) and a coordinator invocation with
+2,017 ms recorded work latency. A subsequent Recurring navigation recorded the named
+`recurringPlans.getRecurringWorkspace` span at 1,120 ms, with 1,207 ms invocation wall time
+and 28 ms CPU; its enclosing fetch recorded 1,624 ms work latency. These observations narrow
+the investigation toward database, coordinator and transport waits. They do not identify an
+individual SQL call's network duration or establish a speedup. They were diagnostic navigations,
+not quiet-window cold-load samples. Scheduled work and other release traffic are separated by
+operation and revision in the retained artifact. Only allowlisted metadata and timings were
+retained; raw request events and SQL were discarded.

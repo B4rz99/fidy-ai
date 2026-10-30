@@ -61,6 +61,7 @@ it.effect("replaces public trace claims with a server receipt and private contin
     expect(receipt).not.toBe(callerTrace);
     expect(forwardedTrace).toMatch(new RegExp(`^00-${receipt}-[0-9a-f]{16}-01$`, "u"));
     expect(response.headers.get("access-control-expose-headers")).toContain(telemetryTraceHeader);
+    expect(response.headers.get("access-control-expose-headers")).toContain("Server-Timing");
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.status).toBe(503);
     expect(events.some((event) => event.event === "span" && event.traceId === receipt)).toBe(true);

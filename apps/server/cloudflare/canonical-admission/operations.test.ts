@@ -152,7 +152,12 @@ it("resolves mounted browser proof and acquires pressure in one guarded native u
       const work = vi.fn((subject: typeof fixture.caller.value) =>
         Effect.sync(() => {
           expect(subject).toEqual(fixture.caller.value);
-          return Response.json({ data: [], next: [] });
+          return Response.json(
+            { data: [], next: [] },
+            {
+              headers: { "server-timing": "owner-read;dur=1", "cache-control": "no-store" },
+            }
+          );
         })
       );
       const response = yield* protectCanonicalBrowserRequest({
@@ -162,6 +167,14 @@ it("resolves mounted browser proof and acquires pressure in one guarded native u
         work,
       });
       expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("server-timing")).toContain("owner-read;dur=1");
+      for (const phase of ["total", "admission", "owner", "standing", "other"]) {
+        expect(response.headers.get("server-timing")).toMatch(
+          new RegExp(`canonical-${phase};dur=\\d+\\.\\d{3}(?:,|$)`)
+        );
+      }
+      expect(yield* io(() => response.json())).toEqual({ data: [], next: [] });
       expect(work).toHaveBeenCalledTimes(1);
       expect(reportedAllowance(response).remaining).toBe(50);
       expect(generationReads).toHaveBeenCalledTimes(2);
@@ -272,6 +285,7 @@ for (const invalid of [
           work,
         });
         expect(response.status).toBe(401);
+        expect(response.headers.get("server-timing")).toContain("canonical-owner;dur=0.000");
         expect(work).not.toHaveBeenCalled();
         expect(response.headers.get(canonicalAllowanceHeaders.remaining)).toBeNull();
         for (const table of ["canonical_request_leases", "canonical_request_buckets"] as const) {

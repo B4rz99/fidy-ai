@@ -1,3 +1,8 @@
+import {
+  type CanonicalRequestTimings,
+  appendCanonicalTimings,
+  measureCanonicalPhase,
+} from "./internal/response-timing";
 import { OAuthNativeReview } from "../oauth-confirmation/contract";
 import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
 import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
@@ -726,15 +731,21 @@ const executeProtectedRequest = <E, R>(
           })
         );
       }
-      return yield* executeAcquiredRequest(input, id, restore);
+      return yield* executeAcquiredRequest({ input, id, restore, timings: Option.none() });
     })
   );
 
-const executeAcquiredRequest = <E, R>(
-  input: RequestCall<E, R>,
-  id: string,
-  restore: <A, E2, R2>(work: Effect.Effect<A, E2, R2>) => Effect.Effect<A, E2, R2>
-): Effect.Effect<Response, never, R> =>
+const executeAcquiredRequest = <E, R>({
+  input,
+  id,
+  restore,
+  timings,
+}: Readonly<{
+  input: RequestCall<E, R>;
+  id: string;
+  restore: <A, E2, R2>(work: Effect.Effect<A, E2, R2>) => Effect.Effect<A, E2, R2>;
+  timings: Option.Option<CanonicalRequestTimings>;
+}>): Effect.Effect<Response, never, R> =>
   restore(
     authorizedCall(input, id).pipe(
       Effect.catch((failure) =>
@@ -746,11 +757,15 @@ const executeAcquiredRequest = <E, R>(
         )
       ),
       Effect.flatMap((response) =>
-        finalizeAllowance({
-          db: input.db,
-          caller: input.caller,
-          response,
-          leaseId: Option.some(id),
+        measureCanonicalPhase({
+          work: finalizeAllowance({
+            db: input.db,
+            caller: input.caller,
+            response,
+            leaseId: Option.some(id),
+          }),
+          phase: "standing",
+          timings,
         })
       )
     )
@@ -820,15 +835,18 @@ export const protectCanonicalRequest = <E, R>(
   input: RequestCall<E, R>
 ): Effect.Effect<Response, never, R> => executeProtectedRequest(input);
 
+type BrowserRequest<E, R> = Readonly<{
+  db: D1Database;
+  request: Request;
+  operation: CatalogOperation;
+  current: number;
+  work: (subject: AuthenticatedWebSession) => Effect.Effect<Response, E, R>;
+}>;
+
 /** Resolve mounted browser proof with native pressure admission; owner work and disclosure still recheck live authority. */
-export const protectCanonicalBrowserRequest = <E, R>(
-  input: Readonly<{
-    db: D1Database;
-    request: Request;
-    operation: CatalogOperation;
-    current: number;
-    work: (subject: AuthenticatedWebSession) => Effect.Effect<Response, E, R>;
-  }>
+const executeBrowserRequest = <E, R>(
+  input: BrowserRequest<E, R>,
+  timings: Option.Option<CanonicalRequestTimings>
 ): Effect.Effect<Response, never, R> =>
   Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
@@ -839,17 +857,26 @@ export const protectCanonicalBrowserRequest = <E, R>(
       if (Option.isNone(prepared)) return noAuthority();
       const lookup = prepared.value;
       const id = newId();
-      const admission = yield* acquireBoundBrowserRequest({ ...input, lookup, id });
+      const admission = yield* measureCanonicalPhase({
+        work: acquireBoundBrowserRequest({ ...input, lookup, id }),
+        phase: "admission",
+        timings,
+      });
       if (typeof admission !== "string") {
-        return yield* executeAcquiredRequest(
-          {
+        return yield* executeAcquiredRequest({
+          input: {
             ...input,
             caller: { _tag: "WebSession", value: admission },
-            work: Effect.suspend(() => input.work(admission)),
+            work: measureCanonicalPhase({
+              work: Effect.suspend(() => input.work(admission)),
+              phase: "owner",
+              timings,
+            }),
           },
           id,
-          restore
-        );
+          restore,
+          timings,
+        });
       }
       if (admission === "unauthenticated") return noAuthority();
       const row = yield* Effect.tryPromise({
@@ -871,6 +898,17 @@ export const protectCanonicalBrowserRequest = <E, R>(
       );
     }).pipe(Effect.orElseSucceed(unavailable))
   );
+
+export const protectCanonicalBrowserRequest = <E, R>(
+  input: BrowserRequest<E, R>
+): Effect.Effect<Response, never, R> =>
+  Effect.suspend(() => {
+    const timings: CanonicalRequestTimings = { admission: 0, owner: 0, standing: 0 };
+    return executeBrowserRequest(input, Option.some(timings)).pipe(
+      Effect.timed,
+      Effect.map(([duration, response]) => appendCanonicalTimings({ response, duration, timings }))
+    );
+  });
 
 const refuseBrowserSnapshot = ({
   db,

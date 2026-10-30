@@ -46,6 +46,23 @@ with Core span 305 ms (Worker wall 317 ms, CPU 8 ms). These observations were no
 in a coordinated quiet window and are excluded from the qualified performance comparison.
 Only status, elapsed time, byte counts and opaque trace correlation were retained.
 
+### Protected browser phase diagnostics
+
+The legacy protected browser path appends fixed numeric `Server-Timing` metrics for total,
+native admission, owner callback and final allowance. `canonical-other` is the nonnegative
+remainder. Only completed phases accumulate a duration; an interrupted or failed phase is
+included in total/other, so zero is not evidence of zero failed work. The owner callback
+includes coordinator RPC transport and dispatch, not just the coordinator's internal span.
+Total starts before mounted-proof preparation and ends after protected work and cleanup;
+it excludes the outer public source guard. Existing response timings, body streams,
+allowance headers and cache policy are preserved. CORS exposes the header for diagnostics.
+This instrumentation changes no reads, authority checks, Audit or lease behavior.
+
+An unqualified `89c87e384c14c6e90e22571665215aadd6ffc555` bootstrap diagnostic returned
+HTTP 200 in 874.8 ms: bootstrap 624 ms, entry 107 ms, metadata 205 ms, history 0 ms,
+authority 98 ms, admission 214 ms and encoding/other 0 ms. It is not pooled with quiet-window
+page measurements and does not establish a speedup.
+
 The matched production comparison does **not** establish the app-wide 2x target. All 54
 observations reached usable controls, but none of the nine page medians improved by 2x.
 Most pages transferred 71–75% fewer completed encoded resource bytes. API waits still

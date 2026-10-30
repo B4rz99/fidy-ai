@@ -2,8 +2,14 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "656516cc8cfef9e175826d4bf34c59ca7173141c49bf5f15558264022d94b9ba";
+const expectedEdgePolicyDigest = "fb7f9ec703a7555ece7eedfc3fbf0bf55c4045accc5fa25f107f08cd52b67e0a";
 const securityArtifacts = [
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/canonical-admission/internal/response-timing.ts",
+      import.meta.url
+    )
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/connections/internal/retention.ts", import.meta.url)
   ).text(),

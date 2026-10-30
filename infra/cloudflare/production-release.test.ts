@@ -9,7 +9,7 @@ import {
   releaseCommand,
   releaseFailureMessage,
   releasePort,
-  verifyCorePlacement,
+  verifyCoreDefaultPlacement,
   verifyRecoveryAccess,
 } from "./production-release";
 import { type ReleasePort, releaseController } from "./release-controller";
@@ -18,51 +18,55 @@ const revision = "a".repeat(40);
 const publicVersion = "11111111-1111-4111-8111-111111111111";
 const coreVersion = "22222222-2222-4222-8222-222222222222";
 
-it.effect(
-  "checks placement on the exact staged Core version and refuses ignored configuration",
-  () =>
-    Effect.gen(function* () {
-      for (const observation of [
-        { id: coreVersion, placement: { mode: "smart" }, accepted: true },
-        {
-          id: coreVersion,
-          placement: { mode: "smart", status: "INSUFFICIENT_INVOCATIONS" },
-          accepted: true,
-        },
-        { id: publicVersion, placement: { mode: "smart" }, accepted: false },
-        { id: coreVersion, placement: undefined, accepted: false },
-        { id: coreVersion, placement: {}, accepted: false },
-        { id: coreVersion, placement: { mode: "off" }, accepted: false },
-      ]) {
-        const requests: Array<string> = [];
-        const client = HttpClient.make((request) => {
-          requests.push(`${request.method} ${new URL(request.url).pathname}`);
-          return Effect.succeed(
-            HttpClientResponse.fromWeb(
-              request,
-              Response.json({
-                success: true,
-                result: {
-                  id: observation.id,
-                  resources: { script: { placement: observation.placement } },
+it.effect("requires native default placement on the exact staged Core version", () =>
+  Effect.gen(function* () {
+    for (const observation of [
+      { id: coreVersion, placement: undefined, legacy: undefined, accepted: true },
+      { id: publicVersion, placement: undefined, legacy: undefined, accepted: false },
+      { id: coreVersion, placement: undefined, legacy: "smart", accepted: false },
+      { id: coreVersion, placement: { mode: "smart" }, accepted: false },
+      {
+        id: coreVersion,
+        placement: { mode: "smart", status: "INSUFFICIENT_INVOCATIONS" },
+        accepted: false,
+      },
+      { id: publicVersion, placement: { mode: "smart" }, accepted: false },
+      { id: coreVersion, placement: {}, accepted: false },
+      { id: coreVersion, placement: { mode: "off" }, accepted: false },
+      { id: coreVersion, placement: { region: "aws:us-east-1" }, accepted: false },
+      { id: coreVersion, placement: { hostname: "example.com" }, accepted: false },
+    ]) {
+      const requests: Array<string> = [];
+      const client = HttpClient.make((request) => {
+        requests.push(`${request.method} ${new URL(request.url).pathname}`);
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              success: true,
+              result: {
+                id: observation.id,
+                resources: {
+                  script: { placement: observation.placement, placement_mode: observation.legacy },
                 },
-              })
-            )
-          );
-        });
-        const result = yield* Effect.exit(
-          verifyCorePlacement(
-            { account: "test-account", token: "test-only" },
-            { name: "core", version: coreVersion },
-            client
+              },
+            })
           )
         );
-        expect(Exit.isSuccess(result)).toBe(observation.accepted);
-        expect(requests).toEqual([
-          `GET /client/v4/accounts/test-account/workers/scripts/core/versions/${coreVersion}`,
-        ]);
-      }
-    })
+      });
+      const result = yield* Effect.exit(
+        verifyCoreDefaultPlacement(
+          { account: "test-account", token: "test-only" },
+          { name: "core", version: coreVersion },
+          client
+        )
+      );
+      expect(Exit.isSuccess(result)).toBe(observation.accepted);
+      expect(requests).toEqual([
+        `GET /client/v4/accounts/test-account/workers/scripts/core/versions/${coreVersion}`,
+      ]);
+    }
+  })
 );
 
 const recoveryFixture = {

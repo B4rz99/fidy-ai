@@ -1,0 +1,264 @@
+apps/web/src/features/connections/feature.tsx
+  s_68bfd164593579::t_dfd15818ba741b 1-2,177,233
+apps/web/e2e/needs-review.spec.ts
+  s_68bfd164593579::t_f2126a1492cb25 1365,1367,1385-1401
+  s_4246e945b03fb3::t_7bfc244a0cd11f 1,1517-1558
+apps/web/src/features/needs-review/workspace.tsx
+  s_68bfd164593579::t_f2126a1492cb25 211-218
+  s_68bfd164593579::t_1a90b8a84e5b87 219-221
+  s_68bfd164593579::t_a96608c43dd9d0 1
+apps/web/src/ui/components/transaction-loading.tsx
+  s_68bfd164593579::t_a96608c43dd9d0 2-9,18,37-39,43-45,91-92,97-98,104-105,120-121,125-128
+  s_68bfd164593579::t_d739a9e8fa23a0 10-17,19-36,40-42,46-90,99-100,102,106-119,122-124
+  s_68bfd164593579::t_d4edad30d7eed7 103
+  s_68bfd164593579::t_cfd3c42b2d4121 1
+  s_68bfd164593579::t_483edfc7eeeafb 93-96
+  s_68bfd164593579::t_d3c4624153d5b3 101
+apps/web/src/ui/reference.tsx
+  s_68bfd164593579::t_a96608c43dd9d0 1
+  s_68bfd164593579::t_ddc961a64fe5ad 268
+apps/web/src/ui/components/loading-preview-frame.tsx
+  s_4246e945b03fb3::t_ba397a1360bed2 1-50
+apps/web/src/features/budgets/screen.tsx
+  s_68bfd164593579::t_d739a9e8fa23a0 1,84
+  s_68bfd164593579::t_0ce6701add78c6 47,53
+apps/web/src/features/privacy/feature.tsx
+  s_4246e945b03fb3::t_ab2671546fae3b 1,105
+apps/web/src/features/privacy/renewal.tsx
+  s_4246e945b03fb3::t_7ec5a613cbf35b 1,132
+apps/web/src/features/dashboard/loading.tsx
+  s_68bfd164593579::t_0ce6701add78c6 4
+  s_68bfd164593579::t_dfd15818ba741b 2
+apps/web/src/features/pats/creation.tsx
+  s_68bfd164593579::t_f2126a1492cb25 57-58,60-61
+  s_68bfd164593579::t_34c2a7b3e3c36a 56,62
+  s_68bfd164593579::t_dfd15818ba741b 1,59
+apps/web/src/features/budgets/workspace.tsx
+  s_68bfd164593579::t_d739a9e8fa23a0 4
+apps/web/src/features/subscription/consent-boundary.tsx
+  s_68bfd164593579::t_eb527869902414 38
+  s_68bfd164593579::t_dfd15818ba741b 1
+apps/web/src/features/oauth-connections/feature.tsx
+  s_68bfd164593579::t_d739a9e8fa23a0 1
+  s_68bfd164593579::t_1a90b8a84e5b87 85,87
+  s_68bfd164593579::t_0ce6701add78c6 86
+apps/web/vitest.config.ts
+  s_4246e945b03fb3::t_8a9f7cd2abdb9a 15
+apps/web/src/ui/components/report-loading.tsx
+  s_68bfd164593579::t_d739a9e8fa23a0 1-60
+apps/web/src/features/recurring/management.tsx
+  s_4246e945b03fb3::t_13c994accc1772 1,140
+apps/web/e2e/recurring-report.spec.ts
+  s_68bfd164593579::t_f2126a1492cb25 100-112,130-131,242,247-251
+  s_4246e945b03fb3::t_2def035196a832 1
+apps/web/src/features/recurring/transactions.tsx
+  s_68bfd164593579::t_1a90b8a84e5b87 1,58
+apps/web/src/app/transactions-page.tsx
+  s_68bfd164593579::t_a96608c43dd9d0 1
+  s_4246e945b03fb3::t_9b12335442d646 46
+apps/web/src/features/transactions/feature.tsx
+  s_68bfd164593579::t_a96608c43dd9d0 15
+  s_68bfd164593579::t_969897e0f84a00 124
+  s_4246e945b03fb3::t_4f1ee72e16f905 105,462
+  s_68bfd164593579::t_f2126a1492cb25 121-123,125-134
+apps/web/src/app/review-workspace.tsx
+  s_68bfd164593579::t_a96608c43dd9d0 1
+  s_68bfd164593579::t_1a90b8a84e5b87 41
+apps/web/src/app/recurring-workspace.tsx
+  s_68bfd164593579::t_a96608c43dd9d0 1
+  s_68bfd164593579::t_1a90b8a84e5b87 43
+apps/web/src/ui/components/budget-loading.tsx
+  s_68bfd164593579::t_d739a9e8fa23a0 1-115
+apps/web/src/features/needs-review/original.tsx
+  s_68bfd164593579::t_1a90b8a84e5b87 1
+  s_68bfd164593579::t_dfd15818ba741b 62
+  s_68bfd164593579::t_34c2a7b3e3c36a 58-61,63,71
+apps/web/src/features/needs-review/editor.tsx
+  s_68bfd164593579::t_eb527869902414 157,162
+  s_68bfd164593579::t_d739a9e8fa23a0 132
+  s_68bfd164593579::t_dfd15818ba741b 158
+  s_68bfd164593579::t_f2126a1492cb25 133-134
+  s_68bfd164593579::t_a96608c43dd9d0 1-2
+apps/web/src/app/application.tsx
+  s_68bfd164593579::t_1a90b8a84e5b87 39-41
+  s_68bfd164593579::t_294571c12d0fe4 42-43
+  s_68bfd164593579::t_aeca70dc7734aa 37-38
+  s_4246e945b03fb3::t_9d60bbbaf9fd95 1,58-66
+apps/web/src/features/provider-authentication/feature.tsx
+  s_68bfd164593579::t_dfd15818ba741b 1,36
+apps/web/src/ui/loading-reference.tsx
+  s_68bfd164593579::t_8b0e306efabec9 1-2
+  s_68bfd164593579::t_fa47473822217e 69
+  s_68bfd164593579::t_629e5fb8823f54 27-28
+  s_68bfd164593579::t_6856901ad2409f 87
+  s_68bfd164593579::t_e70006b8c12a88 42
+  s_68bfd164593579::t_3b3fb678f119a3 246-249
+  s_68bfd164593579::t_550a976072302a 123
+  s_68bfd164593579::t_3b52a27a3b3894 129
+  s_68bfd164593579::t_46b4504f9acff6 141
+  s_68bfd164593579::t_9d1badc12734fe 189
+  s_68bfd164593579::t_22f213b812cfc0 105
+  s_68bfd164593579::t_0fb6814ef26cc6 195
+  s_68bfd164593579::t_4ed8249988dd4a 311-313
+  s_68bfd164593579::t_51b7a76be4b45c 48
+  s_68bfd164593579::t_c3bd40c0a5898e 36-41,43-47,49-53,55-68,70-74,76-80,82-86,88-92,94-95,102-104,106-110,112-116,124-128,130-134,136-140,142-146,148-152,154-158,160-164,166-170,172-176,178-182,184-188,196-200,202-206,208-212,214-218,220-224,226-230,232-236,238-242,244-245,250-251,256-257,262-266,268-310,314-318,320-349,351-356
+  s_68bfd164593579::t_21bb2fe3b463ba 147
+  s_68bfd164593579::t_e61f9152230cec 258-261
+  s_4246e945b03fb3::t_815c40533a0dd4 7-18
+  s_68bfd164593579::t_6811632b335d6e 81
+  s_68bfd164593579::t_fba397dbf2cb8b 350
+  s_68bfd164593579::t_5754631c6fd80f 117
+  s_68bfd164593579::t_7563ee361a1545 30-35
+  s_68bfd164593579::t_51b1a5d0914918 54
+  s_68bfd164593579::t_ac41438b1139f1 252-255
+  s_68bfd164593579::t_b0f13b4de5ff2c 4-6,19-21
+  s_68bfd164593579::t_26120e9c88b3bf 153
+  s_68bfd164593579::t_eeefed9e8349a9 111
+  s_68bfd164593579::t_dfd15818ba741b 3,22-26,29,159,165,171,177,183,201,231,237,243
+  s_68bfd164593579::t_4e56c8e625a178 75
+  s_68bfd164593579::t_00b293681b734a 135
+  s_68bfd164593579::t_53271511e3ee1c 93
+  s_68bfd164593579::t_effd2e4f96a126 207
+  s_68bfd164593579::t_9906ba2f86f84c 213
+  s_68bfd164593579::t_257afccd791dce 267
+  s_68bfd164593579::t_b0d0746d46c7c6 225
+  s_68bfd164593579::t_30bb46123fa490 319
+  s_68bfd164593579::t_eb527869902414 96-98,100-101,118-122,190-194,219
+  s_68bfd164593579::t_de9cb5f538d9eb 99
+apps/web/src/features/pats/management-view.tsx
+  s_68bfd164593579::t_dfd15818ba741b 1,396,398
+apps/web/src/features/dashboard/view.tsx
+  s_4246e945b03fb3::t_0763631b1278e8 1132
+apps/web/src/session/browser-session-boundary.tsx
+  s_68bfd164593579::t_34c2a7b3e3c36a 186-190,195
+  s_4246e945b03fb3::t_ec43dd1556af1b 159,162
+apps/web/src/ui/components/transaction-privacy-notice.tsx
+  s_4246e945b03fb3::t_798f20f1b15cb9 1-17
+apps/web/e2e/oauth-visual.spec.ts
+  s_4246e945b03fb3::t_305d964c8d5e04 1,261-273
+DESIGN.md
+  s_68bfd164593579::t_ae71eefad8f7a2 373-378
+apps/web/src/features/oauth-connections/management-feature.tsx
+  s_68bfd164593579::t_dfd15818ba741b 1,61
+apps/web/src/features/transactions/privacy-view.tsx
+  s_68bfd164593579::t_6a318e40bc7a0e 1
+  s_4246e945b03fb3::t_20985386379327 17-23,37,58
+  s_68bfd164593579::t_a96608c43dd9d0 2
+apps/web/src/features/pats/cli-feature.tsx
+  s_68bfd164593579::t_dfd15818ba741b 1,84
+apps/web/src/ui/components/review-workspace.tsx
+  s_4246e945b03fb3::t_c15cfcd321328c 4,43-69
+  s_68bfd164593579::t_a96608c43dd9d0 1
+apps/web/src/ui/components/loading-skeletons.tsx
+  s_68bfd164593579::t_f2126a1492cb25 19-21
+  s_68bfd164593579::t_8bfae28549811c 10
+  s_68bfd164593579::t_c11e04063aef51 8
+  s_68bfd164593579::t_dfd15818ba741b 26-29,31-33
+  s_68bfd164593579::t_29f72b15d993e7 1-7,9,11-12,14-18,22-25,30,34-37
+  s_68bfd164593579::t_34c2a7b3e3c36a 13
+apps/web/loading-preview.html
+  s_68bfd164593579::t_c3bd40c0a5898e 1-13
+apps/web/src/ui/components/settings-loading.tsx
+  s_68bfd164593579::t_1793dfde171b90 179-180
+  s_68bfd164593579::t_e029b66d500544 150-152,154-156
+  s_4246e945b03fb3::t_0414d2dce00123 153,167-168
+  s_68bfd164593579::t_cb2085cfc6c81b 1-149,157,160-163,172-173,178,181-184
+  s_68bfd164593579::t_8f7994a6c973da 158-159
+  s_68bfd164593579::t_241395e2bcf396 164-166,169-171
+  s_68bfd164593579::t_6cfbf8be3d5a57 174-177
+apps/web/src/features/subscription/workspace.tsx
+  s_68bfd164593579::t_dfd15818ba741b 1,302
+apps/web/src/features/recurring-digest/report.tsx
+  s_68bfd164593579::t_d739a9e8fa23a0 8
+apps/web/src/features/dashboard/feature.tsx
+  s_4246e945b03fb3::t_75b14b67c5dfcb 1,75,105,146-147,149-150
+apps/web/src/features/subscription/feature.tsx
+  s_68bfd164593579::t_65dae468abb952 2-4
+  s_68bfd164593579::t_a94af1ab67f2d4 6-8
+  s_68bfd164593579::t_dfd15818ba741b 5,9,646,657,665,724,804
+  s_68bfd164593579::t_f2126a1492cb25 803,805-808
+  s_68bfd164593579::t_0ce6701add78c6 959
+  s_4246e945b03fb3::t_7dbbe2e627c72a 1,965
+  s_68bfd164593579::t_ddc961a64fe5ad 809
+apps/web/src/features/transactions/workspace.tsx
+  s_68bfd164593579::t_a96608c43dd9d0 1
+  s_68bfd164593579::t_34c2a7b3e3c36a 664-671,694
+apps/web/src/ui/components/dashboard-loading.tsx
+  s_68bfd164593579::t_cb2085cfc6c81b 1-95,97-107,122,124-126,128-129
+  s_4246e945b03fb3::t_411ac13e9ab674 111-118
+  s_68bfd164593579::t_81f32f17f13489 108-110,119-121
+  s_68bfd164593579::t_13c5bc308edceb 96
+  s_68bfd164593579::t_2ad0bbbd847319 123
+  s_68bfd164593579::t_fb6388e98dc106 127
+apps/web/scripts/browser-topology.test.ts
+  s_4246e945b03fb3::t_b746f17a00861e 1-4,11-18,22-37,39-66,71-72,74-81,83-109,111-112
+  s_68bfd164593579::t_d611e75573aa5d 21,67-70
+  s_68bfd164593579::t_dcc6a666982682 19-20,113-119
+apps/web/src/features/recurring/feature.tsx
+  s_68bfd164593579::t_a96608c43dd9d0 1
+  s_68bfd164593579::t_1a90b8a84e5b87 55,70,112
+apps/web/e2e/login-branding.spec.ts
+  s_68bfd164593579::t_f2126a1492cb25 40-42
+apps/web/src/ui/components/recurring-loading.tsx
+  s_68bfd164593579::t_a753e837365c00 115-117,123-125
+  s_68bfd164593579::t_52530198fa296e 131
+  s_68bfd164593579::t_d739a9e8fa23a0 8-42,45-84,87-113,126,130,132-134
+  s_68bfd164593579::t_a96608c43dd9d0 1-7,43-44,85-86,114,135
+  s_4246e945b03fb3::t_aea8e335112a7d 118-122
+  s_68bfd164593579::t_0718581e3bb0d1 127-129
+apps/web/src/ui/components/authorization-loading.tsx
+  s_68bfd164593579::t_d739a9e8fa23a0 1-59
+apps/web/src/app/loading-preview.tsx
+  s_68bfd164593579::t_d739a9e8fa23a0 9-13
+  s_68bfd164593579::t_c3bd40c0a5898e 1-8,14
+apps/web/e2e/loading-geometry.ts
+  s_68bfd164593579::t_73086157bc95f2 2-42
+  s_68bfd164593579::t_e7709626a97a1a 1
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_68bfd164593579::t_f2126a1492cb25 471,476-482,493
+  s_4246e945b03fb3::t_ed1b0c46cf34a9 1,498-499
+apps/web/src/ui/components/subscription-loading.tsx
+  s_68bfd164593579::t_5b506fb57497f9 22
+  s_68bfd164593579::t_cb2085cfc6c81b 1-21,23-29,31-67,69-108,110-123
+  s_68bfd164593579::t_96b4ad704d2942 68
+  s_68bfd164593579::t_ea17ee89fe1da0 30
+  s_68bfd164593579::t_b00ac86197542f 109
+apps/web/src/ui/components/application-loading.tsx
+  s_4246e945b03fb3::t_fa9609c9221bf2 1-77
+apps/web/src/features/connections/result.tsx
+  s_4246e945b03fb3::t_1d40dee7a3d4a8 1
+  s_68bfd164593579::t_0a404c52763f6a 44
+  s_68bfd164593579::t_25a0602c92dada 42
+  s_68bfd164593579::t_dfd15818ba741b 43
+apps/web/src/ui/components/review-loading.tsx
+  s_68bfd164593579::t_a96608c43dd9d0 1-6,20-22,33-34,53-54,67,73-75,112,118-119,139
+  s_68bfd164593579::t_d739a9e8fa23a0 7-19,23-32,35-52,55-66,68-72,76-111,113-117,120-138
+apps/web/src/features/recurring-digest/status.tsx
+  s_68bfd164593579::t_ddc961a64fe5ad 3
+  s_68bfd164593579::t_0ce6701add78c6 62
+  s_68bfd164593579::t_d739a9e8fa23a0 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e9a1c024ae47b6c3facf10197b13c0135eae50f9",
+  "prompts": {},
+  "sessions": {
+    "s_4246e945b03fb3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18760-6dd2-71b0-8895-bc675089fa37",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

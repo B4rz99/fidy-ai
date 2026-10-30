@@ -59,9 +59,9 @@
     "docs:verify": "bun run docs:build && bun run docs:test && bun run --cwd apps/docs test:browser"
   },
   "devDependencies": {
-    "@babel/parser": "8.0.7",
+    "@babel/parser": "8.0.8",
     "@babel/traverse": "8.0.7",
-    "@babel/types": "8.0.6",
+    "@babel/types": "8.0.8",
     "@effect/platform-bun": "4.0.6",
     "@effect/tsgo": "0.46.1",
     "@playwright/test": "1.64.1",

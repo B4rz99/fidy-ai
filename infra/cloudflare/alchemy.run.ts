@@ -366,6 +366,7 @@ export default Alchemy.Stack(
     });
     const core = yield* Cloudflare.Worker("Core", {
       main: "../../apps/server/cloudflare/core-worker.ts",
+      placement: production ? productionTopology.core.placement : undefined,
       version: production
         ? {
             traffic: 0,

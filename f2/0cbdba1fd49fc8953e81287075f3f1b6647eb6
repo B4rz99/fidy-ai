@@ -1,0 +1,64 @@
+apps/server/cloudflare/core-http/browser-entry-isolation.test.ts
+  s_68bfd164593579::t_24854ea8c3bd4e 3,155-165
+  s_68bfd164593579::t_5692994a04eb0e 58,126
+  s_68bfd164593579::t_ec9695d23b8f23 1-2,4-57,59-125,127-154,166-219
+apps/server/cloudflare/canonical-admission/operations.test.ts
+  s_68bfd164593579::t_0ae4ab1d3c2944 1,13
+apps/server/src/client.ts
+  s_68bfd164593579::t_0ae4ab1d3c2944 52-53
+  s_68bfd164593579::t_24854ea8c3bd4e 184
+  s_68bfd164593579::t_eceeda2dec6995 188,208-209
+apps/server/cloudflare/public-worker-browser-entry.test.ts
+  s_68bfd164593579::t_0ae4ab1d3c2944 1-2
+apps/server/cloudflare/public-worker.ts
+  s_68bfd164593579::t_0ae4ab1d3c2944 4-6,28
+apps/server/cloudflare/core-http/browser-entry.test.ts
+  s_68bfd164593579::t_0ae4ab1d3c2944 1-2
+apps/server/src/browser-bootstrap.ts
+  s_68bfd164593579::t_24854ea8c3bd4e 10-14
+  s_68bfd164593579::t_0ae4ab1d3c2944 15-16
+apps/server/cloudflare/core-http/internal/browser-entry.ts
+  s_68bfd164593579::t_0ae4ab1d3c2944 1-4
+apps/server/cloudflare/core-http/browser-admission.test.ts
+  s_68bfd164593579::t_0ae4ab1d3c2944 1,5
+apps/server/cloudflare/public-worker-telemetry.test.ts
+  s_68bfd164593579::t_0ae4ab1d3c2944 1,5
+apps/server/cloudflare/web-session/operations.ts
+  s_68bfd164593579::t_0ae4ab1d3c2944 1,6
+apps/server/cloudflare/web-session/internal/binding.ts
+  s_68bfd164593579::t_0ae4ab1d3c2944 1-4,11
+apps/web/src/app/initial-values.test.ts
+  s_68bfd164593579::t_0ae4ab1d3c2944 12,16-19,99,101,165-170
+apps/cli/src/direct-client/runtime.ts
+  s_68bfd164593579::t_5307800372b0ac 1
+apps/server/src/shell/public-http/operations.ts
+  s_68bfd164593579::t_5feaec6dee8e19 1
+apps/web/src/transport/browser-diagnostics.test.ts
+  s_68bfd164593579::t_617b91e5b5173b 1
+apps/web/src/transport/browser-http-policy.ts
+  s_68bfd164593579::t_be9e41924f9a50 1
+apps/web/src/transport/session-binding.ts
+  s_68bfd164593579::t_f9a1e3976d511c 1
+infra/cloudflare/edge-security.ts
+  s_68bfd164593579::t_f82ba144325852 1-2
+infra/cloudflare/verify-edge-policy.ts
+  s_68bfd164593579::t_bb44346c60b2bf 5
+infra/cloudflare/workers.test.ts
+  s_68bfd164593579::t_3b50f83d69a448 1,7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f20cbdba1fd49fc8953e81287075f3f1b6647eb6",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

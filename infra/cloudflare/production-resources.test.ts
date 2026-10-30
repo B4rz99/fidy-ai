@@ -1,5 +1,9 @@
-import { Cause } from "effect";
-import { describe, expect, it } from "vitest";
+import { Credentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
+import { createScriptVersion } from "@distilled.cloud/cloudflare/workers";
+import { it } from "@effect/vitest";
+import { Cause, Effect } from "effect";
+import { HttpClient, HttpClientResponse } from "effect/http";
+import { describe, expect } from "vitest";
 import { resourceFailureMessage } from "./production-resources";
 
 describe("resource release refusal diagnostics", () => {
@@ -48,3 +52,41 @@ describe("resource release refusal diagnostics", () => {
     }
   });
 });
+
+it.effect.each([
+  { code: 10021, expected: " (BadRequest; code=10021)" },
+  { code: undefined, expected: " (BadRequest)" },
+  { code: "private-code", expected: " (BadRequest)" },
+  { code: -1, expected: "" },
+])("retains only a native numeric upload refusal code: $code", ({ code, expected }) =>
+  Effect.gen(function* () {
+    const client = HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          Response.json(
+            { success: false, errors: [{ code, message: "private binding value" }] },
+            { status: 400 }
+          )
+        )
+      )
+    );
+    const result = yield* createScriptVersion({
+      accountId: "test-account",
+      scriptName: "test-worker",
+      metadata: { mainModule: "index.js" },
+    }).pipe(
+      Effect.provideService(HttpClient.HttpClient, client),
+      Effect.provideService(
+        Credentials,
+        Effect.succeed(apiTokenCredentials({ apiToken: "test-only" }))
+      ),
+      Effect.matchCause({
+        onFailure: resourceFailureMessage,
+        onSuccess: () => "unexpected success",
+      })
+    );
+    expect(result).toBe(`Alchemy resource operation failed${expected}; inspect release state.`);
+    expect(result).not.toContain("private");
+  })
+);

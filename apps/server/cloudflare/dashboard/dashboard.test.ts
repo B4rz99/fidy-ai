@@ -1,6 +1,11 @@
 import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
-import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
+import {
+  installTestSchema,
+  isolatedTestDatabases,
+  isolatedTestStorage,
+  observeRetentionCost,
+} from "../d1-test-fixture";
 import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { ScopeMissing } from "../../src/shell/public-http/contract";
@@ -1799,6 +1804,27 @@ it(
     ),
   30_000
 );
+
+it("reads the established Dashboard document once per document request", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* initializedSetup();
+      const observed = observeRetentionCost(db);
+      const response = yield* Effect.tryPromise(() => send(observed.database, 0, "/dashboard"));
+      expect(response.status).toBe(200);
+      const body = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
+      )(yield* Effect.tryPromise(() => response.json()));
+      expect(body.data.layout.kind).toBe("split");
+      expect(
+        observed
+          .statements()
+          .filter(({ sql }) =>
+            sql.startsWith("SELECT document_json AS encoded,revision FROM user_documents")
+          )
+      ).toHaveLength(1);
+    })
+  ));
 
 it(
   "finds a recent Transaction by its captured notes in a configured list Widget",

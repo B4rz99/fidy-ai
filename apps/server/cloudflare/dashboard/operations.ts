@@ -32,8 +32,8 @@ import {
   editWrite,
   failure,
   findDashboardDocument,
-  findDashboardValue,
   firstUse,
+  projectDashboardValue,
   validCategories,
 } from "./internal/dashboard-mutation";
 import {
@@ -311,7 +311,12 @@ const queryDashboard = ({
       const body = yield* Schema.encodeEffect(Schema.toCodecJson(DashboardUninitialized))(failure);
       return Response.json(body, { status: 404, headers: transactionNoStore });
     }
-    const value = yield* findDashboardValue({ db, userId: subject.userId, operation });
+    const value = yield* projectDashboardValue({
+      db,
+      userId: subject.userId,
+      operation,
+      document: found.value.document,
+    });
     if (Option.isNone(value) || value.value._tag !== "Owner") return transactionUnavailable();
     yield* accountQuery({ db, subject, current, operation });
     return yield* presentDashboard(value.value);

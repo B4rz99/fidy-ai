@@ -1,0 +1,44 @@
+.patterns/sources.json
+  s_68bfd164593579::t_4de39d40f82d32 34,58
+infra/cloudflare/alchemy.run.ts
+  s_68bfd164593579::t_4de39d40f82d32 369
+docs/research/core-placement-2026-10-30.md
+  s_68bfd164593579::t_4de39d40f82d32 1-63
+infra/cloudflare/workers.test.ts
+  s_68bfd164593579::t_4de39d40f82d32 406
+infra/cloudflare/production-release.test.ts
+  s_68bfd164593579::t_4de39d40f82d32 12,21-66
+  s_68bfd164593579::t_820a887b25ac0a 67
+patches/alchemy@2.0.0-beta.80.patch
+  s_68bfd164593579::t_4de39d40f82d32 69,72-83,92,174,177-188,204
+apps/server/ARCHITECTURE.md
+  s_68bfd164593579::t_4de39d40f82d32 25-28
+infra/cloudflare/production-release.ts
+  s_68bfd164593579::t_4de39d40f82d32 5,436-471,1086-1090
+infra/cloudflare/verify-edge-policy.ts
+  s_68bfd164593579::t_4de39d40f82d32 5
+apps/server/cloudflare/runtime/contract.ts
+  s_68bfd164593579::t_4de39d40f82d32 69
+docs/research/core-placement-native-control-2026-10-30.json
+  s_68bfd164593579::t_4de39d40f82d32 1-125
+docs/research/browser-category-production-comparison-2026-10-30.json
+  s_68bfd164593579::t_4de39d40f82d32 1-125
+.patterns/alchemy.md
+  s_68bfd164593579::t_4de39d40f82d32 158-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e921dd37f13052bf203f2860ce250225843cefce",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

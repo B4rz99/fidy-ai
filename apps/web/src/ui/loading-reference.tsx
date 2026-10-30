@@ -19,11 +19,9 @@ import { DashboardCatalogSkeleton, DashboardSkeleton } from "@/ui/components/das
 import { ReportSkeleton } from "@/ui/components/report-loading";
 import { AuthorizationSkeleton } from "@/ui/components/authorization-loading";
 import { BudgetSkeleton } from "@/ui/components/budget-loading";
-import {
-  ReviewDetailSkeleton,
-  ReviewInboxSkeleton,
-  ReviewPageSkeleton,
-} from "@/ui/components/review-loading";
+import { ReviewDetailSkeleton } from "@/ui/components/review-detail-loading";
+import { ReviewInboxSkeleton } from "@/ui/components/review-inbox-loading";
+import { ReviewPageSkeleton } from "@/ui/components/review-page-loading";
 import { TransactionRowsSkeleton, TransactionsSkeleton } from "@/ui/components/transaction-loading";
 import { Button } from "@/ui/components/button";
 import {

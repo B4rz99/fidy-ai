@@ -1,4 +1,4 @@
-import { ReviewPageSkeleton } from "@/ui/components/review-loading";
+import { ReviewPageSkeleton } from "@/ui/components/review-page-loading";
 import { ReviewWorkspace } from "./workspace-components";
 import { useMatch, useRouterState } from "@tanstack/react-router";
 import { Option } from "effect";

@@ -1,4 +1,4 @@
-import { ReviewDetailSkeleton } from "@/ui/components/review-loading";
+import { ReviewDetailSkeleton } from "@/ui/components/review-detail-loading";
 import { TextSkeleton } from "@/ui/components/loading-skeletons";
 import { reviewItemQuery } from "./query";
 import { workspaceCategoriesQuery } from "@/transport/workspace-query";

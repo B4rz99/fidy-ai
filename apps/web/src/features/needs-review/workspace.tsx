@@ -1,4 +1,4 @@
-import { ReviewInboxSkeleton } from "@/ui/components/review-loading";
+import { ReviewInboxSkeleton } from "@/ui/components/review-inbox-loading";
 import type { FidyClient } from "@/transport/client";
 import { type ReviewDecisions, type ReviewWorkspaceQuery, makeReviewDecisions } from "./decisions";
 import { ReviewFullState, ReviewWorkspaceLayout } from "@/ui/components/review-workspace";

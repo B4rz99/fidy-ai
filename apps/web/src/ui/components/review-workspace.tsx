@@ -1,4 +1,4 @@
-import { ReviewInboxSkeleton } from "./review-loading";
+import { ReviewInboxSkeleton } from "./review-inbox-loading";
 import type { JSX, ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CheckmarkCircle02Icon, InformationCircleIcon } from "@hugeicons/core-free-icons";

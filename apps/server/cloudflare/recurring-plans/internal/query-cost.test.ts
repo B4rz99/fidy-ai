@@ -1,5 +1,5 @@
-import { DateTime, Schema } from "effect";
-import { expect, it } from "vitest";
+import { DateTime, Effect, Schema } from "effect";
+import { afterAll, expect, it } from "vitest";
 import { RecurringDocument } from "../../../src/core/recurring-plans/contract";
 import {
   projectRecurringMonth,
@@ -8,7 +8,76 @@ import {
 } from "../../../src/core/recurring-plans/operations";
 import { Transaction } from "../../../src/core/transactions/contract";
 import { planningFact } from "./facts";
-import { automaticMatches } from "./query";
+import { automaticMatches, workspaceValue } from "./query";
+import { RecurringWorkspaceQuery } from "../../../src/shell/recurring-plans/contract";
+import {
+  installTestSchema,
+  isolatedTestDatabases,
+  observeRetentionCost,
+} from "../../d1-test-fixture";
+
+const databases = isolatedTestDatabases();
+afterAll(() => databases.dispose());
+
+it("reads nonempty workspace preferences and both bounded matching ranges in one native round trip", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      yield* Effect.tryPromise(() => installTestSchema({ db }));
+      const userId = "10000000-0000-4000-8000-000000000001";
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', 0)"
+          )
+          .bind(userId)
+          .run()
+      );
+      const document = yield* Schema.decodeEffect(RecurringDocument)({
+        revision: 0,
+        exceptions: [],
+        fulfillments: [],
+        excludedTransactionIds: [],
+        suggestions: [],
+        plans: [
+          {
+            id: "40000000-0000-4000-8000-000000000001",
+            pauses: [],
+            revisions: [
+              {
+                from: "2026-01-01",
+                plan: {
+                  name: "Rent",
+                  kind: "expense",
+                  currency: "COP",
+                  amountMode: "fixed",
+                  money: { amount: "1000", currency: "COP" },
+                  frequency: "monthly",
+                  firstDate: "2026-01-10",
+                  timeZone: "America/Bogota",
+                  counterparty: "Landlord",
+                },
+              },
+            ],
+          },
+        ],
+      });
+      const query = yield* Schema.decodeEffect(RecurringWorkspaceQuery)({
+        month: "2026-10",
+      });
+      const observed = observeRetentionCost(db);
+      const result = yield* workspaceValue({ db: observed.database, userId, document, query });
+      expect(result.matchesComplete).toBe(true);
+      expect(result.occurrences).toHaveLength(1);
+      expect(result.previous).toHaveLength(1);
+      expect(
+        observed
+          .statements()
+          .filter(({ sql }) => sql.includes("occurred_at_ms >= ? AND occurred_at_ms < ?"))
+      ).toHaveLength(2);
+      expect(observed.roundTrips()).toBe(1);
+    })
+  ));
 
 it("converts each transaction once per occurrence time zone while preserving match allocation", () => {
   const document = Schema.decodeUnknownSync(RecurringDocument)({

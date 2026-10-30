@@ -90,6 +90,88 @@ in revision `952157f1` or the before/after table above. A separate default-Dashb
 probe already passed with one aggregate batch, so batching its ranges was not adopted
 as an explanation or fix for that observed page delay.
 
+## Deployed follow-up: revision 11fa1c22
+
+[PR #1619](https://github.com/B4rz99/fidy-ai/pull/1619) merged as
+`11fa1c2271a9c00b8dcc7ddb6cb28a9c133f83c8` after
+[all CI passed](https://github.com/B4rz99/fidy-ai/actions/runs/40982725160).
+Its [production deployment passed](https://github.com/B4rz99/fidy-ai/actions/runs/40983518647).
+App and API metadata matched that revision before and after six further desktop cold loads,
+using the same viewport, cache, CPU, admission gap and readiness conditions. All six were ready.
+
+| Page      | Three observations ms  | Median ms | Speedup versus original 90bdfb2 |
+| --------- | ---------------------- | --------: | ------------------------------: |
+| Recurring | 4156.2, 3915.1, 4359.0 |    4156.2 |                          0.731x |
+| Dashboard | 5373.3, 2958.1, 2943.6 |    2958.1 |                          1.291x |
+
+The Dashboard outlier remains in the artifact. The new median does not establish 2x,
+and the Recurring page regression remains unresolved. Resource spans show substantial
+variation in API waits; these sequential batches do not isolate the code change from
+service conditions. An additional read of the existing Recurring response, retaining
+only counts, found one retained plan and no fulfillments. The empty-plan fast path does
+not apply to that workload. The JSON artifact's `planningFollowUp` contains all six samples.
+
+A supplementary Account probe lost its debugger tab binding and produced no valid
+readiness observation. It is excluded from latency comparisons. Its available resource
+waterfall showed binding discovery starting after the main JavaScript startup; that is
+an investigation lead, not an improvement measurement. The matched follow-up harness
+passes the recovered tab and debugger handles explicitly and retains the 20-second limit.
+
+## Native User startup change
+
+The bound browser User request performed four native statements: ingress binding discovery,
+idle renewal, canonical User projection and the final live-credential Audit. A regression
+assertion failed at four statements and passed at three after the expected binding was
+checked in the existing renewal statement. The final projection and late authority check
+remain separate. All 44 focused tests passed, including wrong/missing/malformed binding,
+duplicate cookies, expiry and revocation during projection. This is not a deployed latency
+measurement of that change.
+
+## Deployed follow-up: revision b2a2234d
+
+[PR #1620](https://github.com/B4rz99/fidy-ai/pull/1620) merged as
+`b2a2234de15e9a979994ea1e0c2b3ef0cf333089` after
+[all required checks passed](https://github.com/B4rz99/fidy-ai/actions/runs/40989664299).
+The [production workflow passed](https://github.com/B4rz99/fidy-ai/actions/runs/40990417504).
+App and API revision and contract digest matched before and after 27 further desktop
+observations. Every observation was ready; no page median reached 2x. The browser cache,
+CPU and viewport overrides were restored after measurement. All numeric observations,
+including slow samples, are retained in the JSON artifact's `boundUserFollowUp`.
+
+| Page         | Median ms | Speedup versus original 90bdfb2 |
+| ------------ | --------: | ------------------------------: |
+| Transactions |    4387.4 |                          0.626x |
+| Budgets      |    4057.1 |                          0.862x |
+| Recurring    |    3922.3 |                          0.775x |
+| Dashboard    |    3998.8 |                          0.955x |
+| Review       |    2283.4 |                          0.685x |
+| Account      |    1135.2 |                          0.587x |
+| Access       |    1817.0 |                          0.617x |
+| Upgrade      |    3792.0 |                          0.538x |
+| Privacy      |    2048.4 |                          0.582x |
+
+These sequential observations do not isolate the User change from service, network or
+browser-observation conditions. Account called only session binding, and Review did not
+call the changed User endpoint; both also became slower. The native statement reduction
+therefore establishes less work, without establishing a deployed startup improvement.
+Recurring's main API spans were approximately 2.24–2.42 seconds. Its two separately bounded
+matching ranges and preference read are the next round-trip investigation. The original
+readiness criteria and 20-second limit were retained. The related performance chat paused
+heavy local checks during the main measurement window, including its final extension;
+the first Transactions samples preceded that acknowledgement.
+
+## Next native Recurring snapshot change
+
+A nonempty workspace's preferences and two matching ranges performed three native round
+trips. A regression test failed with three and passed with one batch after those reads
+were composed through the existing Identity context projection and Transaction owner.
+The two range statements retain independent 128-fact limits and completeness results;
+they are not replaced by a combined range. Empty workspaces still read no matching ranges.
+The broader native suite passed 290 tests with 11 existing skips, including 200 own-User
+facts across two complete ranges, 129 excluded foreign-User facts, and an incomplete earlier
+month. Authority, credential renewal and the final live-credential Audit remain outside
+this refactor. This native round-trip reduction has not yet been measured in production.
+
 ## Sign-in recovery and the quota hypothesis
 
 Before the daily reset, the sign-in attempt failed at `POST /web/pairings` with HTTP 503,

@@ -964,6 +964,50 @@ it(
   30000
 );
 
+it("keeps two complete matching ranges above 128 combined facts and excludes another User's facts", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, subjects } = yield* fixture();
+      const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
+      const other = Option.getOrThrow(Option.fromUndefinedOr(subjects[1]));
+      expect(
+        (yield* call(
+          db,
+          owner,
+          edit(0, {
+            kind: "create",
+            id: planId,
+            plan: { ...planInput, firstDate: "2026-09-10" },
+          })
+        )).status
+      ).toBe(200);
+      yield* Effect.tryPromise(() =>
+        db.batch(
+          Array.from({ length: 329 }, (_, index) =>
+            db
+              .prepare(
+                "INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES (?,?,'1000','COP','outflow','10000000-0000-4000-8000-000000000001',?,?)"
+              )
+              .bind(
+                `40000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+                index < 200 ? owner.userId : other.userId,
+                DateTime.toEpochMillis(
+                  DateTime.makeUnsafe(
+                    index < 100 ? "2026-09-10T12:00:00.000Z" : "2026-10-10T12:00:00.000Z"
+                  )
+                ),
+                DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-29T12:00:00.000Z"))
+              )
+          )
+        )
+      );
+      const workspace = yield* read(db, owner);
+      expect(workspace.occurrences).toHaveLength(1);
+      expect(workspace.previous).toHaveLength(1);
+      expect(workspace.matchesComplete).toBe(true);
+    })
+  ));
+
 const readQuery = (
   db: D1Database,
   index: number,

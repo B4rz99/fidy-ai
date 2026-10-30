@@ -66,9 +66,7 @@ const previews = [
     name: "Transacciones · página siguiente",
     frame: "transaction-rows",
     context: "Se añade al final del historial; las filas cargadas permanecen visibles.",
-    render: (): JSX.Element => (
-      <TransactionRowsSkeleton visibility={{ category: true, type: true }} />
-    ),
+    render: (): JSX.Element => <TransactionRowsSkeleton />,
   },
   {
     name: "Por revisar · entrada",
@@ -150,7 +148,7 @@ const previews = [
   },
   {
     name: "Agentes · solicitud de acceso",
-    frame: "plain",
+    frame: "authorization",
     context: "Permisos y duración antes de habilitar la aprobación.",
     render: (): JSX.Element => <AuthorizationSkeleton />,
   },
@@ -204,13 +202,13 @@ const previews = [
   },
   {
     name: "Privacidad · autorización",
-    frame: "plain",
+    frame: "privacy",
     context: "Consulta de autorización antes de ofrecer decisiones.",
     render: (): JSX.Element => <PrivacyAuthorizationSkeleton />,
   },
   {
     name: "Privacidad · renovación",
-    frame: "plain",
+    frame: "privacy",
     context: "Aviso guardado antes de ofrecer su renovación explícita.",
     render: (): JSX.Element => <ConsentRenewalSkeleton />,
   },

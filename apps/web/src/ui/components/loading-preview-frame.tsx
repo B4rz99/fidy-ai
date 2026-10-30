@@ -7,6 +7,8 @@ type Frame =
   | "review-inbox"
   | "review-detail"
   | "review-original"
+  | "authorization"
+  | "privacy"
   | "settings"
   | "settings-panel"
   | "application";
@@ -35,10 +37,20 @@ const frames: Readonly<Record<Frame, (children: ReactNode) => ReactNode>> = {
     </div>
   ),
   settings: (children): JSX.Element => (
-    <div className="settings-access-section p-6">{children}</div>
+    <div className="settings-workspace !min-h-0">
+      <div className="settings-access-section p-6">{children}</div>
+    </div>
+  ),
+  authorization: (children): JSX.Element => (
+    <div className="settings-workspace oauth-workspace !min-h-0">{children}</div>
+  ),
+  privacy: (children): JSX.Element => (
+    <div className="settings-workspace settings-privacy !min-h-0">{children}</div>
   ),
   "settings-panel": (children): JSX.Element => (
-    <div className="settings-panel w-96 max-w-full">{children}</div>
+    <div className="settings-workspace !min-h-0">
+      <div className="settings-panel w-96 max-w-full">{children}</div>
+    </div>
   ),
   application: (children): JSX.Element => <div className="relative transform-gpu">{children}</div>,
 };

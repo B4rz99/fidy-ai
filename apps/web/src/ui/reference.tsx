@@ -265,7 +265,7 @@ const EmptyReference = (): JSX.Element => (
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
-      <TransactionRowsSkeleton visibility={{ category: true, type: true }} />
+      <TransactionRowsSkeleton />
     </CardContent>
   </Card>
 );

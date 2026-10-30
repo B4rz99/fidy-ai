@@ -5,7 +5,6 @@ import { Table, TableBody, TableCell, TableRow } from "./table";
 import "./transactions.css";
 
 const placeholderRows = 6;
-type LedgerVisibility = Readonly<{ category: boolean; type: boolean }>;
 export const TransactionSkeletonRows = ({
   phase,
 }: Readonly<{ phase: "initial" | "continuation" }>): JSX.Element => (
@@ -43,12 +42,8 @@ export const TransactionSkeletonRows = ({
     ))}
   </>
 );
-const LedgerRows = ({ visibility }: Readonly<{ visibility: LedgerVisibility }>): JSX.Element => (
-  <div
-    className="transaction-ledger"
-    data-category-visible={visibility.category}
-    data-type-visible={visibility.type}
-  >
+const LedgerRows = (): JSX.Element => (
+  <div className="transaction-ledger" data-category-visible="true" data-type-visible="true">
     <Table>
       <TableBody>
         <TransactionSkeletonRows phase="initial" />
@@ -56,11 +51,9 @@ const LedgerRows = ({ visibility }: Readonly<{ visibility: LedgerVisibility }>):
     </Table>
   </div>
 );
-export const TransactionRowsSkeleton = ({
-  visibility,
-}: Readonly<{ visibility: LedgerVisibility }>): JSX.Element => (
+export const TransactionRowsSkeleton = (): JSX.Element => (
   <LoadingRegion label="Cargando transacciones">
-    <LedgerRows visibility={visibility} />
+    <LedgerRows />
   </LoadingRegion>
 );
 const SummarySkeleton = (): JSX.Element => (
@@ -139,7 +132,7 @@ export const TransactionsSkeleton = ({
               <Skeleton className="h-[38px] w-24" />
             </div>
           </div>
-          <LedgerRows visibility={{ category: true, type: true }} />
+          <LedgerRows />
         </div>
         <aside data-transaction-slot="transaction-context-panel">
           <SummarySkeleton />

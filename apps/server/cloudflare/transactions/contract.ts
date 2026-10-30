@@ -46,11 +46,14 @@ export type PlanningTransactionFacts = Readonly<{
 export type PlanningTransactionSnapshot<A> = Readonly<{
   snapshot: A;
   ranges: ReadonlyArray<Option.Option<PlanningTransactionFacts>>;
+  selected: ReadonlyArray<Transaction>;
 }>;
 export type PlanningTransactionRead<A> = Readonly<{
   db: D1Database;
   userId: string;
   ranges: ReadonlyArray<PlanningTransactionRange>;
+  /** At most 4096 references, read in independently bounded 128-ID selections. */
+  ids: ReadonlyArray<string>;
   snapshot: Readonly<{
     statement: D1PreparedStatement;
     decode: (rows: ReadonlyArray<unknown>) => Option.Option<A>;

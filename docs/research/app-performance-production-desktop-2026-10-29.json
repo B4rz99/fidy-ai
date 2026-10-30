@@ -2051,7 +2051,7 @@
         }
       ]
     },
-    "status": "non-suspending-candidate-awaiting-production",
+    "status": "deployed; native prototype regression removed; production 2x target unmet",
     "nonSuspendingCandidateGraph": {
       "files": [
         {
@@ -2782,6 +2782,604 @@
           }
         }
       ]
+    },
+    "readOnlyRestControlProbe": {
+      "sql": "SELECT 1 AS ready",
+      "samples": [
+        {
+          "httpElapsedMs": 777.388,
+          "success": true,
+          "metadata": [
+            {
+              "served_by_region": "ENAM",
+              "served_by_primary": true,
+              "timings": {
+                "sql_duration_ms": 0.1532
+              },
+              "duration": 0.1532,
+              "changes": 0,
+              "rows_read": 0,
+              "rows_written": 0
+            }
+          ]
+        },
+        {
+          "httpElapsedMs": 271.271,
+          "success": true,
+          "metadata": [
+            {
+              "served_by_region": "ENAM",
+              "served_by_primary": true,
+              "timings": {
+                "sql_duration_ms": 0.0982
+              },
+              "duration": 0.0982,
+              "changes": 0,
+              "rows_read": 0,
+              "rows_written": 0
+            }
+          ]
+        },
+        {
+          "httpElapsedMs": 267.955,
+          "success": true,
+          "metadata": [
+            {
+              "served_by_region": "ENAM",
+              "served_by_primary": true,
+              "timings": {
+                "sql_duration_ms": 0.156
+              },
+              "duration": 0.156,
+              "changes": 0,
+              "rows_read": 0,
+              "rows_written": 0
+            }
+          ]
+        }
+      ],
+      "limitation": "REST management-path diagnostics are not Worker-binding timings or browser cold-load observations."
     }
+  },
+  "startupCodeFollowUp": {
+    "revision": "6bde98fb6a84d0a0bf33c4bb3b9d757c3a23c7a2",
+    "contractDigest": "601bd69a4a42aeb9d4317f7aef8bf71092da08ad2e78c277c8565b4d85c11b8f",
+    "deploymentRun": 41003496675,
+    "metadataVerifiedBeforeAndAfterEachWindow": true,
+    "samples": [
+      {
+        "journey": "transactions",
+        "repeat": 1,
+        "observedMs": 2639.2,
+        "ready": true,
+        "timeOrigin": 1793335414401.4,
+        "resourceCount": 108,
+        "completedEncodedResourceBytes": 630296,
+        "apiSpans": [
+          ["/web/session/binding", 208.1, 391.8],
+          ["/web/consent", 511.8, 1220.4],
+          ["/user", 1227.8, 1845.8],
+          ["/ingestion/review-workspace", 1289.6, 1290.6],
+          ["/ingestion/review-workspace", 1545.3, 2094],
+          ["/categories", 1848.8, 2098],
+          ["/transactions", 2098.6, 2609.6]
+        ]
+      },
+      {
+        "journey": "transactions",
+        "repeat": 2,
+        "observedMs": 2950.9,
+        "ready": true,
+        "timeOrigin": 1793335429085.5,
+        "resourceCount": 108,
+        "completedEncodedResourceBytes": 630102,
+        "apiSpans": [
+          ["/web/session/binding", 203.7, 439],
+          ["/web/consent", 573.9, 1343.6],
+          ["/user", 1359.8, 1903.9],
+          ["/ingestion/review-workspace", 1426, 1427.6],
+          ["/ingestion/review-workspace", 1679.9, 2333.7],
+          ["/categories", 1914.5, 2298.4],
+          ["/transactions", 2306.5, 2904]
+        ]
+      },
+      {
+        "journey": "transactions",
+        "repeat": 3,
+        "observedMs": 3204,
+        "ready": true,
+        "timeOrigin": 1793335444068.4,
+        "resourceCount": 108,
+        "completedEncodedResourceBytes": 630232,
+        "apiSpans": [
+          ["/web/session/binding", 214.1, 599],
+          ["/web/consent", 737.5, 1380.4],
+          ["/user", 1388.2, 2049.2],
+          ["/ingestion/review-workspace", 1459.9, 1465.8],
+          ["/ingestion/review-workspace", 1713.2, 2338.9],
+          ["/categories", 2060, 2321.6],
+          ["/transactions", 2335.1, 3140.3]
+        ]
+      },
+      {
+        "journey": "budgets",
+        "repeat": 1,
+        "observedMs": 2752.9,
+        "ready": true,
+        "timeOrigin": 1793335462814.1,
+        "resourceCount": 106,
+        "completedEncodedResourceBytes": 584939,
+        "apiSpans": [
+          ["/web/session/binding", 186.1, 365.6],
+          ["/user", 392.4, 898.4],
+          ["/ingestion/review-workspace", 582.5, 586.4],
+          ["/ingestion/review-workspace", 822.5, 1387.7],
+          ["/budget-status", 906.7, 2035],
+          ["/categories", 1398.1, 1717.9],
+          ["/budgets", 1725.5, 2696.3]
+        ]
+      },
+      {
+        "journey": "budgets",
+        "repeat": 2,
+        "observedMs": 2961.6,
+        "ready": true,
+        "timeOrigin": 1793335477602.8,
+        "resourceCount": 106,
+        "completedEncodedResourceBytes": 584834,
+        "apiSpans": [
+          ["/web/session/binding", 209.8, 383.3],
+          ["/user", 412.7, 986.1],
+          ["/ingestion/review-workspace", 613.9, 614.9],
+          ["/ingestion/review-workspace", 854.5, 1558.5],
+          ["/budget-status", 994.5, 2124.2],
+          ["/categories", 1572.2, 1840.3],
+          ["/budgets", 1848.3, 2912]
+        ]
+      },
+      {
+        "journey": "budgets",
+        "repeat": 3,
+        "observedMs": 2861.7,
+        "ready": true,
+        "timeOrigin": 1793335492597.3,
+        "resourceCount": 106,
+        "completedEncodedResourceBytes": 584791,
+        "apiSpans": [
+          ["/web/session/binding", 197.9, 449.3],
+          ["/user", 493.1, 973.7],
+          ["/ingestion/review-workspace", 708.4, 709.6],
+          ["/ingestion/review-workspace", 952.3, 1544.4],
+          ["/budget-status", 981.5, 2094.1],
+          ["/categories", 1559.3, 1891.7],
+          ["/budgets", 1895.7, 2807.8]
+        ]
+      },
+      {
+        "journey": "recurring",
+        "repeat": 1,
+        "observedMs": 2366.5,
+        "ready": true,
+        "timeOrigin": 1793335581061.7,
+        "resourceCount": 109,
+        "completedEncodedResourceBytes": 618606,
+        "apiSpans": [
+          ["/web/session/binding", 202.1, 394.1],
+          ["/user", 422, 859.8],
+          ["/ingestion/review-workspace", 677.5, 678.5],
+          ["/recurring-plans", 862.5, 2327.5],
+          ["/categories", 862.7, 1115.6],
+          ["/ingestion/review-workspace", 1118.3, 1669.9]
+        ]
+      },
+      {
+        "journey": "recurring",
+        "repeat": 2,
+        "observedMs": 2184.6,
+        "ready": true,
+        "timeOrigin": 1793335595440.1,
+        "resourceCount": 109,
+        "completedEncodedResourceBytes": 618610,
+        "apiSpans": [
+          ["/web/session/binding", 197.9, 347.2],
+          ["/user", 372.7, 795.8],
+          ["/ingestion/review-workspace", 647.2, 649.1],
+          ["/recurring-plans", 798, 2152.4],
+          ["/categories", 798.1, 1202.1],
+          ["/ingestion/review-workspace", 1205, 1651.2]
+        ]
+      },
+      {
+        "journey": "recurring",
+        "repeat": 3,
+        "observedMs": 2619.1,
+        "ready": true,
+        "timeOrigin": 1793335609655.8,
+        "resourceCount": 108,
+        "completedEncodedResourceBytes": 618548,
+        "apiSpans": [
+          ["/web/session/binding", 196.8, 332.5],
+          ["/user", 359.8, 787.3],
+          ["/recurring-plans", 892.8, 2567.4],
+          ["/categories", 894, 1427.7],
+          ["/ingestion/review-workspace", 1436.6, 1985.9]
+        ]
+      },
+      {
+        "journey": "dashboard",
+        "repeat": 1,
+        "observedMs": 2767.3,
+        "ready": true,
+        "timeOrigin": 1793335635880.7,
+        "resourceCount": 100,
+        "completedEncodedResourceBytes": 684659,
+        "apiSpans": [
+          ["/web/session/binding", 218.4, 358.9],
+          ["/dashboard/view", 530.7, 2684.4],
+          ["/dashboard/catalog", 531.3, 551.1],
+          ["/ingestion/review-workspace", 583.2, 584.4],
+          ["/ingestion/review-workspace", 617, 618.4],
+          ["/ingestion/review-workspace", 851.4, 1296.2],
+          ["/dashboard/catalog", 1307.2, 1842.6]
+        ]
+      },
+      {
+        "journey": "dashboard",
+        "repeat": 2,
+        "observedMs": 3260.5,
+        "ready": true,
+        "timeOrigin": 1793335650680.7,
+        "resourceCount": 100,
+        "completedEncodedResourceBytes": 684548,
+        "apiSpans": [
+          ["/web/session/binding", 219, 363.1],
+          ["/dashboard/view", 503.9, 3183.2],
+          ["/dashboard/catalog", 504.8, 524.8],
+          ["/ingestion/review-workspace", 544.2, 545.1],
+          ["/ingestion/review-workspace", 578.7, 584.4],
+          ["/ingestion/review-workspace", 818.9, 1284.5],
+          ["/dashboard/catalog", 1292.6, 1777.9]
+        ]
+      },
+      {
+        "journey": "dashboard",
+        "repeat": 3,
+        "observedMs": 3058.9,
+        "ready": true,
+        "timeOrigin": 1793335665972.5,
+        "resourceCount": 100,
+        "completedEncodedResourceBytes": 684779,
+        "apiSpans": [
+          ["/web/session/binding", 218.1, 356.9],
+          ["/dashboard/view", 509.6, 2972.7],
+          ["/dashboard/catalog", 510.4, 527.3],
+          ["/ingestion/review-workspace", 548.3, 550.1],
+          ["/ingestion/review-workspace", 583.8, 588.5],
+          ["/ingestion/review-workspace", 829.3, 1249.9],
+          ["/dashboard/catalog", 1258.2, 1853.2]
+        ]
+      },
+      {
+        "journey": "review",
+        "repeat": 1,
+        "observedMs": 1446.1,
+        "ready": true,
+        "timeOrigin": 1793335989881.8,
+        "resourceCount": 103,
+        "completedEncodedResourceBytes": 617667,
+        "apiSpans": [
+          ["/web/session/binding", 193.8, 474.3],
+          ["/ingestion/review-workspace", 806.8, 1405.6],
+          ["/ingestion/review-workspace", 870.5, 871.9]
+        ]
+      },
+      {
+        "journey": "review",
+        "repeat": 2,
+        "observedMs": 1285.3,
+        "ready": true,
+        "timeOrigin": 1793336003351.9,
+        "resourceCount": 103,
+        "completedEncodedResourceBytes": 617646,
+        "apiSpans": [
+          ["/web/session/binding", 186.6, 423.3],
+          ["/ingestion/review-workspace", 736.2, 1274.8],
+          ["/ingestion/review-workspace", 780.3, 781.8]
+        ]
+      },
+      {
+        "journey": "review",
+        "repeat": 3,
+        "observedMs": 1225.5,
+        "ready": true,
+        "timeOrigin": 1793336016671,
+        "resourceCount": 103,
+        "completedEncodedResourceBytes": 617598,
+        "apiSpans": [
+          ["/web/session/binding", 189.5, 391.3],
+          ["/ingestion/review-workspace", 682.7, 1199.8],
+          ["/ingestion/review-workspace", 733.8, 735.5]
+        ]
+      },
+      {
+        "journey": "account",
+        "repeat": 1,
+        "observedMs": 546.7,
+        "ready": true,
+        "timeOrigin": 1793336034034.1,
+        "resourceCount": 78,
+        "completedEncodedResourceBytes": 370313,
+        "apiSpans": [["/web/session/binding", 221.3, 403.6]]
+      },
+      {
+        "journey": "account",
+        "repeat": 2,
+        "observedMs": 551.7,
+        "ready": true,
+        "timeOrigin": 1793336046615,
+        "resourceCount": 78,
+        "completedEncodedResourceBytes": 370449,
+        "apiSpans": [["/web/session/binding", 203.2, 375.4]]
+      },
+      {
+        "journey": "account",
+        "repeat": 3,
+        "observedMs": 584.2,
+        "ready": true,
+        "timeOrigin": 1793336059194.1,
+        "resourceCount": 78,
+        "completedEncodedResourceBytes": 370489,
+        "apiSpans": [["/web/session/binding", 199.4, 401.5]]
+      },
+      {
+        "journey": "access",
+        "repeat": 1,
+        "observedMs": 1077.3,
+        "ready": true,
+        "timeOrigin": 1793336080059.2,
+        "resourceCount": 98,
+        "completedEncodedResourceBytes": 573017,
+        "apiSpans": [
+          ["/web/session/binding", 196.5, 376.6],
+          ["/pats", 517.8, 1047.3]
+        ]
+      },
+      {
+        "journey": "access",
+        "repeat": 2,
+        "observedMs": 1019.2,
+        "ready": true,
+        "timeOrigin": 1793336093159.2,
+        "resourceCount": 98,
+        "completedEncodedResourceBytes": 572832,
+        "apiSpans": [
+          ["/web/session/binding", 202.7, 387.6],
+          ["/pats", 548.1, 980]
+        ]
+      },
+      {
+        "journey": "access",
+        "repeat": 3,
+        "observedMs": 1299.6,
+        "ready": true,
+        "timeOrigin": 1793336106210.8,
+        "resourceCount": 98,
+        "completedEncodedResourceBytes": 572838,
+        "apiSpans": [
+          ["/web/session/binding", 206.4, 451.2],
+          ["/pats", 626.3, 1266.5]
+        ]
+      },
+      {
+        "journey": "upgrade",
+        "repeat": 1,
+        "observedMs": 1400.9,
+        "ready": true,
+        "timeOrigin": 1793336145775,
+        "resourceCount": 86,
+        "completedEncodedResourceBytes": 543066,
+        "apiSpans": [
+          ["/web/session/binding", 195.6, 332.6],
+          ["/web/consent", 443.9, 913.4],
+          ["/subscription/offers", 933.1, 1373.1]
+        ]
+      },
+      {
+        "journey": "upgrade",
+        "repeat": 2,
+        "observedMs": 2181.5,
+        "ready": true,
+        "timeOrigin": 1793336159213.7,
+        "resourceCount": 86,
+        "completedEncodedResourceBytes": 543018,
+        "apiSpans": [
+          ["/web/session/binding", 188.2, 326.8],
+          ["/web/consent", 440.1, 891.7],
+          ["/subscription/offers", 1683.3, 2150]
+        ]
+      },
+      {
+        "journey": "upgrade",
+        "repeat": 3,
+        "observedMs": 1624.1,
+        "ready": true,
+        "timeOrigin": 1793336173498.4,
+        "resourceCount": 86,
+        "completedEncodedResourceBytes": 543207,
+        "apiSpans": [
+          ["/web/session/binding", 207.2, 358.5],
+          ["/web/consent", 630.8, 1124.9],
+          ["/subscription/offers", 1145, 1600.1]
+        ]
+      },
+      {
+        "journey": "privacy",
+        "repeat": 1,
+        "observedMs": 1071.7,
+        "ready": true,
+        "timeOrigin": 1793336495155.4,
+        "resourceCount": 86,
+        "completedEncodedResourceBytes": 524562,
+        "apiSpans": [
+          ["/web/session/binding", 194.2, 384.1],
+          ["/web/consent", 515.9, 1041.9]
+        ],
+        "excludedFromQuietComparison": true
+      },
+      {
+        "journey": "privacy",
+        "repeat": 2,
+        "observedMs": 1128,
+        "ready": true,
+        "timeOrigin": 1793336508242.6,
+        "resourceCount": 86,
+        "completedEncodedResourceBytes": 524615,
+        "apiSpans": [
+          ["/web/session/binding", 194, 390],
+          ["/web/consent", 507.6, 1061.6]
+        ],
+        "excludedFromQuietComparison": true
+      },
+      {
+        "journey": "privacy",
+        "repeat": 3,
+        "observedMs": 1407.8,
+        "ready": true,
+        "timeOrigin": 1793336521434.1,
+        "resourceCount": 86,
+        "completedEncodedResourceBytes": 524491,
+        "apiSpans": [
+          ["/web/session/binding", 300.6, 444.5],
+          ["/web/consent", 766, 1371.2]
+        ],
+        "excludedFromQuietComparison": true
+      },
+      {
+        "journey": "privacy",
+        "repeat": 1,
+        "observedMs": 1929.6,
+        "ready": true,
+        "timeOrigin": 1793336787832.1,
+        "resourceCount": 86,
+        "completedEncodedResourceBytes": 524686,
+        "apiSpans": [
+          ["/web/session/binding", 612.6, 1042.9],
+          ["/web/consent", 1215.7, 1893.7]
+        ],
+        "stage": "after-startup-code-privacy-quiet-repeat"
+      },
+      {
+        "journey": "privacy",
+        "repeat": 2,
+        "observedMs": 1109.1,
+        "ready": true,
+        "timeOrigin": 1793336801797.4,
+        "resourceCount": 86,
+        "completedEncodedResourceBytes": 524571,
+        "apiSpans": [
+          ["/web/session/binding", 229.7, 415.2],
+          ["/web/consent", 547.7, 1073.6]
+        ],
+        "stage": "after-startup-code-privacy-quiet-repeat"
+      },
+      {
+        "journey": "privacy",
+        "repeat": 3,
+        "observedMs": 1064.8,
+        "ready": true,
+        "timeOrigin": 1793336814944.3,
+        "resourceCount": 86,
+        "completedEncodedResourceBytes": 524557,
+        "apiSpans": [
+          ["/web/session/binding", 214.3, 381.4],
+          ["/web/consent", 524.4, 1037.2]
+        ],
+        "stage": "after-startup-code-privacy-quiet-repeat"
+      }
+    ],
+    "summary": [
+      {
+        "journey": "transactions",
+        "medianMs": 2950.9,
+        "originalBeforeMs": 2747.4,
+        "speedup": 0.9310379884103155
+      },
+      {
+        "journey": "budgets",
+        "medianMs": 2861.7,
+        "originalBeforeMs": 3495.4,
+        "speedup": 1.2214418003284762
+      },
+      {
+        "journey": "recurring",
+        "medianMs": 2366.5,
+        "originalBeforeMs": 3039.7,
+        "speedup": 1.2844707373758715
+      },
+      {
+        "journey": "dashboard",
+        "medianMs": 3058.9,
+        "originalBeforeMs": 3820.3,
+        "speedup": 1.2489130079440323
+      },
+      {
+        "journey": "review",
+        "medianMs": 1285.3,
+        "originalBeforeMs": 1563.7,
+        "speedup": 1.2166031276744729
+      },
+      {
+        "journey": "account",
+        "medianMs": 551.7,
+        "originalBeforeMs": 666,
+        "speedup": 1.2071778140293636
+      },
+      {
+        "journey": "access",
+        "medianMs": 1077.3,
+        "originalBeforeMs": 1121.7,
+        "speedup": 1.0412141464773044
+      },
+      {
+        "journey": "upgrade",
+        "medianMs": 1624.1,
+        "originalBeforeMs": 2040.6,
+        "speedup": 1.2564497260020935
+      },
+      {
+        "journey": "privacy",
+        "medianMs": 1109.1,
+        "originalBeforeMs": 1191.8,
+        "speedup": 1.074564962582274
+      }
+    ],
+    "twoTimesJourneys": 0,
+    "privacyQuietWindowStatus": "Initial batch retained as descriptive because one load overlaps heavy local checks; all three Privacy loads repeated in a confirmed quiet window. Repeat batch supplies the comparison median.",
+    "privacyOverlapEvidence": {
+      "peerReviewEndedAt": "2026-10-30T05:01:20.524Z",
+      "peerDesktopStartedAt": "2026-10-30T05:01:49.630Z",
+      "peerStaticInterval": ["2026-10-30T05:01:50.619Z", "2026-10-30T05:02:27.147Z"],
+      "overlappingRepeats": [3],
+      "excludedBatchJourneys": ["privacy"]
+    },
+    "qualifiedSampleCount": 27,
+    "allSampleCount": 30,
+    "allReady": true
+  },
+  "linkedRecurringSnapshotCandidate": {
+    "status": "validated locally, not deployed",
+    "beforeRoundTripsWithLinkedReferences": 2,
+    "afterRoundTripsWithLinkedReferences": 1,
+    "referenceLimit": 4096,
+    "independentSelectionLimit": 128,
+    "parameterRepresentation": "bound JSON membership; repeated SQL predicates remain below the 100-parameter D1 limit",
+    "validation": {
+      "focusedNativePassed": 35,
+      "focusedExistingSkipped": 1,
+      "broaderNativePassed": 212,
+      "broaderExistingSkipped": 12,
+      "fullStatic": "passed"
+    },
+    "productionLatencyMeasured": false
   }
 }

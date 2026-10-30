@@ -5,7 +5,7 @@ import { encodeMoneyAmount } from "../../src/core/_shared/money";
 import { CategoryId } from "../../src/core/categories/contract";
 import { prepareUserContext } from "../identity/user-context/operations";
 import { listCategories } from "../categories/operations";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { TransactionAggregatesUnavailable } from "./contract";
 import {
   findRecurringSnapshot,
@@ -13,6 +13,7 @@ import {
   prepareRecurringFactGuard,
   readCompletePeriodAggregates,
   readDashboardTransactions,
+  readPlanningTransactionSnapshot,
   readRecurringFacts,
 } from "./operations";
 
@@ -319,5 +320,67 @@ it("returns ready owned Dashboard pages with caller context and refuses incomple
         ])
       );
       expect(Option.isNone(yield* readDashboardTransactions(query))).toBe(true);
+    })
+  ));
+
+it("reads more than 128 explicit references without borrowing foreign or range completeness", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          ...Array.from({ length: 129 }, (_, index) => movement(db, index + 1)),
+          movement(db, 999, { userId: otherUserId }),
+        ])
+      );
+      const observed = observeRetentionCost(db);
+      const ids = [
+        ...Array.from({ length: 129 }, (_, index) => transactionId(index + 1)),
+        transactionId(1),
+        transactionId(999),
+        transactionId(998),
+      ];
+      const query = {
+        db: observed.database,
+        userId,
+        ids,
+        ranges: [{ from: "2027-01-01T00:00:00.000Z", through: "2027-02-01T00:00:00.000Z" }],
+        snapshot: {
+          statement: prepareUserContext({
+            db: observed.database,
+            userId: UserId.make(userId),
+            statement: {
+              sql: "SELECT serviceMarket, locale, timeZone FROM identity_user_context",
+              params: [],
+            },
+          }),
+          decode: (rows: ReadonlyArray<unknown>): Option.Option<UserContext> =>
+            Schema.decodeUnknownOption(UserContext)(rows[0]),
+        },
+      };
+      const result = Option.getOrThrow(yield* readPlanningTransactionSnapshot(query));
+      expect(observed.roundTrips()).toBe(1);
+      expect(result.selected.map((transaction) => transaction.id).sort()).toEqual(
+        ids.slice(0, 129).sort()
+      );
+      expect(result.ranges.map((range) => Option.getOrThrow(range))).toEqual([
+        { transactions: [], complete: true },
+      ]);
+      expect(
+        Option.isNone(
+          yield* readPlanningTransactionSnapshot({
+            ...query,
+            ids: Array.from({ length: 4097 }, () => transactionId(1)),
+          })
+        )
+      ).toBe(true);
+      expect(observed.roundTrips()).toBe(1);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE transaction_projection_leaf SET revision = -1 WHERE user_id=? AND id=?")
+          .bind(userId, transactionId(1))
+          .run()
+      );
+      expect(Option.isNone(yield* readPlanningTransactionSnapshot(query))).toBe(true);
     })
   ));

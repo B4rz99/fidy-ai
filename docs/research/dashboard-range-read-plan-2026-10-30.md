@@ -92,7 +92,6 @@ starting a third chunk. These are native footprint/correctness observations, not
 latency evidence. Hosted timing, current authenticated production baseline, required CI and deployment
 validation remain pending. The candidate is not deployed.
 
-
 ## Local hosted-fixture validation
 
 A separate private harness now freezes baseline `feb20327069e65bc363805ee205325602ecd4bcc`
@@ -109,10 +108,10 @@ local-day boundaries and exact Money `9007199254740993.01`; the foreign User's T
 from both rendered results. The real erasure database guard reads the isolated R2 generation afresh
 and asserts it in every native D1 batch.
 
-| Layout | Baseline D1 calls / fresh R2 reads | Candidate D1 calls / fresh R2 reads | Baseline D1 rows read | Candidate D1 rows read |
-| --- | ---: | ---: | ---: | ---: |
-| Default | 5 | 5 | 152 | 152 |
-| 31-day chart | 36 | 12 | 548 | 500 |
+| Layout       | Baseline D1 calls / fresh R2 reads | Candidate D1 calls / fresh R2 reads | Baseline D1 rows read | Candidate D1 rows read |
+| ------------ | ---------------------------------: | ----------------------------------: | --------------------: | ---------------------: |
+| Default      |                                  5 |                                   5 |                   152 |                    152 |
+| 31-day chart |                                 36 |                                  12 |                   548 |                    500 |
 
 All four views wrote zero D1 rows. The canonical DashboardView JSON was byte-identical per layout:
 default 3,406 bytes, SHA-256 `d5057d95ed7db7347ad4afd9f83cbb3643107d68c75e134c0f8d3c2c79d3baff`;
@@ -142,3 +141,21 @@ layout, not a threefold production speedup, a default-layout gain or universal 2
 The security manifest was reviewed against the new published Transactions query: User scope,
 current Consent/readiness per chunk, fresh recovery fencing and final authority/Audit are retained.
 No credential transport, cache authority, erasure protocol or admission policy changed.
+
+## Partial hosted comparison
+
+The private native hosted experiment completed schema/seed and 18 of its 20 planned views.
+A fresh account analytics query failed before the final two views were issued; measurement stopped
+and every resource was deleted. Independent GETs returned 404 for all three Workers, Workflow,
+D1 database and R2 bucket. The incomplete plan and every completed sample are retained in
+[the sanitized evidence](dashboard-range-hosted-2026-10-30.json). No SQL write was retried.
+
+The daily chart has three measured samples per variant: baseline 3,335/4,144/4,880 ms, candidate
+1,358/1,107/1,219 ms. Median 4,144 to 1,219 ms is a descriptive **3.40×** ratio for this partial
+synthetic cohort. All results matched the expected body/hash and native counts, with zero view
+writes. The default layout completed its four measurements per variant: median 282.5 to 264.5 ms
+(1.07×), with unchanged five-call footprint. No p95, production or universal gain is established.
+
+Actual native schema/seed/all completed views consumed 13,121 reads and 1,761 writes. The complete
+experiment ceiling carries these costs into any production verification; it is not reset. The
+subsequent standalone D1 observation succeeded and admitted the existing protected reserve.

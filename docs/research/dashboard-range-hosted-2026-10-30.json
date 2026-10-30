@@ -1,0 +1,1738 @@
+{
+  "scope": "Isolated synthetic published Dashboard fact loader and canonical renderer; not authenticated production HTTP latency.",
+  "sourceAudit": {
+    "loadedSourceFilesPerVariant": 212,
+    "sourceDifferences": [
+      "apps/server/cloudflare/dashboard/internal/dashboard-view.ts",
+      "apps/server/cloudflare/transactions/internal/dashboard-projection.ts",
+      "apps/server/cloudflare/transactions/operations.ts"
+    ],
+    "sourceManifestSha256": "35a58f9d1f2301ae9f2e9a5fe077441852b0a7f0311117cc03c5ffe7acba4cf8",
+    "localHarnessSourceSha256": "52a7da516dc71c6b9bcdef875bf063f383df44cb9aa1cb3c96f9a5ecc6611436",
+    "controllerSha256": "75012d98c3fa7cc4284c97d5a0416d6e79635dba646c3178aff2f6afe1784baa",
+    "baselineSha256": "7ab5f99bccff32ab39e1ea510f434783635f099ceee567383a4ae0bf6abaab6b",
+    "candidateSha256": "b53d212bb43faddf7b366fb92258dbf73ca7f863027cc20b4f19038f828830ee",
+    "noProviderCalls": true
+  },
+  "plannedMeasuredPerVariantLayout": 4,
+  "completed": false,
+  "interruption": "Analytics unavailable",
+  "usage": {
+    "rowsRead": 13121,
+    "rowsWritten": 1761
+  },
+  "samples": [
+    {
+      "variant": "baseline",
+      "layout": "default",
+      "elapsedMs": 435,
+      "serviceElapsedMs": 585,
+      "hash": "d5057d95ed7db7347ad4afd9f83cbb3643107d68c75e134c0f8d3c2c79d3baff",
+      "bytes": 3406,
+      "nativeCalls": 5,
+      "fenceReads": 5,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 38
+        },
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 55
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 35
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 47
+        }
+      ],
+      "excludedWarmup": true
+    },
+    {
+      "variant": "candidate",
+      "layout": "default",
+      "elapsedMs": 307,
+      "serviceElapsedMs": 493,
+      "hash": "d5057d95ed7db7347ad4afd9f83cbb3643107d68c75e134c0f8d3c2c79d3baff",
+      "bytes": 3406,
+      "nativeCalls": 5,
+      "fenceReads": 5,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 14
+        },
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 17
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 10
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 19
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 14
+        }
+      ],
+      "excludedWarmup": true
+    },
+    {
+      "variant": "baseline",
+      "layout": "default",
+      "elapsedMs": 243,
+      "serviceElapsedMs": 386,
+      "hash": "d5057d95ed7db7347ad4afd9f83cbb3643107d68c75e134c0f8d3c2c79d3baff",
+      "bytes": 3406,
+      "nativeCalls": 5,
+      "fenceReads": 5,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 26
+        },
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 27
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 29
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 23
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 37
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "candidate",
+      "layout": "default",
+      "elapsedMs": 234,
+      "serviceElapsedMs": 374,
+      "hash": "d5057d95ed7db7347ad4afd9f83cbb3643107d68c75e134c0f8d3c2c79d3baff",
+      "bytes": 3406,
+      "nativeCalls": 5,
+      "fenceReads": 5,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 29
+        },
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 33
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 30
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 37
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "candidate",
+      "layout": "default",
+      "elapsedMs": 257,
+      "serviceElapsedMs": 409,
+      "hash": "d5057d95ed7db7347ad4afd9f83cbb3643107d68c75e134c0f8d3c2c79d3baff",
+      "bytes": 3406,
+      "nativeCalls": 5,
+      "fenceReads": 5,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 30
+        },
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 31
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 31
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 27
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 34
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "baseline",
+      "layout": "default",
+      "elapsedMs": 584,
+      "serviceElapsedMs": 887,
+      "hash": "d5057d95ed7db7347ad4afd9f83cbb3643107d68c75e134c0f8d3c2c79d3baff",
+      "bytes": 3406,
+      "nativeCalls": 5,
+      "fenceReads": 5,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 50
+        },
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 53
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 54
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 48
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 51
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "baseline",
+      "layout": "default",
+      "elapsedMs": 283,
+      "serviceElapsedMs": 419,
+      "hash": "d5057d95ed7db7347ad4afd9f83cbb3643107d68c75e134c0f8d3c2c79d3baff",
+      "bytes": 3406,
+      "nativeCalls": 5,
+      "fenceReads": 5,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 29
+        },
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 45
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 27
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 30
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 32
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "candidate",
+      "layout": "default",
+      "elapsedMs": 272,
+      "serviceElapsedMs": 424,
+      "hash": "d5057d95ed7db7347ad4afd9f83cbb3643107d68c75e134c0f8d3c2c79d3baff",
+      "bytes": 3406,
+      "nativeCalls": 5,
+      "fenceReads": 5,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 23
+        },
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 21
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 29
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 27
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 29
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "candidate",
+      "layout": "default",
+      "elapsedMs": 492,
+      "serviceElapsedMs": 756,
+      "hash": "d5057d95ed7db7347ad4afd9f83cbb3643107d68c75e134c0f8d3c2c79d3baff",
+      "bytes": 3406,
+      "nativeCalls": 5,
+      "fenceReads": 5,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 55
+        },
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 52
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 63
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 103
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 46
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "baseline",
+      "layout": "default",
+      "elapsedMs": 282,
+      "serviceElapsedMs": 423,
+      "hash": "d5057d95ed7db7347ad4afd9f83cbb3643107d68c75e134c0f8d3c2c79d3baff",
+      "bytes": 3406,
+      "nativeCalls": 5,
+      "fenceReads": 5,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 31
+        },
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 30
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 28
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 29
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 49
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "baseline",
+      "layout": "daily",
+      "elapsedMs": 2525,
+      "serviceElapsedMs": 2701,
+      "hash": "cce23cfabb7ab95c359751ed9ead092e27d527583226cdaa12f2c65b0b444b5b",
+      "bytes": 3723,
+      "nativeCalls": 36,
+      "fenceReads": 36,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 33
+        },
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 60
+        },
+        {
+          "statements": 4,
+          "rowsRead": 53,
+          "rowsWritten": 0,
+          "elapsedMs": 38
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 39
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 46
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 37
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 43
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 47
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 45
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 35
+        },
+        {
+          "statements": 4,
+          "rowsRead": 27,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 4,
+          "rowsRead": 23,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 39
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 39
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 38
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 45
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 38
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 42
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 38
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 43
+        },
+        {
+          "statements": 4,
+          "rowsRead": 23,
+          "rowsWritten": 0,
+          "elapsedMs": 39
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 39
+        }
+      ],
+      "excludedWarmup": true
+    },
+    {
+      "variant": "candidate",
+      "layout": "daily",
+      "elapsedMs": 1240,
+      "serviceElapsedMs": 1395,
+      "hash": "cce23cfabb7ab95c359751ed9ead092e27d527583226cdaa12f2c65b0b444b5b",
+      "bytes": 3723,
+      "nativeCalls": 12,
+      "fenceReads": 12,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 43
+        },
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 52
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 48
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 10,
+          "rowsRead": 77,
+          "rowsWritten": 0,
+          "elapsedMs": 53
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 42
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 60
+        },
+        {
+          "statements": 10,
+          "rowsRead": 64,
+          "rowsWritten": 0,
+          "elapsedMs": 52
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 48
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 10,
+          "rowsRead": 161,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        }
+      ],
+      "excludedWarmup": true
+    },
+    {
+      "variant": "baseline",
+      "layout": "daily",
+      "elapsedMs": 3335,
+      "serviceElapsedMs": 3527,
+      "hash": "cce23cfabb7ab95c359751ed9ead092e27d527583226cdaa12f2c65b0b444b5b",
+      "bytes": 3723,
+      "nativeCalls": 36,
+      "fenceReads": 36,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 48
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 36
+        },
+        {
+          "statements": 4,
+          "rowsRead": 53,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 37
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 49
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 64
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 45
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 46
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 58
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 52
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 43
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 60
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 43
+        },
+        {
+          "statements": 4,
+          "rowsRead": 27,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 23,
+          "rowsWritten": 0,
+          "elapsedMs": 48
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 46
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 62
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 38
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 54
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 39
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 45
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 45
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 37
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 38
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 50
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 42
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 52
+        },
+        {
+          "statements": 4,
+          "rowsRead": 23,
+          "rowsWritten": 0,
+          "elapsedMs": 46
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "candidate",
+      "layout": "daily",
+      "elapsedMs": 1358,
+      "serviceElapsedMs": 1496,
+      "hash": "cce23cfabb7ab95c359751ed9ead092e27d527583226cdaa12f2c65b0b444b5b",
+      "bytes": 3723,
+      "nativeCalls": 12,
+      "fenceReads": 12,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 69
+        },
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 73
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 53
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 49
+        },
+        {
+          "statements": 10,
+          "rowsRead": 77,
+          "rowsWritten": 0,
+          "elapsedMs": 50
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 52
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 51
+        },
+        {
+          "statements": 10,
+          "rowsRead": 64,
+          "rowsWritten": 0,
+          "elapsedMs": 54
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 43
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 43
+        },
+        {
+          "statements": 10,
+          "rowsRead": 161,
+          "rowsWritten": 0,
+          "elapsedMs": 49
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "candidate",
+      "layout": "daily",
+      "elapsedMs": 1107,
+      "serviceElapsedMs": 1237,
+      "hash": "cce23cfabb7ab95c359751ed9ead092e27d527583226cdaa12f2c65b0b444b5b",
+      "bytes": 3723,
+      "nativeCalls": 12,
+      "fenceReads": 12,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 24
+        },
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 24
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 18
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 27
+        },
+        {
+          "statements": 10,
+          "rowsRead": 77,
+          "rowsWritten": 0,
+          "elapsedMs": 27
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 30
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 31
+        },
+        {
+          "statements": 10,
+          "rowsRead": 64,
+          "rowsWritten": 0,
+          "elapsedMs": 31
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 42
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 34
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 28
+        },
+        {
+          "statements": 10,
+          "rowsRead": 161,
+          "rowsWritten": 0,
+          "elapsedMs": 33
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "baseline",
+      "layout": "daily",
+      "elapsedMs": 4144,
+      "serviceElapsedMs": 4282,
+      "hash": "cce23cfabb7ab95c359751ed9ead092e27d527583226cdaa12f2c65b0b444b5b",
+      "bytes": 3723,
+      "nativeCalls": 36,
+      "fenceReads": 36,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 42
+        },
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 57
+        },
+        {
+          "statements": 4,
+          "rowsRead": 53,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 39
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 68
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 47
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 39
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 43
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 43
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 48
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 38
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 27,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 4,
+          "rowsRead": 23,
+          "rowsWritten": 0,
+          "elapsedMs": 47
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 45
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 46
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 46
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 39
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 46
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 38
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 45
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 43
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 49
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 4,
+          "rowsRead": 23,
+          "rowsWritten": 0,
+          "elapsedMs": 71
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 42
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "baseline",
+      "layout": "daily",
+      "elapsedMs": 4880,
+      "serviceElapsedMs": 5218,
+      "hash": "cce23cfabb7ab95c359751ed9ead092e27d527583226cdaa12f2c65b0b444b5b",
+      "bytes": 3723,
+      "nativeCalls": 36,
+      "fenceReads": 36,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 45
+        },
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 47
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 35
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 53,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 38
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 45
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 42
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 43
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 42
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 50
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 58
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 42
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 45
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 39
+        },
+        {
+          "statements": 4,
+          "rowsRead": 27,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 23,
+          "rowsWritten": 0,
+          "elapsedMs": 46
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 50
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 51
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 39
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 41
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 51
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 117
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 39
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 50
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 51
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 253
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 44
+        },
+        {
+          "statements": 4,
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 40
+        },
+        {
+          "statements": 4,
+          "rowsRead": 23,
+          "rowsWritten": 0,
+          "elapsedMs": 58
+        },
+        {
+          "statements": 4,
+          "rowsRead": 124,
+          "rowsWritten": 0,
+          "elapsedMs": 45
+        }
+      ],
+      "excludedWarmup": false
+    },
+    {
+      "variant": "candidate",
+      "layout": "daily",
+      "elapsedMs": 1219,
+      "serviceElapsedMs": 1369,
+      "hash": "cce23cfabb7ab95c359751ed9ead092e27d527583226cdaa12f2c65b0b444b5b",
+      "bytes": 3723,
+      "nativeCalls": 12,
+      "fenceReads": 12,
+      "costs": [
+        {
+          "statements": 2,
+          "rowsRead": 17,
+          "rowsWritten": 0,
+          "elapsedMs": 25
+        },
+        {
+          "statements": 2,
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 27
+        },
+        {
+          "statements": 4,
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 32
+        },
+        {
+          "statements": 2,
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 26
+        },
+        {
+          "statements": 10,
+          "rowsRead": 77,
+          "rowsWritten": 0,
+          "elapsedMs": 30
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 35
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 31
+        },
+        {
+          "statements": 10,
+          "rowsRead": 64,
+          "rowsWritten": 0,
+          "elapsedMs": 30
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 28
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 29
+        },
+        {
+          "statements": 10,
+          "rowsRead": 34,
+          "rowsWritten": 0,
+          "elapsedMs": 36
+        },
+        {
+          "statements": 10,
+          "rowsRead": 161,
+          "rowsWritten": 0,
+          "elapsedMs": 34
+        }
+      ],
+      "excludedWarmup": false
+    }
+  ],
+  "cleanup": [
+    {
+      "kind": "workflow",
+      "independent404": true
+    },
+    {
+      "kind": "controller",
+      "independent404": true
+    },
+    {
+      "kind": "candidate",
+      "independent404": true
+    },
+    {
+      "kind": "baseline",
+      "independent404": true
+    },
+    {
+      "kind": "d1",
+      "independent404": true
+    },
+    {
+      "kind": "r2",
+      "independent404": true
+    }
+  ]
+}

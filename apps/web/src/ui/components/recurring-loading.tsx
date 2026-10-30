@@ -3,7 +3,7 @@ import { RecurringHeaderSkeleton } from "./recurring-header-loading";
 import { LoadingRegion } from "./loading-skeletons";
 import { Skeleton } from "./skeleton";
 import { RecurringMonthControlsSkeleton } from "./recurring-month-controls-loading";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./table";
+import { RecurringOccurrenceSkeleton } from "./recurring-occurrence-loading";
 import "./recurring.css";
 
 const MonthlySummary = (): JSX.Element => (
@@ -13,7 +13,7 @@ const MonthlySummary = (): JSX.Element => (
       {[0, 1, 2].map((kind) => (
         <section key={kind} data-recurring-slot="summary-kind">
           <h3>
-            <Skeleton className="size-8 rounded-full" />
+            <Skeleton className="size-10 rounded-full" />
             <Skeleton className="h-5 w-20" />
           </h3>
           <div data-recurring-slot="summary-amounts" className="grid gap-2">
@@ -36,48 +36,6 @@ const MonthlySummary = (): JSX.Element => (
     </div>
   </section>
 );
-const OccurrenceRows = (): JSX.Element => (
-  <section data-recurring-slot="occurrence-group">
-    <h2 className="py-[13px]">
-      <Skeleton className="h-[23px] w-32" />
-    </h2>
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {[0, 1, 2, 3].map((column) => (
-            <TableHead key={column}>
-              <Skeleton className="h-[18px] w-20" />
-            </TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {[0, 1, 2].map((row) => (
-          <TableRow key={row}>
-            <TableCell>
-              <div className="flex items-center gap-3">
-                <Skeleton className="size-8 shrink-0 rounded-full" />
-                <div className="grid gap-1">
-                  <Skeleton className="h-5 w-32" />
-                  <Skeleton className="h-4 w-20" />
-                </div>
-              </div>
-            </TableCell>
-            <TableCell>
-              <Skeleton className="h-5 w-20" />
-            </TableCell>
-            <TableCell>
-              <Skeleton className="h-5 w-24" />
-            </TableCell>
-            <TableCell>
-              <Skeleton data-slot="button" className="h-9 w-28" />
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  </section>
-);
 export const RecurringSkeleton = (): JSX.Element => (
   <LoadingRegion label="Cargando recurrentes">
     <div data-recurring-slot="workspace">
@@ -88,7 +46,7 @@ export const RecurringSkeleton = (): JSX.Element => (
             <Skeleton className="h-[49px] w-full" />
           </div>
           <MonthlySummary />
-          <OccurrenceRows />
+          <RecurringOccurrenceSkeleton />
         </main>
       </div>
     </div>

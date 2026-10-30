@@ -1,0 +1,21 @@
+bun.lock
+  s_d9571b3fccd032::t_172f8cb8dd24a8 8,10,298,306,324
+package.json
+  s_d9571b3fccd032::t_cb11f993b6cc44 62,64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e1682d517a9cd4f8da000c122582e2b255fcf8c7",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

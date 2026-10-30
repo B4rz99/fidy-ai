@@ -13,8 +13,9 @@ import {
   recordAuditedPATUseFromAuthority,
 } from "../../src/shell/tokens/operations";
 import { liveWebSessionAuthority } from "../../src/shell/identity/operations";
-import type { AuthenticatedWebSession } from "../web-session/contract";
+import type { AuthenticatedWebSession, BoundWebSessionLookup } from "../web-session/contract";
 import {
+  boundCanonicalWebSessionAuthority,
   prepareBoundCanonicalWebSession,
   resolveBoundCanonicalWebSession,
 } from "../web-session/operations";
@@ -35,11 +36,14 @@ import {
   prepareAuthorizedQuotaRead,
   prepareConsumption,
   quotaFailure,
+  quotaStatusForUserSelection,
 } from "../quotas/operations";
 import { newId } from "../secret-material/operations";
 import {
   type AuthorizedCanonicalCaller,
   CanonicalAdmissionUnavailable,
+  type CanonicalBrowserRead,
+  type PreparedCanonicalBrowserRead,
   canonicalRequestProtection,
 } from "./contract";
 import { cryptoHash, validatedCanonicalInput } from "./internal/request-input";
@@ -47,6 +51,7 @@ import {
   acquireBoundBrowserRequest,
   acquireRequest,
   admitUnresolvedSource,
+  prepareBoundBrowserSnapshot,
   releaseRequest,
 } from "./internal/protection";
 import { type Replay, claimReplay, completeReplay, retainedReplay } from "./internal/replay";
@@ -864,6 +869,131 @@ export const protectCanonicalBrowserRequest = <E, R>(
           response: admission === "rate_limited" ? rateLimited() : unavailable(),
         })
       );
+    }).pipe(Effect.orElseSucceed(unavailable))
+  );
+
+const refuseBrowserSnapshot = ({
+  db,
+  lookup,
+  cause,
+}: Readonly<{
+  db: D1Database;
+  lookup: BoundWebSessionLookup;
+  cause: unknown;
+}>): Effect.Effect<Response, CanonicalAdmissionUnavailable> =>
+  Effect.gen(function* () {
+    // A response can be lost after commit. Never replay owner work.
+    const row = yield* Effect.tryPromise({
+      try: () =>
+        db
+          .prepare(lookup.statement.sql)
+          .bind(...lookup.statement.params)
+          .first(),
+      catch: (error) => new CanonicalAdmissionUnavailable({ cause: error }),
+    });
+    const subject = resolveBoundCanonicalWebSession({ lookup, row });
+    if (Option.isNone(subject)) return noAuthority();
+    return yield* discloseCanonicalAllowance({
+      db,
+      caller: { _tag: "WebSession", value: subject.value },
+      response:
+        cause instanceof Error && /canonical_request_(rate|concurrency)/u.test(cause.message)
+          ? rateLimited()
+          : unavailable(),
+    });
+  });
+
+const snapshotQuotaIndexFromEnd = -1;
+const presentBrowserSnapshot = ({
+  rows,
+  lookup,
+  protectionCount,
+  owner,
+  current,
+}: Readonly<{
+  rows: ReadonlyArray<D1Result>;
+  lookup: BoundWebSessionLookup;
+  protectionCount: number;
+  owner: PreparedCanonicalBrowserRead;
+  current: number;
+}>): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const subject = resolveBoundCanonicalWebSession({
+      lookup,
+      row: rows[protectionCount - 1]?.results[0],
+    });
+    if (Option.isNone(subject)) return rows[1]?.meta.changes === 1 ? unavailable() : noAuthority();
+    const status = decodeQuotaStatus({
+      row: rows.at(snapshotQuotaIndexFromEnd)?.results[0],
+      current,
+    });
+    if (Option.isNone(status)) return unavailable();
+    const response = yield* owner.present(
+      rows.slice(protectionCount, protectionCount + owner.statements.length)
+    );
+    return attachStanding(response, status.value, current);
+  });
+
+/** Recheck this exact credential in the caller's same native snapshot. */
+const snapshotUserSelection = (lookup: BoundWebSessionLookup): OwnedStatement => ({
+  sql: `SELECT userId FROM (${lookup.statement.sql})`,
+  params: lookup.statement.params,
+});
+
+/** Commit the unmetered Category read, pressure, Audit and standing under one fresh native fence. */
+export const protectCanonicalBrowserSnapshot = (
+  input: Readonly<{
+    db: D1Database;
+    request: Request;
+    current: number;
+    operation: "categories.listCategories";
+    read: CanonicalBrowserRead;
+  }>
+): Effect.Effect<Response> =>
+  Effect.uninterruptible(
+    Effect.gen(function* () {
+      const prepared = yield* Effect.tryPromise({
+        try: () => prepareBoundCanonicalWebSession(input),
+        catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
+      });
+      if (Option.isNone(prepared)) return noAuthority();
+      const lookup = prepared.value;
+      const owner = input.read({
+        db: input.db,
+        current: input.current,
+        authority: boundCanonicalWebSessionAuthority(lookup),
+        reservation: lookup.statement,
+      });
+      const protection = prepareBoundBrowserSnapshot({ ...input, lookup });
+      const statements = [
+        ...protection,
+        ...owner.statements,
+        quotaStatusForUserSelection({
+          ...input,
+          users: snapshotUserSelection(lookup),
+        }),
+      ];
+      const committed = yield* Effect.tryPromise({
+        try: () => input.db.batch(statements),
+        catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
+      }).pipe(
+        Effect.map((rows) => ({ _tag: "Committed", rows }) as const),
+        Effect.catch((error) => Effect.succeed({ _tag: "Refused", error } as const))
+      );
+      if (committed._tag === "Refused") {
+        return yield* refuseBrowserSnapshot({
+          db: input.db,
+          lookup,
+          cause: committed.error.cause,
+        });
+      }
+      return yield* presentBrowserSnapshot({
+        rows: committed.rows,
+        lookup,
+        protectionCount: protection.length,
+        owner,
+        current: input.current,
+      });
     }).pipe(Effect.orElseSucceed(unavailable))
   );
 

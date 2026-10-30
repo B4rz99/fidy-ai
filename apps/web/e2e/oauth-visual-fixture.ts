@@ -97,7 +97,9 @@ export const installOAuthReview = Effect.fnUntraced(function* (
       if (["/web/oauth/cancel", "/web/oauth/connect"].includes(path)) {
         return mutationResponse(route, options.mutation, held.promise);
       }
-      unexpected.push(path);
+      unexpected.push(
+        `${request.method()} ${path}${new URL(request.url()).search} while ${new URL(page.url()).pathname}`
+      );
       return fulfill(route, {}, refusedStatus);
     }
     if (path === "/web/session/binding") {
@@ -109,7 +111,9 @@ export const installOAuthReview = Effect.fnUntraced(function* (
     if (path === "/web/oauth/review") {
       return reviewResponse(route, options.review, held.promise);
     }
-    unexpected.push(path);
+    unexpected.push(
+      `${request.method()} ${path}${new URL(request.url()).search} while ${new URL(page.url()).pathname}`
+    );
     return fulfill(route, {}, missingStatus);
   };
   yield* Effect.tryPromise(() => page.route(`${apiOrigin}/**`, handler));

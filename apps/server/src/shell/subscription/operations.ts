@@ -41,12 +41,22 @@ export const getSubscriptionStatus = (
 export const activePaidSubscriptionCondition = ({
   userId,
   nowEpochMs,
-}: Readonly<{ userId: UserId; nowEpochMs: number }>): OwnedStatement => ({
+}: Readonly<{ userId: UserId; nowEpochMs: number }>): OwnedStatement =>
+  activePaidSubscriptionForUserSelection({
+    users: { sql: "SELECT ?", params: [userId] },
+    nowEpochMs,
+  });
+
+/** Recheck settled paid access for a bounded User selection in the caller's native snapshot. */
+export const activePaidSubscriptionForUserSelection = ({
+  users,
+  nowEpochMs,
+}: Readonly<{ users: OwnedStatement; nowEpochMs: number }>): OwnedStatement => ({
   sql: `EXISTS (SELECT 1 FROM subscription_standing s
     JOIN billing_attempt_context a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
     JOIN payment_source_context source ON source.id=a.payment_source_id AND source.user_id=a.user_id
-    WHERE s.user_id=? AND (${paidAccessEndSql}) > ? AND a.paid_starts_at_ms<=?)`,
-  params: [userId, nowEpochMs, nowEpochMs],
+    WHERE s.user_id IN (${users.sql}) AND (${paidAccessEndSql}) > ? AND a.paid_starts_at_ms<=?)`,
+  params: [...users.params, nowEpochMs, nowEpochMs],
 });
 
 /** Prepare complete public Prices with a live authority recheck and closed JSON projection. */

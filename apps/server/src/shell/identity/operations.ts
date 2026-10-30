@@ -92,11 +92,18 @@ export const userTrialPeriodQuery = (userId: UserId): OwnedStatement => ({
 export const activeTrialPeriodCondition = ({
   userId,
   nowEpochMs,
-}: Readonly<{ userId: UserId; nowEpochMs: number }>): OwnedStatement => {
-  const trial = userTrialPeriodQuery(userId);
-  return {
-    sql: `EXISTS (SELECT 1 FROM (${trial.sql}) AS trial
-      WHERE trial.startedAtMs <= ? AND trial.endsAtMs > ?)`,
-    params: [...trial.params, nowEpochMs, nowEpochMs],
-  };
-};
+}: Readonly<{ userId: UserId; nowEpochMs: number }>): OwnedStatement =>
+  activeTrialPeriodForUserSelection({
+    users: { sql: "SELECT ?", params: [userId] },
+    nowEpochMs,
+  });
+
+/** Recheck TrialPeriod for a bounded User selection in the caller's authoritative native unit. */
+export const activeTrialPeriodForUserSelection = ({
+  users,
+  nowEpochMs,
+}: Readonly<{ users: OwnedStatement; nowEpochMs: number }>): OwnedStatement => ({
+  sql: `EXISTS (SELECT 1 FROM users WHERE id IN (${users.sql})
+    AND trial_started_at_ms <= ? AND trial_ends_at_ms > ?)`,
+  params: [...users.params, nowEpochMs, nowEpochMs],
+});

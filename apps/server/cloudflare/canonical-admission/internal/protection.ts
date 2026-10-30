@@ -14,6 +14,42 @@ type BoundBrowserRequest = Readonly<{
   current: number;
 }>;
 
+/** Only for read work wholly inside this same atomic batch, with no provider work afterward.
+ * D1 serializes the transaction: count existing live leases plus this read against the same cap.
+ * A transient lease inserted/deleted in this batch would never be visible to another transaction.
+ */
+export const prepareBoundBrowserSnapshot = ({
+  db,
+  lookup,
+  current,
+}: Omit<BoundBrowserRequest, "id">): Array<D1PreparedStatement> => {
+  const { statement } = lookup;
+  return [
+    db
+      .prepare(`DELETE FROM canonical_request_leases WHERE expires_at_ms <= ?
+      AND user_id IN (SELECT userId FROM (${statement.sql}))`)
+      .bind(current, ...statement.params),
+    db
+      .prepare(`INSERT INTO canonical_request_buckets(subject,virtual_at_ms)
+      SELECT 'user:' || caller.userId, ? FROM (${statement.sql}) AS caller
+      WHERE (SELECT count(*) FROM canonical_request_leases
+        WHERE user_id = caller.userId AND expires_at_ms > ?) < ?
+      ON CONFLICT(subject) DO UPDATE SET virtual_at_ms = max(virtual_at_ms,?) + ?
+        WHERE virtual_at_ms <= ?`)
+      .bind(
+        current + policy.intervalMs,
+        ...statement.params,
+        current,
+        policy.concurrency,
+        current,
+        policy.intervalMs,
+        current + (policy.burst - 1) * policy.intervalMs
+      ),
+    prepareReservedChangeAssertion({ db, scope: "canonical_request", reservation: statement }),
+    db.prepare(statement.sql).bind(...statement.params),
+  ];
+};
+
 const prepareBoundBrowserRequest = ({
   db,
   lookup,

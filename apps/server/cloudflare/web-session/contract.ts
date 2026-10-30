@@ -1,5 +1,5 @@
 import type { BrowserPairingClaim } from "../browser-login/contract";
-import type { WebSessionSubject } from "../../src/shell/web-session/contract";
+import type { WebSessionAuthority, WebSessionSubject } from "../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 
 /** Browser credentials are resolved at use; a returned subject is never a cached authorization. */
@@ -17,6 +17,7 @@ export type AuthenticatedWebSession = WebSessionSubject;
 export type BoundWebSessionLookup = Readonly<{
   statement: OwnedStatement;
   digest: Uint8Array;
+  authority: WebSessionAuthority;
 }>;
 
 /** One incoming browser request at the private Core Worker boundary. */

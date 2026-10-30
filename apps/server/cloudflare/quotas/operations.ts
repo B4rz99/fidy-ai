@@ -14,7 +14,10 @@ import {
   QuotaStatus,
   freeAllowanceLimits,
 } from "../../src/core/quotas/contract";
-import { activeProUserCondition } from "../../src/shell/access-tier/operations";
+import {
+  activeProForUserSelection,
+  activeProUserCondition,
+} from "../../src/shell/access-tier/operations";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { ConsumptionInput } from "./contract";
 
@@ -132,8 +135,17 @@ export const quotaFailure = (failure: unknown): "exhausted" | "authority" | "una
 /** Observes a bounded consumption projection. Caller must guard and audit disclosure before releasing it. */
 export const quotaStatusStatement = (
   input: Readonly<{ db: D1Database; userId: string; current: number }>
+): D1PreparedStatement =>
+  quotaStatusForUserSelection({
+    ...input,
+    users: { sql: "SELECT ?", params: [input.userId] },
+  });
+
+/** Prepare standing for one credential-owned User selection in the same native snapshot. */
+export const quotaStatusForUserSelection = (
+  input: Readonly<{ db: D1Database; users: OwnedStatement; current: number }>
 ): D1PreparedStatement => {
-  const pro = activeProUserCondition({ userId: input.userId, nowEpochMs: input.current });
+  const pro = activeProForUserSelection({ users: input.users, nowEpochMs: input.current });
   const period = allowancePeriod(DateTime.makeUnsafe(input.current));
   return input.db
     .prepare(`SELECT ${pro.sql} AS pro,
@@ -141,8 +153,8 @@ export const quotaStatusStatement = (
     coalesce(sum(CASE WHEN allowance = 'media_submission' THEN units ELSE 0 END),0) AS media_submission,
     coalesce(sum(CASE WHEN allowance = 'hosted_history_turn' THEN units ELSE 0 END),0) AS hosted_history_turn,
     coalesce(sum(CASE WHEN allowance = 'canonical_call' THEN units ELSE 0 END),0) AS canonical_call
-    FROM commercial_allowance_consumptions WHERE user_id = ? AND period_start_ms = ?`)
-    .bind(...pro.params, input.userId, DateTime.toEpochMillis(period.startsAt));
+    FROM commercial_allowance_consumptions WHERE user_id IN (${input.users.sql}) AND period_start_ms = ?`)
+    .bind(...pro.params, ...input.users.params, DateTime.toEpochMillis(period.startsAt));
 };
 
 /** Snapshot standing only while the exact supplied User-scoped authority is live in this same D1 batch. */

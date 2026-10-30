@@ -1,8 +1,8 @@
 import { UserId } from "~/core/identity/contract";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { Option, Schema } from "effect";
-import { activePaidSubscriptionCondition } from "~/shell/subscription/operations";
-import { activeTrialPeriodCondition } from "~/shell/identity/operations";
+import { activePaidSubscriptionForUserSelection } from "~/shell/subscription/operations";
+import { activeTrialPeriodForUserSelection } from "~/shell/identity/operations";
 
 /**
  * Decide Pro standing inside the caller's D1 unit from the original TrialPeriod or a settled
@@ -16,8 +16,18 @@ export const activeProUserCondition = (
 ): OwnedStatement => {
   const subject = Schema.decodeOption(UserId)(input.userId);
   if (Option.isNone(subject)) return { sql: "0", params: [] };
-  const trial = activeTrialPeriodCondition({ ...input, userId: subject.value });
-  const paid = activePaidSubscriptionCondition({ ...input, userId: subject.value });
+  return activeProForUserSelection({
+    users: { sql: "SELECT ?", params: [subject.value] },
+    nowEpochMs: input.nowEpochMs,
+  });
+};
+
+/** Observe Pro standing for the same bounded User selection as the protected read. */
+export const activeProForUserSelection = (
+  input: Readonly<{ users: OwnedStatement; nowEpochMs: number }>
+): OwnedStatement => {
+  const trial = activeTrialPeriodForUserSelection(input);
+  const paid = activePaidSubscriptionForUserSelection(input);
   return {
     sql: `(${trial.sql} OR ${paid.sql})`,
     params: [...trial.params, ...paid.params],

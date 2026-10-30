@@ -6,10 +6,16 @@ import {
   prepareCategoryRead,
 } from "../../../src/shell/categories/operations";
 import { recordBrowserCategoryWork } from "./canonical-work";
+import type { CanonicalBrowserRead } from "../../canonical-admission/contract";
+import { prepareReservedChangeAssertion } from "../../../src/shell/sql-assertions/operations";
 import { readConsentStatus } from "../../consent/operations";
 import { ListCategoriesResponse } from "../../../src/shell/categories/contract";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
-import { recordCanonicalPATWork, recordOAuthCall } from "../../../src/shell/audit/operations";
+import {
+  recordAuthorizedCall,
+  recordCanonicalPATWork,
+  recordOAuthCall,
+} from "../../../src/shell/audit/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 import { newId } from "../../secret-material/operations";
@@ -44,6 +50,43 @@ const userActionRequired = (): Response =>
     },
     { status: 403, headers }
   );
+
+/** The Category owner keeps its bounded projection, live Audit and response codec in one read. */
+export const prepareBoundCategoryRead: CanonicalBrowserRead = ({
+  db,
+  authority,
+  reservation,
+  current,
+}) => {
+  const audit = recordAuthorizedCall({
+    authority,
+    id: newId(),
+    current,
+    operation: "categories.listCategories",
+    outcome: "success",
+    afterOwnerWrite: false,
+  });
+  return {
+    statements: [
+      prepareCategoryRead({ db, authority: Option.some(authority) }),
+      db.prepare(audit.sql).bind(...audit.params),
+      prepareReservedChangeAssertion({
+        db,
+        scope: "category_mutation",
+        reservation,
+      }),
+    ],
+    present: (results) => {
+      if (results[1]?.meta.changes !== 1) return Effect.succeed(unavailable());
+      const decoded = decodeCategoryRead(results[0]?.results);
+      if (Option.isNone(decoded)) return Effect.succeed(unavailable());
+      return Schema.encodeEffect(Schema.fromJsonString(ListCategoriesResponse))(decoded.value).pipe(
+        Effect.map((body) => new Response(body, { status: 200, headers })),
+        Effect.orElseSucceed(unavailable)
+      );
+    },
+  };
+};
 
 const categoryStatements = (
   db: D1Database,

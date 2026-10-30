@@ -35,6 +35,28 @@ export class TransactionAggregatesUnavailable extends Data.TaggedError(
 /** Unreadable or invalid recurring facts never supply a partial detection selection. */
 export class RecurringFactsUnavailable extends Data.TaggedError("RecurringFactsUnavailable") {}
 
+/** A bounded matching range; its completeness is independent of every other requested range. */
+export type PlanningTransactionRange = Readonly<{ from: string; through: string }>;
+export type PlanningTransactionFacts = Readonly<{
+  transactions: ReadonlyArray<Transaction>;
+  complete: boolean;
+}>;
+
+/** Caller-owned facts and separately bounded Transaction ranges from one native snapshot. */
+export type PlanningTransactionSnapshot<A> = Readonly<{
+  snapshot: A;
+  ranges: ReadonlyArray<Option.Option<PlanningTransactionFacts>>;
+}>;
+export type PlanningTransactionRead<A> = Readonly<{
+  db: D1Database;
+  userId: string;
+  ranges: ReadonlyArray<PlanningTransactionRange>;
+  snapshot: Readonly<{
+    statement: D1PreparedStatement;
+    decode: (rows: ReadonlyArray<unknown>) => Option.Option<A>;
+  }>;
+}>;
+
 /** One complete revision snapshot of effective financial history; later commits must recheck this revision. */
 export type RecurringFactSnapshot = Readonly<{
   revision: number;

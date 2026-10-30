@@ -1582,5 +1582,1206 @@
       }
     ],
     "pagesMeetingTwoTimes": 0
+  },
+  "recurringSnapshotFollowUp": {
+    "revision": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+    "contractDigest": "601bd69a4a42aeb9d4317f7aef8bf71092da08ad2e78c277c8565b4d85c11b8f",
+    "apiPaths": [
+      "/web/session/binding",
+      "/user",
+      "/ingestion/review-workspace",
+      "/recurring-plans",
+      "/categories",
+      "/dashboard/view",
+      "/dashboard/catalog"
+    ],
+    "columns": [
+      "journey",
+      "repeat",
+      "ready",
+      "observedMs",
+      "timeOrigin",
+      "completedEncodedResourceBytes",
+      "resourceCount",
+      "apiSpans[pathIndex,startMs,endMs]"
+    ],
+    "samples": [
+      [
+        "recurring",
+        1,
+        true,
+        3555.4,
+        1793329740550.8,
+        617060,
+        107,
+        [
+          [0, 546.3, 991.3],
+          [1, 1027.9, 1769.8],
+          [2, 1430.1, 1432.6],
+          [2, 1597.2, 2454.2],
+          [3, 1781.5, 3509.8],
+          [4, 2469.8, 3151.9]
+        ]
+      ],
+      [
+        "recurring",
+        2,
+        true,
+        3028.9,
+        1793329756144.2,
+        617053,
+        107,
+        [
+          [0, 213.7, 493.2],
+          [1, 528.4, 1163.6],
+          [2, 829.8, 831.7],
+          [2, 1154.3, 1731.8],
+          [3, 1172.1, 2955.3],
+          [4, 1739.4, 2319]
+        ]
+      ],
+      [
+        "recurring",
+        3,
+        true,
+        3294.8,
+        1793329771209.8,
+        617165,
+        106,
+        [
+          [0, 256.4, 466.1],
+          [1, 489.2, 1282.3],
+          [2, 838.5, 839.7],
+          [2, 1117.8, 1696.3],
+          [4, 1703.3, 2327.5]
+        ]
+      ],
+      [
+        "dashboard",
+        1,
+        true,
+        3577.1,
+        1793329846462.9,
+        683075,
+        98,
+        [
+          [0, 244.3, 446.3],
+          [5, 596.9, 3497.4],
+          [6, 597.8, 615.4],
+          [2, 645.9, 646.9],
+          [2, 684, 685.6],
+          [2, 915.8, 1578.3],
+          [6, 1593.4, 2222.9]
+        ]
+      ],
+      [
+        "dashboard",
+        2,
+        true,
+        3683.8,
+        1793329862076.9,
+        683097,
+        98,
+        [
+          [0, 198.4, 464.3],
+          [5, 638.5, 3634.8],
+          [6, 639.3, 655.2],
+          [2, 697.7, 700.2],
+          [2, 719.9, 722],
+          [2, 950.1, 1568.5],
+          [6, 1575.4, 2283.3]
+        ]
+      ],
+      [
+        "dashboard",
+        3,
+        true,
+        3573.5,
+        1793329877797.9,
+        682884,
+        98,
+        [
+          [0, 221.2, 472.9],
+          [5, 620.6, 3508.3],
+          [6, 621.3, 633.3],
+          [2, 677, 677.7],
+          [2, 714.9, 718.5],
+          [2, 929.8, 1657.5],
+          [6, 1667.6, 2368.8]
+        ]
+      ]
+    ],
+    "profile": "desktop",
+    "viewport": [1280, 720],
+    "cpuRate": 1,
+    "cacheDisabled": true,
+    "admissionGapSeconds": 12,
+    "precisionMs": 0.1,
+    "appAndApiRevisionVerifiedBeforeAndAfter": true,
+    "allReady": true,
+    "financialOrAccountWrites": false,
+    "ciRun": 40994332382,
+    "productionRun": 40995013179,
+    "comparison": [
+      {
+        "journey": "recurring",
+        "beforeMedianMs": 3039.7,
+        "precedingMedianMs": 3922.3,
+        "afterMedianMs": 3294.8,
+        "speedup": 0.923,
+        "speedupVersusPreceding": 1.19
+      },
+      {
+        "journey": "dashboard",
+        "beforeMedianMs": 3820.3,
+        "precedingMedianMs": 3998.8,
+        "afterMedianMs": 3577.1,
+        "speedup": 1.068,
+        "speedupVersusPreceding": 1.118
+      }
+    ],
+    "pagesMeetingTwoTimes": 0
+  },
+  "startupCodeLoading": {
+    "baselineRevision": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+    "method": "Production Vite manifest static import closure from index.html; dynamic imports excluded; gzip measured per JS file",
+    "before": {
+      "files": [
+        {
+          "file": "assets/Atom-DoNLTebf.js",
+          "bytes": 202866,
+          "gzipBytes": 65608
+        },
+        {
+          "file": "assets/Hooks-BNMajrQL.js",
+          "bytes": 5557,
+          "gzipBytes": 2369
+        },
+        {
+          "file": "assets/Match-CgXpuciC.js",
+          "bytes": 4658,
+          "gzipBytes": 1854
+        },
+        {
+          "file": "assets/client-BCoAlYQR.js",
+          "bytes": 195248,
+          "gzipBytes": 61954
+        },
+        {
+          "file": "assets/crypto-CcicX2rd.js",
+          "bytes": 3439,
+          "gzipBytes": 1648
+        },
+        {
+          "file": "assets/jsx-runtime-COQnYV8f.js",
+          "bytes": 424,
+          "gzipBytes": 291
+        },
+        {
+          "file": "assets/lazyRouteComponent-CKHOzUrR.js",
+          "bytes": 590,
+          "gzipBytes": 383
+        },
+        {
+          "file": "assets/link-BX908iCT.js",
+          "bytes": 4224,
+          "gzipBytes": 2174
+        },
+        {
+          "file": "assets/login-destination-BFusdg1p.js",
+          "bytes": 748,
+          "gzipBytes": 391
+        },
+        {
+          "file": "assets/matchContext-CpRK9MIj.js",
+          "bytes": 52439,
+          "gzipBytes": 18445
+        },
+        {
+          "file": "assets/preload-helper-BEyK2XXa.js",
+          "bytes": 1521,
+          "gzipBytes": 801
+        },
+        {
+          "file": "assets/react-dom-p5-f7VGD.js",
+          "bytes": 3853,
+          "gzipBytes": 1383
+        },
+        {
+          "file": "assets/react-sySUN5R7.js",
+          "bytes": 8539,
+          "gzipBytes": 3297
+        },
+        {
+          "file": "assets/session-context-BGmBJHjx.js",
+          "bytes": 281,
+          "gzipBytes": 226
+        },
+        {
+          "file": "assets/subscription-enrollment-context-DDD3kURU.js",
+          "bytes": 309,
+          "gzipBytes": 235
+        },
+        {
+          "file": "assets/useMatch-DZ8J7LY8.js",
+          "bytes": 2378,
+          "gzipBytes": 1078
+        },
+        {
+          "file": "assets/useNavigate-BhSbfJAx.js",
+          "bytes": 369,
+          "gzipBytes": 263
+        },
+        {
+          "file": "assets/useParams-C9z9bc-p.js",
+          "bytes": 258,
+          "gzipBytes": 193
+        },
+        {
+          "file": "assets/useRouter-CzTOuJdZ.js",
+          "bytes": 140,
+          "gzipBytes": 137
+        },
+        {
+          "file": "assets/useRouterState-BOdWFIpm.js",
+          "bytes": 207,
+          "gzipBytes": 178
+        },
+        {
+          "file": "assets/useSearch-BOUnJfVz.js",
+          "bytes": 218,
+          "gzipBytes": 171
+        },
+        {
+          "file": "assets/utils-BsF5wWje.js",
+          "bytes": 3088,
+          "gzipBytes": 1419
+        },
+        {
+          "file": "assets/utils-qyHl_yuu.js",
+          "bytes": 107,
+          "gzipBytes": 112
+        },
+        {
+          "file": "assets/workspace-components-C_zg9P4J.js",
+          "bytes": 3090,
+          "gzipBytes": 1483
+        },
+        {
+          "file": "assets/workspace-query-BZeHP_NK.js",
+          "bytes": 189,
+          "gzipBytes": 174
+        },
+        {
+          "file": "assets/index-CJzEsiNP.js",
+          "bytes": 228708,
+          "gzipBytes": 71766
+        }
+      ],
+      "bytes": 723448,
+      "gzipBytes": 238033
+    },
+    "candidate": {
+      "files": [
+        {
+          "file": "assets/AtomRegistry-D_7k_mq_.js",
+          "bytes": 191769,
+          "gzipBytes": 61876
+        },
+        {
+          "file": "assets/RegistryContext-DZkBQ250.js",
+          "bytes": 4260,
+          "gzipBytes": 1854
+        },
+        {
+          "file": "assets/crypto-ayHRnvCS.js",
+          "bytes": 3447,
+          "gzipBytes": 1654
+        },
+        {
+          "file": "assets/jsx-runtime-COQnYV8f.js",
+          "bytes": 424,
+          "gzipBytes": 291
+        },
+        {
+          "file": "assets/preload-helper-BEyK2XXa.js",
+          "bytes": 1521,
+          "gzipBytes": 801
+        },
+        {
+          "file": "assets/react-dom-p5-f7VGD.js",
+          "bytes": 3853,
+          "gzipBytes": 1383
+        },
+        {
+          "file": "assets/react-sySUN5R7.js",
+          "bytes": 8539,
+          "gzipBytes": 3297
+        },
+        {
+          "file": "assets/session-binding-BtY7N5pO.js",
+          "bytes": 190645,
+          "gzipBytes": 60386
+        },
+        {
+          "file": "assets/session-context-C3FZmOrG.js",
+          "bytes": 289,
+          "gzipBytes": 228
+        },
+        {
+          "file": "assets/index-XKxna9jE.js",
+          "bytes": 208722,
+          "gzipBytes": 65014
+        }
+      ],
+      "bytes": 613469,
+      "gzipBytes": 196784
+    },
+    "productionLatencyEstablished": false,
+    "matchedAccount": {
+      "beforeRevision": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+      "candidateRevision": "2d5623ec18",
+      "dataset": "small",
+      "profile": "desktop",
+      "previewCompression": "gzip",
+      "quietWindow": true,
+      "before": [
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 242.02170800000022,
+          "nativeControlReadyMs": 175.59999999962747,
+          "outcome": "ready",
+          "resourceBytes": 509127,
+          "transferredBytes": 532527
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 239.59941600000093,
+          "nativeControlReadyMs": 177.5,
+          "outcome": "ready",
+          "resourceBytes": 509127,
+          "transferredBytes": 532527
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 213.9541670000035,
+          "nativeControlReadyMs": 156.20000000018626,
+          "outcome": "ready",
+          "resourceBytes": 509127,
+          "transferredBytes": 532527
+        }
+      ],
+      "suspenseCandidate": [
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 927.7806249999994,
+          "nativeControlReadyMs": 506.3999999994412,
+          "outcome": "ready",
+          "resourceBytes": 524908,
+          "transferredBytes": 549808
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 935.0164999999979,
+          "nativeControlReadyMs": 498,
+          "outcome": "ready",
+          "resourceBytes": 524908,
+          "transferredBytes": 549808
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 924.9484589999993,
+          "nativeControlReadyMs": 496.09999999962747,
+          "outcome": "ready",
+          "resourceBytes": 524908,
+          "transferredBytes": 549808
+        }
+      ],
+      "rejectedForRegression": true,
+      "pilotUnquiet": [
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 231.13208300000042,
+          "nativeControlReadyMs": 162.40000000037253,
+          "outcome": "ready",
+          "resourceBytes": 509127,
+          "transferredBytes": 532527
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 213.04100000000108,
+          "nativeControlReadyMs": 143.30000000074506,
+          "outcome": "ready",
+          "resourceBytes": 509127,
+          "transferredBytes": 532527
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 488.3263749999969,
+          "nativeControlReadyMs": 353.79999999981374,
+          "outcome": "ready",
+          "resourceBytes": 509127,
+          "transferredBytes": 532527
+        }
+      ],
+      "nonSuspendingCandidate": [
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 247.27062500000102,
+          "nativeControlReadyMs": 178.5,
+          "outcome": "ready",
+          "resourceBytes": 510748,
+          "transferredBytes": 534748
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 192.05441699999938,
+          "nativeControlReadyMs": 155.30000000074506,
+          "outcome": "ready",
+          "resourceBytes": 510748,
+          "transferredBytes": 534748
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 207.12095899999986,
+          "nativeControlReadyMs": 181.90000000037253,
+          "outcome": "ready",
+          "resourceBytes": 510748,
+          "transferredBytes": 534748
+        }
+      ]
+    },
+    "status": "non-suspending-candidate-awaiting-production",
+    "nonSuspendingCandidateGraph": {
+      "files": [
+        {
+          "file": "assets/Atom-D3YsA3BM.js",
+          "bytes": 202875,
+          "gzipBytes": 65609
+        },
+        {
+          "file": "assets/Hooks-zOiLgwmQ.js",
+          "bytes": 5557,
+          "gzipBytes": 2370
+        },
+        {
+          "file": "assets/crypto-CAqZEt6Z.js",
+          "bytes": 3439,
+          "gzipBytes": 1647
+        },
+        {
+          "file": "assets/jsx-runtime-COQnYV8f.js",
+          "bytes": 424,
+          "gzipBytes": 291
+        },
+        {
+          "file": "assets/preload-helper-BEyK2XXa.js",
+          "bytes": 1521,
+          "gzipBytes": 801
+        },
+        {
+          "file": "assets/react-dom-p5-f7VGD.js",
+          "bytes": 3853,
+          "gzipBytes": 1383
+        },
+        {
+          "file": "assets/react-sySUN5R7.js",
+          "bytes": 8539,
+          "gzipBytes": 3297
+        },
+        {
+          "file": "assets/session-binding-CoY9oKEb.js",
+          "bytes": 190657,
+          "gzipBytes": 60356
+        },
+        {
+          "file": "assets/session-context-CxXTZkhY.js",
+          "bytes": 281,
+          "gzipBytes": 227
+        },
+        {
+          "file": "assets/index-BMJsXQKx.js",
+          "bytes": 208794,
+          "gzipBytes": 65056
+        }
+      ],
+      "bytes": 625940,
+      "gzipBytes": 201037
+    },
+    "nonSuspendingSourceSha256": {
+      "apps/web/src/app/application.tsx": "b78f7291de742ff1d57bbb3f5a66392a9c45eb951111daca5f61307d13584d24",
+      "apps/web/src/app/bound-application.tsx": "52374d8f433ae18f1a545e4cf2e4e0905af1090e4b85ead004a06026e0aaa576"
+    }
+  },
+  "cloudflareDiagnostics": {
+    "collectedAt": "2026-10-30T04:15:00Z",
+    "d1Insights": {
+      "period": "1d",
+      "sort": "average execution time descending",
+      "limit": 20,
+      "queries": [
+        {
+          "queryHash": "40ae299b9536",
+          "averageDurationMs": 4.699815384615385,
+          "executions": 39
+        },
+        {
+          "queryHash": "7185a25a6dcb",
+          "averageDurationMs": 3.5033000000000003,
+          "executions": 39
+        },
+        {
+          "queryHash": "e66009970435",
+          "averageDurationMs": 3.2469,
+          "executions": 10
+        },
+        {
+          "queryHash": "a2ddc317a32a",
+          "averageDurationMs": 2.412452100840336,
+          "executions": 119
+        },
+        {
+          "queryHash": "fb947b8b5c17",
+          "averageDurationMs": 2.3485302521008404,
+          "executions": 238
+        },
+        {
+          "queryHash": "025c7e53df94",
+          "averageDurationMs": 1.9335000000000002,
+          "executions": 27
+        },
+        {
+          "queryHash": "cc1426cace6c",
+          "averageDurationMs": 1.9291,
+          "executions": 12
+        },
+        {
+          "queryHash": "ec7e5bc40703",
+          "averageDurationMs": 1.7490411764705882,
+          "executions": 34
+        },
+        {
+          "queryHash": "a9759f48cc05",
+          "averageDurationMs": 1.5731519841269839,
+          "executions": 252
+        },
+        {
+          "queryHash": "86cdd90d6d08",
+          "averageDurationMs": 1.4606402271651684,
+          "executions": 2113
+        },
+        {
+          "queryHash": "52848d96e462",
+          "averageDurationMs": 1.4495,
+          "executions": 14
+        },
+        {
+          "queryHash": "2b11e46fd6ad",
+          "averageDurationMs": 1.3795,
+          "executions": 21
+        },
+        {
+          "queryHash": "0a834816b44c",
+          "averageDurationMs": 1.276245185185185,
+          "executions": 135
+        },
+        {
+          "queryHash": "f5002fd871e2",
+          "averageDurationMs": 1.2127,
+          "executions": 24
+        },
+        {
+          "queryHash": "b25d77c7fd80",
+          "averageDurationMs": 1.1934555555555555,
+          "executions": 9
+        },
+        {
+          "queryHash": "0f3e23e7ac69",
+          "averageDurationMs": 1.0995818181818182,
+          "executions": 11
+        },
+        {
+          "queryHash": "5e7fc8d522d1",
+          "averageDurationMs": 1.0612,
+          "executions": 18
+        },
+        {
+          "queryHash": "21aa57ab2d70",
+          "averageDurationMs": 0.9940134140870346,
+          "executions": 2229
+        },
+        {
+          "queryHash": "e753d1b5d1bb",
+          "averageDurationMs": 0.9621872340425531,
+          "executions": 47
+        },
+        {
+          "queryHash": "1d1c9c844469",
+          "averageDurationMs": 0.9550878048780488,
+          "executions": 328
+        }
+      ]
+    },
+    "workerMetrics": {
+      "start": "2026-10-29T04:10:13+00:00",
+      "end": "2026-10-30T04:10:13+00:00",
+      "workers": [
+        {
+          "dimensions": {
+            "scriptName": "fidycloudflare-ingress-production-hf6ajjsszff23h5z"
+          },
+          "quantiles": {
+            "cpuTimeP50": 3935,
+            "cpuTimeP99": 27964,
+            "wallTimeP50": 20154,
+            "wallTimeP99": 2030707
+          },
+          "sum": {
+            "errors": 0,
+            "requests": 7988,
+            "subrequests": 4628
+          }
+        },
+        {
+          "dimensions": {
+            "scriptName": "fidycloudflare-core-production-hdv5cspnk7fai6vg"
+          },
+          "quantiles": {
+            "cpuTimeP50": 9085,
+            "cpuTimeP99": 36564,
+            "wallTimeP50": 503568,
+            "wallTimeP99": 26102236
+          },
+          "sum": {
+            "errors": 328,
+            "requests": 6594,
+            "subrequests": 2006
+          }
+        }
+      ],
+      "quantileUnits": "microseconds"
+    },
+    "workerPlacement": [
+      {
+        "worker": "fidycloudflare-ingress-production-hf6ajjsszff23h5z",
+        "placement": {}
+      },
+      {
+        "worker": "fidycloudflare-core-production-hdv5cspnk7fai6vg",
+        "placement": {}
+      }
+    ],
+    "filteredDiagnosticTails": {
+      "dashboard": {
+        "productionRevision": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+        "excludedOtherReleaseOrNoReleaseEvents": 26,
+        "events": [
+          {
+            "cpuTime": 15,
+            "wallTime": 18,
+            "outcome": "ok",
+            "work": [
+              {
+                "operation": "worker.core.fetch",
+                "latencyMilliseconds": 0,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 0,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              }
+            ],
+            "logCount": 2
+          },
+          {
+            "cpuTime": 5,
+            "wallTime": 138,
+            "outcome": "ok",
+            "work": [
+              {
+                "operation": "worker.core.fetch",
+                "latencyMilliseconds": 131,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 131,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              }
+            ],
+            "logCount": 2
+          },
+          {
+            "cpuTime": 8,
+            "wallTime": 440,
+            "outcome": "ok",
+            "work": [
+              {
+                "latencyMilliseconds": 172,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              },
+              {
+                "operation": "worker.core.fetch",
+                "latencyMilliseconds": 427,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 427,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              }
+            ],
+            "logCount": 3
+          },
+          {
+            "cpuTime": 12,
+            "wallTime": 432,
+            "outcome": "ok",
+            "work": [
+              {
+                "latencyMilliseconds": 202,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              },
+              {
+                "operation": "worker.core.fetch",
+                "latencyMilliseconds": 414,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 414,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              }
+            ],
+            "logCount": 3
+          },
+          {
+            "cpuTime": 9,
+            "wallTime": 3000,
+            "outcome": "ok",
+            "work": [
+              {
+                "operation": "worker.core.fetch",
+                "latencyMilliseconds": 2994,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 2994,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              }
+            ],
+            "logCount": 2
+          },
+          {
+            "cpuTime": 64,
+            "wallTime": 2063,
+            "outcome": "ok",
+            "work": [
+              {
+                "latencyMilliseconds": 2017,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              },
+              {
+                "operation": "worker.core.coordinator",
+                "latencyMilliseconds": 2017,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 2017,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              }
+            ],
+            "logCount": 3
+          },
+          {
+            "cpuTime": 4,
+            "wallTime": 11828,
+            "outcome": "ok",
+            "work": [
+              {
+                "operation": "worker.core.scheduled",
+                "latencyMilliseconds": 11828,
+                "outcome": "succeeded",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 11828,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              }
+            ],
+            "logCount": 2
+          },
+          {
+            "cpuTime": 48,
+            "wallTime": 11811,
+            "outcome": "ok",
+            "work": [
+              {
+                "operation": "browserPairing"
+              },
+              {
+                "operation": "emailReplacement"
+              },
+              {
+                "operation": "billing"
+              },
+              {
+                "operation": "statement"
+              },
+              {
+                "operation": "forwardedEmail"
+              },
+              {
+                "operation": "whatsapp"
+              },
+              {
+                "operation": "deadLetters"
+              },
+              {
+                "operation": "browserPairingQueue"
+              },
+              {
+                "operation": "emailReplacementQueue"
+              },
+              {
+                "operation": "billingQueue"
+              },
+              {
+                "operation": "statementQueue"
+              },
+              {
+                "operation": "forwardedEmailQueue"
+              },
+              {
+                "operation": "whatsappQueue"
+              },
+              {
+                "operation": "retention"
+              },
+              {
+                "operation": "d1"
+              },
+              {
+                "operation": "requiredBindings"
+              },
+              {
+                "operation": "coordination"
+              },
+              {
+                "operation": "providerConfig"
+              },
+              {
+                "operation": "ownerInspections"
+              },
+              {
+                "operation": "worker.core.maintenance",
+                "latencyMilliseconds": 11801,
+                "outcome": "succeeded",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 11801,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              }
+            ],
+            "logCount": 21
+          },
+          {
+            "cpuTime": 11,
+            "wallTime": 453,
+            "outcome": "ok",
+            "work": [
+              {
+                "latencyMilliseconds": 160,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              },
+              {
+                "operation": "worker.core.fetch",
+                "latencyMilliseconds": 438,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 438,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation"
+              }
+            ],
+            "logCount": 3
+          }
+        ]
+      },
+      "recurring": {
+        "productionRevision": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+        "excludedOtherReleaseOrNoReleaseEvents": 55,
+        "events": [
+          {
+            "cpuTime": 6,
+            "wallTime": 136,
+            "outcome": "ok",
+            "work": [
+              {
+                "operation": "worker.core.fetch",
+                "latencyMilliseconds": 129,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 129,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation",
+                "fidy.operation": "worker.core.fetch",
+                "fidy.work_kind": "canonical_operation"
+              }
+            ],
+            "logCount": 2
+          },
+          {
+            "cpuTime": 10,
+            "wallTime": 353,
+            "outcome": "ok",
+            "work": [
+              {
+                "operation": "worker.core.fetch",
+                "latencyMilliseconds": 342,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 342,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation",
+                "fidy.operation": "worker.core.fetch",
+                "fidy.work_kind": "canonical_operation"
+              }
+            ],
+            "logCount": 2
+          },
+          {
+            "cpuTime": 15,
+            "wallTime": 390,
+            "outcome": "ok",
+            "work": [
+              {
+                "latencyMilliseconds": 141,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation",
+                "fidy.operation": "ingestion.getReviewWorkspace",
+                "fidy.work_kind": "canonical_operation"
+              },
+              {
+                "operation": "worker.core.fetch",
+                "latencyMilliseconds": 377,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 377,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation",
+                "fidy.operation": "worker.core.fetch",
+                "fidy.work_kind": "canonical_operation"
+              }
+            ],
+            "logCount": 3
+          },
+          {
+            "cpuTime": 13,
+            "wallTime": 452,
+            "outcome": "ok",
+            "work": [
+              {
+                "latencyMilliseconds": 170,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation",
+                "fidy.operation": "categories.listCategories",
+                "fidy.work_kind": "canonical_operation"
+              },
+              {
+                "operation": "worker.core.fetch",
+                "latencyMilliseconds": 440,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 440,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation",
+                "fidy.operation": "worker.core.fetch",
+                "fidy.work_kind": "canonical_operation"
+              }
+            ],
+            "logCount": 3
+          },
+          {
+            "cpuTime": 28,
+            "wallTime": 1207,
+            "outcome": "ok",
+            "work": [
+              {
+                "latencyMilliseconds": 1120,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation",
+                "fidy.operation": "recurringPlans.getRecurringWorkspace",
+                "fidy.work_kind": "canonical_operation"
+              },
+              {
+                "operation": "worker.core.coordinator",
+                "latencyMilliseconds": 1120,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 1120,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation",
+                "fidy.operation": "worker.core.coordinator",
+                "fidy.work_kind": "canonical_operation"
+              }
+            ],
+            "logCount": 3
+          },
+          {
+            "cpuTime": 12,
+            "wallTime": 1631,
+            "outcome": "ok",
+            "work": [
+              {
+                "operation": "worker.core.fetch",
+                "latencyMilliseconds": 1624,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 1624,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation",
+                "fidy.operation": "worker.core.fetch",
+                "fidy.work_kind": "canonical_operation"
+              }
+            ],
+            "logCount": 2
+          },
+          {
+            "cpuTime": 17,
+            "wallTime": 896,
+            "outcome": "ok",
+            "work": [
+              {
+                "latencyMilliseconds": 466,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation",
+                "fidy.operation": "recurring.listRecurringSeries",
+                "fidy.work_kind": "canonical_operation"
+              },
+              {
+                "operation": "worker.core.fetch",
+                "latencyMilliseconds": 881,
+                "outcome": "succeeded",
+                "statusClass": "2xx",
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698"
+              },
+              {
+                "latencyMilliseconds": 881,
+                "release": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+                "spanOperation": "fidy.operation",
+                "fidy.operation": "worker.core.fetch",
+                "fidy.work_kind": "canonical_operation"
+              }
+            ],
+            "logCount": 3
+          }
+        ]
+      }
+    },
+    "limitations": [
+      "Aggregate analytics are not correlated to the measured browser requests.",
+      "Diagnostic tails include scheduled work and release-candidate smoke traffic; use release and operation before comparing.",
+      "No headers, request bodies, financial values, raw SQL or credentials retained.",
+      "These diagnostic navigations are not quiet-window cold-start measurements."
+    ],
+    "workerQuantileDefinitions": [
+      {
+        "description": "CPU time 50th percentile - microseconds",
+        "name": "cpuTimeP50"
+      },
+      {
+        "description": "CPU time 99th percentile - microseconds",
+        "name": "cpuTimeP99"
+      },
+      {
+        "description": "Wall time 50th percentile - microseconds",
+        "name": "wallTimeP50"
+      },
+      {
+        "description": "Wall time 99th percentile - microseconds",
+        "name": "wallTimeP99"
+      }
+    ],
+    "coreStatusLastHour": {
+      "start": "2026-10-30T03:17:31+00:00",
+      "end": "2026-10-30T04:17:31+00:00",
+      "units": "microseconds",
+      "core": [
+        {
+          "dimensions": {
+            "status": "clientDisconnected"
+          },
+          "quantiles": {
+            "cpuTimeP50": 3345,
+            "cpuTimeP99": 24833,
+            "wallTimeP50": 6017,
+            "wallTimeP99": 41568
+          },
+          "sum": {
+            "errors": 0,
+            "requests": 27
+          }
+        },
+        {
+          "dimensions": {
+            "status": "success"
+          },
+          "quantiles": {
+            "cpuTimeP50": 7473,
+            "cpuTimeP99": 29754,
+            "wallTimeP50": 390189,
+            "wallTimeP99": 24298804
+          },
+          "sum": {
+            "errors": 0,
+            "requests": 308
+          }
+        }
+      ]
+    }
   }
 }

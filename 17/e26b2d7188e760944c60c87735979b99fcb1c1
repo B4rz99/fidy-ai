@@ -1,0 +1,22 @@
+apps/web/e2e/needs-review.spec.ts
+  s_68bfd164593579::t_97be45ed879af2 1055
+apps/web/e2e/brand-token-contrast.spec.ts
+  s_68bfd164593579::t_fbf543e4ee283f 91-93,98-99,136,167-169
+  s_68bfd164593579::t_938ab0d39c31d9 2,94,101,165-166,170-171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "17e26b2d7188e760944c60c87735979b99fcb1c1",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

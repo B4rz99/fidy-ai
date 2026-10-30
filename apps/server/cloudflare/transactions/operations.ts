@@ -25,6 +25,7 @@ import {
 } from "./internal/planning-read";
 import {
   findDashboardAggregate as ownerFindDashboardAggregate,
+  findDashboardAggregateRanges as ownerFindDashboardAggregateRanges,
   periodAggregateGuard,
   readPeriodAggregates,
 } from "./internal/dashboard-projection";
@@ -200,6 +201,10 @@ export const readDashboardTransactions: typeof ownerReadDashboardTransactions = 
 /** Read exact Currency-preserving contributions over a bounded half-open UTC interval. */
 export const findDashboardAggregate: typeof ownerFindDashboardAggregate = (input) =>
   ownerFindDashboardAggregate(input);
+
+/** Read bounded ordered intervals through current Consent and consistent projection revisions. */
+export const findDashboardAggregateRanges: typeof ownerFindDashboardAggregateRanges = (input) =>
+  ownerFindDashboardAggregateRanges(input);
 
 /** Prepare irreversible history removal under live authority and the observed revision. */
 export const prepareDeletion: typeof ownerPrepareDeletion = (input) => ownerPrepareDeletion(input);

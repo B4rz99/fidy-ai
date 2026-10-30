@@ -163,6 +163,10 @@ owner reconciliation, not blind replay. See
 Transactions owns effective financial facts and their derived projections. Budget, Dashboard,
 Recurring and Planning consume published facts without reimplementing financial selection policy.
 Exact Money and historical interpretation context remain intact across these boundaries.
+Dashboard deduplicates requested chart intervals before calling Transactions' bounded multi-interval
+reader. Small sequential native batches retain current Consent, projection readiness and fresh
+recovery fencing; revision disagreement refuses the complete read. The same User coordinator turn,
+admission lease and final authority/Audit checks still cover the whole view.
 
 Erasure composes each owner's bounded deletion and SQL authorization under User coordination.
 An independent registry fences ordinary activity after database restoration until reconciliation.

@@ -1,0 +1,48 @@
+infra/cloudflare/production-release.ts
+  s_d9571b3fccd032::t_139acddfba6c07 5,436-447,451-463,468-471,1086-1090
+  s_d9571b3fccd032::t_32cf17fb46b42f 448-450,464-467
+apps/server/cloudflare/runtime/contract.ts
+  s_d9571b3fccd032::t_139acddfba6c07 69
+docs/research/core-placement-2026-10-30.md
+  s_d9571b3fccd032::t_dbea3f38eec8cc 1-63
+infra/cloudflare/production-release.test.ts
+  s_d9571b3fccd032::t_139acddfba6c07 12,66
+  s_d9571b3fccd032::t_32cf17fb46b42f 21-65
+  s_d9571b3fccd032::t_49144b744761b4 67
+.patterns/alchemy.md
+  s_d9571b3fccd032::t_dbea3f38eec8cc 158-160
+docs/research/core-placement-native-control-2026-10-30.json
+  s_d9571b3fccd032::t_9cd7f29ab840b3 1,3-14,16-26,28-42,44-54,56-64,66-72,74-88,90-98,100-110,112-119,121-125
+  s_d9571b3fccd032::t_dbea3f38eec8cc 2,15,27,43,55,65,73,89,99,111,120
+infra/cloudflare/workers.test.ts
+  s_d9571b3fccd032::t_7016dda7ceae1f 406
+infra/cloudflare/alchemy.run.ts
+  s_d9571b3fccd032::t_139acddfba6c07 369
+apps/server/ARCHITECTURE.md
+  s_d9571b3fccd032::t_87b0c383b1e2d5 25-28
+docs/research/browser-category-production-comparison-2026-10-30.json
+  s_d9571b3fccd032::t_9cd7f29ab840b3 1-39,41-43,45-46,51-95,98-99,101-102,107-125
+  s_d9571b3fccd032::t_32cf17fb46b42f 40,44,47-50,96-97,100,103-106
+.patterns/sources.json
+  s_d9571b3fccd032::t_d5f187547b55d4 34,58
+infra/cloudflare/verify-edge-policy.ts
+  s_d9571b3fccd032::t_f87c01fee5c8fb 5
+patches/alchemy@2.0.0-beta.80.patch
+  s_d9571b3fccd032::t_7418f921d46ec1 69,72-83,92,174,177-188,204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9c145c982b0d48044c0ad957faa08d46dec90b5f",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

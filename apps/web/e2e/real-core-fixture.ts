@@ -30,8 +30,22 @@ export const openBrowserLogin = (page: Page): Promise<void> =>
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
 type ConsentRead = Readonly<{ status: number }>;
 const consentReads = new WeakMap<Page, ConsentRead>();
-const isConsentRead = (response: Response): boolean =>
-  response.url().endsWith("/web/consent") && response.request().method() === "GET";
+const isConsentRead = (response: Response): boolean => {
+  if (response.request().method() !== "GET") return false;
+  const url = new URL(response.url());
+  if (url.pathname === "/web/consent") return true;
+  if (
+    url.pathname !== "/web/session/binding" ||
+    !["?context=application", "?context=transactions"].includes(url.search)
+  ) {
+    return false;
+  }
+  if (response.status() === resourceLimitedStatus) return true;
+  if (response.status() !== successStatus) return false;
+  // Startup's declared response is decoded before the UI publishes it. Chromium can discard a
+  // redirecting document's response body, so this observer records the fresh read's status only.
+  return true;
+};
 const observeConsentRead = (page: Page): Promise<ConsentRead> => {
   if (!consentReads.has(page)) {
     consentReads.set(page, { status: 0 });

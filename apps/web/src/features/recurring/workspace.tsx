@@ -4,7 +4,7 @@ import { Array, Effect, Option } from "effect";
 import { type JSX, type ReactNode, useState } from "react";
 import { RecurringPlanId } from "@/transport/client";
 import { Button } from "@/ui/components/button";
-import { Disclosure } from "@/ui/components/disclosure";
+import { DeferredDisclosure } from "@/ui/components/disclosure";
 import {
   RecurringColumns,
   RecurringContextPanel,
@@ -478,14 +478,14 @@ const CreatePlan = ({
   return (
     <>
       <div data-recurring-slot="create-source">
-        <Disclosure title="Crear desde una transacción">
+        <DeferredDisclosure title="Crear desde una transacción">
           <TransactionPicker
             disabled={disabled}
             choose={(transaction) =>
               setInitial(planFromTransaction({ transaction, timeZone: panel.initial.timeZone }))
             }
           />
-        </Disclosure>
+        </DeferredDisclosure>
       </div>
       <PlanForm
         key={JSON.stringify(initial)}

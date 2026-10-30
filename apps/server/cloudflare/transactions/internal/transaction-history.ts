@@ -1,3 +1,4 @@
+import { TransactionListResponse } from "../../../src/shell/transactions/contract";
 import {
   prepareAuditQueryCall,
   prepareAuthorizedAuditCall,
@@ -364,12 +365,44 @@ export const findTransactionPresentation = ({
     .first()
     .then(decodePresentationRow);
 
+const decodedHistoryPage = (
+  rows: D1Result,
+  selection: Pick<Selection, "request" | "search">,
+  query: typeof Query.Type
+): Option.Option<typeof TransactionListResponse.Type> => {
+  const decoded = rows.results.map(decodeTransactionRow);
+  if (decoded.some(Option.isNone)) {
+    return Option.none();
+  }
+  const transactions = decoded.flatMap((item) => (Option.isSome(item) ? [item.value] : []));
+  const size = Option.getOrElse(query.limit, () => pageSize);
+  const visible = transactions.slice(0, size);
+  const last = visible.at(-1);
+  const next =
+    transactions.length > size && last !== undefined
+      ? nextTransactionPage({
+          cursor: `${DateTime.formatIso(last.occurredAt)}|${DateTime.formatIso(last.createdAt)}|${last.id}`,
+          filters: Object.fromEntries(
+            [...new URL(selection.request.url).searchParams].filter(([name]) => name !== "cursor")
+          ),
+          operation:
+            selection.search === true
+              ? "transactions.searchTransactions"
+              : "transactions.listTransactions",
+        })
+      : [];
+  return Option.map(Schema.decodeOption(TransactionListResponse.fields.next)(next), (next) => ({
+    data: visible,
+    next,
+  }));
+};
+
 const presentHistory = (
   rows: D1Result,
   selection: Pick<Selection, "id" | "request" | "search">,
   query: typeof Query.Type
 ): Response => {
-  const { id, request } = selection;
+  const { id } = selection;
   if (Option.isSome(id)) {
     const first = rows.results[0];
     if (first === undefined) {
@@ -388,31 +421,18 @@ const presentHistory = (
           { headers: noStore }
         );
   }
-  const decoded = rows.results.map(decodeTransactionRow);
-  if (decoded.some(Option.isNone)) {
-    return unavailable();
-  }
-  const transactions = decoded.flatMap((item) => (Option.isSome(item) ? [item.value] : []));
-  const size = Option.getOrElse(query.limit, () => pageSize);
-  const visible = transactions.slice(0, size);
-  const last = visible.at(-1);
-  const next =
-    transactions.length > size && last !== undefined
-      ? nextTransactionPage({
-          cursor: `${DateTime.formatIso(last.occurredAt)}|${DateTime.formatIso(last.createdAt)}|${last.id}`,
-          filters: Object.fromEntries(
-            [...new URL(request.url).searchParams].filter(([name]) => name !== "cursor")
+  const page = decodedHistoryPage(rows, selection, query);
+  return Option.isNone(page)
+    ? unavailable()
+    : Response.json(
+        {
+          data: page.value.data.map((transaction) =>
+            Schema.encodeSync(TransactionOutput)(transaction)
           ),
-          operation:
-            selection.search === true
-              ? "transactions.searchTransactions"
-              : "transactions.listTransactions",
-        })
-      : [];
-  return Response.json(
-    { data: visible.map((transaction) => Schema.encodeSync(TransactionOutput)(transaction)), next },
-    { headers: noStore }
-  );
+          next: Schema.encodeSync(TransactionListResponse.fields.next)(page.value.next),
+        },
+        { headers: noStore }
+      );
 };
 
 const invalidQueryAudit = (
@@ -709,3 +729,34 @@ export const browseTransactions = ({
     if (isOAuthCaller(subject)) return yield* readOAuthHistory({ db, selection, query, current });
     return yield* Effect.tryPromise(() => readAuthorizedHistory(db, { selection, query, current }));
   }).pipe(Effect.orElseSucceed(() => failedAudit()));
+
+/** The same browser query and atomic Audit, before HTTP encoding; no authority or row decoder is bypassed. */
+export const readBrowserTransactionPage = (
+  input: Readonly<{
+    db: D1Database;
+    request: Request;
+    subject: BrowserSelection["subject"];
+  }>
+): Effect.Effect<Option.Option<typeof TransactionListResponse.Type>> =>
+  Effect.gen(function* () {
+    const selection: BrowserSelection = {
+      request: input.request,
+      subject: input.subject,
+      search: false,
+      id: Option.none(),
+    };
+    const query = parseQuery(selection);
+    if (Option.isNone(query)) return Option.none();
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
+    const [rows, audit] = yield* Effect.tryPromise(() =>
+      input.db.batch(
+        browserHistoryStatements(input.db, {
+          selection,
+          query: query.value,
+          current,
+        })
+      )
+    ).pipe(Effect.uninterruptible);
+    if (audit?.meta.changes !== 1 || rows === undefined) return Option.none();
+    return decodedHistoryPage(rows, selection, query.value);
+  }).pipe(Effect.orElseSucceed(() => Option.none()));

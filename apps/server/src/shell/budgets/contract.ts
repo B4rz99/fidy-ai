@@ -4,7 +4,7 @@ import {
   Budget,
   BudgetId,
   BudgetStatusQueryParameters,
-  BudgetStatusReport,
+  BudgetWorkspace,
   CreateBudgetInput,
   UpdateBudgetInput,
 } from "~/core/budgets/contract";
@@ -96,7 +96,7 @@ export const BudgetsGroup = HttpApiGroup.make("budgets")
   .add(
     HttpApiEndpoint.get("getBudgetStatus", "/budget-status", {
       query: BudgetStatusQueryParameters,
-      success: OperationResponse(BudgetStatusReport),
+      success: OperationResponse(BudgetWorkspace),
     })
       .annotate(
         OpenApi.Description,

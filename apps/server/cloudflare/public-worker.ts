@@ -1,7 +1,9 @@
 import {
   browserSessionBindingHeader,
   browserSessionBindingPath,
-} from "../src/shell/web-session/contract";
+  telemetryTraceHeader,
+} from "~/shell/browser-transport/contract";
+
 import { cliDistributionResponse } from "./cli-distribution/runtime";
 import {
   microsoftProviderPaths,
@@ -23,7 +25,7 @@ import {
 } from "../src/shell/transactions/runtime";
 import { ownsMemoryPath as memoryPath } from "../src/shell/memory/runtime";
 import type { TelemetryService } from "../src/shell/observability/contract";
-import { telemetryTraceHeader } from "../src/shell/observability/contract";
+
 import { encodeTraceParent } from "../src/shell/observability/operations";
 import {
   type WorkerTelemetryEnvironment,
@@ -419,10 +421,16 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
 
 const fallbackHeaders = (request: Request, path: string): Headers => {
   if (forwardsSession(request, path)) {
-    return new Headers({
+    const headers = new Headers({
       cookie: request.headers.get("cookie") ?? "",
       "content-type": request.headers.get("content-type") ?? "",
     });
+    if (path === browserSessionBindingPath) {
+      headers.set("origin", request.headers.get("origin") ?? "");
+      const binding = request.headers.get(browserSessionBindingHeader);
+      if (binding !== null) headers.set(browserSessionBindingHeader, binding);
+    }
+    return headers;
   }
   const headers = new Headers(request.headers);
   headers.delete(smokeProofHeader);
@@ -516,6 +524,7 @@ const canonicalAdmissionHeaders = (
     );
   });
 const preservesCoreQuery = (path: string): boolean =>
+  path === browserSessionBindingPath ||
   path === connectionCallbackPath ||
   transactionPath(path) ||
   canonicalRoute(path) ||

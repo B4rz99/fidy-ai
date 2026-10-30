@@ -1,32 +1,24 @@
+import type { FidyClient } from "@/transport/client";
 import { type ReviewDecisions, type ReviewWorkspaceQuery, makeReviewDecisions } from "./decisions";
 import { ReviewFullState, ReviewWorkspaceLayout } from "@/ui/components/review-workspace";
 import { Button } from "@/ui/components/button";
-import { Atom } from "effect/reactivity";
 import { type InboxControl, useInboxControl } from "./inbox-controller";
 import { reviewTitle } from "./presentation";
 import { ReviewToolbar } from "./toolbar";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Navigate, useRouter, useSearch } from "@tanstack/react-router";
 import { Option } from "effect";
-import { type JSX, type ReactNode, type RefCallback, memo, useState } from "react";
+import { type JSX, type ReactNode, type RefCallback, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import type { FidyClient } from "@/transport/client";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { ReviewEditor } from "./editor";
 import { Inbox, ReviewPagination } from "./inbox";
 import type { Workspace } from "./model";
-
 import { type Filter, ReviewNavigation } from "./view-navigation";
+import { reviewWorkspaceQueries } from "./query";
 
 const { Toaster, toast } = await import("sonner");
-
-const makeReviewQuery = (client: FidyClient, filter: Filter, page: number): ReviewWorkspaceQuery =>
-  client.query("ingestion", "getReviewWorkspace", {
-    query: { status: Option.some(filter), offset: page === 0 ? Option.none() : Option.some(page) },
-    reactivityKeys: ["ingestion-review"],
-  });
-
 /** The active route owns pagination repair; application composition retains the workspace. */
 export const NeedsReviewRoute = (): JSX.Element => {
   const search = useSearch({ from: "/authenticated/app/needs-review" });
@@ -39,14 +31,23 @@ export const NeedsReviewRoute = (): JSX.Element => {
     </>
   );
 };
-
 /** Pagination repair belongs to the active route, outside the retained presentation owner. */
 const ReviewPageRepair = ({
   filter,
   page,
-}: Readonly<{ filter: Filter; page: number }>): JSX.Element => {
+}: Readonly<{
+  filter: Filter;
+  page: number;
+}>): JSX.Element => {
   const client = useRouter().options.context.apiClient;
-  const [query] = useState(() => makeReviewQuery(client, filter, page));
+  const [query] = useState(
+    () =>
+      reviewWorkspaceQueries({
+        client,
+        filter,
+        page,
+      }).source
+  );
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   return state._tag === "Ready" &&
     state.value.data.items.length === 0 &&
@@ -57,12 +58,15 @@ const ReviewPageRepair = ({
     <></>
   );
 };
-
-const NeedsReviewWorkspaceView = ({
+export const NeedsReviewFeature = ({
   filter,
   page,
   active,
-}: Readonly<{ filter: Filter; page: number; active: boolean }>): JSX.Element => {
+}: Readonly<{
+  filter: Filter;
+  page: number;
+  active: boolean;
+}>): JSX.Element => {
   const router = useRouter();
   const select = (status: Filter, offset: number): void => {
     router.navigate({ to: "/app/needs-review", search: { status, offset } }).catch(() => {});
@@ -112,18 +116,15 @@ const ReviewPanel = ({
     />
   );
 };
-const reviewQueries = (
-  client: FidyClient,
-  filter: Filter,
-  page: number
-): Readonly<{
-  source: ReviewWorkspaceQuery;
-  active: ReviewWorkspaceQuery;
-}> => {
-  const source = makeReviewQuery(client, filter, page);
-  return { source, active: source.pipe(Atom.withRefresh("60 seconds"), Atom.refreshOnWindowFocus) };
+const useReviewDecisions = ({
+  client,
+  query,
+}: Readonly<{ client: FidyClient; query: ReviewWorkspaceQuery }>): ReviewDecisions => {
+  const [decisionAtom] = useState(() =>
+    makeReviewDecisions({ client, query, created: () => toast.success("Transacción creada") })
+  );
+  return useAtomValue(decisionAtom);
 };
-
 const ReviewResources = ({
   active,
   filter,
@@ -138,16 +139,15 @@ const ReviewResources = ({
   select: (status: Filter, offset: number) => void;
 }>): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
-  const [queries] = useState(() => reviewQueries(apiClient, filter, page));
-  const query = active ? queries.active : queries.source;
-  const [decisionAtom] = useState(() =>
-    makeReviewDecisions({
+  const [queries] = useState(() =>
+    reviewWorkspaceQueries({
       client: apiClient,
-      query: queries.source,
-      created: () => toast.success("Transacción creada"),
+      filter,
+      page,
     })
   );
-  const decisions = useAtomValue(decisionAtom);
+  const query = active ? queries.active : queries.source;
+  const decisions = useReviewDecisions({ client: apiClient, query: queries.source });
   const [lifetime] = useState(() => decisionLifetime(decisions));
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
@@ -163,6 +163,7 @@ const ReviewResources = ({
       ) : (
         <ReadyInbox
           active={active}
+          workspaceQuery={queries.source}
           decisions={decisions}
           view={state.value.data}
           notice={
@@ -219,7 +220,10 @@ const ReviewUnavailable = ({
 const ReviewReadFailure = ({
   refresh,
   waiting,
-}: Readonly<{ refresh: () => void; waiting: boolean }>): JSX.Element => (
+}: Readonly<{
+  refresh: () => void;
+  waiting: boolean;
+}>): JSX.Element => (
   <div className="p-5">
     <CanonicalQueryRetry
       title="No pudimos cargar los elementos"
@@ -240,17 +244,21 @@ type ReadyInboxProps = Readonly<{
   page: number;
   move: (offset: number) => void;
   decisions: ReviewDecisions;
+  workspaceQuery: ReviewWorkspaceQuery;
 }>;
-/** Defer an unseen editor after leaving; keep an already displayed editor mounted. */
 const ReadyInbox = ({
   active,
   ...props
-}: ReadyInboxProps & Readonly<{ active: boolean }>): JSX.Element => {
+}: ReadyInboxProps &
+  Readonly<{
+    active: boolean;
+  }>): JSX.Element => {
   const [displayed, setDisplayed] = useState(active);
   if (active && !displayed) setDisplayed(true);
   return displayed ? <ReadyInboxView {...props} /> : <></>;
 };
 const ReadyInboxView = ({
+  workspaceQuery,
   decisions,
   notice,
   disabled,
@@ -288,6 +296,7 @@ const ReadyInboxView = ({
       />
       <ReviewToolbar view={visible} control={{ ...control, checked }} />
       <InboxWorkspace
+        workspaceQuery={workspaceQuery}
         caughtUp={
           filter === "pending" && source === "all" && search === "" && view.pendingCount === 0
         }
@@ -300,8 +309,11 @@ const ReadyInboxView = ({
     </>
   );
 };
-
-const EmptyInbox = ({ caughtUp }: Readonly<{ caughtUp: boolean }>): JSX.Element => (
+const EmptyInbox = ({
+  caughtUp,
+}: Readonly<{
+  caughtUp: boolean;
+}>): JSX.Element => (
   <ReviewFullState
     state="empty"
     title={caughtUp ? "Todo al día" : "Sin elementos en esta vista"}
@@ -314,8 +326,8 @@ const EmptyInbox = ({ caughtUp }: Readonly<{ caughtUp: boolean }>): JSX.Element 
     {null}
   </ReviewFullState>
 );
-
 const InboxWorkspace = ({
+  workspaceQuery,
   caughtUp,
   view,
   control,
@@ -324,6 +336,7 @@ const InboxWorkspace = ({
   pageLength,
 }: Readonly<{
   caughtUp: boolean;
+  workspaceQuery: ReviewWorkspaceQuery;
   view: Workspace;
   control: InboxControl;
   page: number;
@@ -356,6 +369,7 @@ const InboxWorkspace = ({
         move={move}
       />
       <ReviewEditor
+        workspaceQuery={workspaceQuery}
         key={item.id}
         item={item}
         decisions={control.decisions}
@@ -364,12 +378,15 @@ const InboxWorkspace = ({
     </div>
   );
 };
-
 const filterReviewPage = ({
   view,
   source,
   search,
-}: Readonly<{ view: Workspace; source: string; search: string }>): Workspace => ({
+}: Readonly<{
+  view: Workspace;
+  source: string;
+  search: string;
+}>): Workspace => ({
   ...view,
   items: view.items.filter(
     (item) =>
@@ -377,10 +394,7 @@ const filterReviewPage = ({
       reviewTitle(item).toLocaleLowerCase("es-CO").includes(search.toLocaleLowerCase("es-CO"))
   ),
 });
-
 const decisionLifetime =
   (decisions: ReviewDecisions): RefCallback<HTMLDivElement> =>
   (node) =>
     node === null ? undefined : decisions.mount();
-
-export const NeedsReviewFeature = memo(NeedsReviewWorkspaceView);

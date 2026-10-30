@@ -56,7 +56,7 @@ const ConsentResult = ({
 export const SubscriptionConsentBoundary = ({
   children,
 }: Readonly<{ children: ReactNode }>): JSX.Element => {
-  const { webAuthClient: client, initialSessionBinding } = useRouter().options.context;
+  const { webAuthClient: client, sessionBinding } = useRouter().options.context;
   const [query] = useState(() =>
     client.query("processingConsent", "status", {
       timeToLive: "0 seconds",
@@ -66,10 +66,7 @@ export const SubscriptionConsentBoundary = ({
   const status = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   const { authentication } = useSession();
-  if (
-    authentication === "expired" ||
-    (status._tag === "Failure" && initialSessionBinding === "none")
-  ) {
+  if (authentication === "expired" || (status._tag === "Failure" && sessionBinding === "none")) {
     return (
       <Alert>
         <AlertTitle>Inicia sesión para activar Pro</AlertTitle>

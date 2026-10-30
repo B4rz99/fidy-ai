@@ -81,9 +81,3 @@ export const webAuthenticationEndpoints = {
   rotateRecovery: RecoveryGroup.endpoints.rotateBackupRecoveryCode,
   currentUser: IdentityGroup.endpoints.getCurrentUser,
 } as const;
-
-export {
-  BrowserSessionBinding,
-  browserSessionBindingHeader,
-  browserSessionBindingPath,
-} from "~/shell/web-session/contract";

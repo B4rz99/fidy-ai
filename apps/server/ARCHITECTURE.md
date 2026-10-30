@@ -72,6 +72,15 @@ provider shapes or reusable credential authority.
 SuggestedOperations and generated contracts derive from that assembly. Canonical Policy selects
 caller capabilities and confirmation requirements; Canonical Operations invokes the owning behavior.
 
+Workspace read projections remain specific declared observations. Budget status includes bounded
+editing metadata for the selected reporting month under the same authorization and accounting;
+its report and metadata reads can run concurrently within the coordinated User query. The Review
+workspace projects the first revision-bound item detail from its already-read rows, using the same
+draft expiry and Category suggestion policy as an individual read, and never includes original
+material. Browser User responses can carry the bounded Category display catalog through its
+published projection seam, with live browser credential evidence checked after that read. These
+projections do not add a generic batching transport or bypass admission, Consent or write guards.
+
 Queries share an observational owner implementation. Individual and atomic-batch mutations share
 the User-scoped mutation unit. Dedicated browser/proof transports retain separate declarations and
 authority; using one does not confer canonical, agent or batch privileges.
@@ -86,6 +95,24 @@ and browser-session authority. Sensitive OAuth operations require one client-nat
 bound to the exact operation and consumed atomically; the client assertion is not human attestation.
 See [ADR 0033](../../docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md) and the
 [release evidence](../../docs/operations/hosted-mcp-release.md) for protocol and enablement details.
+
+### Browser document entry
+
+The binding endpoint can opt into an application context, or the initial Transactions page. Core
+composition resolves the live credential and Consent receipt together, applies the unchanged
+canonical request-pressure guard, and delegates metadata and Transaction reads to their owners.
+Metadata renewal, same-User credential/active-Consent checks, taxonomy and identity Audit form one
+native batch. The Transaction reader retains its canonical projection, live authority and Audit. Both the ordinary
+endpoint and document entry consume its validated page; entry encodes the combined domain values
+once instead of serializing a Transaction response and decoding it into another response.
+A final exact-credential receipt drops all private observations after withdrawal or revocation.
+Missing/Revoked Consent returns no product data. An explicit mounted binding must match the cookie.
+
+These responses use `no-store`; the ordinary binding-only path stays identity-only. The optional
+Transaction page uses User-timezone month bounds and is omitted if the combined response would
+exceed the existing 64KiB web-auth response limit. Omission falls back to the ordinary canonical
+page read. This is one bounded document-entry request; burst, concurrency, lease duration, refusal
+responses and later canonical authorization checks remain unchanged.
 
 ## 4. Subject, proof, and provider boundaries
 

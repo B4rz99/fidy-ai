@@ -34,12 +34,17 @@ export const AccessRefused = (): JSX.Element => (
 );
 
 /** Shared application navigation; privacy routes can retain it independently of product access. */
+type ApplicationShellProps = Readonly<
+  Pick<ComponentProps<"div">, "children"> & {
+    reviewPendingCount: ReactNode;
+    prepareNavigation: (destination: string) => void;
+  }
+>;
 export const ApplicationShell = ({
   children,
   reviewPendingCount,
-}: Readonly<
-  Pick<ComponentProps<"div">, "children"> & { reviewPendingCount: ReactNode }
->): JSX.Element => {
+  prepareNavigation,
+}: ApplicationShellProps): JSX.Element => {
   const desktop = useDesktopNavigation();
   const router = useRouter();
   const { completeLogout } = useSession();
@@ -73,6 +78,7 @@ export const ApplicationShell = ({
               loggingOut={status.waiting}
               onLogout={onLogout}
               reviewPendingCount={reviewPendingCount}
+              prepareNavigation={prepareNavigation}
             />
           </div>
         ) : (
@@ -80,6 +86,7 @@ export const ApplicationShell = ({
             loggingOut={status.waiting}
             onLogout={onLogout}
             reviewPendingCount={reviewPendingCount}
+            prepareNavigation={prepareNavigation}
           />
         )}
         {failed ? <LogoutFailure /> : null}

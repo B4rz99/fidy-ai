@@ -19,7 +19,7 @@ const VisitedRecurringWorkspace = (): JSX.Element => {
     useMatch({
       from: "/authenticated/app/recurring",
       shouldThrow: false,
-      select: (match) => match.search,
+      select: (match) => (match.status === "success" ? match.search : undefined),
     })
   );
   const [previous, setPrevious] = useState(search);

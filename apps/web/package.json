@@ -16,7 +16,8 @@
     "check:shadcn": "bun scripts/check-shadcn-integrity.ts",
     "lint:deps": "bun ../../tools/depcruise/run.mjs",
     "test:browser": "bun --bun playwright test --config playwright.config.ts",
-    "test:browser:cli": "CLI_ACCEPTANCE_MODE=cli bun --bun playwright test --config playwright.cli.config.ts"
+    "test:browser:cli": "CLI_ACCEPTANCE_MODE=cli bun --bun playwright test --config playwright.cli.config.ts",
+    "test:desktop-navigation": "FIDY_ASSESSMENT=small CLI_ACCEPTANCE_MODE=cli bun --bun playwright test --config playwright.desktop-navigation.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.9.0",

@@ -1,3 +1,4 @@
+import { reviewMaterialQuery } from "./material-query";
 import { useReviewExpired } from "./expiry";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -10,7 +11,11 @@ import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import type { Item } from "./model";
 
-export const OriginalMaterial = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
+export const OriginalMaterial = ({
+  item,
+}: Readonly<{
+  item: Item;
+}>): JSX.Element => {
   const expired = useReviewExpired(item);
   return expired ? (
     <p className="text-sm text-muted-foreground">
@@ -25,19 +30,27 @@ const useMaterialQuery = (
 ): Atom.Atom<AsyncResult.AsyncResult<CanonicalSuccess<"ingestion.getReviewMaterial">, unknown>> => {
   const client = useRouter().options.context.apiClient;
   const [query] = useState(() =>
-    client.query("ingestion", "getReviewMaterial", {
-      params: { id: item.id },
-      reactivityKeys: ["ingestion-review"],
+    reviewMaterialQuery({
+      client,
+      id: item.id,
     })
   );
   return query;
 };
 /** Load original bytes alongside the selected detail, within the same expiry fence. */
-export const ReviewMaterialPreload = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
+export const ReviewMaterialPreload = ({
+  item,
+}: Readonly<{
+  item: Item;
+}>): JSX.Element => {
   useAtomMount(useMaterialQuery(item));
   return <></>;
 };
-const RetainedMaterial = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
+const RetainedMaterial = ({
+  item,
+}: Readonly<{
+  item: Item;
+}>): JSX.Element => {
   const query = useMaterialQuery(item);
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
@@ -70,7 +83,11 @@ const RetainedMaterial = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
   );
 };
 type Material = CanonicalSuccess<"ingestion.getReviewMaterial">["data"];
-const MaterialBody = ({ material }: Readonly<{ material: Material }>): JSX.Element => {
+const MaterialBody = ({
+  material,
+}: Readonly<{
+  material: Material;
+}>): JSX.Element => {
   if (!material.available) {
     return (
       <p className="text-sm text-muted-foreground">

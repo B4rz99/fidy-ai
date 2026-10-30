@@ -1,7 +1,8 @@
 import { type Cause, Clock, Deferred, Effect, Fiber, Schema } from "effect";
 import { afterAll, expect, it } from "@effect/vitest";
 import { User } from "../../src/core/identity/contract";
-import { browserSessionBindingHeader } from "../../src/shell/web-session/contract";
+import { Category } from "../../src/core/categories/contract";
+import { browserSessionBindingHeader } from "../../src/shell/browser-transport/contract";
 import {
   DisabledTelemetryResource,
   makeTelemetryService,
@@ -51,7 +52,7 @@ const environment = (db: D1Database): Parameters<typeof core.fetch>[1] => ({
 
 const setup = Effect.gen(function* () {
   const db = yield* Effect.tryPromise(() => databases.acquire());
-  yield* Effect.tryPromise(() => installCurrentTestObjects({ db, tables: [] }));
+  yield* Effect.tryPromise(() => installCurrentTestObjects({ db, tables: ["categories"] }));
   yield* seedSession({ db, idle, hard });
   return db;
 });
@@ -74,10 +75,18 @@ it.live("combines the current User binding proof with native idle renewal", () =
     const response = yield* send(observed.database, headers());
     expect(response.status).toBe(200);
     const body = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ data: Schema.toCodecJson(User) })
+      Schema.Struct({
+        data: Schema.toCodecJson(User),
+        categories: Schema.toCodecJson(Schema.Array(Category)),
+      })
     )(yield* Effect.tryPromise(() => response.json()));
     expect(body.data.id).toBe(sessionUser);
-    expect(observed.statements().length).toBe(3);
+    expect(body.categories).toHaveLength(16);
+    // Three User proof/read/Audit statements, plus the catalog replacing a separate HTTP read.
+    expect(observed.statements()).toHaveLength(4);
+    expect(
+      observed.statements().filter((statement) => statement.sql.includes("UPDATE web_sessions"))
+    ).toHaveLength(1);
   })
 );
 

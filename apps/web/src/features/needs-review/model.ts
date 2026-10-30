@@ -23,13 +23,21 @@ export const statuses = {
   skipped: "Omitida",
   expired: "Vencida",
 } as const;
-export const deadline = (item: Item): string =>
-  DateTime.format(item.expiresAt, {
-    locale: "es-CO",
-    timeZone: "America/Bogota",
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+const deadlineFormatters = new Map<string, Intl.DateTimeFormat>();
+const maximumDeadlineFormatters = 32;
+export const deadline = (item: Item): string => {
+  let formatter = deadlineFormatters.get(item.timeZone);
+  if (formatter === undefined) {
+    formatter = new Intl.DateTimeFormat("es-CO", {
+      timeZone: item.timeZone,
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+    if (deadlineFormatters.size >= maximumDeadlineFormatters) deadlineFormatters.clear();
+    deadlineFormatters.set(item.timeZone, formatter);
+  }
+  return formatter.format(DateTime.toEpochMillis(item.expiresAt));
+};
 export const editDraft = ({
   draft,
   field,

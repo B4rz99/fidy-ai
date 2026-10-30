@@ -1,14 +1,21 @@
+import { Effect } from "effect";
+import { preloadReviewMaterial, prepareReviewWorkspace } from "./query";
 import { lazyRouteComponent } from "@tanstack/react-router";
-import type { ComponentProps, JSX } from "react";
-
-const Workspace = lazyRouteComponent(() => import("./workspace"), "NeedsReviewFeature");
-const Route = lazyRouteComponent(() => import("./workspace"), "NeedsReviewRoute");
-
+import { type ComponentProps, type JSX, memo } from "react";
 /** Public navigation remains independent of the retained editor and its presentation. */
 export { ReviewPendingCount } from "./navigation";
-export const NeedsReviewFeature = (
-  props: Readonly<ComponentProps<typeof Workspace>>
-): JSX.Element => <Workspace {...props} />;
-NeedsReviewFeature.preload = (): Promise<[void, void]> =>
-  Promise.all([Workspace.preload?.(), Route.preload?.()]);
+/** Public composition stays small; the route and retained owner preload the same workspace. */
+const Workspace = lazyRouteComponent(() =>
+  import("./workspace").then((module) => ({ default: memo(module.NeedsReviewFeature) }))
+);
+const Route = lazyRouteComponent(() => import("./workspace"), "NeedsReviewRoute");
+export const NeedsReviewFeature = (props: ComponentProps<typeof Workspace>): JSX.Element => (
+  <Workspace {...props} />
+);
+NeedsReviewFeature.preload = (): Promise<void> =>
+  Effect.runPromise(
+    Effect.asVoid(Effect.tryPromise(() => Promise.all([Workspace.preload?.(), Route.preload?.()])))
+  );
+NeedsReviewFeature.preloadData = prepareReviewWorkspace;
+NeedsReviewFeature.preloadMaterial = preloadReviewMaterial;
 export const NeedsReviewRoute = (): JSX.Element => <Route />;

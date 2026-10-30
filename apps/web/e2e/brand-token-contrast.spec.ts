@@ -1,5 +1,5 @@
 import type { Locator, Page, Route } from "@playwright/test";
-import { DateTime, Effect } from "effect";
+import { Data, DateTime, Effect } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
@@ -88,10 +88,15 @@ const capture = Effect.fnUntraced(function* (page: Page, name: string) {
 type Rgb = Readonly<{ red: number; green: number; blue: number }>;
 type Rgba = Rgb & Readonly<{ alpha: number }>;
 type RenderedColors = Readonly<{ foreground: Rgb; background: Rgb }>;
+type ColorMeasurement =
+  | Readonly<{ _tag: "Detached" }>
+  | Readonly<{ _tag: "Rendered"; colors: RenderedColors }>;
+class DetachedColorTarget extends Data.TaggedError("DetachedColorTarget")<{}> {}
 const readColors = (
   element: Element,
   property: "color" | "borderLeftColor" | "outlineColor"
-): RenderedColors => {
+): ColorMeasurement => {
+  if (!element.isConnected) return { _tag: "Detached" };
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   if (context === null) throw new Error("Color measurement requires a canvas context");
@@ -128,7 +133,7 @@ const readColors = (
     };
   }
   const { red, green, blue } = pixel(getComputedStyle(element)[property]);
-  return { foreground: { red, green, blue }, background };
+  return { _tag: "Rendered", colors: { foreground: { red, green, blue }, background } };
 };
 const linearChannel = (channel: number): number => {
   const threshold = 0.04045;
@@ -157,6 +162,13 @@ const contrast = Effect.fnUntraced(function* (
 ) {
   const colors = yield* Effect.tryPromise((signal) =>
     locator.evaluate(readColors, property, { signal })
+  ).pipe(
+    Effect.flatMap((value) =>
+      value._tag === "Detached"
+        ? Effect.fail(new DetachedColorTarget())
+        : Effect.succeed(value.colors)
+    ),
+    Effect.retry({ times: 5, while: (error) => error instanceof DetachedColorTarget })
   );
   const foregroundLight = luminance(colors.foreground);
   const backgroundLight = luminance(colors.background);
@@ -457,6 +469,7 @@ const budget = {
   updatedAt: "2026-10-01T12:00:00Z",
 };
 const budgetReport = {
+  budgets: [budget],
   period: budgetPeriod,
   initialized: true,
   cashFlow: {

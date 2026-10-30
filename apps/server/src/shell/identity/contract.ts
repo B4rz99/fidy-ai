@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+import { Category } from "~/core/categories/contract";
 import type { Effect } from "effect";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
@@ -5,15 +7,21 @@ import { User, UserPreferences } from "~/core/identity/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
 
+/** Bounded display metadata; every producer retains its own live authority checks. */
+export const CurrentUserMetadata = Schema.Struct({
+  ...OperationResponse(User).fields,
+  categories: Schema.OptionFromOptionalKey(Schema.Array(Category)),
+}).annotate({ identifier: "CurrentUserMetadata" });
+
 export const IdentityGroup = HttpApiGroup.make("identity").add(
   HttpApiEndpoint.get("getCurrentUser", "/user", {
-    success: OperationResponse(User),
+    success: CurrentUserMetadata,
     error: Unavailable,
   })
     .annotate(
       OpenApi.Description,
       "Get the stable User behind the authenticated bearer and the independently stored ServiceMarket, " +
-        "locale, and IANA time zone. Use it before interpreting dates or presenting data to the User."
+        "locale, and IANA time zone. Browser responses include the bounded Category display catalog so navigation does not require another metadata read. Use it before interpreting dates or presenting data to the User."
     )
     .annotateMerge(
       operationPolicy({

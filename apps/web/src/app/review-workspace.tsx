@@ -1,5 +1,4 @@
 import { ReviewWorkspace } from "./workspace-components";
-import { useWorkspaceResume } from "./workspace-resume";
 import { useMatch, useRouterState } from "@tanstack/react-router";
 import { Option } from "effect";
 import { useSession } from "@/session/session-context";
@@ -18,7 +17,7 @@ const VisitedReviewWorkspace = (): JSX.Element => {
     useMatch({
       from: "/authenticated/app/needs-review",
       shouldThrow: false,
-      select: (match) => match.search,
+      select: (match) => (match.status === "success" ? match.search : undefined),
     })
   );
   const [previous, setPrevious] = useState(search);
@@ -35,10 +34,9 @@ const VisitedReviewWorkspace = (): JSX.Element => {
   }
   const current = Option.orElse(search, () => previous);
   const active = Option.isSome(search);
-  const resume = useWorkspaceResume({ active, key: "ingestion-review" });
   if (Option.isNone(current)) return <></>;
   return (
-    <div hidden={!active} inert={!active} ref={resume}>
+    <div hidden={!active} inert={!active}>
       <Suspense fallback={<p className="p-5">Cargando elementos…</p>}>
         <ReviewWorkspace
           active={active}

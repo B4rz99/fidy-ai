@@ -1,14 +1,14 @@
+import {
+  browserSessionBindingHeader,
+  browserSessionBindingPath,
+} from "~/shell/browser-transport/contract";
 import { webAuthenticationEndpoints } from "../../../src/shell/web-authentication/contract";
 import {
   microsoftProviderPaths,
   providerPaths,
 } from "../../../src/shell/provider-authentication/contract";
 import { Clock, Effect, Option, Schema } from "effect";
-import {
-  BrowserSessionBinding,
-  browserSessionBindingHeader,
-  browserSessionBindingPath,
-} from "../../../src/shell/web-session/contract";
+import { BrowserSessionBinding } from "../../../src/shell/web-session/contract";
 import { authenticate } from "./authentication";
 import { noSession, unavailable } from "./support";
 import type { WebSessionRequest } from "../contract";
@@ -74,8 +74,9 @@ export const bindingResponse = ({
     if (bootstrap) {
       return Option.some(
         Response.json(
-          yield* Schema.decodeEffect(BrowserSessionBinding)({
+          yield* Schema.encodeUnknownEffect(BrowserSessionBinding)({
             binding: Option.match(session, { onNone: () => null, onSome: (value) => value.id }),
+            initial: Option.none(),
           }),
           { headers: { "cache-control": "no-store" } }
         )

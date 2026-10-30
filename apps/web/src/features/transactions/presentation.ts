@@ -118,8 +118,12 @@ export const presentTransactionRows = ({
     direction: transaction.direction,
     transactionTypeLabel: transaction.direction === "inflow" ? "Ingreso" : "Gasto",
     money: transaction.money,
-    dateLabel: dateFormatter.format(transaction.occurredAt.epochMilliseconds),
-    moneyText: formatMoney({ locale, money: transaction.money }),
+    get dateLabel(): string {
+      return dateFormatter.format(transaction.occurredAt.epochMilliseconds);
+    },
+    get moneyText(): string {
+      return formatMoney({ locale, money: transaction.money });
+    },
     occurredOnText: occurrenceText(occurredOnFormatter, transaction.occurredAt),
   }));
 };

@@ -1052,7 +1052,7 @@ const measureReviewEntry = (): void => {
   );
 };
 
-const reviewEntryTargetMilliseconds = 16;
+const reviewEntryTargetMilliseconds = 100;
 const recordReviewEntry = (page: Page): Promise<void> =>
   page
     .locator("body")

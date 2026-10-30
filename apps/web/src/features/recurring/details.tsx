@@ -4,7 +4,7 @@ import { type FormEvent, type JSX, useState } from "react";
 import { RecurringCommand } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
-import { Disclosure } from "@/ui/components/disclosure";
+import { DeferredDisclosure, Disclosure } from "@/ui/components/disclosure";
 import { ChoiceField, DefaultChoiceField, RecurringDateField } from "./fields";
 import { TransactionPicker } from "./transactions";
 import { PlanForm } from "./plan-form";
@@ -283,7 +283,7 @@ const LinkTransaction = ({
   const [replaces, setReplaces] = useState("");
   const [settled, setSettled] = useState(false);
   return (
-    <Disclosure title="Vincular transacción existente">
+    <DeferredDisclosure title="Vincular transacción existente">
       <LinkFields
         item={item}
         disabled={disabled}
@@ -312,7 +312,7 @@ const LinkTransaction = ({
           })
         }
       />
-    </Disclosure>
+    </DeferredDisclosure>
   );
 };
 

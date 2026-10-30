@@ -1,3 +1,4 @@
+import { useNavigationPreparation } from "./navigation-preparation";
 import { Outlet, useRouterState } from "@tanstack/react-router";
 import { type JSX, Suspense, lazy } from "react";
 import { AccessRefused, ApplicationShell } from "@/features/signed-in/feature";
@@ -16,6 +17,7 @@ const ReviewPendingCount = lazy(() =>
 /** One application shell survives navigation across independently authorized product routes. */
 export const ApplicationFrame = (): JSX.Element => {
   const { authentication } = useSession();
+  const prepareNavigation = useNavigationPreparation();
   const frame = useRouterState({
     select: (state) => {
       if (state.matches.some((match) => match.routeId === "/authenticated")) {
@@ -47,6 +49,7 @@ export const ApplicationFrame = (): JSX.Element => {
   if (frame === "standalone") return <Outlet />;
   const shell = (
     <ApplicationShell
+      prepareNavigation={prepareNavigation}
       reviewPendingCount={
         independentControls ? null : (
           <Suspense fallback={null}>

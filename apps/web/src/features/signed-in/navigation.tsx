@@ -1,3 +1,4 @@
+import { transactionEntryConsent } from "@/session/transaction-entry";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Calendar03Icon,
@@ -32,12 +33,7 @@ const navigationLinks = [
 /** Share the Transactions page's fresh Consent query before mounting ordinary navigation reads. */
 const ConsentedReviewCount = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => {
   const client = useRouter().options.context.webAuthClient;
-  const [query] = useState(() =>
-    client.query("processingConsent", "status", {
-      timeToLive: "0 seconds",
-      reactivityKeys: ["processing-consent"],
-    })
-  );
+  const [query] = useState(() => transactionEntryConsent(client));
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   return state._tag === "Ready" &&
     !state.waiting &&
@@ -53,10 +49,12 @@ export const SignedInNavigation = ({
   onLogout,
   loggingOut,
   reviewPendingCount,
+  prepareNavigation,
 }: Readonly<{
   onLogout: () => void;
   loggingOut: boolean;
   reviewPendingCount: ReactNode;
+  prepareNavigation: (destination: string) => void;
 }>): JSX.Element => {
   const { authentication } = useSession();
   const privacy = useRouterState({
@@ -65,8 +63,8 @@ export const SignedInNavigation = ({
   const transactions = useRouterState({
     select: (state) => state.location.pathname === "/app/transactions",
   });
-  const { initialSessionBinding } = useRouter().options.context;
-  const signedIn = authentication !== "expired" && initialSessionBinding !== "none";
+  const { sessionBinding } = useRouter().options.context;
+  const signedIn = authentication !== "expired" && sessionBinding !== "none";
   const count = transactions ? (
     <ConsentedReviewCount>{reviewPendingCount}</ConsentedReviewCount>
   ) : (
@@ -79,6 +77,9 @@ export const SignedInNavigation = ({
           key={link.to}
           to={link.to}
           search={{}}
+          onPointerEnter={() => prepareNavigation(link.to)}
+          onPointerDownCapture={() => prepareNavigation(link.to)}
+          onFocus={() => prepareNavigation(link.to)}
           onClick={dismissCompactNavigation}
           className="application-navigation-link"
           activeProps={{ className: "application-navigation-active" }}

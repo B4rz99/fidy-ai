@@ -49,13 +49,13 @@ const currencyAmount = ({
   currencyDisplay,
   compact,
 }: Readonly<{
-  amount: string;
+  amount: Readonly<BigDecimal.BigDecimal>;
   currency: string;
   locale: string;
   currencyDisplay: "narrowSymbol" | "code";
   compact: boolean;
 }>): string => {
-  const decimal = Schema.decodeSync(ExactDecimal)(amount);
+  const decimal = amount;
   const digits = currencyMetadata(Schema.decodeUnknownSync(Currency)(currency)).fractionalDigits;
   const formatter = numberFormatter({
     locale,
@@ -97,12 +97,18 @@ type MoneyOptions = Readonly<{
 
 export const formatCurrencyAmount = (
   options: Readonly<{ amount: string; currency: string; locale: string }>
-): string => currencyAmount({ ...options, currencyDisplay: "narrowSymbol", compact: false });
+): string =>
+  currencyAmount({
+    ...options,
+    amount: Schema.decodeSync(ExactDecimal)(options.amount),
+    currencyDisplay: "narrowSymbol",
+    compact: false,
+  });
 
 /** Formats exact canonical Money without allowing Locale to supply Currency meaning. */
 export const formatMoney = ({ locale, money }: MoneyOptions): string =>
   currencyAmount({
-    amount: BigDecimal.format(money.amount),
+    amount: money.amount,
     currency: money.currency,
     locale,
     currencyDisplay: "narrowSymbol",
@@ -112,7 +118,7 @@ export const formatMoney = ({ locale, money }: MoneyOptions): string =>
 /** Unambiguous Money for surfaces that mix currencies with a shared symbol. */
 export const formatMoneyWithCode = ({ locale, money }: MoneyOptions): string =>
   currencyAmount({
-    amount: BigDecimal.format(money.amount),
+    amount: money.amount,
     currency: money.currency,
     locale,
     currencyDisplay: "code",
@@ -122,7 +128,7 @@ export const formatMoneyWithCode = ({ locale, money }: MoneyOptions): string =>
 /** Explicit currency after the symbol; exact integral amounts need no empty fractional part. */
 export const formatMoneyWithCompactCode = ({ locale, money }: MoneyOptions): string =>
   `${currencyAmount({
-    amount: BigDecimal.format(money.amount),
+    amount: money.amount,
     currency: money.currency,
     locale,
     currencyDisplay: "narrowSymbol",

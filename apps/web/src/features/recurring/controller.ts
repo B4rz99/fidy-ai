@@ -1,10 +1,14 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Cause, type Context, Effect, Exit, Option, Predicate } from "effect";
+import { Cause, type Context, Data, Effect, Exit, Option, Predicate } from "effect";
 import { type AsyncResult, Atom, Reactivity } from "effect/reactivity";
 import { useRef, useState } from "react";
 import type { CanonicalInput, CanonicalSuccess, FidyClient } from "@/transport/client";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
-import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
+import {
+  revalidateWorkspaceQuery,
+  workspaceCategoriesQuery,
+  workspaceQueryRetention,
+} from "@/transport/workspace-query";
 import type { Save } from "./model";
 
 type Query = CanonicalInput<"recurringPlans.getRecurringWorkspace">["query"];
@@ -22,7 +26,6 @@ type PlanningState = Readonly<{
 }>;
 type Client = Context.Service.Shape<FidyClient>;
 type WorkspaceError = Effect.Error<ReturnType<Client["recurringPlans"]["getRecurringWorkspace"]>>;
-type CategoryError = Effect.Error<ReturnType<Client["categories"]["listCategories"]>>;
 type QueryResource<A, E> = Readonly<{
   source: Atom.Atom<AsyncResult.AsyncResult<A, E>>;
   view: Atom.Atom<AsyncResult.AsyncResult<A, E>>;
@@ -31,20 +34,8 @@ type Queries = Readonly<{
   workspace: (
     query: Query
   ) => QueryResource<CanonicalSuccess<"recurringPlans.getRecurringWorkspace">, WorkspaceError>;
-  categories: QueryResource<CanonicalSuccess<"categories.listCategories">, CategoryError>;
+  categories: ReturnType<typeof workspaceCategoriesQuery>;
 }>;
-const queryResource = <A, E>({
-  source,
-  apiClient,
-  keys,
-}: Readonly<{
-  source: Atom.Atom<AsyncResult.AsyncResult<A, E>>;
-  apiClient: FidyClient;
-  keys: ReadonlyArray<string>;
-}>): QueryResource<A, E> => ({
-  source,
-  view: source.pipe(apiClient.runtime.factory.withReactivity(keys), revalidateWorkspaceQuery),
-});
 type Commands = Readonly<{
   queries: Queries;
   write: Atom.AtomResultFn<
@@ -54,23 +45,24 @@ type Commands = Readonly<{
   >;
   refresh: Atom.AtomResultFn<Query, boolean, never>;
 }>;
+class WorkspaceKey extends Data.Class<Query & Readonly<{ apiClient: FidyClient }>> {}
 const workspaceKey = "recurring-plans";
+const workspaceSources = Atom.family(({ apiClient, ...query }: WorkspaceKey) =>
+  apiClient.query("recurringPlans", "getRecurringWorkspace", { query, ...workspaceQueryRetention })
+);
+const workspaceViews = Atom.family((key: WorkspaceKey) =>
+  workspaceSources(key).pipe(
+    key.apiClient.runtime.factory.withReactivity([workspaceKey, "recurring-resume"]),
+    revalidateWorkspaceQuery,
+    Atom.setIdleTTL("400 millis")
+  )
+);
 const makeQueries = (apiClient: FidyClient): Queries => ({
-  workspace: Atom.family((query: Query) =>
-    apiClient
-      .query("recurringPlans", "getRecurringWorkspace", {
-        query,
-        ...workspaceQueryRetention,
-      })
-      .pipe((source) =>
-        queryResource({ source, apiClient, keys: [workspaceKey, "recurring-resume"] })
-      )
-  ),
-  categories: apiClient
-    .query("categories", "listCategories", {
-      ...workspaceQueryRetention,
-    })
-    .pipe((source) => queryResource({ source, apiClient, keys: ["recurring-resume"] })),
+  workspace: (query) => {
+    const key = new WorkspaceKey({ ...query, apiClient });
+    return { source: workspaceSources(key), view: workspaceViews(key) };
+  },
+  categories: workspaceCategoriesQuery(apiClient),
 });
 const makeCommands = (apiClient: FidyClient): Commands => {
   const queries = makeQueries(apiClient);
@@ -117,7 +109,6 @@ const makeCommands = (apiClient: FidyClient): Commands => {
     ),
   };
 };
-
 const writesDisabled = ({
   state,
   categoryState,
@@ -131,7 +122,6 @@ const writesDisabled = ({
   stale ||
   saveState === "saving" ||
   saveState === "uncertain";
-
 /** Retains write uncertainty across month and filter changes until an explicit reread succeeds. */
 export const useRecurringPlanning = ({
   apiClient,
@@ -190,3 +180,10 @@ export const useRecurringPlanning = ({
   };
   return { state, categoryState, saveState, stale, waiting, disabled, save, retry };
 };
+export const recurringWorkspaceQuery = ({
+  apiClient,
+  query,
+}: Readonly<{
+  apiClient: FidyClient;
+  query: Query;
+}>): ReturnType<Queries["workspace"]> => makeQueries(apiClient).workspace(query);

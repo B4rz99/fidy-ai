@@ -1,6 +1,15 @@
+import { Effect, Option, Schema } from "effect";
+import { AsyncResult } from "effect/reactivity";
+import { BudgetRoute, RecurringRoute } from "./destination-components";
+import { prepareQuery } from "@/transport/query-preparation";
+import {
+  consumeInitialTransactionConsent,
+  transactionEntryConsent,
+} from "@/session/transaction-entry";
 import { RecurringWorkspace, ReviewWorkspace } from "./workspace-components";
+import { NeedsReviewRoute } from "@/features/needs-review/feature";
 import { LoginSearch } from "@/session/login-destination";
-import { Option, Schema } from "effect";
+import type { AtomRegistry } from "effect/reactivity";
 import {
   BudgetMonth,
   type FidyClient,
@@ -10,39 +19,33 @@ import {
   RecurringMonth,
   type WebAuthClient,
 } from "@/transport/client";
-import { Fragment, type JSX, type ReactNode, createElement, useState } from "react";
-import { useAtomValue } from "@effect/atom-react";
-import { workspaceQueryRetention } from "@/transport/workspace-query";
+import { createElement } from "react";
 import {
-  Outlet,
   type RouterHistory,
   createRootRouteWithContext,
   createRoute,
   createRouter,
   lazyRouteComponent,
   redirect,
-  useRouter,
-  useRouterState,
 } from "@tanstack/react-router";
 import { RouteFailure } from "./route-failure";
 
 type WebRouterContext = Readonly<{
+  registry: AtomRegistry.AtomRegistry;
+  /** Display identity already checked by BrowserSessionBoundary; never grants authority. */
+  sessionBinding: string;
   apiClient: FidyClient;
   webAuthClient: WebAuthClient;
   hostedTurnClient: HostedTurnClient;
-  /** Latched identity classifies unauthenticated errors; it never grants access. */
-  initialSessionBinding: string;
 }>;
 type WebRouterOptions = WebRouterContext &
   Readonly<{
     history: Option.Option<RouterHistory>;
   }>;
-
 const ProviderReturnFeature = lazyRouteComponent(
   () => import("@/features/provider-authentication/feature"),
   "ProviderReturnFeature"
 );
-
 const RecurringDigestFeature = lazyRouteComponent(
   () => import("@/features/recurring-digest/feature"),
   "RecurringDigestFeature"
@@ -71,41 +74,11 @@ const TransactionListFeature = lazyRouteComponent(
   () => import("./transactions-page"),
   "TransactionsPage"
 );
-
 const DashboardRoute = lazyRouteComponent(() => import("./dashboard-page"), "DashboardPage");
-
 const ApplicationFrame = lazyRouteComponent(
   () => import("./application-frame"),
   "ApplicationFrame"
 );
-
-/** Warm the same session-owned profile atom; the server still checks live Consent and authority. */
-const CurrentUserPreload = ({ recurring }: Readonly<{ recurring: boolean }>): JSX.Element => {
-  const client = useRouter().options.context.apiClient;
-  const [query] = useState(() =>
-    client.query("identity", "getCurrentUser", {
-      ...workspaceQueryRetention,
-      ...(recurring ? { reactivityKeys: ["recurring-resume"] } : {}),
-    })
-  );
-  useAtomValue(query);
-  return createElement(Fragment);
-};
-
-const ProfilePreloading = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => {
-  const path = useRouterState({ select: (state) => state.location.pathname });
-  // Transactions can serve Privacy after withdrawal; it owns ordinary reads after fresh Consent.
-  const needsProfile = path === "/app/budgets" || path === "/app/recurring";
-  return createElement(
-    Fragment,
-    null,
-    needsProfile
-      ? createElement(CurrentUserPreload, { key: path, recurring: path === "/app/recurring" })
-      : null,
-    children
-  );
-};
-
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({
   component: ApplicationFrame,
   notFoundComponent: () =>
@@ -116,18 +89,9 @@ const rootRoute = createRootRouteWithContext<WebRouterContext>()({
       createElement("a", { href: "https://fidyapp.com" }, "Volver al inicio")
     ),
 });
-const AuthenticatedRoute = lazyRouteComponent(() =>
-  Promise.all([import("@/features/signed-in/feature"), import("@/features/agent/feature")]).then(
-    ([signedIn, agent]) => ({
-      default: (): JSX.Element =>
-        createElement(
-          signedIn.SignedInContent,
-          null,
-          createElement(Outlet),
-          createElement(agent.HostedAgentFeature)
-        ),
-    })
-  )
+const AuthenticatedRoute = lazyRouteComponent(
+  () => import("./authenticated-route"),
+  "AuthenticatedRoute"
 );
 const authenticatedRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -151,6 +115,7 @@ const dashboardRoute = createRoute({
 const budgetsRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/budgets",
+  preload: false,
   validateSearch: (search) =>
     Schema.decodeSync(
       Schema.Struct({
@@ -160,7 +125,29 @@ const budgetsRoute = createRoute({
         ),
       })
     )(search),
-  component: lazyRouteComponent(() => import("@/features/budgets/feature"), "BudgetsFeature"),
+  loaderDeps: ({ search }) => ({ month: search.month }),
+  loader: ({ context, deps, preload, abortController }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { BudgetsFeature } = yield* Effect.tryPromise(
+          () => import("@/features/budgets/feature")
+        );
+        yield* Effect.tryPromise(() =>
+          Promise.all([
+            BudgetsFeature.preload(),
+            preload
+              ? Promise.resolve()
+              : BudgetsFeature.preloadData({
+                  apiClient: context.apiClient,
+                  registry: context.registry,
+                  month: Option.fromUndefinedOr(deps.month),
+                  signal: Option.some(abortController.signal),
+                }),
+          ])
+        );
+      })
+    ),
+  component: BudgetRoute,
 });
 const needsReviewRoute = createRoute({
   getParentRoute: () => signedInRoute,
@@ -172,19 +159,38 @@ const needsReviewRoute = createRoute({
           Schema.Literals(["pending", "history", "created", "skipped", "expired"])
         ),
         offset: Schema.optionalKey(
-          Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }))
+          Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10000 }))
         ),
       })
     )(search),
-  loader: () => ReviewWorkspace.preload?.(),
-  component: lazyRouteComponent(
-    () => import("@/features/needs-review/feature"),
-    "NeedsReviewRoute"
-  ),
+  preloadStaleTime: 0,
+  loaderDeps: ({ search }) => ({ filter: search.status ?? "pending", page: search.offset ?? 0 }),
+  loader: {
+    staleReloadMode: "background",
+    handler: ({ context, deps, preload, abortController }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const preparation = preload
+            ? Promise.resolve()
+            : ReviewWorkspace.preloadData({
+                apiClient: context.apiClient,
+                registry: context.registry,
+                filter: deps.filter,
+                page: deps.page,
+                signal: abortController.signal,
+              }).catch(() => undefined);
+          yield* Effect.tryPromise(() => ReviewWorkspace.preload());
+          // The registry owns query state; unresolved data must not block the workspace shell.
+          return { preparation };
+        })
+      ),
+  },
+  component: NeedsReviewRoute,
 });
 const recurringPlansRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/recurring",
+  preload: false,
   validateSearch: (search) =>
     Schema.decodeSync(
       Schema.Struct({
@@ -194,8 +200,28 @@ const recurringPlansRoute = createRoute({
         ),
       })
     )(search),
-  loader: () => RecurringWorkspace.preload?.(),
-  component: lazyRouteComponent(() => import("@/features/recurring/feature"), "RecurringRoute"),
+  loaderDeps: ({ search }) => ({ month: search.month }),
+  preloadStaleTime: 0,
+  loader: ({ context, deps, preload, abortController }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() => Promise.resolve(RecurringWorkspace.preload?.()));
+        if (preload) return;
+        const { RecurringRoute } = yield* Effect.tryPromise(
+          () => import("@/features/recurring/feature")
+        );
+        yield* Effect.tryPromise(() =>
+          RecurringRoute.preloadData({
+            apiClient: context.apiClient,
+            registry: context.registry,
+            month: Option.fromUndefinedOr(deps.month),
+            signal: abortController.signal,
+            intent: false,
+          })
+        );
+      })
+    ),
+  component: RecurringRoute,
 });
 const recurringDigestRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
@@ -228,6 +254,53 @@ const independentApplicationRoute = createRoute({
 const transactionsRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/app/transactions",
+  // Authorization entry checks must run even when the browser clock moves backwards.
+  shouldReload: true,
+  // A speculative loader must never donate a code-only result to an actual Consent entry.
+  preload: false,
+  preloadStaleTime: 0,
+  loader: {
+    staleReloadMode: "blocking",
+    handler: ({ context, preload, abortController }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() => Promise.resolve(TransactionListFeature.preload?.()));
+          if (!preload) {
+            const consent = transactionEntryConsent(context.webAuthClient);
+            const initial = consumeInitialTransactionConsent(context.registry);
+            yield* Effect.tryPromise(() =>
+              prepareQuery({
+                registry: context.registry,
+                query: consent,
+                options: {
+                  mode: initial ? "cached" : "fresh",
+                  signal: Option.some(abortController.signal),
+                },
+              })
+            );
+            const status = context.registry.get(consent);
+            if (
+              AsyncResult.isSuccess(status) &&
+              !status.waiting &&
+              status.value.status === "Granted"
+            ) {
+              const { TransactionsPage } = yield* Effect.tryPromise(
+                () => import("./transactions-page")
+              );
+              // Consent has completed; data preparation remains owned by this route signal.
+              return {
+                preparation: TransactionsPage.preloadData({
+                  apiClient: context.apiClient,
+                  registry: context.registry,
+                  signal: abortController.signal,
+                }).catch(() => undefined),
+              };
+            }
+          }
+          return undefined;
+        })
+      ),
+  },
   component: TransactionListFeature,
 });
 const privacyRoute = createRoute({
@@ -260,7 +333,6 @@ const connectionResultRoute = createRoute({
     "ConnectionResultFeature"
   ),
 });
-
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
@@ -314,25 +386,32 @@ const routeTree = rootRoute.addChildren([
     recurringDigestRoute,
   ]),
 ]);
-
 export const createWebRouter = (options: WebRouterOptions) =>
   createRouter({
-    InnerWrap: options.initialSessionBinding !== "none" ? ProfilePreloading : undefined,
     defaultPreload: "intent",
     defaultPreloadDelay: 0,
     defaultErrorComponent: RouteFailure,
     routeTree,
     context: {
+      registry: options.registry,
+      sessionBinding: options.sessionBinding,
       apiClient: options.apiClient,
       webAuthClient: options.webAuthClient,
       hostedTurnClient: options.hostedTurnClient,
-      initialSessionBinding: options.initialSessionBinding,
     },
     history: Option.getOrUndefined(options.history),
   });
-
 declare module "@tanstack/react-router" {
   interface Register {
     router: ReturnType<typeof createWebRouter>;
   }
 }
+/** Only the shell and entry code compete with initial identity and foreground work. */
+export const preloadWebRouteCode = (): Promise<void> =>
+  Effect.runPromise(
+    Effect.asVoid(
+      Effect.tryPromise(() =>
+        Promise.allSettled([ApplicationFrame.preload?.(), TransactionListFeature.preload?.()])
+      )
+    )
+  );

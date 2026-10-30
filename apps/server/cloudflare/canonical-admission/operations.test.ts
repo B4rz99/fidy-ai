@@ -1,3 +1,4 @@
+import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
 import {
   type CatalogOperation,
   getBoundOperationCatalog,
@@ -9,7 +10,7 @@ import { CanonicalAllowance, canonicalAllowanceHeaders } from "../../src/shell/q
 import { QuotaStatus } from "../../src/core/quotas/contract";
 import { Unavailable } from "../../src/shell/public-http/contract";
 import { UserId } from "../../src/core/identity/contract";
-import { browserSessionBindingHeader } from "../../src/shell/web-session/contract";
+
 import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
 import { maintenancePerformanceDatabase } from "../maintenance-performance.test-fixture";
 import { executeCanonicalQuery } from "../canonical-operations/operations";

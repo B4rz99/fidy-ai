@@ -36,7 +36,9 @@ const sourceLandmarks = Array.from(
   new Bun.Glob("*.{ts,tsx}").scanSync({ cwd: `${serverRoot}/src` })
 );
 const unexpectedSourceLandmarks = sourceLandmarks.filter(
-  (path) => path !== "client.ts" && !path.endsWith(".d.ts")
+  (path) =>
+    !["client.ts", "browser-bootstrap.ts", "browser-transport.ts"].includes(path) &&
+    !path.endsWith(".d.ts")
 );
 const shellLandmarks = Array.from(
   new Bun.Glob("*.{ts,tsx}").scanSync({ cwd: `${serverRoot}/src/shell` })

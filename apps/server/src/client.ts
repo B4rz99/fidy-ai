@@ -49,8 +49,8 @@ export {
   ConnectionContinuationFailure,
   ConnectionContinuationReview,
 } from "~/shell/connections/contract";
-export { isHttpOrigin, ResourceLimited } from "~/shell/public-http/contract";
-export { TelemetryTraceId, telemetryTraceHeader } from "~/shell/observability/contract";
+export { ResourceLimited } from "~/shell/public-http/contract";
+export { TelemetryTraceId } from "~/shell/observability/contract";
 export {
   ActivePATList,
   ActivePATMetadata,
@@ -181,11 +181,11 @@ export { User } from "~/core/identity/contract";
 
 export { ManualPATReauthenticationRequired } from "~/shell/tokens/contract";
 
+export { BrowserSessionBinding } from "~/shell/web-session/contract";
 export {
-  BrowserSessionBinding,
   browserSessionBindingHeader,
   browserSessionBindingPath,
-} from "~/shell/web-authentication/contract";
+} from "~/shell/browser-transport/contract";
 export { Budget, BudgetStatusReport } from "~/core/budgets/contract";
 
 export type {
@@ -205,3 +205,5 @@ export {
 } from "~/core/recurring-plans/contract";
 
 export { ReviewCommand, ReviewDraft } from "~/core/ingestion/contract";
+
+export { telemetryTraceHeader } from "~/shell/browser-transport/contract";

@@ -715,11 +715,6 @@ export const ReviewSummary = Schema.Union([
   }),
 ]);
 export type ReviewSummary = typeof ReviewSummary.Type;
-export const ReviewWorkspace = Schema.Struct({
-  pendingCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  total: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  items: Schema.Array(ReviewSummary),
-});
 export const reviewPageSize = 50;
 export const ReviewWorkspaceQuery = Schema.Struct({
   limit: Schema.optionalKey(
@@ -769,6 +764,13 @@ export const ReviewDetail = Schema.Struct({
   suggestions: Schema.OptionFromOptionalKey(ReviewDraft),
 });
 export type ReviewDetail = typeof ReviewDetail.Type;
+export const ReviewWorkspace = Schema.Struct({
+  pendingCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  total: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  items: Schema.Array(ReviewSummary),
+  selectedDetail: Schema.OptionFromOptionalKey(ReviewDetail),
+});
+
 const ReviewReferences = Schema.NonEmptyArray(ReviewReference).check(Schema.isMaxLength(100));
 export const ReviewCommand = Schema.Union([
   Schema.TaggedStruct("Create", {

@@ -1,5 +1,5 @@
+import { isHttpOrigin } from "~/shell/browser-transport/operations";
 import { Config, Schema } from "effect";
-import { isHttpOrigin } from "./contract";
 
 /**
  * Stable public addresses shared by the web, channel, ingestion, and billing adapters.

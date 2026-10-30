@@ -105,8 +105,10 @@ const installStartAndLogoutRoutes = (page: Page, fixture: PairingApiFixture): Pr
       yield* wait(installCanonicalProductRoutes(page));
       yield* wait(installReviewNavigationRoute(page));
       yield* wait(
-        page.route("**/web/session/binding", (route) =>
-          route.fulfill({ contentType: "application/json", body: json({ binding: pairingId }) })
+        page.route(
+          (url) => url.origin === apiOrigin && url.pathname === "/web/session/binding",
+          (route) =>
+            route.fulfill({ contentType: "application/json", body: json({ binding: pairingId }) })
         )
       );
       yield* wait(

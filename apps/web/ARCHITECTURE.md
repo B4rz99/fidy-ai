@@ -10,8 +10,9 @@ production topology, and browser-to-server ownership.
 
 `apps/web` is the `@fidy/web` React/Vite application package and produces a portable static artifact.
 It owns product browser routing, providers and styles. Public marketing and policy copy belong to
-`apps/site`, which renders the public website with Astro. Its only server import is the
-browser-safe `@fidy/server/client` declaration seam; it never imports server implementations. The API
+`apps/site`, which renders the public website with Astro. Its server imports use the
+browser-safe `@fidy/server/client` declaration seam and the narrow `browser-bootstrap` and dependency-free
+`browser-transport` declarations; it never imports server implementations. The API
 Workers do not serve web routes or static assets.
 
 Effect Atom derives browser transport from the assembled `FidyApi` with
@@ -283,6 +284,31 @@ is unchanged. Browser-safe contracts derive from the server declaration seam, no
 OAuth/domain model. Loopback ingress/Core/D1 host evidence does not authorize production
 onboarding, deployment or launch.
 
+### Document entry
+
+The dependency-free browser transport starts the declared session-entry request before loading the
+application bundle. Public rendering can start while the request is pending; slow responses retain
+the existing loading feedback. On the Transactions document this carries fresh Consent, User metadata and the
+first canonical page for the User's calendar month. A binding-only recheck starts after that response
+and overlaps bounded decoding; a changed binding discards every private observation. Early local or
+cross-tab authentication invalidation aborts pending entry work before a registry can adopt it.
+
+Completed work is adopted synchronously during the observer commit after its authentication listeners
+are installed; it does not add another Promise hop before mounting the current information. Retiring
+the entry clears its completion slot. Query families retain Atoms directly so garbage collection of
+temporary lookup objects cannot lose a live handoff. A pending first remote metadata read retains
+that registry’s entry display until a fresh result arrives; errors retain their ordinary handling.
+
+The first mounted observer alone can hand these observations into the existing authentication-scoped
+query owners. Explicit refresh retires a handoff and reads canonical HTTP. Initial Consent bridges
+only one actual entry for at most 400ms; later Transactions entries still request fresh status. The
+page's period must match the current User-timezone query key. Initial offscreen ledger rows yield to
+visible information. A measured commit ref fills the viewport when its initial row-height estimate
+underfills it; filters and authoritative record revisions render immediately.
+
+Collapsed Recurring transaction-source and link controls mount their read owners on first expansion
+and retain them on close, so opening a blank editor performs only its needed work.
+
 ## 4. Static production artifact
 
 Alchemy deploys the validated output as an assets-only Worker at `app.fidyapp.com`.
@@ -397,7 +423,9 @@ and atomic bulk Corrections for the canonical history resource. It owns synchron
 observed revisions, outcomes and explicit canonical reread recovery. Drafts remain with presentation;
 single and atomic mutations retain their distinct server contracts. Closing an editing panel does
 not release an uncertain write. Recovery rereads history and Category data, and a failed reread
-preserves the write lock. The privacy history remains read-only and mounts no Correction authority.
+preserves the write lock. The command Atom and its HTTP runtime mount on the first write or recovery
+action, so viewing history does not initialize them. The privacy history remains read-only and mounts
+no Correction authority.
 
 ### Recurring workspace
 
@@ -432,9 +460,54 @@ two in-flight request permits within their session signal, including across feat
 time counts against the original request deadline and session retirement cancels queued work.
 Dashboard initialization remains exclusive to a declared uninitialized response during an
 actual visit. Consent, session binding and security settings reads retain their fresh access
-checks. Router intent preloading loads destination code without executing workspace commands.
+checks. Router intent preloading prepares destination code without executing writes. The owned
+navigation hook prepares display reads only while an authenticated product route is active;
+independent controls such as OAuth do not start product reads on hover. Automatic Budget and Recurring
+loader preloads are disabled so a code-only speculative match cannot satisfy the actual visit.
+The owned product intent retains data preparation and the active product route's AbortSignal,
+including after deferred code import. Idle destination code warming remains independent.
 Needs Review and Recurring route loaders preload the same presentation component used by their
-retained workspace, so resolving destination code does not introduce another lazy suspension.
+retained workspace, so resolving destination code does not introduce another lazy suspension. Retained panels activate
+only for successful route matches after destination code and mandatory access checks complete.
+Transactions and Review return their registry data-preparation promise as deferred loader work,
+owned by the route's AbortSignal. A held data read therefore leaves the workspace's approved
+loading/error controls available instead of blocking the entire route. A cached Review route commits
+its retained display while its loader revalidates in the background. Transactions still awaits
+fresh Consent before starting that preparation or revealing the destination. Budget and first Recurring intent prepare
+their display data, preserving immediate cached returns. Recurring intent does not mark the
+retained planning workspace as visited.
+Actual Transactions entries refresh the shared Consent source before revealing the destination.
+Its 400 ms idle retention bridges loader-to-React subscription only; every actual entry refreshes
+it, including Back and rapid re-entry. Transaction loader preloads are disabled, so an in-flight
+code-only speculative result cannot satisfy the actual entry; idle code preparation remains independent.
+The route stores no copy of Consent or product data. Preparation observes the authentication
+registry's existing query and leaves failures there for the ordinary error view. Cached product
+information can remain visible during revalidation; waiting and failed refreshes still gate decisions.
+First destination reads can complete before reveal, with code-only preparation yielding until the
+foreground Transaction information is ready. Pointer, keyboard focus and touch intent prepare only
+the requested Budget or first Recurring resource, or first Review material, within the same two transport permits.
+The browser's protected User response includes an optional bounded Category display catalog;
+category views derive it from that one source and explicit category recovery refreshes its owner.
+Other transports retain the independent Category read when the inline catalog is absent.
+
+Navigation loads the small pending-count interface without downloading the Review editor on
+ordinary product entry. The badge reads counts without fetching item rows. The badge and inbox
+each own bounded periodic/focus refresh for their distinct projections; another signal joins
+an in-flight read rather than canceling and restarting it. Draft saves invalidate the workspace and affected item only. Create, Skip,
+Restore, and explicit recovery also invalidate the dedicated navigation count key; external
+ingestion changes retain the shared ingestion invalidation key. Workspace
+profiles share one query and resume invalidation, with results still owned by the authentication
+registry. Navigation, Transactions and Upgrade reuse the boundary's latched public session identity
+for display and signed-out classification. Fresh Consent reads, session-resume identity checks and
+server authorization remain independent of those display snapshots.
+Category and Dashboard catalog display resources likewise share their query definitions. Review
+reads retain a short render-to-subscription bridge so React can commit without canceling and
+restarting an admitted read; periodic/focus subscriptions still dispose with the active owner.
+Draft updates invalidate the workspace revisions and affected item details, without rereading
+immutable original bytes. Original display remains fenced by its evidence deadline and
+authentication lifetime. Historical recurring suggestions start only when their disclosure is
+opened or the User requests another suggestions page; a collapsed, unvisited disclosure does
+not compete with the planning workspace for request permits.
 
 The root application frame owns one shared shell across authenticated and independently authorized
 application routes, including Transactions; each route retains its own access checks. It retains a
@@ -442,9 +515,10 @@ visited Needs Review workspace across ordinary navigation within the authenticat
 Its saved route snapshot contains only the validated filter
 and offset; hidden panels keep their evidence deadline timers active but suspend their own
 focus and periodic refresh subscriptions. Entering Privacy disposes
-the retained workspace, as does authentication replacement. The first pending page shares the
-navigation count's canonical query, and the selected original loads alongside its detail. Returning
-invalidates review reads while retaining visible content and disabling decisions until fresh.
+the retained workspace, as does authentication replacement. The first pending page owns its bounded workspace query, and the selected original loads alongside its detail. Returning
+refreshes the current Review workspace from the route preparation owner while retaining visible
+content and disabling decisions until fresh. Its response includes the first item's canonical
+revision-bound detail; other selections retain their own item read and targeted invalidation.
 A newer saved canonical draft replaces a clean local draft; outstanding local edits remain visible
 and require recovery if superseded. A completed autosave releases its draft barrier so subsequent
 bulk decisions use the fresh workspace revision.

@@ -8,6 +8,7 @@ import { Button } from "@/ui/components/button";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import type { FidyClient } from "@/transport/client";
+import { workspaceDashboardCatalogQuery } from "@/transport/workspace-query";
 import { type DashboardEditorError, useDashboardEditing } from "./editing";
 import type { DashboardView } from "./presentation";
 import { type DashboardLoadPhase, dashboardQuery } from "./query";
@@ -177,7 +178,7 @@ export const DashboardRouteContent = ({
   result: AsyncResult.AsyncResult<Readonly<{ data: DashboardView }>, unknown>;
   phase: DashboardLoadPhase;
 }>): JSX.Element => {
-  const [catalogAtom] = useState(() => apiClient.query("dashboard", "listDashboardCatalog", {}));
+  const [catalogAtom] = useState(() => workspaceDashboardCatalogQuery(apiClient));
   const catalogResult = useAtomValue(catalogAtom);
   const refreshCatalog = useAtomRefresh(catalogAtom);
   const dashboardState = presentCanonicalQuery(result);

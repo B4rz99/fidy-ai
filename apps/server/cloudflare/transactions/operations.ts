@@ -34,6 +34,7 @@ import type {
 import {
   browseTransactions as ownerBrowseTransactions,
   findTransaction as ownerFindCapturedTransaction,
+  readBrowserTransactionPage as ownerReadBrowserTransactionPage,
   readPrivacyTransactions as ownerReadPrivacyTransactions,
 } from "./internal/transaction-history";
 import {
@@ -236,3 +237,8 @@ export const readPlanningTransactionMonths = ({
 
 export const prepareReviewedCapture: typeof ownerPrepareReviewedCapture = (input) =>
   ownerPrepareReviewedCapture(input);
+
+/** Return the canonical browser page before HTTP encoding; the owner retains authority and Audit. */
+export const readBrowserTransactionPage = (
+  input: Parameters<typeof ownerReadBrowserTransactionPage>[0]
+): ReturnType<typeof ownerReadBrowserTransactionPage> => ownerReadBrowserTransactionPage(input);

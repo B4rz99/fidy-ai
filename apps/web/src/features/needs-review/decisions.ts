@@ -1,3 +1,4 @@
+import { reviewCountKey, reviewItemKey, reviewWorkspaceKey } from "./query-keys";
 import {
   Cause,
   type Context,
@@ -13,6 +14,18 @@ import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import { type Command, type Detail, type Draft, type Item, creation, emptyDraft } from "./model";
 
 type Feedback = "saved" | "saving" | "unsaved" | "failed" | "uncertain";
+const invalidateItems = ({
+  ids,
+  countsChanged,
+}: Readonly<{
+  ids: ReadonlyArray<Item["id"]>;
+  countsChanged: boolean;
+}>): Effect.Effect<void, never, Reactivity.Reactivity> =>
+  Reactivity.invalidate([
+    reviewWorkspaceKey,
+    ...ids.map(reviewItemKey),
+    ...(countsChanged ? [reviewCountKey] : []),
+  ]);
 type Completion = Readonly<{ ids: ReadonlyArray<Item["id"]> }>;
 export type ReviewEditorState = Readonly<{
   detail: Detail;
@@ -282,7 +295,9 @@ const flush = (owner: Owner, entry: Entry, automatic = false): Work =>
         if (result._tag === "Failure") reject(entry, result.cause);
         else acceptDraft(entry, result.value);
         notify(owner);
-        if (result._tag === "Success") yield* Reactivity.invalidate(["ingestion-review"]);
+        if (result._tag === "Success") {
+          yield* invalidateItems({ ids: [entry.detail.item.id], countsChanged: false });
+        }
         if (automatic) return;
       }
     })
@@ -336,7 +351,7 @@ const decide = (owner: Owner, detail: Detail, kind: "Create" | "Skip"): void => 
         finishActing(owner, entry);
       } else {
         complete(owner, result.value, kind === "Skip");
-        yield* Reactivity.invalidate(["ingestion-review"]);
+        yield* invalidateItems({ ids: [entry.detail.item.id], countsChanged: true });
       }
     })
   );
@@ -370,7 +385,7 @@ const bulk = (owner: Owner, restore: boolean, items: ReadonlyArray<Item>): void 
       if (!sameItems(result.value, items)) return failBulk(owner);
       owner.phase = "idle";
       complete(owner, result.value, !restore);
-      yield* Reactivity.invalidate(["ingestion-review"]);
+      yield* invalidateItems({ ids: items.map((item) => item.id), countsChanged: true });
     })
   );
 };
@@ -423,7 +438,7 @@ const recoverItem = (owner: Owner, detail: Detail): void => {
         } else {
           const replacement = makeEntry(result.value.data);
           replaceEntry(owner, replacement);
-          yield* Reactivity.invalidate(["ingestion-review"]);
+          yield* invalidateItems({ ids: [detail.item.id], countsChanged: true });
         }
         notify(owner);
       })
@@ -444,6 +459,7 @@ const recoverWorkspace = (owner: Owner): void => {
       if (succeeded) {
         owner.phase = "idle";
         owner.feedback = "";
+        yield* Reactivity.invalidate([reviewCountKey]);
       } else failBulk(owner);
       notify(owner);
     })

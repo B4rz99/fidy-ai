@@ -316,6 +316,12 @@ export const BudgetStatusReport = Schema.Struct({
 }).annotate({ identifier: "BudgetStatusReport" });
 export type BudgetStatusReport = typeof BudgetStatusReport.Type;
 
+/** Status and complete editing metadata for the selected month in one authorized workspace read. */
+export const BudgetWorkspace = Schema.Struct({
+  ...BudgetStatusReport.fields,
+  budgets: Schema.Array(Budget),
+});
+
 export const BudgetStatusQueryValues = Schema.Struct({
   categoryId: CategoryId,
   currency: Money.fields.currency,

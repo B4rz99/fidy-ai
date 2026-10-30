@@ -30,7 +30,7 @@ const budget = ({
   createdAt: "2026-10-01T12:00:00Z",
   updatedAt: "2026-10-01T12:00:00Z",
 });
-const report = {
+const reportBase = {
   period,
   initialized: true,
   cashFlow: {
@@ -57,6 +57,8 @@ const report = {
     },
   ],
 };
+
+const report = { ...reportBase, budgets: reportBase.statuses.map((status) => status.budget) };
 
 const fitsViewport = (): boolean => document.documentElement.scrollWidth <= window.innerWidth;
 const installBudgetReport = (page: Page): Promise<unknown> =>
@@ -218,6 +220,10 @@ const checkCommittedRefresh = Effect.fn(function* (page: Page) {
         contentType: "application/json",
         body: response({
           ...report,
+          budgets: [
+            budget({ index: 0, amount: "150000", currency: "COP", groupName: "Hogar" }),
+            report.budgets[1],
+          ],
           statuses: [
             {
               budget: budget({
@@ -457,6 +463,7 @@ const installLargeReport = Effect.fn(function* (page: Page) {
         body: response({
           ...report,
           statuses,
+          budgets: caps,
           cashFlow: { income: [], expenses: [] },
         }),
       })

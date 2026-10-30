@@ -1,4 +1,5 @@
-import type { APIRequestContext, CDPSession, Page } from "@playwright/test";
+import { prepareAssessmentFixture } from "./assessment-fixture";
+import type { CDPSession, Page } from "@playwright/test";
 import { type Cause, Config, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 import { boundSessionRequests, signInNavigationPerformanceThroughCore } from "./real-core-fixture";
@@ -6,37 +7,8 @@ import { browserAcceptanceTopology } from "../../server/cloudflare/browser-accep
 
 const { test, expect } = playwright;
 const dataset = Effect.runSync(Config.String("FIDY_ASSESSMENT").pipe(Config.withDefault("small")));
-const { api: apiOrigin, operator: operatorOrigin } = browserAcceptanceTopology();
-const AssessmentPreparation = Schema.Struct({
-  status: Schema.Literals(["unprepared", "preparing", "ready", "failed"]),
-});
-const assessmentPreparation = (
-  request: APIRequestContext
-): Promise<typeof AssessmentPreparation.Type> =>
-  request
-    .get(`${operatorOrigin}/assessment/prepare`)
-    .then((response) => {
-      expect(response.ok()).toBeTruthy();
-      return response.json();
-    })
-    .then(Schema.decodeUnknownSync(AssessmentPreparation));
-
-test.beforeAll(({ request }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const started = yield* Effect.tryPromise(() =>
-        request.post(`${operatorOrigin}/assessment/prepare`)
-      );
-      expect(started.ok()).toBeTruthy();
-      let preparation = yield* Effect.tryPromise(() => assessmentPreparation(request));
-      while (preparation.status === "preparing") {
-        yield* Effect.sleep("500 millis");
-        preparation = yield* Effect.tryPromise(() => assessmentPreparation(request));
-      }
-      expect(preparation.status).toBe("ready");
-    })
-  )
-);
+const { api: apiOrigin } = browserAcceptanceTopology();
+test.beforeAll(prepareAssessmentFixture);
 const actionTimeout = 10_000;
 const readinessTimeout = 20_000;
 const navigationTimeout = 45_000;

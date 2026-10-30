@@ -1,7 +1,8 @@
+import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
 import { type Cause, Clock, Effect, Option } from "effect";
 import { type Mock, afterAll, expect, it, vi } from "vitest";
 import { getBoundOperationCatalog } from "../../src/shell/canonical-catalog/contract";
-import { browserSessionBindingHeader } from "../../src/shell/web-session/contract";
+
 import { webAuthenticationEndpoints } from "../../src/shell/web-authentication/contract";
 import { oauthPaths } from "../../src/shell/oauth-agents/contract";
 import { canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";

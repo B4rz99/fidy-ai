@@ -3,7 +3,7 @@ import type { CanonicalSuccess } from "@/transport/client";
 import { formatMoney } from "@/transport/money";
 
 export type Budget = CanonicalSuccess<"budgets.listBudgets">["data"][number];
-export type BudgetReport = CanonicalSuccess<"budgets.getBudgetStatus">["data"];
+export type BudgetReport = Omit<CanonicalSuccess<"budgets.getBudgetStatus">["data"], "budgets">;
 export type BudgetStatus = BudgetReport["statuses"][number];
 export type Category = CanonicalSuccess<"categories.listCategories">["data"][number];
 export type CurrentUser = CanonicalSuccess<"identity.getCurrentUser">["data"];

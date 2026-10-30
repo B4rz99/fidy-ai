@@ -263,6 +263,16 @@
       "types": "./src/core/_shared/context.ts",
       "import": "./src/core/_shared/context.ts",
       "default": "./src/core/_shared/context.ts"
+    },
+    "./browser-bootstrap": {
+      "types": "./src/browser-bootstrap.ts",
+      "import": "./src/browser-bootstrap.ts",
+      "default": "./src/browser-bootstrap.ts"
+    },
+    "./browser-transport": {
+      "types": "./src/browser-transport.ts",
+      "import": "./src/browser-transport.ts",
+      "default": "./src/browser-transport.ts"
     }
   },
   "scripts": {

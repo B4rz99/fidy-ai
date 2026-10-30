@@ -1,4 +1,8 @@
-import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
+import { transactionFirstPage, transactionPageInitialValue } from "./query";
+import { prepareQuery } from "@/transport/query-preparation";
+import type { AtomRegistry } from "effect/reactivity";
+import type { FidyClient } from "@/transport/client";
+import { workspaceCategoriesQuery, workspaceProfileQuery } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { lazyRouteComponent, useRouter } from "@tanstack/react-router";
 import { DateTime, Effect, Option } from "effect";
@@ -7,7 +11,7 @@ import { toast } from "sonner";
 import { PrivacyTransactions } from "./privacy-view";
 import { TransactionCorrectionContext } from "./correction-context";
 import { type TransactionCorrections, makeTransactionCorrections } from "./corrections";
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import { Skeleton } from "@/ui/components/skeleton";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
@@ -24,26 +28,32 @@ const TransactionWorkspace = lazyRouteComponent(
   () => import("./workspace"),
   "TransactionWorkspace"
 );
-
 // Fetch presentation immediately while the unchanged query owners check live access and read data.
 TransactionWorkspace.preload?.()?.catch(() => undefined);
-
-const initialTransactionPageSize = 25;
-
 type QueryActivity =
-  | Readonly<{ _tag: "Current" }>
-  | Readonly<{ _tag: "Refreshing" }>
-  | Readonly<{ _tag: "RefreshFailure"; onRetry: () => void; waiting: boolean }>;
-
+  | Readonly<{
+      _tag: "Current";
+    }>
+  | Readonly<{
+      _tag: "Refreshing";
+    }>
+  | Readonly<{
+      _tag: "RefreshFailure";
+      onRetry: () => void;
+      waiting: boolean;
+    }>;
 export type TransactionPageState =
-  | Readonly<{ _tag: "Initial" }>
-  | Readonly<{ _tag: "Loading" }>
+  | Readonly<{
+      _tag: "Initial";
+    }>
+  | Readonly<{
+      _tag: "Loading";
+    }>
   | Readonly<{
       _tag: "CanonicalError" | "BoundaryError";
       onRetry: () => void;
       waiting: boolean;
     }>;
-
 const LoadingTransactions = (): JSX.Element => (
   <section className="flex flex-col gap-3" aria-label="Cargando transacciones" aria-live="polite">
     <Skeleton className="h-20 w-full" />
@@ -51,12 +61,15 @@ const LoadingTransactions = (): JSX.Element => (
     <Skeleton className="h-20 w-full" />
   </section>
 );
-
 const QueryError = ({
   boundary,
   onRetry,
   waiting,
-}: Readonly<{ boundary: boolean; onRetry: () => void; waiting: boolean }>): JSX.Element => (
+}: Readonly<{
+  boundary: boolean;
+  onRetry: () => void;
+  waiting: boolean;
+}>): JSX.Element => (
   <CanonicalQueryRetry
     description="Intenta de nuevo en unos momentos."
     onRetry={onRetry}
@@ -66,8 +79,11 @@ const QueryError = ({
     waiting={waiting}
   />
 );
-
-const QueryActivityNotice = ({ query }: Readonly<{ query: QueryActivity }>): JSX.Element => {
+const QueryActivityNotice = ({
+  query,
+}: Readonly<{
+  query: QueryActivity;
+}>): JSX.Element => {
   switch (query._tag) {
     case "Current":
     case "Refreshing":
@@ -85,10 +101,11 @@ const QueryActivityNotice = ({ query }: Readonly<{ query: QueryActivity }>): JSX
       );
   }
 };
-
 const TransactionPageContent = ({
   state,
-}: Readonly<{ state: TransactionPageState }>): JSX.Element => {
+}: Readonly<{
+  state: TransactionPageState;
+}>): JSX.Element => {
   switch (state._tag) {
     case "Initial":
       return <p className="text-muted-foreground">La consulta aún no se ha iniciado.</p>;
@@ -105,10 +122,11 @@ const TransactionPageContent = ({
       );
   }
 };
-
 export const TransactionListView = ({
   state,
-}: Readonly<{ state: TransactionPageState }>): JSX.Element => (
+}: Readonly<{
+  state: TransactionPageState;
+}>): JSX.Element => (
   <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
     <header className="flex flex-col gap-2">
       <h1 className="font-heading text-3xl font-semibold tracking-tight">Transacciones</h1>
@@ -117,12 +135,15 @@ export const TransactionListView = ({
     <TransactionPageContent state={state} />
   </main>
 );
-
 const FailedTransactionQuery = ({
   boundary,
   onRetry,
   waiting,
-}: Readonly<{ boundary: boolean; onRetry: () => void; waiting: boolean }>): JSX.Element => (
+}: Readonly<{
+  boundary: boolean;
+  onRetry: () => void;
+  waiting: boolean;
+}>): JSX.Element => (
   <TransactionListView
     state={{
       _tag: boundary ? "BoundaryError" : "CanonicalError",
@@ -131,7 +152,6 @@ const FailedTransactionQuery = ({
     }}
   />
 );
-
 const queryActivity = ({
   categoryFailed,
   categoryWaiting,
@@ -155,31 +175,35 @@ const queryActivity = ({
   if (categoryWaiting || transactionWaiting) return { _tag: "Refreshing" };
   return { _tag: "Current" };
 };
-
 type TransactionQueries = Readonly<{
-  categoryState: CanonicalQueryState<Readonly<{ data: ReadonlyArray<Category> }>, unknown>;
+  categoryState: CanonicalQueryState<
+    Readonly<{
+      data: ReadonlyArray<Category>;
+    }>,
+    unknown
+  >;
   period: ReturnType<typeof deriveCurrentMonthPeriod>;
-  transactionState: CanonicalQueryState<Readonly<{ data: ReadonlyArray<Transaction> }>, unknown>;
+  transactionState: CanonicalQueryState<
+    Readonly<{
+      data: ReadonlyArray<Transaction>;
+    }>,
+    unknown
+  >;
   history: HistoryState;
   corrections: TransactionCorrections;
   onMore: () => void;
   onRetryMore: () => void;
 }>;
-
 const useTransactionQueries = (period: TransactionQueries["period"]): TransactionQueries => {
   const router = useRouter();
-  const [categories] = useState(() =>
-    router.options.context.apiClient
-      .query("categories", "listCategories", workspaceQueryRetention)
-      .pipe(revalidateWorkspaceQuery)
+  const [categories] = useState(
+    () => workspaceCategoriesQuery(router.options.context.apiClient).view
   );
   const [transactions] = useState(() =>
-    router.options.context.apiClient
-      .query("transactions", "listTransactions", {
-        ...workspaceQueryRetention,
-        query: { from: period.from, to: period.to, limit: initialTransactionPageSize },
-      })
-      .pipe(revalidateWorkspaceQuery)
+    transactionFirstPage({
+      client: router.options.context.apiClient,
+      period,
+    })
   );
   const [historyResource] = useState(() =>
     transactionHistory({
@@ -213,10 +237,19 @@ const useTransactionQueries = (period: TransactionQueries["period"]): Transactio
     onRetryMore: () => dispatch("retry"),
   };
 };
-
 const readyQueryActivity = (
-  categoryState: Extract<TransactionQueries["categoryState"], { readonly _tag: "Ready" }>,
-  transactionState: Extract<TransactionQueries["transactionState"], { readonly _tag: "Ready" }>,
+  categoryState: Extract<
+    TransactionQueries["categoryState"],
+    {
+      readonly _tag: "Ready";
+    }
+  >,
+  transactionState: Extract<
+    TransactionQueries["transactionState"],
+    {
+      readonly _tag: "Ready";
+    }
+  >,
   retry: () => void
 ): QueryActivity =>
   queryActivity({
@@ -226,12 +259,15 @@ const readyQueryActivity = (
     transactionFailed: Option.isSome(transactionState.refreshFailure),
     transactionWaiting: transactionState.waiting,
   });
-
 type TransactionResourceProps = Readonly<{
+  children: ReactNode;
   currentUser: CurrentUser;
   profileCurrent: boolean;
   period: TransactionQueries["period"];
-  dateFilter: Readonly<{ value: string; onChange: (date: string) => void }>;
+  dateFilter: Readonly<{
+    value: string;
+    onChange: (date: string) => void;
+  }>;
 }>;
 const TransactionResources = (props: TransactionResourceProps): JSX.Element => {
   const queries = useTransactionQueries(props.period);
@@ -248,7 +284,10 @@ const TransactionResources = (props: TransactionResourceProps): JSX.Element => {
   );
 };
 const TransactionResourceContent = (
-  props: TransactionResourceProps & Readonly<{ queries: TransactionQueries }>
+  props: TransactionResourceProps &
+    Readonly<{
+      queries: TransactionQueries;
+    }>
 ): JSX.Element => {
   const { categoryState, transactionState, corrections } = props.queries;
   const retry = corrections.recover;
@@ -278,7 +317,6 @@ const TransactionResourceContent = (
       <TransactionListView state={{ _tag: transactionState.waiting ? "Loading" : "Initial" }} />
     );
   }
-
   return (
     <ReadyTransactionResources
       {...props}
@@ -288,15 +326,29 @@ const TransactionResourceContent = (
 };
 type ReadyQueries = Omit<TransactionQueries, "categoryState" | "transactionState"> &
   Readonly<{
-    categoryState: Extract<TransactionQueries["categoryState"], { _tag: "Ready" }>;
-    transactionState: Extract<TransactionQueries["transactionState"], { _tag: "Ready" }>;
+    categoryState: Extract<
+      TransactionQueries["categoryState"],
+      {
+        _tag: "Ready";
+      }
+    >;
+    transactionState: Extract<
+      TransactionQueries["transactionState"],
+      {
+        _tag: "Ready";
+      }
+    >;
   }>;
 const ReadyTransactionResources = ({
+  children,
   currentUser,
   profileCurrent,
   dateFilter,
   queries,
-}: TransactionResourceProps & Readonly<{ queries: ReadyQueries }>): JSX.Element => {
+}: TransactionResourceProps &
+  Readonly<{
+    queries: ReadyQueries;
+  }>): JSX.Element => {
   const router = useRouter();
   const { categoryState, period, transactionState, history, corrections, onMore, onRetryMore } =
     queries;
@@ -325,14 +377,22 @@ const ReadyTransactionResources = ({
         }
         onRefresh={corrections.recover}
       />
+      {profileCurrent &&
+      readyQueryActivity(categoryState, transactionState, retry)._tag === "Current"
+        ? children
+        : null}
     </Suspense>
   );
 };
-
 const TransactionPeriod = ({
+  children,
   currentUser,
   profileCurrent,
-}: Readonly<{ currentUser: CurrentUser; profileCurrent: boolean }>): JSX.Element => {
+}: Readonly<{
+  currentUser: CurrentUser;
+  profileCurrent: boolean;
+  children: ReactNode;
+}>): JSX.Element => {
   const [selection, setSelection] = useState(() => ({
     anchor: Effect.runSync(DateTime.now),
     date: "",
@@ -363,10 +423,11 @@ const TransactionPeriod = ({
                   ),
           })),
       }}
-    />
+    >
+      {children}
+    </TransactionResources>
   );
 };
-
 const profileCurrent = ({
   waiting,
   refreshFailure,
@@ -374,14 +435,13 @@ const profileCurrent = ({
   waiting: boolean;
   refreshFailure: Option.Option<unknown>;
 }>): boolean => !waiting && Option.isNone(refreshFailure);
-
-const CurrentUserQuery = (): JSX.Element => {
+const CurrentUserQuery = ({
+  children,
+}: Readonly<{
+  children: ReactNode;
+}>): JSX.Element => {
   const router = useRouter();
-  const [currentUser] = useState(() =>
-    router.options.context.apiClient
-      .query("identity", "getCurrentUser", workspaceQueryRetention)
-      .pipe(revalidateWorkspaceQuery)
-  );
+  const [currentUser] = useState(() => workspaceProfileQuery(router.options.context.apiClient));
   const result = useAtomValue(currentUser);
   const refresh = useAtomRefresh(currentUser);
   const state = presentCanonicalQuery(result);
@@ -420,13 +480,61 @@ const CurrentUserQuery = (): JSX.Element => {
             key={state.value.data.timeZone}
             currentUser={state.value.data}
             profileCurrent={profileCurrent(state)}
-          />
+          >
+            {children}
+          </TransactionPeriod>
         </>
       );
   }
 };
-
-export const TransactionListFeature = (): JSX.Element => <CurrentUserQuery />;
-
-// Keep the history owner mounted while its presentation downloads.
-export const PrivacyTransactionFeature = PrivacyTransactions;
+/** Optional composition mounts only once the displayed Transaction information is current. */
+export const TransactionListFeature = ({
+  children,
+}: Readonly<{
+  children: ReactNode;
+}>): JSX.Element => <CurrentUserQuery>{children}</CurrentUserQuery>;
+export const PrivacyTransactionFeature = (): JSX.Element => <PrivacyTransactions />;
+/** Prepare the same first-page resource after fresh entry authority, before the ordinary tree mounts. */
+TransactionListFeature.preloadData = ({
+  apiClient,
+  registry,
+  signal,
+}: Readonly<{
+  apiClient: FidyClient;
+  registry: AtomRegistry.AtomRegistry;
+  signal: AbortSignal;
+}>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const profile = workspaceProfileQuery(apiClient);
+      yield* Effect.tryPromise(() =>
+        prepareQuery({
+          registry,
+          query: profile,
+          options: { mode: "cached", signal: Option.some(signal) },
+        })
+      );
+      const current = presentCanonicalQuery(registry.get(profile));
+      if (current._tag !== "Ready" || current.waiting || Option.isSome(current.refreshFailure)) {
+        return;
+      }
+      const period = deriveCurrentMonthPeriod({
+        now: DateTime.nowUnsafe(),
+        timeZone: current.value.data.timeZone,
+      });
+      yield* Effect.tryPromise(() =>
+        prepareQuery({
+          registry,
+          query: transactionFirstPage({
+            client: apiClient,
+            period,
+          }),
+          options: {
+            mode: "display",
+            signal: Option.some(signal),
+          },
+        })
+      );
+    })
+  );
+TransactionListFeature.initialValue = transactionPageInitialValue;

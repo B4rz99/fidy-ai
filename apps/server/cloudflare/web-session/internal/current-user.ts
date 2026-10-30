@@ -1,7 +1,9 @@
+import { decodeCategoryRead, prepareCategoryRead } from "../../../src/shell/categories/operations";
+import { Category } from "../../../src/core/categories/contract";
 import { webSessionCredentialAuthority } from "../../../src/shell/web-session/operations";
 import { User, UserId } from "../../../src/core/identity/contract";
 import { WebSessionId } from "../../../src/core/web-session/contract";
-import { browserSessionBindingHeader } from "../../../src/shell/web-session/contract";
+import { browserSessionBindingHeader } from "../../../src/shell/browser-transport/contract";
 
 import { readCurrentUser } from "../../identity/operations";
 import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
@@ -76,6 +78,9 @@ const projectCurrentUser = ({
   Effect.gen(function* () {
     const loaded = yield* Effect.exit(readCurrentUser({ db, userId: subject }));
     if (Exit.isFailure(loaded)) return unavailable();
+    const rows = yield* attempt(() => prepareCategoryRead({ db, authority: Option.none() }).all());
+    const categories = decodeCategoryRead(rows.results);
+    if (Option.isNone(categories)) return unavailable();
     const observedAt = yield* Clock.currentTimeMillis;
     const authority = webSessionCredentialAuthority({
       subject: { id: session.id, userId: subject, digest },
@@ -93,8 +98,15 @@ const projectCurrentUser = ({
     const data = yield* Schema.encodeEffect(Schema.toCodecJson(User))(loaded.value.data).pipe(
       Effect.orDie
     );
+    const encodedCategories = yield* Schema.encodeEffect(
+      Schema.toCodecJson(Schema.Array(Category))
+    )(categories.value.data).pipe(Effect.orDie);
     return json({
-      body: { data, next: loaded.value.next },
+      body: {
+        data,
+        next: loaded.value.next,
+        categories: encodedCategories,
+      },
       status: HTTP_OK,
       headers: {},
     });

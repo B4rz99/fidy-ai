@@ -1,5 +1,10 @@
+import type { ProcessingConsentStatus } from "../../../src/shell/processing-consent/contract";
+import {
+  decodeProcessingConsentStatusRead,
+  prepareInitialProcessingConsentRead,
+} from "../../../src/shell/processing-consent/operations";
 import { protectConsentAuthority } from "../../../src/shell/consent/operations";
-import { Option, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { WebSessionId } from "../../../src/core/web-session/contract";
 import type {
@@ -93,4 +98,31 @@ export const authenticate = ({
       .bind(...statement.params)
       .first()
       .then((row) => decodeSessionLookup({ lookup: lookup.value, row }));
+  });
+
+/** The lookup and legal receipt observe one live credential in the same native read. */
+export const observeEntry = (
+  input: Omit<WebSessionAuthentication, "freshness">
+): Effect.Effect<
+  Option.Option<Readonly<{ subject: AuthenticatedWebSession; status: ProcessingConsentStatus }>>,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const token = sessionCookie(input.request);
+    if (Option.isNone(token)) return Option.none();
+    const digest = yield* Effect.tryPromise(() => sessionDigest(token.value));
+    const read = prepareInitialProcessingConsentRead({ digest, current: input.current });
+    const rows = yield* Effect.tryPromise(() =>
+      input.db
+        .prepare(read.sql)
+        .bind(...read.params)
+        .all()
+    );
+    const session = Schema.decodeUnknownOption(Session)(rows.results[0]);
+    if (Option.isNone(session)) return Option.none();
+    const status = yield* decodeProcessingConsentStatusRead(rows.results);
+    return Option.map(status, (value) => ({
+      subject: { ...session.value, digest },
+      status: value,
+    }));
   });

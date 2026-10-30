@@ -1,0 +1,30 @@
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_68bfd164593579::t_c626bae6a21418 42-55,62-69,202
+  s_68bfd164593579::t_405b5d318f7d22 56
+apps/web/ARCHITECTURE.md
+  s_68bfd164593579::t_a7b7db87400ed7 466-470
+apps/web/e2e/brand-token-contrast.spec.ts
+  s_68bfd164593579::t_9eecb22169f128 460
+apps/web/e2e/browser-pairing.spec.ts
+  s_68bfd164593579::t_1d8d191773c81b 108-111
+apps/web/e2e/budgets.spec.ts
+  s_68bfd164593579::t_7ed307354c66df 33,61-62,223-226,466
+apps/web/src/app/routes.ts
+  s_68bfd164593579::t_4de7b822ee1053 169-182,285-287,291-292,295
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c144c81cb3d6031c69c87db703704fce1e4893bb",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "de83519080f035911e186d33ba5e35a6264e0ef12594a4c886af2d1fee59cde8";
+const expectedEdgePolicyDigest = "8f3ceb345cc43e45a87f1839f5e8fd62d015317fb37cefe25095f06fd53b2b7e";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/connections/internal/retention.ts", import.meta.url)
@@ -71,6 +71,40 @@ const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/src/core/connections/contract.ts", import.meta.url)
   ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/canonical-admission/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/categories/internal/canonical-category.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/categories/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/quotas/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/web-session/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/web-session/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/access-tier/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/identity/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/subscription/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/mcp/native-confirmation.ts", import.meta.url)
+  ).text(),
+  await Bun.file(new URL("../../apps/server/cloudflare/mcp/runtime.ts", import.meta.url)).text(),
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
   await Bun.file(new URL("worker-observability.ts", import.meta.url)).text(),

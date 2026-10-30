@@ -1,5 +1,9 @@
 import { captureCategories } from "./internal/capture";
-import { executeProtectedCategories as readProtectedCategories } from "./internal/canonical-category";
+import {
+  prepareBoundCategoryRead as prepareBrowserRead,
+  executeProtectedCategories as readProtectedCategories,
+} from "./internal/canonical-category";
+import type { CanonicalBrowserRead } from "../canonical-admission/contract";
 import { keywordRuleGuardFailure as classifyRuleGuardFailure } from "./internal/keyword-rule-outcome";
 import type { Effect } from "effect";
 import {
@@ -8,6 +12,7 @@ import {
   type CategoryNotFound,
 } from "../../src/core/categories/contract";
 import type { CategoriesUnavailable } from "./contract";
+
 import {
   categoryList,
   categoryReferenceStatement,
@@ -24,6 +29,9 @@ import {
   keywordRuleUnknownId as unknownRuleId,
   prepareUpdateKeywordRule as updateRule,
 } from "./internal/canonical-keyword-rules";
+
+/** Compose the bounded Category listing and its Audit in a protected browser snapshot. */
+export const prepareBoundCategoryRead: CanonicalBrowserRead = (input) => prepareBrowserRead(input);
 
 export const requireCategory = (
   input: Readonly<{ db: D1Database; categoryId: CategoryId }>

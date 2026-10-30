@@ -30,6 +30,7 @@ import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/m
 
 import {
   protectCanonicalBrowserRequest,
+  protectCanonicalBrowserSnapshot,
   protectCanonicalRequest,
   protectCanonicalSource,
 } from "../../canonical-admission/operations";
@@ -112,6 +113,7 @@ import {
   keywordRuleInput,
   keywordRuleInvalidInput,
   keywordRuleUnknownId,
+  prepareBoundCategoryRead,
 } from "../../categories/operations";
 import { contractDigestPattern, gitRevisionPattern } from "../../runtime/contract";
 import { smokeFailureHeader, smokePath } from "../../runtime/release-smoke/contract";
@@ -1459,23 +1461,43 @@ const withBrowserBinding = <E, R>(
     Effect.flatMap(Option.match({ onNone: () => work, onSome: Effect.succeed }))
   );
 
+const browserCanonicalResponse = (
+  request: Request,
+  environment: CoreHttpEnvironment,
+  operation: CatalogOperation
+): Effect.Effect<Response> =>
+  Clock.currentTimeMillis.pipe(
+    Effect.flatMap((current) => {
+      if (
+        operation.id === "categories.listCategories" &&
+        request.method === "GET" &&
+        new URL(request.url).search === ""
+      ) {
+        return protectCanonicalBrowserSnapshot({
+          request,
+          db: environment.DB,
+          current,
+          operation: "categories.listCategories",
+          read: prepareBoundCategoryRead,
+        });
+      }
+      return protectCanonicalBrowserRequest({
+        request,
+        db: environment.DB,
+        operation,
+        current,
+        work: (subject) => executeCanonicalWork({ request, environment, operation, subject }),
+      });
+    })
+  );
+
 const authorizedCanonicalResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
   operation: CatalogOperation
 ): Effect.Effect<Response> => {
   if (!request.headers.has("authorization")) {
-    return Clock.currentTimeMillis.pipe(
-      Effect.flatMap((current) =>
-        protectCanonicalBrowserRequest({
-          request,
-          db: environment.DB,
-          operation,
-          current,
-          work: (subject) => executeCanonicalWork({ request, environment, operation, subject }),
-        })
-      )
-    );
+    return browserCanonicalResponse(request, environment, operation);
   }
   return withBrowserBinding(
     request,

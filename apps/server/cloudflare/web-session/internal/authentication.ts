@@ -3,7 +3,7 @@ import {
   decodeProcessingConsentStatusRead,
   prepareInitialProcessingConsentRead,
 } from "../../../src/shell/processing-consent/operations";
-import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { protectConsentAuthority } from "../../../src/shell/consent/operations";
 import { type Cause, Effect, Option, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { WebSessionId } from "../../../src/core/web-session/contract";
@@ -42,12 +42,12 @@ export const prepareSessionLookup = ({
   const token = sessionCookie(request);
   if (Option.isNone(token)) return Promise.resolve(Option.none());
   return sessionDigest(token.value).then((digest) => {
-    const statement = {
-      sql: `SELECT id, user_id AS userId FROM web_sessions
-        WHERE token_digest = ? AND revoked_at_ms IS NULL ${freshness === "fresh" ? "AND fresh_until_ms > ?" : ""}
+    const requested = {
+      table: "web_sessions" as const,
+      predicate: `token_digest = ? AND revoked_at_ms IS NULL ${freshness === "fresh" ? "AND fresh_until_ms > ?" : ""}
           AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
           ${Option.isSome(binding) ? "AND id = ?" : ""}`,
-      params: [
+      bindings: [
         digest,
         ...(freshness === "fresh" ? [current] : []),
         current,
@@ -55,15 +55,20 @@ export const prepareSessionLookup = ({
         ...(Option.isSome(binding) ? [binding.value] : []),
       ],
     };
+    const authority = requireConsent
+      ? protectConsentAuthority({
+          authority: requested,
+          subject: { _tag: "Owner", column: "web_sessions.user_id" },
+          requirement: "unrevoked",
+        })
+      : requested;
     return Option.some({
       digest,
-      statement: requireConsent
-        ? protectConsentStatement({
-            statement,
-            subject: { _tag: "Owner", column: "web_sessions.user_id" },
-            requirement: "unrevoked",
-          })
-        : statement,
+      authority,
+      statement: {
+        sql: `SELECT id, user_id AS userId FROM web_sessions WHERE ${authority.predicate}`,
+        params: authority.bindings,
+      },
     });
   });
 };

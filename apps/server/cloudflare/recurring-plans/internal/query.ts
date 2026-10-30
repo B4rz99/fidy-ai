@@ -14,8 +14,16 @@ import {
   validRecurringFulfillment,
 } from "../../../src/core/recurring-plans/operations";
 
-import { readPrivacyPreferences } from "../../identity/operations";
-import { readPlanningTransactions } from "../../transactions/operations";
+import { UserId, UserPreferences } from "../../../src/core/identity/contract";
+import { prepareUserContext } from "../../identity/user-context/operations";
+import {
+  readPlanningTransactionSnapshot,
+  readPlanningTransactions,
+} from "../../transactions/operations";
+import type {
+  PlanningTransactionFacts,
+  PlanningTransactionRange,
+} from "../../transactions/contract";
 
 import { linkedTransactions, planningFact } from "./facts";
 import { RecurringPlanningUnavailable } from "../contract";
@@ -72,6 +80,41 @@ type AutomaticProjection = Readonly<{
   complete: boolean;
   matches: (typeof RecurringWorkspace.Type)["matches"];
 }>;
+const matchingRange = (month: string): PlanningTransactionRange => {
+  const start = DateTime.makeUnsafe(`${month}-01`);
+  return {
+    from: DateTime.formatIso(DateTime.subtract(start, { days: 4 })),
+    through: DateTime.formatIso(DateTime.add(start, { months: 1, days: 4 })),
+  };
+};
+const automaticFromFacts = ({
+  document,
+  month,
+  now,
+  selection,
+}: Readonly<{
+  document: RecurringDocument;
+  month: string;
+  now: DateTime.Utc;
+  selection: Option.Option<PlanningTransactionFacts>;
+}>): AutomaticProjection => {
+  if (document.plans.length === 0) return { document, complete: true, matches: [] };
+  if (Option.isNone(selection) || !selection.value.complete) {
+    return { document, complete: false, matches: [] };
+  }
+  const start = DateTime.makeUnsafe(`${month}-01`);
+  const nextMonth = DateTime.formatIsoDateUtc(DateTime.add(start, { months: 1 })).slice(
+    0,
+    monthLength
+  );
+  const items = [previousMonth(month), month, nextMonth].flatMap((selected) =>
+    projectRecurringMonth({ document, month: selected, now })
+  );
+  return matchedProjection(
+    document,
+    automaticMatches({ document, items, transactions: selection.value.transactions })
+  );
+};
 export const automaticProjection = ({
   db,
   userId,
@@ -82,29 +125,64 @@ export const automaticProjection = ({
   Effect.gen(function* () {
     // No automatic matching candidate can exist without a retained plan.
     if (document.plans.length === 0) return { document, complete: true, matches: [] };
-    const start = DateTime.makeUnsafe(`${month}-01`);
     const selection = yield* readPlanningTransactions({
       db,
       userId,
       selection: {
         kind: "range",
-        from: DateTime.formatIso(DateTime.subtract(start, { days: 4 })),
-        through: DateTime.formatIso(DateTime.add(start, { months: 1, days: 4 })),
+        ...matchingRange(month),
       },
     });
-    if (Option.isNone(selection) || !selection.value.complete) {
-      return { document, complete: false, matches: [] };
-    }
-    const facts = selection.value.transactions;
-    const nextMonth = DateTime.formatIsoDateUtc(DateTime.add(start, { months: 1 })).slice(
-      0,
-      monthLength
-    );
-    const items = [previousMonth(month), month, nextMonth].flatMap((selected) =>
-      projectRecurringMonth({ document, month: selected, now })
-    );
-    const matches = automaticMatches({ document, items, transactions: facts });
-    return matchedProjection(document, matches);
+    return automaticFromFacts({ document, month, now, selection });
+  });
+
+const workspaceMatching = ({
+  db,
+  userId,
+  document,
+  month,
+  prior,
+  now,
+}: ProjectionWork & Readonly<{ prior: string }>): Effect.Effect<
+  Readonly<{
+    preferences: UserPreferences;
+    earlier: AutomaticProjection;
+    matched: AutomaticProjection;
+  }>,
+  RecurringPlanningUnavailable | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const owner = yield* Schema.decodeEffect(UserId)(userId);
+    const observed = yield* readPlanningTransactionSnapshot({
+      db,
+      userId,
+      ranges: document.plans.length === 0 ? [] : [matchingRange(prior), matchingRange(month)],
+      snapshot: {
+        statement: prepareUserContext({
+          db,
+          userId: owner,
+          statement: {
+            sql: "SELECT locale, timeZone FROM identity_user_context",
+            params: [],
+          },
+        }),
+        decode: (rows) =>
+          rows.length === 1 ? Schema.decodeUnknownOption(UserPreferences)(rows[0]) : Option.none(),
+      },
+    });
+    if (Option.isNone(observed)) return yield* new RecurringPlanningUnavailable();
+    const projection = (selected: string, index: number): AutomaticProjection =>
+      automaticFromFacts({
+        document,
+        month: selected,
+        now,
+        selection: observed.value.ranges[index] ?? Option.none(),
+      });
+    return {
+      preferences: observed.value.snapshot,
+      earlier: projection(prior, 0),
+      matched: projection(month, 1),
+    };
   });
 
 /** Reuse date conversion only within this projection; never retain live facts between reads. */
@@ -147,16 +225,14 @@ export const workspaceValue = ({
 > =>
   Effect.gen(function* () {
     const now = yield* DateTime.now;
-    const preferences = yield* readPrivacyPreferences({ db, userId }).pipe(
-      Effect.mapError(() => new RecurringPlanningUnavailable())
-    );
     const checked = yield* checkedDocument({ db, userId, document });
     const prior = query.previousMonth ?? previousMonth(query.month);
-    const earlier = yield* automaticProjection({
+    const { preferences, earlier, matched } = yield* workspaceMatching({
       db,
       userId,
       document: checked.document,
-      month: prior,
+      month: query.month,
+      prior,
       now,
     });
     const previous = filterRecurring({
@@ -164,13 +240,6 @@ export const workspaceValue = ({
       filters: query,
     }).filter((item) => item.status !== "completed" && item.status !== "skipped");
     const earliest = earliestMonth(document, query.month);
-    const matched = yield* automaticProjection({
-      db,
-      userId,
-      document: checked.document,
-      month: query.month,
-      now,
-    });
     const items = filterRecurring({
       items: projectRecurringMonth({ document: matched.document, month: query.month, now }),
       filters: query,

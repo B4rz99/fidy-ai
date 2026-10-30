@@ -1,0 +1,50 @@
+{
+  "phase": "baseline",
+  "method": "Signed-in in-app browser; same existing cookie and observed binding, credentials remain in browser. GET /categories, no-store, one request start per second; two excluded warmups then sixteen sequential samples. No raw response or credential exported.",
+  "finishedAt": "2026-10-30T00:55:38.370Z",
+  "preflight": {
+    "phase": "baseline",
+    "scope": "Paced signed-in production Category experiment, separate from the completed isolated native fixture; at most 48 owned requests including setup, 100,000 reads and 5,000 writes. No fixture provisioning.",
+    "frame": {
+      "accountId": "a32350b6918ad7e78bc589b6630af1c2",
+      "observation": {
+        "accountId": "a32350b6918ad7e78bc589b6630af1c2",
+        "utcDate": "2026-10-30",
+        "observedAtEpochMs": 1793321713249,
+        "rowsRead": 435218,
+        "rowsWritten": 9260
+      },
+      "estimate": {
+        "rowsRead": 100000,
+        "rowsWritten": 5000
+      }
+    },
+    "decision": {
+      "_tag": "Allowed",
+      "maximumRowsRead": 100000,
+      "maximumRowsWritten": 5000
+    },
+    "health": {
+      "contractDigest": "601bd69a4a42aeb9d4317f7aef8bf71092da08ad2e78c277c8565b4d85c11b8f",
+      "gitRevision": "952157f1b040552744e4b356b0f91c4c3a46d946",
+      "status": "available"
+    }
+  },
+  "healthAfter": {
+    "contractDigest": "601bd69a4a42aeb9d4317f7aef8bf71092da08ad2e78c277c8565b4d85c11b8f",
+    "gitRevision": "952157f1b040552744e4b356b0f91c4c3a46d946",
+    "status": "available"
+  },
+  "elapsedMs": [
+    607, 624.6999999880791, 593.2999999523163, 637.4000000357628, 683.4000000357628,
+    581.1999999880791, 626.6999999880791, 692.3999999761581, 722.7000000476837, 652.8000000119209,
+    505.89999997615814, 583.3000000119209, 541.2000000476837, 539.8000000119209, 482.800000011921,
+    533.4000000357628
+  ],
+  "warmupElapsedMs": [959.399999976158, 614.6000000238419],
+  "statuses": [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200],
+  "categoryCount": 16,
+  "responseBytes": 1086,
+  "wireAndSemanticHash": "a22a14b134e4f607155c09195c4a2dc16ae83a7ec4c14b382020290eeb52b1ec",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+}

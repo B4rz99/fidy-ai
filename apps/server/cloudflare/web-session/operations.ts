@@ -3,8 +3,10 @@ import { readMetadata } from "./internal/metadata";
 import { bindingResponse } from "./internal/binding";
 import { type Effect, Option, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
-
-import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
+import type {
+  FreshSessionSubject,
+  WebSessionAuthority,
+} from "../../src/shell/web-session/contract";
 import { completePairing, logout } from "./internal/lifecycle";
 import { currentUser } from "./internal/current-user";
 import type {
@@ -37,6 +39,11 @@ export const prepareBoundCanonicalWebSession = (
 export const resolveBoundCanonicalWebSession = (
   input: Readonly<{ lookup: BoundWebSessionLookup; row: unknown }>
 ): Option.Option<AuthenticatedWebSession> => decodeSessionLookup(input);
+
+/** Compose the exact mounted credential and Consent lookup into its caller's single native read. */
+export const boundCanonicalWebSessionAuthority = (
+  lookup: BoundWebSessionLookup
+): WebSessionAuthority => lookup.authority;
 
 /**
  * Authenticate one browser cookie against authoritative expiry, revocation and optional freshness.

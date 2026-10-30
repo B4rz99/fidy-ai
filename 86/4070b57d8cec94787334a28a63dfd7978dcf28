@@ -1,0 +1,25 @@
+docs/research/browser-category-production-baseline-2026-10-30.json
+  s_d9571b3fccd032::t_912840899642b5 1-50
+docs/research/browser-category-snapshot-2026-10-29.md
+  s_d9571b3fccd032::t_df675f0934a29b 98,107-123
+docs/research/browser-category-snapshot-hosted-2026-10-30.json
+  s_d9571b3fccd032::t_d3422bf4cc671a 2
+docs/research/browser-category-snapshot-local-after-sync-2026-10-30.json
+  s_d9571b3fccd032::t_121281be60e0b5 1-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "864070b57d8cec94787334a28a63dfd7978dcf28",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

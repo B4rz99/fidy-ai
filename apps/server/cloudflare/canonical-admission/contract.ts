@@ -6,7 +6,7 @@ import type { AuthorizedPAT } from "../tokens/contract";
 import type { AuthenticatedWebSession } from "../web-session/contract";
 
 /** An owner-prepared unmetered browser read; presentation follows the complete protected batch.
- * The operation is deliberately closed to the Category listing until other policies are proved.
+ * Closed to the Category and Transaction listings with their proved unmetered browser policies.
  */
 export type PreparedCanonicalBrowserRead = Readonly<{
   statements: ReadonlyArray<D1PreparedStatement>;

@@ -5,6 +5,7 @@ import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   effectiveHistoryPage,
   effectiveTransactionRelation,
+  selectedEffectiveHistoryPage,
 } from "./internal/effective-transaction";
 import { findTransactionPresentation } from "./internal/transaction-history";
 
@@ -68,6 +69,20 @@ it("bounds ready effective History pages while preserving authoritative rows", (
       const page = yield* fromTestPromise(() => historyPage(db, userId));
       expect(page.results).toHaveLength(101);
       expect(page.meta.rows_read).toBeLessThanOrEqual(152);
+      const selected = selectedEffectiveHistoryPage({
+        userSelection: { sql: "SELECT ? AS userId", params: [userId] },
+        where: "1 = 1",
+        bindings: [],
+        limit: 101,
+      });
+      const scoped = yield* fromTestPromise(() =>
+        db
+          .prepare(selected.sql)
+          .bind(...selected.bindings)
+          .all()
+      );
+      expect(scoped.results).toEqual(page.results);
+      expect(scoped.meta.rows_read).toBeLessThanOrEqual(152);
     })
   ));
 it(

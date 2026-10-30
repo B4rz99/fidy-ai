@@ -940,13 +940,13 @@ const snapshotUserSelection = (lookup: BoundWebSessionLookup): OwnedStatement =>
   params: lookup.statement.params,
 });
 
-/** Commit the unmetered Category read, pressure, Audit and standing under one fresh native fence. */
+/** Commit an approved unmetered browser read, pressure, Audit and standing under one fresh native fence. */
 export const protectCanonicalBrowserSnapshot = (
   input: Readonly<{
     db: D1Database;
     request: Request;
     current: number;
-    operation: "categories.listCategories";
+    operation: "categories.listCategories" | "transactions.listTransactions";
     read: CanonicalBrowserRead;
   }>
 ): Effect.Effect<Response> =>

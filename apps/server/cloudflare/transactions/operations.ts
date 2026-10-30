@@ -1,4 +1,5 @@
 import { effectiveTransactionRelation } from "./internal/effective-transaction";
+import { prepareBoundTransactionRead as ownerPrepareBoundRead } from "./internal/bound-history";
 import { prepareDeletion as ownerPrepareDeletion } from "./internal/transaction-deletion";
 import {
   findSnapshot,
@@ -108,6 +109,10 @@ export const prepareFactRevisionProjection = (
 /** Browse the same bounded canonical Transaction projection under live WebSession or PAT authority. */
 export const browseTransactions: typeof ownerBrowseTransactions = (...args) =>
   ownerBrowseTransactions(...args);
+
+/** Compose bounded browser History and its required Audit in one live native read. */
+export const prepareBoundTransactionRead: typeof ownerPrepareBoundRead = (request) =>
+  ownerPrepareBoundRead(request);
 
 /** Return bounded same-User financial history for an explicit Titular access request; every page requires fresh browser proof and atomic Audit, never renewed processing Consent. */
 export const readPrivacyTransactions = (input: PrivacyTransactionsRead): Effect.Effect<Response> =>

@@ -1,5 +1,6 @@
 import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
-import { type Cause, Clock, Effect, Option } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option } from "effect";
+import { browseTransactions } from "../transactions/operations";
 import { type Mock, afterAll, expect, it, vi } from "vitest";
 import { getBoundOperationCatalog } from "../../src/shell/canonical-catalog/contract";
 
@@ -15,6 +16,7 @@ import { makeCoreHttp } from "./runtime";
 
 const databases = isolatedTestDatabases();
 const storage = isolatedTestStorage();
+const atomicListings = ["categories.listCategories", "transactions.listTransactions"] as const;
 afterAll(() => databases.dispose());
 afterAll(() => storage.dispose());
 
@@ -31,7 +33,9 @@ type BrowserReadFixture = Readonly<{
   request: (headers?: Readonly<Record<string, string>>) => Promise<Response>;
 }>;
 
-const browserFixture = (): Effect.Effect<BrowserReadFixture, Cause.UnknownError> =>
+const browserFixture = (
+  operationId: (typeof atomicListings)[number] = "categories.listCategories"
+): Effect.Effect<BrowserReadFixture, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
     yield* Effect.tryPromise(() => installTestSchema({ db }));
@@ -111,7 +115,7 @@ const browserFixture = (): Effect.Effect<BrowserReadFixture, Cause.UnknownError>
       institutions: registeredConnectionInstitutionIds,
     });
     const categoryRoute = Option.getOrThrow(
-      Option.fromUndefinedOr(getBoundOperationCatalog().byId.get("categories.listCategories"))
+      Option.fromUndefinedOr(getBoundOperationCatalog().byId.get(operationId))
     ).route;
     const request = (headers: Readonly<Record<string, string>> = {}): Promise<Response> =>
       core(
@@ -141,6 +145,7 @@ const browserFixture = (): Effect.Effect<BrowserReadFixture, Cause.UnknownError>
 it.each([
   ["quota.getQuota", 3],
   ["categories.listCategories", 1],
+  ["transactions.listTransactions", 1],
 ] as const)("serves %s within %i fresh recovery-generation checks", (operationId, checks) =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -214,93 +219,100 @@ const refusedBrowserHeaders: Readonly<Record<string, Readonly<Record<string, str
   "missing cookie": { cookie: "" },
 };
 
-it.each([
-  "revoked",
-  "expired",
-  "withdrawn Consent",
-  "invalid Authorization",
-  "missing binding",
-  "mismatched binding",
-  "missing cookie",
-] as const)(
-  "refuses the atomic Category read for %s without Audit, quota or a retained lease",
-  (refusal) =>
+it.each(
+  atomicListings.flatMap((operationId) =>
+    (
+      [
+        "revoked",
+        "expired",
+        "withdrawn Consent",
+        "invalid Authorization",
+        "missing binding",
+        "mismatched binding",
+        "missing cookie",
+      ] as const
+    ).map((refusal) => [operationId, refusal] as const)
+  )
+)("refuses atomic %s for %s without Audit, quota or a retained lease", (operationId, refusal) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* browserFixture(operationId);
+      const { db, userId, sessionId, current } = fixture;
+      if (refusal === "revoked") {
+        yield* Effect.tryPromise(() =>
+          db.prepare("UPDATE web_sessions SET revoked_at_ms = ?").bind(current).run()
+        );
+      }
+      if (refusal === "expired") {
+        yield* Effect.tryPromise(() =>
+          db.prepare("UPDATE web_sessions SET idle_expires_at_ms = ?").bind(current).run()
+        );
+      }
+      if (refusal === "withdrawn Consent") {
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            db
+              .prepare(
+                "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)"
+              )
+              .bind("grant", userId, current, current),
+            db
+              .prepare(
+                "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)"
+              )
+              .bind("withdrawal", userId, "grant", sessionId, current),
+          ])
+        );
+      }
+      const headers = Option.getOrElse(
+        Option.fromUndefinedOr(refusedBrowserHeaders[refusal]),
+        () => ({})
+      );
+      const response = yield* Effect.tryPromise(() => fixture.request(headers));
+      expect(response.status).toBe(401);
+      for (const table of [
+        "audit_entries",
+        "canonical_request_buckets",
+        "canonical_request_leases",
+        "commercial_allowance_consumptions",
+      ]) {
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare(`SELECT count(*) AS total FROM ${table}`).first()
+          )
+        ).toEqual({ total: 0 });
+      }
+    })
+  )
+);
+
+it.each(atomicListings)(
+  "keeps atomic %s standing bound to its caller when another User has an active TrialPeriod",
+  (operationId) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const fixture = yield* browserFixture();
-        const { db, userId, sessionId, current } = fixture;
-        if (refusal === "revoked") {
-          yield* Effect.tryPromise(() =>
-            db.prepare("UPDATE web_sessions SET revoked_at_ms = ?").bind(current).run()
-          );
-        }
-        if (refusal === "expired") {
-          yield* Effect.tryPromise(() =>
-            db.prepare("UPDATE web_sessions SET idle_expires_at_ms = ?").bind(current).run()
-          );
-        }
-        if (refusal === "withdrawn Consent") {
-          yield* Effect.tryPromise(() =>
-            db.batch([
-              db
-                .prepare(
-                  "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)"
-                )
-                .bind("grant", userId, current, current),
-              db
-                .prepare(
-                  "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)"
-                )
-                .bind("withdrawal", userId, "grant", sessionId, current),
-            ])
-          );
-        }
-        const headers = Option.getOrElse(
-          Option.fromUndefinedOr(refusedBrowserHeaders[refusal]),
-          () => ({})
-        );
-        const response = yield* Effect.tryPromise(() => fixture.request(headers));
-        expect(response.status).toBe(401);
-        for (const table of [
-          "audit_entries",
-          "canonical_request_buckets",
-          "canonical_request_leases",
-          "commercial_allowance_consumptions",
-        ]) {
-          expect(
-            yield* Effect.tryPromise(() =>
-              db.prepare(`SELECT count(*) AS total FROM ${table}`).first()
+        const fixture = yield* browserFixture(operationId);
+        yield* Effect.tryPromise(() =>
+          fixture.db
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,trial_started_at_ms,trial_ends_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?,?,?)"
             )
-          ).toEqual({ total: 0 });
-        }
+            .bind(
+              "10000000-0000-4000-8000-000000000002",
+              fixture.current,
+              fixture.current,
+              fixture.current + 604800000
+            )
+            .run()
+        );
+        const response = yield* Effect.tryPromise(() => fixture.request());
+        expect(response.status).toBe(200);
+        const limit = response.headers.get(canonicalAllowanceHeaders.limit);
+        expect(limit).toMatch(/^[1-9][0-9]*$/u);
+        expect(response.headers.get(canonicalAllowanceHeaders.remaining)).toBe(limit);
       })
     )
 );
-
-it("keeps atomic Category standing bound to its caller when another User has an active TrialPeriod", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* browserFixture();
-      yield* Effect.tryPromise(() =>
-        fixture.db
-          .prepare(
-            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,trial_started_at_ms,trial_ends_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?,?,?)"
-          )
-          .bind(
-            "10000000-0000-4000-8000-000000000002",
-            fixture.current,
-            fixture.current,
-            fixture.current + 604800000
-          )
-          .run()
-      );
-      const response = yield* Effect.tryPromise(() => fixture.request());
-      expect(response.status).toBe(200);
-      const limit = response.headers.get(canonicalAllowanceHeaders.limit);
-      expect(limit).toMatch(/^[1-9][0-9]*$/u);
-      expect(response.headers.get(canonicalAllowanceHeaders.remaining)).toBe(limit);
-    })
-  ));
 
 it.each(["caller", "another User"] as const)(
   "preserves outstanding leases for %s during an atomic Category read",
@@ -346,10 +358,14 @@ it.each(["caller", "another User"] as const)(
     )
 );
 
-it.each(["rate", "concurrency"] as const)("preserves atomic Category %s protection", (limit) =>
+it.each(
+  atomicListings.flatMap((operationId) =>
+    (["rate", "concurrency"] as const).map((limit) => [operationId, limit] as const)
+  )
+)("preserves atomic %s %s protection", (operationId, limit) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const fixture = yield* browserFixture();
+      const fixture = yield* browserFixture(operationId);
       const { db, userId, current } = fixture;
       if (limit === "rate") {
         yield* Effect.tryPromise(() =>
@@ -391,34 +407,37 @@ it.each(["rate", "concurrency"] as const)("preserves atomic Category %s protecti
   )
 );
 
-it("rolls back Category pressure and disclosure when required Audit is ignored", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* browserFixture();
-      const { db } = fixture;
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "CREATE TRIGGER ignore_category_audit BEFORE INSERT ON audit_entries WHEN NEW.operation='categories.listCategories' BEGIN SELECT RAISE(IGNORE); END"
-          )
-          .run()
-      );
-      const response = yield* Effect.tryPromise(() => fixture.request());
-      expect(response.status).toBe(503);
-      for (const table of [
-        "audit_entries",
-        "canonical_request_buckets",
-        "canonical_request_leases",
-        "commercial_allowance_consumptions",
-      ]) {
-        expect(
-          yield* Effect.tryPromise(() =>
-            db.prepare(`SELECT count(*) AS total FROM ${table}`).first()
-          )
-        ).toEqual({ total: 0 });
-      }
-    })
-  ));
+it.each(atomicListings)(
+  "rolls back %s pressure and disclosure when required Audit is ignored",
+  (operationId) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* browserFixture(operationId);
+        const { db } = fixture;
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "CREATE TRIGGER ignore_category_audit BEFORE INSERT ON audit_entries WHEN NEW.operation IN ('categories.listCategories','transactions.listTransactions') BEGIN SELECT RAISE(IGNORE); END"
+            )
+            .run()
+        );
+        const response = yield* Effect.tryPromise(() => fixture.request());
+        expect(response.status).toBe(503);
+        for (const table of [
+          "audit_entries",
+          "canonical_request_buckets",
+          "canonical_request_leases",
+          "commercial_allowance_consumptions",
+        ]) {
+          expect(
+            yield* Effect.tryPromise(() =>
+              db.prepare(`SELECT count(*) AS total FROM ${table}`).first()
+            )
+          ).toEqual({ total: 0 });
+        }
+      })
+    )
+);
 
 it("closes malformed Category projections without leaving a lease or spending commercial quota", () =>
   Effect.runPromise(
@@ -445,88 +464,256 @@ it("closes malformed Category projections without leaving a lease or spending co
     })
   ));
 
-it("freshly fences the atomic Category read after a recovery-generation change", () =>
+it.each(atomicListings)(
+  "freshly fences atomic %s after a recovery-generation change",
+  (operationId) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* browserFixture(operationId);
+        expect((yield* Effect.tryPromise(() => fixture.request())).status).toBe(200);
+        yield* Effect.tryPromise(() => fixture.bucket.put("recovery/generation", "restored"));
+        fixture.generationReads.mockClear();
+        const response = yield* Effect.tryPromise(() => fixture.request());
+        expect(response.status).toBe(503);
+        expect(fixture.generationReads).toHaveBeenCalled();
+        expect(
+          yield* Effect.tryPromise(() =>
+            fixture.db
+              .prepare("SELECT count(*) AS total FROM audit_entries WHERE operation=?")
+              .bind(operationId)
+              .first()
+          )
+        ).toEqual({ total: 1 });
+      })
+    )
+);
+
+it.each(atomicListings)(
+  "does not replay %s after losing an already committed native response",
+  (operationId) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* browserFixture(operationId);
+        // Establish the recovery fence before injecting loss into the next owner batch.
+        expect((yield* Effect.tryPromise(() => fixture.request())).status).toBe(200);
+        let loseResponse = true;
+        const native = new Proxy(fixture.db, {
+          get: (target, property): unknown => {
+            if (property === "batch") {
+              return (statements: Array<D1PreparedStatement>): Promise<Array<D1Result>> =>
+                target.batch(statements).then((rows) => {
+                  if (loseResponse) {
+                    loseResponse = false;
+                    throw new Error("Synthetic response loss after native commit");
+                  }
+                  return rows;
+                });
+            }
+            const member: unknown = Reflect.get(target, property, target);
+            return typeof member === "function" ? member.bind(target) : member;
+          },
+        });
+        const request = new Request(
+          `https://api.fidyapp.com${Option.getOrThrow(Option.fromUndefinedOr(getBoundOperationCatalog().byId.get(operationId))).route}`,
+          {
+            headers: {
+              cookie: `__Host-fidy_session=${fixture.token}`,
+              [browserSessionBindingHeader]: fixture.sessionId,
+            },
+          }
+        );
+        const response = yield* Effect.tryPromise(() =>
+          fixture.core(request, {
+            ...fixture.environment,
+            DB: maintenancePerformanceDatabase({ db: native, bucket: fixture.bucket }),
+          })
+        );
+        expect(response.status).toBe(503);
+        expect(loseResponse).toBe(false);
+        expect(
+          yield* Effect.tryPromise(() =>
+            fixture.db
+              .prepare("SELECT count(*) AS total FROM audit_entries WHERE operation=?")
+              .bind(operationId)
+              .first()
+          )
+        ).toEqual({ total: 2 });
+        expect(
+          yield* Effect.tryPromise(() =>
+            fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+          )
+        ).toEqual({ total: 0 });
+        expect(
+          yield* Effect.tryPromise(() =>
+            fixture.db
+              .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
+              .first()
+          )
+        ).toEqual({ total: 0 });
+      })
+    )
+);
+
+const historyId = (index: number): string =>
+  `40000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+const historyStart = 1767225600000;
+const historyMinute = 60000;
+
+it("refuses malformed atomic Transaction projections without a lease or commercial spend", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const fixture = yield* browserFixture();
-      expect((yield* Effect.tryPromise(() => fixture.request())).status).toBe(200);
-      yield* Effect.tryPromise(() => fixture.bucket.put("recovery/generation", "restored"));
-      fixture.generationReads.mockClear();
+      const fixture = yield* browserFixture("transactions.listTransactions");
+      yield* seedScopedHistory(fixture);
+      yield* Effect.tryPromise(() =>
+        fixture.db
+          .prepare(
+            "UPDATE transaction_projection_leaf SET amount='invalid-money' WHERE user_id=? AND id=?"
+          )
+          .bind(fixture.userId, historyId(3))
+          .run()
+      );
       const response = yield* Effect.tryPromise(() => fixture.request());
       expect(response.status).toBe(503);
-      expect(fixture.generationReads).toHaveBeenCalled();
-      expect(
-        yield* Effect.tryPromise(() =>
-          fixture.db
-            .prepare(
-              "SELECT count(*) AS total FROM audit_entries WHERE operation='categories.listCategories'"
-            )
-            .first()
-        )
-      ).toEqual({ total: 1 });
+      for (const table of ["canonical_request_leases", "commercial_allowance_consumptions"]) {
+        expect(
+          yield* Effect.tryPromise(() =>
+            fixture.db.prepare(`SELECT count(*) AS total FROM ${table}`).first()
+          )
+        ).toEqual({ total: 0 });
+      }
     })
   ));
 
-it("does not replay Category work after losing an already committed native response", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* browserFixture();
-      // Establish the recovery fence before injecting loss into the next owner batch.
-      expect((yield* Effect.tryPromise(() => fixture.request())).status).toBe(200);
-      let loseResponse = true;
-      const native = new Proxy(fixture.db, {
-        get: (target, property): unknown => {
-          if (property === "batch") {
-            return (statements: Array<D1PreparedStatement>): Promise<Array<D1Result>> =>
-              target.batch(statements).then((rows) => {
-                if (loseResponse) {
-                  loseResponse = false;
-                  throw new Error("Synthetic response loss after native commit");
-                }
-                return rows;
-              });
-          }
-          const member: unknown = Reflect.get(target, property, target);
-          return typeof member === "function" ? member.bind(target) : member;
-        },
-      });
-      const request = new Request(
-        `https://api.fidyapp.com${Option.getOrThrow(Option.fromUndefinedOr(getBoundOperationCatalog().byId.get("categories.listCategories"))).route}`,
-        {
-          headers: {
-            cookie: `__Host-fidy_session=${fixture.token}`,
-            [browserSessionBindingHeader]: fixture.sessionId,
-          },
-        }
-      );
-      const response = yield* Effect.tryPromise(() =>
-        fixture.core(request, {
-          ...fixture.environment,
-          DB: maintenancePerformanceDatabase({ db: native, bucket: fixture.bucket }),
-        })
-      );
-      expect(response.status).toBe(503);
-      expect(loseResponse).toBe(false);
-      expect(
-        yield* Effect.tryPromise(() =>
-          fixture.db
+const seedScopedHistory = (fixture: BrowserReadFixture): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const foreignUser = "10000000-0000-4000-8000-000000000002";
+    yield* Effect.tryPromise(() =>
+      fixture.db
+        .prepare(
+          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',0)"
+        )
+        .bind(foreignUser)
+        .run()
+    );
+    yield* Effect.tryPromise(() =>
+      fixture.db.batch(
+        Array.from({ length: 10 }, (_, offset) => {
+          const index = offset + 1;
+          return fixture.db
             .prepare(
-              "SELECT count(*) AS total FROM audit_entries WHERE operation='categories.listCategories'"
+              "INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at_ms,created_at_ms,revision) VALUES (?,?,?,?,?,'shop','10000000-0000-4000-8000-000000000016',?,?,?,?)"
             )
-            .first()
-        )
-      ).toEqual({ total: 2 });
-      expect(
-        yield* Effect.tryPromise(() =>
-          fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
-        )
-      ).toEqual({ total: 0 });
-      expect(
-        yield* Effect.tryPromise(() =>
-          fixture.db
-            .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
-            .first()
-        )
-      ).toEqual({ total: 0 });
-    })
-  ));
+            .bind(
+              historyId(index),
+              index > 8 ? foreignUser : fixture.userId,
+              index === 3 ? "9007199254740993.01" : "100",
+              index === 8 ? "USD" : "COP",
+              index === 8 ? "inflow" : "outflow",
+              index === 3 ? "corrected" : null,
+              historyStart + index * historyMinute,
+              historyStart + index * historyMinute + 1000,
+              index === 3 ? 1 : 0
+            );
+        })
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      fixture.db.batch([
+        fixture.db
+          .prepare("INSERT INTO transaction_reconciliation_decisions VALUES (?,?,?,'linked',?,?)")
+          .bind(fixture.userId, historyId(1), historyId(2), historyId(1), historyStart),
+        fixture.db
+          .prepare(
+            "UPDATE transactions SET reconciliation_first_id=?,reconciliation_second_id=? WHERE user_id=? AND id IN (?,?)"
+          )
+          .bind(historyId(1), historyId(2), fixture.userId, historyId(1), historyId(2)),
+      ])
+    );
+  });
+
+it.each(["ready", "rebuilding", "absent"] as const)(
+  "keeps atomic History identical across filters, pages and %s projection state",
+  (readiness) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* browserFixture("transactions.listTransactions");
+        yield* seedScopedHistory(fixture);
+        if (readiness === "absent") {
+          yield* Effect.tryPromise(() =>
+            fixture.db
+              .prepare("DELETE FROM transaction_projection_state WHERE user_id=?")
+              .bind(fixture.userId)
+              .run()
+          );
+        } else {
+          yield* Effect.tryPromise(() =>
+            fixture.db
+              .prepare("UPDATE transaction_projection_state SET readiness=? WHERE user_id=?")
+              .bind(readiness, fixture.userId)
+              .run()
+          );
+        }
+        const digest = new Uint8Array(
+          yield* Effect.tryPromise(() =>
+            crypto.subtle.digest("SHA-256", new TextEncoder().encode(fixture.token))
+          )
+        );
+        const route = Option.getOrThrow(
+          Option.fromUndefinedOr(
+            getBoundOperationCatalog().byId.get("transactions.listTransactions")
+          )
+        ).route;
+        const cursor = `${DateTime.formatIso(DateTime.makeUnsafe(historyStart + 6 * historyMinute))}|${DateTime.formatIso(DateTime.makeUnsafe(historyStart + 6 * historyMinute + 1000))}|${historyId(6)}`;
+        for (const test of [
+          { query: "?limit=100", status: 200 },
+          { query: "?limit=2", status: 200 },
+          { query: "?limit=5&currency=COP&direction=outflow&counterparty=shop", status: 200 },
+          { query: "?from=2026-01-01T00:00:00Z&to=2026-01-01T00:10:00Z", status: 200 },
+          { query: `?limit=2&cursor=${encodeURIComponent(cursor)}`, status: 200 },
+          { query: "?limit=invalid", status: 400 },
+          { query: "?limit=2&limit=3", status: 400 },
+        ]) {
+          const request = new Request(`https://api.fidyapp.com${route}${test.query}`, {
+            headers: {
+              cookie: `__Host-fidy_session=${fixture.token}`,
+              [browserSessionBindingHeader]: fixture.sessionId,
+            },
+          });
+          fixture.generationReads.mockClear();
+          const actual = yield* Effect.tryPromise(() => fixture.core(request, fixture.environment));
+          expect(actual.status).toBe(test.status);
+          expect(fixture.generationReads).toHaveBeenCalledTimes(1);
+          const expected = yield* browseTransactions({
+            db: fixture.db,
+            selection: {
+              request,
+              search: false,
+              id: Option.none(),
+              subject: { id: fixture.sessionId, userId: fixture.userId, digest },
+            },
+          });
+          expect(expected.status).toBe(test.status);
+          const body = yield* Effect.tryPromise(() => actual.text());
+          expect(body).toBe(yield* Effect.tryPromise(() => expected.text()));
+          expect(body).not.toContain(historyId(9));
+          expect(body).not.toContain(historyId(10));
+          if (test.query === "?limit=100") {
+            expect(body).toContain("9007199254740993.01");
+            expect(body).not.toContain(historyId(2));
+          }
+        }
+        expect(
+          yield* Effect.tryPromise(() =>
+            fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+          )
+        ).toEqual({ total: 0 });
+        expect(
+          yield* Effect.tryPromise(() =>
+            fixture.db
+              .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
+              .first()
+          )
+        ).toEqual({ total: 0 });
+      })
+    )
+);

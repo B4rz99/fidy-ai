@@ -1,0 +1,28 @@
+apps/web/src/app/bound-application.tsx
+  s_68bfd164593579::t_62d3430b6dcb65 7-8,11-13,17-23,30-31,33-35,47-48,52-60,62-64,66,72-76,82-83
+  s_68bfd164593579::t_f8241738b8911a 1-6,9-10,14-16,24-29,32,36-46,49-51,61,65,67-71,77-81
+docs/research/app-performance-production-desktop-2026-10-29.md
+  s_68bfd164593579::t_62d3430b6dcb65 59-60,174-230,244-274
+apps/web/src/app/application.tsx
+  s_68bfd164593579::t_f8241738b8911a 34,40
+  s_68bfd164593579::t_62d3430b6dcb65 3-8,14-21,35-38
+  s_68bfd164593579::t_df4a255fb2cc5b 2,22-24,39,41-44
+docs/research/app-performance-production-desktop-2026-10-29.json
+  s_68bfd164593579::t_62d3430b6dcb65 1585-2785
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8b0fd817fcd7587f5f6e6f4ed1f902066b0d9e56",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

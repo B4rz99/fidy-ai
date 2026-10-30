@@ -1582,5 +1582,361 @@
       }
     ],
     "pagesMeetingTwoTimes": 0
+  },
+  "recurringSnapshotFollowUp": {
+    "revision": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+    "contractDigest": "601bd69a4a42aeb9d4317f7aef8bf71092da08ad2e78c277c8565b4d85c11b8f",
+    "apiPaths": [
+      "/web/session/binding",
+      "/user",
+      "/ingestion/review-workspace",
+      "/recurring-plans",
+      "/categories",
+      "/dashboard/view",
+      "/dashboard/catalog"
+    ],
+    "columns": [
+      "journey",
+      "repeat",
+      "ready",
+      "observedMs",
+      "timeOrigin",
+      "completedEncodedResourceBytes",
+      "resourceCount",
+      "apiSpans[pathIndex,startMs,endMs]"
+    ],
+    "samples": [
+      [
+        "recurring",
+        1,
+        true,
+        3555.4,
+        1793329740550.8,
+        617060,
+        107,
+        [
+          [0, 546.3, 991.3],
+          [1, 1027.9, 1769.8],
+          [2, 1430.1, 1432.6],
+          [2, 1597.2, 2454.2],
+          [3, 1781.5, 3509.8],
+          [4, 2469.8, 3151.9]
+        ]
+      ],
+      [
+        "recurring",
+        2,
+        true,
+        3028.9,
+        1793329756144.2,
+        617053,
+        107,
+        [
+          [0, 213.7, 493.2],
+          [1, 528.4, 1163.6],
+          [2, 829.8, 831.7],
+          [2, 1154.3, 1731.8],
+          [3, 1172.1, 2955.3],
+          [4, 1739.4, 2319]
+        ]
+      ],
+      [
+        "recurring",
+        3,
+        true,
+        3294.8,
+        1793329771209.8,
+        617165,
+        106,
+        [
+          [0, 256.4, 466.1],
+          [1, 489.2, 1282.3],
+          [2, 838.5, 839.7],
+          [2, 1117.8, 1696.3],
+          [4, 1703.3, 2327.5]
+        ]
+      ],
+      [
+        "dashboard",
+        1,
+        true,
+        3577.1,
+        1793329846462.9,
+        683075,
+        98,
+        [
+          [0, 244.3, 446.3],
+          [5, 596.9, 3497.4],
+          [6, 597.8, 615.4],
+          [2, 645.9, 646.9],
+          [2, 684, 685.6],
+          [2, 915.8, 1578.3],
+          [6, 1593.4, 2222.9]
+        ]
+      ],
+      [
+        "dashboard",
+        2,
+        true,
+        3683.8,
+        1793329862076.9,
+        683097,
+        98,
+        [
+          [0, 198.4, 464.3],
+          [5, 638.5, 3634.8],
+          [6, 639.3, 655.2],
+          [2, 697.7, 700.2],
+          [2, 719.9, 722],
+          [2, 950.1, 1568.5],
+          [6, 1575.4, 2283.3]
+        ]
+      ],
+      [
+        "dashboard",
+        3,
+        true,
+        3573.5,
+        1793329877797.9,
+        682884,
+        98,
+        [
+          [0, 221.2, 472.9],
+          [5, 620.6, 3508.3],
+          [6, 621.3, 633.3],
+          [2, 677, 677.7],
+          [2, 714.9, 718.5],
+          [2, 929.8, 1657.5],
+          [6, 1667.6, 2368.8]
+        ]
+      ]
+    ],
+    "profile": "desktop",
+    "viewport": [1280, 720],
+    "cpuRate": 1,
+    "cacheDisabled": true,
+    "admissionGapSeconds": 12,
+    "precisionMs": 0.1,
+    "appAndApiRevisionVerifiedBeforeAndAfter": true,
+    "allReady": true,
+    "financialOrAccountWrites": false,
+    "ciRun": 40994332382,
+    "productionRun": 40995013179,
+    "comparison": [
+      {
+        "journey": "recurring",
+        "beforeMedianMs": 3039.7,
+        "precedingMedianMs": 3922.3,
+        "afterMedianMs": 3294.8,
+        "speedup": 0.923,
+        "speedupVersusPreceding": 1.19
+      },
+      {
+        "journey": "dashboard",
+        "beforeMedianMs": 3820.3,
+        "precedingMedianMs": 3998.8,
+        "afterMedianMs": 3577.1,
+        "speedup": 1.068,
+        "speedupVersusPreceding": 1.118
+      }
+    ],
+    "pagesMeetingTwoTimes": 0
+  },
+  "startupCodeLoading": {
+    "baselineRevision": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+    "method": "Production Vite manifest static import closure from index.html; dynamic imports excluded; gzip measured per JS file",
+    "before": {
+      "files": [
+        {
+          "file": "assets/Atom-DoNLTebf.js",
+          "bytes": 202866,
+          "gzipBytes": 65608
+        },
+        {
+          "file": "assets/Hooks-BNMajrQL.js",
+          "bytes": 5557,
+          "gzipBytes": 2369
+        },
+        {
+          "file": "assets/Match-CgXpuciC.js",
+          "bytes": 4658,
+          "gzipBytes": 1854
+        },
+        {
+          "file": "assets/client-BCoAlYQR.js",
+          "bytes": 195248,
+          "gzipBytes": 61954
+        },
+        {
+          "file": "assets/crypto-CcicX2rd.js",
+          "bytes": 3439,
+          "gzipBytes": 1648
+        },
+        {
+          "file": "assets/jsx-runtime-COQnYV8f.js",
+          "bytes": 424,
+          "gzipBytes": 291
+        },
+        {
+          "file": "assets/lazyRouteComponent-CKHOzUrR.js",
+          "bytes": 590,
+          "gzipBytes": 383
+        },
+        {
+          "file": "assets/link-BX908iCT.js",
+          "bytes": 4224,
+          "gzipBytes": 2174
+        },
+        {
+          "file": "assets/login-destination-BFusdg1p.js",
+          "bytes": 748,
+          "gzipBytes": 391
+        },
+        {
+          "file": "assets/matchContext-CpRK9MIj.js",
+          "bytes": 52439,
+          "gzipBytes": 18445
+        },
+        {
+          "file": "assets/preload-helper-BEyK2XXa.js",
+          "bytes": 1521,
+          "gzipBytes": 801
+        },
+        {
+          "file": "assets/react-dom-p5-f7VGD.js",
+          "bytes": 3853,
+          "gzipBytes": 1383
+        },
+        {
+          "file": "assets/react-sySUN5R7.js",
+          "bytes": 8539,
+          "gzipBytes": 3297
+        },
+        {
+          "file": "assets/session-context-BGmBJHjx.js",
+          "bytes": 281,
+          "gzipBytes": 226
+        },
+        {
+          "file": "assets/subscription-enrollment-context-DDD3kURU.js",
+          "bytes": 309,
+          "gzipBytes": 235
+        },
+        {
+          "file": "assets/useMatch-DZ8J7LY8.js",
+          "bytes": 2378,
+          "gzipBytes": 1078
+        },
+        {
+          "file": "assets/useNavigate-BhSbfJAx.js",
+          "bytes": 369,
+          "gzipBytes": 263
+        },
+        {
+          "file": "assets/useParams-C9z9bc-p.js",
+          "bytes": 258,
+          "gzipBytes": 193
+        },
+        {
+          "file": "assets/useRouter-CzTOuJdZ.js",
+          "bytes": 140,
+          "gzipBytes": 137
+        },
+        {
+          "file": "assets/useRouterState-BOdWFIpm.js",
+          "bytes": 207,
+          "gzipBytes": 178
+        },
+        {
+          "file": "assets/useSearch-BOUnJfVz.js",
+          "bytes": 218,
+          "gzipBytes": 171
+        },
+        {
+          "file": "assets/utils-BsF5wWje.js",
+          "bytes": 3088,
+          "gzipBytes": 1419
+        },
+        {
+          "file": "assets/utils-qyHl_yuu.js",
+          "bytes": 107,
+          "gzipBytes": 112
+        },
+        {
+          "file": "assets/workspace-components-C_zg9P4J.js",
+          "bytes": 3090,
+          "gzipBytes": 1483
+        },
+        {
+          "file": "assets/workspace-query-BZeHP_NK.js",
+          "bytes": 189,
+          "gzipBytes": 174
+        },
+        {
+          "file": "assets/index-CJzEsiNP.js",
+          "bytes": 228708,
+          "gzipBytes": 71766
+        }
+      ],
+      "bytes": 723448,
+      "gzipBytes": 238033
+    },
+    "candidate": {
+      "files": [
+        {
+          "file": "assets/AtomRegistry-D_7k_mq_.js",
+          "bytes": 191769,
+          "gzipBytes": 61876
+        },
+        {
+          "file": "assets/RegistryContext-DZkBQ250.js",
+          "bytes": 4260,
+          "gzipBytes": 1854
+        },
+        {
+          "file": "assets/crypto-ayHRnvCS.js",
+          "bytes": 3447,
+          "gzipBytes": 1654
+        },
+        {
+          "file": "assets/jsx-runtime-COQnYV8f.js",
+          "bytes": 424,
+          "gzipBytes": 291
+        },
+        {
+          "file": "assets/preload-helper-BEyK2XXa.js",
+          "bytes": 1521,
+          "gzipBytes": 801
+        },
+        {
+          "file": "assets/react-dom-p5-f7VGD.js",
+          "bytes": 3853,
+          "gzipBytes": 1383
+        },
+        {
+          "file": "assets/react-sySUN5R7.js",
+          "bytes": 8539,
+          "gzipBytes": 3297
+        },
+        {
+          "file": "assets/session-binding-BtY7N5pO.js",
+          "bytes": 190645,
+          "gzipBytes": 60386
+        },
+        {
+          "file": "assets/session-context-C3FZmOrG.js",
+          "bytes": 289,
+          "gzipBytes": 228
+        },
+        {
+          "file": "assets/index-XKxna9jE.js",
+          "bytes": 208722,
+          "gzipBytes": 65014
+        }
+      ],
+      "bytes": 613469,
+      "gzipBytes": 196784
+    },
+    "productionLatencyEstablished": false
   }
 }

@@ -56,7 +56,8 @@ Three observations provide no confidence interval or broad consistency claim. Th
 ran sequentially, roughly half an hour apart; network and service conditions may vary.
 Completed encoded resource bytes include noncritical assets and omit unfinished transfers.
 Their reduction is not a causal estimate of startup improvement. API resource timing entries
-can include preflight representations; they must not all be counted as business requests.
+include opaque cross-origin fetch observations, including short attempts whose outcomes were
+not established; they must not all be counted as completed business requests.
 
 ## Remaining investigation
 
@@ -170,7 +171,45 @@ they are not replaced by a combined range. Empty workspaces still read no matchi
 The broader native suite passed 290 tests with 11 existing skips, including 200 own-User
 facts across two complete ranges, 129 excluded foreign-User facts, and an incomplete earlier
 month. Authority, credential renewal and the final live-credential Audit remain outside
-this refactor. This native round-trip reduction has not yet been measured in production.
+this refactor.
+
+## Deployed follow-up: revision 228da62e
+
+[PR #1621](https://github.com/B4rz99/fidy-ai/pull/1621) merged as
+`228da62e81a7031d5c0c1f4f6dcae9f869538698` after
+[all CI passed](https://github.com/B4rz99/fidy-ai/actions/runs/40994332382).
+Its [production workflow passed](https://github.com/B4rz99/fidy-ai/actions/runs/40995013179).
+Both app/API metadata checks matched before and after six further desktop observations.
+All six reached usable controls, and all browser overrides were restored afterward.
+
+| Page      | Three observations ms  | Median ms | Speedup versus original 90bdfb2 |
+| --------- | ---------------------- | --------: | ------------------------------: |
+| Recurring | 3555.4, 3028.9, 3294.8 |    3294.8 |                          0.923x |
+| Dashboard | 3577.1, 3683.8, 3573.5 |    3577.1 |                          1.068x |
+
+Recurring's median was about 16% below the preceding b2a2234d batch, and its two completed
+main API spans were approximately 1.73–1.78 seconds. Dashboard, whose implementation was
+unchanged in this release, also fell about 11%. The samples therefore do not isolate a causal
+16% improvement from the native batching change. Neither page meets the original 2x target.
+The JSON artifact's `recurringSnapshotFollowUp` retains every observation. A fresh tab in the
+same authenticated browser recovered unavailable browser controls; the related performance
+chat again paused heavy local checks for this measurement window.
+
+The canonical browser dispatch trace already avoids a separate ingress binding lookup and
+combines binding validation with admission; expanding the binding exception was ruled out.
+Cross-origin resource status fields were opaque, and the optional debugger-event trace was
+unavailable, so short fetch entries have no established response status or failure reason.
+
+## Startup code-loading candidate
+
+The production Vite manifest's static JavaScript closure initially contained 26 files,
+723,448 raw bytes and 238,033 independently gzip-compressed bytes. Splitting the router and
+bound clients into a module loaded alongside session discovery reduces the initial static
+dependency graph. Clients still mount only inside the verified binding boundary, and a failed
+code preload is retained as a failure for React's loader rather than an unhandled rejection.
+This changes code loading, not binding, request admission or authentication lifetimes.
+The JSON artifact records the before/candidate file inventories and sizes. Those dependency
+counts alone do not establish faster startup; matched desktop measurements remain required.
 
 ## Sign-in recovery and the quota hypothesis
 

@@ -1,0 +1,20 @@
+apps/web/src/features/transactions/query.ts
+  s_1cebf747fbaef6::t_a224eb329ff588 36,38-39,41,49-50
+  s_1cebf747fbaef6::t_ee95103a5bd775 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5d8ee994a1b2716008783e3f917d0b3570f760bc",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

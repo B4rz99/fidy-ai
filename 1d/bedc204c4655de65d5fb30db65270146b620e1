@@ -1,0 +1,382 @@
+apps/server/cloudflare/agent/hosted-statement-turn.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 25,272-274
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 3,16-20,46-51,652,706-734,743-759,762,766,771-772,776-777,782-788,790-795,798,801,805-812,816-826,828-867
+apps/docs/src/components/docs-page-title.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-39
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 15,31,39,79-83,85-94,96-102,457,465-493,501-503,602,624
+docs/research/production-performance-pilot-2026-10-28.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-115
+apps/server/src/shell/memory/memory-policy.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 3,10-17,48,70
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 124-126,129-130,133-146,163-164,176-177,278-285
+apps/docs/src/route-middleware.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-7
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 13,122-127,391-399
+apps/web/e2e/dashboard-pointer-resize.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-4,9,14-33,54,69-70,89,95
+apps/web/e2e/text-reflow.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 7,72
+docs/research/app-performance-startup-measurements-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-5304
+apps/web/scripts/serve-assessment-dev.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 2,9
+apps/docs/test/artifact.test.js
+  s_68bfd164593579::t_c584cbd0a5e42b 14-21,58-63
+apps/web/src/features/transactions/privacy-view.tsx
+  s_68bfd164593579::t_c584cbd0a5e42b 2,4,9-13,62-82
+docs/research/statement-publication-wakeup-2026-10-29.md
+  s_68bfd164593579::t_c584cbd0a5e42b 1-67
+apps/docs/public/fonts/DejaVu-LICENSE.txt
+  s_68bfd164593579::t_c584cbd0a5e42b 1-78
+apps/docs/src/components/docs-content-panel.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-3
+apps/server/cloudflare/browser-assessment.test-fixture.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 13
+docs/research/hosted-statement-wakeup-proof-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-1284
+docs/research/app-performance-production-baseline-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-324
+apps/docs/e2e/visual.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-218
+apps/server/cloudflare/canonical-admission/internal/protection.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-7,10-93,135-137
+apps/server/ARCHITECTURE.md
+  s_68bfd164593579::t_c584cbd0a5e42b 136-139,190-202
+  s_68bfd164593579::t_28a1118ebd1cd5 203
+docs/research/app-performance-startup-2026-10-29.md
+  s_68bfd164593579::t_c584cbd0a5e42b 1-203
+apps/docs/src/components/reference-json.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-88
+docs/research/hosted-direct-statement-handoff-proof-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-1025
+apps/docs/src/components/docs-sidebar.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-93
+apps/server/cloudflare/ingestion/internal/publication-wake.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-21
+apps/web/e2e/real-core-fixture.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 128,252-254
+  s_68bfd164593579::t_015fd70757a14c 255
+apps/web/playwright.assessment.config.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 4-6,35-46,53
+apps/docs/src/components/schema-table.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-70
+docs/research/browser-request-budget-2026-10-29.md
+  s_68bfd164593579::t_c584cbd0a5e42b 1-68
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1,23,199-201,336,355,504,603-605,611,625,728-730,926-928
+apps/docs/ARCHITECTURE.md
+  s_68bfd164593579::t_c584cbd0a5e42b 25-30
+apps/docs/e2e/docs.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 2,49-50,53-55,78-243
+apps/web/ARCHITECTURE.md
+  s_68bfd164593579::t_c584cbd0a5e42b 21-24,45-69
+  s_68bfd164593579::t_5080450800e529 70
+apps/web/e2e/privacy.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 5,311,331-334
+  s_68bfd164593579::t_c51a34838a7ec5 335
+docs/research/hosted-workflow-handoff-shared-proof-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-327
+docs/research/hosted-infra-proof-independent-2026-10-28.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-570
+docs/research/production-history-baseline-2026-10-28.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-72
+tools/depcruise/boundaries.mjs
+  s_68bfd164593579::t_c584cbd0a5e42b 27
+apps/server/src/shell/sql-assertions/operations.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 18-34
+apps/docs/src/components/schema-variants.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-24
+apps/docs/e2e/visual-routes.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-450
+docs/research/production-api-pilot-2026-10-28.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-15
+docs/research/statement-wakeup-cleanup-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-346
+apps/cli/package.json
+  s_68bfd164593579::t_c584cbd0a5e42b 18,20,23
+docs/research/hosted-infra-proof-2026-10-28.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-333
+apps/docs/src/components/docs-columns.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-14
+apps/server/cloudflare/ingestion/contract.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 113-148
+apps/docs/src/components/schema-properties.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-50
+.patterns/effect-4-stable.md
+  s_68bfd164593579::t_c584cbd0a5e42b 3-4,22
+.patterns/sources.json
+  s_68bfd164593579::t_c584cbd0a5e42b 4,17,22
+apps/docs/playwright.config.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 6-12
+apps/server/cloudflare/maintenance/runtime.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 268-272
+apps/server/cloudflare/web-session/internal/authentication.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 10-14,19-31,36-41,48-56,58-90,92-93,95
+apps/docs/src/components/docs-page-sidebar.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-155
+apps/server/cloudflare/queue/failure-isolation.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 6-7,30,296,372-378,385-386,388,395-410,414-601
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 3398-3454
+apps/web/e2e/needs-review.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 144-203
+apps/web/src/ui/components/application.tsx
+  s_68bfd164593579::t_c584cbd0a5e42b 12-15,64-66,68,74-76,78
+apps/server/cloudflare/ingestion/internal/statement-delivery.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 7-15,54,58,60,71,73,90-95,157-181
+  s_68bfd164593579::t_e8afe16fa44d02 182
+infra/docs/package.json
+  s_68bfd164593579::t_c584cbd0a5e42b 13
+apps/server/cloudflare/core-http/internal/http.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 32,1453-1461,1466-1476,1479-1516,1540-1548,1667-1690,1699-1700,1702-1709,1712,1714,1717,1720,1728-1739,1744
+  s_68bfd164593579::t_59fcf32b8a1269 1
+apps/web/e2e/browser-cost.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1,23
+docs/research/production-admission-proof-2026-10-28.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-26
+apps/docs/src/components/markdown-content.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 3-8,13-38,41-55,57
+apps/web/src/features/dashboard/feature.tsx
+  s_68bfd164593579::t_c584cbd0a5e42b 4-6,15-23,33-40
+docs/research/direct-statement-handoff-2026-10-29.md
+  s_68bfd164593579::t_c584cbd0a5e42b 1-48
+docs/research/production-history-after-1609-2026-10-28.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-85
+apps/server/cloudflare/mcp/native-confirmation.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 20
+docs/research/hosted-browser-burst-proof-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-12088
+apps/docs/src/styles/controls.css
+  s_68bfd164593579::t_c584cbd0a5e42b 1-361
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1226,1238-1374,1466,1627,1645,4214,4218,4245-4257
+apps/docs/public/fonts/Poppins-OFL.txt
+  s_68bfd164593579::t_c584cbd0a5e42b 1-93
+apps/web/src/features/dashboard/loading.tsx
+  s_68bfd164593579::t_c584cbd0a5e42b 1-13
+apps/server/cloudflare/web-session/internal/binding.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 54-62
+apps/web/src/features/transactions/feature.tsx
+  s_68bfd164593579::t_c584cbd0a5e42b 7,9,11,27-34
+  s_68bfd164593579::t_a959380751f54c 302,329
+.github/workflows/docs-visual.yml
+  s_68bfd164593579::t_c584cbd0a5e42b 1-51
+apps/server/src/core/transactions/contract.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 290-291,293-297
+apps/web/src/features/signed-in/navigation.tsx
+  s_68bfd164593579::t_c584cbd0a5e42b 12-15,33-35,37-47,63-65,68-72,89
+  s_68bfd164593579::t_d60967b3683842 1,36
+apps/server/cloudflare/canonical-admission/operations.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 7,12-14,17,29,31,73-434,1184-1341
+apps/server/cloudflare/ingestion/runtime.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 4,7-8,14-15,48-62
+apps/web/e2e/transaction-native-pagination.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 8
+dependency-policy.json
+  s_68bfd164593579::t_c584cbd0a5e42b 4,7,12,53-88
+apps/docs/src/components/docs-header.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-23
+apps/web/package.json
+  s_68bfd164593579::t_c584cbd0a5e42b 25-26,30,35,48,62
+apps/server/src/shell/transactions/contract.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 76
+apps/web/src/features/needs-review/feature.tsx
+  s_68bfd164593579::t_c584cbd0a5e42b 5
+docs/research/production-browser-admission-proof-2026-10-28.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-49
+apps/server/cloudflare/recurring-plans/internal/query-cost.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-81
+apps/docs/src/components/markdown-actions.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-40
+apps/web/scripts/serve-preview.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 5-45,150-152,156-157,160-167
+apps/web/e2e/browser-pairing.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 806-825,878,883,892,897
+docs/research/hosted-queue-batch-size-trial-2026-10-28.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-400
+apps/server/cloudflare/recurring-plans/internal/query.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 23,104,107-130
+apps/server/cloudflare/agent/hosted-turn.test-fixture.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 28-32,1120-1141
+apps/server/cloudflare/consent/browser.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1081-1122
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 31,249,251-252,260,266,268-269,310-347,609,700,728,1035
+apps/web/src/transport/client.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 11,171-334
+apps/docs/src/lib/navigation.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-40
+docs/research/browser-burst-cleanup-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-102
+docs/research/app-performance-cold-start-2026-10-28.md
+  s_68bfd164593579::t_c584cbd0a5e42b 1-218
+apps/docs/e2e/layout.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-115
+apps/web/src/index.css
+  s_68bfd164593579::t_c584cbd0a5e42b 12-22,30-39,47-56,64-73,81-90
+apps/web/e2e/transaction-pagination.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 10,52-53,56,147,229-230,244-246,273,288,336,405
+apps/server/cloudflare/mcp/runtime.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 182,222-224,240
+apps/docs/src/lib/reference-contract.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-30
+apps/server/cloudflare/transactions/runtime.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 2,39-43,107-111,160-161,684,702,773,790,795-796,863,890-920,924
+  s_68bfd164593579::t_5524cc8c41c97b 925
+infra/cloudflare/verify-edge-policy.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 50-67,137-142
+  s_68bfd164593579::t_62662821c21ac9 5
+package.json
+  s_68bfd164593579::t_c584cbd0a5e42b 65,70-71,76,80-83,85,97-98,100
+apps/server/cloudflare/ingestion/internal/review-workspace.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 76
+apps/web/src/transport/browser-http-policy.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 11,19,87,405-406,436-443,445,452-455,466,499,510-517,535-536
+apps/web/e2e/privacy-core-fixture.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 113-121
+docs/research/production-read-proof-after-1612-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-1044
+docs/research/generation-control-prototype-2026-10-29.md
+  s_68bfd164593579::t_c584cbd0a5e42b 1-33
+.oxlintrc.json
+  s_68bfd164593579::t_c584cbd0a5e42b 80,280
+apps/docs/src/components/docs-theme.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-93
+apps/server/cloudflare/insights/governor.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 3,27-34,89,118
+apps/web/scripts/check-browser-bundle.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 185-188,192
+apps/docs/src/components/reference-catalog.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-54
+apps/web/src/features/dashboard/view.tsx
+  s_68bfd164593579::t_c584cbd0a5e42b 40
+apps/server/package.json
+  s_68bfd164593579::t_c584cbd0a5e42b 298,300,310-313,315,321
+apps/server/cloudflare/ingestion/internal/statement-mutation.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 21,94-103,121,124-125
+apps/docs/src/styles/fidy.css
+  s_68bfd164593579::t_c584cbd0a5e42b 15-20,23-31,33-34,36-57,61-213,216-218,220-346,351-355,357,359-361,363-368,370-372,374-375,377-378,380-1150
+apps/web/src/app/routes.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 44-48
+apps/docs/scripts/generate-reference.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 5-9
+.patterns/INDEX.md
+  s_68bfd164593579::t_c584cbd0a5e42b 6
+apps/docs/src/components/docs-icon.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-43
+apps/docs/src/components/docs-search.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-261
+apps/web/e2e/dashboard-core.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1,8,21
+apps/docs/src/components/reference-filter.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-58
+apps/docs/astro.config.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 29-38,41
+apps/server/cloudflare/transactions/internal/recovery-alarm.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-55
+apps/web/e2e/workspace-navigation.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 43-77
+apps/server/src/core/ingestion/contract.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 718,720-725
+apps/docs/src/lib/reference.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-99
+apps/docs/e2e/reference.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-123
+apps/web/e2e/performance.assessment.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1,5,9-39,44-56,58-60,83-100,117,163-175,183-199,201-203,207-217,231-234,253-255,448-509,511-527,529-536,538-570,583,592-600,610,623,625-629,641,647-655,680,693-737
+  s_68bfd164593579::t_72a0960188d1f4 738
+apps/docs/src/components/reference-operation.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-182
+apps/docs/src/components/docs-footer.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-10
+apps/server/cloudflare/agent/internal/service.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1,566,626,698
+apps/server/cloudflare/core-http/browser-admission.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-158
+apps/server/cloudflare/consent/runtime.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 13,133
+apps/server/cloudflare/web-session/contract.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 3,16-20
+  s_68bfd164593579::t_7af13246e2ea93 21
+apps/web/scripts/subset-poppins.py
+  s_68bfd164593579::t_c584cbd0a5e42b 1-27
+apps/server/cloudflare/transactions/internal/recovery-alarm.test.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-91
+apps/server/cloudflare/web-session/operations.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 3-5,11,16-18,20-38,48-62,96-99
+  s_68bfd164593579::t_e2d44a6ace617a 19,100,123
+apps/web/e2e/static-shell.spec.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1,6-7,35,78-79,117-121,127-128
+apps/web/src/features/needs-review/navigation.tsx
+  s_68bfd164593579::t_c584cbd0a5e42b 11-16
+  s_68bfd164593579::t_30fed6ddcd3165 6
+apps/web/src/ui/brand.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1
+apps/web/src/ui/fonts/README.md
+  s_68bfd164593579::t_c584cbd0a5e42b 1-27
+apps/server/cloudflare/queue/handoff-worker.fixture.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1-106
+docs/research/generation-and-handoff-cleanup-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-175
+apps/web/src/ui/assets/access/README.md
+  s_68bfd164593579::t_c584cbd0a5e42b 1-18
+apps/docs/src/components/docs-home.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-55
+docs/research/hosted-workflow-handoff-eight-proof-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-670
+docs/research/generation-control-prototype-proof-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-7204
+apps/docs/test/reference-presentation.test.js
+  s_68bfd164593579::t_c584cbd0a5e42b 1-106
+apps/server/cloudflare/transactions/internal/transaction-history.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 18,63,74,83,86,239,370-371,378-379,382,402-403,424,637-639,677,708
+  s_68bfd164593579::t_77c74726ca7c52 761
+apps/web/e2e/subscription-visual-fixture.ts
+  s_68bfd164593579::t_c584cbd0a5e42b 1,15
+apps/docs/src/components/docs-not-found.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-30
+apps/docs/src/components/schema-catalog.astro
+  s_68bfd164593579::t_c584cbd0a5e42b 1-99
+apps/docs/src/styles/reference.css
+  s_68bfd164593579::t_c584cbd0a5e42b 1-536
+docs/research/app-performance-cold-start-2026-10-28.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-27244
+docs/research/hosted-workflow-handoff-proof-2026-10-29.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-484
+docs/research/production-placement-trial-2026-10-28.json
+  s_68bfd164593579::t_c584cbd0a5e42b 1-175
+infra/cloudflare/package.json
+  s_68bfd164593579::t_c584cbd0a5e42b 17,20-22,26
+apps/server/cloudflare/core-http/internal/browser-entry.ts
+  s_68bfd164593579::t_1aab04a297b1c9 151
+apps/server/contracts/openapi.json
+  s_68bfd164593579::t_89baba01babca1 9403-9405,9905-9908,18147,18150-18158,23463,23466-23473
+apps/server/src/shell/ingestion/contract.ts
+  s_68bfd164593579::t_546f8af7441567 138
+apps/web/src/features/needs-review/workspace.tsx
+  s_68bfd164593579::t_766f0cedf8f188 146,228-235
+apps/web/src/features/transactions/query.ts
+  s_68bfd164593579::t_e33a46412e8b73 20
+bun.lock
+  s_68bfd164593579::t_2b91bdbd2ce527 11,16-17,22,33,35,38,58,60,70-73,75,81,112-113,117,122,135,149,157,160-162,166,174,183-186,188,200-201,203,378,446,448,450,452,454,456,458,476,576,802,804,806,808,810,812,998,1004,1192,1202,1378,1882,2042,2044,2112,2252,2436,2514
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1dbedc204c4655de65d5fb30db65270146b620e1",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

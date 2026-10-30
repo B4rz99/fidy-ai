@@ -3,7 +3,7 @@ import {
   TelemetryTraceId,
   connectionBrowserPaths,
   telemetryTraceHeader,
-} from "@fidy/server/client";
+} from "@fidy/server/browser-bootstrap";
 import {
   Cause,
   Clock,

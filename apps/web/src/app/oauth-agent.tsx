@@ -22,7 +22,7 @@ export const OAuthAgent = (): JSX.Element => {
     })
   );
   const [bindingQuery] = useState(() =>
-    client.query("browserSession", "binding", { timeToLive: "0 seconds" })
+    client.query("browserSession", "binding", { query: {}, timeToLive: "0 seconds" })
   );
   const consent = useAtomValue(consentQuery).pipe(presentCanonicalQuery, freshValue);
   const session = useAtomValue(bindingQuery).pipe(presentCanonicalQuery, freshValue);

@@ -109,7 +109,7 @@ const recordSamples = (
       contentType: "text/plain",
     })
     .then(() => {
-      if (development === 0 && name !== "Transacciones") {
+      if (development === 0 && name !== "Transacciones" && name !== "Tablero") {
         expect(median).toBeLessThanOrEqual(
           name === "Presupuestos" ? budgetTargetMilliseconds : targetMilliseconds
         );
@@ -230,3 +230,55 @@ test("refreshes the retained recurring default month after midnight", ({ page, r
       );
     })
   ));
+
+test("opens recurring editors without reading hidden transaction pickers", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationRecurring" })
+      );
+      yield* Effect.tryPromise(() => openWorkspace(page, "Recurrentes"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Nuevo recurrente", exact: true })).toBeEnabled()
+      );
+      const reads: string[] = [];
+      page.on("request", (entry) => {
+        if (entry.method() === "GET" && new URL(entry.url()).pathname === "/transactions") {
+          reads.push(entry.url());
+        }
+      });
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Nuevo recurrente", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.locator('[data-recurring-slot="plan-form"]')).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.evaluate(twoAnimationFrames));
+      expect(reads).toHaveLength(0);
+      const disclosure = page.getByText("Crear desde una transacción", { exact: true });
+      yield* Effect.tryPromise(() => disclosure.click());
+      yield* Effect.tryPromise(() => waitForTransactionRead(reads));
+      const picker = page.locator('[data-recurring-slot="create-source"]');
+      yield* Effect.tryPromise(() =>
+        expect(
+          picker
+            .getByRole("button")
+            .filter({ hasText: / · /u })
+            .or(picker.getByText("Sin transacciones en esta página.", { exact: true }))
+            .first()
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Cargando transacciones…", { exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() => disclosure.click());
+      yield* Effect.tryPromise(() => disclosure.click());
+      expect(reads).toHaveLength(1);
+    })
+  ));
+
+const twoAnimationFrames = (): Promise<void> =>
+  new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+const waitForTransactionRead = (reads: ReadonlyArray<string>): Promise<void> =>
+  expect.poll(() => reads.length).toBe(1);

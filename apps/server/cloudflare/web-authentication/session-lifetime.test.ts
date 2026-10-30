@@ -10,7 +10,9 @@ import { holdSessionCallback, seedSession, sessionRequest } from "./session.test
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 const sessionDatabase = (): Promise<D1Database> =>
-  databases.acquire().then((db) => installCurrentTestObjects({ db, tables: [] }).then(() => db));
+  databases
+    .acquire()
+    .then((db) => installCurrentTestObjects({ db, tables: ["categories"] }).then(() => db));
 
 /** Observe the real native abort event without starting another Effect runtime. */
 const awaitAbort = (signal: AbortSignal): Effect.Effect<void> =>

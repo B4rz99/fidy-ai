@@ -13,6 +13,13 @@ import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import { type Command, type Detail, type Draft, type Item, creation, emptyDraft } from "./model";
 
 type Feedback = "saved" | "saving" | "unsaved" | "failed" | "uncertain";
+const invalidateItems = (
+  ids: ReadonlyArray<Item["id"]>
+): Effect.Effect<void, never, Reactivity.Reactivity> =>
+  Reactivity.invalidate([
+    "ingestion-review-workspace",
+    ...ids.map((id) => `ingestion-review-item:${id}`),
+  ]);
 type Completion = Readonly<{ ids: ReadonlyArray<Item["id"]> }>;
 export type ReviewEditorState = Readonly<{
   detail: Detail;
@@ -282,7 +289,7 @@ const flush = (owner: Owner, entry: Entry, automatic = false): Work =>
         if (result._tag === "Failure") reject(entry, result.cause);
         else acceptDraft(entry, result.value);
         notify(owner);
-        if (result._tag === "Success") yield* Reactivity.invalidate(["ingestion-review"]);
+        if (result._tag === "Success") yield* invalidateItems([entry.detail.item.id]);
         if (automatic) return;
       }
     })
@@ -336,7 +343,7 @@ const decide = (owner: Owner, detail: Detail, kind: "Create" | "Skip"): void => 
         finishActing(owner, entry);
       } else {
         complete(owner, result.value, kind === "Skip");
-        yield* Reactivity.invalidate(["ingestion-review"]);
+        yield* invalidateItems([entry.detail.item.id]);
       }
     })
   );
@@ -370,7 +377,7 @@ const bulk = (owner: Owner, restore: boolean, items: ReadonlyArray<Item>): void 
       if (!sameItems(result.value, items)) return failBulk(owner);
       owner.phase = "idle";
       complete(owner, result.value, !restore);
-      yield* Reactivity.invalidate(["ingestion-review"]);
+      yield* invalidateItems(items.map((item) => item.id));
     })
   );
 };
@@ -423,7 +430,7 @@ const recoverItem = (owner: Owner, detail: Detail): void => {
         } else {
           const replacement = makeEntry(result.value.data);
           replaceEntry(owner, replacement);
-          yield* Reactivity.invalidate(["ingestion-review"]);
+          yield* invalidateItems([detail.item.id]);
         }
         notify(owner);
       })

@@ -165,11 +165,12 @@ export default {
       severity: "error",
       comment:
         "Web source reached server code outside the browser declaration seam. Depend on " +
-        "@fidy/server/client through transport only; native contracts are not browser APIs.",
+        "the published browser SDK entries through transport only; native contracts are not browser APIs.",
       from: { path: "^src/" },
       to: {
         path: "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/",
-        pathNot: "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/src/client\\.ts$",
+        pathNot:
+          "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/src/(?:client|browser-bootstrap|browser-transport)\\.ts$",
       },
     },
     {

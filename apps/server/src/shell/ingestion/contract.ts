@@ -135,7 +135,7 @@ export const IngestionGroup = HttpApiGroup.make("ingestion")
     })
       .annotate(
         OpenApi.Description,
-        "Read the ingestion inbox ordered by original evidence expiry, or retained created, skipped and expired history. Returns metadata only, with a complete pending count and bounded pagination."
+        "Read the ingestion inbox ordered by original evidence expiry, or retained created, skipped and expired history. Returns a complete pending count, bounded metadata page and the first item’s revision-bound detail. Original material is excluded."
       )
       .annotateMerge(read)
   )

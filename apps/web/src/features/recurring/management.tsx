@@ -73,15 +73,7 @@ const SuggestionRow = ({
     <SuggestionLink series={series} view={view} save={save} disabled={disabled} />
   </article>
 );
-export const Suggestions = ({
-  view,
-  save,
-  create,
-  disabled,
-  timeZone,
-  cursor,
-  next,
-}: Readonly<{
+type SuggestionsProps = Readonly<{
   view: Workspace;
   save: Save;
   create: (initial: PlanInput, seriesId: string) => void;
@@ -89,7 +81,43 @@ export const Suggestions = ({
   timeZone: PlanInput["timeZone"];
   cursor: Option.Option<string>;
   next: (cursor: string) => void;
-}>): JSX.Element => {
+}>;
+
+export const Suggestions = (props: SuggestionsProps): JSX.Element => {
+  const [requested, setRequested] = useState(Option.isSome(props.cursor));
+  return (
+    <details
+      data-recurring-slot="suggestions"
+      className="group/review"
+      open={Option.isSome(props.cursor)}
+      onToggle={(event) => {
+        if (event.currentTarget.open) setRequested(true);
+      }}
+    >
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 text-sm [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center gap-2 font-medium">
+          <HugeiconsIcon
+            icon={ArrowDown01Icon}
+            className="size-4 -rotate-90 transition-transform group-open/review:rotate-0"
+          />
+          Patrones detectados
+        </span>
+        <span className="text-xs text-muted-foreground">Revisar historial</span>
+      </summary>
+      {requested ? <LoadedSuggestions {...props} /> : null}
+    </details>
+  );
+};
+
+const LoadedSuggestions = ({
+  view,
+  save,
+  create,
+  disabled,
+  timeZone,
+  cursor,
+  next,
+}: SuggestionsProps): JSX.Element => {
   const client = useRouter().options.context.apiClient;
   const [resource] = useState(() =>
     client.query("recurring", "listRecurringSeries", {
@@ -241,39 +269,37 @@ const SuggestionResults = ({
   next: (cursor: string) => void;
   ready: boolean;
 }>): JSX.Element => (
-  <details data-recurring-slot="suggestions" className="group/review">
-    <SuggestionBanner data={data} view={view} ready={ready} />
-    <div className="mt-3 grid gap-3">
-      <ReviewState
-        ready={ready}
-        hasSuggestions={data.series.some(
-          (series) => !view.document.suggestions.some((decision) => decision.seriesId === series.id)
-        )}
-      />
-      {data.evaluation.kind === "updating" ? (
-        <output className="text-sm text-muted-foreground">
-          La evaluación está actualizándose. Las sugerencias no forman parte de tus próximos pagos.
-        </output>
-      ) : null}
-      {data.series.flatMap((series) =>
-        view.document.suggestions.some((decision) => decision.seriesId === series.id)
-          ? []
-          : [
-              <SuggestionRow
-                key={series.id}
-                series={series}
-                view={view}
-                save={save}
-                create={create}
-                disabled={disabled || !ready}
-                timeZone={timeZone}
-              />,
-            ]
+  <div className="mt-3 grid gap-3">
+    <SuggestionStatus data={data} view={view} ready={ready} />
+    <ReviewState
+      ready={ready}
+      hasSuggestions={data.series.some(
+        (series) => !view.document.suggestions.some((decision) => decision.seriesId === series.id)
       )}
-      <SuggestionNext cursor={data.cursor} next={next} />
-      <RestoreSuggestions view={view} save={save} disabled={disabled} />
-    </div>
-  </details>
+    />
+    {data.evaluation.kind === "updating" ? (
+      <output className="text-sm text-muted-foreground">
+        La evaluación está actualizándose. Las sugerencias no forman parte de tus próximos pagos.
+      </output>
+    ) : null}
+    {data.series.flatMap((series) =>
+      view.document.suggestions.some((decision) => decision.seriesId === series.id)
+        ? []
+        : [
+            <SuggestionRow
+              key={series.id}
+              series={series}
+              view={view}
+              save={save}
+              create={create}
+              disabled={disabled || !ready}
+              timeZone={timeZone}
+            />,
+          ]
+    )}
+    <SuggestionNext cursor={data.cursor} next={next} />
+    <RestoreSuggestions view={view} save={save} disabled={disabled} />
+  </div>
 );
 const RestoreSuggestions = ({
   view,
@@ -371,7 +397,7 @@ const PlanRow = ({
   );
 };
 
-const SuggestionBanner = ({
+const SuggestionStatus = ({
   data,
   view,
   ready,
@@ -386,18 +412,7 @@ const SuggestionBanner = ({
   const message = ready
     ? `${count} sugerencias nuevas · Revisar`
     : "Sin evaluación completa · Ver estado";
-  return (
-    <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 text-sm [&::-webkit-details-marker]:hidden">
-      <span className="flex items-center gap-2 font-medium">
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
-          className="size-4 -rotate-90 transition-transform group-open/review:rotate-0"
-        />
-        Patrones detectados
-      </span>
-      <span className="text-xs text-muted-foreground">{message}</span>
-    </summary>
-  );
+  return <p className="text-xs text-muted-foreground">{message}</p>;
 };
 const ReviewState = ({
   ready,

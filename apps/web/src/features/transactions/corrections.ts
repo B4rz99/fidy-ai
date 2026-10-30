@@ -34,12 +34,11 @@ export type TransactionCorrections = Readonly<{
 }>;
 type Client = Context.Service.Shape<FidyClient>;
 type PageFailure = Effect.Error<ReturnType<Client["transactions"]["listTransactions"]>>;
-type CategoryFailure = Effect.Error<ReturnType<Client["categories"]["listCategories"]>>;
 type Query<A, E> = Atom.Atom<AsyncResult.AsyncResult<A, E>>;
 type Input = Readonly<{
   client: FidyClient;
   firstPage: Query<CanonicalSuccess<"transactions.listTransactions">, PageFailure>;
-  categories: Query<CanonicalSuccess<"categories.listCategories">, CategoryFailure>;
+  categories: Query<CanonicalSuccess<"categories.listCategories">, unknown>;
   history: Atom.Atom<HistoryState>;
   historyAction: Atom.Writable<Option.Option<void>, "more" | "retry" | "reset">;
   saved: (kind: Correction["kind"]) => void;
@@ -47,7 +46,7 @@ type Input = Readonly<{
 type Work = Effect.Effect<void>;
 type Owner = Input & {
   get: Atom.AtomContext;
-  command: Atom.AtomResultFn<Work, void, never>;
+  command: Option.Option<Atom.AtomResultFn<Work, void, never>>;
   status: Status;
   inlineTransaction: Option.Option<Transaction["id"]>;
   active: boolean;
@@ -62,12 +61,10 @@ type Write =
  * canonical reread releases an uncertain write; disposing cannot undo a request already sent.
  */
 export const makeTransactionCorrections = (input: Input): Atom.Atom<TransactionCorrections> => {
-  const command = input.client.runtime.fn<Work>()((work) => work, { concurrent: false });
   return Atom.make((get) => {
-    get.mount(command);
     const owner: Owner = {
       ...input,
-      command,
+      command: Option.none(),
       get,
       status: "idle",
       inlineTransaction: Option.none(),
@@ -98,10 +95,20 @@ const dispose = (owner: Owner): void => {
   owner.active = false;
   owner.generation += 1;
   Deferred.doneUnsafe(owner.stopped, Effect.void);
-  owner.get.set(owner.command, Atom.Interrupt);
+  Option.map(owner.command, (command) => owner.get.set(command, Atom.Interrupt));
+};
+const correctionCommand = (owner: Owner): Atom.AtomResultFn<Work, void, never> => {
+  if (Option.isSome(owner.command)) return owner.command.value;
+  const command = owner.client.runtime.fn<Work>()((work) => work, { concurrent: false });
+  owner.command = Option.some(command);
+  owner.get.mount(command);
+  return command;
 };
 const run = (owner: Owner, work: Work): void => {
-  owner.get.set(owner.command, work.pipe(Effect.raceFirst(Deferred.await(owner.stopped))));
+  owner.get.set(
+    correctionCommand(owner),
+    work.pipe(Effect.raceFirst(Deferred.await(owner.stopped)))
+  );
 };
 const live = (owner: Owner, generation: number): boolean =>
   owner.active && owner.generation === generation;

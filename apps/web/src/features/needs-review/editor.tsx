@@ -1,7 +1,8 @@
-import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
+import { reviewItemQuery } from "./query";
+import { workspaceCategoriesQuery } from "@/transport/workspace-query";
 import { ReviewDraftFooter, ReviewNotice } from "@/ui/components/review-workspace";
 import { useReviewExpired } from "./expiry";
-import type { ReviewDecisions, ReviewEditorState } from "./decisions";
+import type { ReviewDecisions, ReviewEditorState, ReviewWorkspaceQuery } from "./decisions";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -30,6 +31,7 @@ type Props = Readonly<{
   item: Item;
   decisions: ReviewDecisions;
   disabled: boolean;
+  workspaceQuery: ReviewWorkspaceQuery;
 }>;
 export const ReviewEditor = (props: Props): JSX.Element => {
   const expired = useReviewExpired(props.item);
@@ -60,19 +62,10 @@ const ExpiredReviewItem = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
   </section>
 );
 
-const ReviewItemEditor = ({ item, decisions, disabled }: Props): JSX.Element => {
+const ReviewItemEditor = ({ item, decisions, disabled, workspaceQuery }: Props): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
-  const [query] = useState(() =>
-    apiClient.query("ingestion", "getReviewItem", {
-      params: { id: item.id },
-      reactivityKeys: ["ingestion-review"],
-    })
-  );
-  const [categoryQuery] = useState(() =>
-    apiClient
-      .query("categories", "listCategories", workspaceQueryRetention)
-      .pipe(revalidateWorkspaceQuery)
-  );
+  const [query] = useState(() => reviewItemQuery(apiClient, workspaceQuery, item.id));
+  const [categoryQuery] = useState(() => workspaceCategoriesQuery(apiClient).view);
   const detail = useAtomValue(query).pipe(presentCanonicalQuery);
   const categories = useAtomValue(categoryQuery).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
@@ -97,7 +90,7 @@ const ReviewItemEditor = ({ item, decisions, disabled }: Props): JSX.Element => 
   }
   return (
     <ReviewItemFrame item={detail.value.data.item}>
-      {[detail, categories].some((state) => Option.isSome(state.refreshFailure)) ? (
+      {[detail, categories].some((state) => Option.isSome<unknown>(state.refreshFailure)) ? (
         <ReviewItemFailure recover={recover} />
       ) : null}
       <ReadyEditor

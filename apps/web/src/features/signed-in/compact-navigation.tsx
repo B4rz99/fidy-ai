@@ -8,10 +8,12 @@ export const CompactNavigation = ({
   loggingOut,
   onLogout,
   reviewPendingCount,
+  prepareNavigation,
 }: Readonly<{
   loggingOut: boolean;
   onLogout: () => void;
   reviewPendingCount: ReactNode;
+  prepareNavigation: (destination: string) => void;
 }>): JSX.Element => (
   <>
     <div className="application-menu-control">
@@ -40,6 +42,7 @@ export const CompactNavigation = ({
         loggingOut={loggingOut}
         onLogout={onLogout}
         reviewPendingCount={reviewPendingCount}
+        prepareNavigation={prepareNavigation}
       />
     </div>
   </>

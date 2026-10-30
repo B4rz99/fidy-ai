@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Calendar03Icon,
@@ -9,9 +8,7 @@ import {
   Wallet01Icon,
 } from "@hugeicons/core-free-icons";
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
-import { Option } from "effect";
-import { AsyncResult } from "effect/reactivity";
-import { type JSX, type ReactNode, useState } from "react";
+import { type JSX, type ReactNode } from "react";
 import { useSession } from "@/session/session-context";
 import {
   ApplicationHabitat,
@@ -33,22 +30,19 @@ export const SignedInNavigation = ({
   onLogout,
   loggingOut,
   reviewPendingCount,
+  prepareNavigation,
 }: Readonly<{
   onLogout: () => void;
   loggingOut: boolean;
   reviewPendingCount: ReactNode;
+  prepareNavigation: (destination: string) => void;
 }>): JSX.Element => {
   const { authentication } = useSession();
   const privacy = useRouterState({
     select: (state) => state.location.pathname === "/settings/privacy",
   });
-  const client = useRouter().options.context.webAuthClient;
-  const [binding] = useState(() => client.query("browserSession", "binding", {}));
-  const session = useAtomValue(binding);
-  const signedIn =
-    authentication !== "expired" &&
-    AsyncResult.isSuccess(session) &&
-    Option.isSome(Option.fromNullishOr(session.value.binding));
+  const { sessionBinding } = useRouter().options.context;
+  const signedIn = authentication !== "expired" && sessionBinding !== "none";
   return (
     <nav aria-label="Aplicación" className="application-navigation">
       {navigationLinks.map((link) => (
@@ -56,6 +50,9 @@ export const SignedInNavigation = ({
           key={link.to}
           to={link.to}
           search={{}}
+          onPointerEnter={() => prepareNavigation(link.to)}
+          onPointerDownCapture={() => prepareNavigation(link.to)}
+          onFocus={() => prepareNavigation(link.to)}
           onClick={dismissCompactNavigation}
           className="application-navigation-link"
           activeProps={{ className: "application-navigation-active" }}

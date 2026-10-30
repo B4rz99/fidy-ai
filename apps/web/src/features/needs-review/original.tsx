@@ -1,3 +1,4 @@
+import { reviewMaterialQuery } from "./material-query";
 import { useReviewExpired } from "./expiry";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -24,12 +25,7 @@ const useMaterialQuery = (
   item: Item
 ): Atom.Atom<AsyncResult.AsyncResult<CanonicalSuccess<"ingestion.getReviewMaterial">, unknown>> => {
   const client = useRouter().options.context.apiClient;
-  const [query] = useState(() =>
-    client.query("ingestion", "getReviewMaterial", {
-      params: { id: item.id },
-      reactivityKeys: ["ingestion-review"],
-    })
-  );
+  const [query] = useState(() => reviewMaterialQuery(client, item.id));
   return query;
 };
 /** Load original bytes alongside the selected detail, within the same expiry fence. */

@@ -1,7 +1,9 @@
+import type { ReviewUnavailable } from "../contract";
 import { reviewAudit } from "./review-audit";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Data, Effect, Option, Schema } from "effect";
 import {
+  type ReviewDetail,
   ReviewWorkspace,
   ReviewWorkspaceQuery,
   reviewPageSize,
@@ -12,12 +14,27 @@ import {
   transactionNow,
   transactionUnavailable,
 } from "../../canonical-work/operations";
-import { ReviewRow, projectReviewSummary } from "./review-store";
+import { ReviewRow, projectReviewDetail, projectReviewSummary } from "./review-store";
 import { validationFailed } from "./statement-ingestion";
 
 const Counts = Schema.Struct({ pendingCount: Schema.Int, total: Schema.Int });
 const relation = `SELECT *, CASE WHEN status != 'created' AND expires_at_ms <= ?
   THEN 'expired' ELSE status END AS visible_status FROM ingestion_review_sources WHERE user_id = ?`;
+
+const firstReviewDetail = ({
+  db,
+  userId,
+  rows,
+  current,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  rows: ReadonlyArray<typeof ReviewRow.Type>;
+  current: number;
+}>): Effect.Effect<Option.Option<ReviewDetail>, ReviewUnavailable> =>
+  Effect.forEach(rows.slice(0, 1), (row) => projectReviewDetail({ db, userId, row, current })).pipe(
+    Effect.map((details) => Option.fromUndefinedOr(details[0]))
+  );
 
 class ReviewWorkspaceUnavailable extends Data.TaggedError("ReviewWorkspaceUnavailable") {}
 
@@ -73,6 +90,7 @@ const readWorkspace = ({
     const data = yield* Schema.encodeUnknownEffect(Schema.toCodecJson(ReviewWorkspace))({
       ...counts,
       items,
+      selectedDetail: yield* firstReviewDetail({ db, userId: subject.userId, rows, current }),
     });
     return Response.json({ data, next: [] }, { headers: transactionNoStore });
   }).pipe(Effect.mapError(() => new ReviewWorkspaceUnavailable()));

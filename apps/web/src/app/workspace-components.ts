@@ -3,11 +3,7 @@ import { Option } from "effect";
 import { memo } from "react";
 
 /** Routes preload the same presentations that the application retains after navigation. */
-export const ReviewWorkspace = lazyRouteComponent(() =>
-  import("@/features/needs-review/feature").then((module) => ({
-    default: memo(module.NeedsReviewFeature),
-  }))
-);
+export { NeedsReviewFeature as ReviewWorkspace } from "@/features/needs-review/feature";
 export const RecurringWorkspace = lazyRouteComponent(() =>
   import("@/features/recurring/feature").then((module) => ({
     default: memo(

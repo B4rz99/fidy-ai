@@ -271,26 +271,26 @@
       },
       "Arrays_4": {
         "items": {
-          "$ref": "#/components/schemas/Objects_32"
+          "$ref": "#/components/schemas/Objects_33"
         },
         "maxItems": 100,
         "minItems": 1,
         "prefixItems": [
           {
-            "$ref": "#/components/schemas/Objects_32"
+            "$ref": "#/components/schemas/Objects_33"
           }
         ],
         "type": "array"
       },
       "Arrays_5": {
         "items": {
-          "$ref": "#/components/schemas/Objects_35"
+          "$ref": "#/components/schemas/Objects_36"
         },
         "type": "array"
       },
       "Arrays_6": {
         "items": {
-          "$ref": "#/components/schemas/Objects_35"
+          "$ref": "#/components/schemas/Objects_36"
         },
         "type": "array"
       },
@@ -1062,51 +1062,6 @@
             "type": "object"
           }
         ]
-      },
-      "BudgetStatusReport": {
-        "additionalProperties": false,
-        "properties": {
-          "cashFlow": {
-            "additionalProperties": false,
-            "properties": {
-              "expenses": {
-                "items": {
-                  "$ref": "#/components/schemas/Money_2"
-                },
-                "type": "array"
-              },
-              "income": {
-                "items": {
-                  "$ref": "#/components/schemas/Money_2"
-                },
-                "type": "array"
-              }
-            },
-            "required": [
-              "income",
-              "expenses"
-            ],
-            "type": "object"
-          },
-          "initialized": {
-            "type": "boolean"
-          },
-          "period": {
-            "$ref": "#/components/schemas/AppliedBudgetMonth"
-          },
-          "statuses": {
-            "items": {
-              "$ref": "#/components/schemas/BudgetStatus"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "period",
-          "statuses",
-          "cashFlow"
-        ],
-        "type": "object"
       },
       "CanonicalOperationId": {
         "pattern": "^[a-z][A-Za-z0-9]*\\.[a-z][A-Za-z0-9]*$",
@@ -2012,6 +1967,28 @@
           "ZWG"
         ],
         "type": "string"
+      },
+      "CurrentUserMetadata": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/Category"
+            },
+            "type": "array"
+          },
+          "data": {
+            "$ref": "#/components/schemas/User"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
       },
       "CustomMetricResult": {
         "additionalProperties": false,
@@ -4320,6 +4297,25 @@
       "Objects_21": {
         "additionalProperties": false,
         "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Transaction"
+            },
+            "type": "array"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_22": {
+        "additionalProperties": false,
+        "properties": {
           "kind": {
             "enum": [
               "independent"
@@ -4332,7 +4328,7 @@
         ],
         "type": "object"
       },
-      "Objects_22": {
+      "Objects_23": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4348,7 +4344,7 @@
         ],
         "type": "object"
       },
-      "Objects_23": {
+      "Objects_24": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4364,7 +4360,7 @@
         ],
         "type": "object"
       },
-      "Objects_24": {
+      "Objects_25": {
         "additionalProperties": false,
         "properties": {
           "categoryId": {
@@ -4399,7 +4395,7 @@
             "$ref": "#/components/schemas/TransactionOccurredAt"
           },
           "presentation": {
-            "$ref": "#/components/schemas/Objects_21"
+            "$ref": "#/components/schemas/Objects_22"
           },
           "revision": {
             "maximum": 9007199254740991,
@@ -4419,7 +4415,7 @@
         ],
         "type": "object"
       },
-      "Objects_25": {
+      "Objects_26": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4431,7 +4427,7 @@
         ],
         "type": "object"
       },
-      "Objects_26": {
+      "Objects_27": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4447,7 +4443,7 @@
         ],
         "type": "object"
       },
-      "Objects_27": {
+      "Objects_28": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4459,7 +4455,7 @@
         ],
         "type": "object"
       },
-      "Objects_28": {
+      "Objects_29": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4472,30 +4468,6 @@
         "required": [
           "data",
           "next"
-        ],
-        "type": "object"
-      },
-      "Objects_29": {
-        "additionalProperties": false,
-        "properties": {
-          "draft": {
-            "$ref": "#/components/schemas/Objects_31"
-          },
-          "item": {
-            "$ref": "#/components/schemas/Union_11"
-          },
-          "revision": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "suggestions": {
-            "$ref": "#/components/schemas/Objects_31"
-          }
-        },
-        "required": [
-          "item",
-          "revision"
         ],
         "type": "object"
       },
@@ -4518,6 +4490,30 @@
       "Objects_30": {
         "additionalProperties": false,
         "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/Objects_32"
+          },
+          "item": {
+            "$ref": "#/components/schemas/Union_11"
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "suggestions": {
+            "$ref": "#/components/schemas/Objects_32"
+          }
+        },
+        "required": [
+          "item",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "Objects_31": {
+        "additionalProperties": false,
+        "properties": {
           "amount": {
             "maxLength": 120,
             "type": "string"
@@ -4536,7 +4532,7 @@
         ],
         "type": "object"
       },
-      "Objects_31": {
+      "Objects_32": {
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -4583,7 +4579,7 @@
         ],
         "type": "object"
       },
-      "Objects_32": {
+      "Objects_33": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4601,12 +4597,12 @@
         ],
         "type": "object"
       },
-      "Objects_33": {
+      "Objects_34": {
         "additionalProperties": false,
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/Objects_29"
+              "$ref": "#/components/schemas/Objects_30"
             },
             "type": "array"
           },
@@ -4620,7 +4616,7 @@
         ],
         "type": "object"
       },
-      "Objects_34": {
+      "Objects_35": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4636,7 +4632,7 @@
         ],
         "type": "object"
       },
-      "Objects_35": {
+      "Objects_36": {
         "additionalProperties": false,
         "properties": {
           "message": {
@@ -4652,7 +4648,7 @@
         ],
         "type": "object"
       },
-      "Objects_36": {
+      "Objects_37": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4664,7 +4660,7 @@
         ],
         "type": "object"
       },
-      "Objects_37": {
+      "Objects_38": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4680,7 +4676,7 @@
         ],
         "type": "object"
       },
-      "Objects_38": {
+      "Objects_39": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4689,22 +4685,6 @@
         },
         "required": [
           "id"
-        ],
-        "type": "object"
-      },
-      "Objects_39": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/StatementSubmission"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
         ],
         "type": "object"
       },
@@ -4727,6 +4707,22 @@
       "Objects_40": {
         "additionalProperties": false,
         "properties": {
+          "data": {
+            "$ref": "#/components/schemas/StatementSubmission"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_41": {
+        "additionalProperties": false,
+        "properties": {
           "id": {
             "$ref": "#/components/schemas/StatementSubmissionId"
           }
@@ -4736,7 +4732,7 @@
         ],
         "type": "object"
       },
-      "Objects_41": {
+      "Objects_42": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4752,7 +4748,7 @@
         ],
         "type": "object"
       },
-      "Objects_42": {
+      "Objects_43": {
         "additionalProperties": false,
         "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
         "properties": {
@@ -4771,7 +4767,7 @@
         ],
         "type": "object"
       },
-      "Objects_43": {
+      "Objects_44": {
         "additionalProperties": false,
         "properties": {
           "kind": {
@@ -4786,7 +4782,7 @@
         ],
         "type": "object"
       },
-      "Objects_44": {
+      "Objects_45": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4802,7 +4798,7 @@
         ],
         "type": "object"
       },
-      "Objects_45": {
+      "Objects_46": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4814,7 +4810,7 @@
         ],
         "type": "object"
       },
-      "Objects_46": {
+      "Objects_47": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4832,22 +4828,6 @@
               "deliveryAttempt"
             ],
             "type": "object"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_47": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/InsightEvent"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -4878,6 +4858,34 @@
       "Objects_49": {
         "additionalProperties": false,
         "properties": {
+          "data": {
+            "$ref": "#/components/schemas/InsightEvent"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_5": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/KeywordRuleId"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Objects_50": {
+        "additionalProperties": false,
+        "properties": {
           "exceptions": {
             "items": {
               "additionalProperties": false,
@@ -4892,7 +4900,7 @@
                   "type": "string"
                 },
                 "replacement": {
-                  "$ref": "#/components/schemas/Objects_51"
+                  "$ref": "#/components/schemas/Objects_52"
                 },
                 "skipped": {
                   "type": "boolean"
@@ -4919,7 +4927,7 @@
           },
           "fulfillments": {
             "items": {
-              "$ref": "#/components/schemas/Objects_53"
+              "$ref": "#/components/schemas/Objects_54"
             },
             "maxItems": 4096,
             "type": "array"
@@ -4956,13 +4964,13 @@
                 },
                 "revisions": {
                   "items": {
-                    "$ref": "#/components/schemas/Objects_50"
+                    "$ref": "#/components/schemas/Objects_51"
                   },
                   "maxItems": 100,
                   "minItems": 1,
                   "prefixItems": [
                     {
-                      "$ref": "#/components/schemas/Objects_50"
+                      "$ref": "#/components/schemas/Objects_51"
                     }
                   ],
                   "type": "array"
@@ -5029,19 +5037,7 @@
         ],
         "type": "object"
       },
-      "Objects_5": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/KeywordRuleId"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "Objects_50": {
+      "Objects_51": {
         "additionalProperties": false,
         "properties": {
           "from": {
@@ -5049,7 +5045,7 @@
             "type": "string"
           },
           "plan": {
-            "$ref": "#/components/schemas/Objects_51"
+            "$ref": "#/components/schemas/Objects_52"
           }
         },
         "required": [
@@ -5058,7 +5054,7 @@
         ],
         "type": "object"
       },
-      "Objects_51": {
+      "Objects_52": {
         "additionalProperties": false,
         "properties": {
           "accountId": {
@@ -5106,7 +5102,7 @@
             "$ref": "#/components/schemas/Union_16"
           },
           "money": {
-            "$ref": "#/components/schemas/Objects_52"
+            "$ref": "#/components/schemas/Objects_53"
           },
           "monthDays": {
             "maxItems": 2,
@@ -5166,7 +5162,7 @@
         ],
         "type": "object"
       },
-      "Objects_52": {
+      "Objects_53": {
         "additionalProperties": false,
         "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
         "properties": {
@@ -5185,7 +5181,7 @@
         ],
         "type": "object"
       },
-      "Objects_53": {
+      "Objects_54": {
         "additionalProperties": false,
         "properties": {
           "actualDate": {
@@ -5205,7 +5201,7 @@
             "type": "string"
           },
           "money": {
-            "$ref": "#/components/schemas/Objects_52"
+            "$ref": "#/components/schemas/Objects_53"
           },
           "planId": {
             "format": "uuid",
@@ -5231,7 +5227,7 @@
         ],
         "type": "object"
       },
-      "Objects_54": {
+      "Objects_55": {
         "additionalProperties": false,
         "properties": {
           "completed": {
@@ -5247,12 +5243,12 @@
           },
           "fulfillments": {
             "items": {
-              "$ref": "#/components/schemas/Objects_53"
+              "$ref": "#/components/schemas/Objects_54"
             },
             "type": "array"
           },
           "plan": {
-            "$ref": "#/components/schemas/Objects_51"
+            "$ref": "#/components/schemas/Objects_52"
           },
           "planId": {
             "format": "uuid",
@@ -5284,7 +5280,7 @@
         ],
         "type": "object"
       },
-      "Objects_55": {
+      "Objects_56": {
         "additionalProperties": false,
         "properties": {
           "edit": {
@@ -5304,7 +5300,7 @@
                     "type": "string"
                   },
                   "plan": {
-                    "$ref": "#/components/schemas/Objects_51"
+                    "$ref": "#/components/schemas/Objects_52"
                   },
                   "seriesId": {
                     "format": "uuid",
@@ -5333,7 +5329,7 @@
                     "type": "string"
                   },
                   "plan": {
-                    "$ref": "#/components/schemas/Objects_51"
+                    "$ref": "#/components/schemas/Objects_52"
                   },
                   "planId": {
                     "format": "uuid",
@@ -5426,7 +5422,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "fulfillment": {
-                    "$ref": "#/components/schemas/Objects_53"
+                    "$ref": "#/components/schemas/Objects_54"
                   },
                   "kind": {
                     "enum": [
@@ -5522,27 +5518,11 @@
         ],
         "type": "object"
       },
-      "Objects_56": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/Objects_49"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
       "Objects_57": {
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Memory"
+            "$ref": "#/components/schemas/Objects_50"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -5557,18 +5537,6 @@
       "Objects_58": {
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/MemoryId"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "Objects_59": {
-        "additionalProperties": false,
-        "properties": {
           "data": {
             "$ref": "#/components/schemas/Memory"
           },
@@ -5579,6 +5547,18 @@
         "required": [
           "data",
           "next"
+        ],
+        "type": "object"
+      },
+      "Objects_59": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/MemoryId"
+          }
+        },
+        "required": [
+          "id"
         ],
         "type": "object"
       },
@@ -5601,20 +5581,8 @@
       "Objects_60": {
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/MemoryId"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "Objects_61": {
-        "additionalProperties": false,
-        "properties": {
           "data": {
-            "$ref": "#/components/schemas/MemoryId"
+            "$ref": "#/components/schemas/Memory"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -5626,11 +5594,23 @@
         ],
         "type": "object"
       },
+      "Objects_61": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/MemoryId"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "Objects_62": {
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SubscriptionCancellation"
+            "$ref": "#/components/schemas/MemoryId"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -5646,7 +5626,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/IssuedManualPATResponse"
+            "$ref": "#/components/schemas/SubscriptionCancellation"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -5661,6 +5641,22 @@
       "Objects_64": {
         "additionalProperties": false,
         "properties": {
+          "data": {
+            "$ref": "#/components/schemas/IssuedManualPATResponse"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_65": {
+        "additionalProperties": false,
+        "properties": {
           "publicCode": {
             "type": "string"
           }
@@ -5670,7 +5666,7 @@
         ],
         "type": "object"
       },
-      "Objects_65": {
+      "Objects_66": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -5686,7 +5682,7 @@
         ],
         "type": "object"
       },
-      "Objects_66": {
+      "Objects_67": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -6213,7 +6209,7 @@
         "additionalProperties": false,
         "properties": {
           "cadence": {
-            "$ref": "#/components/schemas/Objects_43"
+            "$ref": "#/components/schemas/Objects_44"
           },
           "confirmationId": {
             "format": "uuid",
@@ -6230,7 +6226,7 @@
             "type": "string"
           },
           "money": {
-            "$ref": "#/components/schemas/Objects_42"
+            "$ref": "#/components/schemas/Objects_43"
           },
           "seriesId": {
             "format": "uuid",
@@ -6351,7 +6347,7 @@
             ]
           },
           "cadence": {
-            "$ref": "#/components/schemas/Objects_43"
+            "$ref": "#/components/schemas/Objects_44"
           },
           "confirmedAt": {
             "$ref": "#/components/schemas/UtcTimestamp"
@@ -6374,7 +6370,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "money": {
-            "$ref": "#/components/schemas/Objects_42"
+            "$ref": "#/components/schemas/Objects_43"
           }
         },
         "required": [
@@ -7022,10 +7018,10 @@
         "additionalProperties": false,
         "properties": {
           "firstTransaction": {
-            "$ref": "#/components/schemas/Objects_24"
+            "$ref": "#/components/schemas/Objects_25"
           },
           "secondTransaction": {
-            "$ref": "#/components/schemas/Objects_24"
+            "$ref": "#/components/schemas/Objects_25"
           }
         },
         "required": [
@@ -11092,918 +11088,7 @@
           }
         ]
       },
-      "SwapWidgets": {
-        "additionalProperties": false,
-        "properties": {
-          "op": {
-            "enum": [
-              "swap-widgets"
-            ],
-            "type": "string"
-          },
-          "widgetId": {
-            "$ref": "#/components/schemas/WidgetId"
-          },
-          "withWidgetId": {
-            "$ref": "#/components/schemas/WidgetId"
-          }
-        },
-        "required": [
-          "op",
-          "widgetId",
-          "withWidgetId"
-        ],
-        "type": "object"
-      },
-      "SwapWidgetsPartial": {
-        "additionalProperties": false,
-        "properties": {
-          "op": {
-            "enum": [
-              "swap-widgets"
-            ],
-            "type": "string"
-          },
-          "widgetId": {
-            "$ref": "#/components/schemas/WidgetId"
-          },
-          "withWidgetId": {
-            "$ref": "#/components/schemas/WidgetId"
-          }
-        },
-        "type": "object"
-      },
-      "TaxTreatment": {
-        "enum": [
-          "not-taxable"
-        ],
-        "type": "string"
-      },
-      "TokenBearer": {
-        "pattern": "^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{32,}$",
-        "type": "string"
-      },
-      "TokenShortId": {
-        "pattern": "^[a-z0-9]{8}$",
-        "type": "string"
-      },
-      "Transaction": {
-        "additionalProperties": false,
-        "properties": {
-          "categoryId": {
-            "$ref": "#/components/schemas/CategoryId"
-          },
-          "counterparty": {
-            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-            "maxLength": 120,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "createdAt": {
-            "$ref": "#/components/schemas/TransactionCreatedAt"
-          },
-          "direction": {
-            "$ref": "#/components/schemas/Union_2"
-          },
-          "id": {
-            "$ref": "#/components/schemas/TransactionId"
-          },
-          "money": {
-            "$ref": "#/components/schemas/Money_2"
-          },
-          "notes": {
-            "maxLength": 500,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "occurredAt": {
-            "$ref": "#/components/schemas/TransactionOccurredAt"
-          },
-          "revision": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "money",
-          "direction",
-          "categoryId",
-          "occurredAt",
-          "createdAt",
-          "revision"
-        ],
-        "type": "object"
-      },
-      "TransactionCreatedAt": {
-        "description": "When fidy learned of it, which can be long after it occurred: a statement read in July carries movements from March. Reason about the user's spending from `occurredAt`; read this only to tell how freshly the record was captured.",
-        "format": "date-time",
-        "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$",
-        "type": "string"
-      },
-      "TransactionExtraction": {
-        "additionalProperties": false,
-        "properties": {
-          "counterparty": {
-            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-            "maxLength": 120,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "direction": {
-            "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
-            "enum": [
-              "inflow",
-              "outflow"
-            ],
-            "type": "string"
-          },
-          "money": {
-            "$ref": "#/components/schemas/Money"
-          },
-          "occurredAt": {
-            "$ref": "#/components/schemas/TransactionOccurredAt"
-          }
-        },
-        "type": "object"
-      },
-      "TransactionExtraction_1": {
-        "additionalProperties": false,
-        "properties": {
-          "counterparty": {
-            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-            "maxLength": 120,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "direction": {
-            "$ref": "#/components/schemas/Union_2"
-          },
-          "money": {
-            "$ref": "#/components/schemas/Money_2"
-          },
-          "occurredAt": {
-            "$ref": "#/components/schemas/TransactionOccurredAt"
-          }
-        },
-        "required": [
-          "money",
-          "direction",
-          "occurredAt"
-        ],
-        "type": "object"
-      },
-      "TransactionId": {
-        "format": "uuid",
-        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
-        "type": "string"
-      },
-      "TransactionListLimit": {
-        "maximum": 50,
-        "minimum": 1,
-        "type": "integer"
-      },
-      "TransactionListResult": {
-        "additionalProperties": false,
-        "properties": {
-          "transactions": {
-            "items": {
-              "$ref": "#/components/schemas/DashboardTransaction"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "transactions"
-        ],
-        "type": "object"
-      },
-      "TransactionListTemplate": {
-        "additionalProperties": false,
-        "properties": {
-          "categories": {
-            "$ref": "#/components/schemas/Arrays_3"
-          },
-          "limit": {
-            "$ref": "#/components/schemas/TransactionListLimit"
-          },
-          "search": {
-            "maxLength": 100,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "title": {
-            "maxLength": 80,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "type": {
-            "enum": [
-              "transaction-list"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "limit"
-        ],
-        "type": "object"
-      },
-      "TransactionListWidget": {
-        "additionalProperties": false,
-        "properties": {
-          "categories": {
-            "$ref": "#/components/schemas/Arrays_3"
-          },
-          "id": {
-            "$ref": "#/components/schemas/WidgetId"
-          },
-          "limit": {
-            "$ref": "#/components/schemas/TransactionListLimit"
-          },
-          "search": {
-            "maxLength": 100,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "title": {
-            "maxLength": 80,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "type": {
-            "enum": [
-              "transaction-list"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "type",
-          "limit"
-        ],
-        "type": "object"
-      },
-      "TransactionListWidgetPartial": {
-        "additionalProperties": false,
-        "properties": {
-          "categories": {
-            "$ref": "#/components/schemas/Arrays_1"
-          },
-          "id": {
-            "$ref": "#/components/schemas/WidgetId"
-          },
-          "limit": {
-            "$ref": "#/components/schemas/TransactionListLimit"
-          },
-          "search": {
-            "maxLength": 100,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "title": {
-            "maxLength": 80,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "type": {
-            "enum": [
-              "transaction-list"
-            ],
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "TransactionOccurredAt": {
-        "description": "When the money actually moved. It must already have happened — a Transaction dated in the future is rejected — and the history is ordered by it, so send the instant the user is describing rather than the moment you are recording it.",
-        "format": "date-time",
-        "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$",
-        "type": "string"
-      },
-      "TransactionPairInput": {
-        "additionalProperties": false,
-        "properties": {
-          "firstTransactionId": {
-            "$ref": "#/components/schemas/TransactionId"
-          },
-          "secondTransactionId": {
-            "$ref": "#/components/schemas/TransactionId"
-          }
-        },
-        "required": [
-          "firstTransactionId",
-          "secondTransactionId"
-        ],
-        "type": "object"
-      },
-      "TransactionPairInputPartial": {
-        "additionalProperties": false,
-        "properties": {
-          "firstTransactionId": {
-            "$ref": "#/components/schemas/TransactionId"
-          },
-          "secondTransactionId": {
-            "$ref": "#/components/schemas/TransactionId"
-          }
-        },
-        "type": "object"
-      },
-      "TransactionPresentation": {
-        "additionalProperties": false,
-        "properties": {
-          "categoryId": {
-            "$ref": "#/components/schemas/CategoryId"
-          },
-          "counterparty": {
-            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-            "maxLength": 120,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "createdAt": {
-            "$ref": "#/components/schemas/TransactionCreatedAt"
-          },
-          "direction": {
-            "$ref": "#/components/schemas/Union_2"
-          },
-          "id": {
-            "$ref": "#/components/schemas/TransactionId"
-          },
-          "money": {
-            "$ref": "#/components/schemas/Money_2"
-          },
-          "notes": {
-            "maxLength": 500,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "occurredAt": {
-            "$ref": "#/components/schemas/TransactionOccurredAt"
-          },
-          "presentation": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Objects_21"
-              },
-              {
-                "anyOf": [
-                  {
-                    "additionalProperties": false,
-                    "properties": {
-                      "kind": {
-                        "enum": [
-                          "visible-member"
-                        ],
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "kind"
-                    ],
-                    "type": "object"
-                  },
-                  {
-                    "additionalProperties": false,
-                    "properties": {
-                      "kind": {
-                        "enum": [
-                          "suppressed-member"
-                        ],
-                        "type": "string"
-                      },
-                      "requestedId": {
-                        "$ref": "#/components/schemas/TransactionId"
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "requestedId"
-                    ],
-                    "type": "object"
-                  }
-                ]
-              }
-            ]
-          },
-          "revision": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "money",
-          "direction",
-          "categoryId",
-          "occurredAt",
-          "createdAt",
-          "revision",
-          "presentation"
-        ],
-        "type": "object"
-      },
-      "TrialPeriod": {
-        "additionalProperties": false,
-        "properties": {
-          "endsAt": {
-            "$ref": "#/components/schemas/UtcTimestamp"
-          },
-          "startedAt": {
-            "$ref": "#/components/schemas/UtcTimestamp"
-          }
-        },
-        "required": [
-          "startedAt",
-          "endsAt"
-        ],
-        "type": "object"
-      },
-      "UnauthenticatedEncoded": {
-        "additionalProperties": false,
-        "properties": {
-          "_tag": {
-            "enum": [
-              "Unauthenticated"
-            ],
-            "type": "string"
-          },
-          "error": {
-            "additionalProperties": false,
-            "properties": {
-              "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
-                "enum": [
-                  "unauthenticated"
-                ],
-                "type": "string"
-              },
-              "message": {
-                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
-                "minLength": 1,
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "type": "object"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "error",
-          "next"
-        ],
-        "type": "object"
-      },
-      "UnavailableEncoded": {
-        "additionalProperties": false,
-        "properties": {
-          "_tag": {
-            "enum": [
-              "Unavailable"
-            ],
-            "type": "string"
-          },
-          "error": {
-            "additionalProperties": false,
-            "properties": {
-              "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
-                "enum": [
-                  "unavailable"
-                ],
-                "type": "string"
-              },
-              "message": {
-                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
-                "minLength": 1,
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-                "type": "string"
-              },
-              "retryAfterSeconds": {
-                "exclusiveMinimum": 0,
-                "maximum": 9007199254740991,
-                "type": "integer"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "type": "object"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "error",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Union_": {
-        "enum": [
-          "this-week",
-          "this-month",
-          "last-week",
-          "last-month",
-          "last-7-days",
-          "last-30-days"
-        ],
-        "type": "string"
-      },
-      "Union_1": {
-        "anyOf": [
-          {
-            "enum": [
-              "top",
-              "bottom"
-            ],
-            "type": "string"
-          },
-          {
-            "$ref": "#/components/schemas/BesidePlacementPartial"
-          }
-        ]
-      },
-      "Union_10": {
-        "enum": [
-          "csv",
-          "xlsx"
-        ],
-        "type": "string"
-      },
-      "Union_11": {
-        "anyOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "createdAt": {
-                "$ref": "#/components/schemas/UtcTimestamp"
-              },
-              "expiresAt": {
-                "$ref": "#/components/schemas/UtcTimestamp"
-              },
-              "id": {
-                "$ref": "#/components/schemas/NeedsReviewItemId"
-              },
-              "preview": {
-                "$ref": "#/components/schemas/Objects_30"
-              },
-              "reason": {
-                "type": "string"
-              },
-              "revision": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "source": {
-                "$ref": "#/components/schemas/Union_12"
-              },
-              "status": {
-                "enum": [
-                  "created"
-                ],
-                "type": "string"
-              },
-              "timeZone": {
-                "$ref": "#/components/schemas/IanaTimeZone"
-              },
-              "transactionId": {
-                "$ref": "#/components/schemas/TransactionId"
-              }
-            },
-            "required": [
-              "revision",
-              "id",
-              "source",
-              "timeZone",
-              "reason",
-              "createdAt",
-              "expiresAt",
-              "status",
-              "transactionId"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "createdAt": {
-                "$ref": "#/components/schemas/UtcTimestamp"
-              },
-              "expiresAt": {
-                "$ref": "#/components/schemas/UtcTimestamp"
-              },
-              "id": {
-                "$ref": "#/components/schemas/NeedsReviewItemId"
-              },
-              "preview": {
-                "$ref": "#/components/schemas/Objects_30"
-              },
-              "reason": {
-                "type": "string"
-              },
-              "revision": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "source": {
-                "$ref": "#/components/schemas/Union_12"
-              },
-              "status": {
-                "enum": [
-                  "pending",
-                  "skipped",
-                  "expired"
-                ],
-                "type": "string"
-              },
-              "timeZone": {
-                "$ref": "#/components/schemas/IanaTimeZone"
-              },
-              "transactionId": {
-                "not": {}
-              }
-            },
-            "required": [
-              "revision",
-              "id",
-              "source",
-              "timeZone",
-              "reason",
-              "createdAt",
-              "expiresAt",
-              "status"
-            ],
-            "type": "object"
-          }
-        ]
-      },
-      "Union_12": {
-        "enum": [
-          "statement",
-          "email",
-          "media"
-        ],
-        "type": "string"
-      },
-      "Union_13": {
-        "anyOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "_tag": {
-                "enum": [
-                  "Create"
-                ],
-                "type": "string"
-              },
-              "categoryId": {
-                "$ref": "#/components/schemas/CategoryId"
-              },
-              "extraction": {
-                "$ref": "#/components/schemas/TransactionExtraction_1"
-              },
-              "id": {
-                "$ref": "#/components/schemas/NeedsReviewItemId"
-              },
-              "revision": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              }
-            },
-            "required": [
-              "_tag",
-              "id",
-              "revision",
-              "extraction"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "_tag": {
-                "enum": [
-                  "SaveDraft"
-                ],
-                "type": "string"
-              },
-              "draft": {
-                "$ref": "#/components/schemas/Objects_31"
-              },
-              "id": {
-                "$ref": "#/components/schemas/NeedsReviewItemId"
-              },
-              "revision": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              }
-            },
-            "required": [
-              "_tag",
-              "id",
-              "revision",
-              "draft"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "_tag": {
-                "enum": [
-                  "Skip"
-                ],
-                "type": "string"
-              },
-              "items": {
-                "$ref": "#/components/schemas/Arrays_4"
-              }
-            },
-            "required": [
-              "_tag",
-              "items"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "_tag": {
-                "enum": [
-                  "Restore"
-                ],
-                "type": "string"
-              },
-              "items": {
-                "$ref": "#/components/schemas/Arrays_4"
-              }
-            },
-            "required": [
-              "_tag",
-              "items"
-            ],
-            "type": "object"
-          }
-        ]
-      },
-      "Union_14": {
-        "enum": [
-          "malformed-source-row",
-          "missing-required-fact",
-          "ambiguous-direction",
-          "ambiguous-currency",
-          "canonical-validation-failed",
-          "mapping-unavailable",
-          "model-unavailable"
-        ],
-        "type": "string"
-      },
-      "Union_15": {
-        "enum": [
-          "provider-retrieval-failed",
-          "processing-interrupted",
-          "consent-revoked"
-        ],
-        "type": "string"
-      },
-      "Union_16": {
-        "enum": [
-          "income",
-          "expense",
-          "transfer"
-        ],
-        "type": "string"
-      },
-      "Union_17": {
-        "enum": [
-          "weekly",
-          "fortnightly",
-          "twice-monthly",
-          "monthly",
-          "quarterly",
-          "half-yearly",
-          "yearly"
-        ],
-        "type": "string"
-      },
-      "Union_18": {
-        "anyOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "_tag": {
-                "enum": [
-                  "Limited"
-                ],
-                "type": "string"
-              },
-              "consumed": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "limit": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "period": {
-                "additionalProperties": false,
-                "properties": {
-                  "resetsAt": {
-                    "type": "string"
-                  },
-                  "startsAt": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "startsAt",
-                  "resetsAt"
-                ],
-                "type": "object"
-              },
-              "remaining": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              }
-            },
-            "required": [
-              "_tag",
-              "limit",
-              "consumed",
-              "remaining",
-              "period"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "_tag": {
-                "enum": [
-                  "Uncapped"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "_tag"
-            ],
-            "type": "object"
-          }
-        ]
-      },
-      "Union_19": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/UtcTimestamp"
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
-      "Union_2": {
-        "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
-        "enum": [
-          "inflow",
-          "outflow"
-        ],
-        "type": "string"
-      },
-      "Union_20": {
+      "Suspend_": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -12431,7 +11516,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_25"
+                    "$ref": "#/components/schemas/Objects_26"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/UpdateTransactionInput"
@@ -12467,7 +11552,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_27"
+                    "$ref": "#/components/schemas/Objects_28"
                   }
                 },
                 "required": [
@@ -12555,7 +11640,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_36"
+                    "$ref": "#/components/schemas/Objects_37"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/ResolveNeedsReviewItemInput"
@@ -12591,7 +11676,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_38"
+                    "$ref": "#/components/schemas/Objects_39"
                   }
                 },
                 "required": [
@@ -12623,7 +11708,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_40"
+                    "$ref": "#/components/schemas/Objects_41"
                   }
                 },
                 "required": [
@@ -12687,7 +11772,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_45"
+                    "$ref": "#/components/schemas/Objects_46"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/DeliveryEvidenceInput"
@@ -12723,7 +11808,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_45"
+                    "$ref": "#/components/schemas/Objects_46"
                   }
                 },
                 "required": [
@@ -12755,7 +11840,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_45"
+                    "$ref": "#/components/schemas/Objects_46"
                   }
                 },
                 "required": [
@@ -12787,7 +11872,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Objects_55"
+                    "$ref": "#/components/schemas/Objects_56"
                   }
                 },
                 "required": [
@@ -12851,7 +11936,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_58"
+                    "$ref": "#/components/schemas/Objects_59"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/ReviseInput"
@@ -12887,7 +11972,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_60"
+                    "$ref": "#/components/schemas/Objects_61"
                   }
                 },
                 "required": [
@@ -12975,7 +12060,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Objects_64"
+                    "$ref": "#/components/schemas/Objects_65"
                   }
                 },
                 "required": [
@@ -13031,7 +12116,7 @@
           }
         ]
       },
-      "Union_21": {
+      "Suspend_1": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -13299,7 +12384,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_22"
+                "$ref": "#/components/schemas/Objects_23"
               }
             },
             "required": [
@@ -13322,7 +12407,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_23"
+                "$ref": "#/components/schemas/Objects_24"
               }
             },
             "required": [
@@ -13345,7 +12430,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_26"
+                "$ref": "#/components/schemas/Objects_27"
               }
             },
             "required": [
@@ -13368,7 +12453,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_28"
+                "$ref": "#/components/schemas/Objects_29"
               }
             },
             "required": [
@@ -13391,7 +12476,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_33"
+                "$ref": "#/components/schemas/Objects_34"
               }
             },
             "required": [
@@ -13414,7 +12499,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_34"
+                "$ref": "#/components/schemas/Objects_35"
               }
             },
             "required": [
@@ -13437,7 +12522,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_37"
+                "$ref": "#/components/schemas/Objects_38"
               }
             },
             "required": [
@@ -13460,7 +12545,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_39"
+                "$ref": "#/components/schemas/Objects_40"
               }
             },
             "required": [
@@ -13483,7 +12568,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_41"
+                "$ref": "#/components/schemas/Objects_42"
               }
             },
             "required": [
@@ -13506,7 +12591,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_44"
+                "$ref": "#/components/schemas/Objects_45"
               }
             },
             "required": [
@@ -13529,7 +12614,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_46"
+                "$ref": "#/components/schemas/Objects_47"
               }
             },
             "required": [
@@ -13552,7 +12637,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_47"
+                "$ref": "#/components/schemas/Objects_48"
               }
             },
             "required": [
@@ -13575,7 +12660,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_48"
+                "$ref": "#/components/schemas/Objects_49"
               }
             },
             "required": [
@@ -13598,7 +12683,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_56"
+                "$ref": "#/components/schemas/Objects_57"
               }
             },
             "required": [
@@ -13621,7 +12706,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_57"
+                "$ref": "#/components/schemas/Objects_58"
               }
             },
             "required": [
@@ -13644,7 +12729,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_59"
+                "$ref": "#/components/schemas/Objects_60"
               }
             },
             "required": [
@@ -13667,7 +12752,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_61"
+                "$ref": "#/components/schemas/Objects_62"
               }
             },
             "required": [
@@ -13690,7 +12775,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_62"
+                "$ref": "#/components/schemas/Objects_63"
               }
             },
             "required": [
@@ -13713,7 +12798,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_63"
+                "$ref": "#/components/schemas/Objects_64"
               }
             },
             "required": [
@@ -13736,7 +12821,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_65"
+                "$ref": "#/components/schemas/Objects_66"
               }
             },
             "required": [
@@ -13759,7 +12844,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_66"
+                "$ref": "#/components/schemas/Objects_67"
               }
             },
             "required": [
@@ -13770,6 +12855,917 @@
             "type": "object"
           }
         ]
+      },
+      "SwapWidgets": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "enum": [
+              "swap-widgets"
+            ],
+            "type": "string"
+          },
+          "widgetId": {
+            "$ref": "#/components/schemas/WidgetId"
+          },
+          "withWidgetId": {
+            "$ref": "#/components/schemas/WidgetId"
+          }
+        },
+        "required": [
+          "op",
+          "widgetId",
+          "withWidgetId"
+        ],
+        "type": "object"
+      },
+      "SwapWidgetsPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "enum": [
+              "swap-widgets"
+            ],
+            "type": "string"
+          },
+          "widgetId": {
+            "$ref": "#/components/schemas/WidgetId"
+          },
+          "withWidgetId": {
+            "$ref": "#/components/schemas/WidgetId"
+          }
+        },
+        "type": "object"
+      },
+      "TaxTreatment": {
+        "enum": [
+          "not-taxable"
+        ],
+        "type": "string"
+      },
+      "TokenBearer": {
+        "pattern": "^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{32,}$",
+        "type": "string"
+      },
+      "TokenShortId": {
+        "pattern": "^[a-z0-9]{8}$",
+        "type": "string"
+      },
+      "Transaction": {
+        "additionalProperties": false,
+        "properties": {
+          "categoryId": {
+            "$ref": "#/components/schemas/CategoryId"
+          },
+          "counterparty": {
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TransactionCreatedAt"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/Union_2"
+          },
+          "id": {
+            "$ref": "#/components/schemas/TransactionId"
+          },
+          "money": {
+            "$ref": "#/components/schemas/Money_2"
+          },
+          "notes": {
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/TransactionOccurredAt"
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "money",
+          "direction",
+          "categoryId",
+          "occurredAt",
+          "createdAt",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "TransactionCreatedAt": {
+        "description": "When fidy learned of it, which can be long after it occurred: a statement read in July carries movements from March. Reason about the user's spending from `occurredAt`; read this only to tell how freshly the record was captured.",
+        "format": "date-time",
+        "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$",
+        "type": "string"
+      },
+      "TransactionExtraction": {
+        "additionalProperties": false,
+        "properties": {
+          "counterparty": {
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "direction": {
+            "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
+            "enum": [
+              "inflow",
+              "outflow"
+            ],
+            "type": "string"
+          },
+          "money": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/TransactionOccurredAt"
+          }
+        },
+        "type": "object"
+      },
+      "TransactionExtraction_1": {
+        "additionalProperties": false,
+        "properties": {
+          "counterparty": {
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/Union_2"
+          },
+          "money": {
+            "$ref": "#/components/schemas/Money_2"
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/TransactionOccurredAt"
+          }
+        },
+        "required": [
+          "money",
+          "direction",
+          "occurredAt"
+        ],
+        "type": "object"
+      },
+      "TransactionId": {
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+        "type": "string"
+      },
+      "TransactionListLimit": {
+        "maximum": 50,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "TransactionListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "transactions": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardTransaction"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "transactions"
+        ],
+        "type": "object"
+      },
+      "TransactionListTemplate": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "$ref": "#/components/schemas/Arrays_3"
+          },
+          "limit": {
+            "$ref": "#/components/schemas/TransactionListLimit"
+          },
+          "search": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "transaction-list"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "limit"
+        ],
+        "type": "object"
+      },
+      "TransactionListWidget": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "$ref": "#/components/schemas/Arrays_3"
+          },
+          "id": {
+            "$ref": "#/components/schemas/WidgetId"
+          },
+          "limit": {
+            "$ref": "#/components/schemas/TransactionListLimit"
+          },
+          "search": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "transaction-list"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "limit"
+        ],
+        "type": "object"
+      },
+      "TransactionListWidgetPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "$ref": "#/components/schemas/Arrays_1"
+          },
+          "id": {
+            "$ref": "#/components/schemas/WidgetId"
+          },
+          "limit": {
+            "$ref": "#/components/schemas/TransactionListLimit"
+          },
+          "search": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "transaction-list"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TransactionOccurredAt": {
+        "description": "When the money actually moved. It must already have happened — a Transaction dated in the future is rejected — and the history is ordered by it, so send the instant the user is describing rather than the moment you are recording it.",
+        "format": "date-time",
+        "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$",
+        "type": "string"
+      },
+      "TransactionPairInput": {
+        "additionalProperties": false,
+        "properties": {
+          "firstTransactionId": {
+            "$ref": "#/components/schemas/TransactionId"
+          },
+          "secondTransactionId": {
+            "$ref": "#/components/schemas/TransactionId"
+          }
+        },
+        "required": [
+          "firstTransactionId",
+          "secondTransactionId"
+        ],
+        "type": "object"
+      },
+      "TransactionPairInputPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "firstTransactionId": {
+            "$ref": "#/components/schemas/TransactionId"
+          },
+          "secondTransactionId": {
+            "$ref": "#/components/schemas/TransactionId"
+          }
+        },
+        "type": "object"
+      },
+      "TransactionPresentation": {
+        "additionalProperties": false,
+        "properties": {
+          "categoryId": {
+            "$ref": "#/components/schemas/CategoryId"
+          },
+          "counterparty": {
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TransactionCreatedAt"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/Union_2"
+          },
+          "id": {
+            "$ref": "#/components/schemas/TransactionId"
+          },
+          "money": {
+            "$ref": "#/components/schemas/Money_2"
+          },
+          "notes": {
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/TransactionOccurredAt"
+          },
+          "presentation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Objects_22"
+              },
+              {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "visible-member"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "suppressed-member"
+                        ],
+                        "type": "string"
+                      },
+                      "requestedId": {
+                        "$ref": "#/components/schemas/TransactionId"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "requestedId"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            ]
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "money",
+          "direction",
+          "categoryId",
+          "occurredAt",
+          "createdAt",
+          "revision",
+          "presentation"
+        ],
+        "type": "object"
+      },
+      "TrialPeriod": {
+        "additionalProperties": false,
+        "properties": {
+          "endsAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "startedAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          }
+        },
+        "required": [
+          "startedAt",
+          "endsAt"
+        ],
+        "type": "object"
+      },
+      "UnauthenticatedEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "Unauthenticated"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "enum": [
+                  "unauthenticated"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "error",
+          "next"
+        ],
+        "type": "object"
+      },
+      "UnavailableEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "Unavailable"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "enum": [
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "retryAfterSeconds": {
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "error",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Union_": {
+        "enum": [
+          "this-week",
+          "this-month",
+          "last-week",
+          "last-month",
+          "last-7-days",
+          "last-30-days"
+        ],
+        "type": "string"
+      },
+      "Union_1": {
+        "anyOf": [
+          {
+            "enum": [
+              "top",
+              "bottom"
+            ],
+            "type": "string"
+          },
+          {
+            "$ref": "#/components/schemas/BesidePlacementPartial"
+          }
+        ]
+      },
+      "Union_10": {
+        "enum": [
+          "csv",
+          "xlsx"
+        ],
+        "type": "string"
+      },
+      "Union_11": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "expiresAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "preview": {
+                "$ref": "#/components/schemas/Objects_31"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "revision": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "source": {
+                "$ref": "#/components/schemas/Union_12"
+              },
+              "status": {
+                "enum": [
+                  "created"
+                ],
+                "type": "string"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              },
+              "transactionId": {
+                "$ref": "#/components/schemas/TransactionId"
+              }
+            },
+            "required": [
+              "revision",
+              "id",
+              "source",
+              "timeZone",
+              "reason",
+              "createdAt",
+              "expiresAt",
+              "status",
+              "transactionId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "expiresAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "preview": {
+                "$ref": "#/components/schemas/Objects_31"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "revision": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "source": {
+                "$ref": "#/components/schemas/Union_12"
+              },
+              "status": {
+                "enum": [
+                  "pending",
+                  "skipped",
+                  "expired"
+                ],
+                "type": "string"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              },
+              "transactionId": {
+                "not": {}
+              }
+            },
+            "required": [
+              "revision",
+              "id",
+              "source",
+              "timeZone",
+              "reason",
+              "createdAt",
+              "expiresAt",
+              "status"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Union_12": {
+        "enum": [
+          "statement",
+          "email",
+          "media"
+        ],
+        "type": "string"
+      },
+      "Union_13": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "Create"
+                ],
+                "type": "string"
+              },
+              "categoryId": {
+                "$ref": "#/components/schemas/CategoryId"
+              },
+              "extraction": {
+                "$ref": "#/components/schemas/TransactionExtraction_1"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "revision": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "_tag",
+              "id",
+              "revision",
+              "extraction"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "SaveDraft"
+                ],
+                "type": "string"
+              },
+              "draft": {
+                "$ref": "#/components/schemas/Objects_32"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "revision": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "_tag",
+              "id",
+              "revision",
+              "draft"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "Skip"
+                ],
+                "type": "string"
+              },
+              "items": {
+                "$ref": "#/components/schemas/Arrays_4"
+              }
+            },
+            "required": [
+              "_tag",
+              "items"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "Restore"
+                ],
+                "type": "string"
+              },
+              "items": {
+                "$ref": "#/components/schemas/Arrays_4"
+              }
+            },
+            "required": [
+              "_tag",
+              "items"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Union_14": {
+        "enum": [
+          "malformed-source-row",
+          "missing-required-fact",
+          "ambiguous-direction",
+          "ambiguous-currency",
+          "canonical-validation-failed",
+          "mapping-unavailable",
+          "model-unavailable"
+        ],
+        "type": "string"
+      },
+      "Union_15": {
+        "enum": [
+          "provider-retrieval-failed",
+          "processing-interrupted",
+          "consent-revoked"
+        ],
+        "type": "string"
+      },
+      "Union_16": {
+        "enum": [
+          "income",
+          "expense",
+          "transfer"
+        ],
+        "type": "string"
+      },
+      "Union_17": {
+        "enum": [
+          "weekly",
+          "fortnightly",
+          "twice-monthly",
+          "monthly",
+          "quarterly",
+          "half-yearly",
+          "yearly"
+        ],
+        "type": "string"
+      },
+      "Union_18": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "Limited"
+                ],
+                "type": "string"
+              },
+              "consumed": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "limit": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "period": {
+                "additionalProperties": false,
+                "properties": {
+                  "resetsAt": {
+                    "type": "string"
+                  },
+                  "startsAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "startsAt",
+                  "resetsAt"
+                ],
+                "type": "object"
+              },
+              "remaining": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "_tag",
+              "limit",
+              "consumed",
+              "remaining",
+              "period"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "Uncapped"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "_tag"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Union_19": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "Union_2": {
+        "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
+        "enum": [
+          "inflow",
+          "outflow"
+        ],
+        "type": "string"
       },
       "Union_3": {
         "enum": [
@@ -14525,7 +14521,56 @@
                   "additionalProperties": false,
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/BudgetStatusReport"
+                      "additionalProperties": false,
+                      "properties": {
+                        "budgets": {
+                          "items": {
+                            "$ref": "#/components/schemas/Budget"
+                          },
+                          "type": "array"
+                        },
+                        "cashFlow": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "expenses": {
+                              "items": {
+                                "$ref": "#/components/schemas/Money_2"
+                              },
+                              "type": "array"
+                            },
+                            "income": {
+                              "items": {
+                                "$ref": "#/components/schemas/Money_2"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "income",
+                            "expenses"
+                          ],
+                          "type": "object"
+                        },
+                        "initialized": {
+                          "type": "boolean"
+                        },
+                        "period": {
+                          "$ref": "#/components/schemas/AppliedBudgetMonth"
+                        },
+                        "statuses": {
+                          "items": {
+                            "$ref": "#/components/schemas/BudgetStatus"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "period",
+                        "statuses",
+                        "cashFlow",
+                        "budgets"
+                      ],
+                      "type": "object"
                     },
                     "next": {
                       "$ref": "#/components/schemas/Arrays_"
@@ -17541,7 +17586,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_34"
+                  "$ref": "#/components/schemas/Objects_35"
                 }
               }
             },
@@ -17837,7 +17882,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_37"
+                  "$ref": "#/components/schemas/Objects_38"
                 }
               }
             },
@@ -17973,7 +18018,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_39"
+                  "$ref": "#/components/schemas/Objects_40"
                 }
               }
             },
@@ -18092,7 +18137,7 @@
     },
     "/ingestion/review-workspace": {
       "get": {
-        "description": "Read the ingestion inbox ordered by original evidence expiry, or retained created, skipped and expired history. Returns metadata only, with a complete pending count and bounded pagination.",
+        "description": "Read the ingestion inbox ordered by original evidence expiry, or retained created, skipped and expired history. Returns a complete pending count, bounded metadata page and the first item’s revision-bound detail. Original material is excluded.",
         "operationId": "ingestion.getReviewWorkspace",
         "parameters": [
           {
@@ -18133,6 +18178,9 @@
                           "maximum": 9007199254740991,
                           "minimum": 0,
                           "type": "integer"
+                        },
+                        "selectedDetail": {
+                          "$ref": "#/components/schemas/Objects_30"
                         },
                         "total": {
                           "maximum": 9007199254740991,
@@ -18284,7 +18332,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Objects_29"
+                      "$ref": "#/components/schemas/Objects_30"
                     },
                     "next": {
                       "$ref": "#/components/schemas/Arrays_"
@@ -18624,7 +18672,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_33"
+                  "$ref": "#/components/schemas/Objects_34"
                 }
               }
             },
@@ -19035,7 +19083,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_41"
+                  "$ref": "#/components/schemas/Objects_42"
                 }
               }
             },
@@ -19181,7 +19229,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_46"
+                  "$ref": "#/components/schemas/Objects_47"
                 }
               }
             },
@@ -19317,7 +19365,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_48"
+                  "$ref": "#/components/schemas/Objects_49"
                 }
               }
             },
@@ -19453,7 +19501,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_47"
+                  "$ref": "#/components/schemas/Objects_48"
                 }
               }
             },
@@ -20023,7 +20071,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_44"
+                  "$ref": "#/components/schemas/Objects_45"
                 }
               }
             },
@@ -20421,7 +20469,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_57"
+                  "$ref": "#/components/schemas/Objects_58"
                 }
               }
             },
@@ -20557,7 +20605,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_61"
+                  "$ref": "#/components/schemas/Objects_62"
                 }
               }
             },
@@ -20701,7 +20749,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_59"
+                  "$ref": "#/components/schemas/Objects_60"
                 }
               }
             },
@@ -20841,13 +20889,13 @@
                 "properties": {
                   "calls": {
                     "items": {
-                      "$ref": "#/components/schemas/Union_20"
+                      "$ref": "#/components/schemas/Suspend_"
                     },
                     "maxItems": 12,
                     "minItems": 1,
                     "prefixItems": [
                       {
-                        "$ref": "#/components/schemas/Union_20"
+                        "$ref": "#/components/schemas/Suspend_"
                       }
                     ],
                     "type": "array"
@@ -20874,13 +20922,13 @@
                       "properties": {
                         "results": {
                           "items": {
-                            "$ref": "#/components/schemas/Union_21"
+                            "$ref": "#/components/schemas/Suspend_1"
                           },
                           "maxItems": 12,
                           "minItems": 1,
                           "prefixItems": [
                             {
-                              "$ref": "#/components/schemas/Union_21"
+                              "$ref": "#/components/schemas/Suspend_1"
                             }
                           ],
                           "type": "array"
@@ -21280,7 +21328,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_63"
+                  "$ref": "#/components/schemas/Objects_64"
                 }
               }
             },
@@ -21719,7 +21767,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_66"
+                  "$ref": "#/components/schemas/Objects_67"
                 }
               }
             },
@@ -21841,7 +21889,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_64"
+                "$ref": "#/components/schemas/Objects_65"
               }
             }
           },
@@ -21852,7 +21900,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_65"
+                  "$ref": "#/components/schemas/Objects_66"
                 }
               }
             },
@@ -22356,7 +22404,7 @@
                       "additionalProperties": false,
                       "properties": {
                         "document": {
-                          "$ref": "#/components/schemas/Objects_49"
+                          "$ref": "#/components/schemas/Objects_50"
                         },
                         "invalidFulfillmentIds": {
                           "items": {
@@ -22407,7 +22455,7 @@
                                 "type": "object"
                               },
                               "item": {
-                                "$ref": "#/components/schemas/Objects_54"
+                                "$ref": "#/components/schemas/Objects_55"
                               }
                             },
                             "required": [
@@ -22427,13 +22475,13 @@
                         },
                         "occurrences": {
                           "items": {
-                            "$ref": "#/components/schemas/Objects_54"
+                            "$ref": "#/components/schemas/Objects_55"
                           },
                           "type": "array"
                         },
                         "previous": {
                           "items": {
-                            "$ref": "#/components/schemas/Objects_54"
+                            "$ref": "#/components/schemas/Objects_55"
                           },
                           "type": "array"
                         },
@@ -22619,7 +22667,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_55"
+                "$ref": "#/components/schemas/Objects_56"
               }
             }
           },
@@ -22630,7 +22678,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_56"
+                  "$ref": "#/components/schemas/Objects_57"
                 }
               }
             },
@@ -22887,7 +22935,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_62"
+                  "$ref": "#/components/schemas/Objects_63"
                 }
               }
             },
@@ -23465,23 +23513,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "data": {
-                      "items": {
-                        "$ref": "#/components/schemas/Transaction"
-                      },
-                      "type": "array"
-                    },
-                    "next": {
-                      "$ref": "#/components/schemas/Arrays_"
-                    }
-                  },
-                  "required": [
-                    "data",
-                    "next"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/Objects_21"
                 }
               }
             },
@@ -23742,7 +23774,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_28"
+                  "$ref": "#/components/schemas/Objects_29"
                 }
               }
             },
@@ -24033,7 +24065,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_26"
+                  "$ref": "#/components/schemas/Objects_27"
                 }
               }
             },
@@ -24322,7 +24354,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_22"
+                  "$ref": "#/components/schemas/Objects_23"
                 }
               }
             },
@@ -24469,23 +24501,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "data": {
-                      "items": {
-                        "$ref": "#/components/schemas/Transaction"
-                      },
-                      "type": "array"
-                    },
-                    "next": {
-                      "$ref": "#/components/schemas/Arrays_"
-                    }
-                  },
-                  "required": [
-                    "data",
-                    "next"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/Objects_21"
                 }
               }
             },
@@ -24612,7 +24628,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_23"
+                  "$ref": "#/components/schemas/Objects_24"
                 }
               }
             },
@@ -24731,7 +24747,7 @@
     },
     "/user": {
       "get": {
-        "description": "Get the stable User behind the authenticated bearer and the independently stored ServiceMarket, locale, and IANA time zone. Use it before interpreting dates or presenting data to the User.",
+        "description": "Get the stable User behind the authenticated bearer and the independently stored ServiceMarket, locale, and IANA time zone. Browser responses include the bounded Category display catalog so navigation does not require another metadata read. Use it before interpreting dates or presenting data to the User.",
         "operationId": "identity.getCurrentUser",
         "parameters": [],
         "responses": {
@@ -24739,24 +24755,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/User"
-                    },
-                    "next": {
-                      "$ref": "#/components/schemas/Arrays_"
-                    }
-                  },
-                  "required": [
-                    "data",
-                    "next"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/CurrentUserMetadata"
                 }
               }
             },
-            "description": "Success"
+            "description": "CurrentUserMetadata"
           },
           "400": {
             "content": {

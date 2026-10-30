@@ -49,16 +49,25 @@ export const ProcessingAuthorization = Schema.Struct({
 export type ProcessingAuthorization = typeof ProcessingAuthorization.Type;
 
 /** Same-User withdrawal receipt; this records processing authority, never physical erasure. */
-export const ProcessingConsentStatus = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("Granted"), withdrawal: Schema.Null }),
-  Schema.Struct({ status: Schema.Literal("Missing"), withdrawal: Schema.Null }),
-  Schema.Struct({
-    status: Schema.Literal("Revoked"),
-    withdrawal: Schema.Struct({
-      reference: Schema.String.check(Schema.isUUID()),
-      occurredAtMs: publicReceiptTime,
-    }),
+export const GrantedProcessingConsent = Schema.Struct({
+  status: Schema.Literal("Granted"),
+  withdrawal: Schema.Null,
+});
+export const MissingProcessingConsent = Schema.Struct({
+  status: Schema.Literal("Missing"),
+  withdrawal: Schema.Null,
+});
+export const RevokedProcessingConsent = Schema.Struct({
+  status: Schema.Literal("Revoked"),
+  withdrawal: Schema.Struct({
+    reference: Schema.String.check(Schema.isUUID()),
+    occurredAtMs: publicReceiptTime,
   }),
+});
+export const ProcessingConsentStatus = Schema.Union([
+  GrantedProcessingConsent,
+  MissingProcessingConsent,
+  RevokedProcessingConsent,
 ]);
 
 export type ProcessingConsentStatus = typeof ProcessingConsentStatus.Type;

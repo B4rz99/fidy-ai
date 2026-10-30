@@ -1,3 +1,5 @@
+import { decodeCategoryRead, prepareCategoryRead } from "../../../src/shell/categories/operations";
+import { Category } from "../../../src/core/categories/contract";
 import { webSessionCredentialAuthority } from "../../../src/shell/web-session/operations";
 import { User, UserId } from "../../../src/core/identity/contract";
 
@@ -64,6 +66,9 @@ const projectCurrentUser = ({
   Effect.gen(function* () {
     const loaded = yield* Effect.exit(readCurrentUser({ db, userId: subject }));
     if (Exit.isFailure(loaded)) return unavailable();
+    const rows = yield* attempt(() => prepareCategoryRead({ db, authority: Option.none() }).all());
+    const categories = decodeCategoryRead(rows.results);
+    if (Option.isNone(categories)) return unavailable();
     const observedAt = yield* Clock.currentTimeMillis;
     const authority = webSessionCredentialAuthority({
       subject: { id: session.id, userId: subject, digest },
@@ -82,7 +87,13 @@ const projectCurrentUser = ({
       Effect.orDie
     );
     return json({
-      body: { data, next: loaded.value.next },
+      body: {
+        data,
+        next: loaded.value.next,
+        categories: Schema.encodeSync(Schema.toCodecJson(Schema.Array(Category)))(
+          categories.value.data
+        ),
+      },
       status: HTTP_OK,
       headers: {},
     });

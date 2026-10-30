@@ -335,3 +335,7 @@ export {
   RecurringDate,
   RecurringMonth,
 } from "@fidy/server/client";
+
+export type { InitialTransactionPage } from "@fidy/server/browser-bootstrap";
+
+export { BrowserSessionBinding as BrowserSessionBindingSchema } from "@fidy/server/browser-bootstrap";

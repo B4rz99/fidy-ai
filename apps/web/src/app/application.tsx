@@ -1,13 +1,22 @@
+import type { InitialBrowserSession } from "@/transport/initial-session";
+import type {
+  BrowserSessionLifetime,
+  BrowserSessionObservation,
+} from "@/transport/session-binding";
+import { initialApplicationValues } from "./initial-values";
+import { RegistryContext, RegistryProvider } from "@effect/atom-react";
 import { BrowserSessionBoundary } from "@/session/browser-session-boundary";
-import type { BrowserSessionLifetime } from "@/transport/session-binding";
 import { RouterProvider } from "@tanstack/react-router";
 import { Option } from "effect";
-import { useCallback, useState } from "react";
+import { useCallback, useContext, useState } from "react";
 import type { JSX } from "react";
 import { SessionRegistryProvider } from "@/session/session";
 import { useSession } from "@/session/session-context";
 import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollment-lifetime";
 import {
+  type FidyClient,
+  type HostedTurnClient,
+  type WebAuthClient,
   makeFidyClient,
   makeHostedTurnClient,
   makeSubscriptionEnrollmentClient,
@@ -16,24 +25,34 @@ import {
 import { parseApiOrigin } from "@/transport/origin";
 import { createWebRouter } from "./routes";
 
-const AuthenticationRouter = ({
+type Clients = Readonly<{
+  apiClient: FidyClient;
+  webAuthClient: WebAuthClient;
+  hostedTurnClient: HostedTurnClient;
+}>;
+const makeClients = ({
   apiOrigin,
   session,
-}: Readonly<{ apiOrigin: string; session: BrowserSessionLifetime }>): JSX.Element => {
-  const { expireAuthentication } = useSession();
+  expired,
+}: Readonly<{
+  apiOrigin: string;
+  session: BrowserSessionLifetime;
+  expired: () => void;
+}>): Clients => ({
+  apiClient: makeFidyClient({ apiOrigin, session, observer: { onAuthenticationExpired: expired } }),
+  webAuthClient: makeWebAuthClient({ apiOrigin, session }),
+  hostedTurnClient: makeHostedTurnClient({ apiOrigin, session }),
+});
+const AuthenticationRouter = ({
+  clients,
+  session,
+}: Readonly<{ clients: Clients; session: BrowserSessionLifetime }>): JSX.Element => {
+  const registry = useContext(RegistryContext);
   const [router] = useState(() =>
     createWebRouter({
-      apiClient: makeFidyClient({
-        apiOrigin,
-        session,
-        observer: {
-          onAuthenticationExpired: () => {
-            expireAuthentication();
-          },
-        },
-      }),
-      webAuthClient: makeWebAuthClient({ apiOrigin, session }),
-      hostedTurnClient: makeHostedTurnClient({ apiOrigin, session }),
+      ...clients,
+      registry,
+      sessionBinding: session.binding,
       history: Option.none(),
     })
   );
@@ -43,28 +62,46 @@ const AuthenticationRouter = ({
 const BoundApplication = ({
   apiOrigin,
   session,
-}: Readonly<{ apiOrigin: string; session: BrowserSessionLifetime }>): JSX.Element => {
+  initial,
+}: Readonly<{
+  apiOrigin: string;
+  session: BrowserSessionLifetime;
+  initial: BrowserSessionObservation;
+}>): JSX.Element => {
+  const { expireAuthentication } = useSession();
+  const [clients] = useState(() =>
+    makeClients({ apiOrigin, session, expired: expireAuthentication })
+  );
+  const [initialValues] = useState(() => initialApplicationValues({ ...clients, initial }));
   const makeEnrollmentClient = useCallback(
     () => makeSubscriptionEnrollmentClient({ apiOrigin, session }),
     [apiOrigin, session]
   );
   return (
-    <SubscriptionEnrollmentLifetime makeClient={makeEnrollmentClient}>
-      <AuthenticationRouter apiOrigin={apiOrigin} session={session} />
-    </SubscriptionEnrollmentLifetime>
+    <RegistryProvider initialValues={initialValues}>
+      <SubscriptionEnrollmentLifetime makeClient={makeEnrollmentClient}>
+        <AuthenticationRouter clients={clients} session={session} />
+      </SubscriptionEnrollmentLifetime>
+    </RegistryProvider>
   );
 };
-const RoutedApplication = (): JSX.Element => {
+const RoutedApplication = ({
+  initial,
+}: Readonly<{ initial: InitialBrowserSession }>): JSX.Element => {
   const apiOrigin = parseApiOrigin(import.meta.env.VITE_API_ORIGIN);
   return (
-    <BrowserSessionBoundary apiOrigin={apiOrigin}>
-      {(session) => <BoundApplication apiOrigin={apiOrigin} session={session} />}
+    <BrowserSessionBoundary apiOrigin={apiOrigin} initial={initial}>
+      {(session, observation) => (
+        <BoundApplication apiOrigin={apiOrigin} session={session} initial={observation} />
+      )}
     </BrowserSessionBoundary>
   );
 };
 
-export const WebApplication = (): JSX.Element => (
+export const WebApplication = ({
+  initial,
+}: Readonly<{ initial: InitialBrowserSession }>): JSX.Element => (
   <SessionRegistryProvider>
-    <RoutedApplication />
+    <RoutedApplication initial={initial} />
   </SessionRegistryProvider>
 );

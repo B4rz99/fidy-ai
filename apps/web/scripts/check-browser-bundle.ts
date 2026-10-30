@@ -252,7 +252,13 @@ const findForbiddenServerImport = (
   Option.fromUndefinedOr(
     imports.find(({ importPath, sourceFile }) => {
       if (importPath.startsWith("@fidy/server")) {
-        return importPath !== "@fidy/server/client" || !sourceFile.startsWith("src/transport/");
+        return (
+          ![
+            "@fidy/server/client",
+            "@fidy/server/browser-bootstrap",
+            "@fidy/server/browser-transport",
+          ].includes(importPath) || !sourceFile.startsWith("src/transport/")
+        );
       }
       if (importPath.startsWith("~/")) return true;
       if (!importPath.startsWith(".")) return false;
@@ -273,7 +279,12 @@ const assertSourceBoundary = (
   const forbiddenSourceImport = imports.find(({ importPath }) =>
     forbiddenNodeBuiltin.test(importPath)
   );
-  const directFetch = sources.find(({ source }) => /\bfetch\s*\(/u.test(source));
+  // The dependency-free document-entry adapter prepares one response for the bounded SDK decoder.
+  // Every other module must use the normal Effect transport seam.
+  const directFetch = sources.find(
+    ({ source, sourceFile }) =>
+      sourceFile !== "src/transport/initial-request.ts" && /\bfetch\s*\(/u.test(source)
+  );
   const alternateStateClient = imports.find(({ importPath }) =>
     /^(?:@apollo\/client|@tanstack\/(?:query|react-query)|redux|swr|zustand)(?:\/|$)/u.test(
       importPath

@@ -394,13 +394,7 @@ export const isTransientHttpStatus = (status: number): boolean =>
  * A root slash is the only accepted path; credentials, query parameters, and
  * fragments are rejected so callers can compare the returned origin exactly.
  */
-export const isHttpOrigin = (url: URL): boolean =>
-  (url.protocol === "http:" || url.protocol === "https:") &&
-  url.username.length === 0 &&
-  url.password.length === 0 &&
-  url.pathname === "/" &&
-  url.search.length === 0 &&
-  url.hash.length === 0;
+export { isHttpOrigin } from "~/shell/browser-transport/contract";
 
 /** Observes a canonical call without changing its success, failure, interruption, or requirements. */
 export class CanonicalTelemetry extends HttpApiMiddleware.Service<CanonicalTelemetry>()(

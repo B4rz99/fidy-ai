@@ -13,8 +13,8 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/ui/components/dropdown-menu";
-import { Fragment, useMemo, useState } from "react";
-import type { JSX } from "react";
+import { Fragment, useCallback, useDeferredValue, useMemo, useState } from "react";
+import type { JSX, RefCallback } from "react";
 import { BigDecimal, Option } from "effect";
 import { Checkbox } from "@/ui/components/checkbox";
 import { Button } from "@/ui/components/button";
@@ -344,6 +344,51 @@ const LedgerControls = ({
     </div>
   </RecordToolbar>
 );
+const fallbackInitialRows = 32;
+const estimatedRowHeightPixels = 72;
+type LedgerRows = ReturnType<ReactTable<TransactionListRow>["getRowModel"]>["rows"];
+const useInitialViewportRows = (
+  sortedRows: LedgerRows
+): Readonly<{
+  visible: LedgerRows;
+  measure: RefCallback<HTMLTableSectionElement>;
+}> => {
+  const [initial] = useState(() => ({
+    all: sortedRows,
+    visible: sortedRows.slice(
+      0,
+      typeof window === "undefined"
+        ? fallbackInitialRows
+        : Math.ceil(window.innerHeight / estimatedRowHeightPixels)
+    ),
+  }));
+  const [count, setCount] = useState(initial.visible.length);
+  const deferred = useDeferredValue(sortedRows, initial.visible);
+  const preparing = sortedRows === initial.all && deferred === initial.visible;
+  const measure = useCallback<RefCallback<HTMLTableSectionElement>>(
+    (node): void => {
+      if (
+        node === null ||
+        !preparing ||
+        count >= sortedRows.length ||
+        node.getClientRects().length === 0
+      ) {
+        return;
+      }
+      const shortfall = window.innerHeight - node.getBoundingClientRect().bottom;
+      if (shortfall <= 0) return;
+      const heights = [...node.querySelectorAll<HTMLElement>("tr[data-state]")]
+        .map((row) => row.getBoundingClientRect().height)
+        .filter((height) => height > 0);
+      if (heights.length === 0) return;
+      // A commit ref fills any estimate shortfall before paint; no viewport information is skipped.
+      setCount(Math.min(sortedRows.length, count + Math.ceil(shortfall / Math.min(...heights))));
+    },
+    [preparing, count, sortedRows.length]
+  );
+  // Only initial offscreen work yields. Filters and authoritative revisions always render now.
+  return { visible: preparing ? sortedRows.slice(0, count) : sortedRows, measure };
+};
 const LedgerBody = ({
   dates,
   rows,
@@ -356,32 +401,38 @@ const LedgerBody = ({
   sortedRows: ReturnType<ReactTable<TransactionListRow>["getRowModel"]>["rows"];
   locale: string;
   rowProps: Omit<LedgerProps, "rows">;
-}>): JSX.Element => (
-  <TableBody>
-    {dates.map((date) => (
-      <Fragment key={date}>
-        <TableRow data-date-group="true">
-          <TableCell colSpan={4}>
-            <div className="flex items-center justify-between gap-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-              <span>{rows.find((row) => row.occurredOnText === date)?.dateLabel}</span>
-              <span className="tabular-nums">
-                {dailyTotals(
-                  rows.filter((row) => row.occurredOnText === date),
-                  locale
-                )}
-              </span>
-            </div>
-          </TableCell>
-        </TableRow>
-        {sortedRows.flatMap((item) =>
-          item.original.occurredOnText === date
-            ? [<TransactionRow key={item.id} row={item.original} {...rowProps} />]
-            : []
-        )}
-      </Fragment>
-    ))}
-  </TableBody>
-);
+}>): JSX.Element => {
+  const { visible, measure } = useInitialViewportRows(sortedRows);
+  const visibleDates = dates.filter((date) =>
+    visible.some((item) => item.original.occurredOnText === date)
+  );
+  return (
+    <TableBody ref={measure}>
+      {visibleDates.map((date) => (
+        <Fragment key={date}>
+          <TableRow data-date-group="true">
+            <TableCell colSpan={4}>
+              <div className="flex items-center justify-between gap-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                <span>{rows.find((row) => row.occurredOnText === date)?.dateLabel}</span>
+                <span className="tabular-nums">
+                  {dailyTotals(
+                    rows.filter((row) => row.occurredOnText === date),
+                    locale
+                  )}
+                </span>
+              </div>
+            </TableCell>
+          </TableRow>
+          {visible.flatMap((item) =>
+            item.original.occurredOnText === date
+              ? [<TransactionRow key={item.id} row={item.original} {...rowProps} />]
+              : []
+          )}
+        </Fragment>
+      ))}
+    </TableBody>
+  );
+};
 const emptyDescription = (partial: boolean, readOnly: boolean): string => {
   if (partial) return "Carga más transacciones para buscar en el resto del periodo.";
   return readOnly

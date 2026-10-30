@@ -194,11 +194,16 @@ const makeAtomicBatchSchemas = (
   readonly input: AtomicBatchInputSchema;
   readonly output: AtomicBatchOutputSchema;
 } => {
-  const call = Schema.make<Schema.Codec<AtomicBatchCall, Schema.Json>>(
-    catalogUnion(mutations, mutationCallMember).ast
+  // Derive the unchanged child validators when a batch is encoded/decoded, outside read startup.
+  const call = Schema.suspend(() =>
+    Schema.make<Schema.Codec<AtomicBatchCall, Schema.Json>>(
+      catalogUnion(mutations, mutationCallMember).ast
+    )
   );
-  const result = Schema.make<Schema.Codec<AtomicBatchResult, Schema.Json>>(
-    catalogUnion(mutations, mutationResultMember).ast
+  const result = Schema.suspend(() =>
+    Schema.make<Schema.Codec<AtomicBatchResult, Schema.Json>>(
+      catalogUnion(mutations, mutationResultMember).ast
+    )
   );
   const input = Schema.Struct({
     calls: Schema.NonEmptyArray(call).check(Schema.isMaxLength(maximumAtomicBatchCalls)),

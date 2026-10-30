@@ -1,7 +1,8 @@
+import { transactionEntryConsent } from "./transaction-entry";
+import { DestinationCodePreload } from "./destination-code-preload";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
-import { AsyncResult } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import type { ProcessingConsentStatus } from "@/transport/client";
@@ -19,25 +20,11 @@ const currentConsent = <E,>(
 
 /** Privacy reads use their own cookie proof after ordinary access ends; product views retain SignedInContent. */
 export const TransactionsPage = (): JSX.Element => {
-  const client = useRouter().options.context.webAuthClient;
-  const [query] = useState(() =>
-    client.query("processingConsent", "status", {
-      timeToLive: "0 seconds",
-      reactivityKeys: ["processing-consent"],
-    })
-  );
+  const { webAuthClient: client, sessionBinding } = useRouter().options.context;
+  const [query] = useState(() => transactionEntryConsent(client));
   const status = useAtomValue(query).pipe(presentCanonicalQuery);
-  const [binding] = useState(() => client.query("browserSession", "binding", {}));
-  const session = useAtomValue(binding);
   const refresh = useAtomRefresh(query);
-  if (
-    status._tag === "Failure" &&
-    AsyncResult.match(session, {
-      onInitial: () => false,
-      onFailure: () => false,
-      onSuccess: ({ value }) => Option.isNone(Option.fromNullishOr(value.binding)),
-    })
-  ) {
+  if (status._tag === "Failure" && sessionBinding === "none") {
     return <AccessRefused />;
   }
   const consent = currentConsent(status);
@@ -45,7 +32,9 @@ export const TransactionsPage = (): JSX.Element => {
     if (consent.value.status === "Granted") {
       return (
         <SignedInContent>
-          <TransactionListFeature />
+          <TransactionListFeature>
+            <DestinationCodePreload />
+          </TransactionListFeature>
           <HostedAgentFeature />
         </SignedInContent>
       );
@@ -67,3 +56,5 @@ export const TransactionsPage = (): JSX.Element => {
     </main>
   );
 };
+
+TransactionsPage.preloadData = TransactionListFeature.preloadData;

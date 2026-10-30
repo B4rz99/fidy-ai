@@ -1,0 +1,29 @@
+import { useCallback } from "react";
+import { useRouter } from "@tanstack/react-router";
+import { Option } from "effect";
+import { useSession } from "@/session/session-context";
+import { BudgetsFeature } from "@/features/budgets/feature";
+import { NeedsReviewFeature } from "@/features/needs-review/feature";
+
+export const useNavigationPreparation = (): ((destination: string) => void) => {
+  const router = useRouter();
+  const { authentication } = useSession();
+  return useCallback(
+    (destination: string): void => {
+      if (authentication === "expired") return;
+      const { apiClient, registry } = router.options.context;
+      if (destination === "/app/needs-review") {
+        NeedsReviewFeature.preloadMaterial(apiClient, registry).catch(() => undefined);
+      }
+      if (destination === "/app/budgets") {
+        BudgetsFeature.preloadData({
+          apiClient,
+          registry,
+          month: Option.none(),
+          signal: Option.none(),
+        }).catch(() => undefined);
+      }
+    },
+    [authentication, router]
+  );
+};

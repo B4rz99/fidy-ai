@@ -1,6 +1,12 @@
+import { AsyncResult } from "effect/reactivity";
+import { BudgetRoute, RecurringRoute } from "./destination-components";
+import { prepareQuery } from "@/transport/query-preparation";
+import { consumeInitialTransactionConsent, transactionEntryConsent } from "./transaction-entry";
 import { RecurringWorkspace, ReviewWorkspace } from "./workspace-components";
+import { NeedsReviewRoute } from "@/features/needs-review/feature";
 import { LoginSearch } from "@/session/login-destination";
 import { ProviderReturnFeature } from "@/features/provider-authentication/feature";
+import type { AtomRegistry } from "effect/reactivity";
 import { Option, Schema } from "effect";
 import {
   BudgetMonth,
@@ -24,6 +30,9 @@ import {
 import { RouteFailure } from "./route-failure";
 
 type WebRouterContext = Readonly<{
+  registry: AtomRegistry.AtomRegistry;
+  /** Display identity already checked by BrowserSessionBoundary; never grants authority. */
+  sessionBinding: string;
   apiClient: FidyClient;
   webAuthClient: WebAuthClient;
   hostedTurnClient: HostedTurnClient;
@@ -64,8 +73,12 @@ const TransactionListFeature = lazyRouteComponent(
 
 const DashboardRoute = lazyRouteComponent(() => import("./dashboard-page"), "DashboardPage");
 
+const ApplicationFrame = lazyRouteComponent(
+  () => import("./application-frame"),
+  "ApplicationFrame"
+);
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({
-  component: lazyRouteComponent(() => import("./application-frame"), "ApplicationFrame"),
+  component: ApplicationFrame,
   notFoundComponent: () =>
     createElement(
       "main",
@@ -118,7 +131,20 @@ const budgetsRoute = createRoute({
         ),
       })
     )(search),
-  component: lazyRouteComponent(() => import("@/features/budgets/feature"), "BudgetsFeature"),
+  loaderDeps: ({ search }) => ({ month: search.month }),
+  loader: async ({ context, deps, abortController }) => {
+    const { BudgetsFeature } = await import("@/features/budgets/feature");
+    await Promise.all([
+      BudgetsFeature.preload(),
+      BudgetsFeature.preloadData({
+        apiClient: context.apiClient,
+        registry: context.registry,
+        month: Option.fromUndefinedOr(deps.month),
+        signal: Option.some(abortController.signal),
+      }),
+    ]);
+  },
+  component: BudgetRoute,
 });
 const needsReviewRoute = createRoute({
   getParentRoute: () => signedInRoute,
@@ -134,11 +160,26 @@ const needsReviewRoute = createRoute({
         ),
       })
     )(search),
-  loader: () => ReviewWorkspace.preload?.(),
-  component: lazyRouteComponent(
-    () => import("@/features/needs-review/feature"),
-    "NeedsReviewRoute"
-  ),
+  preloadStaleTime: 0,
+  loaderDeps: ({ search }) => ({ filter: search.status ?? "pending", page: search.offset ?? 0 }),
+  loader: {
+    staleReloadMode: "blocking",
+    handler: async ({ context, deps, preload, abortController }) => {
+      await Promise.all([
+        ReviewWorkspace.preload(),
+        preload
+          ? Promise.resolve()
+          : ReviewWorkspace.preloadData({
+              apiClient: context.apiClient,
+              registry: context.registry,
+              filter: deps.filter,
+              page: deps.page,
+              signal: abortController.signal,
+            }),
+      ]);
+    },
+  },
+  component: NeedsReviewRoute,
 });
 const recurringPlansRoute = createRoute({
   getParentRoute: () => signedInRoute,
@@ -152,8 +193,20 @@ const recurringPlansRoute = createRoute({
         ),
       })
     )(search),
-  loader: () => RecurringWorkspace.preload?.(),
-  component: lazyRouteComponent(() => import("@/features/recurring/feature"), "RecurringRoute"),
+  loaderDeps: ({ search }) => ({ month: search.month }),
+  preloadStaleTime: 0,
+  loader: async ({ context, deps, preload, abortController }) => {
+    await RecurringWorkspace.preload?.();
+    const { RecurringRoute } = await import("@/features/recurring/feature");
+    await RecurringRoute.preloadData({
+      apiClient: context.apiClient,
+      registry: context.registry,
+      month: Option.fromUndefinedOr(deps.month),
+      signal: abortController.signal,
+      intent: preload,
+    });
+  },
+  component: RecurringRoute,
 });
 const recurringDigestRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
@@ -186,6 +239,32 @@ const independentApplicationRoute = createRoute({
 const transactionsRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/app/transactions",
+  // A speculative loader must never donate a code-only result to an actual Consent entry.
+  preload: false,
+  preloadStaleTime: 0,
+  loader: {
+    staleReloadMode: "blocking",
+    handler: async ({ context, preload, abortController }) => {
+      await TransactionListFeature.preload?.();
+      if (!preload) {
+        const consent = transactionEntryConsent(context.webAuthClient);
+        const initial = consumeInitialTransactionConsent(context.registry);
+        await prepareQuery(context.registry, consent, {
+          mode: initial ? "cached" : "fresh",
+          signal: Option.some(abortController.signal),
+        });
+        const status = context.registry.get(consent);
+        if (AsyncResult.isSuccess(status) && !status.waiting && status.value.status === "Granted") {
+          const { TransactionsPage } = await import("./transactions-page");
+          await TransactionsPage.preloadData({
+            apiClient: context.apiClient,
+            registry: context.registry,
+            signal: abortController.signal,
+          });
+        }
+      }
+    },
+  },
   component: TransactionListFeature,
 });
 const privacyRoute = createRoute({
@@ -280,6 +359,8 @@ export const createWebRouter = (options: WebRouterOptions) =>
     defaultErrorComponent: RouteFailure,
     routeTree,
     context: {
+      registry: options.registry,
+      sessionBinding: options.sessionBinding,
       apiClient: options.apiClient,
       webAuthClient: options.webAuthClient,
       hostedTurnClient: options.hostedTurnClient,
@@ -292,3 +373,8 @@ declare module "@tanstack/react-router" {
     router: ReturnType<typeof createWebRouter>;
   }
 }
+
+/** Only the shell and entry code compete with initial identity and foreground work. */
+export const preloadWebRouteCode = async (): Promise<void> => {
+  await Promise.allSettled([ApplicationFrame.preload?.(), TransactionListFeature.preload?.()]);
+};

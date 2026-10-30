@@ -3,7 +3,7 @@ import { ReviewCommand } from "../../../src/core/ingestion/contract";
 import { RecurringCommand } from "../../../src/core/recurring-plans/contract";
 import { handleErasureOperator } from "../../erasure/runtime";
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
-import { browserSessionBindingResponse } from "../../web-session/operations";
+import { initialBrowserSessionBindingResponse } from "./browser-entry";
 import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
 import { processingConsentTransport } from "../../../src/shell/processing-consent/runtime";
 import { handleProcessingConsentRequest } from "../../consent/runtime";
@@ -1704,6 +1704,10 @@ const dispatchCoreHttp = ({
 export const executeCoreHttp = (
   input: RequestExecution
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>
-  browserSessionBindingResponse({ request: input.request, db: input.environment.DB }).pipe(
+  initialBrowserSessionBindingResponse({
+    request: input.request,
+    db: input.environment.DB,
+    browserOrigin: input.environment.BROWSER_ORIGIN,
+  }).pipe(
     Effect.flatMap(Option.match({ onNone: () => dispatchCoreHttp(input), onSome: Effect.succeed }))
   );

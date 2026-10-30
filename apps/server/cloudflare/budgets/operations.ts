@@ -16,7 +16,8 @@ import {
   type BudgetCrossing,
   BudgetId,
   type BudgetStatusQueryParameters,
-  BudgetStatusReport,
+  type BudgetStatusReport,
+  BudgetWorkspace,
   type CreateBudgetInput,
   type UpdateBudgetInput,
 } from "../../src/core/budgets/contract";
@@ -644,8 +645,21 @@ const readAuthorizedBudget = ({
       query: Option.getOrThrow(query),
       now,
     });
-    return Option.isSome(report)
-      ? respond(Schema.toCodecJson(BudgetStatusReport), report.value)
+    if (Option.isNone(report)) return transactionUnavailable();
+    // Keep dependent Promise-owned reads behind the caller's live deadline fence.
+    const budgets = yield* readPlannedCaps({
+      db,
+      userId: subject.userId,
+      month: DateTime.formatIsoDate(
+        DateTime.setZone(
+          budgetPeriod({ now, query: Option.getOrThrow(query) }).from,
+          DateTime.zoneMakeNamedUnsafe(Option.getOrThrow(query).timeZone)
+        )
+      ).slice(0, monthLabelLength),
+      includeInactive: true,
+    });
+    return Option.isSome(budgets)
+      ? respond(Schema.toCodecJson(BudgetWorkspace), { ...report.value, budgets: budgets.value })
       : transactionUnavailable();
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 

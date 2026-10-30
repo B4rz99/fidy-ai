@@ -1,4 +1,7 @@
-import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
+import { preparationActive, prepareQuery } from "@/transport/query-preparation";
+import type { AtomRegistry } from "effect/reactivity";
+import type { FidyClient } from "@/transport/client";
+import { workspaceProfileQuery } from "@/transport/workspace-query";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
@@ -10,7 +13,7 @@ import { RecurringQueryFailure } from "./query-failure";
 import { Button } from "@/ui/components/button";
 import { Skeleton } from "@/ui/components/skeleton";
 import { RecurringWorkspace } from "./workspace";
-import { type SaveState, useRecurringPlanning } from "./controller";
+import { type SaveState, recurringWorkspaceQuery, useRecurringPlanning } from "./controller";
 import { type Filters, type PlanInput, shiftMonth } from "./model";
 
 const PreviewWorkspace = import.meta.env.DEV
@@ -87,14 +90,7 @@ export const RecurringFeature = ({
   month: selectedMonth,
 }: Readonly<{ month: Option.Option<string> }>): JSX.Element => {
   const router = useRouter();
-  const [profile] = useState(() =>
-    router.options.context.apiClient
-      .query("identity", "getCurrentUser", {
-        ...workspaceQueryRetention,
-        reactivityKeys: ["recurring-resume"],
-      })
-      .pipe(revalidateWorkspaceQuery)
-  );
+  const [profile] = useState(() => workspaceProfileQuery(router.options.context.apiClient));
   const state = useAtomValue(profile).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(profile);
   const [clock] = useState(() =>
@@ -177,3 +173,39 @@ const LoadingRecurring = (): JSX.Element => (
 
 /** Application composition owns the retained workspace. This route retains code preloading. */
 export const RecurringRoute = (): JSX.Element => <></>;
+
+const preparedClients = Atom.family((_client: FidyClient) => Atom.make(false).pipe(Atom.keepAlive));
+/** First-entry preparation uses the same compact query as the retained planning owner. */
+const monthLabelLength = 7;
+RecurringRoute.preloadData = async ({
+  apiClient,
+  registry,
+  month: selectedMonth,
+  signal,
+  intent,
+}: Readonly<{
+  apiClient: FidyClient;
+  registry: AtomRegistry.AtomRegistry;
+  month: Option.Option<string>;
+  signal: AbortSignal;
+  intent: boolean;
+}>): Promise<void> => {
+  if (!preparationActive(signal) || registry.get(preparedClients(apiClient))) return;
+  await prepareQuery(registry, workspaceProfileQuery(apiClient), {
+    mode: "cached",
+    signal: Option.some(signal),
+  });
+  const profile = presentCanonicalQuery(registry.get(workspaceProfileQuery(apiClient)));
+  if (profile._tag !== "Ready" || profile.waiting || Option.isSome(profile.refreshFailure)) return;
+  const month = Option.getOrElse(selectedMonth, () =>
+    DateTime.formatIsoDate(
+      DateTime.makeZonedUnsafe(DateTime.nowUnsafe(), { timeZone: profile.value.data.timeZone })
+    ).slice(0, monthLabelLength)
+  );
+  await prepareQuery(
+    registry,
+    recurringWorkspaceQuery(apiClient, { month, view: "compact" }).view,
+    { mode: "display", signal: Option.some(signal) }
+  );
+  if (!intent && preparationActive(signal)) registry.set(preparedClients(apiClient), true);
+};

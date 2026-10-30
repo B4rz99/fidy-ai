@@ -1094,6 +1094,10 @@ it("reports only this User's exact same-Currency outflows in the applied half-op
         send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
       );
       expect(response.status).toBe(200);
+      const workspace = yield* Effect.tryPromise(() => response.clone().json());
+      expect(workspace).toMatchObject({
+        data: { budgets: [expect.objectContaining({ categoryId: category })] },
+      });
       const report = yield* Schema.decodeUnknownEffect(Report)(
         yield* Effect.tryPromise(() => response.json())
       );

@@ -1,9 +1,10 @@
-import { newId } from "../../secret-material/operations";
-import { Clock, Effect, Schema } from "effect";
 import {
-  ProcessingAuthorization,
-  ProcessingConsentStatus,
-} from "../../../src/shell/processing-consent/contract";
+  decodeProcessingConsentStatusRead,
+  prepareProcessingConsentStatusRead,
+} from "../../../src/shell/processing-consent/operations";
+import { newId } from "../../secret-material/operations";
+import { Clock, Effect, Option, Schema } from "effect";
+import { ProcessingAuthorization } from "../../../src/shell/processing-consent/contract";
 import { DisclosureSnapshot } from "../../../src/shell/consent/contract";
 import { webSessionCredentialAuthority } from "../../../src/shell/web-session/operations";
 import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
@@ -31,40 +32,19 @@ const receiptQuery = (
   subject: AuthenticatedWebSession,
   current: number
 ): D1PreparedStatement => {
-  const authority = webSessionCredentialAuthority({ subject, current });
-  return db
-    .prepare(`SELECT
-    CASE WHEN r.id IS NOT NULL THEN 'Revoked'
-      WHEN EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records WHERE user_id = ?) THEN 'Granted'
-      ELSE 'Missing' END AS status,
-    r.id AS reference, r.occurred_at_ms AS occurredAtMs
-    FROM web_sessions w LEFT JOIN (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) r ON r.user_id = w.user_id
-    WHERE w.id = ? AND w.user_id = ?
-      AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
-    .bind(subject.userId, subject.id, subject.userId, ...authority.bindings);
+  const read = prepareProcessingConsentStatusRead({ subject, current });
+  return db.prepare(read.sql).bind(...read.params);
 };
 const presentReceipt = (rows: ReadonlyArray<unknown>): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    if (rows.length === 0) return consentResponse(unauthenticatedStatus);
-    const row = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({
-        status: Schema.String,
-        reference: Schema.NullOr(Schema.String),
-        occurredAtMs: Schema.NullOr(Schema.Int),
+  decodeProcessingConsentStatusRead(rows).pipe(
+    Effect.map(
+      Option.match({
+        onNone: () => consentResponse(unauthenticatedStatus),
+        onSome: (status) => Response.json(status, { headers: { "cache-control": "no-store" } }),
       })
-    )(rows[0]);
-    const result = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)({
-      status: row.status,
-      withdrawal:
-        row.reference === null
-          ? null
-          : {
-              reference: row.reference,
-              occurredAtMs: row.occurredAtMs,
-            },
-    });
-    return Response.json(result, { headers: { "cache-control": "no-store" } });
-  }).pipe(Effect.orElseSucceed(() => consentResponse(unavailableStatus)));
+    ),
+    Effect.orElseSucceed(() => consentResponse(unavailableStatus))
+  );
 
 export const readProcessingConsent = (
   input: Readonly<{

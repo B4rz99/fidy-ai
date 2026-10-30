@@ -57,8 +57,9 @@ export const bindingResponse = ({
     if (bootstrap) {
       return Option.some(
         Response.json(
-          yield* Schema.decodeEffect(BrowserSessionBinding)({
+          yield* Schema.encodeUnknownEffect(BrowserSessionBinding)({
             binding: Option.match(session, { onNone: () => null, onSome: (value) => value.id }),
+            initial: Option.none(),
           }),
           { headers: { "cache-control": "no-store" } }
         )

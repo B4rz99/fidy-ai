@@ -1,8 +1,66 @@
-import { Effect } from "effect";
-import { Atom, AtomRegistry } from "effect/reactivity";
-import { expect, it } from "@effect/vitest";
-import { vi } from "vitest";
-import { revalidateWorkspaceQuery } from "./workspace-query";
+import { Deferred, Effect, Layer, Option } from "effect";
+import { HttpClient, HttpClientResponse } from "effect/http";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import { it } from "@effect/vitest";
+import { expect, vi } from "vitest";
+import { makeFidyClient } from "./client";
+import {
+  revalidateWorkspaceQuery,
+  workspaceCategoriesQuery,
+  workspaceMetadataInitialValue,
+  workspaceProfileQuery,
+} from "./workspace-query";
+
+const metadataResponse = (label: string): Response =>
+  new Response(
+    JSON.stringify({
+      data: {
+        id: "10000000-0000-4000-8000-000000000001",
+        serviceMarket: "CO",
+        locale: "es-CO",
+        timeZone: "America/Bogota",
+        createdAt: "2026-08-01T00:00:00Z",
+        trialPeriod: { startedAt: "2026-08-01T00:00:00Z", endsAt: "2026-08-08T00:00:00Z" },
+      },
+      categories: [{ id: "10000000-0000-4000-8000-000000000002", label }],
+      next: [],
+    }),
+    { headers: { "content-type": "application/json" } }
+  );
+
+it.live("shares inline taxonomy with the profile and rereads its owner on explicit recovery", () =>
+  Effect.gen(function* () {
+    const reads: string[] = [];
+    let label = "Mercado";
+    const http = HttpClient.make((request) => {
+      reads.push(new URL(request.url).pathname);
+      return Effect.succeed(HttpClientResponse.fromWeb(request, metadataResponse(label)));
+    });
+    const client = makeFidyClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: Layer.succeed(HttpClient.HttpClient, http),
+    });
+    const registry = AtomRegistry.make();
+    const profile = workspaceProfileQuery(client);
+    const categories = workspaceCategoriesQuery(client);
+    const unmount = [registry.mount(profile), registry.mount(categories.view)];
+    try {
+      const first = yield* AtomRegistry.getResult(registry, categories.source);
+      expect(first.data[0]?.label).toBe("Mercado");
+      expect(reads).toEqual(["/user"]);
+      label = "Compras";
+      registry.refresh(categories.source);
+      const second = yield* AtomRegistry.getResult(registry, categories.source, {
+        suspendOnWaiting: true,
+      });
+      expect(second.data[0]?.label).toBe("Compras");
+      expect(reads).toEqual(["/user", "/user"]);
+    } finally {
+      for (const dispose of unmount) dispose();
+      registry.dispose();
+    }
+  })
+);
 
 it.live("reuses recent display reads but respects explicit refresh and expiry", () => {
   const now = vi.spyOn(Date, "now").mockReturnValue(1000);
@@ -37,3 +95,54 @@ it.live("reuses recent display reads but respects explicit refresh and expiry", 
     )
   );
 });
+
+it.live("retains prepared metadata while the first fresh read is pending", () =>
+  Effect.gen(function* () {
+    const release = yield* Deferred.make<void>();
+    const initialHttp = HttpClient.make((request) =>
+      Effect.succeed(HttpClientResponse.fromWeb(request, metadataResponse("Mercado")))
+    );
+    const initialClient = makeFidyClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: Layer.succeed(HttpClient.HttpClient, initialHttp),
+    });
+    const initialRegistry = AtomRegistry.make();
+    const initialProfile = workspaceProfileQuery(initialClient);
+    const detachInitial = initialRegistry.mount(initialProfile);
+    const prepared = yield* AtomRegistry.getResult(initialRegistry, initialProfile);
+    detachInitial();
+    initialRegistry.dispose();
+    let reads = 0;
+    const http = HttpClient.make((request) => {
+      reads += 1;
+      return Deferred.await(release).pipe(
+        Effect.as(HttpClientResponse.fromWeb(request, metadataResponse("Compras")))
+      );
+    });
+    const client = makeFidyClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: Layer.succeed(HttpClient.HttpClient, http),
+    });
+    const registry = AtomRegistry.make();
+    const [slot, value] = workspaceMetadataInitialValue(client, prepared, Date.now());
+    registry.set(slot, value);
+    const profile = workspaceProfileQuery(client);
+    const detach = registry.mount(profile);
+    try {
+      expect(yield* AtomRegistry.getResult(registry, profile)).toEqual(prepared);
+      expect(reads).toBe(0);
+      registry.refresh(profile);
+      yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)));
+      const pending = registry.get(profile);
+      expect(pending.waiting).toBe(true);
+      expect(Option.getOrThrow(AsyncResult.value(pending))).toEqual(prepared);
+      yield* Deferred.succeed(release, undefined);
+      const current = yield* AtomRegistry.getResult(registry, profile, { suspendOnWaiting: true });
+      expect(Option.getOrThrow(current.categories)[0]?.label).toBe("Compras");
+      expect(reads).toBe(1);
+    } finally {
+      detach();
+      registry.dispose();
+    }
+  })
+);

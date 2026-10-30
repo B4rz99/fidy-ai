@@ -4148,6 +4148,10 @@ it("autosaves a revision-bound draft and retains it through skip and restore", (
         yield* fromTestPromise(() => response.json())
       );
       const id = workspace.data.items[0]?.id ?? "";
+      const projected = yield* fromTestPromise(() => reviewWorkspaceRequest(runtime));
+      expect(yield* fromTestPromise(() => projected.json())).toMatchObject({
+        data: { selectedDetail: { item: { id }, revision: 0 } },
+      });
       const draft = {
         amount: "13500",
         counterparty: "Café",
@@ -4328,6 +4332,8 @@ it("expires skipped drafts at the original deadline and refuses restoration or c
         expect(body).not.toHaveProperty("data.item.preview");
         const history = yield* readReviewInbox(runtime, "expired");
         expect(history.items[0]?.preview).toEqual(Option.none());
+        expect(Option.getOrThrow(history.selectedDetail).draft).toEqual(Option.none());
+        expect(Option.getOrThrow(history.selectedDetail).suggestions).toEqual(Option.none());
         expect(
           (yield* fromTestPromise(() =>
             editReview(runtime, { _tag: "Restore", items: [{ id, revision: 2 }] })

@@ -8,11 +8,12 @@ const serverRoot = Bun.fileURLToPath(new URL("..", import.meta.url))
 const workspaceRoot = Bun.fileURLToPath(new URL("../../../", import.meta.url))
   .replaceAll("\\", "/")
   .replace(/\/$/u, "");
-const entrypoint = "src/client.ts";
+const entrypoints = ["src/client.ts", "src/browser-bootstrap.ts", "src/browser-transport.ts"];
 
 const safeSource = [
   /^src\/client\.ts$/u,
-  /^src\/shell\/(?:processing-consent|identity|categories|transactions|subscription|tokens|budgets|dashboard|insights|recurring|recurring-plans|connections|public-http|schema-codecs|browser-login|recovery|ingestion|web-session|web-authentication|provider-authentication|oauth-agents|memory|quotas)\/contract\.ts$/u,
+  /^src\/(?:browser-bootstrap|browser-transport)\.ts$/u,
+  /^src\/shell\/(?:browser-transport|processing-consent|identity|categories|transactions|subscription|tokens|budgets|dashboard|insights|recurring|recurring-plans|connections|public-http|schema-codecs|browser-login|recovery|ingestion|web-session|web-authentication|provider-authentication|oauth-agents|memory|quotas)\/contract\.ts$/u,
   /^src\/shell\/agent\/contract\.ts$/u,
   /^src\/shell\/observability\/contract\.ts$/u,
   /^src\/core\//u,
@@ -66,7 +67,7 @@ if (mkdir.exitCode !== 0) {
 
 try {
   const result = await Bun.build({
-    entrypoints: [`${serverRoot}/${entrypoint}`],
+    entrypoints: entrypoints.map((entrypoint) => `${serverRoot}/${entrypoint}`),
     metafile: true,
     outdir,
     target: "browser",
@@ -91,10 +92,10 @@ try {
   if (unexpectedInput.length > 0 || forbidden.length > 0) {
     const sections = [
       unexpectedInput.length > 0
-        ? `Unexpected modules in ${entrypoint}:\n${unexpectedInput.map((path) => `  - ${path}`).join("\n")}`
+        ? `Unexpected modules in ${entrypoints.join(", ")}:\n${unexpectedInput.map((path) => `  - ${path}`).join("\n")}`
         : undefined,
       forbidden.length > 0
-        ? `Forbidden dependencies in ${entrypoint}:\n${forbidden.map((path) => `  - ${path}`).join("\n")}`
+        ? `Forbidden dependencies in ${entrypoints.join(", ")}:\n${forbidden.map((path) => `  - ${path}`).join("\n")}`
         : undefined,
     ].filter((section): section is string => section !== undefined);
     throw new Error(

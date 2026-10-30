@@ -46,6 +46,22 @@ export const readReviewDetail = ({
     );
     if (raw === null) return Option.none();
     const row = yield* Schema.decodeUnknownEffect(ReviewRow)(raw);
+    return Option.some(yield* projectReviewDetail({ db, userId, row, current }));
+  }).pipe(Effect.mapError(() => new ReviewUnavailable()));
+
+/** Project the same revision and expiry policy for an inbox row and an individual read. */
+export const projectReviewDetail = ({
+  db,
+  userId,
+  row,
+  current,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  row: typeof ReviewRow.Type;
+  current: number;
+}>): Effect.Effect<ReviewDetail, ReviewUnavailable> =>
+  Effect.gen(function* () {
     const draft =
       DateTime.toEpochMillis(row.expiresAt) > current
         ? yield* Effect.forEach(Option.toArray(row.draft_json), (json) =>
@@ -60,7 +76,7 @@ export const readReviewDetail = ({
         : Option.none();
     const suggestions = yield* suggestReviewCategory({ db, userId, draft: retainedSuggestions });
     const item = yield* projectReviewSummary({ row, current });
-    return Option.some({ item, revision: row.revision, draft, suggestions });
+    return { item, revision: row.revision, draft, suggestions };
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));
 
 export const projectReviewSummary = ({

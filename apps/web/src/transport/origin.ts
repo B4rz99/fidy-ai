@@ -1,5 +1,4 @@
-import { isHttpOrigin } from "@fidy/server/client";
-import { Predicate } from "effect";
+import { isHttpOrigin } from "@fidy/server/browser-transport";
 
 const originConfigurationMessage = "VITE_API_ORIGIN must be an HTTP origin";
 
@@ -8,7 +7,7 @@ const originConfigurationMessage = "VITE_API_ORIGIN must be an HTTP origin";
  * fragments, credentials, and non-URL values fail closed before the transport is constructed.
  */
 export const parseApiOrigin = (configured: unknown): string => {
-  if (!Predicate.isString(configured) || configured.length === 0) {
+  if (typeof configured !== "string" || configured.length === 0) {
     throw new Error(originConfigurationMessage);
   }
 

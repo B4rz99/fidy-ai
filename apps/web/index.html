@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
+    <link rel="preconnect" href="%VITE_API_ORIGIN%" crossorigin="use-credentials" />
     <title>Fidy — Tu aplicación</title>
   </head>
   <body>
@@ -12,6 +13,6 @@
       <a href="https://fidyapp.com">Conoce Fidy</a>.</noscript
     >
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" async fetchpriority="high" src="/src/main.tsx"></script>
   </body>
 </html>

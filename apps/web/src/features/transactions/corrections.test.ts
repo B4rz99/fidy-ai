@@ -271,3 +271,51 @@ it.effect("disposal stops pending completion and an obsolete view cannot submit 
     expect(test.saved()).toBe(0);
   })
 );
+
+it.live("reading and disposing history does not initialize the correction transport", () =>
+  Effect.gen(function* () {
+    let initialized = 0;
+    const transport = Layer.effect(
+      HttpClient.HttpClient,
+      Effect.sync(() => {
+        initialized += 1;
+        return HttpClient.make(() => Effect.die(new Error("No request during read-only mounting")));
+      })
+    );
+    const client = makeFidyClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: transport,
+    });
+    const period = {
+      from: DateTime.makeUnsafe("2026-10-01T00:00:00Z"),
+      to: DateTime.makeUnsafe("2026-11-01T00:00:00Z"),
+    };
+    const firstPage = client.query("transactions", "listTransactions", {
+      query: period,
+      ...workspaceQueryRetention,
+    });
+    const categories = client.query("categories", "listCategories", workspaceQueryRetention);
+    const history = transactionHistory({ apiClient: client, firstPage, period });
+    const corrections = makeTransactionCorrections({
+      client,
+      firstPage,
+      categories,
+      history: history.state,
+      historyAction: history.action,
+      saved: () => undefined,
+    });
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(corrections);
+    try {
+      const dispose = registry.get(corrections).mount();
+      yield* Effect.sleep("10 millis");
+      expect(initialized).toBe(0);
+      dispose();
+      yield* Effect.sleep("10 millis");
+      expect(initialized).toBe(0);
+    } finally {
+      unmount();
+      registry.dispose();
+    }
+  })
+);

@@ -50,6 +50,8 @@ export const CreateTransactionResponse = OperationResponse(Transaction);
  * Caller-owned Transaction capture, history, correction, deletion, and retained provenance.
  * Identity comes from authentication; unknown and foreign record ids are indistinguishable.
  */
+export const TransactionListResponse = OperationResponse(Schema.Array(Transaction));
+
 export const TransactionsGroup = HttpApiGroup.make("transactions")
   .add(
     HttpApiEndpoint.post("createTransaction", "/transactions", {
@@ -66,7 +68,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
   .add(
     HttpApiEndpoint.get("listTransactions", "/transactions", {
       query: TransactionQueryParameters,
-      success: OperationResponse(Schema.Array(Transaction)),
+      success: TransactionListResponse,
       error: [ValidationFailed, ResourceLimited],
     })
       .annotate(
@@ -78,7 +80,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
   .add(
     HttpApiEndpoint.get("searchTransactions", "/transactions/search", {
       query: TransactionSearchQuery,
-      success: OperationResponse(Schema.Array(Transaction)),
+      success: TransactionListResponse,
       error: [ValidationFailed, ResourceLimited],
     })
       .annotate(

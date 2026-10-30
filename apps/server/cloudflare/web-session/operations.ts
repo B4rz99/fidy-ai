@@ -1,3 +1,4 @@
+import { readMetadata } from "./internal/metadata";
 import { bindingResponse } from "./internal/binding";
 import { type Effect, Option } from "effect";
 import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
@@ -9,7 +10,7 @@ import type {
   WebSessionEstablishment,
   WebSessionRequest,
 } from "./contract";
-import { authenticate } from "./internal/authentication";
+import { authenticate, observeEntry } from "./internal/authentication";
 
 /**
  * Authenticate one browser cookie against authoritative expiry, revocation and optional freshness.
@@ -44,6 +45,11 @@ export const establishWebSession = (
 export const currentWebSessionUser = (input: WebSessionRequest): Effect.Effect<Response> =>
   currentUser(input);
 
+/** Recheck the exact credential and active Consent inside the metadata/Audit native unit. */
+export const readCurrentWebSessionMetadata = (
+  input: Parameters<typeof readMetadata>[0]
+): ReturnType<typeof readMetadata> => readMetadata(input);
+
 /** Resolve one live or fresh browser session for account-security composition. */
 export const browserSession = (
   input: WebSessionRequest & Readonly<{ input: Readonly<{ current: number; fresh: boolean }> }>
@@ -77,3 +83,8 @@ export const authenticateCanonicalWebSession = (
 export const browserSessionBindingResponse = (
   input: WebSessionRequest
 ): Effect.Effect<Option.Option<Response>> => bindingResponse(input);
+
+/** Observe a document entry without renewing it; protected metadata rechecks this exact proof. */
+export const readWebSessionEntry = (
+  input: Parameters<typeof observeEntry>[0]
+): ReturnType<typeof observeEntry> => observeEntry(input);

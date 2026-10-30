@@ -419,10 +419,16 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
 
 const fallbackHeaders = (request: Request, path: string): Headers => {
   if (forwardsSession(request, path)) {
-    return new Headers({
+    const headers = new Headers({
       cookie: request.headers.get("cookie") ?? "",
       "content-type": request.headers.get("content-type") ?? "",
     });
+    if (path === browserSessionBindingPath) {
+      headers.set("origin", request.headers.get("origin") ?? "");
+      const binding = request.headers.get(browserSessionBindingHeader);
+      if (binding !== null) headers.set(browserSessionBindingHeader, binding);
+    }
+    return headers;
   }
   const headers = new Headers(request.headers);
   headers.delete(smokeProofHeader);
@@ -516,6 +522,7 @@ const canonicalAdmissionHeaders = (
     );
   });
 const preservesCoreQuery = (path: string): boolean =>
+  path === browserSessionBindingPath ||
   path === connectionCallbackPath ||
   transactionPath(path) ||
   canonicalRoute(path) ||

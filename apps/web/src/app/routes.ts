@@ -166,22 +166,20 @@ const needsReviewRoute = createRoute({
     staleReloadMode: "blocking",
     handler: ({ context, deps, preload, abortController }) =>
       Effect.runPromise(
-        Effect.asVoid(
-          Effect.tryPromise(() =>
-            Promise.all([
-              ReviewWorkspace.preload(),
-              preload
-                ? Promise.resolve()
-                : ReviewWorkspace.preloadData({
-                    apiClient: context.apiClient,
-                    registry: context.registry,
-                    filter: deps.filter,
-                    page: deps.page,
-                    signal: abortController.signal,
-                  }),
-            ])
-          )
-        )
+        Effect.gen(function* () {
+          const preparation = preload
+            ? Promise.resolve()
+            : ReviewWorkspace.preloadData({
+                apiClient: context.apiClient,
+                registry: context.registry,
+                filter: deps.filter,
+                page: deps.page,
+                signal: abortController.signal,
+              }).catch(() => undefined);
+          yield* Effect.tryPromise(() => ReviewWorkspace.preload());
+          // The registry owns query state; unresolved data must not block the workspace shell.
+          return { preparation };
+        })
       ),
   },
   component: NeedsReviewRoute,
@@ -284,15 +282,17 @@ const transactionsRoute = createRoute({
               const { TransactionsPage } = yield* Effect.tryPromise(
                 () => import("./transactions-page")
               );
-              yield* Effect.tryPromise(() =>
-                TransactionsPage.preloadData({
+              // Consent has completed; data preparation remains owned by this route signal.
+              return {
+                preparation: TransactionsPage.preloadData({
                   apiClient: context.apiClient,
                   registry: context.registry,
                   signal: abortController.signal,
-                })
-              );
+                }).catch(() => undefined),
+              };
             }
           }
+          return undefined;
         })
       ),
   },

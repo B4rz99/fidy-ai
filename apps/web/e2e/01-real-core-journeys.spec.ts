@@ -39,17 +39,34 @@ const RetrySeconds = Schema.NumberFromString.check(
 
 const fromPlaywright = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
+// These tests exercise an independent Transactions read rather than an optional prepared page.
+const readTransactionsSeparately = (page: Page): Promise<void> =>
+  page
+    .route(
+      (url) =>
+        url.origin === api &&
+        url.pathname === "/web/session/binding" &&
+        url.searchParams.get("context") === "transactions",
+      (route) => {
+        const url = new URL(route.request().url());
+        url.searchParams.set("context", "application");
+        return route.fetch({ url: url.href }).then((response) => route.fulfill({ response }));
+      }
+    )
+    .then(() => {});
 const holdTransactionRead = (
   page: Page,
   release: Promise<void>
 ): Promise<Readonly<{ received: Promise<Route> }>> => {
   const received = Promise.withResolvers<Route>();
-  return page
-    .route(`${api}/transactions?*`, (route) => {
-      received.resolve(route);
-      return release.then(() => route.continue());
-    })
-    .then(() => ({ received: received.promise }));
+  return readTransactionsSeparately(page).then(() =>
+    page
+      .route(`${api}/transactions?*`, (route) => {
+        received.resolve(route);
+        return release.then(() => route.continue());
+      })
+      .then(() => ({ received: received.promise }))
+  );
 };
 
 // Playwright serializes this function into the browser; Effect is not present there.
@@ -182,6 +199,7 @@ const assertUnderScopedBrowser = (
           })
         )
       );
+      yield* fromPlaywright(readTransactionsSeparately(page));
       yield* fromPlaywright(page.goto("/app/transactions"));
       yield* fromPlaywright(expect(page.getByRole("alert")).toBeVisible());
       expect(yield* fromPlaywright(page.locator("body").textContent())).not.toContain(bearer);

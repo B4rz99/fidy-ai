@@ -84,7 +84,7 @@ type SuggestionsProps = Readonly<{
 }>;
 
 export const Suggestions = (props: SuggestionsProps): JSX.Element => {
-  const [requested, setRequested] = useState(Option.isSome(props.cursor));
+  const [requested, setRequested] = useState(() => Option.isSome(props.cursor));
   return (
     <details
       data-recurring-slot="suggestions"

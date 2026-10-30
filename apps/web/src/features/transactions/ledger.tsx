@@ -377,9 +377,10 @@ const useInitialViewportRows = (
       }
       const shortfall = window.innerHeight - node.getBoundingClientRect().bottom;
       if (shortfall <= 0) return;
-      const heights = [...node.querySelectorAll<HTMLElement>("tr[data-state]")]
-        .map((row) => row.getBoundingClientRect().height)
-        .filter((height) => height > 0);
+      const heights = [...node.querySelectorAll<HTMLElement>("tr[data-state]")].flatMap((row) => {
+        const height = row.getBoundingClientRect().height;
+        return height > 0 ? [height] : [];
+      });
       if (heights.length === 0) return;
       // A commit ref fills any estimate shortfall before paint; no viewport information is skipped.
       setCount(Math.min(sortedRows.length, count + Math.ceil(shortfall / Math.min(...heights))));

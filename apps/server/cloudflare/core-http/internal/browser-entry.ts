@@ -279,12 +279,13 @@ const contextResponse = (input: Input): Effect.Effect<Response> =>
     );
   });
 
-/** The ordinary binding-only path remains unchanged, including all mounted-request checks. */
+/** Handle document binding entry only; each protected route owner validates its mounted request. */
 export const initialBrowserSessionBindingResponse = (
   input: Input
 ): Effect.Effect<Option.Option<Response>> => {
   const url = new URL(input.request.url);
-  return url.pathname === browserSessionBindingPath && url.searchParams.size > 0
+  if (url.pathname !== browserSessionBindingPath) return Effect.succeedNone;
+  return url.searchParams.size > 0
     ? contextResponse(input).pipe(Effect.asSome)
     : browserSessionBindingResponse(input);
 };

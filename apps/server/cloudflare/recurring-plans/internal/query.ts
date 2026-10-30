@@ -80,6 +80,8 @@ export const automaticProjection = ({
   now,
 }: ProjectionWork): Effect.Effect<AutomaticProjection> =>
   Effect.gen(function* () {
+    // No automatic matching candidate can exist without a retained plan.
+    if (document.plans.length === 0) return { document, complete: true, matches: [] };
     const start = DateTime.makeUnsafe(`${month}-01`);
     const selection = yield* readPlanningTransactions({
       db,

@@ -1,0 +1,29 @@
+apps/web/e2e/workspace-requests.spec.ts
+  s_68bfd164593579::t_4c9db25bef8102 193-247
+apps/web/src/features/needs-review/decisions.ts
+  s_73a0416adbb8d0::t_ada5ad3700752e 462
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "10bf82822b9cfe721d117abb598bc464484a7b4d",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_73a0416adbb8d0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18a74-c29d-78e0-8dfe-05a2ce27dabf",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

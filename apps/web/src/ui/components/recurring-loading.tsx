@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { RecurringHeaderSkeleton } from "./recurring-header-loading";
 import { LoadingRegion } from "./loading-skeletons";
 import { Skeleton } from "./skeleton";
 import { RecurringMonthControlsSkeleton } from "./recurring-month-controls-loading";
@@ -69,7 +70,7 @@ const OccurrenceRows = (): JSX.Element => (
               <Skeleton className="h-5 w-24" />
             </TableCell>
             <TableCell>
-              <Skeleton className="h-9 w-28" />
+              <Skeleton data-slot="button" className="h-9 w-28" />
             </TableCell>
           </TableRow>
         ))}
@@ -80,20 +81,7 @@ const OccurrenceRows = (): JSX.Element => (
 export const RecurringSkeleton = (): JSX.Element => (
   <LoadingRegion label="Cargando recurrentes">
     <div data-recurring-slot="workspace">
-      <header data-recurring-slot="page-header">
-        <div data-recurring-slot="title-tabs">
-          <h1>Recurrentes</h1>
-          <div data-recurring-slot="tabs">
-            <Skeleton className="h-[49px] w-16" />
-            <Skeleton className="h-[49px] w-40" />
-          </div>
-        </div>
-        <div data-recurring-slot="header-actions">
-          <Skeleton className="h-9 w-20" />
-          <Skeleton className="h-9 w-28" />
-          <Skeleton className="h-9 w-40" />
-        </div>
-      </header>
+      <RecurringHeaderSkeleton />
       <div data-recurring-slot="columns" data-panel-open="false">
         <main data-recurring-slot="content">
           <div data-recurring-slot="suggestions">

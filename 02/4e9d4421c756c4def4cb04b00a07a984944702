@@ -1,0 +1,36 @@
+apps/server/cloudflare/dashboard/internal/dashboard-mutation.ts
+  s_1cebf747fbaef6::t_d2bde065ba1738 206-221,233,238
+docs/research/app-performance-production-desktop-2026-10-29.md
+  s_1cebf747fbaef6::t_6fe1218b952e55 1-43,45-75,93-104
+  s_1cebf747fbaef6::t_1b3d7b2d0e7e53 76-92
+  s_1cebf747fbaef6::t_18f2b22bfb800e 44
+docs/research/app-performance-production-desktop-2026-10-29.json
+  s_1cebf747fbaef6::t_97279d530e192c 1-304,308-735,739-965
+  s_1cebf747fbaef6::t_35a937a3949594 305-307,736-738
+apps/server/cloudflare/recurring-plans/internal/query.ts
+  s_1cebf747fbaef6::t_faa8d61715cbf5 83-84
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_1cebf747fbaef6::t_b94ed6c6562a00 3-8,1808-1827
+  s_1cebf747fbaef6::t_8ef0d99752a269 1828
+apps/server/cloudflare/dashboard/operations.ts
+  s_1cebf747fbaef6::t_d2bde065ba1738 314-319
+  s_1cebf747fbaef6::t_a065ed91784afc 36
+apps/server/cloudflare/recurring-plans/recurring-plans.test.ts
+  s_1cebf747fbaef6::t_8b22f439086e81 246-265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "024e9d4421c756c4def4cb04b00a07a984944702",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

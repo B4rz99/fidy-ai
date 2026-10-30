@@ -1,0 +1,36 @@
+apps/web/ARCHITECTURE.md
+  s_68bfd164593579::t_e054a71bed23d4 485-489
+apps/server/scripts/check-browser-client.ts
+  s_68bfd164593579::t_f8f51e49e843ef 27
+apps/web/src/features/needs-review/navigation.tsx
+  s_68bfd164593579::t_f8f51e49e843ef 1,15
+apps/server/.dependency-cruiser.mjs
+  s_68bfd164593579::t_f8f51e49e843ef 47
+apps/web/e2e/workspace-requests.spec.ts
+  s_68bfd164593579::t_f8f51e49e843ef 163-178
+  s_68bfd164593579::t_c243726fdc5db4 136,138-140
+  s_68bfd164593579::t_f2cb55b5e4d12f 141,150,161-162,179-180
+apps/web/src/features/needs-review/query-keys.ts
+  s_68bfd164593579::t_f8f51e49e843ef 1-5
+apps/web/src/features/needs-review/decisions.ts
+  s_68bfd164593579::t_f8f51e49e843ef 1,17-23
+  s_68bfd164593579::t_ad5d84c7bbdd2b 25-27,298-299,353,387,440
+apps/web/src/features/needs-review/query.ts
+  s_68bfd164593579::t_f8f51e49e843ef 1,60,95,135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d8c6dbd384da04dca508e34e81d0bfa1ec1e6ffb",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

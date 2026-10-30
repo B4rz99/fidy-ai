@@ -1,0 +1,22 @@
+docs/research/dashboard-range-read-plan-2026-10-30.md
+  s_d9571b3fccd032::t_27ff8bef06a1d6 111-114
+  s_d9571b3fccd032::t_949c16c84b7674 144-161
+docs/research/dashboard-range-hosted-2026-10-30.json
+  s_d9571b3fccd032::t_949c16c84b7674 1-1738
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b66e2a790d35030bf1e7188ae76dbed83e17a431",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

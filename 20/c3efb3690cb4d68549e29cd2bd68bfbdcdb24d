@@ -1,0 +1,23 @@
+docs/research/app-performance-production-desktop-2026-10-29.json
+  s_1cebf747fbaef6::t_75e161f6cd24d2 3394-3399,3413-3418,3432-3437,3451-3457,3471-3477,3491-3497
+  s_1cebf747fbaef6::t_514d4284ca9a5a 3384-3393,3400-3412,3419-3431,3438-3450,3458-3470,3478-3490,3498-3577
+docs/research/app-performance-production-desktop-2026-10-29.md
+  s_1cebf747fbaef6::t_174660101cec8a 19-22
+  s_1cebf747fbaef6::t_708fe8bec17506 3-18,23-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "20c3efb3690cb4d68549e29cd2bd68bfbdcdb24d",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

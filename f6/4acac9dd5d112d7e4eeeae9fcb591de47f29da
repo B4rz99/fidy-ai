@@ -1,0 +1,23 @@
+docs/research/dashboard-range-read-plan-2026-10-30.md
+  s_d9571b3fccd032::t_46a5b5d7006628 94-120,124-140
+  s_d9571b3fccd032::t_5921247ab306a8 121-123
+  s_d9571b3fccd032::t_af24cf92bdeddb 83-85,141-144
+infra/cloudflare/verify-edge-policy.ts
+  s_d9571b3fccd032::t_8ee1a6eae7fed9 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f64acac9dd5d112d7e4eeeae9fcb591de47f29da",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

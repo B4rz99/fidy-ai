@@ -1,7 +1,8 @@
 import type { InitialBrowserSession } from "@/transport/initial-session";
-import { Effect, Option } from "effect";
+import { type Cause, Effect, Option } from "effect";
 import { type ReactNode, useCallback, useState } from "react";
 import {
+  type BrowserSessionEntryFailure,
   type BrowserSessionLifetime,
   type BrowserSessionObservation,
   loadBrowserSessionEntry,
@@ -22,7 +23,6 @@ type BindingObserver = Readonly<{
   update: (state: BindingState) => void;
   failed: () => void;
 }>;
-
 const observeBindingEvents = (validate: () => void, retire: () => void): (() => void) => {
   const visible = (): void => {
     if (document.visibilityState === "visible") {
@@ -45,13 +45,12 @@ const observeBindingEvents = (validate: () => void, retire: () => void): (() => 
     document.removeEventListener("visibilitychange", visible);
   };
 };
-
 const bindingRead = (
   prepared: ReturnType<InitialBrowserSession["take"]>,
   apiOrigin: string,
   first: boolean
-): Effect.Effect<BrowserSessionObservation, unknown> => {
-  return Option.match(prepared, {
+): Effect.Effect<BrowserSessionObservation, BrowserSessionEntryFailure | Cause.UnknownError> =>
+  Option.match(prepared, {
     onNone: () =>
       loadBrowserSessionEntry({
         apiOrigin,
@@ -60,8 +59,6 @@ const bindingRead = (
       }),
     onSome: (work) => work.result.pipe(Effect.flatMap((result) => result)),
   });
-};
-
 /** Resume checks retain the exact same session object so feature owners do not remount on focus. */
 const retainedBinding = (
   input: Readonly<{
@@ -80,7 +77,6 @@ const retainedBinding = (
   initial: Option.getOrElse(input.observation, () => input.current),
   checking: false,
 });
-
 const retirePreparedBinding =
   (lifetime: AbortController, prepared: ReturnType<InitialBrowserSession["take"]>): (() => void) =>
   () => {
@@ -96,7 +92,6 @@ const markChecking = (
     update({ session: session.value, checking: true, initial: observation.value });
   }
 };
-
 const observeBinding = ({
   apiOrigin,
   initial,
@@ -157,7 +152,6 @@ const observeBinding = ({
   };
   return observeBindingEvents(validate, retire);
 };
-
 /** Mount authenticated owners only after latching identity; resume never silently adopts another User. */
 export const BrowserSessionBoundary = ({
   apiOrigin,

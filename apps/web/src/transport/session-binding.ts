@@ -68,6 +68,10 @@ const observeBindingReply = (
   }));
 
 /** The initial context is an owned, live observation; ordinary resume requests only public binding. */
+type BootstrapClient = HttpApiClient.Client<typeof BrowserBootstrapApi.groups.browserSession>;
+export type BrowserSessionEntryFailure = Effect.Error<
+  ReturnType<BootstrapClient["browserSession"]["binding"]>
+>;
 export const loadBrowserSessionEntry = ({
   apiOrigin,
   context: includeContext,
@@ -76,7 +80,7 @@ export const loadBrowserSessionEntry = ({
   apiOrigin: string;
   context: boolean;
   request: Option.Option<InitialBrowserRequest>;
-}>): Effect.Effect<BrowserSessionObservation, unknown> =>
+}>): Effect.Effect<BrowserSessionObservation, BrowserSessionEntryFailure> =>
   Effect.gen(function* () {
     const context = yield* Layer.build(
       FetchHttpClient.layer.pipe(browserHttpClientLayer("web-auth", apiOrigin))
@@ -115,7 +119,7 @@ export const loadBrowserSessionEntry = ({
 /** Read public session identity without loading User data or renewing/replacing a cookie. */
 export const loadBrowserSessionBinding = ({
   apiOrigin,
-}: Readonly<{ apiOrigin: string }>): Effect.Effect<string, unknown> =>
+}: Readonly<{ apiOrigin: string }>): Effect.Effect<string, BrowserSessionEntryFailure> =>
   loadBrowserSessionEntry({ apiOrigin, context: false, request: Option.none() }).pipe(
     Effect.map((entry) => entry.binding)
   );

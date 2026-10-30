@@ -312,8 +312,11 @@ test("opens recurring editors without reading hidden transaction pickers", ({ pa
     })
   ));
 
-const twoAnimationFrames = (): Promise<void> =>
-  new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+const twoAnimationFrames = (): Promise<void> => {
+  const result = Promise.withResolvers<void>();
+  requestAnimationFrame(() => requestAnimationFrame(() => result.resolve()));
+  return result.promise;
+};
 
 const waitForTransactionRead = (reads: ReadonlyArray<string>): Promise<void> =>
   expect.poll(() => reads.length).toBe(1);

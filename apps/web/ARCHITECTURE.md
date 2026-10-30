@@ -482,7 +482,7 @@ category views derive it from that one source and explicit category recovery ref
 Other transports retain the independent Category read when the inline catalog is absent.
 
 Navigation loads the small pending-count interface without downloading the Review editor on
-ordinary product entry. The badge and first pending page share one periodic/focus refresh owner;
+ordinary product entry. The badge reads counts without fetching item rows; the inbox owns its periodic/focus refresh;
 another focus signal joins an in-flight read rather than canceling and restarting it. Workspace
 profiles share one query and resume invalidation, with results still owned by the authentication
 registry. Navigation, Transactions and Upgrade reuse the boundary's latched public session identity
@@ -503,8 +503,7 @@ visited Needs Review workspace across ordinary navigation within the authenticat
 Its saved route snapshot contains only the validated filter
 and offset; hidden panels keep their evidence deadline timers active but suspend their own
 focus and periodic refresh subscriptions. Entering Privacy disposes
-the retained workspace, as does authentication replacement. The first pending page shares the
-navigation count's canonical query, and the selected original loads alongside its detail. Returning
+the retained workspace, as does authentication replacement. The first pending page owns its bounded workspace query, and the selected original loads alongside its detail. Returning
 refreshes the current Review workspace from the route preparation owner while retaining visible
 content and disabling decisions until fresh. Its response includes the first item's canonical
 revision-bound detail; other selections retain their own item read and targeted invalidation.

@@ -6,8 +6,8 @@ const scheduleIdleCode = (run: () => void): (() => void) => {
     const token = requestIdleCallback(run);
     return () => cancelIdleCallback(token);
   }
-  const token = setTimeout(run, 0);
-  return () => clearTimeout(token);
+  const token = requestAnimationFrame(run);
+  return () => cancelAnimationFrame(token);
 };
 
 /** Code parsing yields between destinations; retirement cancels every unstarted step. */
@@ -24,7 +24,7 @@ export const DestinationCodePreload = (): JSX.Element => {
     const run = (): void => {
       if (stopped || !node.isConnected) return;
       const step = steps.next();
-      if (!step.done) {
+      if (step.done !== true) {
         step
           .value()
           .then(enqueue, enqueue)

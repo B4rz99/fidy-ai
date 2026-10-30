@@ -22,12 +22,7 @@ it.live(
           if (held) yield* Deferred.await(gate);
           return HttpClientResponse.fromWeb(
             request,
-            new Response(
-              JSON.stringify({ data: { pendingCount: 0, total: 0, items: [] }, next: [] }),
-              {
-                headers: { "content-type": "application/json" },
-              }
-            )
+            Response.json({ data: { pendingCount: 0, total: 0, items: [] }, next: [] })
           );
         })
       );
@@ -36,8 +31,16 @@ it.live(
         httpClient: Layer.succeed(HttpClient.HttpClient, http),
       });
       const registry = AtomRegistry.make();
-      const badge = reviewWorkspaceQueries(client, "pending", 0);
-      const panel = reviewWorkspaceQueries(client, "pending", 0);
+      const badge = reviewWorkspaceQueries({
+        client,
+        filter: "pending",
+        page: 0,
+      });
+      const panel = reviewWorkspaceQueries({
+        client,
+        filter: "pending",
+        page: 0,
+      });
       expect(panel.source).toBe(badge.source);
       expect(panel.active).toBe(badge.active);
       // React reads its snapshot during render, before subscribing in the commit.

@@ -1,4 +1,4 @@
-import { Deferred, Effect, Layer, Option } from "effect";
+import { Clock, Deferred, Effect, Layer, Option } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
@@ -27,7 +27,6 @@ const metadataResponse = (label: string): Response =>
     }),
     { headers: { "content-type": "application/json" } }
   );
-
 it.live("shares inline taxonomy with the profile and rereads its owner on explicit recovery", () =>
   Effect.gen(function* () {
     const reads: string[] = [];
@@ -56,12 +55,13 @@ it.live("shares inline taxonomy with the profile and rereads its owner on explic
       expect(second.data[0]?.label).toBe("Compras");
       expect(reads).toEqual(["/user", "/user"]);
     } finally {
-      for (const dispose of unmount) dispose();
+      for (const dispose of unmount) {
+        dispose();
+      }
       registry.dispose();
     }
   })
 );
-
 it.live("reuses recent display reads but respects explicit refresh and expiry", () => {
   const now = vi.spyOn(Date, "now").mockReturnValue(1000);
   const registry = AtomRegistry.make();
@@ -88,16 +88,18 @@ it.live("reuses recent display reads but respects explicit refresh and expiry", 
   }).pipe(
     Effect.ensuring(
       Effect.sync(() => {
-        for (const unmount of cleanup) unmount();
+        for (const unmount of cleanup) {
+          unmount();
+        }
         registry.dispose();
         now.mockRestore();
       })
     )
   );
 });
-
 it.live("retains prepared metadata while the first fresh read is pending", () =>
   Effect.gen(function* () {
+    const observedAt = yield* Clock.currentTimeMillis;
     const release = yield* Deferred.make<void>();
     const initialHttp = HttpClient.make((request) =>
       Effect.succeed(HttpClientResponse.fromWeb(request, metadataResponse("Mercado")))
@@ -124,7 +126,11 @@ it.live("retains prepared metadata while the first fresh read is pending", () =>
       httpClient: Layer.succeed(HttpClient.HttpClient, http),
     });
     const registry = AtomRegistry.make();
-    const [slot, value] = workspaceMetadataInitialValue(client, prepared, Date.now());
+    const [slot, value] = workspaceMetadataInitialValue({
+      client,
+      value: prepared,
+      timestamp: observedAt,
+    });
     registry.set(slot, value);
     const profile = workspaceProfileQuery(client);
     const detach = registry.mount(profile);

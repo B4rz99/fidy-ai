@@ -5,7 +5,7 @@ import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Badge } from "@/ui/components/badge";
 import { Option } from "effect";
 
-/** The mounted navigation owns polling; authentication registry replacement clears its queries. */
+/** The navigation reads counts only; authentication registry replacement clears its query. */
 export const ReviewPendingCount = (): JSX.Element => {
   const client = useRouter().options.context.apiClient;
   const [query] = useState(() =>

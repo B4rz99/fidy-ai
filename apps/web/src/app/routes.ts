@@ -1,12 +1,15 @@
+import { Effect, Option, Schema } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { BudgetRoute, RecurringRoute } from "./destination-components";
 import { prepareQuery } from "@/transport/query-preparation";
-import { consumeInitialTransactionConsent, transactionEntryConsent } from "./transaction-entry";
+import {
+  consumeInitialTransactionConsent,
+  transactionEntryConsent,
+} from "@/session/transaction-entry";
 import { RecurringWorkspace, ReviewWorkspace } from "./workspace-components";
 import { NeedsReviewRoute } from "@/features/needs-review/feature";
 import { LoginSearch } from "@/session/login-destination";
 import type { AtomRegistry } from "effect/reactivity";
-import { Option, Schema } from "effect";
 import {
   BudgetMonth,
   type FidyClient,
@@ -16,9 +19,8 @@ import {
   RecurringMonth,
   type WebAuthClient,
 } from "@/transport/client";
-import { type JSX, createElement } from "react";
+import { createElement } from "react";
 import {
-  Outlet,
   type RouterHistory,
   createRootRouteWithContext,
   createRoute,
@@ -40,12 +42,10 @@ type WebRouterOptions = WebRouterContext &
   Readonly<{
     history: Option.Option<RouterHistory>;
   }>;
-
 const ProviderReturnFeature = lazyRouteComponent(
   () => import("@/features/provider-authentication/feature"),
   "ProviderReturnFeature"
 );
-
 const RecurringDigestFeature = lazyRouteComponent(
   () => import("@/features/recurring-digest/feature"),
   "RecurringDigestFeature"
@@ -74,9 +74,7 @@ const TransactionListFeature = lazyRouteComponent(
   () => import("./transactions-page"),
   "TransactionsPage"
 );
-
 const DashboardRoute = lazyRouteComponent(() => import("./dashboard-page"), "DashboardPage");
-
 const ApplicationFrame = lazyRouteComponent(
   () => import("./application-frame"),
   "ApplicationFrame"
@@ -91,18 +89,9 @@ const rootRoute = createRootRouteWithContext<WebRouterContext>()({
       createElement("a", { href: "https://fidyapp.com" }, "Volver al inicio")
     ),
 });
-const AuthenticatedRoute = lazyRouteComponent(() =>
-  Promise.all([import("@/features/signed-in/feature"), import("@/features/agent/feature")]).then(
-    ([signedIn, agent]) => ({
-      default: (): JSX.Element =>
-        createElement(
-          signedIn.SignedInContent,
-          null,
-          createElement(Outlet),
-          createElement(agent.HostedAgentFeature)
-        ),
-    })
-  )
+const AuthenticatedRoute = lazyRouteComponent(
+  () => import("./authenticated-route"),
+  "AuthenticatedRoute"
 );
 const authenticatedRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -136,18 +125,25 @@ const budgetsRoute = createRoute({
       })
     )(search),
   loaderDeps: ({ search }) => ({ month: search.month }),
-  loader: async ({ context, deps, abortController }) => {
-    const { BudgetsFeature } = await import("@/features/budgets/feature");
-    await Promise.all([
-      BudgetsFeature.preload(),
-      BudgetsFeature.preloadData({
-        apiClient: context.apiClient,
-        registry: context.registry,
-        month: Option.fromUndefinedOr(deps.month),
-        signal: Option.some(abortController.signal),
-      }),
-    ]);
-  },
+  loader: ({ context, deps, abortController }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { BudgetsFeature } = yield* Effect.tryPromise(
+          () => import("@/features/budgets/feature")
+        );
+        yield* Effect.tryPromise(() =>
+          Promise.all([
+            BudgetsFeature.preload(),
+            BudgetsFeature.preloadData({
+              apiClient: context.apiClient,
+              registry: context.registry,
+              month: Option.fromUndefinedOr(deps.month),
+              signal: Option.some(abortController.signal),
+            }),
+          ])
+        );
+      })
+    ),
   component: BudgetRoute,
 });
 const needsReviewRoute = createRoute({
@@ -160,7 +156,7 @@ const needsReviewRoute = createRoute({
           Schema.Literals(["pending", "history", "created", "skipped", "expired"])
         ),
         offset: Schema.optionalKey(
-          Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }))
+          Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10000 }))
         ),
       })
     )(search),
@@ -168,20 +164,25 @@ const needsReviewRoute = createRoute({
   loaderDeps: ({ search }) => ({ filter: search.status ?? "pending", page: search.offset ?? 0 }),
   loader: {
     staleReloadMode: "blocking",
-    handler: async ({ context, deps, preload, abortController }) => {
-      await Promise.all([
-        ReviewWorkspace.preload(),
-        preload
-          ? Promise.resolve()
-          : ReviewWorkspace.preloadData({
-              apiClient: context.apiClient,
-              registry: context.registry,
-              filter: deps.filter,
-              page: deps.page,
-              signal: abortController.signal,
-            }),
-      ]);
-    },
+    handler: ({ context, deps, preload, abortController }) =>
+      Effect.runPromise(
+        Effect.asVoid(
+          Effect.tryPromise(() =>
+            Promise.all([
+              ReviewWorkspace.preload(),
+              preload
+                ? Promise.resolve()
+                : ReviewWorkspace.preloadData({
+                    apiClient: context.apiClient,
+                    registry: context.registry,
+                    filter: deps.filter,
+                    page: deps.page,
+                    signal: abortController.signal,
+                  }),
+            ])
+          )
+        )
+      ),
   },
   component: NeedsReviewRoute,
 });
@@ -199,17 +200,24 @@ const recurringPlansRoute = createRoute({
     )(search),
   loaderDeps: ({ search }) => ({ month: search.month }),
   preloadStaleTime: 0,
-  loader: async ({ context, deps, preload, abortController }) => {
-    await RecurringWorkspace.preload?.();
-    const { RecurringRoute } = await import("@/features/recurring/feature");
-    await RecurringRoute.preloadData({
-      apiClient: context.apiClient,
-      registry: context.registry,
-      month: Option.fromUndefinedOr(deps.month),
-      signal: abortController.signal,
-      intent: preload,
-    });
-  },
+  loader: ({ context, deps, preload, abortController }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() => Promise.resolve(RecurringWorkspace.preload?.()));
+        const { RecurringRoute } = yield* Effect.tryPromise(
+          () => import("@/features/recurring/feature")
+        );
+        yield* Effect.tryPromise(() =>
+          RecurringRoute.preloadData({
+            apiClient: context.apiClient,
+            registry: context.registry,
+            month: Option.fromUndefinedOr(deps.month),
+            signal: abortController.signal,
+            intent: preload,
+          })
+        );
+      })
+    ),
   component: RecurringRoute,
 });
 const recurringDigestRoute = createRoute({
@@ -243,31 +251,50 @@ const independentApplicationRoute = createRoute({
 const transactionsRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/app/transactions",
+  // Authorization entry checks must run even when the browser clock moves backwards.
+  shouldReload: true,
   // A speculative loader must never donate a code-only result to an actual Consent entry.
   preload: false,
   preloadStaleTime: 0,
   loader: {
     staleReloadMode: "blocking",
-    handler: async ({ context, preload, abortController }) => {
-      await TransactionListFeature.preload?.();
-      if (!preload) {
-        const consent = transactionEntryConsent(context.webAuthClient);
-        const initial = consumeInitialTransactionConsent(context.registry);
-        await prepareQuery(context.registry, consent, {
-          mode: initial ? "cached" : "fresh",
-          signal: Option.some(abortController.signal),
-        });
-        const status = context.registry.get(consent);
-        if (AsyncResult.isSuccess(status) && !status.waiting && status.value.status === "Granted") {
-          const { TransactionsPage } = await import("./transactions-page");
-          await TransactionsPage.preloadData({
-            apiClient: context.apiClient,
-            registry: context.registry,
-            signal: abortController.signal,
-          });
-        }
-      }
-    },
+    handler: ({ context, preload, abortController }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() => Promise.resolve(TransactionListFeature.preload?.()));
+          if (!preload) {
+            const consent = transactionEntryConsent(context.webAuthClient);
+            const initial = consumeInitialTransactionConsent(context.registry);
+            yield* Effect.tryPromise(() =>
+              prepareQuery({
+                registry: context.registry,
+                query: consent,
+                options: {
+                  mode: initial ? "cached" : "fresh",
+                  signal: Option.some(abortController.signal),
+                },
+              })
+            );
+            const status = context.registry.get(consent);
+            if (
+              AsyncResult.isSuccess(status) &&
+              !status.waiting &&
+              status.value.status === "Granted"
+            ) {
+              const { TransactionsPage } = yield* Effect.tryPromise(
+                () => import("./transactions-page")
+              );
+              yield* Effect.tryPromise(() =>
+                TransactionsPage.preloadData({
+                  apiClient: context.apiClient,
+                  registry: context.registry,
+                  signal: abortController.signal,
+                })
+              );
+            }
+          }
+        })
+      ),
   },
   component: TransactionListFeature,
 });
@@ -301,7 +328,6 @@ const connectionResultRoute = createRoute({
     "ConnectionResultFeature"
   ),
 });
-
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
@@ -355,7 +381,6 @@ const routeTree = rootRoute.addChildren([
     recurringDigestRoute,
   ]),
 ]);
-
 export const createWebRouter = (options: WebRouterOptions) =>
   createRouter({
     defaultPreload: "intent",
@@ -371,14 +396,17 @@ export const createWebRouter = (options: WebRouterOptions) =>
     },
     history: Option.getOrUndefined(options.history),
   });
-
 declare module "@tanstack/react-router" {
   interface Register {
     router: ReturnType<typeof createWebRouter>;
   }
 }
-
 /** Only the shell and entry code compete with initial identity and foreground work. */
-export const preloadWebRouteCode = async (): Promise<void> => {
-  await Promise.allSettled([ApplicationFrame.preload?.(), TransactionListFeature.preload?.()]);
-};
+export const preloadWebRouteCode = (): Promise<void> =>
+  Effect.runPromise(
+    Effect.asVoid(
+      Effect.tryPromise(() =>
+        Promise.allSettled([ApplicationFrame.preload?.(), TransactionListFeature.preload?.()])
+      )
+    )
+  );

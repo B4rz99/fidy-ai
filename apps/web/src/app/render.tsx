@@ -5,8 +5,13 @@ import { installBrowserDefectListeners, reportBrowserDefect } from "@/transport/
 import { WebApplication } from "./application";
 
 export { preloadWebRouteCode } from "./routes";
-
-export const mountWebApplication = (root: Element, initial: InitialBrowserSession): void => {
+export const mountWebApplication = ({
+  root,
+  initial,
+}: Readonly<{
+  root: Element;
+  initial: InitialBrowserSession;
+}>): void => {
   const disposeDefectListeners = installBrowserDefectListeners(window);
   if (import.meta.env.DEV) import.meta.hot.dispose(disposeDefectListeners);
   createRoot(root, {

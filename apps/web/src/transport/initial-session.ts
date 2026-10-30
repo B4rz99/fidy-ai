@@ -1,9 +1,14 @@
 import type { InitialBrowserRequest } from "./initial-request";
-import { Effect, Exit, Option } from "effect";
+import { type Cause, Effect, Exit, Option } from "effect";
 import { type BrowserSessionObservation, loadBrowserSessionEntry } from "./session-binding";
 
 export type InitialSessionWork = Readonly<{
-  result: Effect.Effect<Exit.Exit<BrowserSessionObservation, unknown>>;
+  result: Effect.Effect<
+    Exit.Exit<
+      BrowserSessionObservation,
+      Effect.Error<ReturnType<typeof loadBrowserSessionEntry>> | Cause.UnknownError
+    >
+  >;
   cancel: () => void;
 }>;
 export type InitialBrowserSession = Readonly<{
@@ -14,9 +19,24 @@ export type InitialBrowserSession = Readonly<{
 }>;
 
 const preparedResult = (
-  completed: () => Option.Option<Exit.Exit<BrowserSessionObservation, unknown>>,
-  result: Promise<Exit.Exit<BrowserSessionObservation, unknown>>
-): Effect.Effect<Exit.Exit<BrowserSessionObservation, unknown>> =>
+  completed: () => Option.Option<
+    Exit.Exit<
+      BrowserSessionObservation,
+      Effect.Error<ReturnType<typeof loadBrowserSessionEntry>> | Cause.UnknownError
+    >
+  >,
+  result: Promise<
+    Exit.Exit<
+      BrowserSessionObservation,
+      Effect.Error<ReturnType<typeof loadBrowserSessionEntry>> | Cause.UnknownError
+    >
+  >
+): Effect.Effect<
+  Exit.Exit<
+    BrowserSessionObservation,
+    Effect.Error<ReturnType<typeof loadBrowserSessionEntry>> | Cause.UnknownError
+  >
+> =>
   Effect.suspend(() =>
     Option.match(completed(), {
       onNone: () => Effect.tryPromise(() => result).pipe(Effect.orElseSucceed(Exit.fail)),
@@ -43,7 +63,13 @@ export const beginInitialBrowserSession = ({
   const result = Effect.runPromiseExit(observe, {
     signal: AbortSignal.any([controller.signal, request.signal]),
   });
-  let completed = Option.none<Exit.Exit<BrowserSessionObservation, unknown>>();
+  let completed =
+    Option.none<
+      Exit.Exit<
+        BrowserSessionObservation,
+        Effect.Error<ReturnType<typeof loadBrowserSessionEntry>> | Cause.UnknownError
+      >
+    >();
   let work = Option.none<InitialSessionWork>();
   const cancel = (): void => {
     completed = Option.none();

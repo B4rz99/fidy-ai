@@ -24,6 +24,10 @@ import { protectCanonicalPressure } from "../../canonical-admission/operations";
 type Input = WebSessionRequest & Readonly<{ browserOrigin: string }>;
 type StartupPhase = "entry" | "metadata" | "history" | "authority" | "encoding" | "guarded";
 type StartupTimings = Record<StartupPhase, number>;
+type EntryError =
+  | Effect.Error<ReturnType<typeof readWebSessionEntry>>
+  | Effect.Error<ReturnType<typeof readCurrentWebSessionMetadata>>
+  | Schema.SchemaError;
 type TimedInput = Input & Readonly<{ timings: StartupTimings }>;
 const measurePhase = <A, E>(
   phase: StartupPhase,
@@ -84,9 +88,9 @@ const refused = (status: number): Response =>
 
 const reply = (
   binding: Option.Option<string>,
-  initial: Option.Option<typeof BrowserSessionInitialContext.Type>
+  initial: Option.Option<BrowserSessionInitialContext>
 ): Effect.Effect<Response, Schema.SchemaError> =>
-  Schema.decodeUnknownEffect(BrowserSessionBinding.fields.binding)(Option.getOrNull(binding)).pipe(
+  Schema.decodeEffect(BrowserSessionBinding.fields.binding)(Option.getOrNull(binding)).pipe(
     Effect.flatMap((binding) => Schema.encodeEffect(BrowserSessionBinding)({ binding, initial })),
     Effect.map((body) => {
       const initial = body.initial;
@@ -109,7 +113,7 @@ const readStatus = ({
   subject,
 }: Readonly<{ db: D1Database; subject: AuthenticatedWebSession }>): Effect.Effect<
   Option.Option<ProcessingConsentStatus>,
-  unknown
+  EntryError
 > =>
   Effect.gen(function* () {
     const read = prepareProcessingConsentStatusRead({
@@ -127,14 +131,14 @@ const readStatus = ({
 const readProfile = (
   input: Input,
   subject: AuthenticatedWebSession
-): Effect.Effect<Option.Option<typeof CurrentUserMetadata.Type>, unknown> =>
+): ReturnType<typeof readCurrentWebSessionMetadata> =>
   readCurrentWebSessionMetadata({ db: input.db, subject });
 
 const initialTransactions = (
   input: Input,
   subject: AuthenticatedWebSession,
   profile: typeof CurrentUserMetadata.Type
-): Effect.Effect<Option.Option<typeof InitialTransactionPage.Type>, unknown> =>
+): Effect.Effect<Option.Option<InitialTransactionPage>, EntryError> =>
   Effect.gen(function* () {
     if (new URL(input.request.url).searchParams.get("context") !== "transactions") {
       return Option.none();
@@ -160,7 +164,7 @@ const initialTransactions = (
 const grantedReply = (
   subject: AuthenticatedWebSession,
   profile: Option.Option<typeof CurrentUserMetadata.Type>,
-  transactions: Option.Option<typeof InitialTransactionPage.Type>
+  transactions: Option.Option<InitialTransactionPage>
 ): Effect.Effect<Response, Schema.SchemaError> =>
   Option.isSome(profile) && profile.value.data.id === subject.userId
     ? reply(
@@ -183,7 +187,7 @@ const protectedContext = (
   input: TimedInput,
   subject: AuthenticatedWebSession,
   initial: ProcessingConsentStatus
-): Effect.Effect<Response, unknown> =>
+): Effect.Effect<Response, EntryError> =>
   Effect.gen(function* () {
     const first =
       initial.status === "Granted"
@@ -221,7 +225,7 @@ const validContextRequest = (request: Request): boolean => {
   );
 };
 
-const readContext = (input: TimedInput): Effect.Effect<Response, unknown> =>
+const readContext = (input: TimedInput): Effect.Effect<Response, EntryError> =>
   Effect.gen(function* () {
     if (input.request.headers.get("origin") !== input.browserOrigin) {
       return refused(forbiddenStatus);
@@ -279,6 +283,6 @@ export const initialBrowserSessionBindingResponse = (
 ): Effect.Effect<Option.Option<Response>> => {
   const url = new URL(input.request.url);
   return url.pathname === browserSessionBindingPath && url.searchParams.size > 0
-    ? contextResponse(input).pipe(Effect.map(Option.some))
+    ? contextResponse(input).pipe(Effect.asSome)
     : browserSessionBindingResponse(input);
 };

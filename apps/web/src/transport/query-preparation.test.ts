@@ -13,15 +13,29 @@ it.live("fresh entry rereads a retained result and leaves failures available to 
     ).pipe(Atom.setIdleTTL("400 millis"));
     const registry = AtomRegistry.make();
     try {
-      yield* Effect.tryPromise(() => prepareQuery(registry, source));
+      yield* Effect.tryPromise(() =>
+        prepareQuery({
+          registry,
+          query: source,
+          options: { mode: "cached", signal: Option.none() },
+        })
+      );
       expect(Option.getOrThrow(AsyncResult.value(registry.get(source)))).toBe(1);
       yield* Effect.tryPromise(() =>
-        prepareQuery(registry, source, { mode: "fresh", signal: Option.none() })
+        prepareQuery({
+          registry,
+          query: source,
+          options: { mode: "fresh", signal: Option.none() },
+        })
       );
       expect(Option.getOrThrow(AsyncResult.value(registry.get(source)))).toBe(2);
       failing = true;
       yield* Effect.tryPromise(() =>
-        prepareQuery(registry, source, { mode: "fresh", signal: Option.none() })
+        prepareQuery({
+          registry,
+          query: source,
+          options: { mode: "fresh", signal: Option.none() },
+        })
       );
       expect(AsyncResult.isFailure(registry.get(source))).toBe(true);
     } finally {
@@ -29,7 +43,6 @@ it.live("fresh entry rereads a retained result and leaves failures available to 
     }
   })
 );
-
 it.live("cached display remains available while a fresh observation is in flight", () =>
   Effect.gen(function* () {
     let reads = 0;
@@ -44,10 +57,20 @@ it.live("cached display remains available while a fresh observation is in flight
     ).pipe(Atom.setIdleTTL("400 millis"));
     const registry = AtomRegistry.make();
     try {
-      yield* Effect.tryPromise(() => prepareQuery(registry, source));
+      yield* Effect.tryPromise(() =>
+        prepareQuery({
+          registry,
+          query: source,
+          options: { mode: "cached", signal: Option.none() },
+        })
+      );
       held = true;
       yield* Effect.tryPromise(() =>
-        prepareQuery(registry, source, { mode: "refresh-display", signal: Option.none() })
+        prepareQuery({
+          registry,
+          query: source,
+          options: { mode: "refresh-display", signal: Option.none() },
+        })
       );
       yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(2)));
       expect(registry.get(source).waiting).toBe(true);

@@ -286,7 +286,7 @@
     // Vite and Vitest require default-exported configuration objects.
     {
       "files": [
-        "apps/web/{playwright,playwright.capture,playwright.cli,playwright.oauth,playwright.assessment,vite,vitest}.config.ts",
+        "apps/web/{playwright,playwright.capture,playwright.cli,playwright.desktop-navigation,playwright.oauth,playwright.assessment,vite,vitest}.config.ts",
         "apps/site/{astro,playwright}.config.ts",
         "apps/docs/{astro,playwright}.config.ts"
       ],

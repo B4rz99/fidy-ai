@@ -1,20 +1,21 @@
 import { AsyncResult, Atom } from "effect/reactivity";
-import { Option } from "effect";
+import { type Context, type Effect, Option } from "effect";
 import type { CanonicalSuccess, FidyClient } from "./client";
 
+type Client = Context.Service.Shape<FidyClient>;
+type ProfileError = Effect.Error<ReturnType<Client["identity"]["getCurrentUser"]>>;
+type CatalogError = Effect.Error<ReturnType<Client["dashboard"]["listDashboardCatalog"]>>;
 type ProfileQuery = Atom.Atom<
-  AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, unknown>
+  AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, ProfileError>
 >;
 type CategoriesQuery = Atom.Atom<
-  AsyncResult.AsyncResult<CanonicalSuccess<"categories.listCategories">, unknown>
+  AsyncResult.AsyncResult<CanonicalSuccess<"categories.listCategories">, ProfileError>
 >;
 type CatalogQuery = Atom.Atom<
-  AsyncResult.AsyncResult<CanonicalSuccess<"dashboard.listDashboardCatalog">, unknown>
+  AsyncResult.AsyncResult<CanonicalSuccess<"dashboard.listDashboardCatalog">, CatalogError>
 >;
-
 /** Retain display data only within the current authentication registry. */
 export const workspaceQueryRetention = { timeToLive: "1 minute" } as const;
-
 /** Reuse a recent display snapshot; expired results reread before editing resumes. */
 export const revalidateWorkspaceQuery = <A, E>(
   query: Atom.Atom<AsyncResult.AsyncResult<A, E>>
@@ -27,12 +28,17 @@ export const revalidateWorkspaceQuery = <A, E>(
       focusSignal: Atom.windowFocusSignal,
     })
   );
-
-const initialMetadata = Atom.family((_client: FidyClient) =>
-  Atom.make<
-    Option.Option<AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, unknown>>
-  >(Option.none()).pipe(Atom.setIdleTTL("400 millis"))
-);
+type MetadataValue = Option.Option<
+  AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, ProfileError>
+>;
+const initialMetadata: (client: FidyClient) => Atom.Writable<MetadataValue, MetadataValue> =
+  Atom.family((_client: FidyClient) =>
+    Atom.make<
+      Option.Option<
+        AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, ProfileError>
+      >
+    >(Option.none()).pipe(Atom.setIdleTTL("400 millis"))
+  );
 const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
   const remote = client.query("identity", "getCurrentUser", workspaceQueryRetention);
   return Atom.readable(
@@ -42,7 +48,7 @@ const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
       return AsyncResult.isInitial(current)
         ? AsyncResult.waitingFrom(
             get.self<
-              AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, unknown>
+              AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, ProfileError>
             >()
           )
         : current;
@@ -53,19 +59,23 @@ const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
     }
   ).pipe(client.runtime.factory.withReactivity(["recurring-resume"]), Atom.setIdleTTL("1 minute"));
 });
-
 /** The initial observation belongs to the canonical metadata owner; refresh retires it. */
-export const workspaceMetadataInitialValue = (
-  client: FidyClient,
-  value: CanonicalSuccess<"identity.getCurrentUser">,
-  timestamp: number
-) => [initialMetadata(client), Option.some(AsyncResult.success(value, { timestamp }))] as const;
-
+export const workspaceMetadataInitialValue = ({
+  client,
+  value,
+  timestamp,
+}: Readonly<{
+  client: FidyClient;
+  value: CanonicalSuccess<"identity.getCurrentUser">;
+  timestamp: number;
+}>): readonly [
+  ReturnType<typeof initialMetadata>,
+  Option.Option<AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, ProfileError>>,
+] => [initialMetadata(client), Option.some(AsyncResult.success(value, { timestamp }))] as const;
 /** All workspaces observe one profile and its optional inline display taxonomy. */
 export const workspaceProfileQuery: (client: FidyClient) => ProfileQuery = Atom.family(
   (client: FidyClient) => workspaceMetadataQuery(client).pipe(revalidateWorkspaceQuery)
 );
-
 /** The browser's metadata projection supplies taxonomy; other transports can read it separately. */
 export const workspaceCategoriesQuery: (client: FidyClient) => Readonly<{
   source: CategoriesQuery;
@@ -94,7 +104,6 @@ export const workspaceCategoriesQuery: (client: FidyClient) => Readonly<{
   );
   return { source, view: revalidateWorkspaceQuery(source) };
 });
-
 export const workspaceDashboardCatalogQuery: (client: FidyClient) => CatalogQuery = Atom.family(
   (client: FidyClient) =>
     client

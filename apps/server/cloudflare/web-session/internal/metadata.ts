@@ -49,7 +49,7 @@ export const readMetadata = (
   input: Input
 ): Effect.Effect<Option.Option<typeof CurrentUserMetadata.Type>, void> =>
   Effect.gen(function* () {
-    const userId = yield* Schema.decodeUnknownEffect(UserId)(input.subject.userId).pipe(
+    const userId = yield* Schema.decodeEffect(UserId)(input.subject.userId).pipe(
       Effect.mapError(() => undefined)
     );
     const prepared = yield* prepareCurrentUser(userId).pipe(Effect.mapError(() => undefined));

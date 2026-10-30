@@ -44,7 +44,11 @@ export const ReviewEditor = (props: Props): JSX.Element => {
     </>
   );
 };
-const ExpiredReviewItem = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
+const ExpiredReviewItem = ({
+  item,
+}: Readonly<{
+  item: Item;
+}>): JSX.Element => (
   <section data-review="expired">
     <ReviewItemHeading item={item} />
     <div data-review="history" data-status={item.status}>
@@ -61,10 +65,15 @@ const ExpiredReviewItem = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
     </div>
   </section>
 );
-
 const ReviewItemEditor = ({ item, decisions, disabled, workspaceQuery }: Props): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
-  const [query] = useState(() => reviewItemQuery(apiClient, workspaceQuery, item.id));
+  const [query] = useState(() =>
+    reviewItemQuery({
+      client: apiClient,
+      workspace: workspaceQuery,
+      id: item.id,
+    })
+  );
   const [categoryQuery] = useState(() => workspaceCategoriesQuery(apiClient).view);
   const detail = useAtomValue(query).pipe(presentCanonicalQuery);
   const categories = useAtomValue(categoryQuery).pipe(presentCanonicalQuery);
@@ -128,17 +137,23 @@ const ReviewItemUnavailable = ({
     )}
   </ReviewItemFrame>
 );
-
 const ReviewItemFrame = ({
   item,
   children,
-}: Readonly<{ item: Item; children: ReactNode }>): JSX.Element => (
+}: Readonly<{
+  item: Item;
+  children: ReactNode;
+}>): JSX.Element => (
   <section data-review="detail">
     <ReviewItemHeading item={item} />
     {children}
   </section>
 );
-const RecoveringReviewItem = ({ recover }: Readonly<{ recover: () => void }>): JSX.Element => (
+const RecoveringReviewItem = ({
+  recover,
+}: Readonly<{
+  recover: () => void;
+}>): JSX.Element => (
   <output className="block p-5">
     <p>Actualizando la versión guardada…</p>
     <Button variant="outline" onClick={recover}>
@@ -146,7 +161,11 @@ const RecoveringReviewItem = ({ recover }: Readonly<{ recover: () => void }>): J
     </Button>
   </output>
 );
-const ReviewItemFailure = ({ recover }: Readonly<{ recover: () => void }>): JSX.Element => (
+const ReviewItemFailure = ({
+  recover,
+}: Readonly<{
+  recover: () => void;
+}>): JSX.Element => (
   <ReviewNotice text="No pudimos cargar todos los datos del elemento." error>
     <Button variant="outline" onClick={recover}>
       Reintentar
@@ -212,7 +231,6 @@ const ReadyEditor = ({
     </>
   );
 };
-
 const ReviewEditorActions = ({
   editor,
   locked,
@@ -231,7 +249,6 @@ const ReviewEditorActions = ({
     </Button>
   </>
 );
-
 const feedbackCopy = {
   saved: "Borrador guardado",
   saving: "Guardando borrador…",
@@ -239,15 +256,17 @@ const feedbackCopy = {
   failed: "El elemento cambió. Actualiza para revisar la versión guardada.",
   uncertain: "No pudimos confirmar el guardado. Actualiza antes de continuar.",
 } as const;
-
 const historyTitles = {
   pending: "Por revisar",
   skipped: "Elemento omitido",
   created: "Transacción creada",
   expired: "Este elemento venció",
 };
-
-const HistoryDetail = ({ detail }: Readonly<{ detail: Detail }>): JSX.Element => (
+const HistoryDetail = ({
+  detail,
+}: Readonly<{
+  detail: Detail;
+}>): JSX.Element => (
   <div data-review="columns">
     <OriginalMaterial item={detail.item} />
     <div data-review="history" data-status={detail.item.status}>
@@ -260,9 +279,12 @@ const HistoryDetail = ({ detail }: Readonly<{ detail: Detail }>): JSX.Element =>
     </div>
   </div>
 );
-
 const sourceIcons = { statement: File01Icon, media: Image01Icon, email: Mail01Icon };
-const ReviewItemHeading = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
+const ReviewItemHeading = ({
+  item,
+}: Readonly<{
+  item: Item;
+}>): JSX.Element => (
   <header data-review="detail-heading">
     <div data-review="item-heading">
       <span data-review="source-icon" data-source={item.source}>
@@ -278,7 +300,6 @@ const ReviewItemHeading = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
     </Badge>
   </header>
 );
-
 const historyDescription = (item: Item): string => {
   if (item.status === "expired") return "Envía el material de nuevo para revisarlo.";
   if (item.status === "created") {
@@ -286,7 +307,6 @@ const historyDescription = (item: Item): string => {
   }
   return "Selecciona este elemento y pulsa Restaurar para volver a editarlo. Su vencimiento original se conserva.";
 };
-
 const ReviewEditorNotice = ({
   feedback,
   creationRequired,

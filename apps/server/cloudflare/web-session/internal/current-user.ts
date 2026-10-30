@@ -86,13 +86,14 @@ const projectCurrentUser = ({
     const data = yield* Schema.encodeEffect(Schema.toCodecJson(User))(loaded.value.data).pipe(
       Effect.orDie
     );
+    const encodedCategories = yield* Schema.encodeEffect(
+      Schema.toCodecJson(Schema.Array(Category))
+    )(categories.value.data).pipe(Effect.orDie);
     return json({
       body: {
         data,
         next: loaded.value.next,
-        categories: Schema.encodeSync(Schema.toCodecJson(Schema.Array(Category)))(
-          categories.value.data
-        ),
+        categories: encodedCategories,
       },
       status: HTTP_OK,
       headers: {},

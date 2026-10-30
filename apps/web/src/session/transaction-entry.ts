@@ -1,9 +1,15 @@
-import { Option } from "effect";
+import { type Context, DateTime, type Effect, Option } from "effect";
 import { type AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 import type { ProcessingConsentStatus, WebAuthClient } from "@/transport/client";
 
-export const initialConsentObservation = Atom.family((_client: WebAuthClient) =>
-  Atom.make<Option.Option<AsyncResult.AsyncResult<ProcessingConsentStatus, unknown>>>(
+type ConsentError = Effect.Error<
+  ReturnType<Context.Service.Shape<WebAuthClient>["processingConsent"]["status"]>
+>;
+type ConsentValue = Option.Option<AsyncResult.AsyncResult<ProcessingConsentStatus, ConsentError>>;
+export const initialConsentObservation: (
+  client: WebAuthClient
+) => Atom.Writable<ConsentValue, ConsentValue> = Atom.family((_client: WebAuthClient) =>
+  Atom.make<Option.Option<AsyncResult.AsyncResult<ProcessingConsentStatus, ConsentError>>>(
     Option.none()
   ).pipe(Atom.setIdleTTL("400 millis"))
 );
@@ -32,6 +38,6 @@ export const consumeInitialTransactionConsent = (registry: AtomRegistry.AtomRegi
   registry.set(initialTransactionConsent, Option.none());
   const bridgeMilliseconds = 400;
   if (Option.isNone(observedAt)) return false;
-  const age = Date.now() - observedAt.value;
+  const age = DateTime.toEpochMillis(DateTime.nowUnsafe()) - observedAt.value;
   return age >= 0 && age < bridgeMilliseconds;
 };

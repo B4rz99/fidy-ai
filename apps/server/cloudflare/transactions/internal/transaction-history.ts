@@ -391,10 +391,10 @@ const decodedHistoryPage = (
               : "transactions.listTransactions",
         })
       : [];
-  return Option.map(
-    Schema.decodeUnknownOption(TransactionListResponse.fields.next)(next),
-    (next) => ({ data: visible, next })
-  );
+  return Option.map(Schema.decodeOption(TransactionListResponse.fields.next)(next), (next) => ({
+    data: visible,
+    next,
+  }));
 };
 
 const presentHistory = (

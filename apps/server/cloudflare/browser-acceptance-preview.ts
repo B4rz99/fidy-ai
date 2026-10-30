@@ -467,10 +467,7 @@ const assessmentReadyStatus = 200;
 type AssessmentPreparation = "unprepared" | "preparing" | "ready" | "failed";
 const assessmentPreparation: { status: AssessmentPreparation } = { status: "unprepared" };
 const assessmentOperator = (request: Request): Option.Option<Response> => {
-  if (
-    Bun.env.FIDY_ASSESSMENT === undefined ||
-    !["GET", "POST"].some((method) => operatorRoute(request, "/assessment/prepare", method))
-  ) {
+  if (!["GET", "POST"].some((method) => operatorRoute(request, "/assessment/prepare", method))) {
     return Option.none();
   }
   if (request.method === "POST" && assessmentPreparation.status === "unprepared") {

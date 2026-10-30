@@ -1,3 +1,4 @@
+import { DateTime, Effect, Option } from "effect";
 import { preparationActive, prepareQuery } from "@/transport/query-preparation";
 import type { AtomRegistry } from "effect/reactivity";
 import type { FidyClient } from "@/transport/client";
@@ -5,7 +6,6 @@ import { workspaceProfileQuery } from "@/transport/workspace-query";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { DateTime, Option } from "effect";
 import { Atom } from "effect/reactivity";
 import { type JSX, Suspense, lazy, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -19,7 +19,6 @@ import { type Filters, type PlanInput, shiftMonth } from "./model";
 const PreviewWorkspace = import.meta.env.DEV
   ? lazy(() => import("./dev-preview").then((module) => ({ default: module.RecurringDataPreview })))
   : RecurringWorkspace;
-
 type Props = Readonly<{
   profileStale: boolean;
   profileWaiting: boolean;
@@ -85,10 +84,11 @@ const Resources = (props: Props): JSX.Element => {
     </Suspense>
   );
 };
-
 export const RecurringFeature = ({
   month: selectedMonth,
-}: Readonly<{ month: Option.Option<string> }>): JSX.Element => {
+}: Readonly<{
+  month: Option.Option<string>;
+}>): JSX.Element => {
   const router = useRouter();
   const [profile] = useState(() => workspaceProfileQuery(router.options.context.apiClient));
   const state = useAtomValue(profile).pipe(presentCanonicalQuery);
@@ -108,7 +108,9 @@ export const RecurringFeature = ({
       </Button>
     );
   }
-  if (state._tag !== "Ready") return <output>Cargando recurrentes…</output>;
+  if (state._tag !== "Ready") {
+    return <output>Cargando recurrentes…</output>;
+  }
   const user = state.value.data;
   const currentMonth = DateTime.formatIsoDate(
     DateTime.makeZonedUnsafe(now, { timeZone: user.timeZone })
@@ -129,7 +131,6 @@ export const RecurringFeature = ({
     />
   );
 };
-
 const SaveNotice = ({
   stale,
   saveState,
@@ -163,21 +164,18 @@ const SaveNotice = ({
     ) : null}
   </>
 );
-
 const LoadingRecurring = (): JSX.Element => (
   <div className="p-5" aria-label="Cargando recurrentes">
     <Skeleton className="h-24" />
     <Skeleton className="mt-5 h-64" />
   </div>
 );
-
 /** Application composition owns the retained workspace. This route retains code preloading. */
 export const RecurringRoute = (): JSX.Element => <></>;
-
 const preparedClients = Atom.family((_client: FidyClient) => Atom.make(false).pipe(Atom.keepAlive));
 /** First-entry preparation uses the same compact query as the retained planning owner. */
 const monthLabelLength = 7;
-RecurringRoute.preloadData = async ({
+RecurringRoute.preloadData = ({
   apiClient,
   registry,
   month: selectedMonth,
@@ -189,23 +187,43 @@ RecurringRoute.preloadData = async ({
   month: Option.Option<string>;
   signal: AbortSignal;
   intent: boolean;
-}>): Promise<void> => {
-  if (!preparationActive(signal) || registry.get(preparedClients(apiClient))) return;
-  await prepareQuery(registry, workspaceProfileQuery(apiClient), {
-    mode: "cached",
-    signal: Option.some(signal),
-  });
-  const profile = presentCanonicalQuery(registry.get(workspaceProfileQuery(apiClient)));
-  if (profile._tag !== "Ready" || profile.waiting || Option.isSome(profile.refreshFailure)) return;
-  const month = Option.getOrElse(selectedMonth, () =>
-    DateTime.formatIsoDate(
-      DateTime.makeZonedUnsafe(DateTime.nowUnsafe(), { timeZone: profile.value.data.timeZone })
-    ).slice(0, monthLabelLength)
+}>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      if (!preparationActive(signal) || registry.get(preparedClients(apiClient))) {
+        return;
+      }
+      yield* Effect.tryPromise(() =>
+        prepareQuery({
+          registry,
+          query: workspaceProfileQuery(apiClient),
+          options: {
+            mode: "cached",
+            signal: Option.some(signal),
+          },
+        })
+      );
+      const profile = presentCanonicalQuery(registry.get(workspaceProfileQuery(apiClient)));
+      if (profile._tag !== "Ready" || profile.waiting || Option.isSome(profile.refreshFailure)) {
+        return;
+      }
+      const month = Option.getOrElse(selectedMonth, () =>
+        DateTime.formatIsoDate(
+          DateTime.makeZonedUnsafe(DateTime.nowUnsafe(), { timeZone: profile.value.data.timeZone })
+        ).slice(0, monthLabelLength)
+      );
+      yield* Effect.tryPromise(() =>
+        prepareQuery({
+          registry,
+          query: recurringWorkspaceQuery({
+            apiClient,
+            query: { month, view: "compact" },
+          }).view,
+          options: { mode: "display", signal: Option.some(signal) },
+        })
+      );
+      if (!intent && preparationActive(signal)) {
+        registry.set(preparedClients(apiClient), true);
+      }
+    })
   );
-  await prepareQuery(
-    registry,
-    recurringWorkspaceQuery(apiClient, { month, view: "compact" }).view,
-    { mode: "display", signal: Option.some(signal) }
-  );
-  if (!intent && preparationActive(signal)) registry.set(preparedClients(apiClient), true);
-};

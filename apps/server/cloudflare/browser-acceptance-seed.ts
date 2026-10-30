@@ -388,12 +388,10 @@ await db
   .bind(recoveryDisclosureUserId, recoveryDisclosureDigest, now)
   .run();
 
-/** Large histories are prepared after the fixture is listening, before any measured browser work. */
+/** Prepare an isolated navigation workspace before measured work; ordinary regressions use small. */
 export const prepareBrowserAssessment = (): Promise<void> => {
-  const dataset = Bun.env.FIDY_ASSESSMENT;
-  return dataset === undefined
-    ? Promise.resolve()
-    : import("./browser-assessment.test-fixture").then(({ seedAssessment }) =>
-        Effect.runPromise(seedAssessment({ db, dataset, now }))
-      );
+  const dataset = Bun.env.FIDY_ASSESSMENT ?? "small";
+  return import("./browser-assessment.test-fixture").then(({ seedAssessment }) =>
+    Effect.runPromise(seedAssessment({ db, dataset, now }))
+  );
 };

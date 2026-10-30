@@ -3,11 +3,7 @@ import { Effect } from "effect";
 import { observeConsentRecovery } from "./consent-recovery-diagnostics";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
-import {
-  openTransactionsThroughCore,
-  openUpgradeThroughCore,
-  signInNavigationThroughCore,
-} from "./real-core-fixture";
+import { openUpgradeThroughCore, signInNavigationThroughCore } from "./real-core-fixture";
 
 const { test, expect } = playwright;
 const { api } = browserAcceptanceTopology();
@@ -87,7 +83,7 @@ const installConsentPressure = (
         ? route.fulfill({
             status: 429,
             contentType: "application/json",
-            headers: { "retry-after": "1" },
+            headers: { "retry-after": "1", "access-control-expose-headers": "retry-after" },
             body: JSON.stringify({
               _tag: "ResourceLimited",
               error: {
@@ -115,7 +111,9 @@ test("Transactions retries an explicitly refused Consent read without replacing 
       yield* Effect.tryPromise(() => page.goto("/settings/account"));
       const counts = { reads: 0, pairings: 0 };
       yield* Effect.tryPromise(() => installConsentPressure(page, counts));
-      yield* Effect.tryPromise(() => openTransactionsThroughCore(page));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Transacciones", exact: true }).click()
+      );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
       );
@@ -137,18 +135,11 @@ const openReview = Effect.fnUntraced(function* (page: Page) {
 });
 
 const signInForRecovery = Effect.fnUntraced(function* (page: Page, request: APIRequestContext) {
-  yield* Effect.tryPromise((signal) =>
-    Promise.all([
-      page.waitForResponse(
-        (response) =>
-          new URL(response.url()).origin === api &&
-          new URL(response.url()).pathname === "/transactions" &&
-          response.request().method() === "GET" &&
-          response.status() === successStatus,
-        { signal }
-      ),
-      signInNavigationThroughCore({ page, request, identity: "navigationConsentRecovery" }),
-    ]).then(() => undefined)
+  yield* Effect.tryPromise(() =>
+    signInNavigationThroughCore({ page, request, identity: "navigationConsentRecovery" })
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeEnabled()
   );
 });
 

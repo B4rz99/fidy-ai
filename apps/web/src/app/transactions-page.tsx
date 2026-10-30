@@ -1,4 +1,4 @@
-import { transactionEntryConsent } from "./transaction-entry";
+import { transactionEntryConsent } from "@/session/transaction-entry";
 import { DestinationCodePreload } from "./destination-code-preload";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";

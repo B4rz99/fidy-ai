@@ -1,13 +1,16 @@
+import { Clock, Effect, Layer, Option, Schema } from "effect";
 import { afterEach, expect, vi } from "vitest";
 import { it } from "@effect/vitest";
-import { Effect, Layer, Option, Schema } from "effect";
 import { AtomRegistry } from "effect/reactivity";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { BrowserSessionBindingSchema, makeFidyClient, makeWebAuthClient } from "@/transport/client";
 import { workspaceProfileQuery } from "@/transport/workspace-query";
 import { prepareQuery } from "@/transport/query-preparation";
 import { initialApplicationValues } from "./initial-values";
-import { consumeInitialTransactionConsent, transactionEntryConsent } from "./transaction-entry";
+import {
+  consumeInitialTransactionConsent,
+  transactionEntryConsent,
+} from "@/session/transaction-entry";
 
 afterEach(() => vi.unstubAllGlobals());
 const profile = {
@@ -26,11 +29,11 @@ const entry = Schema.decodeUnknownSync(BrowserSessionBindingSchema)({
   binding: "20000000-0000-4000-8000-000000000001",
   initial: { status: "Granted", withdrawal: null, profile },
 });
-
 it.live(
   "initial metadata hydrates the existing owner without HTTP; refreshing still reads canonical metadata",
   () =>
     Effect.gen(function* () {
+      const observedAt = yield* Clock.currentTimeMillis;
       vi.stubGlobal(
         "window",
         Object.assign(new EventTarget(), {
@@ -64,7 +67,7 @@ it.live(
           initial: {
             binding: entry.binding ?? "none",
             initial: entry.initial,
-            receivedAt: Date.now(),
+            receivedAt: observedAt,
           },
         }),
       });
@@ -85,11 +88,11 @@ it.live(
       }
     })
 );
-
 it.live(
   "only the initial entry consumes its fresh bootstrap Consent; the next entry reads fresh status",
   () =>
     Effect.gen(function* () {
+      const observedAt = yield* Clock.currentTimeMillis;
       vi.stubGlobal(
         "window",
         Object.assign(new EventTarget(), {
@@ -107,7 +110,7 @@ it.live(
               status: "Revoked",
               withdrawal: {
                 reference: "30000000-0000-4000-8000-000000000001",
-                occurredAtMs: Date.now(),
+                occurredAtMs: observedAt,
               },
             })
           )
@@ -129,7 +132,7 @@ it.live(
           initial: {
             binding: entry.binding ?? "none",
             initial: entry.initial,
-            receivedAt: Date.now(),
+            receivedAt: observedAt,
           },
         }),
       });
@@ -143,7 +146,11 @@ it.live(
         expect(reads).toBe(0);
         expect(consumeInitialTransactionConsent(registry)).toBe(false);
         yield* Effect.tryPromise(() =>
-          prepareQuery(registry, query, { mode: "fresh", signal: Option.none() })
+          prepareQuery({
+            registry,
+            query,
+            options: { mode: "fresh", signal: Option.none() },
+          })
         );
         expect(
           (yield* AtomRegistry.getResult(registry, query, { suspendOnWaiting: true })).status

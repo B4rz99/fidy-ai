@@ -22,7 +22,11 @@ type Correction =
       transaction: Revision;
       changes: Changes;
     }>
-  | Readonly<{ kind: "bulk"; transactions: ReadonlyArray<Revision>; changes: Changes }>;
+  | Readonly<{
+      kind: "bulk";
+      transactions: ReadonlyArray<Revision>;
+      changes: Changes;
+    }>;
 type Status = "idle" | "saving" | "rejected" | "uncertain" | "recovering";
 export type TransactionCorrections = Readonly<{
   status: Status;
@@ -54,14 +58,19 @@ type Owner = Input & {
   stopped: Deferred.Deferred<void>;
 };
 type Write =
-  | Readonly<{ kind: "single"; input: CanonicalInput<"transactions.updateTransaction"> }>
-  | Readonly<{ kind: "bulk"; input: CanonicalInput<"operations.executeAtomicBatch"> }>;
-
+  | Readonly<{
+      kind: "single";
+      input: CanonicalInput<"transactions.updateTransaction">;
+    }>
+  | Readonly<{
+      kind: "bulk";
+      input: CanonicalInput<"operations.executeAtomicBatch">;
+    }>;
 /** Owns Correction admission and uncertainty across editing paths. Only a successful explicit
  * canonical reread releases an uncertain write; disposing cannot undo a request already sent.
  */
-export const makeTransactionCorrections = (input: Input): Atom.Atom<TransactionCorrections> => {
-  return Atom.make((get) => {
+export const makeTransactionCorrections = (input: Input): Atom.Atom<TransactionCorrections> =>
+  Atom.make((get) => {
     const owner: Owner = {
       ...input,
       command: Option.none(),
@@ -75,7 +84,6 @@ export const makeTransactionCorrections = (input: Input): Atom.Atom<TransactionC
     get.addFinalizer(() => dispose(owner));
     return present(owner);
   });
-};
 const present = (owner: Owner): TransactionCorrections => ({
   status: owner.status,
   locked: owner.status !== "idle",
@@ -114,8 +122,12 @@ const live = (owner: Owner, generation: number): boolean =>
   owner.active && owner.generation === generation;
 const fresh = <A, E>(
   query: ReturnType<typeof presentCanonicalQuery<A, E>>
-): query is Extract<ReturnType<typeof presentCanonicalQuery<A, E>>, { _tag: "Ready" }> =>
-  query._tag === "Ready" && !query.waiting && Option.isNone(query.refreshFailure);
+): query is Extract<
+  ReturnType<typeof presentCanonicalQuery<A, E>>,
+  {
+    _tag: "Ready";
+  }
+> => query._tag === "Ready" && !query.waiting && Option.isNone(query.refreshFailure);
 const currentRevisions = (owner: Owner, correction: Correction): boolean => {
   const history = owner.get.once(owner.history).query;
   const categories = presentCanonicalQuery(owner.get.once(owner.categories));

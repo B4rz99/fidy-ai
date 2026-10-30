@@ -4,8 +4,7 @@ import { Option } from "effect";
 import type { BrowserSessionObservation } from "@/transport/session-binding";
 import type { FidyClient, ProcessingConsentStatus, WebAuthClient } from "@/transport/client";
 import { workspaceMetadataInitialValue } from "@/transport/workspace-query";
-import { initialConsentObservation, initialTransactionConsent } from "./transaction-entry";
-
+import { initialConsentObservation, initialTransactionConsent } from "@/session/transaction-entry";
 /** Hydrate the canonical nodes once in the new authentication registry; later refreshes use HTTP. */
 export const initialApplicationValues = ({
   apiClient,
@@ -20,10 +19,22 @@ export const initialApplicationValues = ({
   const context = initial.initial.value;
   const values: Array<readonly [Atom.Atom<unknown>, unknown]> = [];
   if (context.status === "Granted") {
-    values.push(workspaceMetadataInitialValue(apiClient, context.profile, initial.receivedAt));
+    values.push(
+      workspaceMetadataInitialValue({
+        client: apiClient,
+        value: context.profile,
+        timestamp: initial.receivedAt,
+      })
+    );
     if (Option.isSome(context.transactions)) {
       const page = context.transactions.value;
-      values.push(TransactionListFeature.initialValue(apiClient, page, initial.receivedAt));
+      values.push(
+        TransactionListFeature.initialValue({
+          client: apiClient,
+          page,
+          timestamp: initial.receivedAt,
+        })
+      );
     }
   }
   {

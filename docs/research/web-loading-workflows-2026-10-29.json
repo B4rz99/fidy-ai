@@ -8924,7 +8924,7 @@
     "evidenceRevision": "Historical worktree before integration with trunk 952157f1b040552744e4b356b0f91c4c3a46d946; source fingerprints in the previous local artifact. These measurements are not results for the final PR head."
   },
   "reproduction": {
-    "functional": "CLI_ACCEPTANCE_MODE=cli bun run --cwd apps/web test:browser -- --config playwright.cli.config.ts e2e/workspace-requests.spec.ts e2e/workspace-navigation.spec.ts e2e/oauth-navigation.spec.ts",
+    "functional": "bun run --cwd apps/web test:desktop-navigation",
     "limitation": "Historical timing harnesses ran from /tmp and are not part of the repository. Historical timings cannot be reproduced byte-for-byte from the final PR; preserve them as dated attribution evidence rather than an SLO assertion. The checked-in browser tests exercise ownership, request count, canonical authority and retained navigation."
   }
 }

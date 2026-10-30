@@ -1,6 +1,6 @@
 import { browserSessionBindingHeader } from "../../src/shell/web-session/contract";
 import { afterAll, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Option } from "effect";
+import { type Cause, Deferred, Effect, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";
 import {
   auditEntriesTestSchema,
@@ -11,6 +11,8 @@ import {
 import { initialBrowserSessionBindingResponse as browserSessionBindingResponse } from "./internal/browser-entry";
 
 const holdInitialMetadata = Effect.fn(function* (db: D1Database) {
+  const context = yield* Effect.context<never>();
+  const run = Effect.runPromiseWith(context);
   const entered = yield* Deferred.make<void>();
   const released = yield* Deferred.make<void>();
   let metadataPrepared = false;
@@ -24,15 +26,16 @@ const holdInitialMetadata = Effect.fn(function* (db: D1Database) {
         };
       }
       if (key === "batch") {
-        return async (statements: Array<D1PreparedStatement>) => {
-          const result = await target.batch(statements);
-          if (metadataPrepared && !held) {
-            held = true;
-            await Effect.runPromise(Deferred.succeed(entered, undefined));
-            await Effect.runPromise(Deferred.await(released));
-          }
-          return result;
-        };
+        return (statements: Array<D1PreparedStatement>) =>
+          target.batch(statements).then((result) => {
+            if (metadataPrepared && !held) {
+              held = true;
+              return run(Deferred.succeed(entered, undefined))
+                .then(() => run(Deferred.await(released)))
+                .then(() => result);
+            }
+            return result;
+          });
       }
       return Reflect.get(target, key, target);
     },
@@ -55,7 +58,7 @@ const request = (): Request =>
   new Request("https://api.fidyapp.com/web/session/binding?context=application", {
     headers: { cookie: `__Host-fidy_session=${token}`, origin: "https://app.fidyapp.com" },
   });
-const setup = (granted: boolean): Effect.Effect<D1Database, unknown> =>
+const setup = (granted: boolean): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
     const digest = new Uint8Array(

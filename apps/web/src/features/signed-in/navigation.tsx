@@ -1,4 +1,4 @@
-import { transactionEntryConsent } from "@/app/transaction-entry";
+import { transactionEntryConsent } from "@/session/transaction-entry";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Calendar03Icon,

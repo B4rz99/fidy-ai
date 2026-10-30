@@ -13,7 +13,10 @@ export const useNavigationPreparation = (): ((destination: string) => void) => {
       if (authentication === "expired") return;
       const { apiClient, registry } = router.options.context;
       if (destination === "/app/needs-review") {
-        NeedsReviewFeature.preloadMaterial(apiClient, registry).catch(() => undefined);
+        NeedsReviewFeature.preloadMaterial({
+          client: apiClient,
+          registry,
+        }).catch(() => undefined);
       }
       if (destination === "/app/budgets") {
         BudgetsFeature.preloadData({

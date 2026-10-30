@@ -53,7 +53,21 @@ const LedgerRows = (): JSX.Element => (
 );
 export const TransactionRowsSkeleton = (): JSX.Element => (
   <LoadingRegion label="Cargando transacciones">
-    <LedgerRows />
+    <div className="transaction-ledger" data-category-visible="true" data-type-visible="true">
+      <Table>
+        <TableBody>
+          <TableRow aria-hidden="true">
+            <TableCell>Transacción de ejemplo</TableCell>
+            <TableCell className="hidden @min-[600px]/ledger:table-cell">Categoría</TableCell>
+            <TableCell className="hidden @min-[481px]/ledger:table-cell">Gasto</TableCell>
+            <TableCell>
+              <span className="block text-right tabular-nums">$12.000</span>
+            </TableCell>
+          </TableRow>
+          <TransactionSkeletonRows phase="continuation" />
+        </TableBody>
+      </Table>
+    </div>
   </LoadingRegion>
 );
 const SummarySkeleton = (): JSX.Element => (

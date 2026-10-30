@@ -186,7 +186,7 @@ const previews = [
     name: "Conexión bancaria · estado",
     frame: "plain",
     context: "Lectura del estado de la conexión.",
-    render: (): JSX.Element => <TextSkeleton label="Consultando conexión" lines={4} />,
+    render: (): JSX.Element => <TextSkeleton label="Consultando conexión" lines={3} />,
   },
   {
     name: "Conexión bancaria · cuentas",

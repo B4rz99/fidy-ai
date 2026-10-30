@@ -59,7 +59,7 @@ export const PATCreationSkeleton = (): JSX.Element => (
       <h2 className="settings-panel-title">Crear token</h2>
       <div className="settings-token-form">
         <div className="grid gap-2">
-          <Skeleton className="h-6 w-16" />
+          <Skeleton className="h-[1lh] w-16 text-sm leading-none" />
           <Skeleton data-slot="input" className="h-11 w-full" />
           <Skeleton className="h-[21px] w-full" />
         </div>
@@ -75,10 +75,12 @@ export const PATCreationSkeleton = (): JSX.Element => (
             </div>
           ))}
         </div>
-        <div className="settings-token-lifetime">
-          <Skeleton className="h-6 w-20" />
-          <Skeleton data-slot="dropdown-menu-trigger" className="h-11 w-full" />
-        </div>
+        <fieldset className="settings-token-lifetime">
+          <legend className="font-medium">
+            <Skeleton className="h-[1lh] w-20" />
+          </legend>
+          <Skeleton data-slot="dropdown-menu-trigger" className="inline-flex h-11 w-full" />
+        </fieldset>
         <div className="settings-token-submit">
           <Skeleton data-slot="button" className="h-11 w-full" />
           <Skeleton className="h-[21px] w-full" />

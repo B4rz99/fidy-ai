@@ -44,6 +44,7 @@ export default {
           "^src/shell/authorization/runtime\\.ts$",
           "^src/shell/(agent|canonical-operations|processing-consent|connections|dashboard|email-authentication|oauth-agents|operations|public-http|quotas|subscription|tokens|web-authentication|web-session|browser-transport)/contract\\.ts$",
           "^src/shell/canonical-policy/operations\\.ts$",
+          "^src/shell/browser-transport/operations\\.ts$",
         ],
       },
     },

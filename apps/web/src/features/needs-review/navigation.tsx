@@ -1,3 +1,4 @@
+import { reviewCountKey } from "./query-keys";
 import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { type JSX, useState } from "react";
@@ -11,7 +12,7 @@ export const ReviewPendingCount = (): JSX.Element => {
   const [query] = useState(() =>
     client.query("ingestion", "getReviewWorkspace", {
       query: { status: Option.some("pending" as const), offset: Option.none(), limit: 0 },
-      reactivityKeys: ["ingestion-review"],
+      reactivityKeys: ["ingestion-review", reviewCountKey],
     })
   );
   const state = useAtomValue(query).pipe(presentCanonicalQuery);

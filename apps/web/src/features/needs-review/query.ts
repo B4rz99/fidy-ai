@@ -1,3 +1,4 @@
+import { reviewItemKey, reviewWorkspaceKey } from "./query-keys";
 import { Data, DateTime, Effect, Option } from "effect";
 import { preparationActive, prepareQuery } from "@/transport/query-preparation";
 import { reviewMaterialQuery } from "./material-query";
@@ -56,7 +57,7 @@ const sources = Atom.family(({ client, filter, page }: WorkspaceKey) =>
       status: Option.some(filter),
       offset: page === 0 ? Option.none() : Option.some(page),
     },
-    reactivityKeys: ["ingestion-review", "ingestion-review-workspace"],
+    reactivityKeys: ["ingestion-review", reviewWorkspaceKey],
     timeToLive: renderCommitRetention,
   })
 );
@@ -91,7 +92,7 @@ export const reviewItemQuery = ({
 }>): Atom.Atom<AsyncResult.AsyncResult<CanonicalSuccess<"ingestion.getReviewItem">, unknown>> => {
   const individual = client.query("ingestion", "getReviewItem", {
     params: { id },
-    reactivityKeys: ["ingestion-review", `ingestion-review-item:${id}`],
+    reactivityKeys: ["ingestion-review", reviewItemKey(id)],
     timeToLive: renderCommitRetention,
   });
   return Atom.readable(
@@ -131,7 +132,7 @@ const invalidateSelectedReads = (
   if (Option.isSome(old)) {
     registry.set(
       invalidateItemReads(apiClient),
-      old.value.data.items.map((item) => `ingestion-review-item:${item.id}`)
+      old.value.data.items.map((item) => reviewItemKey(item.id))
     );
   }
 };

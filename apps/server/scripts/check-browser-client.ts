@@ -24,6 +24,7 @@ const safeSource = [
   /^src\/shell\/authorization\/runtime\.ts$/u,
   /^src\/shell\/canonical-operations\/contract\.ts$/u,
   /^src\/shell\/canonical-policy\/operations\.ts$/u,
+  /^src\/shell\/browser-transport\/operations\.ts$/u,
 ] as const;
 
 const safeDependency = [

@@ -133,8 +133,12 @@ test("saving a Review draft refreshes its revision without rereading the origina
         signInNavigationPerformanceThroughCore({ page, request, identity: "navigationDashboard" })
       );
       let originals = 0;
+      let countReads = 0;
       page.on("request", (read) => {
-        if (new URL(read.url()).pathname.endsWith("/material")) originals += 1;
+        const url = new URL(read.url());
+        if (url.pathname.endsWith("/material")) originals += 1;
+        if (url.pathname === "/ingestion/review-workspace" && url.searchParams.get("limit") === "0")
+          {countReads += 1;}
       });
       const initialMaterial = page.waitForResponse(isMaterialRead);
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
@@ -143,6 +147,7 @@ test("saving a Review draft refreshes its revision without rereading the origina
         expect(page.getByLabel("Valor", { exact: true })).toBeEnabled()
       );
       const before = originals;
+      const countsBefore = countReads;
       const revisedWorkspace = page.waitForResponse(isWorkspaceRead);
       yield* Effect.tryPromise(() => page.getByLabel("Valor", { exact: true }).fill("13250"));
       yield* Effect.tryPromise(() =>
@@ -153,6 +158,26 @@ test("saving a Review draft refreshes its revision without rereading the origina
         expect(page.getByLabel("Valor", { exact: true })).toBeEnabled()
       );
       expect(originals).toBe(before);
+      expect(countReads).toBe(countsBefore);
+    })
+  ));
+test("updates the persistent Review count after a decision", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationDashboard" })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      const skip = page.getByRole("button", { name: "Omitir", exact: true });
+      yield* Effect.tryPromise(() => expect(skip).toBeEnabled());
+      const badge = page
+        .getByRole("link", { name: /^Por revisar/u })
+        .getByLabel(/^\d+ pendientes$/u);
+      yield* Effect.tryPromise(() => expect(badge).toBeVisible());
+      const pending = Number(yield* Effect.tryPromise(() => badge.textContent()));
+      expect(pending).toBeGreaterThan(0);
+      yield* Effect.tryPromise(() => skip.click());
+      yield* Effect.tryPromise(() => expect(badge).toHaveText(String(pending - 1)));
     })
   ));
 test("coalesces Review focus refreshes already in flight", ({ page, request }) =>

@@ -1,0 +1,19 @@
+apps/web/src/features/transactions/query.ts
+  s_1cebf747fbaef6::t_a224eb329ff588 36,38-39,41,49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "614fa5a7f9d922deabc3489f98c80872eee60729",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

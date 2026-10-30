@@ -25,7 +25,7 @@ import type {
   PlanningTransactionRange,
 } from "../../transactions/contract";
 
-import { linkedTransactions, planningFact } from "./facts";
+import { linkedTransactionIds, planningFact } from "./facts";
 import { RecurringPlanningUnavailable } from "../contract";
 import { displayDocument } from "./display";
 import { type Transaction } from "../../../src/core/transactions/contract";
@@ -37,37 +37,34 @@ const previousMonth = (month: string): string =>
     DateTime.subtract(DateTime.makeUnsafe(`${month}-01`), { months: 1 })
   ).slice(0, monthLength);
 const checkedDocument = ({
-  db,
-  userId,
   document,
-}: Readonly<{ db: D1Database; userId: string; document: RecurringDocument }>): Effect.Effect<
-  Readonly<{ document: RecurringDocument; invalid: ReadonlyArray<string> }>,
-  RecurringPlanningUnavailable
-> =>
-  Effect.gen(function* () {
-    const transactions = yield* linkedTransactions({ db, userId, document });
-    const invalid = document.fulfillments
-      .filter((mark) => {
-        if (mark.transactionId === undefined) return false;
-        const transaction = transactions.find((entry) => entry.id === mark.transactionId);
-        const plan = document.plans.find((entry) => entry.id === mark.planId);
-        if (transaction === undefined || plan === undefined) return true;
-        const settings = retainedOccurrencePlan(document, plan, mark.date);
-        return !validRecurringFulfillment({
-          mark,
-          fact: planningFact({ transaction, timeZone: settings.timeZone }),
-          plan: settings,
-        });
-      })
-      .map((mark) => mark.id);
-    return {
-      document: {
-        ...document,
-        fulfillments: document.fulfillments.filter((mark) => !invalid.includes(mark.id)),
-      },
-      invalid,
-    };
-  });
+  transactions,
+}: Readonly<{ document: RecurringDocument; transactions: ReadonlyArray<Transaction> }>): Readonly<{
+  document: RecurringDocument;
+  invalid: ReadonlyArray<string>;
+}> => {
+  const invalid = document.fulfillments
+    .filter((mark) => {
+      if (mark.transactionId === undefined) return false;
+      const transaction = transactions.find((entry) => entry.id === mark.transactionId);
+      const plan = document.plans.find((entry) => entry.id === mark.planId);
+      if (transaction === undefined || plan === undefined) return true;
+      const settings = retainedOccurrencePlan(document, plan, mark.date);
+      return !validRecurringFulfillment({
+        mark,
+        fact: planningFact({ transaction, timeZone: settings.timeZone }),
+        plan: settings,
+      });
+    })
+    .map((mark) => mark.id);
+  return {
+    document: {
+      ...document,
+      fulfillments: document.fulfillments.filter((mark) => !invalid.includes(mark.id)),
+    },
+    invalid,
+  };
+};
 type ProjectionWork = Readonly<{
   db: D1Database;
   userId: string;
@@ -146,6 +143,7 @@ const workspaceMatching = ({
 }: ProjectionWork & Readonly<{ prior: string }>): Effect.Effect<
   Readonly<{
     preferences: UserPreferences;
+    invalid: ReadonlyArray<string>;
     earlier: AutomaticProjection;
     matched: AutomaticProjection;
   }>,
@@ -157,6 +155,7 @@ const workspaceMatching = ({
       db,
       userId,
       ranges: document.plans.length === 0 ? [] : [matchingRange(prior), matchingRange(month)],
+      ids: linkedTransactionIds(document),
       snapshot: {
         statement: prepareUserContext({
           db,
@@ -171,15 +170,17 @@ const workspaceMatching = ({
       },
     });
     if (Option.isNone(observed)) return yield* new RecurringPlanningUnavailable();
+    const checked = checkedDocument({ document, transactions: observed.value.selected });
     const projection = (selected: string, index: number): AutomaticProjection =>
       automaticFromFacts({
-        document,
+        document: checked.document,
         month: selected,
         now,
         selection: observed.value.ranges[index] ?? Option.none(),
       });
     return {
       preferences: observed.value.snapshot,
+      invalid: checked.invalid,
       earlier: projection(prior, 0),
       matched: projection(month, 1),
     };
@@ -225,12 +226,11 @@ export const workspaceValue = ({
 > =>
   Effect.gen(function* () {
     const now = yield* DateTime.now;
-    const checked = yield* checkedDocument({ db, userId, document });
     const prior = query.previousMonth ?? previousMonth(query.month);
-    const { preferences, earlier, matched } = yield* workspaceMatching({
+    const { preferences, earlier, matched, invalid } = yield* workspaceMatching({
       db,
       userId,
-      document: checked.document,
+      document,
       month: query.month,
       prior,
       now,
@@ -254,7 +254,7 @@ export const workspaceValue = ({
       previous,
       ...(prior > earliest ? { previousMonth: previousMonth(prior) } : {}),
       summary: summarizeRecurring(items),
-      invalidFulfillmentIds: checked.invalid,
+      invalidFulfillmentIds: invalid,
       matches: matched.matches.filter(({ item }) => item.expectedDate.startsWith(query.month)),
       matchesComplete: matched.complete && earlier.complete,
     });

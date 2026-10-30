@@ -24,6 +24,14 @@ export const planningFact = ({
     ? { counterparty: transaction.counterparty.value }
     : {}),
 });
+export const linkedTransactionIds = (document: RecurringDocument): ReadonlyArray<string> => [
+  ...new Set(
+    document.fulfillments.flatMap((mark) =>
+      mark.transactionId === undefined ? [] : [mark.transactionId]
+    )
+  ),
+];
+
 export const linkedTransactions = ({
   db,
   userId,
@@ -33,13 +41,7 @@ export const linkedTransactions = ({
   RecurringPlanningUnavailable
 > =>
   Effect.gen(function* () {
-    const ids = [
-      ...new Set(
-        document.fulfillments.flatMap((mark) =>
-          mark.transactionId === undefined ? [] : [mark.transactionId]
-        )
-      ),
-    ];
+    const ids = linkedTransactionIds(document);
     const size = 128;
     const transactions: Transaction[] = [];
     for (let index = 0; index < ids.length; index += size) {

@@ -1,0 +1,50 @@
+apps/server/cloudflare/d1-test-fixture.ts
+  s_1cebf747fbaef6::t_6a8e97611853ff 364,370,381,388,414,420,427-429,447,453,463-466,495,507,511
+  s_1cebf747fbaef6::t_60e885c449a516 449,456-459
+apps/server/cloudflare/transactions/internal/planning-read.ts
+  s_1cebf747fbaef6::t_c44cdb16ae1609 1-14,22,62-64,88-89
+  s_1cebf747fbaef6::t_67ed1e3c339f16 15-21,23-30,41-61,65-87,90-110
+  s_1cebf747fbaef6::t_8e7eae797cd362 31-40
+apps/server/cloudflare/recurring-plans/internal/query.ts
+  s_1cebf747fbaef6::t_60e885c449a516 21
+  s_1cebf747fbaef6::t_ef740df91062b7 17-18,83-89,99-105,110-112,117,133,136-138,154-156,159-160,171-173,230,234-235
+  s_1cebf747fbaef6::t_67ed1e3c339f16 19-20,22-26,90-98,106-109,113-116,139-153,157-158,161-170,174-185
+apps/server/cloudflare/recurring-plans/recurring-plans.test.ts
+  s_1cebf747fbaef6::t_67ed1e3c339f16 968-1009
+  s_1cebf747fbaef6::t_2ebfaf2898f45f 967,1010
+apps/server/cloudflare/recurring-plans/internal/query-cost.test.ts
+  s_1cebf747fbaef6::t_60e885c449a516 36,65
+  s_1cebf747fbaef6::t_67ed1e3c339f16 13-17,23-35,37-64,66-80
+  s_1cebf747fbaef6::t_56b6cea861144c 1-2,11-12,18-22
+apps/server/cloudflare/transactions/operations.ts
+  s_1cebf747fbaef6::t_f5214fb50d7af4 22,24,205,208
+  s_1cebf747fbaef6::t_67ed1e3c339f16 1,206-207,209-211
+  s_1cebf747fbaef6::t_60e885c449a516 11,23
+  s_1cebf747fbaef6::t_156d4419461ed6 21
+apps/server/cloudflare/transactions/contract.ts
+  s_1cebf747fbaef6::t_c44cdb16ae1609 38-59
+docs/research/app-performance-production-desktop-2026-10-29.md
+  s_1cebf747fbaef6::t_4f8de6e7b79cfc 120,128-161
+  s_1cebf747fbaef6::t_bb738e4d8c7a9b 163-173
+  s_1cebf747fbaef6::t_aa09da684cef33 162
+docs/research/app-performance-production-desktop-2026-10-29.json
+  s_1cebf747fbaef6::t_67ed1e3c339f16 1137,1157-1163,1175-1181,1193-1198,1210-1216,1228-1234,1246-1252,1264-1269,1281-1286,1298-1303,1315-1321,1333-1339,1351-1357,1369-1371,1383-1385,1397-1399,1402-1404,1414-1415,1427-1428,1440-1441,1453-1456,1468-1470,1482-1485,1497-1498,1510-1511,1523-1524
+  s_1cebf747fbaef6::t_067c15e0a079de 1136,1138-1147,1528-1582,1584
+  s_1cebf747fbaef6::t_2e5d108aa05bd5 1106-1135,1148-1156,1164-1174,1182-1192,1199-1209,1217-1227,1235-1245,1253-1263,1270-1280,1287-1297,1304-1314,1322-1332,1340-1350,1358-1368,1372-1382,1386-1396,1400-1401,1405-1413,1416-1426,1429-1439,1442-1452,1457-1467,1471-1481,1486-1496,1499-1509,1512-1522,1525-1527,1583
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a2ac8ec84aad38921b68283302ea479ae5795151",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

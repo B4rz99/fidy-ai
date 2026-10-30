@@ -1,0 +1,26 @@
+docs/research/app-performance-production-desktop-2026-10-29.md
+  s_1cebf747fbaef6::t_d504cb46a361ea 223-231
+  s_1cebf747fbaef6::t_5268e815d43bdb 214-222
+apps/web/src/app/application.tsx
+  s_1cebf747fbaef6::t_8bc699f37d894e 3,14-19,21-24,27,31-33
+  s_1cebf747fbaef6::t_e43442ddd1ccba 2,4-5,8,25-26,28-30,34-35
+  s_1cebf747fbaef6::t_f614b01356f390 36-37,42
+docs/research/app-performance-production-desktop-2026-10-29.json
+  s_1cebf747fbaef6::t_11f5bd2a7916a7 1940-2114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b313a30191eb6faa33ffd8ed8e174f2a3922288f",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,59 +1,39 @@
 import { BrowserSessionBoundary } from "@/session/browser-session-boundary";
-import type { BrowserSessionLifetime } from "@/transport/session-binding";
-import { RouterProvider } from "@tanstack/react-router";
-import { Option } from "effect";
-import { useCallback, useState } from "react";
-import type { JSX } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import { Data, Effect, Result } from "effect";
+import { AsyncResult, Atom } from "effect/reactivity";
+import { type JSX } from "react";
 import { SessionRegistryProvider } from "@/session/session";
-import { useSession } from "@/session/session-context";
-import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollment-lifetime";
-import {
-  makeFidyClient,
-  makeHostedTurnClient,
-  makeSubscriptionEnrollmentClient,
-  makeWebAuthClient,
-} from "@/transport/client";
 import { parseApiOrigin } from "@/transport/origin";
-import { createWebRouter } from "./routes";
+import type { BrowserSessionLifetime } from "@/transport/session-binding";
 
-const AuthenticationRouter = ({
-  apiOrigin,
-  session,
-}: Readonly<{ apiOrigin: string; session: BrowserSessionLifetime }>): JSX.Element => {
-  const { expireAuthentication } = useSession();
-  const [router] = useState(() =>
-    createWebRouter({
-      apiClient: makeFidyClient({
-        apiOrigin,
-        session,
-        observer: {
-          onAuthenticationExpired: () => {
-            expireAuthentication();
-          },
-        },
-      }),
-      webAuthClient: makeWebAuthClient({ apiOrigin, session }),
-      hostedTurnClient: makeHostedTurnClient({ apiOrigin, session }),
-      history: Option.none(),
-      initialSessionBinding: session.binding,
-    })
-  );
-  return <RouterProvider router={router} />;
-};
-
+// Code loading overlaps discovery; authenticated clients still mount inside the binding boundary.
+const applicationModule = import("./bound-application").then(Result.succeed, (cause: unknown) =>
+  Result.fail(cause)
+);
+class ApplicationCodeUnavailable extends Data.TaggedError("ApplicationCodeUnavailable")<{}> {}
+const applicationCode = Atom.make(
+  Effect.tryPromise({
+    try: () => applicationModule,
+    catch: () => new ApplicationCodeUnavailable(),
+  })
+);
 const BoundApplication = ({
   apiOrigin,
   session,
-}: Readonly<{ apiOrigin: string; session: BrowserSessionLifetime }>): JSX.Element => {
-  const makeEnrollmentClient = useCallback(
-    () => makeSubscriptionEnrollmentClient({ apiOrigin, session }),
-    [apiOrigin, session]
-  );
-  return (
-    <SubscriptionEnrollmentLifetime makeClient={makeEnrollmentClient}>
-      <AuthenticationRouter apiOrigin={apiOrigin} session={session} />
-    </SubscriptionEnrollmentLifetime>
-  );
+}: Readonly<{
+  apiOrigin: string;
+  session: BrowserSessionLifetime;
+}>): JSX.Element => {
+  const loaded = useAtomValue(applicationCode);
+  if (AsyncResult.isFailure(loaded)) throw new ApplicationCodeUnavailable();
+  if (!AsyncResult.isSuccess(loaded)) return <output>Cargando…</output>;
+  return Result.match(loaded.value, {
+    onSuccess: (module) => <module.BoundApplication apiOrigin={apiOrigin} session={session} />,
+    onFailure: (cause) => {
+      throw cause;
+    },
+  });
 };
 const RoutedApplication = (): JSX.Element => {
   const apiOrigin = parseApiOrigin(import.meta.env.VITE_API_ORIGIN);

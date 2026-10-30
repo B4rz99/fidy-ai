@@ -56,7 +56,8 @@ Three observations provide no confidence interval or broad consistency claim. Th
 ran sequentially, roughly half an hour apart; network and service conditions may vary.
 Completed encoded resource bytes include noncritical assets and omit unfinished transfers.
 Their reduction is not a causal estimate of startup improvement. API resource timing entries
-can include preflight representations; they must not all be counted as business requests.
+include opaque cross-origin fetch observations, including short attempts whose outcomes were
+not established; they must not all be counted as completed business requests.
 
 ## Remaining investigation
 
@@ -170,7 +171,63 @@ they are not replaced by a combined range. Empty workspaces still read no matchi
 The broader native suite passed 290 tests with 11 existing skips, including 200 own-User
 facts across two complete ranges, 129 excluded foreign-User facts, and an incomplete earlier
 month. Authority, credential renewal and the final live-credential Audit remain outside
-this refactor. This native round-trip reduction has not yet been measured in production.
+this refactor.
+
+## Deployed follow-up: revision 228da62e
+
+[PR #1621](https://github.com/B4rz99/fidy-ai/pull/1621) merged as
+`228da62e81a7031d5c0c1f4f6dcae9f869538698` after
+[all CI passed](https://github.com/B4rz99/fidy-ai/actions/runs/40994332382).
+Its [production workflow passed](https://github.com/B4rz99/fidy-ai/actions/runs/40995013179).
+Both app/API metadata checks matched before and after six further desktop observations.
+All six reached usable controls, and all browser overrides were restored afterward.
+
+| Page      | Three observations ms  | Median ms | Speedup versus original 90bdfb2 |
+| --------- | ---------------------- | --------: | ------------------------------: |
+| Recurring | 3555.4, 3028.9, 3294.8 |    3294.8 |                          0.923x |
+| Dashboard | 3577.1, 3683.8, 3573.5 |    3577.1 |                          1.068x |
+
+Recurring's median was about 16% below the preceding b2a2234d batch, and its two completed
+main API spans were approximately 1.73–1.78 seconds. Dashboard, whose implementation was
+unchanged in this release, also fell about 11%. The samples therefore do not isolate a causal
+16% improvement from the native batching change. Neither page meets the original 2x target.
+The JSON artifact's `recurringSnapshotFollowUp` retains every observation. A fresh tab in the
+same authenticated browser recovered unavailable browser controls; the related performance
+chat again paused heavy local checks for this measurement window.
+
+The canonical browser dispatch trace already avoids a separate ingress binding lookup and
+combines binding validation with admission; expanding the binding exception was ruled out.
+Cross-origin resource status fields were opaque, and the optional debugger-event trace was
+unavailable, so short fetch entries have no established response status or failure reason.
+
+## Startup code-loading candidate
+
+The production Vite manifest's static JavaScript closure initially contained 26 files,
+723,448 raw bytes and 238,033 independently gzip-compressed bytes. Splitting the router and
+bound clients into a module loaded alongside session discovery reduces the initial static
+dependency graph. Clients still mount only inside the verified binding boundary, and a failed
+code preload is retained as a failure for React's loader rather than an unhandled rejection.
+This changes code loading, not binding, request admission or authentication lifetimes.
+The JSON artifact records the before/candidate file inventories and sizes. Those dependency
+counts alone do not establish faster startup; matched desktop measurements remain required.
+
+The first code-loading prototype (`2d5623ec18`) used a Suspense boundary and was rejected
+after a matched local desktop Account check. Both batches used the small native dataset,
+gzip preview, empty browser cache, three cold documents and the same readiness/deadline
+rules in a coordinated quiet window. All six loads were ready, but native-control medians
+rose from 175.6 ms to 498.0 ms; driver medians rose from 239.6 ms to 927.8 ms. An earlier
+uncoordinated baseline is retained as a pilot and excluded from this paired comparison.
+The candidate is being revised to track code readiness without a new Suspense fallback;
+the smaller dependency graph alone is insufficient evidence for merging it.
+
+The revised non-suspending Atom loader passed the 16 focused login, Consent and session
+browser cases and full static verification. Three more quiet-window Account loads reached
+native controls in 178.5, 155.3 and 181.9 ms (median 178.5 ms), versus the retained 175.6 ms
+baseline median. Driver observations were 247.3, 192.1 and 207.1 ms (median 207.1 ms).
+This removes the large prototype regression but establishes no native readiness improvement.
+Its static graph contains 10 files, 625,940 raw bytes and 201,037 gzip bytes; production
+startup latency remains unmeasured for this code-loading change. Source hashes and every
+native observation are retained in the JSON artifact.
 
 ## Sign-in recovery and the quota hypothesis
 
@@ -184,3 +241,34 @@ Cloudflare documents that D1 Free daily read/write limit errors clear at
 The observed recovery strongly supports the user's quota hypothesis. Account-level usage
 and a quota-specific database error were not obtained, so exhaustion is not confirmed.
 The API health response alone is not a database-availability proof.
+
+## Cloudflare diagnostics
+
+Read-only diagnostics used the existing Wrangler OAuth session. D1 query insights for the
+preceding day, ordered by average execution duration, returned 20 statements; the largest
+average was 4.700 ms. These aggregates are not correlated to individual browser requests.
+The database reports ENAM placement and disabled read replication. Its rolling 24-hour usage
+is not evidence of exhaustion during the earlier sign-in failure.
+
+Worker analytics for 2026-10-29 04:10:13 through 2026-10-30 04:10:13 UTC report Core CPU
+P50/P99 of 9.085/36.564 ms and wall-time P50/P99 of 503.568/26,102.236 ms. The live GraphQL
+schema explicitly describes both quantile fields in microseconds; the JSON retains raw values
+and those definitions. These are mixed-traffic aggregates, not page response times. Cloudflare
+[defines wall time](https://developers.cloudflare.com/workers/observability/metrics-and-analytics/)
+to include I/O waits and work after sending the response. A separate last-hour status query
+reported 308 successful and 27 client-disconnected invocations, with no counted runtime errors;
+that does not resolve the earlier failure. Core and Ingress settings both report empty placement
+configuration. [Placement](https://developers.cloudflare.com/workers/configuration/placement/)
+can reduce database round-trip latency, but the installed staged release path does not apply
+script-level placement changes during a zero-traffic version upload. No placement change was made.
+
+Filtered live diagnostics on revision `228da62e` observed a Dashboard-window Core fetch with
+2,994 ms recorded work latency (3,000 ms wall / 9 ms CPU) and a coordinator invocation with
+2,017 ms recorded work latency. A subsequent Recurring navigation recorded the named
+`recurringPlans.getRecurringWorkspace` span at 1,120 ms, with 1,207 ms invocation wall time
+and 28 ms CPU; its enclosing fetch recorded 1,624 ms work latency. These observations narrow
+the investigation toward database, coordinator and transport waits. They do not identify an
+individual SQL call's network duration or establish a speedup. They were diagnostic navigations,
+not quiet-window cold-load samples. Scheduled work and other release traffic are separated by
+operation and revision in the retained artifact. Only allowlisted metadata and timings were
+retained; raw request events and SQL were discarded.

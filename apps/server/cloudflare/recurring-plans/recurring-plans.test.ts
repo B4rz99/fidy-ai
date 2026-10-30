@@ -243,6 +243,26 @@ const read = (
     return parsed.data;
   });
 
+it("reads an empty recurring workspace without scanning Transaction matching facts", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, subjects } = yield* fixture();
+      const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
+      const observed = observeRetentionCost(db);
+      const workspace = yield* read(observed.database, owner);
+      expect(workspace.document.plans).toEqual([]);
+      expect(workspace.occurrences).toEqual([]);
+      expect(workspace.previous).toEqual([]);
+      expect(workspace.matches).toEqual([]);
+      expect(workspace.matchesComplete).toBe(true);
+      expect(
+        observed
+          .statements()
+          .filter(({ sql }) => sql.includes("occurred_at_ms >= ? AND occurred_at_ms < ?"))
+      ).toHaveLength(0);
+    })
+  ));
+
 it("compact recurring responses preserve stored history and historical occurrence settings", () =>
   Effect.runPromise(
     Effect.gen(function* () {

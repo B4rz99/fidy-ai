@@ -203,8 +203,23 @@ export const findDashboardValue = ({
   Effect.gen(function* () {
     const found = yield* findDashboardDocument({ db, userId });
     if (Option.isNone(found)) return Option.none();
+    return yield* projectDashboardValue({ db, userId, operation, document: found.value.document });
+  }).pipe(Effect.orElseSucceed(() => Option.none()));
+
+/** Project a document already established in this canonical read, without retaining it afterward. */
+export const projectDashboardValue = ({
+  db,
+  userId,
+  operation,
+  document,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  operation: DashboardOperation;
+  document: DashboardDocument;
+}>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
+  Effect.gen(function* () {
     if (operation !== "dashboard.getDashboardView") {
-      const document = found.value.document;
       return Option.some({
         _tag: "Owner" as const,
         payload: document,
@@ -215,12 +230,12 @@ export const findDashboardValue = ({
     const facts = yield* loadDashboardFacts({
       db,
       userId,
-      document: found.value.document,
+      document,
       now,
     });
     if (Option.isNone(facts)) return Option.none();
     const view = yield* renderDashboardView({
-      document: found.value.document,
+      document,
       facts: facts.value,
       now,
     });

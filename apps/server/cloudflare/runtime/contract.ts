@@ -66,6 +66,7 @@ export const productionTopology = {
   core: {
     d1Binding: "DB",
     localPort: 8788,
+    placement: { mode: "smart" },
     workersDev: false,
   },
   ingress: {

@@ -31,7 +31,7 @@
   },
   "alchemy": {
     "repository": "https://github.com/alchemy-run/alchemy",
-    "verifiedOn": "2026-10-12",
+    "verifiedOn": "2026-10-30",
     "snapshot": {
       "manifest": ".repos/alchemy/packages/alchemy/package.json",
       "version": "2.0.0-beta.79",
@@ -55,7 +55,7 @@
     "patches": [
       {
         "path": "patches/alchemy@2.0.0-beta.80.patch",
-        "sha256": "45dc498b83ada7e91b5671480af054ad574a08b9c48eaa196c6abaf3163e32b7"
+        "sha256": "4b527dec17eb880c557566a05d658bfc5c9972490842fbc5e7f4b9d525e8de5c"
       }
     ]
   },

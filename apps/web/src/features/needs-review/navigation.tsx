@@ -1,20 +1,14 @@
-import { reviewCountKey } from "./query-keys";
+import { reviewPendingCountQuery } from "./navigation-query";
 import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { type JSX, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Badge } from "@/ui/components/badge";
-import { Option } from "effect";
 
 /** The navigation reads counts only; authentication registry replacement clears its query. */
 export const ReviewPendingCount = (): JSX.Element => {
   const client = useRouter().options.context.apiClient;
-  const [query] = useState(() =>
-    client.query("ingestion", "getReviewWorkspace", {
-      query: { status: Option.some("pending" as const), offset: Option.none(), limit: 0 },
-      reactivityKeys: ["ingestion-review", reviewCountKey],
-    })
-  );
+  const [query] = useState(() => reviewPendingCountQuery(client));
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   return (
     <span>

@@ -482,9 +482,9 @@ category views derive it from that one source and explicit category recovery ref
 Other transports retain the independent Category read when the inline catalog is absent.
 
 Navigation loads the small pending-count interface without downloading the Review editor on
-ordinary product entry. The badge reads counts without fetching item rows; the inbox owns its
-periodic/focus refresh, and another focus signal joins an in-flight read rather than canceling
-and restarting it. Draft saves invalidate the workspace and affected item only. Create, Skip,
+ordinary product entry. The badge reads counts without fetching item rows. The badge and inbox
+each own bounded periodic/focus refresh for their distinct projections; another signal joins
+an in-flight read rather than canceling and restarting it. Draft saves invalidate the workspace and affected item only. Create, Skip,
 Restore, and explicit recovery also invalidate the dedicated navigation count key; external
 ingestion changes retain the shared ingestion invalidation key. Workspace
 profiles share one query and resume invalidation, with results still owned by the authentication

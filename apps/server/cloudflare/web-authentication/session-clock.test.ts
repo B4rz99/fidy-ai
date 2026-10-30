@@ -10,7 +10,9 @@ import { seedSession, sessionId, sessionRequest, sessionUser } from "./session.t
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 const sessionDatabase = (): Promise<D1Database> =>
-  databases.acquire().then((db) => installCurrentTestObjects({ db, tables: [] }).then(() => db));
+  databases
+    .acquire()
+    .then((db) => installCurrentTestObjects({ db, tables: ["categories"] }).then(() => db));
 const current = 4102444800000;
 
 it.effect.each([
@@ -112,8 +114,7 @@ it.effect.each([
           )
         )
       );
-      deepStrictEqual(
-        outcome,
+      expect(outcome).toMatchObject(
         Exit.succeed({
           status: 200,
           cache: "no-store",

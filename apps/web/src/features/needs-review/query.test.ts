@@ -1,14 +1,23 @@
-import { Deferred, Effect, Layer } from "effect";
+import { reviewPendingCountQuery } from "./navigation-query";
+import { Deferred, Effect, Fiber, Layer } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import { AtomRegistry } from "effect/reactivity";
+import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
-import { expect, vi } from "vitest";
-import { makeFidyClient } from "@/transport/client";
+import { afterEach, expect, vi } from "vitest";
+import { type FidyClient, makeFidyClient } from "@/transport/client";
 import { reviewWorkspaceQueries } from "./query";
 
-it.live(
-  "shares Review reads, coalesces focus while waiting, and refreshes again after completion",
-  () =>
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+const countQueries = (client: FidyClient): ReturnType<typeof reviewWorkspaceQueries> => {
+  const active = reviewPendingCountQuery(client);
+  return { source: active, active };
+};
+it.live.each(["workspace", "count"] as const)(
+  "shares %s reads, coalesces focus while waiting, and refreshes again after completion",
+  (projection) =>
     Effect.gen(function* () {
       const window = Object.assign(new EventTarget(), { Uint8Array });
       vi.stubGlobal("window", window);
@@ -31,16 +40,22 @@ it.live(
         httpClient: Layer.succeed(HttpClient.HttpClient, http),
       });
       const registry = AtomRegistry.make();
-      const badge = reviewWorkspaceQueries({
-        client,
-        filter: "pending",
-        page: 0,
-      });
-      const panel = reviewWorkspaceQueries({
-        client,
-        filter: "pending",
-        page: 0,
-      });
+      const badge =
+        projection === "count"
+          ? countQueries(client)
+          : reviewWorkspaceQueries({
+              client,
+              filter: "pending",
+              page: 0,
+            });
+      const panel =
+        projection === "count"
+          ? countQueries(client)
+          : reviewWorkspaceQueries({
+              client,
+              filter: "pending",
+              page: 0,
+            });
       expect(panel.source).toBe(badge.source);
       expect(panel.active).toBe(badge.active);
       // React reads its snapshot during render, before subscribing in the commit.
@@ -69,4 +84,45 @@ it.live(
         vi.unstubAllGlobals();
       }
     })
+);
+
+it.live("polls remote Review counts without item rows and stops with its registry", () =>
+  Effect.gen(function* () {
+    vi.useFakeTimers();
+    vi.stubGlobal("window", Object.assign(new EventTarget(), { Uint8Array }));
+    vi.stubGlobal("document", { visibilityState: "visible" });
+    let pending = 0;
+    let reads = 0;
+    const http = HttpClient.make((request) =>
+      Effect.sync(() => {
+        expect(request.urlParams).toContainEqual(["limit", "0"]);
+        reads += 1;
+        return HttpClientResponse.fromWeb(
+          request,
+          Response.json({ data: { pendingCount: pending, total: pending, items: [] }, next: [] })
+        );
+      })
+    );
+    const client = makeFidyClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: Layer.succeed(HttpClient.HttpClient, http),
+    });
+    const registry = AtomRegistry.make();
+    const query = reviewPendingCountQuery(client);
+    const unmount = registry.mount(query);
+    try {
+      const initial = yield* Effect.forkChild(AtomRegistry.getResult(registry, query));
+      yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
+      expect((yield* Fiber.join(initial)).data.pendingCount).toBe(0);
+      pending = 1;
+      yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(60000));
+      expect(AsyncResult.getOrThrow(registry.get(query)).data.pendingCount).toBe(1);
+      expect(reads).toBe(2);
+    } finally {
+      unmount();
+      registry.dispose();
+    }
+    yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(60000));
+    expect(reads).toBe(2);
+  })
 );

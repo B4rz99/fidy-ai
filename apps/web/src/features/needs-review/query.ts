@@ -1,3 +1,4 @@
+import { observeReviewQuery } from "./query-observation";
 import { reviewItemKey, reviewWorkspaceKey } from "./query-keys";
 import { Data, DateTime, Effect, Option } from "effect";
 import { preparationActive, prepareQuery } from "@/transport/query-preparation";
@@ -7,43 +8,8 @@ import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import type { ReviewWorkspaceQuery } from "./decisions";
 import type { Filter } from "./view-navigation";
 
-const focusSignal = Atom.readable((get) => {
-  if (typeof window === "undefined") {
-    return 0;
-  }
-  let version = 0;
-  const visible = (): void => {
-    if (document.visibilityState === "visible") {
-      get.setSelf(++version);
-    }
-  };
-  window.addEventListener("focus", visible);
-  window.addEventListener("visibilitychange", visible);
-  get.addFinalizer(() => {
-    window.removeEventListener("focus", visible);
-    window.removeEventListener("visibilitychange", visible);
-  });
-  return version;
-});
-const pollMilliseconds = 60000;
 // Bridge React's render-to-subscription gap without retaining abandoned reads indefinitely.
 const renderCommitRetention = "400 millis";
-const observeReviewQuery = (source: ReviewWorkspaceQuery): ReviewWorkspaceQuery =>
-  Atom.transform(source, (get) => {
-    const refresh = (): void => {
-      if (!get.once(source).waiting) {
-        get.refresh(source);
-      }
-    };
-    get.once(focusSignal);
-    get.subscribe(focusSignal, refresh);
-    get.subscribe(source, (value) => get.setSelf(value));
-    const timer = Effect.runFork(
-      Effect.forever(Effect.sleep(pollMilliseconds).pipe(Effect.andThen(Effect.sync(refresh))))
-    );
-    get.addFinalizer(() => timer.interruptUnsafe());
-    return get.once(source);
-  });
 class WorkspaceKey extends Data.Class<
   Readonly<{
     client: FidyClient;

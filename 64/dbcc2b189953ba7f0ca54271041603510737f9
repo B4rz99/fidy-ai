@@ -1,0 +1,29 @@
+apps/server/ARCHITECTURE.md
+  s_68bfd164593579::t_9ef0a3f88a8248 25-28
+infra/cloudflare/production-release.test.ts
+  s_68bfd164593579::t_9ef0a3f88a8248 12,21-50,52-53,56-69
+infra/cloudflare/production-release.ts
+  s_68bfd164593579::t_9ef0a3f88a8248 435-436,447-448,464,1084
+docs/research/core-placement-2026-10-30.md
+  s_68bfd164593579::t_9ef0a3f88a8248 3-7,18,64-65,69-107
+infra/cloudflare/verify-edge-policy.ts
+  s_68bfd164593579::t_9ef0a3f88a8248 5
+docs/research/core-placement-production-2026-10-30.json
+  s_68bfd164593579::t_9ef0a3f88a8248 1-587
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "64dbcc2b189953ba7f0ca54271041603510737f9",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -32,6 +32,15 @@ const hasSessionCookie = (request: Request): boolean =>
 const bindingMatches = (session: Option.Option<{ id: string }>, request: Request): boolean =>
   Option.isSome(session) && request.headers.get(browserSessionBindingHeader) === session.value.id;
 
+const boundCurrentUserRead = (request: Request, path: string): boolean =>
+  path === webAuthenticationEndpoints.currentUser.path &&
+  request.method === "GET" &&
+  request.headers.has(browserSessionBindingHeader) &&
+  !request.headers.has("authorization");
+
+const ownerChecksBinding = (request: Request, path: string): boolean =>
+  independentProofPaths.has(path) || boundCurrentUserRead(request, path);
+
 /** Protect cookie-bearing ingress before any owner work; bootstrap discloses only public identity. */
 export const bindingResponse = ({
   request,
@@ -39,7 +48,7 @@ export const bindingResponse = ({
 }: WebSessionRequest): Effect.Effect<Option.Option<Response>> =>
   Effect.gen(function* () {
     const path = new URL(request.url).pathname;
-    if (independentProofPaths.has(path)) {
+    if (ownerChecksBinding(request, path)) {
       return Option.none();
     }
     const bootstrap = path === browserSessionBindingPath;

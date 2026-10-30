@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "9f17b50b4c862d04e79d4a055e29fb9de395102df985d26e5283b9f79d8f24ba";
+const expectedEdgePolicyDigest = "8030a0c4803608a39f3b719be8c50ab83d1ece6b3ed2588c6343efcf93e5f3de";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/connections/internal/retention.ts", import.meta.url)
@@ -46,6 +46,9 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/web-session/internal/binding.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/web-session/internal/current-user.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/web-session/operations.ts", import.meta.url)

@@ -90,6 +90,43 @@ in revision `952157f1` or the before/after table above. A separate default-Dashb
 probe already passed with one aggregate batch, so batching its ranges was not adopted
 as an explanation or fix for that observed page delay.
 
+## Deployed follow-up: revision 11fa1c22
+
+[PR #1619](https://github.com/B4rz99/fidy-ai/pull/1619) merged as
+`11fa1c2271a9c00b8dcc7ddb6cb28a9c133f83c8` after
+[all CI passed](https://github.com/B4rz99/fidy-ai/actions/runs/40982725160).
+Its [production deployment passed](https://github.com/B4rz99/fidy-ai/actions/runs/40983518647).
+App and API metadata matched that revision before and after six further desktop cold loads,
+using the same viewport, cache, CPU, admission gap and readiness conditions. All six were ready.
+
+| Page      | Three observations ms  | Median ms | Speedup versus original 90bdfb2 |
+| --------- | ---------------------- | --------: | ------------------------------: |
+| Recurring | 4156.2, 3915.1, 4359.0 |    4156.2 |                          0.731x |
+| Dashboard | 5373.3, 2958.1, 2943.6 |    2958.1 |                          1.291x |
+
+The Dashboard outlier remains in the artifact. The new median does not establish 2x,
+and the Recurring page regression remains unresolved. Resource spans show substantial
+variation in API waits; these sequential batches do not isolate the code change from
+service conditions. An additional read of the existing Recurring response, retaining
+only counts, found one retained plan and no fulfillments. The empty-plan fast path does
+not apply to that workload. The JSON artifact's `planningFollowUp` contains all six samples.
+
+A supplementary Account probe lost its debugger tab binding and produced no valid
+readiness observation. It is excluded from latency comparisons. Its available resource
+waterfall showed binding discovery starting after the main JavaScript startup; that is
+an investigation lead, not an improvement measurement. The matched follow-up harness
+passes the recovered tab and debugger handles explicitly and retains the 20-second limit.
+
+## Next native User startup change
+
+The bound browser User request performed four native statements: ingress binding discovery,
+idle renewal, canonical User projection and the final live-credential Audit. A regression
+assertion failed at four statements and passed at three after the expected binding was
+checked in the existing renewal statement. The final projection and late authority check
+remain separate. All 44 focused tests passed, including wrong/missing/malformed binding,
+duplicate cookies, expiry and revocation during projection. This is not a deployed latency
+measurement of that next change.
+
 ## Sign-in recovery and the quota hypothesis
 
 Before the daily reset, the sign-in attempt failed at `POST /web/pairings` with HTTP 503,

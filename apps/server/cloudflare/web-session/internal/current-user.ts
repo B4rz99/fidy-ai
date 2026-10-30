@@ -2,6 +2,8 @@ import { decodeCategoryRead, prepareCategoryRead } from "../../../src/shell/cate
 import { Category } from "../../../src/core/categories/contract";
 import { webSessionCredentialAuthority } from "../../../src/shell/web-session/operations";
 import { User, UserId } from "../../../src/core/identity/contract";
+import { WebSessionId } from "../../../src/core/web-session/contract";
+import { browserSessionBindingHeader } from "../../../src/shell/web-session/contract";
 
 import { readCurrentUser } from "../../identity/operations";
 import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
@@ -23,6 +25,9 @@ export const currentUser = ({
   Effect.gen(function* () {
     const token = sessionCookie(request);
     if (Option.isNone(token)) return noSession();
+    const rawBinding = request.headers.get(browserSessionBindingHeader);
+    const binding = Schema.decodeUnknownOption(WebSessionId)(rawBinding);
+    if (rawBinding !== null && Option.isNone(binding)) return noSession();
     {
       const digest = yield* attempt(() => sessionDigest(token.value));
       const usedAt = yield* Clock.currentTimeMillis;
@@ -33,9 +38,16 @@ export const currentUser = ({
           .prepare(
             `UPDATE web_sessions SET idle_expires_at_ms = min(hard_expires_at_ms,
         max(idle_expires_at_ms, ?)) WHERE token_digest = ? AND revoked_at_ms IS NULL
-        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ? RETURNING id, user_id`
+        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
+        ${Option.isSome(binding) ? "AND id = ?" : ""} RETURNING id, user_id`
           )
-          .bind(DateTime.toEpochMillis(candidate), digest, usedAt, usedAt)
+          .bind(
+            DateTime.toEpochMillis(candidate),
+            digest,
+            usedAt,
+            usedAt,
+            ...(Option.isSome(binding) ? [binding.value] : [])
+          )
           .first()
       ).pipe(Effect.uninterruptible);
       if (rawSession === null) return noSession();

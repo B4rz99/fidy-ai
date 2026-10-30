@@ -9388,6 +9388,9 @@
                       "from": {
                         "$ref": "#/components/schemas/UtcTimestamp"
                       },
+                      "limit": {
+                        "type": "string"
+                      },
                       "to": {
                         "$ref": "#/components/schemas/UtcTimestamp"
                       }
@@ -9887,6 +9890,10 @@
                   "query": {
                     "additionalProperties": false,
                     "properties": {
+                      "limit": {
+                        "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$",
+                        "type": "string"
+                      },
                       "offset": {
                         "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$",
                         "type": "string"
@@ -18072,9 +18079,18 @@
     },
     "/ingestion/review-workspace": {
       "get": {
-        "description": "Read the ingestion inbox ordered by original evidence expiry, or retained created, skipped and expired history. Returns metadata only, with a complete pending count and bounded pagination.",
+        "description": "Read the ingestion inbox ordered by original evidence expiry, or retained created, skipped and expired history. Returns metadata only, with a complete pending count and bounded pagination. Use limit=0 for complete counts without returning item rows; the default item limit is 50.",
         "operationId": "ingestion.getReviewWorkspace",
         "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$",
+              "type": "string"
+            }
+          },
           {
             "in": "query",
             "name": "status",
@@ -23376,9 +23392,17 @@
     },
     "/transactions": {
       "get": {
-        "description": "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, counterparty text, direction, and Currency narrows the history; omit every filter for all visible history.",
+        "description": "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, counterparty text, direction, and Currency narrows the history; omit every filter for all visible history. limit optionally bounds each response to 1–100 records (default 100); the keyset continuation remains valid when the limit changes.",
         "operationId": "transactions.listTransactions",
         "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "in": "query",
             "name": "from",

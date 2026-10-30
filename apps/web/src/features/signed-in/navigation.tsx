@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Calendar03Icon,
@@ -9,9 +8,10 @@ import {
   Wallet01Icon,
 } from "@hugeicons/core-free-icons";
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
-import { Option } from "effect";
-import { AsyncResult } from "effect/reactivity";
 import { type JSX, type ReactNode, useState } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import { Option } from "effect";
+import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { useSession } from "@/session/session-context";
 import {
   ApplicationHabitat,
@@ -29,6 +29,26 @@ const navigationLinks = [
   { to: "/app/recurring", label: "Recurrentes", icon: Calendar03Icon },
 ] as const;
 
+/** Share the Transactions page's fresh Consent query before mounting ordinary navigation reads. */
+const ConsentedReviewCount = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => {
+  const client = useRouter().options.context.webAuthClient;
+  const [query] = useState(() =>
+    client.query("processingConsent", "status", {
+      timeToLive: "0 seconds",
+      reactivityKeys: ["processing-consent"],
+    })
+  );
+  const state = useAtomValue(query).pipe(presentCanonicalQuery);
+  return state._tag === "Ready" &&
+    !state.waiting &&
+    Option.isNone(state.refreshFailure) &&
+    state.value.status === "Granted" ? (
+    <>{children}</>
+  ) : (
+    <></>
+  );
+};
+
 export const SignedInNavigation = ({
   onLogout,
   loggingOut,
@@ -42,13 +62,16 @@ export const SignedInNavigation = ({
   const privacy = useRouterState({
     select: (state) => state.location.pathname === "/settings/privacy",
   });
-  const client = useRouter().options.context.webAuthClient;
-  const [binding] = useState(() => client.query("browserSession", "binding", {}));
-  const session = useAtomValue(binding);
-  const signedIn =
-    authentication !== "expired" &&
-    AsyncResult.isSuccess(session) &&
-    Option.isSome(Option.fromNullishOr(session.value.binding));
+  const transactions = useRouterState({
+    select: (state) => state.location.pathname === "/app/transactions",
+  });
+  const { initialSessionBinding } = useRouter().options.context;
+  const signedIn = authentication !== "expired" && initialSessionBinding !== "none";
+  const count = transactions ? (
+    <ConsentedReviewCount>{reviewPendingCount}</ConsentedReviewCount>
+  ) : (
+    reviewPendingCount
+  );
   return (
     <nav aria-label="Aplicación" className="application-navigation">
       {navigationLinks.map((link) => (
@@ -62,7 +85,7 @@ export const SignedInNavigation = ({
         >
           <HugeiconsIcon icon={link.icon} size={22} strokeWidth={1.5} aria-hidden="true" />
           {link.label}
-          {link.to === "/app/needs-review" && signedIn && !privacy ? reviewPendingCount : null}
+          {link.to === "/app/needs-review" && signedIn && !privacy ? count : null}
         </Link>
       ))}
       <SettingsNavigation />

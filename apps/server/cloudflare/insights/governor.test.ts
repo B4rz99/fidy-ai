@@ -1,6 +1,6 @@
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
-import { Effect, Exit, Option, Result, Schema } from "effect";
+import { Cause, Effect, Exit, Option, Schema } from "effect";
 import {
   InsightTemplateConfiguration,
   WeeklyQuestionTemplateConfiguration,
@@ -23,6 +23,14 @@ import {
   weeklySummaryTestNow,
   weeklySummaryTestUser,
 } from "../weekly-summary.test-fixture";
+
+const assertTypedFailure = <E>(exit: Exit.Exit<unknown, E>, expected: E): void => {
+  assert(Exit.isFailure(exit));
+  assert.equal(exit.cause.reasons.length, 1);
+  const reason = exit.cause.reasons[0];
+  assert(reason !== undefined && Cause.isFailReason(reason));
+  assert.deepStrictEqual(reason.error, expected);
+};
 
 afterAll(() => weeklySummaryTestDatabases.dispose());
 it.live("rejects corrupt retained pause dates before materializing any report", () =>
@@ -78,8 +86,8 @@ it.live("rejects a corrupt retained question origin without staging or sending w
         .bind(id, userId, 8_640_000_000_000_001)
         .run()
     );
-    assert.deepStrictEqual(
-      yield* Effect.result(
+    assertTypedFailure(
+      yield* Effect.exit(
         executeProactivityWork({
           userId,
           work: { kind: "weekly-question", version: 1, userId, id },
@@ -107,7 +115,7 @@ it.live("rejects a corrupt retained question origin without staging or sending w
           },
         })
       ),
-      Result.fail(new InsightUnavailable())
+      new InsightUnavailable()
     );
     expect(
       yield* Effect.tryPromise(() =>

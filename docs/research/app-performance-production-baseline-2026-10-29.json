@@ -1,0 +1,324 @@
+{
+  "revision": "7cb76cd8f7c34b0639e98af5c05085142cf3521c",
+  "contractDigest": "935282207549fbc70a15632d74d3b9a4ee2c04a37380ac82ab67a9da68428b38",
+  "app": "https://app.fidyapp.com",
+  "api": "https://api.fidyapp.com",
+  "date": "2026-10-29",
+  "journey": "transactions:cold-document",
+  "environment": "Authenticated existing account in the in-app browser; account data differs from local seeded datasets.",
+  "method": {
+    "httpCache": "disabled; reload ignores cache",
+    "connectionAndProcess": "warm",
+    "readiness": "Visible enabled + Registrar; browser-side polling every 25 ms after the new document DOMContentLoaded event; 20-second observation budget.",
+    "gapBetweenAcceptedDocuments": "At least 12 seconds outside the clock, verified from timeOrigin and the previous observation.",
+    "desktop": {
+      "width": 1280,
+      "height": 720,
+      "cpuRate": 1,
+      "network": "unthrottled"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "cpuRate": 4,
+      "latencyMs": 150,
+      "downloadBytesPerSecond": 200000,
+      "uploadBytesPerSecond": 93750
+    }
+  },
+  "samples": [
+    {
+      "profile": "desktop",
+      "ready": true,
+      "observedMs": 3860.8,
+      "timeOrigin": 1793291000183.7,
+      "resourceEntriesAtCollection": 109,
+      "completedEncodedResourceBytes": 2220216,
+      "criticalApiResourceTimings": [
+        {
+          "path": "/web/session/binding",
+          "startMs": 503.3,
+          "endMs": 886.3
+        },
+        {
+          "path": "/web/session/binding",
+          "startMs": 1030.3,
+          "endMs": 1667.5
+        },
+        {
+          "path": "/web/consent",
+          "startMs": 1033.9,
+          "endMs": 2370.3
+        },
+        {
+          "path": "/user",
+          "startMs": 2376.4,
+          "endMs": 3199.7
+        },
+        {
+          "path": "/categories",
+          "startMs": 3209.5,
+          "endMs": 3823.7
+        },
+        {
+          "path": "/transactions",
+          "startMs": 3211,
+          "endMs": 3834.2
+        }
+      ]
+    },
+    {
+      "profile": "desktop",
+      "ready": true,
+      "observedMs": 3278.8,
+      "timeOrigin": 1793291076917.1,
+      "resourceEntriesAtCollection": 109,
+      "completedEncodedResourceBytes": 2220123,
+      "criticalApiResourceTimings": [
+        {
+          "path": "/web/session/binding",
+          "startMs": 429.3,
+          "endMs": 616.2
+        },
+        {
+          "path": "/web/session/binding",
+          "startMs": 768.6,
+          "endMs": 1151.7
+        },
+        {
+          "path": "/web/consent",
+          "startMs": 769.9,
+          "endMs": 1832.3
+        },
+        {
+          "path": "/user",
+          "startMs": 1837.6,
+          "endMs": 2584.9
+        },
+        {
+          "path": "/categories",
+          "startMs": 2591.3,
+          "endMs": 3205.6
+        },
+        {
+          "path": "/transactions",
+          "startMs": 2592.4,
+          "endMs": 3259.6
+        }
+      ]
+    },
+    {
+      "profile": "desktop",
+      "ready": true,
+      "observedMs": 3423,
+      "timeOrigin": 1793291399734,
+      "resourceEntriesAtCollection": 109,
+      "completedEncodedResourceBytes": 2220136,
+      "criticalApiResourceTimings": [
+        {
+          "path": "/web/session/binding",
+          "startMs": 475.6,
+          "endMs": 715.5
+        },
+        {
+          "path": "/web/session/binding",
+          "startMs": 847.3,
+          "endMs": 1730.8
+        },
+        {
+          "path": "/web/consent",
+          "startMs": 849.1,
+          "endMs": 2194.8
+        },
+        {
+          "path": "/user",
+          "startMs": 2198,
+          "endMs": 2797.6
+        },
+        {
+          "path": "/categories",
+          "startMs": 2801.4,
+          "endMs": 3262.4
+        },
+        {
+          "path": "/transactions",
+          "startMs": 2801.6,
+          "endMs": 3401.4
+        }
+      ]
+    },
+    {
+      "profile": "mobile-slow",
+      "ready": true,
+      "observedMs": 8175.5,
+      "timeOrigin": 1793291137058.7,
+      "resourceEntriesAtCollection": 105,
+      "completedEncodedResourceBytes": 634370,
+      "criticalApiResourceTimings": [
+        {
+          "path": "/web/session/binding",
+          "startMs": 2002.9,
+          "endMs": 3582.7
+        },
+        {
+          "path": "/web/session/binding",
+          "startMs": 5152.9,
+          "endMs": 5787.8
+        },
+        {
+          "path": "/web/consent",
+          "startMs": 5157.6,
+          "endMs": 6537.7
+        },
+        {
+          "path": "/user",
+          "startMs": 6541.6,
+          "endMs": 7452.4
+        },
+        {
+          "path": "/categories",
+          "startMs": 7460.6,
+          "endMs": 8107.7
+        },
+        {
+          "path": "/transactions",
+          "startMs": 7461.6,
+          "endMs": 8090.8
+        }
+      ]
+    },
+    {
+      "profile": "mobile-slow",
+      "ready": true,
+      "observedMs": 6586.2,
+      "timeOrigin": 1793291168125.6,
+      "resourceEntriesAtCollection": 105,
+      "completedEncodedResourceBytes": 634460,
+      "criticalApiResourceTimings": [
+        {
+          "path": "/web/session/binding",
+          "startMs": 1853.6,
+          "endMs": 2095.7
+        },
+        {
+          "path": "/web/session/binding",
+          "startMs": 3705.9,
+          "endMs": 4091.4
+        },
+        {
+          "path": "/web/consent",
+          "startMs": 3710.6,
+          "endMs": 4818.1
+        },
+        {
+          "path": "/user",
+          "startMs": 4822.6,
+          "endMs": 5546.3
+        },
+        {
+          "path": "/categories",
+          "startMs": 5551.9,
+          "endMs": 6545.3
+        },
+        {
+          "path": "/transactions",
+          "startMs": 5553.3,
+          "endMs": 6289.2
+        }
+      ]
+    },
+    {
+      "profile": "mobile-slow",
+      "ready": true,
+      "observedMs": 7037.9,
+      "timeOrigin": 1793291225507.1,
+      "resourceEntriesAtCollection": 105,
+      "completedEncodedResourceBytes": 634315,
+      "criticalApiResourceTimings": [
+        {
+          "path": "/web/session/binding",
+          "startMs": 1947.7,
+          "endMs": 2459.7
+        },
+        {
+          "path": "/web/session/binding",
+          "startMs": 4024.8,
+          "endMs": 4445.7
+        },
+        {
+          "path": "/web/consent",
+          "startMs": 4029,
+          "endMs": 5426.7
+        },
+        {
+          "path": "/user",
+          "startMs": 5433.7,
+          "endMs": 6191.8
+        },
+        {
+          "path": "/categories",
+          "startMs": 6198.7,
+          "endMs": 6995.9
+        },
+        {
+          "path": "/transactions",
+          "startMs": 6199.6,
+          "endMs": 6792.2
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "desktop": {
+      "attempts": 3,
+      "ready": 3,
+      "medianObservedMs": 3423
+    },
+    "mobile-slow": {
+      "attempts": 3,
+      "ready": 3,
+      "medianObservedMs": 7037.9
+    }
+  },
+  "excluded": {
+    "exploratorySuccesses": [
+      {
+        "profile": "desktop",
+        "observedMs": 4383.8,
+        "reason": "Earlier event-wait implementation; excluded from matched stable-probe medians."
+      }
+    ],
+    "invalidProbeAttempts": [
+      {
+        "reason": "Stale browser handle prevented reload"
+      },
+      {
+        "reason": "Observation returned the previous document; timeOrigin guard rejected it"
+      },
+      {
+        "reason": "Reload wrapper retained an unavailable browser handle"
+      }
+    ],
+    "setupFailures": [
+      {
+        "operation": "Network.clearBrowserCache",
+        "reason": "Command timeout"
+      },
+      {
+        "operation": "Network.clearBrowserCache retry",
+        "reason": "Browser API unavailable"
+      },
+      {
+        "operation": "Page.addScriptToEvaluateOnNewDocument",
+        "reason": "Unsupported raw CDP method"
+      }
+    ]
+  },
+  "limits": [
+    "Completed resource entries omit pending transfers; cross-origin API sizes are unavailable and zero timing sizes do not mean zero API traffic.",
+    "CDP response windows can include old-document responses; critical API timings above come from the current document ResourceTiming buffer.",
+    "All accepted app Fetch responses were 200; preflight responses were 204. No live-provider operation, production write, charge or grant was performed.",
+    "Historical 6e72 observations used an earlier probe; they are not substituted for this verified-revision baseline."
+  ],
+  "browserRestored": true
+}

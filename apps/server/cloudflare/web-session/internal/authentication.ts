@@ -74,7 +74,9 @@ export const authenticate = ({
   current,
   freshness,
   requireConsent,
-}: WebSessionAuthentication & Readonly<{ requireConsent: boolean }>): Promise<
+  binding,
+}: WebSessionAuthentication &
+  Readonly<{ requireConsent: boolean; binding: Option.Option<string> }>): Promise<
   Option.Option<AuthenticatedWebSession>
 > =>
   prepareSessionLookup({
@@ -82,7 +84,7 @@ export const authenticate = ({
     current,
     freshness,
     requireConsent,
-    binding: Option.none(),
+    binding,
   }).then((lookup) => {
     if (Option.isNone(lookup)) return Option.none();
     const { statement } = lookup.value;

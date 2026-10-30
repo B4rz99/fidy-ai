@@ -4,6 +4,7 @@ import { playwright } from "./playwright-runtime";
 import {
   openUpgradeThroughCore,
   signInRecurringThroughCore,
+  signInSubscriptionReflowThroughCore,
   signInThroughCore,
 } from "./real-core-fixture";
 
@@ -68,7 +69,7 @@ test("Upgrade keeps every payment choice and exact offer price reachable with do
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(() => signInThroughCore({ page, request }));
+      yield* wait(() => signInSubscriptionReflowThroughCore({ page, request }));
       yield* wait(() => page.setViewportSize(narrowViewport));
       yield* wait(() => openUpgradeThroughCore(page));
       const yearly = page.getByRole("button", { name: /anual/u });

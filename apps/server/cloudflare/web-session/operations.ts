@@ -47,7 +47,21 @@ export const boundCanonicalWebSessionAuthority = (
 export const authenticateWebSession = (
   input: WebSessionAuthentication
 ): Promise<Option.Option<AuthenticatedWebSession>> =>
-  authenticate({ ...input, requireConsent: false });
+  authenticate({ ...input, requireConsent: false, binding: Option.none() });
+
+/** Discover the cookie's subject and verify its expected binding in one live lookup.
+ * Protected work still rechecks credential authority in its own atomic unit.
+ */
+export const authenticateBoundWebSession = (
+  input: WebSessionAuthentication
+): Promise<Option.Option<AuthenticatedWebSession>> => {
+  const binding = Schema.decodeUnknownOption(WebSessionId)(
+    input.request.headers.get(browserSessionBindingHeader)
+  );
+  return Option.isNone(binding)
+    ? Promise.resolve(Option.none())
+    : authenticate({ ...input, requireConsent: false, binding });
+};
 
 /**
  * Revoke only the presented credential at the caller's Clock and expire its browser cookie;
@@ -76,7 +90,11 @@ export const currentWebSessionUser = (input: WebSessionRequest): Effect.Effect<R
 export const browserSession = (
   input: WebSessionRequest & Readonly<{ input: Readonly<{ current: number; fresh: boolean }> }>
 ): Promise<Option.Option<FreshSessionSubject>> =>
-  authenticate({ ...inputWithFreshness(input), requireConsent: false }).then((session) =>
+  authenticate({
+    ...inputWithFreshness(input),
+    requireConsent: false,
+    binding: Option.none(),
+  }).then((session) =>
     Option.map(session, (subject) => ({ id: subject.id, user_id: subject.userId }))
   );
 
@@ -99,7 +117,7 @@ export const freshBrowserSession = (
 export const authenticateCanonicalWebSession = (
   input: WebSessionRequest & Readonly<{ current: number }>
 ): Promise<Option.Option<AuthenticatedWebSession>> =>
-  authenticate({ ...input, freshness: "live", requireConsent: true });
+  authenticate({ ...input, freshness: "live", requireConsent: true, binding: Option.none() });
 
 /** Check browser lifetime binding at private HTTP ingress; correlation never replaces the cookie. */
 export const browserSessionBindingResponse = (

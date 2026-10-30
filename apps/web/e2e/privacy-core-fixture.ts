@@ -110,3 +110,12 @@ export const openPrivacyTransactionsThroughCore = (page: Page): Promise<void> =>
     retry,
   });
 };
+
+/** Reload read-only history through its independent Privacy authority. */
+export const reloadPrivacyTransactionsThroughCore = (page: Page): Promise<void> =>
+  readPrivacyThroughCore({
+    page,
+    path: "/web/privacy/transactions",
+    initial: () => page.reload(),
+    retry: page.getByRole("button", { name: "Reintentar", exact: true }),
+  });

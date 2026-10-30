@@ -4211,11 +4211,11 @@ it("shows an isolated ingestion inbox with the original evidence deadline", () =
       yield* fromTestPromise(() =>
         clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
       );
-      const read = (index: number): Promise<Response> =>
+      const read = (index: number, limit = 50): Promise<Response> =>
         send(
           runtime,
           new Request(
-            "https://api.fidyapp.com/ingestion/review-workspace?status=pending&offset=0",
+            `https://api.fidyapp.com/ingestion/review-workspace?status=pending&offset=0&limit=${limit}`,
             {
               headers: sessionHeaders(index),
             }
@@ -4242,6 +4242,19 @@ it("shows an isolated ingestion inbox with the original evidence deadline", () =
       expect(body.data.items).toHaveLength(1);
       expect(body.data.items[0]?.source).toBe("statement");
       expect(body.data.items[0]?.status).toBe("pending");
+      const counts = yield* fromTestPromise(() => read(0, 0));
+      expect(counts.status).toBe(200);
+      expect(yield* fromTestPromise(() => counts.json())).toMatchObject({
+        data: { pendingCount: 1, total: 1, items: [] },
+      });
+      const foreignCounts = yield* fromTestPromise(() => read(1, 0));
+      expect(foreignCounts.status).toBe(200);
+      expect(yield* fromTestPromise(() => foreignCounts.json())).toMatchObject({
+        data: { pendingCount: 0, total: 0, items: [] },
+      });
+      for (const invalid of [-1, 51, 0.5]) {
+        expect((yield* fromTestPromise(() => read(0, invalid))).status).toBe(400);
+      }
       const foreign = yield* fromTestPromise(() => read(1));
       expect(foreign.status).toBe(200);
       expect(yield* fromTestPromise(() => foreign.json())).toMatchObject({

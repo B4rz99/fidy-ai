@@ -803,6 +803,26 @@ test("discards an in-flight verifier when switching methods and starts email onl
 
 const emailCooldownSeconds = 60;
 const secondMilliseconds = 1000;
+/** Let intercepted polling I/O finish before advancing its bounded HTTP deadline again. */
+const advancePendingEmailPoll = (page: Page, milliseconds: number): Promise<void> =>
+  Promise.all([
+    page
+      .waitForResponse((reply) => reply.url().endsWith("/web/pairings/redeem"))
+      .then((reply) => reply.finished()),
+    page.clock.runFor(milliseconds),
+  ]).then(() => undefined);
+const advanceEmailCooldown = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const duration = (emailCooldownSeconds - 1) * secondMilliseconds;
+      let elapsed = 0;
+      while (elapsed + minimumPollIntervalMilliseconds <= duration) {
+        yield* wait(advancePendingEmailPoll(page, minimumPollIntervalMilliseconds));
+        elapsed += minimumPollIntervalMilliseconds;
+      }
+      yield* wait(page.clock.runFor(duration - elapsed));
+    })
+  );
 const installEmailCooldownRoutes = (page: Page): Promise<() => number> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -855,12 +875,12 @@ test("honors each server email resend cooldown without creating another pairing"
       yield* wait(
         expect(page.getByRole("button", { name: "Reenviar código", exact: true })).toHaveCount(0)
       );
-      yield* wait(page.clock.runFor((emailCooldownSeconds - 1) * secondMilliseconds));
+      yield* wait(advanceEmailCooldown(page));
       yield* wait(
         expect(page.getByRole("button", { name: "Reenviar código", exact: true })).toHaveCount(0)
       );
       expect(sends()).toBe(1);
-      yield* wait(page.clock.runFor(secondMilliseconds));
+      yield* wait(advancePendingEmailPoll(page, secondMilliseconds));
       yield* wait(page.getByRole("button", { name: "Reenviar código", exact: true }).click());
       yield* wait(expect.poll(sends).toBe(2));
       yield* wait(
@@ -869,12 +889,12 @@ test("honors each server email resend cooldown without creating another pairing"
       yield* wait(
         expect(page.getByRole("button", { name: "Reenviar código", exact: true })).toHaveCount(0)
       );
-      yield* wait(page.clock.runFor((emailCooldownSeconds - 1) * secondMilliseconds));
+      yield* wait(advanceEmailCooldown(page));
       yield* wait(
         expect(page.getByRole("button", { name: "Reenviar código", exact: true })).toHaveCount(0)
       );
       expect(sends()).toBe(2);
-      yield* wait(page.clock.runFor(secondMilliseconds));
+      yield* wait(advancePendingEmailPoll(page, secondMilliseconds));
       yield* wait(
         expect(page.getByRole("button", { name: "Reenviar código", exact: true })).toBeEnabled()
       );

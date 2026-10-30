@@ -201,15 +201,6 @@ const decodeToolResponse = (
     });
   });
 
-const nativeRetryKey = (
-  context: McpSchema.McpRequestContext["Service"]
-): Effect.Effect<Option.Option<Schema.Json>, Schema.SchemaError> => {
-  const wire = context.requestMetadata?.[mcpCanonicalMetadata.retryKey];
-  return wire === undefined
-    ? Effect.succeedNone
-    : Schema.decodeUnknownEffect(Schema.Json)(wire).pipe(Effect.asSome);
-};
-
 const executeAdmittedTool = (
   input: ToolAdmission,
   work: Readonly<{
@@ -228,7 +219,9 @@ const executeAdmittedTool = (
     const confirmation = readNativeConfirmation({ context, supplied: work.confirmation });
     if (confirmation._tag === "Invalid") return yield* toolFailure(operation);
     const encodedInput = yield* Schema.decodeUnknownEffect(Schema.Json)(payload);
-    const retryKey = yield* nativeRetryKey(context);
+    const retryKey = yield* Schema.decodeUnknownEffect(Schema.UndefinedOr(Schema.Json))(
+      context.requestMetadata?.[mcpCanonicalMetadata.retryKey]
+    );
     const admission = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthCanonicalAdmission))({
       userId: input.subject.userId,
       connectionId: input.subject.oauthConnectionId,
@@ -244,7 +237,7 @@ const executeAdmittedTool = (
       }),
       operation: operation.id,
       input: encodedInput,
-      ...Option.match(retryKey, { onNone: () => ({}), onSome: (retryKey) => ({ retryKey }) }),
+      ...(retryKey === undefined ? {} : { retryKey }),
       ...Option.match(confirmation.attempt, {
         onNone: () => ({}),
         onSome: (confirmation) => ({ confirmation }),

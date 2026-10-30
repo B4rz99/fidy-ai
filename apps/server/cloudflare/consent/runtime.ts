@@ -10,7 +10,7 @@ import {
   ProcessingConsentWithdrawal,
 } from "../../src/shell/processing-consent/contract";
 import { readPrivacyTransactions } from "../transactions/operations";
-import { authenticateWebSession } from "../web-session/operations";
+import { authenticateBoundWebSession } from "../web-session/operations";
 import { protectCanonicalPressure } from "../canonical-admission/operations";
 import { boundedJsonBody } from "../http/operations";
 import { RequestBodyPolicy } from "../http/contract";
@@ -130,7 +130,7 @@ export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Ef
     }
     const current = yield* Clock.currentTimeMillis;
     const subject = yield* Effect.tryPromise(() =>
-      authenticateWebSession({
+      authenticateBoundWebSession({
         ...input,
         current,
         freshness: ["transactions", "erase", "renew"].includes(transport.value.operation)

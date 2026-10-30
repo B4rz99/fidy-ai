@@ -1699,6 +1699,16 @@ const paymentEnrollmentResponse = (
     catch: () => undefined,
   }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.payment-enrollment"));
 
+/** Consent combines expected binding with its live subject lookup; its protected work rechecks authority. */
+const reservedBindingResponse = <E, R>(
+  request: Request,
+  environment: CoreHttpEnvironment,
+  work: Effect.Effect<Response, E, R>
+): Effect.Effect<Response, E, R> =>
+  Option.isSome(processingConsentTransport(new URL(request.url).pathname))
+    ? work
+    : withBrowserBinding(request, environment, work);
+
 const dispatchCoreHttp = ({
   bankAuthentication,
   request,
@@ -1720,7 +1730,7 @@ const dispatchCoreHttp = ({
     );
   }
   const reserved = reservedCoreResponse({ request, environment, bankAuthentication }, url.pathname);
-  if (Option.isSome(reserved)) return bound(reserved.value);
+  if (Option.isSome(reserved)) return reservedBindingResponse(request, environment, reserved.value);
   if (["/providers/kapso/callback", "/providers/wompi/billing-events"].includes(url.pathname)) {
     return bound(providerCallbackEffect(request, environment, publish));
   }

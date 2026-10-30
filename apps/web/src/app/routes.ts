@@ -10,7 +10,9 @@ import {
   RecurringMonth,
   type WebAuthClient,
 } from "@/transport/client";
-import { type JSX, createElement } from "react";
+import { Fragment, type JSX, type ReactNode, createElement, useState } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import { workspaceQueryRetention } from "@/transport/workspace-query";
 import {
   Outlet,
   type RouterHistory,
@@ -19,6 +21,8 @@ import {
   createRouter,
   lazyRouteComponent,
   redirect,
+  useRouter,
+  useRouterState,
 } from "@tanstack/react-router";
 import { RouteFailure } from "./route-failure";
 
@@ -26,6 +30,8 @@ type WebRouterContext = Readonly<{
   apiClient: FidyClient;
   webAuthClient: WebAuthClient;
   hostedTurnClient: HostedTurnClient;
+  /** Latched identity classifies unauthenticated errors; it never grants access. */
+  initialSessionBinding: string;
 }>;
 type WebRouterOptions = WebRouterContext &
   Readonly<{
@@ -68,8 +74,40 @@ const TransactionListFeature = lazyRouteComponent(
 
 const DashboardRoute = lazyRouteComponent(() => import("./dashboard-page"), "DashboardPage");
 
+const ApplicationFrame = lazyRouteComponent(
+  () => import("./application-frame"),
+  "ApplicationFrame"
+);
+
+/** Warm the same session-owned profile atom; the server still checks live Consent and authority. */
+const CurrentUserPreload = ({ recurring }: Readonly<{ recurring: boolean }>): JSX.Element => {
+  const client = useRouter().options.context.apiClient;
+  const [query] = useState(() =>
+    client.query("identity", "getCurrentUser", {
+      ...workspaceQueryRetention,
+      ...(recurring ? { reactivityKeys: ["recurring-resume"] } : {}),
+    })
+  );
+  useAtomValue(query);
+  return createElement(Fragment);
+};
+
+const ProfilePreloading = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => {
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  // Transactions can serve Privacy after withdrawal; it owns ordinary reads after fresh Consent.
+  const needsProfile = path === "/app/budgets" || path === "/app/recurring";
+  return createElement(
+    Fragment,
+    null,
+    needsProfile
+      ? createElement(CurrentUserPreload, { key: path, recurring: path === "/app/recurring" })
+      : null,
+    children
+  );
+};
+
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({
-  component: lazyRouteComponent(() => import("./application-frame"), "ApplicationFrame"),
+  component: ApplicationFrame,
   notFoundComponent: () =>
     createElement(
       "main",
@@ -279,6 +317,7 @@ const routeTree = rootRoute.addChildren([
 
 export const createWebRouter = (options: WebRouterOptions) =>
   createRouter({
+    InnerWrap: options.initialSessionBinding !== "none" ? ProfilePreloading : undefined,
     defaultPreload: "intent",
     defaultPreloadDelay: 0,
     defaultErrorComponent: RouteFailure,
@@ -287,6 +326,7 @@ export const createWebRouter = (options: WebRouterOptions) =>
       apiClient: options.apiClient,
       webAuthClient: options.webAuthClient,
       hostedTurnClient: options.hostedTurnClient,
+      initialSessionBinding: options.initialSessionBinding,
     },
     history: Option.getOrUndefined(options.history),
   });

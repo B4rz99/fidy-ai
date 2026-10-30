@@ -2,6 +2,7 @@ import {
   consultAuthorizationThroughCore,
   openPrivacyTransactionsThroughCore,
   reloadPrivacyThroughCore,
+  reloadPrivacyTransactionsThroughCore,
   reloadUpgradeThroughCore,
   reopenPrivacyThroughCore,
 } from "./privacy-core-fixture";
@@ -307,6 +308,7 @@ test("an expired-trial User withdraws through real Core and can recover the same
       expect(response.status()).toBe(unauthenticatedStatus);
       yield* Effect.tryPromise(() => verifyRefusalRecovery(page, original));
       yield* Effect.tryPromise(() => verifyTransactionAccess(page));
+      yield* Effect.tryPromise(() => verifyReadOnlyReload(page));
       yield* Effect.tryPromise(() => verifyAnonymousTransactionRefusal(page));
       expect(privacyReviewRequests).toEqual([]);
     })
@@ -325,6 +327,11 @@ const observePrivacyReviewRequests = (page: Page): ReadonlyArray<string> => {
   });
   return requests;
 };
+
+const verifyReadOnlyReload = (page: Page): Promise<void> =>
+  reloadPrivacyTransactionsThroughCore(page).then(() =>
+    expect(page.getByText("Solo lectura", { exact: true })).toBeVisible()
+  );
 
 const verifyAnonymousTransactionRefusal = (page: Page): Promise<void> =>
   Effect.runPromise(

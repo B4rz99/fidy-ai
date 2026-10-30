@@ -11,7 +11,7 @@ export const ReviewPendingCount = (): JSX.Element => {
   const client = useRouter().options.context.apiClient;
   const [query] = useState(() =>
     client.query("ingestion", "getReviewWorkspace", {
-      query: { status: Option.some("pending" as const), offset: Option.none() },
+      query: { status: Option.some("pending" as const), offset: Option.none(), limit: 0 },
       reactivityKeys: ["ingestion-review"],
     })
   );

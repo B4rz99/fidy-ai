@@ -272,3 +272,59 @@ individual SQL call's network duration or establish a speedup. They were diagnos
 not quiet-window cold-load samples. Scheduled work and other release traffic are separated by
 operation and revision in the retained artifact. Only allowlisted metadata and timings were
 retained; raw request events and SQL were discarded.
+
+## Deployed startup code loading: revision 6bde98fb
+
+[PR #1623](https://github.com/B4rz99/fidy-ai/pull/1623) merged after exact-head CI, including
+Required Checks, passed. Production run `41003496675` passed; app metadata and API health
+reported revision `6bde98fb6a84d0a0bf33c4bb3b9d757c3a23c7a2` and the unchanged contract digest
+before and after each measurement window. The affected full local browser shard passed
+188 cases with three existing skips. An earlier CI run failed one signed-out OAuth navigation
+assertion; 19 focused reruns, the full local shard and the rebased CI passed, but that failure's
+root cause was not established. No assertion or threshold was relaxed.
+
+Three cold desktop loads per route used the existing readiness rules, empty browser cache,
+1280×720 viewport, normal CPU and 12-second admission gaps. There are 27 qualified observations,
+all ready, plus three retained descriptive Privacy observations. The third initial Privacy load
+overlapped another checkout's desktop/static checks. The entire initial Privacy batch is excluded
+from the comparison and was repeated in a confirmed quiet window; its replacement includes the
+slow 1,929.6 ms first load. All raw observations and overlap timestamps remain in the JSON.
+Temporary browser overrides were restored after each window. These remain small-sample,
+shared-host observations rather than production percentile estimates.
+
+| Journey      | Original median, ms | Deployed median, ms | Original / deployed |
+| ------------ | ------------------: | ------------------: | ------------------: |
+| Transactions |             2,747.4 |             2,950.9 |               0.93× |
+| Budgets      |             3,495.4 |             2,861.7 |               1.22× |
+| Recurring    |             3,039.7 |             2,366.5 |               1.28× |
+| Dashboard    |             3,820.3 |             3,058.9 |               1.25× |
+| Review       |             1,563.7 |             1,285.3 |               1.22× |
+| Account      |               666.0 |               551.7 |               1.21× |
+| Access       |             1,121.7 |             1,077.3 |               1.04× |
+| Upgrade      |             2,040.6 |             1,624.1 |               1.26× |
+| Privacy      |             1,191.8 |             1,109.1 |               1.07× |
+
+**Zero of nine journeys meets 2×.** The deployed state includes intervening Category read work;
+these observations do not isolate a causal latency gain from the smaller startup graph. The
+Recurring regression is below the original median in this batch, but the overall performance
+objective remains open. Million-Transaction preparation and isolated live-provider measurements
+are still incomplete as recorded in the earlier reports.
+
+## Next Recurring linked-reference snapshot
+
+For a workspace with linked fulfillment references, validating those references and reading
+preferences/matching ranges previously required two sequential native calls. The candidate puts
+them in one snapshot, then performs the same fulfillment validation before matching. Empty plans
+still issue no matching-range reads. Each range and ID selection retains its independent 128-fact
+bound; up to 4,096 references are split into bounded selections. Bound JSON membership avoids
+exceeding D1's [100-parameter query limit](https://developers.cloudflare.com/d1/platform/limits/)
+when the shared effective-history SQL repeats its predicates.
+
+Three new native cost cases first failed with two calls and now pass with one, preserving valid,
+missing and foreign-reference outcomes. Additional native coverage reads 129 distinct references
+across selections without borrowing another range's completeness, excludes foreign/missing IDs,
+rejects oversized input before I/O, and refuses malformed selected facts. Focused checks pass
+35 cases with one existing skip; broader native checks pass 212 with 12 existing skips. Full static
+verification passes. This is a read-phase round-trip reduction, not a demonstrated 2× page speedup;
+production latency for this candidate is unmeasured. Admission, live authority and final Audit stay
+in their existing owners.

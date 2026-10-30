@@ -3,7 +3,7 @@ import { Category } from "../../../src/core/categories/contract";
 import { webSessionCredentialAuthority } from "../../../src/shell/web-session/operations";
 import { User, UserId } from "../../../src/core/identity/contract";
 import { WebSessionId } from "../../../src/core/web-session/contract";
-import { browserSessionBindingHeader } from "../../../src/shell/web-session/contract";
+import { browserSessionBindingHeader } from "../../../src/shell/browser-transport/contract";
 
 import { readCurrentUser } from "../../identity/operations";
 import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";

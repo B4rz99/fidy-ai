@@ -295,8 +295,9 @@ const flush = (owner: Owner, entry: Entry, automatic = false): Work =>
         if (result._tag === "Failure") reject(entry, result.cause);
         else acceptDraft(entry, result.value);
         notify(owner);
-        if (result._tag === "Success")
-          {yield* invalidateItems({ ids: [entry.detail.item.id], countsChanged: false });}
+        if (result._tag === "Success") {
+          yield* invalidateItems({ ids: [entry.detail.item.id], countsChanged: false });
+        }
         if (automatic) return;
       }
     })

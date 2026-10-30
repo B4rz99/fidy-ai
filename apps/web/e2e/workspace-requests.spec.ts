@@ -137,14 +137,24 @@ test("saving a Review draft refreshes its revision without rereading the origina
       page.on("request", (read) => {
         const url = new URL(read.url());
         if (url.pathname.endsWith("/material")) originals += 1;
-        if (url.pathname === "/ingestion/review-workspace" && url.searchParams.get("limit") === "0")
-          {countReads += 1;}
+        if (
+          read.method() === "GET" &&
+          url.pathname === "/ingestion/review-workspace" &&
+          url.searchParams.get("limit") === "0"
+        ) {
+          countReads += 1;
+        }
       });
       const initialMaterial = page.waitForResponse(isMaterialRead);
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
       yield* Effect.tryPromise(() => initialMaterial);
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Valor", { exact: true })).toBeEnabled()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("link", { name: /^Por revisar/u }).getByLabel(/^\d+ pendientes$/u)
+        ).toBeVisible()
       );
       const before = originals;
       const countsBefore = countReads;

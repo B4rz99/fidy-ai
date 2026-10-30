@@ -2,7 +2,6 @@ import { ReleaseSmokeFailed } from "./smoke-exchange";
 import { verifyStableWorkerIdentity } from "./stable-worker-identity";
 import { RecoveryRequest, recoverStaged } from "./staged-recovery";
 import { ReleaseHttpLive } from "./release-http";
-import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 /// <reference types="bun-types" />
 
 import {
@@ -433,8 +432,8 @@ export const verifyRecoveryAccess = Effect.fn(
   )
 );
 
-/** Placement belongs to the candidate version; live settings can describe a different version. */
-export const verifyCorePlacement = Effect.fn(function* (
+/** Require default execution on the exact candidate; live settings may describe another version. */
+export const verifyCoreDefaultPlacement = Effect.fn(function* (
   env: Pick<Config, "account" | "token">,
   core: Readonly<{ name: string; version: string }>,
   client: HttpClient.HttpClient
@@ -445,9 +444,8 @@ export const verifyCorePlacement = Effect.fn(function* (
       id: Schema.Literal(core.version),
       resources: Schema.Struct({
         script: Schema.Struct({
-          placement: Schema.Struct({
-            mode: Schema.Literal(productionTopology.core.placement.mode),
-          }),
+          placement: Schema.optionalKey(Schema.Never),
+          placement_mode: Schema.optionalKey(Schema.Never),
         }),
       }),
     }),
@@ -463,7 +461,7 @@ export const verifyCorePlacement = Effect.fn(function* (
     Effect.mapError(
       () =>
         new ReleaseFailure({
-          message: "Release staging refused: Core candidate placement is unverified",
+          message: "Release staging refused: Core default placement is unverified",
         })
     )
   );
@@ -1083,7 +1081,7 @@ const stage = Effect.fn(function* (port: ReleasePort, env: Config, client: HttpC
     return yield* Effect.fail(Error("Alchemy candidate receipts are incomplete"));
   }
   yield* configureReleaseObservability(env, [snapshot.public.name, snapshot.core.name], client);
-  yield* verifyCorePlacement(
+  yield* verifyCoreDefaultPlacement(
     env,
     { name: snapshot.core.name, version: workers.core.versionId.value },
     client

@@ -1,5 +1,10 @@
 # Core placement and the remaining production target
 
+**Production trial rejected.** Smart Placement reported `SUCCESS`, but the measured Category median
+increased from 260.5 to 359.1 ms (37.9% slower). Default execution must be restored and retained in
+subsequent releases. The implementation and controls below record the historical trial, not a
+recommendation to re-enable it. See the [full production evidence](core-placement-production-2026-10-30.json).
+
 PR #1617 deployed revision `11000495fe` successfully. The matched production Category cohort
 improved median 542.3 to 292.8 ms (**1.85×**) and observed maximum 1,206.2 to 823.8 ms
 (**1.46×**). The production 2× target remains open. Both six-read cohorts returned the same
@@ -10,7 +15,7 @@ CPU, memory, total billing or an app-wide gain. See the
 
 ## Proposed change
 
-Enable Smart Placement only on the private Core Worker, whose fetch handler performs the
+The trial enabled Smart Placement only on the private Core Worker, whose fetch handler performs the
 R2 generation lookup and D1 work. Keep Ingress and static assets at their existing locations.
 Placement changes where code executes; it does not remove authorization, Consent, admission,
 Audit, fresh recovery fencing or any SQL transaction boundary.
@@ -56,8 +61,47 @@ published TypeScript source and compiled JavaScript. Its other ten existing patc
 unchanged. The patch was rebuilt against the npm tarball whose SHA-512 integrity matches the lock;
 Bun's local package marker is excluded. The source manifest records the new patch digest.
 
-Production declares Core's desired mode in the runtime topology and verifies it on the exact
-uploaded Core version before staging can continue. Missing, default or foreign-version responses
+The trial declared Core's desired mode in the runtime topology and verifies it on the exact
+uploaded Core version before staging could continue. Missing, default or foreign-version responses
 refuse promotion. An `INSUFFICIENT_INVOCATIONS` status may still pass this configuration gate;
 optimized placement and performance require separate observation after deployment. No direct
 settings patch, early promotion, new data resource, credential or billing upgrade is needed.
+
+## Production rejection and restoration
+
+PR #1624 merged as `c5c9b43b0f`; production run `41010737657` passed its exact-pair gates,
+normal traffic probes, topology, public discovery and drift checks. The active Core version
+`23c5b9fb-94f5-49d3-bc8b-be8ebca81f36` reported Smart Placement and service status `SUCCESS`.
+
+Three retained pre-placement controls had medians 243.05 ms (eight reads, `6bde98fb6a`),
+285.10 ms (eight reads, `8a16adf5cd`) and 260.50 ms (three reads, `c57d38769f`). The shorter
+final control followed concurrent Recurring and Dashboard releases and immediately preceded the
+placement merge; their Category implementation was unchanged. The paired Smart Placement cohort
+had eight measured reads with median 359.10 ms and maximum 912.80 ms. Each cohort retained one
+excluded warmup. Every request succeeded with the same 16 Categories, 1,086 bytes and matching
+wire/normalized hashes. The negative result is retained; it does not support a latency gain.
+
+The original production experiment ceilings remain 5,000 writes and 100,000 reads. Its request
+plan carried all 47 original reservations forward and admitted at most 86 owned requests total.
+The protected-read upper bound is 78, conservatively charged 64 writes each (4,992); new public
+health identities perform no storage work. Reads are reserved at 86,000. No further protected
+production cohort is admitted under this experiment. Account observations include all databases,
+including deleted experiments, and preserve 50,000 writes and 2.5 million reads for production.
+These are conservative reservations, not per-request measured production D1 costs.
+
+Restore the prior captured Worker pair through the guarded rollback workflow, then remove Core's
+placement input so later uploads retain default execution. The prior native promotion control
+already established that an omitted placement produces an immutable version without `placement`
+or `placement_mode`; promotion restores empty live settings. Staging now requires precisely that
+native default representation on the exact candidate. Smart/targeted placement and foreign-version
+responses refuse promotion. Keep the Alchemy forwarding correction and all trial evidence.
+
+A retrospective provider metrics read returned seven estimated invocations in each six-request
+snapshot window. Shared-isolate memory was higher in the later window, and CPU quantiles were
+lower, but the windows cannot establish workload-specific CPU/memory gains or causal regressions.
+Local synthetic profiling likewise does not establish deployed resource improvements. #1589
+remains open; billing, memory, CPU, maximum capacity and universal 2× gains remain unproven.
+
+Guarded rollback run `41012633170` failed with a generic release-routing error. Independent
+inspection still found the Smart version serving 100% of traffic. The attempt was not retried;
+default execution is instead restored through the normal validated forward-release path.

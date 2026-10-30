@@ -22,9 +22,10 @@ HTTP, Queue, Workflow and Durable Object execution. Per-User Durable Objects ser
 maintenance coordinates scheduled work independently. The private Email Worker composes only its
 narrow Ingestion and maintenance capabilities. Infrastructure owns bindings, not domain behavior.
 
-Production Core fetch handlers use versioned Smart Placement to reduce network distance to native
-storage. Ingress and assets retain their existing placement. The staged Core version must report
-the declared mode before promotion; configured placement alone is not performance evidence.
+Production Core uses default execution near the incoming request. Staging requires the exact
+Core version to omit placement metadata; live settings cannot establish a candidate's configuration.
+The measured Smart Placement trial increased Category latency and was rejected; see
+[`core-placement-2026-10-30.md`](../../docs/research/core-placement-2026-10-30.md).
 
 ## 2. Ownership and publication
 

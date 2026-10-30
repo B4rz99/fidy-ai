@@ -1,9 +1,10 @@
+import { browserSessionBindingPath, telemetryTraceHeader } from "@fidy/server/browser-transport";
 import { receiveSmoke } from "../../apps/server/cloudflare/runtime/release-smoke/operations";
 import {
   installTestSchema,
   isolatedTestDatabases,
 } from "../../apps/server/cloudflare/d1-test-fixture";
-import { browserSessionBindingPath } from "../../apps/server/src/shell/web-session/contract";
+
 import {
   microsoftProviderPaths,
   providerPaths,
@@ -14,7 +15,6 @@ import {
   type TelemetryService,
   TelemetryTraceId,
   TelemetryWorkRecord,
-  telemetryTraceHeader,
 } from "@fidy/server/telemetry-contract";
 import { type Cause, Clock, DateTime, Effect, Result, Schema } from "effect";
 import { afterAll, describe, expect } from "vitest";

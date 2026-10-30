@@ -1,8 +1,8 @@
+import { telemetryTraceHeader } from "@fidy/server/browser-transport";
 import {
   ResourceLimited,
   TelemetryTraceId,
   connectionBrowserPaths,
-  telemetryTraceHeader,
 } from "@fidy/server/browser-bootstrap";
 import {
   Cause,

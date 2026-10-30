@@ -9,10 +9,14 @@ import { prepareQuery } from "@/transport/query-preparation";
 import { initialApplicationValues } from "./initial-values";
 import {
   consumeInitialTransactionConsent,
+  initialTransactionConsent,
   transactionEntryConsent,
 } from "@/session/transaction-entry";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 const profile = {
   data: {
     id: "10000000-0000-4000-8000-000000000001",
@@ -92,7 +96,9 @@ it.live(
   "only the initial entry consumes its fresh bootstrap Consent; the next entry reads fresh status",
   () =>
     Effect.gen(function* () {
+      vi.useFakeTimers({ toFake: ["Date"] });
       const observedAt = yield* Clock.currentTimeMillis;
+      vi.setSystemTime(observedAt);
       vi.stubGlobal(
         "window",
         Object.assign(new EventTarget(), {
@@ -156,6 +162,12 @@ it.live(
           (yield* AtomRegistry.getResult(registry, query, { suspendOnWaiting: true })).status
         ).toBe("Revoked");
         expect(reads).toBe(1);
+        registry.set(initialTransactionConsent, Option.some(observedAt));
+        vi.setSystemTime(observedAt + 400);
+        expect(consumeInitialTransactionConsent(registry)).toBe(false);
+        registry.set(initialTransactionConsent, Option.some(observedAt));
+        vi.setSystemTime(observedAt - 1);
+        expect(consumeInitialTransactionConsent(registry)).toBe(false);
       } finally {
         registry.dispose();
       }

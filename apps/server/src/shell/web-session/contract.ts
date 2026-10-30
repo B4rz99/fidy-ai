@@ -29,12 +29,6 @@ export const logoutWebSessionEndpoint = HttpApiEndpoint.post("logout", "/web/ses
   success: HttpApiSchema.NoContent,
 }).annotate(OpenApi.Description, "Revoke the current browser WebSession and expire its cookie.");
 
-/** Public correlation for one browser authority lifetime; never sufficient to authenticate. */
-
-export {
-  browserSessionBindingHeader,
-  browserSessionBindingPath,
-} from "~/shell/browser-transport/contract";
 /** A fresh bootstrap observation. Ordinary metadata exists only in the Granted branch. */
 export const InitialTransactionPage = Schema.Struct({
   from: UtcTimestamp,

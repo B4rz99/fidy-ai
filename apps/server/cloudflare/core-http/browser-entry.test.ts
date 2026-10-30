@@ -1,4 +1,5 @@
-import { browserSessionBindingHeader } from "../../src/shell/web-session/contract";
+import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
+
 import { afterAll, expect, it } from "@effect/vitest";
 import { type Cause, Deferred, Effect, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";

@@ -1,8 +1,9 @@
+import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
 import { readMetadata } from "./internal/metadata";
 import { bindingResponse } from "./internal/binding";
 import { type Effect, Option, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
-import { browserSessionBindingHeader } from "../../src/shell/web-session/contract";
+
 import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
 import { completePairing, logout } from "./internal/lifecycle";
 import { currentUser } from "./internal/current-user";

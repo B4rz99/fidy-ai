@@ -6,9 +6,13 @@ export {
   BrowserSessionBinding,
   type BrowserSessionInitialContext,
   type InitialTransactionPage,
-  browserSessionBindingHeader,
 } from "~/shell/web-session/contract";
-export { isHttpOrigin, ResourceLimited } from "~/shell/public-http/contract";
-export { TelemetryTraceId, telemetryTraceHeader } from "~/shell/observability/contract";
+export {
+  browserSessionBindingHeader,
+  isHttpOrigin,
+  telemetryTraceHeader,
+} from "~/shell/browser-transport/contract";
+export { ResourceLimited } from "~/shell/public-http/contract";
+export { TelemetryTraceId } from "~/shell/observability/contract";
 export { connectionBrowserPaths } from "~/shell/connections/contract";
 export const BrowserBootstrapApi = HttpApi.make("BrowserBootstrapApi").add(BrowserSessionGroup);

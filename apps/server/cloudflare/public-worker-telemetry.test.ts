@@ -1,7 +1,8 @@
+import { telemetryTraceHeader } from "~/shell/browser-transport/contract";
 import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { expect } from "vitest";
-import { TelemetryTraceId, telemetryTraceHeader } from "../src/shell/observability/contract";
+import { TelemetryTraceId } from "../src/shell/observability/contract";
 import { WorkerTelemetryEvent, workerInternalTraceHeader } from "./runtime/telemetry/contract";
 import { makeWorkerTelemetry } from "./runtime/telemetry/operations";
 import { makePublicWorker } from "./public-worker";

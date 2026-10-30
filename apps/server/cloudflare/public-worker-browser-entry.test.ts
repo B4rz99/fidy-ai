@@ -1,4 +1,5 @@
-import { browserSessionBindingHeader } from "../src/shell/web-session/contract";
+import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
+
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { expect, vi } from "vitest";

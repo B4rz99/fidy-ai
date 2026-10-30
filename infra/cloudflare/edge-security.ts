@@ -1,4 +1,5 @@
-import { browserSessionBindingPath } from "../../apps/server/src/shell/web-session/contract";
+import { browserSessionBindingPath } from "@fidy/server/browser-transport";
+
 import {
   microsoftProviderPaths,
   providerPaths,

@@ -277,7 +277,6 @@ export const TelemetrySpanId = Schema.String.check(
 ).pipe(Schema.brand("TelemetrySpanId"));
 
 /** A server-authored receipt used by clients to correlate diagnostics without sending trace authority. */
-export { telemetryTraceHeader } from "~/shell/browser-transport/contract";
 
 /** The exact fields permitted in a completed Work export record. */
 export const TelemetryWorkRecord = Schema.Struct({

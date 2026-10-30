@@ -1,9 +1,9 @@
+import { browserSessionBindingHeader } from "@fidy/server/browser-transport";
 import { type InitialBrowserRequest, initialRequestFetch } from "./initial-request";
 import {
   BrowserBootstrapApi,
   type BrowserSessionBinding,
   type BrowserSessionInitialContext,
-  browserSessionBindingHeader,
 } from "@fidy/server/browser-bootstrap";
 import { Clock, Context, Effect, Layer, Option, Semaphore } from "effect";
 import {

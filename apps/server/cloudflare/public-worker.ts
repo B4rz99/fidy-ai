@@ -1,7 +1,9 @@
 import {
   browserSessionBindingHeader,
   browserSessionBindingPath,
-} from "../src/shell/web-session/contract";
+  telemetryTraceHeader,
+} from "~/shell/browser-transport/contract";
+
 import { cliDistributionResponse } from "./cli-distribution/runtime";
 import {
   microsoftProviderPaths,
@@ -23,7 +25,7 @@ import {
 } from "../src/shell/transactions/runtime";
 import { ownsMemoryPath as memoryPath } from "../src/shell/memory/runtime";
 import type { TelemetryService } from "../src/shell/observability/contract";
-import { telemetryTraceHeader } from "../src/shell/observability/contract";
+
 import { encodeTraceParent } from "../src/shell/observability/operations";
 import {
   type WorkerTelemetryEnvironment,

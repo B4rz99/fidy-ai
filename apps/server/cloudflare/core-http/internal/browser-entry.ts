@@ -1,11 +1,13 @@
+import {
+  browserSessionBindingHeader,
+  browserSessionBindingPath,
+} from "~/shell/browser-transport/contract";
 import { readBrowserTransactionPage } from "../../transactions/operations";
 import { Clock, DateTime, Duration, Effect, Option, Schema } from "effect";
 import {
   BrowserSessionBinding,
   type BrowserSessionInitialContext,
   type InitialTransactionPage,
-  browserSessionBindingHeader,
-  browserSessionBindingPath,
 } from "../../../src/shell/web-session/contract";
 import type { CurrentUserMetadata } from "../../../src/shell/identity/contract";
 import {

@@ -1,6 +1,6 @@
+import { telemetryTraceHeader } from "@fidy/server/browser-transport";
 // @vitest-environment node
 
-import { telemetryTraceHeader } from "@fidy/server/client";
 import { describe, expect, it } from "@effect/vitest";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";

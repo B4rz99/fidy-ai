@@ -1,3 +1,4 @@
+import { telemetryTraceHeader } from "@fidy/server/browser-transport";
 import {
   CanonicalAllowance,
   PATPairingApi,
@@ -7,7 +8,6 @@ import {
   PATPairingUnavailableApi,
   TelemetryTraceId,
   canonicalAllowanceHeaders,
-  telemetryTraceHeader,
 } from "@fidy/server/client";
 import { Clock, DateTime, Effect, Option, Redacted, Schema, Stream } from "effect";
 import {

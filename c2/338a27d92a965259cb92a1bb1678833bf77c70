@@ -1,0 +1,32 @@
+apps/server/cloudflare/dashboard/internal/dashboard-mutation.ts
+  s_68bfd164593579::t_2f569a4f8e48d7 206-221,233,238
+docs/research/app-performance-production-desktop-2026-10-29.md
+  s_68bfd164593579::t_2f569a4f8e48d7 1-104
+apps/server/cloudflare/recurring-plans/recurring-plans.test.ts
+  s_68bfd164593579::t_2f569a4f8e48d7 246-265
+apps/server/cloudflare/recurring-plans/internal/query.ts
+  s_68bfd164593579::t_2f569a4f8e48d7 83-84
+apps/server/cloudflare/dashboard/operations.ts
+  s_68bfd164593579::t_2f569a4f8e48d7 36,314-319
+docs/research/app-performance-production-desktop-2026-10-29.json
+  s_68bfd164593579::t_2f569a4f8e48d7 1-965
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_68bfd164593579::t_2f569a4f8e48d7 3-8,1808-1827
+  s_68bfd164593579::t_f89e7b6a809444 1828
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c2338a27d92a965259cb92a1bb1678833bf77c70",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

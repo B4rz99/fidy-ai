@@ -1937,6 +1937,180 @@
       "bytes": 613469,
       "gzipBytes": 196784
     },
-    "productionLatencyEstablished": false
+    "productionLatencyEstablished": false,
+    "matchedAccount": {
+      "beforeRevision": "228da62e81a7031d5c0c1f4f6dcae9f869538698",
+      "candidateRevision": "2d5623ec18",
+      "dataset": "small",
+      "profile": "desktop",
+      "previewCompression": "gzip",
+      "quietWindow": true,
+      "before": [
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 242.02170800000022,
+          "nativeControlReadyMs": 175.59999999962747,
+          "outcome": "ready",
+          "resourceBytes": 509127,
+          "transferredBytes": 532527
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 239.59941600000093,
+          "nativeControlReadyMs": 177.5,
+          "outcome": "ready",
+          "resourceBytes": 509127,
+          "transferredBytes": 532527
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 213.9541670000035,
+          "nativeControlReadyMs": 156.20000000018626,
+          "outcome": "ready",
+          "resourceBytes": 509127,
+          "transferredBytes": 532527
+        }
+      ],
+      "suspenseCandidate": [
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 927.7806249999994,
+          "nativeControlReadyMs": 506.3999999994412,
+          "outcome": "ready",
+          "resourceBytes": 524908,
+          "transferredBytes": 549808
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 935.0164999999979,
+          "nativeControlReadyMs": 498,
+          "outcome": "ready",
+          "resourceBytes": 524908,
+          "transferredBytes": 549808
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 924.9484589999993,
+          "nativeControlReadyMs": 496.09999999962747,
+          "outcome": "ready",
+          "resourceBytes": 524908,
+          "transferredBytes": 549808
+        }
+      ],
+      "rejectedForRegression": true,
+      "pilotUnquiet": [
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 231.13208300000042,
+          "nativeControlReadyMs": 162.40000000037253,
+          "outcome": "ready",
+          "resourceBytes": 509127,
+          "transferredBytes": 532527
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 213.04100000000108,
+          "nativeControlReadyMs": 143.30000000074506,
+          "outcome": "ready",
+          "resourceBytes": 509127,
+          "transferredBytes": 532527
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 488.3263749999969,
+          "nativeControlReadyMs": 353.79999999981374,
+          "outcome": "ready",
+          "resourceBytes": 509127,
+          "transferredBytes": 532527
+        }
+      ],
+      "nonSuspendingCandidate": [
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 247.27062500000102,
+          "nativeControlReadyMs": 178.5,
+          "outcome": "ready",
+          "resourceBytes": 510748,
+          "transferredBytes": 534748
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 192.05441699999938,
+          "nativeControlReadyMs": 155.30000000074506,
+          "outcome": "ready",
+          "resourceBytes": 510748,
+          "transferredBytes": 534748
+        },
+        {
+          "journey": "account:isolated-cold-document",
+          "elapsedMs": 207.12095899999986,
+          "nativeControlReadyMs": 181.90000000037253,
+          "outcome": "ready",
+          "resourceBytes": 510748,
+          "transferredBytes": 534748
+        }
+      ]
+    },
+    "status": "non-suspending-candidate-awaiting-production",
+    "nonSuspendingCandidateGraph": {
+      "files": [
+        {
+          "file": "assets/Atom-D3YsA3BM.js",
+          "bytes": 202875,
+          "gzipBytes": 65609
+        },
+        {
+          "file": "assets/Hooks-zOiLgwmQ.js",
+          "bytes": 5557,
+          "gzipBytes": 2370
+        },
+        {
+          "file": "assets/crypto-CAqZEt6Z.js",
+          "bytes": 3439,
+          "gzipBytes": 1647
+        },
+        {
+          "file": "assets/jsx-runtime-COQnYV8f.js",
+          "bytes": 424,
+          "gzipBytes": 291
+        },
+        {
+          "file": "assets/preload-helper-BEyK2XXa.js",
+          "bytes": 1521,
+          "gzipBytes": 801
+        },
+        {
+          "file": "assets/react-dom-p5-f7VGD.js",
+          "bytes": 3853,
+          "gzipBytes": 1383
+        },
+        {
+          "file": "assets/react-sySUN5R7.js",
+          "bytes": 8539,
+          "gzipBytes": 3297
+        },
+        {
+          "file": "assets/session-binding-CoY9oKEb.js",
+          "bytes": 190657,
+          "gzipBytes": 60356
+        },
+        {
+          "file": "assets/session-context-CxXTZkhY.js",
+          "bytes": 281,
+          "gzipBytes": 227
+        },
+        {
+          "file": "assets/index-BMJsXQKx.js",
+          "bytes": 208794,
+          "gzipBytes": 65056
+        }
+      ],
+      "bytes": 625940,
+      "gzipBytes": 201037
+    },
+    "nonSuspendingSourceSha256": {
+      "apps/web/src/app/application.tsx": "b78f7291de742ff1d57bbb3f5a66392a9c45eb951111daca5f61307d13584d24",
+      "apps/web/src/app/bound-application.tsx": "52374d8f433ae18f1a545e4cf2e4e0905af1090e4b85ead004a06026e0aaa576"
+    }
   }
 }

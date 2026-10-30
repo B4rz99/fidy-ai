@@ -211,6 +211,24 @@ This changes code loading, not binding, request admission or authentication life
 The JSON artifact records the before/candidate file inventories and sizes. Those dependency
 counts alone do not establish faster startup; matched desktop measurements remain required.
 
+The first code-loading prototype (`2d5623ec18`) used a Suspense boundary and was rejected
+after a matched local desktop Account check. Both batches used the small native dataset,
+gzip preview, empty browser cache, three cold documents and the same readiness/deadline
+rules in a coordinated quiet window. All six loads were ready, but native-control medians
+rose from 175.6 ms to 498.0 ms; driver medians rose from 239.6 ms to 927.8 ms. An earlier
+uncoordinated baseline is retained as a pilot and excluded from this paired comparison.
+The candidate is being revised to track code readiness without a new Suspense fallback;
+the smaller dependency graph alone is insufficient evidence for merging it.
+
+The revised non-suspending Atom loader passed the 16 focused login, Consent and session
+browser cases and full static verification. Three more quiet-window Account loads reached
+native controls in 178.5, 155.3 and 181.9 ms (median 178.5 ms), versus the retained 175.6 ms
+baseline median. Driver observations were 247.3, 192.1 and 207.1 ms (median 207.1 ms).
+This removes the large prototype regression but establishes no native readiness improvement.
+Its static graph contains 10 files, 625,940 raw bytes and 201,037 gzip bytes; production
+startup latency remains unmeasured for this code-loading change. Source hashes and every
+native observation are retained in the JSON artifact.
+
 ## Sign-in recovery and the quota hypothesis
 
 Before the daily reset, the sign-in attempt failed at `POST /web/pairings` with HTTP 503,

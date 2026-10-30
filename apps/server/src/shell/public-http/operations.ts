@@ -1,4 +1,4 @@
-import { isHttpOrigin } from "~/shell/browser-transport/contract";
+import { isHttpOrigin } from "~/shell/browser-transport/operations";
 import { Config, Schema } from "effect";
 
 /**

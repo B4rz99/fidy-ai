@@ -9,9 +9,9 @@ export {
 } from "~/shell/web-session/contract";
 export {
   browserSessionBindingHeader,
-  isHttpOrigin,
   telemetryTraceHeader,
 } from "~/shell/browser-transport/contract";
+export { isHttpOrigin } from "~/shell/browser-transport/operations";
 export { ResourceLimited } from "~/shell/public-http/contract";
 export { TelemetryTraceId } from "~/shell/observability/contract";
 export { connectionBrowserPaths } from "~/shell/connections/contract";

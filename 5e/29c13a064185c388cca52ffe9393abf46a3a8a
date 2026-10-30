@@ -1,0 +1,38 @@
+apps/server/cloudflare/core-http/browser-admission.test.ts
+  s_1cebf747fbaef6::t_980c4960212dea 2-3,19,36-38,118,148,222-291,294-298,300-312,361-365,368,410-440,467-562,565-574,577-583,587-602,604,606-719
+apps/server/cloudflare/transactions/internal/bound-history.ts
+  s_1cebf747fbaef6::t_980c4960212dea 1-51
+infra/cloudflare/verify-edge-policy.ts
+  s_1cebf747fbaef6::t_8dd544413b9fda 5
+  s_1cebf747fbaef6::t_980c4960212dea 77-94
+apps/server/cloudflare/canonical-admission/contract.ts
+  s_1cebf747fbaef6::t_980c4960212dea 9
+apps/server/cloudflare/transactions/internal/transaction-history.ts
+  s_1cebf747fbaef6::t_980c4960212dea 21-26,101,175,203-211,213,217-220,251,255-276,437-445,679,718-720,751-753
+apps/server/cloudflare/transactions/internal/effective-transaction.ts
+  s_1cebf747fbaef6::t_980c4960212dea 1-2,10-13,16,22-23,26-55,63-66,70-76,81,83,91,96-103,106-133
+apps/server/cloudflare/core-http/internal/http.ts
+  s_1cebf747fbaef6::t_980c4960212dea 57,61,1466-1471,1479-1487
+apps/server/cloudflare/transactions/operations.ts
+  s_1cebf747fbaef6::t_980c4960212dea 2,113-115
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_1cebf747fbaef6::t_980c4960212dea 943,949
+apps/server/cloudflare/transactions/query-costs.test.ts
+  s_1cebf747fbaef6::t_980c4960212dea 8,72-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5e29c13a064185c388cca52ffe9393abf46a3a8a",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

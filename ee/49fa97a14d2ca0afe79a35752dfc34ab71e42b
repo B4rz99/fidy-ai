@@ -1,0 +1,22 @@
+docs/research/r2-generation-read-proof-2026-10-30.json
+  s_d9571b3fccd032::t_13a0aee3e7bdbe 1-305
+docs/research/r2-generation-read-proof-2026-10-30.md
+  s_d9571b3fccd032::t_13a0aee3e7bdbe 42-45,75-77
+  s_d9571b3fccd032::t_2869169e168e97 1-41,46-74,78-83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee49fa97a14d2ca0afe79a35752dfc34ab71e42b",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

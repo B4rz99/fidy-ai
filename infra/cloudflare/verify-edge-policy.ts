@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "8f3ceb345cc43e45a87f1839f5e8fd62d015317fb37cefe25095f06fd53b2b7e";
+const expectedEdgePolicyDigest = "13ad95e1e7abbcd5c72ce8def85622fdc285ae61a560f9ec71709c9a39799693";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/connections/internal/retention.ts", import.meta.url)

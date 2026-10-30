@@ -403,6 +403,7 @@ describe("Production topology contract", () => {
     expect(productionTopology.core).toEqual({
       d1Binding: "DB",
       localPort: 8788,
+      placement: { mode: "smart" },
       workersDev: false,
     });
   });

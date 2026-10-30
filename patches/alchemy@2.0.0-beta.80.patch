@@ -66,12 +66,21 @@ index 22a223eca67c519d34f7ced0f6cb9b2b85f53f14..7ecdd5447df4c24b8e82d6f3dba48fc3
          yield* Effect.forEach(Array.from(terminalStatuses.values()), ({ fqn, id, type, status, providerMode }) => session.emit({
              _tag: "apply.resource.status",
 diff --git a/lib/Cloudflare/Workers/WorkerProvider.js b/lib/Cloudflare/Workers/WorkerProvider.js
-index 622b336b29d2b8c60406cd84660719afae6c8c96..75ab507bb13966dbe3273a6dd595a024a016d4f6 100644
+index 622b336b29d2b8c60406cd84660719afae6c8c96..6fb5ae38ca0a5b2a0934ef456d439ce0536c91dd 100644
 --- a/lib/Cloudflare/Workers/WorkerProvider.js
 +++ b/lib/Cloudflare/Workers/WorkerProvider.js
-@@ -4133,6 +4133,12 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
-             // with this Worker — see readWorkerRoutes. Empty-array props
-             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
+@@ -3044,4 +3044,4 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+         // for changes a version can carry — code, bindings, compatibility
+-        // settings, cache. Script-level settings in the upload metadata
+-        // (tags, observability, limits, placement, logpush) keep their live
++        // settings, cache, and placement. Script-level settings in the upload metadata
++        // (tags, observability, limits, logpush) keep their live
+         // values until the next full deploy, matching
+@@ -3077,2 +3077,3 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+                     cacheOptions: metadata.cacheOptions,
++                    placement: metadata.placement,
+                     annotations: news.version?.alias !== undefined ||
+@@ -4135,2 +4136,8 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
              // can detect drift and converge deletions.
 +            // versionId is an immutable upload receipt, not current traffic.
 +            const uploadedVersionId = output?.versionId
@@ -80,16 +89,10 @@ index 622b336b29d2b8c60406cd84660719afae6c8c96..75ab507bb13966dbe3273a6dd595a024
 +                    Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)))
 +                : undefined;
              const observeDomains = shouldObserveWorkerDomains(olds, output);
-             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
-             const observeCrons = shouldObserveWorkerCrons(olds, output);
-@@ -4234,6 +4240,7 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
-                 // (a getPhas call per known zone on every read); carry the
-                 // cleanup list forward like any other stable cache.
+@@ -4236,2 +4243,3 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
                  affinityZoneIds: output?.affinityZoneIds,
 +                versionId: uploadedVersionId,
              };
-             // Centralized ownership decision: the engine routes `read`'s
-             // return value based on `AdoptPolicy`. We hand it the attrs
 diff --git a/src/Apply.ts b/src/Apply.ts
 index 473a9e7ebe81897693fbd09e70f77e4dd2f7a628..8910524517dc9595b6be10d4604b6c91c2750466 100644
 --- a/src/Apply.ts
@@ -168,12 +171,21 @@ index 473a9e7ebe81897693fbd09e70f77e4dd2f7a628..8910524517dc9595b6be10d4604b6c91
        yield* converge(
          plan,
 diff --git a/src/Cloudflare/Workers/WorkerProvider.ts b/src/Cloudflare/Workers/WorkerProvider.ts
-index 798e8499d1db0184d14defbd50e1e5bd0288e291..4a6c2efe3f756846e00737c03c351c158fe68169 100644
+index 798e8499d1db0184d14defbd50e1e5bd0288e291..27a134ef37831c7a96d120e9ebb858edff9e928f 100644
 --- a/src/Cloudflare/Workers/WorkerProvider.ts
 +++ b/src/Cloudflare/Workers/WorkerProvider.ts
-@@ -5587,6 +5587,19 @@ export const LiveWorkerProvider = () =>
-             // with this Worker — see readWorkerRoutes. Empty-array props
-             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
+@@ -4223,4 +4223,4 @@ export const LiveWorkerProvider = () =>
+         // for changes a version can carry — code, bindings, compatibility
+-        // settings, cache. Script-level settings in the upload metadata
+-        // (tags, observability, limits, placement, logpush) keep their live
++        // settings, cache, and placement. Script-level settings in the upload metadata
++        // (tags, observability, limits, logpush) keep their live
+         // values until the next full deploy, matching
+@@ -4263,2 +4263,3 @@ export const LiveWorkerProvider = () =>
+                 cacheOptions: metadata.cacheOptions,
++                placement: metadata.placement,
+                 annotations:
+@@ -5589,2 +5590,15 @@ export const LiveWorkerProvider = () =>
              // can detect drift and converge deletions.
 +            // versionId is the last upload receipt, not the current traffic
 +            // deployment. Retain it only while the immutable version exists;
@@ -189,16 +201,10 @@ index 798e8499d1db0184d14defbd50e1e5bd0288e291..4a6c2efe3f756846e00737c03c351c15
 +                )
 +              : undefined;
              const observeDomains = shouldObserveWorkerDomains(olds, output);
-             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
-             const observeCrons = shouldObserveWorkerCrons(olds, output);
-@@ -5704,6 +5717,7 @@ export const LiveWorkerProvider = () =>
-               // (a getPhas call per known zone on every read); carry the
-               // cleanup list forward like any other stable cache.
+@@ -5706,2 +5720,3 @@ export const LiveWorkerProvider = () =>
                affinityZoneIds: output?.affinityZoneIds,
 +              versionId: uploadedVersionId,
              } satisfies Worker["Attributes"];
-
-             // Centralized ownership decision: the engine routes `read`'s
 diff --git a/lib/Cloudflare/D1/ApplyMigrations.d.ts b/lib/Cloudflare/D1/ApplyMigrations.d.ts
 index 0c9935255b73ac427d76e4e1b19074aafabfcc0b..05f48c9b8e6cc4cd9715077675730399aebfd020 100644
 --- a/lib/Cloudflare/D1/ApplyMigrations.d.ts

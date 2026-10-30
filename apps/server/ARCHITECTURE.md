@@ -22,6 +22,10 @@ HTTP, Queue, Workflow and Durable Object execution. Per-User Durable Objects ser
 maintenance coordinates scheduled work independently. The private Email Worker composes only its
 narrow Ingestion and maintenance capabilities. Infrastructure owns bindings, not domain behavior.
 
+Production Core fetch handlers use versioned Smart Placement to reduce network distance to native
+storage. Ingress and assets retain their existing placement. The staged Core version must report
+the declared mode before promotion; configured placement alone is not performance evidence.
+
 ## 2. Ownership and publication
 
 An owner exposes declarations through `contract.ts`, behavior through `operations.ts`, and

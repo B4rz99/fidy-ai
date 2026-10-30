@@ -2,6 +2,7 @@ import { ReleaseSmokeFailed } from "./smoke-exchange";
 import { verifyStableWorkerIdentity } from "./stable-worker-identity";
 import { RecoveryRequest, recoverStaged } from "./staged-recovery";
 import { ReleaseHttpLive } from "./release-http";
+import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 /// <reference types="bun-types" />
 
 import {
@@ -431,6 +432,42 @@ export const verifyRecoveryAccess = Effect.fn(
       })
   )
 );
+
+/** Placement belongs to the candidate version; live settings can describe a different version. */
+export const verifyCorePlacement = Effect.fn(function* (
+  env: Pick<Config, "account" | "token">,
+  core: Readonly<{ name: string; version: string }>,
+  client: HttpClient.HttpClient
+) {
+  const response = Schema.Struct({
+    success: Schema.Literal(true),
+    result: Schema.Struct({
+      id: Schema.Literal(core.version),
+      resources: Schema.Struct({
+        script: Schema.Struct({
+          placement: Schema.Struct({
+            mode: Schema.Literal(productionTopology.core.placement.mode),
+          }),
+        }),
+      }),
+    }),
+  });
+  yield* providerJson(
+    HttpClientRequest.get(
+      `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(core.name)}/versions/${encodeURIComponent(core.version)}`,
+      { headers: { authorization: `Bearer ${env.token}` } }
+    )
+  ).pipe(
+    Effect.provideService(HttpClient.HttpClient, client),
+    Effect.flatMap(Schema.decodeUnknownEffect(response)),
+    Effect.mapError(
+      () =>
+        new ReleaseFailure({
+          message: "Release staging refused: Core candidate placement is unverified",
+        })
+    )
+  );
+});
 
 /** Script settings are independent of gradual code uploads; verify privacy before staging. */
 export const configureReleaseObservability = Effect.fn(function* (
@@ -1046,6 +1083,11 @@ const stage = Effect.fn(function* (port: ReleasePort, env: Config, client: HttpC
     return yield* Effect.fail(Error("Alchemy candidate receipts are incomplete"));
   }
   yield* configureReleaseObservability(env, [snapshot.public.name, snapshot.core.name], client);
+  yield* verifyCorePlacement(
+    env,
+    { name: snapshot.core.name, version: workers.core.versionId.value },
+    client
+  );
   const recovery = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       CLOUDFLARE_ACCESS_ISSUER: Schema.String.check(

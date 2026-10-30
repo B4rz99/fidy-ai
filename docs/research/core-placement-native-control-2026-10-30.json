@@ -1,0 +1,125 @@
+{
+  "scope": "Real Cloudflare API controls on three sequential instances of one disposable Worker without storage or service bindings. No production setting changed, D1 SQL executed, data resources or credentials provisioned. A single plain-text test binding was used in controls two and three. Each instance was deleted and independently returned 404.",
+  "proofs": [
+    {
+      "control": "placement-settings-proof.json",
+      "startedAt": "2026-10-30T04:33:07.297561+00:00",
+      "finishedAt": "2026-10-30T04:33:18.358104+00:00",
+      "requests": 12,
+      "cleanupAbsent": true,
+      "failure": null,
+      "before": {
+        "activeVersion": "3a1a14cf-2509-4aea-8a1a-adf80ba61c20",
+        "activePlacement": null,
+        "settingsPlacement": {},
+        "activeCodeEtag": "etag:7b779b9dc89b7ccd98b1ab8fa61a8fe2dcdc77a8c77a11b35abc2443a59446f1",
+        "bindingCount": 0,
+        "annotationTag": "placement-proof-baseline"
+      },
+      "after": {
+        "activeVersion": "8fd2a001-416d-4a45-8386-8834b4ca05fd",
+        "activePlacement": {
+          "mode": "smart"
+        },
+        "settingsPlacement": {
+          "mode": "smart"
+        },
+        "activeCodeEtag": "etag:7b779b9dc89b7ccd98b1ab8fa61a8fe2dcdc77a8c77a11b35abc2443a59446f1",
+        "bindingCount": 0,
+        "annotationTag": null
+      }
+    },
+    {
+      "control": "placement-promotion-proof.json",
+      "startedAt": "2026-10-30T04:38:07.460212+00:00",
+      "finishedAt": "2026-10-30T04:38:27.847911+00:00",
+      "requests": 20,
+      "cleanupAbsent": true,
+      "failure": null,
+      "before": {
+        "activeVersion": "8fa24586-e6d2-4f73-add9-3d44a48146a0",
+        "activePlacement": null,
+        "settingsPlacement": {},
+        "activeCodeEtag": "etag:7b779b9dc89b7ccd98b1ab8fa61a8fe2dcdc77a8c77a11b35abc2443a59446f1",
+        "bindingCount": 1,
+        "annotationTag": "placement-proof-baseline"
+      },
+      "after": {
+        "activeVersion": "92f833d9-103e-43a1-978b-e15c9c5c8806",
+        "activePlacement": {
+          "mode": "smart"
+        },
+        "settingsPlacement": {
+          "mode": "smart"
+        },
+        "activeCodeEtag": "etag:7b779b9dc89b7ccd98b1ab8fa61a8fe2dcdc77a8c77a11b35abc2443a59446f1",
+        "bindingCount": 1,
+        "annotationTag": null
+      },
+      "beforePromotion": {
+        "activeVersion": "92f833d9-103e-43a1-978b-e15c9c5c8806",
+        "activePlacement": {
+          "mode": "smart"
+        },
+        "settingsPlacement": {},
+        "activeCodeEtag": "etag:7b779b9dc89b7ccd98b1ab8fa61a8fe2dcdc77a8c77a11b35abc2443a59446f1",
+        "bindingCount": 1,
+        "annotationTag": "placement-proof-candidate"
+      },
+      "afterPromotion": {
+        "activeVersion": "1528c14a-66ac-4e9e-bb17-aa47ee02b722",
+        "activePlacement": null,
+        "settingsPlacement": {},
+        "activeCodeEtag": "etag:7b779b9dc89b7ccd98b1ab8fa61a8fe2dcdc77a8c77a11b35abc2443a59446f1",
+        "bindingCount": 1,
+        "annotationTag": "placement-proof-candidate"
+      }
+    },
+    {
+      "control": "placement-version-proof.json",
+      "startedAt": "2026-10-30T04:40:28.723683+00:00",
+      "finishedAt": "2026-10-30T04:40:44.851902+00:00",
+      "requests": 17,
+      "cleanupAbsent": true,
+      "failure": null,
+      "before": {
+        "activeVersion": "72354847-c140-4138-a57c-db31fad2eca5",
+        "activePlacement": null,
+        "settingsPlacement": {},
+        "activeCodeEtag": "etag:7b779b9dc89b7ccd98b1ab8fa61a8fe2dcdc77a8c77a11b35abc2443a59446f1",
+        "bindingCount": 1,
+        "annotationTag": "placement-proof-baseline"
+      },
+      "after": {
+        "activeVersion": "72354847-c140-4138-a57c-db31fad2eca5",
+        "activePlacement": null,
+        "settingsPlacement": {
+          "mode": "smart"
+        },
+        "activeCodeEtag": "etag:7b779b9dc89b7ccd98b1ab8fa61a8fe2dcdc77a8c77a11b35abc2443a59446f1",
+        "bindingCount": 1,
+        "annotationTag": "placement-proof-candidate"
+      },
+      "afterPromotion": {
+        "activeVersion": "b8deb655-e123-4328-8e79-31afdf329705",
+        "activePlacement": {
+          "mode": "smart"
+        },
+        "settingsPlacement": {
+          "mode": "smart"
+        },
+        "activeCodeEtag": "etag:7b779b9dc89b7ccd98b1ab8fa61a8fe2dcdc77a8c77a11b35abc2443a59446f1",
+        "bindingCount": 1,
+        "annotationTag": "placement-proof-candidate"
+      },
+      "candidate": {
+        "version": "b8deb655-e123-4328-8e79-31afdf329705",
+        "placement": {
+          "mode": "smart"
+        },
+        "codeEtag": "etag:7b779b9dc89b7ccd98b1ab8fa61a8fe2dcdc77a8c77a11b35abc2443a59446f1",
+        "bindingCount": 1
+      }
+    }
+  ]
+}

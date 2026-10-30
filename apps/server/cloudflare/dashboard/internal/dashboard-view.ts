@@ -1,5 +1,4 @@
 import { UserContext, UserId } from "../../../src/core/identity/contract";
-import type { EffectiveTransactionAggregate } from "../../../src/core/transactions/contract";
 import { type DateTime, Effect, Option, Schema } from "effect";
 
 import { prepareUserContext } from "../../identity/user-context/operations";
@@ -12,7 +11,10 @@ import {
 
 import type { DashboardFacts } from "../../../src/shell/dashboard/contract";
 import { readBudgetCaps } from "../../budgets/operations";
-import { findDashboardAggregate, readDashboardTransactions } from "../../transactions/operations";
+import {
+  findDashboardAggregateRanges,
+  readDashboardTransactions,
+} from "../../transactions/operations";
 
 type LayoutWidgets = ReturnType<typeof collectLayoutWidgets>;
 type Groups = DashboardFacts["groups"];
@@ -78,19 +80,6 @@ const loadBase = (
     return Option.some({ ...lists.value, budgets: budgets.value });
   });
 
-const findCached = (
-  cache: Map<string, ReadonlyArray<EffectiveTransactionAggregate>>,
-  input: Parameters<typeof findDashboardAggregate>[0]
-): Effect.Effect<Option.Option<ReadonlyArray<EffectiveTransactionAggregate>>> =>
-  Effect.gen(function* () {
-    const key = `${input.from}:${input.toExclusive}`;
-    const existing = cache.get(key);
-    if (existing !== undefined) return Option.some(existing);
-    const loaded = yield* findDashboardAggregate(input);
-    if (Option.isSome(loaded)) cache.set(key, loaded.value);
-    return loaded;
-  });
-
 const findRanges = ({
   db,
   userId,
@@ -105,22 +94,32 @@ const findRanges = ({
   widgets: LayoutWidgets;
 }>): Effect.Effect<Option.Option<Groups>> =>
   Effect.gen(function* () {
-    const cached = new Map<string, ReadonlyArray<EffectiveTransactionAggregate>>();
+    const plans = widgets
+      .filter((widget) => widget.type !== "transaction-list")
+      .map((widget) => ({
+        id: widget.id,
+        ranges: dashboardProjectionRanges(widget, now, context.timeZone),
+      }));
+    const unique = new Map<string, { from: number; toExclusive: number }>();
+    for (const plan of plans) {
+      for (const range of plan.ranges) unique.set(`${range.from}:${range.toExclusive}`, range);
+    }
+    const loaded = yield* findDashboardAggregateRanges({
+      db,
+      userId,
+      ranges: [...unique.values()],
+    });
+    if (Option.isNone(loaded) || loaded.value.length !== unique.size) return Option.none();
+    const facts = new Map([...unique.keys()].map((key, index) => [key, loaded.value[index]]));
     const groups = new Map<string, ReadonlyArray<ProjectedRange>>();
-    for (const widget of widgets) {
-      if (widget.type === "transaction-list") continue;
-      const buckets = [];
-      for (const range of dashboardProjectionRanges(widget, now, context.timeZone)) {
-        const loaded = yield* findCached(cached, {
-          db,
-          userId,
-          from: range.from,
-          toExclusive: range.toExclusive,
-        });
-        if (Option.isNone(loaded)) return Option.none<Groups>();
-        buckets.push({ key: range.key, contributions: loaded.value });
+    for (const plan of plans) {
+      const buckets: Array<ProjectedRange> = [];
+      for (const range of plan.ranges) {
+        const contributions = facts.get(`${range.from}:${range.toExclusive}`);
+        if (contributions === undefined) return Option.none();
+        buckets.push({ key: range.key, contributions });
       }
-      groups.set(widget.id, buckets);
+      groups.set(plan.id, buckets);
     }
     return Option.some(groups);
   });

@@ -166,37 +166,95 @@ const decodeGroups = (
   return Option.some(result);
 };
 
-/** Read a bounded UTC-day/minute materialization for a half-open UTC interval. */
-export const findDashboardAggregate = ({
+type AggregateRange = Readonly<{ from: number; toExclusive: number }>;
+// At most 32 native batches, leaving room for the caller within the Free invocation query budget.
+const maximumAggregateRanges = 128;
+// Bound transient raw results without starting additional concurrent provider work.
+const aggregateRangesPerBatch = 4;
+
+/** Read one exact interval through the bounded projection snapshot reader. */
+export const findDashboardAggregate = (
+  input: Readonly<{ db: D1Database; userId: string }> & AggregateRange
+): Effect.Effect<Option.Option<ReadonlyArray<EffectiveTransactionAggregate>>> =>
+  findDashboardAggregateRanges({ ...input, ranges: [input] }).pipe(
+    Effect.map(Option.flatMap((ranges) => Option.fromUndefinedOr(ranges[0])))
+  );
+
+type AggregateSnapshot = Readonly<{
+  revision: number;
+  values: ReadonlyArray<ReadonlyArray<EffectiveTransactionAggregate>>;
+}>;
+
+const decodeAggregateRows = (
+  rows: ReadonlyArray<D1Result>,
+  offset: number
+): Option.Option<ReadonlyArray<EffectiveTransactionAggregate>> => {
+  const groups = rows[offset];
+  const digits = rows[offset + 1];
+  return groups === undefined || digits === undefined
+    ? Option.none()
+    : Option.flatMap(decodeSums(digits.results), (sums) => decodeGroups(groups.results, sums));
+};
+
+const decodeAggregateSnapshot = (
+  rows: ReadonlyArray<D1Result>,
+  count: number
+): Option.Option<AggregateSnapshot> => {
+  const state = rows[0];
+  if (rows.length !== 1 + count * 2 || state?.results.length !== 1) return Option.none();
+  const revision = Schema.decodeUnknownOption(AggregateRevision)(state.results[0]);
+  if (Option.isNone(revision)) return Option.none();
+  const values: Array<ReadonlyArray<EffectiveTransactionAggregate>> = [];
+  for (let index = 0; index < count; index++) {
+    const decoded = decodeAggregateRows(rows, 1 + index * 2);
+    if (Option.isNone(decoded)) return Option.none();
+    values.push(decoded.value);
+  }
+  return Option.some({ revision: revision.value.revision, values });
+};
+
+/** Read ordered exact intervals in small native snapshots; a changed revision refuses the whole read. */
+export const findDashboardAggregateRanges = ({
   db,
   userId,
-  from,
-  toExclusive,
+  ranges,
 }: Readonly<{
   db: D1Database;
   userId: string;
-  from: number;
-  toExclusive: number;
-}>): Effect.Effect<Option.Option<ReadonlyArray<EffectiveTransactionAggregate>>> =>
+  ranges: ReadonlyArray<AggregateRange>;
+}>): Effect.Effect<Option.Option<ReadonlyArray<ReadonlyArray<EffectiveTransactionAggregate>>>> =>
   Effect.gen(function* () {
-    const range = projectionRange(from, toExclusive);
-    if (Option.isNone(range)) return Option.none();
-    const [state, groups, digits] = yield* Effect.tryPromise(() =>
-      db.batch([
-        prepareConsentAction({
-          db,
-          subject: { _tag: "User", userId: UserId.make(userId) },
-          requirement: "unrevoked",
-          statement: revisionSelection(UserId.make(userId)),
-        }),
-        ...projectionQueries(db, userId, range.value),
-      ])
+    if (ranges.length > maximumAggregateRanges) return Option.none();
+    const prepared = Option.all(
+      ranges.map((range) => projectionRange(range.from, range.toExclusive))
     );
-    if (state?.results.length !== 1 || groups === undefined || digits === undefined) {
-      return Option.none();
+    if (Option.isNone(prepared)) return Option.none();
+    const values: Array<ReadonlyArray<EffectiveTransactionAggregate>> = [];
+    let observedRevision = Option.none<number>();
+    for (let offset = 0; offset < prepared.value.length; offset += aggregateRangesPerBatch) {
+      const chunk = prepared.value.slice(offset, offset + aggregateRangesPerBatch);
+      const rows = yield* Effect.tryPromise(() =>
+        db.batch([
+          prepareConsentAction({
+            db,
+            subject: { _tag: "User", userId: UserId.make(userId) },
+            requirement: "unrevoked",
+            statement: revisionSelection(UserId.make(userId)),
+          }),
+          ...chunk.flatMap((range) => projectionQueries(db, userId, range)),
+        ])
+      );
+      const decoded = decodeAggregateSnapshot(rows, chunk.length);
+      if (
+        Option.isNone(decoded) ||
+        (Option.isSome(observedRevision) && observedRevision.value !== decoded.value.revision)
+      ) {
+        return Option.none();
+      }
+      observedRevision = Option.some(decoded.value.revision);
+      values.push(...decoded.value.values);
     }
-    const sums = decodeSums(digits.results);
-    return Option.flatMap(sums, (decoded) => decodeGroups(groups.results, decoded));
+    return Option.some(values);
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 const AggregateRevision = Schema.Struct({

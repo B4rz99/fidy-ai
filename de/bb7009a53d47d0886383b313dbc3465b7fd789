@@ -1,0 +1,20 @@
+docs/research/browser-category-snapshot-2026-10-29.md
+  s_d9571b3fccd032::t_f276577b671d39 36-37
+  s_d9571b3fccd032::t_3c5b8453eb87d0 59-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "debb7009a53d47d0886383b313dbc3465b7fd789",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -163,7 +163,7 @@ const needsReviewRoute = createRoute({
   preloadStaleTime: 0,
   loaderDeps: ({ search }) => ({ filter: search.status ?? "pending", page: search.offset ?? 0 }),
   loader: {
-    staleReloadMode: "blocking",
+    staleReloadMode: "background",
     handler: ({ context, deps, preload, abortController }) =>
       Effect.runPromise(
         Effect.gen(function* () {

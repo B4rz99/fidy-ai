@@ -466,7 +466,8 @@ retained workspace, so resolving destination code does not introduce another laz
 only for successful route matches after destination code and mandatory access checks complete.
 Transactions and Review return their registry data-preparation promise as deferred loader work,
 owned by the route's AbortSignal. A held data read therefore leaves the workspace's approved
-loading/error controls available instead of blocking the entire route. Transactions still awaits
+loading/error controls available instead of blocking the entire route. A cached Review route commits
+its retained display while its loader revalidates in the background. Transactions still awaits
 fresh Consent before starting that preparation or revealing the destination. Budget and first Recurring intent prepare
 their display data, preserving immediate cached returns. Recurring intent does not mark the
 retained planning workspace as visited.

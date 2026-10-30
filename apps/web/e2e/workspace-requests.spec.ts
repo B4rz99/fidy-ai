@@ -39,10 +39,18 @@ const expectEntryRecheck = (
   // A private entry is followed by a binding-only proof before navigation reuses the actor.
   expect(reads.filter((path) => path === "/web/session/binding")).toHaveLength(2);
   expect(contexts).toEqual(["?context=transactions", ""]);
+  expect(
+    reads.filter((path) => path === "/transactions"),
+    "initial entry handoff"
+  ).toHaveLength(0);
 };
 const returnToHandoffAfterCollection = (page: Page, reads: ReadonlyArray<string>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      expect(
+        reads.filter((path) => path === "/transactions"),
+        "before collection"
+      ).toHaveLength(0);
       // A live canonical owner must survive collection of temporary lookup objects.
       const devtools = yield* Effect.tryPromise(() => page.context().newCDPSession(page));
       yield* Effect.tryPromise(() => devtools.send("HeapProfiler.collectGarbage"));

@@ -1,0 +1,44 @@
+apps/server/cloudflare/transactions/operations.ts
+  s_d9571b3fccd032::t_07080e82c08e79 1,11,21-24,205-211
+apps/server/cloudflare/web-authentication/bound-user.test.ts
+  s_d9571b3fccd032::t_07080e82c08e79 1-182
+apps/server/cloudflare/recurring-plans/internal/query-cost.test.ts
+  s_d9571b3fccd032::t_07080e82c08e79 1-2,11-80
+apps/server/cloudflare/recurring-plans/internal/query.ts
+  s_d9571b3fccd032::t_07080e82c08e79 17-26,83-117,133,136-185,230,234-235
+apps/server/cloudflare/transactions/internal/planning-read.ts
+  s_d9571b3fccd032::t_07080e82c08e79 1-110
+apps/server/cloudflare/d1-test-fixture.ts
+  s_d9571b3fccd032::t_07080e82c08e79 364,370,381,388,414,420,427-429,447,449,453,456-459,463-466,495,507,511
+docs/research/app-performance-production-desktop-2026-10-29.json
+  s_d9571b3fccd032::t_07080e82c08e79 964-1584
+apps/server/cloudflare/transactions/contract.ts
+  s_d9571b3fccd032::t_07080e82c08e79 38-59
+apps/server/cloudflare/web-session/internal/current-user.ts
+  s_d9571b3fccd032::t_07080e82c08e79 3-4,26-28,39-47
+infra/cloudflare/verify-edge-policy.ts
+  s_d9571b3fccd032::t_07080e82c08e79 52
+  s_d9571b3fccd032::t_5ed8cfafdc72c0 5,50-51
+docs/research/app-performance-production-desktop-2026-10-29.md
+  s_d9571b3fccd032::t_07080e82c08e79 93-174
+apps/server/cloudflare/recurring-plans/recurring-plans.test.ts
+  s_d9571b3fccd032::t_07080e82c08e79 967-1010
+apps/server/cloudflare/web-session/internal/binding.ts
+  s_d9571b3fccd032::t_07080e82c08e79 35-43,51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "41c85f04c5eb20e547b485e13717d43b395221b2",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

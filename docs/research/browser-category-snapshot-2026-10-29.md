@@ -33,8 +33,8 @@ Effect 4.0.6 to compare SQL work; baseline server source is `90bdfb2`. Response 
 | Per successful Category read           | Baseline | Candidate |
 | -------------------------------------- | -------: | --------: |
 | Fresh R2 generation reads / D1 batches |    3 / 3 |     1 / 1 |
-| Native rows written                    |       23 |        21 |
-| Native rows read                       |       41 |        44 |
+| Native rows written                    |       23 |        16 |
+| Native rows read                       |       41 |        40 |
 
 This establishes three times fewer remote units, 30.4% fewer writes and slightly fewer rows read. It does not establish production latency, total CPU, memory, capacity or invoice gains.
 Schema installation alone measured 1,474 writes across 1,108 statements.
@@ -56,3 +56,27 @@ release dependency change. Any observed release ratio includes that dependency u
 Capture a healthy authenticated production baseline before promotion, then repeat the same paced
 requests, account, dataset and browser after deployment. Retain failures, report sample counts and
 verify response equivalence. Keep issue #1589 open: universal 2x improvement remains unconfirmed.
+
+
+## Reset verification on 30 October
+
+At 00:03 UTC, account-wide D1 analytics for the new day reported 477 rows read and 96
+written. Public OAuth discovery recovered to HTTP 200. The complete credential-free
+production edge smoke passed, including OAuth discovery and rejected operations; this does
+not establish signed-in Category availability. All required CI checks for candidate `f15d4e6af5`
+passed, including all four native Cloudflare adapter shards.
+
+The first post-reset preflight refused unavailable analytics before provisioning. A later
+fresh preflight admitted the fixture, which stopped during schema setup when a batch exceeded
+its read estimate. No timed trial completed. Local reproduction identifies the final eight
+schema statements as 5,099 reads against the temporary runner's 5,000-read reservation; the
+complete schema remains 8,299 reads and 1,474 writes locally. The temporary runner's batch
+read reservation was raised to 10,000 within the unchanged 100,000-read/5,000-write experiment
+ceiling. This correction has not been revalidated hosted. All six provisioned resources
+independently returned HTTP 404 after cleanup. Retain the failed attempt in accounting before
+any further experiment; do not reset its spent allowance by using a different resource name.
+
+The scheduled run could list in-app tabs but could not access the signed-in page or debugger
+connection. An authenticated production baseline is therefore still missing. Keep the PR in
+draft until that baseline and controlled hosted evidence are available; do not infer browser
+recovery or a production speedup from the public checks.

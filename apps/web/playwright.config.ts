@@ -52,7 +52,8 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: isCI,
   retries: 0,
-  workers: measuringBrowserCost ? 1 : browserWorkers,
+  // Each shard owns one mutable native fixture clock; do not advance it from parallel cases.
+  workers: isCI || measuringBrowserCost ? 1 : browserWorkers,
   reporter: isCI
     ? [
         ["./scripts/browser-phase-reporter.ts"],

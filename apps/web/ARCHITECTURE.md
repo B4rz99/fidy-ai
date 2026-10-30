@@ -460,7 +460,10 @@ two in-flight request permits within their session signal, including across feat
 time counts against the original request deadline and session retirement cancels queued work.
 Dashboard initialization remains exclusive to a declared uninitialized response during an
 actual visit. Consent, session binding and security settings reads retain their fresh access
-checks. Router intent preloading prepares destination code and declared display reads without executing writes.
+checks. Router intent preloading prepares destination code without executing writes. The owned
+navigation hook prepares display reads only while an authenticated product route is active;
+independent controls such as OAuth do not start product reads on hover. Automatic Budget loader
+preloads warm code only, while actual visits and the owned product intent retain data preparation.
 Needs Review and Recurring route loaders preload the same presentation component used by their
 retained workspace, so resolving destination code does not introduce another lazy suspension. Retained panels activate
 only for successful route matches after destination code and mandatory access checks complete.

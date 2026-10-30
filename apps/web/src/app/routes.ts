@@ -125,7 +125,7 @@ const budgetsRoute = createRoute({
       })
     )(search),
   loaderDeps: ({ search }) => ({ month: search.month }),
-  loader: ({ context, deps, abortController }) =>
+  loader: ({ context, deps, preload, abortController }) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const { BudgetsFeature } = yield* Effect.tryPromise(
@@ -134,12 +134,14 @@ const budgetsRoute = createRoute({
         yield* Effect.tryPromise(() =>
           Promise.all([
             BudgetsFeature.preload(),
-            BudgetsFeature.preloadData({
-              apiClient: context.apiClient,
-              registry: context.registry,
-              month: Option.fromUndefinedOr(deps.month),
-              signal: Option.some(abortController.signal),
-            }),
+            preload
+              ? Promise.resolve()
+              : BudgetsFeature.preloadData({
+                  apiClient: context.apiClient,
+                  registry: context.registry,
+                  month: Option.fromUndefinedOr(deps.month),
+                  signal: Option.some(abortController.signal),
+                }),
           ])
         );
       })

@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useRouter } from "@tanstack/react-router";
+import { useRouter, useRouterState } from "@tanstack/react-router";
 import { Option } from "effect";
 import { useSession } from "@/session/session-context";
 import { BudgetsFeature } from "@/features/budgets/feature";
@@ -8,9 +8,12 @@ import { NeedsReviewFeature } from "@/features/needs-review/feature";
 export const useNavigationPreparation = (): ((destination: string) => void) => {
   const router = useRouter();
   const { authentication } = useSession();
+  const privateWorkspace = useRouterState({
+    select: (state) => state.matches.some((match) => match.routeId === "/authenticated"),
+  });
   return useCallback(
     (destination: string): void => {
-      if (authentication === "expired") return;
+      if (authentication === "expired" || !privateWorkspace) return;
       const { apiClient, registry } = router.options.context;
       if (destination === "/app/needs-review") {
         NeedsReviewFeature.preloadMaterial({
@@ -27,6 +30,6 @@ export const useNavigationPreparation = (): ((destination: string) => void) => {
         }).catch(() => undefined);
       }
     },
-    [authentication, router]
+    [authentication, privateWorkspace, router]
   );
 };

@@ -14,6 +14,13 @@ const returnToOAuth = (): void => {
 const focusWindow = (): void => {
   window.dispatchEvent(new Event("focus"));
 };
+const observeBudgetHover = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise(() =>
+    page.getByRole("link", { name: "Presupuestos", exact: true }).hover()
+  );
+  // Observe forbidden speculative requests after an explicit hover, not just timer disposal.
+  yield* Effect.sleep("100 millis");
+});
 const conditions = [
   { review: "loading", consent: "granted", identity: "navigationOAuthLoading" },
   { review: "unavailable", consent: "granted", identity: "navigationOAuthUnavailable" },
@@ -86,6 +93,7 @@ for (const { identity, ...condition } of conditions) {
         }
         yield* Effect.tryPromise(() => page.evaluate(focusWindow));
         yield* Effect.tryPromise(() => page.clock.fastForward(observationMilliseconds));
+        yield* observeBudgetHover(page);
         yield* Effect.tryPromise((signal) =>
           expect(
             page.getByRole("heading", { name: "Por revisar", exact: true, includeHidden: true })

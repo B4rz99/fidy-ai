@@ -93,7 +93,9 @@ const readColors = (
   property: "color" | "borderLeftColor" | "outlineColor"
 ): RenderedColors => {
   const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d");
+  canvas.width = 1;
+  canvas.height = 1;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
   if (context === null) throw new Error("Color measurement requires a canvas context");
   const maximumChannel = 255;
   const pixel = (color: string): Rgba => {

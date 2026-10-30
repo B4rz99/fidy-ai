@@ -1,0 +1,43 @@
+docs/research/app-performance-production-desktop-2026-10-29.json
+  s_1cebf747fbaef6::t_61684b7bb0ccfc 964-968,970-1002,1009-1019,1026-1036,1043-1053,1061-1071,1079-1089,1097-1103,1105
+  s_1cebf747fbaef6::t_f729cc5fd5987f 969,1003-1008,1020-1025,1037-1042,1054-1060,1072-1078,1090-1096,1104
+docs/research/app-performance-production-desktop-2026-10-29.md
+  s_1cebf747fbaef6::t_cb5cfbec349956 93-102,104-129
+  s_1cebf747fbaef6::t_a25d96d89f4947 103
+apps/server/package.json
+  s_1cebf747fbaef6::t_0b026f87f9f22f 300
+apps/server/cloudflare/web-authentication/bound-user.test.ts
+  s_1cebf747fbaef6::t_8dd2a60edb77e5 1,21,25,29,61
+  s_1cebf747fbaef6::t_7273c77c98b3a4 30,32-33
+  s_1cebf747fbaef6::t_276c9fa246fc15 98-110,112-114,123-136
+  s_1cebf747fbaef6::t_a40c971001db72 2-20,22-24,26-28,31,34-60,62-97,111,115-122,137-182
+infra/cloudflare/verify-edge-policy.ts
+  s_1cebf747fbaef6::t_6c4413adba21e0 51-52
+  s_1cebf747fbaef6::t_dc40c85a249194 5
+  s_1cebf747fbaef6::t_02f5cbd13b4415 50
+apps/server/cloudflare/web-session/internal/binding.ts
+  s_1cebf747fbaef6::t_a40c971001db72 35-40
+  s_1cebf747fbaef6::t_8dd2a60edb77e5 41-43,51
+infra/cloudflare/package.json
+  s_1cebf747fbaef6::t_0b026f87f9f22f 20
+apps/server/cloudflare/web-session/internal/current-user.ts
+  s_1cebf747fbaef6::t_04742e245be45a 3-4,26-28,39-47
+bun.lock
+  s_1cebf747fbaef6::t_a678a2d4749dfe 70,160,378
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "945efb438a69ec4c7caceca2b0c91fbd05fe3c31",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

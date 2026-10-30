@@ -1,0 +1,1284 @@
+{
+  "prefix": "fidy-user-wake-3444038b",
+  "scope": "Private ingestion-owner committed readback with native alarm storage and the production User coordinator alarm handler; synthetic D1/R2 and no-op child Workflows. The fixture supplies the production alarm scheduler to readback after the existing owner fixture committed the intent; it does not exercise a public upload route or the complete hosted Turn service. Four phase-matched pairs, ABBA order, two synthetic User identities with valid seven-day Trial records, candidate reset on two of four pairs after a test-only three-second future alarm and confirmed storage.sync; that delay remains included in measured candidate time. Control waits for a real next-five-minute cadence represented by a native Workflow timer calling the current global dispatcher; this is not a measurement of the Cron Trigger transport. No production Cron transport latency, extraction completion, production authenticated API latency or CPU comparison is claimed.",
+  "resources": [
+    ["database", "d1/database/c7b817b1-3e41-4c6f-94bb-eb2a37e509a6"],
+    ["bucket", "r2/buckets/fidy-user-wake-3444038b"],
+    ["queue", "queues/e67bbd9ac17949dbafa68f703abce6e4"],
+    ["worker", "workers/scripts/fidy-user-wake-3444038b"],
+    ["workflow", "workflows/fidy-user-wake-3444038b-probe"],
+    ["workflow", "workflows/fidy-user-wake-3444038b-child"],
+    ["workflow", "workflows/fidy-user-wake-3444038b-discover"]
+  ],
+  "namespaceId": "00a1f1247b7d44c79d0f126f8dfb758b",
+  "samples": [
+    {
+      "index": 0,
+      "variant": "cron",
+      "reset": false,
+      "submissionId": "1e070fa7-5b21-434b-a414-658bff1f302b",
+      "startedAt": 1793294151405,
+      "responseReceivedAt": 1793294154273,
+      "responseStatus": 202,
+      "diagnostics": {
+        "actor": "{\"knownUser\":true,\"batches\":3,\"errors\":[]}",
+        "body": {
+          "retained": true
+        }
+      },
+      "pair": 0,
+      "childStartedAt": 1793294402611,
+      "readbackToChildStartMs": 251206
+    },
+    {
+      "index": 0,
+      "variant": "wake",
+      "reset": false,
+      "submissionId": "a7bbd6e7-55cd-4f03-b662-e250ecc1553d",
+      "startedAt": 1793294162319,
+      "responseReceivedAt": 1793294163481,
+      "responseStatus": 202,
+      "diagnostics": {
+        "actor": "{\"knownUser\":true,\"batches\":3,\"errors\":[]}",
+        "body": {
+          "retained": true
+        }
+      },
+      "pair": 0,
+      "childStartedAt": 1793294168022,
+      "readbackToChildStartMs": 5703
+    },
+    {
+      "index": 1,
+      "variant": "wake",
+      "reset": true,
+      "submissionId": "edb18899-05ef-4c6a-a809-cc39366adf93",
+      "startedAt": 1793294176916,
+      "responseReceivedAt": 1793294177277,
+      "responseStatus": "reset",
+      "pair": 1,
+      "childStartedAt": 1793294183559,
+      "readbackToChildStartMs": 6643
+    },
+    {
+      "index": 1,
+      "variant": "cron",
+      "reset": false,
+      "submissionId": "0e637f48-e4a8-4db3-bcda-2c20550489fc",
+      "startedAt": 1793294194762,
+      "responseReceivedAt": 1793294195739,
+      "responseStatus": 202,
+      "diagnostics": {
+        "actor": "{\"knownUser\":true,\"batches\":3,\"errors\":[]}",
+        "body": {
+          "retained": true
+        }
+      },
+      "pair": 1,
+      "childStartedAt": 1793294403192,
+      "readbackToChildStartMs": 208430
+    },
+    {
+      "index": 2,
+      "variant": "wake",
+      "reset": false,
+      "submissionId": "0496a525-ce9f-43b8-967e-f6ba03b23ca1",
+      "startedAt": 1793294199441,
+      "responseReceivedAt": 1793294199791,
+      "responseStatus": 202,
+      "diagnostics": {
+        "actor": "{\"knownUser\":true,\"batches\":3,\"errors\":[]}",
+        "body": {
+          "retained": true
+        }
+      },
+      "pair": 2,
+      "childStartedAt": 1793294201167,
+      "readbackToChildStartMs": 1726
+    },
+    {
+      "index": 2,
+      "variant": "cron",
+      "reset": false,
+      "submissionId": "7a171505-2109-44ed-a33d-570e53181256",
+      "startedAt": 1793294210659,
+      "responseReceivedAt": 1793294211164,
+      "responseStatus": 202,
+      "diagnostics": {
+        "actor": "{\"knownUser\":true,\"batches\":3,\"errors\":[]}",
+        "body": {
+          "retained": true
+        }
+      },
+      "pair": 2,
+      "childStartedAt": 1793294403583,
+      "readbackToChildStartMs": 192924
+    },
+    {
+      "index": 3,
+      "variant": "cron",
+      "reset": false,
+      "submissionId": "43375908-7d51-4bc4-8bd7-1f839a5e26ac",
+      "startedAt": 1793294216015,
+      "responseReceivedAt": 1793294216454,
+      "responseStatus": 202,
+      "diagnostics": {
+        "actor": "{\"knownUser\":true,\"batches\":6,\"errors\":[]}",
+        "body": {
+          "retained": true
+        }
+      },
+      "pair": 3,
+      "childStartedAt": 1793294404085,
+      "readbackToChildStartMs": 188070
+    },
+    {
+      "index": 3,
+      "variant": "wake",
+      "reset": true,
+      "submissionId": "4a4c2d35-2f28-4378-ac98-ed2a70cffad5",
+      "startedAt": 1793294220277,
+      "responseReceivedAt": 1793294220602,
+      "responseStatus": "reset",
+      "pair": 3,
+      "childStartedAt": 1793294224885,
+      "readbackToChildStartMs": 4608
+    }
+  ],
+  "cleanup": [
+    {
+      "resource": "namespace",
+      "deleted": true,
+      "httpStatus": 404
+    },
+    {
+      "resource": "workflow",
+      "path": "workflows/fidy-user-wake-3444038b-discover",
+      "deleted": true
+    },
+    {
+      "resource": "workflow",
+      "path": "workflows/fidy-user-wake-3444038b-child",
+      "deleted": true
+    },
+    {
+      "resource": "workflow",
+      "path": "workflows/fidy-user-wake-3444038b-probe",
+      "deleted": true
+    },
+    {
+      "resource": "worker",
+      "path": "workers/scripts/fidy-user-wake-3444038b",
+      "deleted": true
+    },
+    {
+      "resource": "queue",
+      "path": "queues/e67bbd9ac17949dbafa68f703abce6e4",
+      "deleted": true
+    },
+    {
+      "resource": "bucket",
+      "path": "r2/buckets/fidy-user-wake-3444038b",
+      "deleted": true
+    },
+    {
+      "resource": "database",
+      "path": "d1/database/c7b817b1-3e41-4c6f-94bb-eb2a37e509a6",
+      "deleted": true
+    }
+  ],
+  "instances": [
+    {
+      "action": "init",
+      "id": "e7d55889-02bd-49b5-bd24-3bef726bbb29"
+    },
+    {
+      "action": "sample",
+      "id": "5307f26d-5a93-47cc-9425-b20e3b4a909e",
+      "index": 0,
+      "variant": "cron",
+      "reset": false
+    },
+    {
+      "action": "sample",
+      "id": "785b7a8e-af75-4f0c-8bf3-8fd162900a86",
+      "index": 0,
+      "variant": "wake",
+      "reset": false
+    },
+    {
+      "action": "settle",
+      "id": "ff31edba-6ac1-47b5-a1c8-bf57c3f20847",
+      "submissionId": "a7bbd6e7-55cd-4f03-b662-e250ecc1553d",
+      "variant": "wake"
+    },
+    {
+      "action": "sample",
+      "id": "6be24c6c-afdb-48a6-b1da-d905225f05f7",
+      "index": 1,
+      "variant": "wake",
+      "reset": true
+    },
+    {
+      "action": "settle",
+      "id": "43664653-ee0d-4bd9-a9e1-d7cf04f0dbf3",
+      "submissionId": "edb18899-05ef-4c6a-a809-cc39366adf93",
+      "variant": "wake"
+    },
+    {
+      "action": "sample",
+      "id": "05be70ed-9d48-4c13-9a4c-9a2cd594ae6c",
+      "index": 1,
+      "variant": "cron",
+      "reset": false
+    },
+    {
+      "action": "sample",
+      "id": "7ff419b8-bcd5-4ccf-b2d9-d9b3dfa45ae4",
+      "index": 2,
+      "variant": "wake",
+      "reset": false
+    },
+    {
+      "action": "settle",
+      "id": "778df928-b193-4dce-bbc0-c20708c4467b",
+      "submissionId": "0496a525-ce9f-43b8-967e-f6ba03b23ca1",
+      "variant": "wake"
+    },
+    {
+      "action": "sample",
+      "id": "140ec1cc-1cbe-4011-9458-970c808a72f7",
+      "index": 2,
+      "variant": "cron",
+      "reset": false
+    },
+    {
+      "action": "sample",
+      "id": "af077f22-c0c4-42fc-9a56-fd6eb26aeb70",
+      "index": 3,
+      "variant": "cron",
+      "reset": false
+    },
+    {
+      "action": "sample",
+      "id": "dcab3ded-82c5-4c99-8cb8-08861c5b4b8b",
+      "index": 3,
+      "variant": "wake",
+      "reset": true
+    },
+    {
+      "action": "settle",
+      "id": "9af87770-f9bc-465d-a161-7c8dec984326",
+      "submissionId": "4a4c2d35-2f28-4378-ac98-ed2a70cffad5",
+      "variant": "wake"
+    },
+    {
+      "action": "inspect",
+      "id": "8e6bc80b-1733-4dda-b608-cd26135ad318"
+    },
+    {
+      "action": "cleanup",
+      "id": "3aae9bed-37da-48b6-af1e-86207031f01b"
+    }
+  ],
+  "initialization": {
+    "schemaStatements": 1108,
+    "synthetic": true
+  },
+  "discoveries": [
+    {
+      "id": "13084bd4-0e34-46f1-9888-7eb3dde37d48",
+      "output": {
+        "due": 1793294400000,
+        "startedAt": 1793294400073,
+        "finishedAt": 1793294403431
+      }
+    },
+    {
+      "id": "ee22b94a-9e1a-441c-a811-8e992404931a"
+    }
+  ],
+  "summary": {
+    "cron": {
+      "count": 4,
+      "medianMs": 200677.0,
+      "maxMs": 251206
+    },
+    "wake": {
+      "count": 4,
+      "medianMs": 5155.5,
+      "maxMs": 6643
+    },
+    "phaseMatchedMedianSpeedup": 38.92483755212879
+  },
+  "queueState": {
+    "queue_id": "e67bbd9ac17949dbafa68f703abce6e4",
+    "queue_name": "fidy-user-wake-3444038b",
+    "settings": {
+      "delivery_delay": 0,
+      "message_retention_period": 86400
+    },
+    "created_on": "2026-10-29T17:15:17.175099Z",
+    "modified_on": "2026-10-29T17:15:17.175099Z",
+    "producers_total_count": 1,
+    "producers": [
+      {
+        "script": "fidy-user-wake-3444038b",
+        "type": "worker"
+      }
+    ],
+    "consumers_total_count": 0,
+    "consumers": []
+  },
+  "retainedIntents": [
+    {
+      "id": "1e070fa7-5b21-434b-a414-658bff1f302b",
+      "status": "queued",
+      "published": 1,
+      "attempted": 1
+    },
+    {
+      "id": "a7bbd6e7-55cd-4f03-b662-e250ecc1553d",
+      "status": "failed",
+      "published": 0,
+      "attempted": 0
+    },
+    {
+      "id": "edb18899-05ef-4c6a-a809-cc39366adf93",
+      "status": "failed",
+      "published": 0,
+      "attempted": 0
+    },
+    {
+      "id": "0e637f48-e4a8-4db3-bcda-2c20550489fc",
+      "status": "queued",
+      "published": 1,
+      "attempted": 1
+    },
+    {
+      "id": "0496a525-ce9f-43b8-967e-f6ba03b23ca1",
+      "status": "failed",
+      "published": 0,
+      "attempted": 0
+    },
+    {
+      "id": "7a171505-2109-44ed-a33d-570e53181256",
+      "status": "queued",
+      "published": 1,
+      "attempted": 1
+    },
+    {
+      "id": "43375908-7d51-4bc4-8bd7-1f839a5e26ac",
+      "status": "queued",
+      "published": 1,
+      "attempted": 1
+    },
+    {
+      "id": "4a4c2d35-2f28-4378-ac98-ed2a70cffad5",
+      "status": "failed",
+      "published": 0,
+      "attempted": 0
+    }
+  ],
+  "objectCleanup": {
+    "deletedObjects": 9
+  },
+  "baselineRevision": "74c0b47de61b82bff90bee214a54030d590e232b",
+  "nativeBundleSha256": "da04b4c243c1bdd1279ec08f95ee7583666357da1d0b67cdafa5270789163e91",
+  "builderSource": "const root=process.cwd();\nconst paths=Array.from(new Bun.Glob('*.sql').scanSync({cwd:root+'/apps/server/cloudflare/migrations'})).sort();\nconst schema=(await Promise.all(paths.map(n=>Bun.file(root+'/apps/server/cloudflare/migrations/'+n).text()))).join('\\n--> statement-breakpoint\\n').split('--> statement-breakpoint').map(s=>s.trim()).filter(s=>s&&!s.startsWith('PRAGMA '));\nconst source=`import {WorkflowEntrypoint} from 'cloudflare:workers';\nimport {Effect,Option} from 'effect';\nimport {failStatementSubmission,prepareHeldStatementSubmission} from '${root}/apps/server/cloudflare/ingestion/operations.ts';\nimport {dispatchStatementExtraction,withStatementPublicationWake} from '${root}/apps/server/cloudflare/ingestion/runtime.ts';\nimport {withErasureRecovery} from '${root}/apps/server/cloudflare/erasure/runtime.ts';\nimport {makeUserRecoveryAlarm} from '${root}/apps/server/cloudflare/transactions/internal/recovery-alarm.ts';\nimport {statementMutationAdapter} from '${root}/apps/server/cloudflare/ingestion/internal/statement-mutation.ts';\nimport {UserTransactionCoordinator as UserRuntime} from '${root}/apps/server/cloudflare/transactions/runtime.ts';\nimport {stageOwnedStatement,publishOwnedStatement} from '${root}/apps/server/cloudflare/ingestion/statement-publication.test-fixture.ts';\nimport {approvedWorkersAiModel} from '${root}/apps/server/src/shell/hosted-inference/contract.ts';\nconst id=n=>'10000000-0000-4000-8000-'+String(n).padStart(12,'0');\nconst environment=env=>({...env,STATEMENT_STAGING_BUCKET:env.ERASURE_BUCKET,STATEMENT_EXTRACTION_QUEUE:env.OFFERS,STATEMENT_EXTRACTION_WORKFLOW:env.CHILD,ERASURE_REQUIRED:'true',AI:{run:()=>Promise.reject(new Error('Inference not authorized'))},HOSTED_AI_MODEL:approvedWorkersAiModel});\nexport default{fetch(){return new Response(null,{status:404})}};\nexport class WakeUser {\n constructor(ctx,env){this.ctx=ctx;this.errors=[];this.batches=0;const owner=this;const DB=new Proxy(env.DB,{get(target,prop){if(prop==='batch')return async statements=>{owner.batches++;try{return await target.batch(statements)}catch(error){owner.errors.push(String(error?.message??'').slice(0,240));throw error;}};const value=Reflect.get(target,prop,target);return typeof value==='function'?value.bind(target):value;}});this.delegate=new UserRuntime(ctx,environment({...env,DB}));this.fixtureEnvironment=withErasureRecovery(environment({...env,DB}));this.fixtureAlarm=makeUserRecoveryAlarm(ctx.storage);}\n async fetch(request){const input=await request.json(),userId=this.ctx.id.name;const response=await Effect.runPromise(Effect.gen(function*(){const prepared=yield*prepareHeldStatementSubmission({db:this.fixtureEnvironment.DB,bucket:Option.some(this.fixtureEnvironment.ERASURE_BUCKET),authority:{table:'hosted_turns',predicate:'0=1',bindings:[]},publicationOrigin:Option.some({sql:'SELECT user_id FROM statement_submissions WHERE 0=1',params:[]}),originSessionId:Option.none(),originTurns:Option.none(),requiredScope:Option.none(),userId,current:Date.now(),input:input.work.input});if(prepared._tag!=='Prepared'||prepared.mutation.outcome._tag!=='StatementSubmission')return Response.json({prepared:prepared._tag},{status:503});const readback=prepared.mutation.outcome.publication.readCommitted(userId);const retained=yield* (request.headers.get('x-probe-wake')==='false'?readback:readback.pipe(withStatementPublicationWake(due=>this.fixtureAlarm.schedule(due+(request.headers.get('x-probe-reset')==='true'?3000:0)))));return Response.json({retained:Option.isSome(retained)},{status:Option.isSome(retained)?202:503});}.bind(this)));if(request.headers.get('x-probe-reset')==='true'&&response.status===202){await this.ctx.storage.sync();this.ctx.abort('Owned alarm persistence probe');}const headers=new Headers(response.headers);headers.set('x-probe-state',JSON.stringify({knownUser:[id(1),id(11)].includes(this.ctx.id.name),batches:this.batches,errors:this.errors}));return new Response(response.body,{status:response.status,headers});}\n alarm(){return this.delegate.alarm();}\n}\nconst schema=${JSON.stringify(schema)},stepConfig={retries:{limit:0,delay:1},timeout:'2 minutes'};\nexport class WakeProbe extends WorkflowEntrypoint {\n async run(event,step){const action=event.payload.action;\n if(action==='init')return step.do('initialize owned schema',stepConfig,async()=>{\n  for(let i=0;i<schema.length;i+=50)await this.env.DB.batch(schema.slice(i,i+50).map(sql=>this.env.DB.prepare(sql)));\n  await this.env.ERASURE_BUCKET.put('recovery/generation','initial');\n  for(let ownerIndex=0;ownerIndex<2;ownerIndex++){const offset=ownerIndex*10,current=Date.now(),digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(ownerIndex+1).repeat(43))));\n  await this.env.DB.batch([\n   this.env.DB.prepare(\\\"INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,trial_started_at_ms,trial_ends_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?,?,?)\\\").bind(id(1+offset),current,current,current+604800000),\n   this.env.DB.prepare(\\\"INSERT INTO browser_login_pairings(id,public_code,verifier_digest,user_id,state,created_at_ms,expires_at_ms) VALUES (?,?,?,?,'consumed',?,?)\\\").bind(id(2+offset),'BCDF-'+(ownerIndex===0?'BCDF':'BCDG'),digest,id(1+offset),current,current+600000),\n   this.env.DB.prepare('INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES (?,?,?,?,?,?,?,?)').bind(id(3+offset),id(2+offset),id(1+offset),digest,current,current+600000,current+3600000,current+7776000000),\n   this.env.DB.prepare(\\\"INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','fixture','fixture',?,?)\\\").bind(id(4+offset),id(1+offset),current,current)\n  ]);}return{schemaStatements:schema.length,synthetic:true};});\n if(action==='inspect')return step.do('inspect owned intents',stepConfig,()=>this.env.DB.prepare('SELECT id,status,work_published_at_ms IS NOT NULL AS published,work_last_attempt_at_ms IS NOT NULL AS attempted FROM statement_submissions ORDER BY submitted_at_ms').all().then(r=>r.results));\n if(action==='settle')return step.do('settle synthetic child',stepConfig,async()=>{const env=withErasureRecovery(environment(this.env));await Effect.runPromise(failStatementSubmission({DB:env.DB,userId:event.payload.variant==='cron'?id(1):id(11),submissionId:event.payload.submissionId,reason:'mapping-unavailable'}));return{fixtureTerminalFailure:true};});\n if(action==='cleanup')return step.do('empty owned bucket',stepConfig,async()=>{let count=0;for(;;){const page=await this.env.ERASURE_BUCKET.list({limit:100});if(!page.objects.length)break;await this.env.ERASURE_BUCKET.delete(page.objects.map(o=>o.key));count+=page.objects.length;}return{deletedObjects:count};});\n if(action!=='sample'||!Number.isInteger(event.payload.index)||event.payload.index<0||event.payload.index>=16)throw new Error('Invalid probe');\n return step.do('publish and replay through native User coordinator',stepConfig,async()=>{\n  if(!['cron','wake'].includes(event.payload.variant))throw new Error('Invalid variant');const ownerIndex=event.payload.variant==='cron'?0:1,userId=id(1+ownerIndex*10),sessionId=id(3+ownerIndex*10);\n  const storage={db:this.env.DB,bucket:this.env.ERASURE_BUCKET};\n  const bytes=new TextEncoder().encode('fecha,valor,descripcion\\\\n2026-10-01,-1000,Synthetic fixture\\\\n');\n  const stagedResponse=await stageOwnedStatement({storage,index:ownerIndex,request:new Request('https://owner-fixture.internal/bytes',{method:'POST',body:bytes})});\n  if(stagedResponse.status!==201)throw new Error('Staging refused '+stagedResponse.status);\n  const staged=(await stagedResponse.json()).data,idempotencyKey=crypto.randomUUID();\n  const published=await publishOwnedStatement({storage,input:{index:ownerIndex,idempotencyKey,reference:staged}});\n  if(published.status!==202)throw new Error('Publication refused '+published.status);\n  const submission=(await published.json()).data;\n  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(ownerIndex+1).repeat(43)))));\n  const request=new Request('https://coordinator.internal/call',{method:'POST',headers:{'content-type':'application/json','x-probe-reset':String(event.payload.reset===true),'x-probe-wake':String(event.payload.variant==='wake')},body:JSON.stringify({_tag:'WebSessionWork',userId,sessionId,digest,work:{_tag:'Call',operation:'ingestion.submitForExtraction',input:{payload:{idempotencyKey,reference:staged}}}})});\n  const startedAt=Date.now();let responseStatus,diagnostics; \n  try{const response=await this.env.USERS.getByName(userId,{locationHint:'enam'}).fetch(request);responseStatus=response.status;diagnostics={actor:response.headers.get('x-probe-state'),body:await response.json()};}catch{responseStatus='reset';}\n  return{index:event.payload.index,variant:event.payload.variant,reset:event.payload.reset===true,submissionId:submission.id,startedAt,responseReceivedAt:Date.now(),responseStatus,diagnostics};\n });\n }\n}\nexport class WakeDiscovery extends WorkflowEntrypoint {async run(event,step){const due=await step.do('next five-minute cadence',()=>Math.floor(Date.now()/300000)*300000+300000);await step.sleep('wait for discovery cadence',Math.max(1,due-Date.now()));return step.do('discover committed intents',stepConfig,async()=>{const startedAt=Date.now(),env=withErasureRecovery(environment(this.env));await Effect.runPromise(dispatchStatementExtraction({DB:env.DB,STATEMENT_EXTRACTION_QUEUE:env.OFFERS,STATEMENT_EXTRACTION_WORKFLOW:Option.some(env.CHILD)}));return{due,startedAt,finishedAt:Date.now()};});}}\nexport class WakeChild extends WorkflowEntrypoint{run(){return Promise.resolve({synthetic:true,startedAt:Date.now()});}}\n`;\nawait Bun.write('/tmp/fidy-user-wake-worker.ts',source);\nconst built=await Bun.build({entrypoints:['/tmp/fidy-user-wake-worker.ts'],target:'browser',tsconfig:root+'/apps/server/tsconfig.json',external:['cloudflare:workers','node:*'],plugins:[{name:'repo-packages',setup(build){build.onResolve({filter:/^effect(\\/.*)?$/},args=>({path:Bun.resolveSync(args.path,root+'/apps/server')}));}}]});\nif(!built.success)throw new Error(String(built.logs));await Bun.write('/tmp/fidy-user-wake-worker.mjs',built.outputs[0]);console.log({bytes:built.outputs[0].size,schemaStatements:schema.length});\n",
+  "driverSource": "import importlib.util,json,pathlib,subprocess,secrets,time,uuid,statistics\ns=importlib.util.spec_from_file_location('cf','/tmp/fidy-category-cf-read.py');cf=importlib.util.module_from_spec(s);s.loader.exec_module(cf)\nprefix='fidy-user-wake-'+secrets.token_hex(4);folder=pathlib.Path('/tmp')/prefix;folder.mkdir(mode=0o700);out=pathlib.Path('/tmp/fidy-user-wake-proof.json')\nevidence={'prefix':prefix,'scope':'Private ingestion-owner committed readback with native alarm storage and the production User coordinator alarm handler; synthetic D1/R2 and no-op child Workflows. The fixture supplies the production alarm scheduler to readback after the existing owner fixture committed the intent; it does not exercise a public upload route or the complete hosted Turn service. Four phase-matched pairs, ABBA order, two synthetic User identities with valid seven-day Trial records, candidate reset on two of four pairs after a test-only three-second future alarm and confirmed storage.sync; that delay remains included in measured candidate time. Control waits for a real next-five-minute cadence represented by a native Workflow timer calling the current global dispatcher; this is not a measurement of the Cron Trigger transport. No production Cron transport latency, extraction completion, production authenticated API latency or CPU comparison is claimed.','resources':[],'namespaceId':None,'samples':[],'cleanup':[]}\ndef save():out.write_text(json.dumps(evidence,indent=2)+'\\n');(folder/'resources.json').write_text(json.dumps(evidence,indent=2)+'\\n')\ndef api(path,body=None,method=None):return cf.api('accounts/'+cf.ACCOUNT+'/'+path,body,method)\ndef deploy(config):\n (folder/'wrangler.json').write_text(json.dumps(config));p=subprocess.run([cf.BUN,str(cf.ROOT/'node_modules/.bin/wrangler'),'deploy','--config',str(folder/'wrangler.json')],cwd=cf.ROOT,capture_output=True,text=True,timeout=120)\n if p.returncode:raise RuntimeError('Owned deployment failed: '+p.stderr[-1200:])\ndef wait(workflow,identity,deadline_seconds=120):\n deadline=time.monotonic()+deadline_seconds;r={}\n while time.monotonic()<deadline:\n  try:r=api('workflows/'+workflow+'/instances/'+identity)['result']\n  except RuntimeError as error:\n   if 'HTTP 404;' not in str(error)and'HTTP 5'not in str(error):raise\n   time.sleep(2);continue\n  if r.get('status')=='complete':return json.loads(r['output'])if isinstance(r['output'],str)else r['output']\n  if r.get('status')in['errored','terminated']:raise RuntimeError('Owned Workflow failed: '+json.dumps(r.get('error')))\n  time.sleep(2)\n raise RuntimeError('Owned Workflow deadline: '+workflow+' '+identity+' '+json.dumps({k:r.get(k)for k in['status','error']}))\ndef run(action,**kwargs):\n identity=str(uuid.uuid4());evidence.setdefault('instances',[]).append({'action':action,'id':identity,**kwargs});save();api('workflows/'+prefix+'-probe/instances',{'instance_id':identity,'location_hint':'enam','params':{'action':action,**kwargs}});return wait(prefix+'-probe',identity)\ntry:\n db=api('d1/database',{'name':prefix,'primary_location_hint':'enam'})['result'];evidence['resources'].append(['database','d1/database/'+db['uuid']]);save()\n api('r2/buckets',{'name':prefix,'locationHint':'enam'});evidence['resources'].append(['bucket','r2/buckets/'+prefix]);save()\n queue=api('queues',{'queue_name':prefix})['result'];evidence['resources'].append(['queue','queues/'+queue['queue_id']]);save()\n workflows=[{'binding':'PROBE','name':prefix+'-probe','class_name':'WakeProbe'},{'binding':'CHILD','name':prefix+'-child','class_name':'WakeChild'},{'binding':'DISCOVERY','name':prefix+'-discover','class_name':'WakeDiscovery'}]\n evidence['resources'].append(['worker','workers/scripts/'+prefix]);evidence['resources'].extend(['workflow','workflows/'+w['name']]for w in workflows);save()\n (folder/'worker.mjs').write_bytes(pathlib.Path('/tmp/fidy-user-wake-worker.mjs').read_bytes())\n config={'name':prefix,'main':'worker.mjs','account_id':cf.ACCOUNT,'compatibility_date':'2026-09-08','compatibility_flags':['nodejs_compat'],'workers_dev':False,'preview_urls':False,'d1_databases':[{'binding':'DB','database_name':prefix,'database_id':db['uuid']}],'r2_buckets':[{'binding':'ERASURE_BUCKET','bucket_name':prefix}],'queues':{'producers':[{'binding':'OFFERS','queue':prefix}]},'workflows':workflows,'durable_objects':{'bindings':[{'name':'USERS','class_name':'WakeUser','script_name':prefix}]},'migrations':[{'tag':'v1','new_sqlite_classes':['WakeUser']}]}\n deploy(config);settings=api('workers/scripts/'+prefix+'/settings')['result'];evidence['namespaceId']=next(b['namespace_id']for b in settings['bindings']if b['name']=='USERS');save()\n evidence['initialization']=run('init');save();print('Owned native User wake initialized',flush=True)\n evidence['discoveries']=[]\n def start_discovery():\n  identity=str(uuid.uuid4());evidence['discoveries'].append({'id':identity});save();api('workflows/'+prefix+'-discover/instances',{'instance_id':identity,'location_hint':'enam','params':{}})\n start_discovery()\n for pair in range(4):\n  for variant in (['cron','wake']if pair%4 in[0,3]else['wake','cron']):\n   reset=variant=='wake'and pair%2==1\n   sample=run('sample',index=pair,variant=variant,reset=reset);sample['pair']=pair;evidence['samples'].append(sample);save()\n   if sample['responseStatus']!=('reset'if reset else 202):raise RuntimeError('Unexpected owner readback status: '+str(sample['responseStatus']))\n   if variant=='wake':\n    child=wait(prefix+'-child',sample['submissionId']);sample['childStartedAt']=child['startedAt'];sample['readbackToChildStartMs']=child['startedAt']-sample['startedAt'];save();run('settle',submissionId=sample['submissionId'],variant=variant)\n   print({'pair':pair,'variant':variant,'reset':reset,'readbackToChildStartMs':sample.get('readbackToChildStartMs')},flush=True)\n deadline=time.monotonic()+650\n while time.monotonic()<deadline:\n  for sample in evidence['samples']:\n   if 'childStartedAt'in sample:continue\n   try:detail=api('workflows/'+prefix+'-child/instances/'+sample['submissionId'])['result']\n   except RuntimeError as error:\n    if 'HTTP 404;'not in str(error):raise\n    continue\n   if detail.get('status')=='complete':\n    child=json.loads(detail['output'])if isinstance(detail['output'],str)else detail['output'];sample['childStartedAt']=child['startedAt'];sample['readbackToChildStartMs']=child['startedAt']-sample['startedAt'];save()\n  for discovery in evidence['discoveries']:\n   if 'output'in discovery:continue\n   detail=api('workflows/'+prefix+'-discover/instances/'+discovery['id'])['result']\n   if detail.get('status')=='complete':discovery['output']=json.loads(detail['output'])if isinstance(detail['output'],str)else detail['output'];save()\n   elif detail.get('status')in['errored','terminated']:raise RuntimeError('Discovery failed: '+json.dumps(detail.get('error')))\n  pending=[sample for sample in evidence['samples']if 'childStartedAt'not in sample]\n  if not pending:break\n  if all('output'in d for d in evidence['discoveries']):\n   assert len(evidence['discoveries'])<2,'Published control did not start at its discovery'\n   start_discovery()\n  time.sleep(10)\n assert all('childStartedAt'in sample for sample in evidence['samples']),'Child observation deadline'\n starts=[d['output']['startedAt']for d in evidence['discoveries']if 'output'in d]\n assert starts,'No discovery observation'\n assert all(s['childStartedAt']>=min(starts)for s in evidence['samples']if s['variant']=='cron'),'A candidate User alarm dispatched another User control intent'\n evidence['summary']={}\n for variant in['cron','wake']:\n  values=[sample['readbackToChildStartMs']for sample in evidence['samples']if sample['variant']==variant];evidence['summary'][variant]={'count':len(values),'medianMs':statistics.median(values),'maxMs':max(values)}\n evidence['summary']['phaseMatchedMedianSpeedup']=evidence['summary']['cron']['medianMs']/evidence['summary']['wake']['medianMs'];save();print(evidence['summary'],flush=True)\n evidence['queueState']=api('queues/'+queue['queue_id'])['result'];save();print(evidence['summary'],flush=True)\nexcept Exception as error:evidence['failure']=str(error);save();print(str(error),flush=True)\nfinally:\n if evidence['namespaceId']is not None:\n  try:evidence['retainedIntents']=run('inspect');save()\n  except Exception as error:evidence['inspectionFailure']=str(error);save()\n  try:evidence['objectCleanup']=run('cleanup');save()\n  except Exception as error:evidence['cleanup'].append({'resource':'objects','deleted':False,'error':str(error)})\n  try:\n   config.pop('durable_objects',None);config['migrations'].append({'tag':'v2','deleted_classes':['WakeUser']});(folder/'worker.mjs').write_text(\"import {WorkflowEntrypoint} from 'cloudflare:workers';export default{fetch(){return new Response(null,{status:404})}};export class WakeProbe extends WorkflowEntrypoint{run(){return Promise.resolve({disabled:true})}};export class WakeChild extends WorkflowEntrypoint{run(){return Promise.resolve({disabled:true})}};export class WakeDiscovery extends WorkflowEntrypoint{run(){return Promise.resolve({disabled:true})}}\")\n   deploy(config)\n   try:api('workers/durable_objects/namespaces/'+evidence['namespaceId']+'/objects');raise RuntimeError('Owned namespace remains')\n   except RuntimeError as error:\n    if 'HTTP 404;'not in str(error):raise\n   evidence['cleanup'].append({'resource':'namespace','deleted':True,'httpStatus':404})\n  except Exception as error:evidence['cleanup'].append({'resource':'namespace','deleted':False,'error':str(error)})\n for kind,path in reversed(evidence['resources']):\n  try:api(path,method='DELETE');evidence['cleanup'].append({'resource':kind,'path':path,'deleted':True})\n  except Exception as error:evidence['cleanup'].append({'resource':kind,'path':path,'deleted':False,'error':str(error)})\n save();print({'cleanup':evidence['cleanup']},flush=True)\n",
+  "notes": [
+    "Four pairs share one discovery phase and two synthetic Trial Users; this is not a multi-region or p95 distribution.",
+    "Control uses a native Workflow timer to reproduce the next five-minute discovery cadence and the current global dispatcher; actual Cron Trigger transport is excluded.",
+    "The fixture commits with the existing owner adapter, then runs held-owner committed readback with its supplied native alarm scheduler. The actual User coordinator alarm handler dispatches the identity. It does not invoke the complete hosted Turn entry service.",
+    "Two candidate cases use a test-only 3000 ms future alarm, await storage.sync and force ctx.abort; the full artificial delay is included in measurements.",
+    "Actor reset during immediate handoff had an earlier unlocalized deadline failure; retained separately, without a crash-latency guarantee.",
+    "Child Workflows are no-op probes; candidate fixtures are marked failed afterward through the actual failure owner solely to release fixture admission. Real extraction completion is not measured."
+  ],
+  "earlierFixtureStudies": [
+    {
+      "fixtureStudy": "initial-schema-failure",
+      "evidence": {
+        "prefix": "fidy-user-wake-9a697c08",
+        "scope": "Private native User coordinator publication replay and alarm dispatch; synthetic D1/R2 and no-op child Workflows. Fresh intent was committed by the existing owner fixture before its canonical replay. Alternating warm/reset actor cases. No cron delay, extraction completion, production authenticated API latency or CPU comparison is claimed.",
+        "resources": [
+          ["database", "d1/database/17d37baa-28b0-41db-aebf-0fdbb6e3af9f"],
+          ["bucket", "r2/buckets/fidy-user-wake-9a697c08"],
+          ["queue", "queues/467fb2b8cab4465dbf722f1221b743cf"],
+          ["worker", "workers/scripts/fidy-user-wake-9a697c08"],
+          ["workflow", "workflows/fidy-user-wake-9a697c08-probe"],
+          ["workflow", "workflows/fidy-user-wake-9a697c08-child"]
+        ],
+        "namespaceId": "e9c30f5193dd4e78a781d07b350079b2",
+        "samples": [],
+        "cleanup": [
+          {
+            "resource": "namespace",
+            "deleted": true,
+            "httpStatus": 404
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-9a697c08-child",
+            "deleted": true
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-9a697c08-probe",
+            "deleted": true
+          },
+          {
+            "resource": "worker",
+            "path": "workers/scripts/fidy-user-wake-9a697c08",
+            "deleted": true
+          },
+          {
+            "resource": "queue",
+            "path": "queues/467fb2b8cab4465dbf722f1221b743cf",
+            "deleted": true
+          },
+          {
+            "resource": "bucket",
+            "path": "r2/buckets/fidy-user-wake-9a697c08",
+            "deleted": true
+          },
+          {
+            "resource": "database",
+            "path": "d1/database/17d37baa-28b0-41db-aebf-0fdbb6e3af9f",
+            "deleted": true
+          }
+        ],
+        "instances": [
+          {
+            "action": "init",
+            "id": "0a3afd8a-0cb9-45ab-a961-81704fa63972"
+          },
+          {
+            "action": "cleanup",
+            "id": "3f714b4c-26b8-47df-88e4-68b6c1ed81b8"
+          }
+        ],
+        "failure": "Owned Workflow failed: {\"message\": \"D1_ERROR: CHECK constraint failed: expires_at_ms = created_at_ms + 600000: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_CHECK)\", \"name\": \"Error\"}",
+        "objectCleanup": {
+          "deletedObjects": 1
+        }
+      }
+    },
+    {
+      "fixtureStudy": "first-replay-failure",
+      "evidence": {
+        "prefix": "fidy-user-wake-75ba6232",
+        "scope": "Private native User coordinator publication replay and alarm dispatch; synthetic D1/R2 and no-op child Workflows. Fresh intent was committed by the existing owner fixture before its canonical replay. Alternating warm/reset actor cases. No cron delay, extraction completion, production authenticated API latency or CPU comparison is claimed.",
+        "resources": [
+          ["database", "d1/database/0c34aef9-cf48-4f9e-af71-d531e96a1ee5"],
+          ["bucket", "r2/buckets/fidy-user-wake-75ba6232"],
+          ["queue", "queues/54d2b535502c48a380e997dc4e40ad86"],
+          ["worker", "workers/scripts/fidy-user-wake-75ba6232"],
+          ["workflow", "workflows/fidy-user-wake-75ba6232-probe"],
+          ["workflow", "workflows/fidy-user-wake-75ba6232-child"]
+        ],
+        "namespaceId": "e4815ba1fdde4c2d820edced08917d31",
+        "samples": [
+          {
+            "index": 0,
+            "reset": false,
+            "submissionId": "a2523d8e-5158-40b4-a602-66f023eea6d4",
+            "startedAt": 1793291806265,
+            "responseReceivedAt": 1793291807182,
+            "responseStatus": 503
+          }
+        ],
+        "cleanup": [
+          {
+            "resource": "namespace",
+            "deleted": true,
+            "httpStatus": 404
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-75ba6232-child",
+            "deleted": true
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-75ba6232-probe",
+            "deleted": true
+          },
+          {
+            "resource": "worker",
+            "path": "workers/scripts/fidy-user-wake-75ba6232",
+            "deleted": true
+          },
+          {
+            "resource": "queue",
+            "path": "queues/54d2b535502c48a380e997dc4e40ad86",
+            "deleted": true
+          },
+          {
+            "resource": "bucket",
+            "path": "r2/buckets/fidy-user-wake-75ba6232",
+            "deleted": true
+          },
+          {
+            "resource": "database",
+            "path": "d1/database/0c34aef9-cf48-4f9e-af71-d531e96a1ee5",
+            "deleted": true
+          }
+        ],
+        "instances": [
+          {
+            "action": "init",
+            "id": "8bc357aa-175d-4e62-8bff-98073a2c7fc8"
+          },
+          {
+            "action": "sample",
+            "id": "b492b405-e7ea-4e2b-9731-a3f06b11d711",
+            "index": 0,
+            "reset": false
+          },
+          {
+            "action": "cleanup",
+            "id": "65fdd9cb-4447-418b-99dc-7e20095db80d"
+          }
+        ],
+        "initialization": {
+          "schemaStatements": 1108,
+          "synthetic": true
+        },
+        "failure": "Unexpected User publication replay status: 503",
+        "objectCleanup": {
+          "deletedObjects": 2
+        }
+      }
+    },
+    {
+      "fixtureStudy": "closed-browser-catalog-refusal",
+      "evidence": {
+        "prefix": "fidy-user-wake-8e4572c1",
+        "scope": "Private native User coordinator publication replay and alarm dispatch; synthetic D1/R2 and no-op child Workflows. Fresh intent was committed by the existing owner fixture before its canonical replay. Alternating warm/reset actor cases. No cron delay, extraction completion, production authenticated API latency or CPU comparison is claimed.",
+        "resources": [
+          ["database", "d1/database/bfd7f642-f98a-4cce-95a0-4851ddaf5d31"],
+          ["bucket", "r2/buckets/fidy-user-wake-8e4572c1"],
+          ["queue", "queues/6769c88c7fa24783ace7abd21c4f7541"],
+          ["worker", "workers/scripts/fidy-user-wake-8e4572c1"],
+          ["workflow", "workflows/fidy-user-wake-8e4572c1-probe"],
+          ["workflow", "workflows/fidy-user-wake-8e4572c1-child"]
+        ],
+        "namespaceId": "02e9ef263d2d4ce58c68d9b7a5c5b31b",
+        "samples": [
+          {
+            "index": 0,
+            "reset": false,
+            "submissionId": "9c0c1fff-2d53-41b0-8ab2-3283b0993d58",
+            "startedAt": 1793292159600,
+            "responseReceivedAt": 1793292160654,
+            "responseStatus": 503,
+            "diagnostics": {
+              "actor": "{\"nameMatches\":true,\"batches\":0,\"errors\":[]}",
+              "body": {
+                "status": "unavailable"
+              }
+            }
+          }
+        ],
+        "cleanup": [
+          {
+            "resource": "namespace",
+            "deleted": true,
+            "httpStatus": 404
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-8e4572c1-child",
+            "deleted": true
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-8e4572c1-probe",
+            "deleted": true
+          },
+          {
+            "resource": "worker",
+            "path": "workers/scripts/fidy-user-wake-8e4572c1",
+            "deleted": true
+          },
+          {
+            "resource": "queue",
+            "path": "queues/6769c88c7fa24783ace7abd21c4f7541",
+            "deleted": true
+          },
+          {
+            "resource": "bucket",
+            "path": "r2/buckets/fidy-user-wake-8e4572c1",
+            "deleted": true
+          },
+          {
+            "resource": "database",
+            "path": "d1/database/bfd7f642-f98a-4cce-95a0-4851ddaf5d31",
+            "deleted": true
+          }
+        ],
+        "instances": [
+          {
+            "action": "init",
+            "id": "46443416-888d-4c0c-8870-b64fe7f217d8"
+          },
+          {
+            "action": "sample",
+            "id": "bf789f4a-1f7a-4ba6-b6b6-8c56a2769c88",
+            "index": 0,
+            "reset": false
+          },
+          {
+            "action": "cleanup",
+            "id": "6567eacb-e937-4220-af7b-1a0a1e53ca9b"
+          }
+        ],
+        "initialization": {
+          "schemaStatements": 1108,
+          "synthetic": true
+        },
+        "failure": "Unexpected User publication replay status: 503",
+        "objectCleanup": {
+          "deletedObjects": 2
+        }
+      }
+    },
+    {
+      "fixtureStudy": "owner-fixture-shape-failure",
+      "evidence": {
+        "prefix": "fidy-user-wake-1d3b2968",
+        "scope": "Private ingestion-owner committed readback with native alarm storage and the production User coordinator alarm handler; synthetic D1/R2 and no-op child Workflows. The fixture supplies the production alarm scheduler to readback after the existing owner fixture committed the intent; it does not exercise a public upload route or the complete hosted Turn service. Alternating warm/reset actor cases. No cron delay, extraction completion, production authenticated API latency or CPU comparison is claimed.",
+        "resources": [
+          ["database", "d1/database/a741467a-8839-408e-ac7e-d0279739e71a"],
+          ["bucket", "r2/buckets/fidy-user-wake-1d3b2968"],
+          ["queue", "queues/eaea74ee70fe484c933cbaf1a15922aa"],
+          ["worker", "workers/scripts/fidy-user-wake-1d3b2968"],
+          ["workflow", "workflows/fidy-user-wake-1d3b2968-probe"],
+          ["workflow", "workflows/fidy-user-wake-1d3b2968-child"]
+        ],
+        "namespaceId": "103bfa07d85b445d8acb88906244f27e",
+        "samples": [
+          {
+            "index": 0,
+            "reset": false,
+            "submissionId": "1005e3d9-be98-4c05-83d6-ddadb6fe7ef8",
+            "startedAt": 1793292323483,
+            "responseReceivedAt": 1793292324699,
+            "responseStatus": 503,
+            "diagnostics": {
+              "actor": "{\"nameMatches\":true,\"batches\":0,\"errors\":[]}",
+              "body": {
+                "prepared": "Unavailable"
+              }
+            }
+          }
+        ],
+        "cleanup": [
+          {
+            "resource": "namespace",
+            "deleted": true,
+            "httpStatus": 404
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-1d3b2968-child",
+            "deleted": true
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-1d3b2968-probe",
+            "deleted": true
+          },
+          {
+            "resource": "worker",
+            "path": "workers/scripts/fidy-user-wake-1d3b2968",
+            "deleted": true
+          },
+          {
+            "resource": "queue",
+            "path": "queues/eaea74ee70fe484c933cbaf1a15922aa",
+            "deleted": true
+          },
+          {
+            "resource": "bucket",
+            "path": "r2/buckets/fidy-user-wake-1d3b2968",
+            "deleted": true
+          },
+          {
+            "resource": "database",
+            "path": "d1/database/a741467a-8839-408e-ac7e-d0279739e71a",
+            "deleted": true
+          }
+        ],
+        "instances": [
+          {
+            "action": "init",
+            "id": "5f8e3e5c-a781-4fb0-9b6a-28df870bf31a"
+          },
+          {
+            "action": "sample",
+            "id": "d84dbf86-a490-45b7-a98d-86ae03593277",
+            "index": 0,
+            "reset": false
+          },
+          {
+            "action": "cleanup",
+            "id": "c471092d-f90e-4971-887b-34ef2599eb01"
+          }
+        ],
+        "initialization": {
+          "schemaStatements": 1108,
+          "synthetic": true
+        },
+        "failure": "Unexpected User publication replay status: 503",
+        "objectCleanup": {
+          "deletedObjects": 2
+        }
+      }
+    },
+    {
+      "fixtureStudy": "rest-settlement-failure",
+      "evidence": {
+        "prefix": "fidy-user-wake-5fb566a6",
+        "scope": "Private ingestion-owner committed readback with native alarm storage and the production User coordinator alarm handler; synthetic D1/R2 and no-op child Workflows. The fixture supplies the production alarm scheduler to readback after the existing owner fixture committed the intent; it does not exercise a public upload route or the complete hosted Turn service. Alternating warm/reset actor cases. No cron delay, extraction completion, production authenticated API latency or CPU comparison is claimed.",
+        "resources": [
+          ["database", "d1/database/282c43a8-f652-4ccd-8620-fe33ac9fefb2"],
+          ["bucket", "r2/buckets/fidy-user-wake-5fb566a6"],
+          ["queue", "queues/d9194ca5d3bc4edca1ac5efe0f33f9b9"],
+          ["worker", "workers/scripts/fidy-user-wake-5fb566a6"],
+          ["workflow", "workflows/fidy-user-wake-5fb566a6-probe"],
+          ["workflow", "workflows/fidy-user-wake-5fb566a6-child"]
+        ],
+        "namespaceId": "8b1f168e4ff8459788bd2d1c584fb98b",
+        "samples": [
+          {
+            "index": 0,
+            "reset": false,
+            "submissionId": "f36e9e6e-d2e5-4b92-b26a-1d20b3eefb82",
+            "startedAt": 1793292478322,
+            "responseReceivedAt": 1793292480423,
+            "responseStatus": 202,
+            "diagnostics": {
+              "actor": "{\"nameMatches\":true,\"batches\":3,\"errors\":[]}",
+              "body": {
+                "retained": true
+              }
+            },
+            "childStartedAt": 1793292484735,
+            "replayToChildStartMs": 6413,
+            "responseToChildStartMs": 4312
+          }
+        ],
+        "cleanup": [
+          {
+            "resource": "namespace",
+            "deleted": true,
+            "httpStatus": 404
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-5fb566a6-child",
+            "deleted": true
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-5fb566a6-probe",
+            "deleted": true
+          },
+          {
+            "resource": "worker",
+            "path": "workers/scripts/fidy-user-wake-5fb566a6",
+            "deleted": true
+          },
+          {
+            "resource": "queue",
+            "path": "queues/d9194ca5d3bc4edca1ac5efe0f33f9b9",
+            "deleted": true
+          },
+          {
+            "resource": "bucket",
+            "path": "r2/buckets/fidy-user-wake-5fb566a6",
+            "deleted": true
+          },
+          {
+            "resource": "database",
+            "path": "d1/database/282c43a8-f652-4ccd-8620-fe33ac9fefb2",
+            "deleted": true
+          }
+        ],
+        "instances": [
+          {
+            "action": "init",
+            "id": "b9ed4cd4-82b4-4ba4-9bfb-3817d733f6ec"
+          },
+          {
+            "action": "sample",
+            "id": "63ef080e-a121-497f-8552-04a7f24cd705",
+            "index": 0,
+            "reset": false
+          },
+          {
+            "action": "cleanup",
+            "id": "15f16411-be0c-40d2-a494-ded44171f96b"
+          }
+        ],
+        "initialization": {
+          "schemaStatements": 1108,
+          "synthetic": true
+        },
+        "failure": "Cloudflare HTTP 400; codes [7500]",
+        "objectCleanup": {
+          "deletedObjects": 2
+        }
+      }
+    },
+    {
+      "fixtureStudy": "rest-string-settlement-failure",
+      "evidence": {
+        "prefix": "fidy-user-wake-fedea5bd",
+        "scope": "Private ingestion-owner committed readback with native alarm storage and the production User coordinator alarm handler; synthetic D1/R2 and no-op child Workflows. The fixture supplies the production alarm scheduler to readback after the existing owner fixture committed the intent; it does not exercise a public upload route or the complete hosted Turn service. Alternating warm/reset actor cases. No cron delay, extraction completion, production authenticated API latency or CPU comparison is claimed.",
+        "resources": [
+          ["database", "d1/database/baabf0f4-0391-4eb4-987f-473d8ad46568"],
+          ["bucket", "r2/buckets/fidy-user-wake-fedea5bd"],
+          ["queue", "queues/00ccf82e3201435cad04dcf272d3351e"],
+          ["worker", "workers/scripts/fidy-user-wake-fedea5bd"],
+          ["workflow", "workflows/fidy-user-wake-fedea5bd-probe"],
+          ["workflow", "workflows/fidy-user-wake-fedea5bd-child"]
+        ],
+        "namespaceId": "8fbf5ee044ab4b3ba30b4b96d5ee5baf",
+        "samples": [
+          {
+            "index": 0,
+            "reset": false,
+            "submissionId": "5e8b7700-98ef-46b1-bb73-ae458d84e67a",
+            "startedAt": 1793292709276,
+            "responseReceivedAt": 1793292710152,
+            "responseStatus": 202,
+            "diagnostics": {
+              "actor": "{\"nameMatches\":true,\"batches\":3,\"errors\":[]}",
+              "body": {
+                "retained": true
+              }
+            },
+            "childStartedAt": 1793292716489,
+            "replayToChildStartMs": 7213,
+            "responseToChildStartMs": 6337
+          }
+        ],
+        "cleanup": [
+          {
+            "resource": "namespace",
+            "deleted": true,
+            "httpStatus": 404
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-fedea5bd-child",
+            "deleted": true
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-fedea5bd-probe",
+            "deleted": true
+          },
+          {
+            "resource": "worker",
+            "path": "workers/scripts/fidy-user-wake-fedea5bd",
+            "deleted": true
+          },
+          {
+            "resource": "queue",
+            "path": "queues/00ccf82e3201435cad04dcf272d3351e",
+            "deleted": true
+          },
+          {
+            "resource": "bucket",
+            "path": "r2/buckets/fidy-user-wake-fedea5bd",
+            "deleted": true
+          },
+          {
+            "resource": "database",
+            "path": "d1/database/baabf0f4-0391-4eb4-987f-473d8ad46568",
+            "deleted": true
+          }
+        ],
+        "instances": [
+          {
+            "action": "init",
+            "id": "db25c332-740c-4141-b683-809546b73cf4"
+          },
+          {
+            "action": "sample",
+            "id": "3461af64-804d-43e6-8891-a1c42e3242f7",
+            "index": 0,
+            "reset": false
+          },
+          {
+            "action": "cleanup",
+            "id": "2034f819-1b85-41d4-b1b6-7747d715dd0f"
+          }
+        ],
+        "initialization": {
+          "schemaStatements": 1108,
+          "synthetic": true
+        },
+        "failure": "Cloudflare HTTP 400; codes [7500]",
+        "objectCleanup": {
+          "deletedObjects": 2
+        }
+      }
+    },
+    {
+      "fixtureStudy": "immediate-reset-deadline",
+      "evidence": {
+        "prefix": "fidy-user-wake-e8b82750",
+        "scope": "Private ingestion-owner committed readback with native alarm storage and the production User coordinator alarm handler; synthetic D1/R2 and no-op child Workflows. The fixture supplies the production alarm scheduler to readback after the existing owner fixture committed the intent; it does not exercise a public upload route or the complete hosted Turn service. Four phase-matched pairs, ABBA order, two User identities, candidate reset on two of four pairs. Control waits for a real next-five-minute cadence represented by a native Workflow timer calling the current global dispatcher; this is not a measurement of the Cron Trigger transport. No cron delay, extraction completion, production authenticated API latency or CPU comparison is claimed.",
+        "resources": [
+          ["database", "d1/database/0f28c883-aaf1-4be8-9a22-4273e75823a6"],
+          ["bucket", "r2/buckets/fidy-user-wake-e8b82750"],
+          ["queue", "queues/d2e75ded9bf3402ab86c24c2496429d9"],
+          ["worker", "workers/scripts/fidy-user-wake-e8b82750"],
+          ["workflow", "workflows/fidy-user-wake-e8b82750-probe"],
+          ["workflow", "workflows/fidy-user-wake-e8b82750-child"],
+          ["workflow", "workflows/fidy-user-wake-e8b82750-discover"]
+        ],
+        "namespaceId": "d54aa9da36e94c16a160dd9f41ae2ceb",
+        "samples": [
+          {
+            "index": 0,
+            "variant": "cron",
+            "reset": false,
+            "submissionId": "7396b305-e11f-48d8-9d9f-1fb39a7f073c",
+            "startedAt": 1793293192882,
+            "responseReceivedAt": 1793293194069,
+            "responseStatus": 202,
+            "diagnostics": {
+              "actor": "{\"knownUser\":true,\"batches\":3,\"errors\":[]}",
+              "body": {
+                "retained": true
+              }
+            },
+            "pair": 0
+          },
+          {
+            "index": 0,
+            "variant": "wake",
+            "reset": false,
+            "submissionId": "e55cc365-413a-4479-aaf9-718360ceb547",
+            "startedAt": 1793293204309,
+            "responseReceivedAt": 1793293205695,
+            "responseStatus": 202,
+            "diagnostics": {
+              "actor": "{\"knownUser\":true,\"batches\":3,\"errors\":[]}",
+              "body": {
+                "retained": true
+              }
+            },
+            "pair": 0,
+            "childStartedAt": 1793293211989,
+            "readbackToChildStartMs": 7680
+          },
+          {
+            "index": 1,
+            "variant": "wake",
+            "reset": true,
+            "submissionId": "e03ffd94-5a94-4044-9e50-bc06dc419baf",
+            "startedAt": 1793293224650,
+            "responseReceivedAt": 1793293225320,
+            "responseStatus": "reset",
+            "pair": 1
+          }
+        ],
+        "cleanup": [
+          {
+            "resource": "namespace",
+            "deleted": true,
+            "httpStatus": 404
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-e8b82750-discover",
+            "deleted": true
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-e8b82750-child",
+            "deleted": true
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-e8b82750-probe",
+            "deleted": true
+          },
+          {
+            "resource": "worker",
+            "path": "workers/scripts/fidy-user-wake-e8b82750",
+            "deleted": true
+          },
+          {
+            "resource": "queue",
+            "path": "queues/d2e75ded9bf3402ab86c24c2496429d9",
+            "deleted": true
+          },
+          {
+            "resource": "bucket",
+            "path": "r2/buckets/fidy-user-wake-e8b82750",
+            "deleted": true
+          },
+          {
+            "resource": "database",
+            "path": "d1/database/0f28c883-aaf1-4be8-9a22-4273e75823a6",
+            "deleted": true
+          }
+        ],
+        "instances": [
+          {
+            "action": "init",
+            "id": "23e23d91-b31a-4946-9ac3-8279ce04e9e1"
+          },
+          {
+            "action": "sample",
+            "id": "aee4a38f-889b-4fd1-b07a-254a8b5b06c1",
+            "index": 0,
+            "variant": "cron",
+            "reset": false
+          },
+          {
+            "action": "sample",
+            "id": "5ddf287c-8c70-4899-97e4-8adc3cc6b11d",
+            "index": 0,
+            "variant": "wake",
+            "reset": false
+          },
+          {
+            "action": "settle",
+            "id": "c4eb1cb7-d140-4a62-a166-72c7094ecc24",
+            "submissionId": "e55cc365-413a-4479-aaf9-718360ceb547",
+            "variant": "wake"
+          },
+          {
+            "action": "sample",
+            "id": "60239535-309a-44dd-b905-ba2e5457352e",
+            "index": 1,
+            "variant": "wake",
+            "reset": true
+          },
+          {
+            "action": "cleanup",
+            "id": "7ac3312a-5d5b-4419-9891-7a92f5740a94"
+          }
+        ],
+        "initialization": {
+          "schemaStatements": 1108,
+          "synthetic": true
+        },
+        "discoveries": [
+          {
+            "id": "9f527321-38eb-4ea9-8be9-76c14fe660bc"
+          }
+        ],
+        "failure": "Owned Workflow deadline: fidy-user-wake-e8b82750-child e03ffd94-5a94-4044-9e50-bc06dc419baf {\"status\": null, \"error\": null}",
+        "objectCleanup": {
+          "deletedObjects": 4
+        }
+      }
+    },
+    {
+      "fixtureStudy": "free-backfill-refusal",
+      "evidence": {
+        "prefix": "fidy-user-wake-0635ea0c",
+        "scope": "Private ingestion-owner committed readback with native alarm storage and the production User coordinator alarm handler; synthetic D1/R2 and no-op child Workflows. The fixture supplies the production alarm scheduler to readback after the existing owner fixture committed the intent; it does not exercise a public upload route or the complete hosted Turn service. Four phase-matched pairs, ABBA order, two User identities, candidate reset on two of four pairs after a test-only three-second future alarm and confirmed storage.sync; that delay remains included in measured candidate time. Control waits for a real next-five-minute cadence represented by a native Workflow timer calling the current global dispatcher; this is not a measurement of the Cron Trigger transport. No production Cron transport latency, extraction completion, production authenticated API latency or CPU comparison is claimed.",
+        "resources": [
+          ["database", "d1/database/263d43e1-2a60-42a4-846b-b5eaa670e814"],
+          ["bucket", "r2/buckets/fidy-user-wake-0635ea0c"],
+          ["queue", "queues/f5cc8e966ee643849787affc8efcc4e5"],
+          ["worker", "workers/scripts/fidy-user-wake-0635ea0c"],
+          ["workflow", "workflows/fidy-user-wake-0635ea0c-probe"],
+          ["workflow", "workflows/fidy-user-wake-0635ea0c-child"],
+          ["workflow", "workflows/fidy-user-wake-0635ea0c-discover"]
+        ],
+        "namespaceId": "6aaaaecc294047318e770816362825e1",
+        "samples": [
+          {
+            "index": 0,
+            "variant": "cron",
+            "reset": false,
+            "submissionId": "9148cdd0-4893-4d9a-bc56-e13a48491f29",
+            "startedAt": 1793293785532,
+            "responseReceivedAt": 1793293786526,
+            "responseStatus": 202,
+            "diagnostics": {
+              "actor": "{\"knownUser\":true,\"batches\":3,\"errors\":[]}",
+              "body": {
+                "retained": true
+              }
+            },
+            "pair": 0
+          },
+          {
+            "index": 0,
+            "variant": "wake",
+            "reset": false,
+            "submissionId": "f992a8c6-5d22-4ace-a4f5-dfbde31c5fdf",
+            "startedAt": 1793293793414,
+            "responseReceivedAt": 1793293794720,
+            "responseStatus": 202,
+            "diagnostics": {
+              "actor": "{\"knownUser\":true,\"batches\":3,\"errors\":[]}",
+              "body": {
+                "retained": true
+              }
+            },
+            "pair": 0,
+            "childStartedAt": 1793293798118,
+            "readbackToChildStartMs": 4704
+          },
+          {
+            "index": 1,
+            "variant": "wake",
+            "reset": true,
+            "submissionId": "35ed679b-39ba-49c7-bc21-f41fda0a5b76",
+            "startedAt": 1793293807233,
+            "responseReceivedAt": 1793293807814,
+            "responseStatus": "reset",
+            "pair": 1,
+            "childStartedAt": 1793293815200,
+            "readbackToChildStartMs": 7967
+          }
+        ],
+        "cleanup": [
+          {
+            "resource": "namespace",
+            "deleted": true,
+            "httpStatus": 404
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-0635ea0c-discover",
+            "deleted": true
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-0635ea0c-child",
+            "deleted": true
+          },
+          {
+            "resource": "workflow",
+            "path": "workflows/fidy-user-wake-0635ea0c-probe",
+            "deleted": true
+          },
+          {
+            "resource": "worker",
+            "path": "workers/scripts/fidy-user-wake-0635ea0c",
+            "deleted": true
+          },
+          {
+            "resource": "queue",
+            "path": "queues/f5cc8e966ee643849787affc8efcc4e5",
+            "deleted": true
+          },
+          {
+            "resource": "bucket",
+            "path": "r2/buckets/fidy-user-wake-0635ea0c",
+            "deleted": true
+          },
+          {
+            "resource": "database",
+            "path": "d1/database/263d43e1-2a60-42a4-846b-b5eaa670e814",
+            "deleted": true
+          }
+        ],
+        "instances": [
+          {
+            "action": "init",
+            "id": "f6e1e935-b14d-4b9d-8033-ccea49c68598"
+          },
+          {
+            "action": "sample",
+            "id": "05f48ba2-c8b4-435a-b860-cfdef4b59276",
+            "index": 0,
+            "variant": "cron",
+            "reset": false
+          },
+          {
+            "action": "sample",
+            "id": "f8f929fe-aa3d-4365-ac38-79a701f9c3a4",
+            "index": 0,
+            "variant": "wake",
+            "reset": false
+          },
+          {
+            "action": "settle",
+            "id": "d5b76f14-8622-4092-a297-5041f7582832",
+            "submissionId": "f992a8c6-5d22-4ace-a4f5-dfbde31c5fdf",
+            "variant": "wake"
+          },
+          {
+            "action": "sample",
+            "id": "15d19c23-4458-4365-92d5-f97525e88444",
+            "index": 1,
+            "variant": "wake",
+            "reset": true
+          },
+          {
+            "action": "settle",
+            "id": "ce47522c-f26b-4a06-9b1f-cf36adc9d474",
+            "submissionId": "35ed679b-39ba-49c7-bc21-f41fda0a5b76",
+            "variant": "wake"
+          },
+          {
+            "action": "sample",
+            "id": "6d56ce45-fabe-43a1-a194-e2c8678069fa",
+            "index": 1,
+            "variant": "cron",
+            "reset": false
+          },
+          {
+            "action": "inspect",
+            "id": "0ca995f0-c6bb-4746-b445-c1509261972b"
+          },
+          {
+            "action": "cleanup",
+            "id": "9d5f8a6f-533b-4232-8371-08d3862d36bc"
+          }
+        ],
+        "initialization": {
+          "schemaStatements": 1108,
+          "synthetic": true
+        },
+        "discoveries": [
+          {
+            "id": "3890d74e-1505-40e8-8f98-20bd88b356af"
+          }
+        ],
+        "failure": "Owned Workflow failed: {\"message\": \"Publication refused 402\", \"name\": \"Error\"}",
+        "retainedIntents": [
+          {
+            "id": "9148cdd0-4893-4d9a-bc56-e13a48491f29",
+            "status": "queued",
+            "published": 1,
+            "attempted": 1
+          },
+          {
+            "id": "f992a8c6-5d22-4ace-a4f5-dfbde31c5fdf",
+            "status": "failed",
+            "published": 0,
+            "attempted": 0
+          },
+          {
+            "id": "35ed679b-39ba-49c7-bc21-f41fda0a5b76",
+            "status": "failed",
+            "published": 0,
+            "attempted": 0
+          }
+        ],
+        "objectCleanup": {
+          "deletedObjects": 5
+        }
+      }
+    }
+  ],
+  "authenticationHelperSource": "import json,pathlib,subprocess,urllib.request,urllib.error,datetime\nROOT=pathlib.Path('/Users/obarbozaa/.codex/worktrees/6dc1/fidy-ai')\nBUN='/Users/obarbozaa/.fidy/bun-13a98b0db/bun'\nACCOUNT='a32350b6918ad7e78bc589b6630af1c2'\nWORKER='fidycloudflare-core-production-hdv5cspnk7fai6vg'\nclass NoRedirect(urllib.request.HTTPRedirectHandler):\n def redirect_request(self,*a,**kw):raise RuntimeError('Unexpected redirect')\ndef credential():\n auth=json.loads(subprocess.run([BUN,str(ROOT/'node_modules/.bin/wrangler'),'auth','token','--json'],capture_output=True,text=True,check=True,timeout=30).stdout)\n token=auth.pop('token');auth.clear();return token\ndef api(path,body=None,method=None):\n token=credential();req=urllib.request.Request('https://api.cloudflare.com/client/v4/'+path,data=None if body is None else json.dumps(body).encode(),method=method or ('GET' if body is None else 'POST'),headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})\n try:\n  with urllib.request.build_opener(NoRedirect).open(req,timeout=60) as response:data=response.read(2_000_001)\n except urllib.error.HTTPError as error:\n  detail=json.loads(error.read(65536));raise RuntimeError('Cloudflare HTTP '+str(error.code)+'; codes '+str([e.get('code') for e in detail.get('errors',[])])) from None\n finally:token=''\n if len(data)>2_000_000:raise RuntimeError('Response exceeds bound')\n return json.loads(data)\n",
+  "cleanupAuditFile": "statement-wakeup-cleanup-2026-10-29.json"
+}

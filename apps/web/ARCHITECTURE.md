@@ -18,7 +18,10 @@ Workers do not serve web routes or static assets.
 Effect Atom derives browser transport from the assembled `FidyApi` with
 `AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`. A shared browser HTTP policy
 layer bounds and sanitizes that transport beneath each generated client; the web application does not
-hand-wrap endpoints or declare a second canonical surface. Only GET/HEAD transport failures retry
+hand-wrap endpoints or declare a second canonical surface. Each canonical API client permits two
+active transfers through complete response materialization. Waiting uses the original request deadline;
+interruption removes queued work, and retry pacing releases capacity. This volatile browser budget
+does not replace server admission across tabs and clients. Only GET/HEAD transport failures retry
 once. Canonical requests and safe web-auth reads may additionally retry a decoded `ResourceLimited` refusal with bounded
 `Retry-After` pacing (six retries, delays of one to five seconds) inside the original boundary deadline (15 seconds for canonical requests, 10 seconds for ordinary web-auth reads). This proves non-admission; commercial exhaustion, uncertain mutations, authentication,
 and enrollment refusals never gain automatic replay. Cancellation interrupts pacing as well as
@@ -38,6 +41,32 @@ These records are local DevTools diagnostics, not centrally collected browser te
 can correlate a transport receipt, but runtime/render failures and schema decoding failures do not carry
 server receipt correlation. Navigation and component interactions are not recorded, and there is no
 session recording or automatic reproduction of User content.
+
+Needs Review publishes navigation separately from its lazy workspace through `feature.tsx`.
+The route preloads both the retained workspace and its route wrapper before navigation commits,
+so a second presentation suspension cannot retain the previous route's Consent reader.
+
+Transactions and Dashboard
+commit their existing query owners while their presentation modules load. Capture and calendar
+code load before the Transactions workspace becomes usable rather than moving that cost to its
+first interaction. Poppins uses Latin subsets with the original fonts retained for other scripts. Sidebar artwork
+uses display-density variants, retaining the originals for the larger access screen.
+
+After the application boundary latches the browser session, the initial Budgets
+and Recurring routes may mount the same session-registry profile query before presentation loads.
+Transactions starts ordinary reads only after its fresh Consent gate, preserving Privacy-only
+access after withdrawal. Its navigation count shares the page's fresh Consent query and mounts
+ordinary reads only after Granted, including on a full reload of read-only history. Consent remains owned by each page's existing zero-idle-TTL query and fresh-read gate. The
+immutable initial binding only classifies unauthenticated failures and navigation display; every
+protected request retains the bound header, server checks, and authentication-lifetime cancellation.
+
+Navigation requests Review counts with a zero-row window; the Review workspace retains its
+default 50-record window and the same User-scoped counts and authority checks.
+
+Transactions requests 25 records for its initial view, then uses the existing default 100-record
+continuations. The canonical query accepts an integer limit from 1 through 100, defaulting to 100;
+the User-owned keyset cursor remains valid across page sizes. Display summaries still describe
+only loaded records, and reaching the continuation retains access to the remaining history.
 
 ## 2. Behavioral ownership
 

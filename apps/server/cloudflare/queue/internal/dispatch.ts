@@ -121,20 +121,29 @@ const observeWorkflowMessage = <E>(
     });
   });
 
+// Handoff lookups may overlap; the Workflows and User coordinator retain execution authority.
+const statementHandoffConcurrency = 8;
+
 const receiveWorkflowBatch = <E>(
   batch: MessageBatch<unknown>,
-  receive: (message: MessageBatch<unknown>) => Effect.Effect<void, E>
+  receive: (message: MessageBatch<unknown>) => Effect.Effect<void, E>,
+  concurrency: 1 | 4 | typeof statementHandoffConcurrency = 1
 ): Effect.Effect<void, E> =>
   Effect.gen(function* () {
-    let failure = Option.none<Cause.Cause<E>>();
-    for (const message of batch.messages) {
-      const result = yield* Effect.exit(observeWorkflowMessage(batch, message, receive));
-      if (Exit.isFailure(result)) {
-        if (Cause.hasInterrupts(result.cause)) return yield* Effect.failCause(result.cause);
-        if (Option.isNone(failure)) failure = Option.some(result.cause);
-      }
-    }
-    if (Option.isSome(failure)) return yield* Effect.failCause(failure.value);
+    const results = yield* Effect.forEach(
+      batch.messages,
+      (message) =>
+        Effect.gen(function* () {
+          const result = yield* Effect.exit(observeWorkflowMessage(batch, message, receive));
+          if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause)) {
+            return yield* Effect.failCause(result.cause);
+          }
+          return result;
+        }),
+      { concurrency }
+    );
+    const failure = results.find(Exit.isFailure);
+    if (failure !== undefined) return yield* Effect.failCause(failure.cause);
   });
 
 const receiveEmailQueue = ({
@@ -151,7 +160,8 @@ const receiveEmailQueue = ({
         receiveEmailReplacement({
           DB: environment.DB,
           EMAIL_REPLACEMENT_WORKFLOW: environment.EMAIL_REPLACEMENT_WORKFLOW,
-        })
+        }),
+        4
       ).pipe(Effect.withSpan("emailReplacement.receive"));
     }
     if (batch.messages.some((message) => isBrowserPairingEmailWork(message.body))) {
@@ -163,7 +173,8 @@ const receiveEmailQueue = ({
         receiveBrowserPairingEmail({
           DB: environment.DB,
           BROWSER_PAIRING_EMAIL_WORKFLOW: environment.BROWSER_PAIRING_EMAIL_WORKFLOW,
-        })
+        }),
+        4
       );
     }
     return yield* deliveryFailure(new Error("Unknown email work"));
@@ -264,11 +275,14 @@ const receiveWorkQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryU
     if (workflow === undefined) {
       return Effect.fail(deliveryFailure(new Error("Statement extraction unavailable")));
     }
-    return receiveWorkflowBatch(batch, (entry) =>
-      receiveStatementExtraction({
-        environment: { DB: environment.DB, STATEMENT_EXTRACTION_WORKFLOW: workflow },
-        messages: entry.messages,
-      })
+    return receiveWorkflowBatch(
+      batch,
+      (entry) =>
+        receiveStatementExtraction({
+          environment: { DB: environment.DB, STATEMENT_EXTRACTION_WORKFLOW: workflow },
+          messages: entry.messages,
+        }),
+      statementHandoffConcurrency
     ).pipe(Effect.mapError(deliveryFailure));
   }
   return batch.messages.some(

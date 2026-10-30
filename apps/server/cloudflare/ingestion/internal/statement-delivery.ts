@@ -4,8 +4,15 @@ import {
   workTraceHeaders,
 } from "../../runtime/telemetry/operations";
 import type { WorkflowStepConfig } from "cloudflare:workers";
-import { Cause, Clock, Data, Effect, Exit, Option, Result, Schema } from "effect";
-import { StatementCoordinatorActivity, StatementWork } from "../contract";
+import { Cause, Clock, Effect, Exit, Option, Result, Schema } from "effect";
+import {
+  StatementCoordinatorActivity,
+  StatementDeliveryUnavailable,
+  type StatementQueue,
+  StatementWork,
+  type StatementWorkflow,
+  statementWorkflowRetention as retention,
+} from "../contract";
 import { maximumStatementChunkActivities } from "./statement-processing-limits";
 
 const Work = StatementWork;
@@ -32,35 +39,9 @@ const WorkflowState = Schema.Struct({
     "unknown",
   ]),
 });
-const retention = { successRetention: "3 days", errorRetention: "3 days" } as const;
 const dispatchLimit = 32;
 const dispatchCooldownMs = 60_000;
 
-/** Publish only versioned User/submission identity. A resolved send means the Queue accepted an
- * offer, not that extraction completed; a rejected send may still have been accepted, so the
- * outbox retries the same idempotent identity after its cooldown. No bytes or passwords enter it.
- */
-export type StatementQueue = Readonly<{
-  send: (work: typeof Work.Type) => Promise<unknown>;
-}>;
-/** Create one Workflow instance keyed by submission id. A resolved create means the instance
- * exists, not that it finished. If creation rejects ambiguously, get must resolve an existing
- * instance before Queue acknowledgement; a missing/unavailable get must reject for redelivery.
- * get may return an errored instance: the scheduled reconciler inspects status and settles it
- * under the User coordinator. The three-day retention applies to Workflow state only.
- */
-export type StatementWorkflow = Readonly<{
-  create: (options: {
-    id: string;
-    params: typeof Work.Type;
-    retention: typeof retention;
-  }) => Promise<unknown>;
-  get: (id: string) => Promise<unknown>;
-}>;
-
-class StatementDeliveryUnavailable extends Data.TaggedError("StatementDeliveryUnavailable")<{
-  readonly cause: unknown;
-}> {}
 const attempt = <A>(run: () => PromiseLike<A>): Effect.Effect<A, StatementDeliveryUnavailable> =>
   Effect.tryPromise({
     try: () => Promise.resolve(run()),
@@ -70,11 +51,13 @@ const attempt = <A>(run: () => PromiseLike<A>): Effect.Effect<A, StatementDelive
 export const isStatementExtractionWork = (body: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(Work)(body));
 
-/** Reoffers a bounded page of unsettled D1 intents. A failed send leaves its identity selectable. */
+/** Reoffers a bounded page of unsettled D1 intents. Failed handoffs leave their identity selectable. */
 export const dispatchStatementExtraction = (
   environment: Readonly<{
     DB: D1Database;
+    userId: Option.Option<string>;
     STATEMENT_EXTRACTION_QUEUE: StatementQueue;
+    STATEMENT_EXTRACTION_WORKFLOW: Option.Option<StatementWorkflow>;
   }>
 ): Effect.Effect<void, StatementDeliveryUnavailable> =>
   Effect.gen(function* () {
@@ -85,8 +68,9 @@ export const dispatchStatementExtraction = (
         FROM statement_submissions
         WHERE work_published_at_ms IS NOT NULL AND status IN ('queued', 'processing')
           AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms < ?)
+          ${Option.isSome(environment.userId) ? "AND user_id = ?" : ""}
         ORDER BY work_published_at_ms, id LIMIT ?`)
-        .bind(now - dispatchCooldownMs, dispatchLimit)
+        .bind(now - dispatchCooldownMs, ...Option.toArray(environment.userId), dispatchLimit)
         .all()
     );
     const entries = yield* Schema.decodeUnknownEffect(Schema.Array(OutboxRow))(rows.results).pipe(
@@ -103,14 +87,12 @@ export const dispatchStatementExtraction = (
       );
       if (claimed.meta.changes !== 1) continue;
       const offered = yield* Effect.exit(
-        attempt(() =>
-          environment.STATEMENT_EXTRACTION_QUEUE.send({
-            ...trace,
-            version: entry.revision,
-            userId: entry.user_id,
-            submissionId: entry.submission_id,
-          })
-        )
+        offerStatementExtraction(environment, {
+          ...trace,
+          version: entry.revision,
+          userId: entry.user_id,
+          submissionId: entry.submission_id,
+        })
       );
       if (Exit.isFailure(offered)) {
         if (Cause.hasInterrupts(offered.cause)) return yield* Effect.failCause(offered.cause);
@@ -171,6 +153,32 @@ export const receiveStatementExtraction = (
       message.ack();
     }
   }).pipe(Effect.withSpan("ingestion.statementReceive"));
+
+/** Direct handoff accelerates the committed outbox; an unavailable create/get falls back to the
+ * same Queue identity. Both paths use the receiver's current eligibility and stable Workflow id.
+ */
+const offerStatementExtraction = (
+  environment: Readonly<{
+    DB: D1Database;
+    STATEMENT_EXTRACTION_QUEUE: StatementQueue;
+    STATEMENT_EXTRACTION_WORKFLOW: Option.Option<StatementWorkflow>;
+  }>,
+  body: typeof Work.Type
+): Effect.Effect<void, StatementDeliveryUnavailable> =>
+  Effect.gen(function* () {
+    const workflow = environment.STATEMENT_EXTRACTION_WORKFLOW;
+    if (Option.isSome(workflow)) {
+      const delivered = yield* Effect.exit(
+        receiveStatementExtraction({
+          environment: { DB: environment.DB, STATEMENT_EXTRACTION_WORKFLOW: workflow.value },
+          messages: [{ body, ack: (): void => undefined }],
+        })
+      );
+      if (Exit.isSuccess(delivered)) return;
+      if (Cause.hasInterrupts(delivered.cause)) return yield* Effect.failCause(delivered.cause);
+    }
+    yield* attempt(() => environment.STATEMENT_EXTRACTION_QUEUE.send(body));
+  });
 
 /** One private coordinator target; the Workflow never stores bytes, row facts, or credentials. */
 type StatementCoordinator = Readonly<{

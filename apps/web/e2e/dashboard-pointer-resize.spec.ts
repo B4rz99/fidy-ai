@@ -1,13 +1,36 @@
-import type { Locator, Page } from "@playwright/test";
-import { Effect } from "effect";
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
+import type { Locator, Page, Route } from "@playwright/test";
+import { ResourceLimited } from "@fidy/server/client";
+import { Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 import { signInDashboardThroughCore } from "./real-core-fixture";
 
 const { expect, test } = playwright;
+const { operator } = browserAcceptanceTopology();
 const resizeDistance = 100;
 const pointerSteps = 12;
 const successStatus = 200;
 const noContentStatus = 204;
+const resourceLimitedStatus = 429;
+
+const observeEditResponse = Effect.fnUntraced(function* (route: Route, committed: unknown[]) {
+  const response = yield* Effect.tryPromise(() => route.fetch({ maxRetries: 0 }));
+  if (response.status() === resourceLimitedStatus) {
+    const body: unknown = yield* Effect.tryPromise(() => response.json());
+    yield* Schema.decodeUnknownEffect(Schema.toCodecJson(ResourceLimited))(body);
+  } else {
+    expect(response.status()).toBe(successStatus);
+    committed.push(route.request().postDataJSON());
+  }
+  yield* Effect.tryPromise(() => route.fulfill({ response }));
+});
+
+const observeCommittedEdits = Effect.fnUntraced(function* (page: Page, committed: unknown[]) {
+  const run = Effect.runPromiseWith(yield* Effect.context<never>());
+  yield* Effect.tryPromise(() =>
+    page.route("**/dashboard/edits", (route) => run(observeEditResponse(route, committed)))
+  );
+});
 
 const moveBoundary = Effect.fnUntraced(function* (page: Page, boundary: Locator) {
   yield* Effect.tryPromise(() => boundary.scrollIntoViewIfNeeded());
@@ -28,7 +51,7 @@ test("a pointer resize submits the canonical edit and retains its weight after r
   Effect.runPromise(
     Effect.gen(function* () {
       const reset = yield* Effect.tryPromise(() =>
-        request.post("http://127.0.0.1:4175/dashboard/reset?dashboard=true")
+        request.post(`${operator}/dashboard/reset?dashboard=true`)
       );
       expect(reset.status()).toBe(noContentStatus);
       yield* Effect.tryPromise(() => signInDashboardThroughCore({ page, request }));
@@ -43,6 +66,8 @@ test("a pointer resize submits the canonical edit and retains its weight after r
       );
       yield* Effect.tryPromise(() => expect(boundary).toHaveAttribute("aria-valuenow", "1"));
       const edits: unknown[] = [];
+      const committed: unknown[] = [];
+      yield* observeCommittedEdits(page, committed);
       page.on("request", (call) => {
         if (call.url().endsWith("/dashboard/edits")) edits.push(call.postDataJSON());
       });
@@ -61,12 +86,13 @@ test("a pointer resize submits the canonical edit and retains its weight after r
       yield* Effect.tryPromise(() => expect(boundary).not.toHaveAttribute("aria-valuenow", "1"));
       const weight = yield* Effect.tryPromise(() => boundary.getAttribute("aria-valuenow"));
       if (weight === null) throw new Error("Missing persisted resize weight");
-      expect(edits).toEqual([
+      expect(committed).toEqual([
         expect.objectContaining({
           op: "resize-region",
           size: { kind: "weight", weight: Number(weight) },
         }),
       ]);
+      expect(edits).toEqual(edits.map(() => committed[0]));
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
       yield* Effect.tryPromise(() => expect(boundary).toHaveAttribute("aria-valuenow", weight));

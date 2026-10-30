@@ -1,0 +1,175 @@
+{
+  "scope": "Independent absence checks for the generation-handler and direct-handoff prototypes, including failed attempts.",
+  "checks": [
+    {
+      "path": "d1/database/01354c19-93e6-4976-a382-405bd718ed0b",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "d1/database/092a7c19-db33-47ea-9c84-1fcfd93e4ab2",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "d1/database/0e68d892-1ee9-4646-9f92-53bb6e8b1c65",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "d1/database/134cedcb-d481-4e10-a5b8-d79cf08c64dd",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "d1/database/3da728d5-ee40-4455-bfff-f35b99962961",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "d1/database/66b775da-2bca-4c1d-a092-d535b009d521",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "queues/13cbe33db8a64fd2b36b048d3bc67911",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "queues/b4aeb4ebc02c435eaef7d5bc0178e178",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "r2/buckets/fidy-direct-handoff-5985da96",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "r2/buckets/fidy-direct-handoff-87537976",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "r2/buckets/fidy-generation-core-58baf2e3",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "r2/buckets/fidy-generation-core-626bd67f",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "r2/buckets/fidy-generation-core-c067764b",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "r2/buckets/fidy-generation-core-fd93806d",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workers/durable_objects/namespaces/116f30f0ca4742cb93d1fe8dfce94628/objects",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workers/durable_objects/namespaces/414f3fb1950145ba9be0f4a81f1182d3/objects",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workers/durable_objects/namespaces/88c408c37a21444090657c38b3b9174d/objects",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workers/scripts/fidy-direct-handoff-5985da96",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workers/scripts/fidy-direct-handoff-87537976",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workers/scripts/fidy-generation-core-58baf2e3",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workers/scripts/fidy-generation-core-58baf2e3-api",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workers/scripts/fidy-generation-core-626bd67f",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workers/scripts/fidy-generation-core-626bd67f-api",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workers/scripts/fidy-generation-core-c067764b",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workers/scripts/fidy-generation-core-c067764b-api",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workers/scripts/fidy-generation-core-fd93806d",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workflows/fidy-direct-handoff-5985da96-child",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workflows/fidy-direct-handoff-5985da96-probe",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workflows/fidy-direct-handoff-87537976-child",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workflows/fidy-direct-handoff-87537976-probe",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workflows/fidy-generation-core-58baf2e3-probe",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workflows/fidy-generation-core-626bd67f-probe",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workflows/fidy-generation-core-c067764b-probe",
+      "absent": true,
+      "httpCode": 404
+    },
+    {
+      "path": "workflows/fidy-generation-core-fd93806d-probe",
+      "absent": true,
+      "httpCode": 404
+    }
+  ]
+}

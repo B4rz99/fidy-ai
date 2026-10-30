@@ -1,0 +1,484 @@
+{
+  "scope": "Isolated hosted Fidy Core Queue handoff with synthetic D1 rows and real no-op child Workflows. Measures eight-message handoff service time, not Queue waiting, extraction completion, erasure-recovery wrapper latency, or global API throughput. No public ingress or application provider bindings.",
+  "baselineRevision": "55e992057302ffecff406e7ff8fbde831659ed61",
+  "startedAt": "2026-10-29T05:38:09Z",
+  "warmup": [
+    {
+      "pair": -2,
+      "variant": "baseline",
+      "elapsedMs": 3636,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": -2,
+      "variant": "current",
+      "elapsedMs": 946,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": -1,
+      "variant": "current",
+      "elapsedMs": 1383,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": -1,
+      "variant": "baseline",
+      "elapsedMs": 3113,
+      "acknowledged": 8,
+      "retries": 0
+    }
+  ],
+  "samples": [
+    {
+      "pair": 0,
+      "variant": "baseline",
+      "elapsedMs": 3188,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 0,
+      "variant": "current",
+      "elapsedMs": 992,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 1,
+      "variant": "current",
+      "elapsedMs": 1034,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 1,
+      "variant": "baseline",
+      "elapsedMs": 3484,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "elapsedMs": 3226,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 2,
+      "variant": "current",
+      "elapsedMs": 1235,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 3,
+      "variant": "current",
+      "elapsedMs": 740,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "elapsedMs": 3906,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 4,
+      "variant": "baseline",
+      "elapsedMs": 3641,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 4,
+      "variant": "current",
+      "elapsedMs": 1033,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 5,
+      "variant": "current",
+      "elapsedMs": 743,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 5,
+      "variant": "baseline",
+      "elapsedMs": 3538,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 6,
+      "variant": "baseline",
+      "elapsedMs": 4317,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 6,
+      "variant": "current",
+      "elapsedMs": 1030,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 7,
+      "variant": "current",
+      "elapsedMs": 1152,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 7,
+      "variant": "baseline",
+      "elapsedMs": 3357,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 8,
+      "variant": "baseline",
+      "elapsedMs": 4615,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 8,
+      "variant": "current",
+      "elapsedMs": 933,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 9,
+      "variant": "current",
+      "elapsedMs": 873,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 9,
+      "variant": "baseline",
+      "elapsedMs": 3212,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 10,
+      "variant": "baseline",
+      "elapsedMs": 3749,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 10,
+      "variant": "current",
+      "elapsedMs": 1890,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 11,
+      "variant": "current",
+      "elapsedMs": 1095,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 11,
+      "variant": "baseline",
+      "elapsedMs": 3888,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 12,
+      "variant": "baseline",
+      "elapsedMs": 3865,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 12,
+      "variant": "current",
+      "elapsedMs": 1284,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 13,
+      "variant": "current",
+      "elapsedMs": 800,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 13,
+      "variant": "baseline",
+      "elapsedMs": 3863,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 14,
+      "variant": "baseline",
+      "elapsedMs": 2933,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 14,
+      "variant": "current",
+      "elapsedMs": 982,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 15,
+      "variant": "current",
+      "elapsedMs": 1118,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 15,
+      "variant": "baseline",
+      "elapsedMs": 3721,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 16,
+      "variant": "baseline",
+      "elapsedMs": 4016,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 16,
+      "variant": "current",
+      "elapsedMs": 1608,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 17,
+      "variant": "current",
+      "elapsedMs": 999,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 17,
+      "variant": "baseline",
+      "elapsedMs": 3335,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 18,
+      "variant": "baseline",
+      "elapsedMs": 3064,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 18,
+      "variant": "current",
+      "elapsedMs": 971,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 19,
+      "variant": "current",
+      "elapsedMs": 892,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 19,
+      "variant": "baseline",
+      "elapsedMs": 3260,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 20,
+      "variant": "baseline",
+      "elapsedMs": 3848,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 20,
+      "variant": "current",
+      "elapsedMs": 1311,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 21,
+      "variant": "current",
+      "elapsedMs": 1060,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 21,
+      "variant": "baseline",
+      "elapsedMs": 4167,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 22,
+      "variant": "baseline",
+      "elapsedMs": 3005,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 22,
+      "variant": "current",
+      "elapsedMs": 852,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 23,
+      "variant": "current",
+      "elapsedMs": 1347,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 23,
+      "variant": "baseline",
+      "elapsedMs": 4057,
+      "acknowledged": 8,
+      "retries": 0
+    }
+  ],
+  "cleanup": [
+    {
+      "resource": "handoff-proof-238efdd2-current-child",
+      "deleted": true
+    },
+    {
+      "resource": "handoff-proof-238efdd2-current-probe",
+      "deleted": true
+    },
+    {
+      "resource": "handoff-proof-238efdd2-baseline-child",
+      "deleted": true
+    },
+    {
+      "resource": "handoff-proof-238efdd2-baseline-probe",
+      "deleted": true
+    },
+    {
+      "resource": "handoff-proof-238efdd2-baseline",
+      "deleted": true
+    },
+    {
+      "resource": "handoff-proof-238efdd2-current",
+      "deleted": true
+    },
+    {
+      "resource": "database",
+      "deleted": true
+    }
+  ],
+  "bundleSha256": {
+    "baseline": "edcd72439b164b2a68f43d7baeda443e996b7837c1f6d6abf96b008fdad43241",
+    "current": "b14419b3497bd703964a9e7b6b69abc12412998b8322e3c6338b462c6952defd"
+  },
+  "controlPlaneInterruption": "Cloudflare GET /workflows/handoff-proof-238efdd2-baseline-probe/instances/5f8475d4-f27a-4054-8a00-9afe38aaa145: HTTP 401; codes=[10000]",
+  "summary": {
+    "medianServiceMs": {
+      "baseline": 3681.0,
+      "current": 1031.5
+    },
+    "medianServiceSpeedup": 3.5685894328647603,
+    "handoffsPerSecond": {
+      "baseline": 2.173322466721,
+      "current": 7.755695588948134
+    },
+    "nearestRankP95ServiceMs": {
+      "baseline": 4317,
+      "current": 1608
+    },
+    "p95ServiceSpeedup": 2.6847014925373136,
+    "pairedBootstrapMedianSpeedup95Interval": [3.2383745286971095, 3.8814665996986437],
+    "bootstrap": {
+      "replicates": 10000,
+      "seed": 1589,
+      "unit": "complete alternating pair",
+      "interpretation": "Exploratory paired bootstrap; not a production SLA or global capacity estimate."
+    }
+  },
+  "cleanupVerified": [
+    {
+      "resource": "handoff-proof-238efdd2-baseline-probe",
+      "confirmedAbsent": true
+    },
+    {
+      "resource": "handoff-proof-238efdd2-baseline-child",
+      "confirmedAbsent": true
+    },
+    {
+      "resource": "handoff-proof-238efdd2-current-probe",
+      "confirmedAbsent": true
+    },
+    {
+      "resource": "handoff-proof-238efdd2-current-child",
+      "confirmedAbsent": true
+    },
+    {
+      "resource": "handoff-proof-238efdd2-baseline",
+      "confirmedAbsent": true
+    },
+    {
+      "resource": "handoff-proof-238efdd2-current",
+      "confirmedAbsent": true
+    },
+    {
+      "resource": "database",
+      "confirmedAbsent": true
+    }
+  ],
+  "method": {
+    "measuredPairs": 24,
+    "warmupPairs": 2,
+    "order": "baseline/current on even pairs; current/baseline on odd pairs",
+    "messagesPerRun": 8,
+    "independentWorkers": true,
+    "sharedSyntheticD1": true,
+    "nativeWorkflowBindingsVerified": true,
+    "baseline": "Identical fixture/dependencies with queue/internal/dispatch.ts loaded from baselineRevision through a Bun onLoad hook.",
+    "current": "Current bounded handoff implementation; same fixture and no-op child Workflow.",
+    "timing": "Effect monotonic Clock inside parent step, after synthetic row seeding; excludes parent scheduling and control-plane polling.",
+    "fixture": "apps/server/cloudflare/queue/handoff-worker.fixture.ts",
+    "fixtureSha256": "d44f9f967d0a3a7782778e00dae14a48a9a156e6c7a61b636ea42efadbd194d3",
+    "currentDispatchSha256": "cdec97f6d612c61dbf46cb85c175460c4a5f50d0b1497a0b019a610e5b80f6dd",
+    "limits": [
+      "No real extraction, email, billing, or financial data.",
+      "Direct synthetic D1; does not measure production erasure-recovery wrapper overhead.",
+      "Workflow creation and D1 eligibility are real hosted calls; batch envelope and acknowledgement collection are synthetic.",
+      "Measures native handoff service throughput, not Queue enqueue-to-dispatch tails or full application capacity.",
+      "Native provider creation limits, owner checks, stable identities, retries, and acknowledgements remain unchanged.",
+      "The API credential expired after pair 19 started. That completed result was recovered after routine OAuth refresh; every measured pair is included."
+    ]
+  }
+}

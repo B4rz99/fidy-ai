@@ -4,18 +4,17 @@ import type { AtomRegistry } from "effect/reactivity";
 import type { FidyClient } from "@/transport/client";
 import { workspaceCategoriesQuery, workspaceProfileQuery } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { useRouter } from "@tanstack/react-router";
+import { lazyRouteComponent, useRouter } from "@tanstack/react-router";
 import { DateTime, Effect, Option } from "effect";
-import { type RefCallback, useState } from "react";
+import { type RefCallback, Suspense, useState } from "react";
 import { toast } from "sonner";
+import { PrivacyTransactions } from "./privacy-view";
 import { TransactionCorrectionContext } from "./correction-context";
 import { type TransactionCorrections, makeTransactionCorrections } from "./corrections";
 import type { JSX, ReactNode } from "react";
 import { Skeleton } from "@/ui/components/skeleton";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
-import { PrivacyTransactions } from "./privacy-view";
-import { TransactionWorkspace } from "./workspace";
 import { type HistoryState, transactionHistory } from "./history";
 import {
   type Category,
@@ -24,6 +23,14 @@ import {
   deriveCurrentMonthPeriod,
   presentPeriod,
 } from "./presentation";
+
+const TransactionWorkspace = lazyRouteComponent(
+  () => import("./workspace"),
+  "TransactionWorkspace"
+);
+
+// Fetch presentation immediately while the unchanged query owners check live access and read data.
+TransactionWorkspace.preload?.()?.catch(() => undefined);
 
 type QueryActivity =
   | Readonly<{ _tag: "Current" }>
@@ -292,7 +299,7 @@ const ReadyTransactionResources = ({
     queries;
   const retry = corrections.recover;
   return (
-    <>
+    <Suspense fallback={<TransactionListView state={{ _tag: "Loading" }} />}>
       <TransactionWorkspace
         key={history.generation}
         readOnly={false}
@@ -319,7 +326,7 @@ const ReadyTransactionResources = ({
       readyQueryActivity(categoryState, transactionState, retry)._tag === "Current"
         ? children
         : null}
-    </>
+    </Suspense>
   );
 };
 

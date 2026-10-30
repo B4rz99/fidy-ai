@@ -73,7 +73,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     })
       .annotate(
         OpenApi.Description,
-        "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, counterparty text, direction, and Currency narrows the history; omit every filter for all visible history."
+        "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, counterparty text, direction, and Currency narrows the history; omit every filter for all visible history. limit optionally bounds each response to 1–100 records (default 100); the keyset continuation remains valid when the limit changes."
       )
       .annotateMerge(read)
   )

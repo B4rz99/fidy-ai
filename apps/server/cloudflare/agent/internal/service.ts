@@ -1,3 +1,4 @@
+import { withStatementPublicationWake } from "../../ingestion/runtime";
 import { OutboundHttpLive } from "../../outbound-http/runtime";
 import { ConnectionSandboxAdmission } from "../../connections/contract";
 import { TelemetryRelease } from "../../../src/shell/observability/contract";
@@ -562,6 +563,7 @@ const runWhatsAppWork = (
         });
       }).pipe(
         (effect) => provideHostedKapsoFetch(effect, env),
+        withStatementPublicationWake(owner.scheduleRecovery),
         Effect.withSpan("agent.whatsappTurn.resume"),
         Effect.catchCause(() => Effect.succeed(transactionUnavailable())),
         (effect) => observeHostedExecution(effect, request, { trigger: "queue", environment: env })
@@ -621,6 +623,7 @@ const runWhatsAppTurn = (
     });
   }).pipe(
     (effect) => provideHostedKapsoFetch(effect, env),
+    withStatementPublicationWake(owner.scheduleRecovery),
     Effect.withSpan("agent.whatsappTurn.execution"),
     Effect.orElseSucceed(transactionUnavailable),
     (effect) =>
@@ -692,6 +695,7 @@ const runHostedTurn = (
       );
     }).pipe(
       Effect.provideService(ConnectionSandboxAdmission, owner.connectionAdmission),
+      withStatementPublicationWake(owner.scheduleRecovery),
       (effect) => observeHostedExecution(effect, request, { trigger: "api", environment: env })
     )
   );

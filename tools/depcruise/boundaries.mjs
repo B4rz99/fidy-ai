@@ -24,6 +24,7 @@ const compositionRoots = new Set([
   "cloudflare/browser-acceptance-preview.ts",
   "cloudflare/browser-acceptance-whatsapp.ts",
   "cloudflare/resource-admission/resource-admission-worker.fixture.ts",
+  "cloudflare/queue/failure-isolation.test.ts",
   "cloudflare/browser-acceptance-core-bundle.d.mts",
   "cloudflare/browser-acceptance-core-bundle.mjs",
   "tools/email-formats/generate-runtime.ts",

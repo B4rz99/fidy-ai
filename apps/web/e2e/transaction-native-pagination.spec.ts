@@ -5,7 +5,7 @@ import { reloadTransactionsThroughCore, signInPaginationThroughCore } from "./re
 
 const { expect, test } = playwright;
 const expectHistory = expect.configure({ timeout: 15_000 });
-const firstPageSize = 100;
+const firstPageSize = 25;
 const retainedRecords = 105;
 const historyRows = (page: Page): Locator =>
   page.getByRole("button", { name: /^Ver transacción Registro paginado /u });

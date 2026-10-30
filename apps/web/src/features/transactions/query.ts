@@ -17,7 +17,7 @@ const makeSource = (period: Period): Atom.Atom<Result> => {
   const initial = initialPages(period);
   const remote = period.client.query("transactions", "listTransactions", {
     ...workspaceQueryRetention,
-    query: { from: period.from, to: period.to },
+    query: { from: period.from, to: period.to, limit: 25 },
   });
   return Atom.readable(
     (get) => Option.getOrElse(get(initial), () => get(remote)),

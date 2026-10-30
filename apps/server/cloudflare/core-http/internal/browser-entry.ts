@@ -148,6 +148,7 @@ const initialTransactions = (
     const url = new URL("https://core.internal/transactions");
     url.searchParams.set("from", DateTime.formatIso(from));
     url.searchParams.set("to", DateTime.formatIso(to));
+    url.searchParams.set("limit", "25");
     const page = yield* readBrowserTransactionPage({
       db: input.db,
       request: new Request(url),

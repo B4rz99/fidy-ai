@@ -1,0 +1,55 @@
+---
+import Icon from "./docs-icon.astro";
+
+const { entry } = Astro.locals.starlightRoute;
+const intro = entry.body?.trim().split("\n\n")[0];
+const journeys = [
+  {
+    title: "Conectar mi agente",
+    description: "MCP, Claude Code, Codex o la CLI.",
+    href: "/conectar/mcp",
+    icon: "code",
+  },
+  {
+    title: "Registrar y corregir",
+    description: "Registra una transacción y corrige sus datos.",
+    href: "/transacciones/registrar-corregir",
+    icon: "book",
+  },
+  {
+    title: "Consultar mis finanzas",
+    description: "Consulta por fecha, categoría y moneda.",
+    href: "/consultar/finanzas",
+    icon: "search",
+  },
+  {
+    title: "Controla el acceso",
+    description: "Permisos, revocación y solución de problemas.",
+    href: "/acceso/permisos",
+    icon: "shield",
+  },
+] as const;
+---
+
+<div class="docs-home-lead">
+  <p class="docs-home-description">{entry.data.description}</p>
+  <a class="docs-primary-button" href="/conectar/mcp">
+    <Icon name="arrow" size={18} />
+    Conectar mi agente
+  </a>
+  <p class="docs-home-intro">{intro}</p>
+  <nav class="docs-journeys" aria-label="Empieza con Fidy">
+    {journeys.map((journey) => (
+      <a href={journey.href}>
+        <span class="docs-journey-icon">
+          <Icon name={journey.icon} size={18} />
+        </span>
+        <span>
+          <strong>{journey.title}</strong>
+          <small>{journey.description}</small>
+        </span>
+        <Icon name="arrow" size={18} />
+      </a>
+    ))}
+  </nav>
+</div>

@@ -1078,3 +1078,45 @@ it("refuses foreign coordinators, forged digests, expired renewal admissions and
       expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
     }).pipe(Effect.scoped)
   ));
+
+it("reads Consent with one bound session discovery and rejects retired or foreign bindings", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* consentSetup();
+      const queries: string[] = [];
+      const observed = new Proxy(db, {
+        get(target, key, receiver): unknown {
+          if (key !== "prepare") return Reflect.get(target, key, receiver);
+          return (sql: string): D1PreparedStatement => {
+            queries.push(sql);
+            return target.prepare(sql);
+          };
+        },
+      });
+      const accepted = yield* Effect.tryPromise(() => send(observed, request(0, "/web/consent")));
+      const discoveries = queries.filter((sql) =>
+        sql.includes("SELECT id, user_id AS userId FROM web_sessions")
+      ).length;
+      expect(accepted.status).toBe(200);
+      expect(discoveries).toBe(1);
+      const status = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)(
+        yield* Effect.tryPromise(() => accepted.json())
+      );
+      expect(status.status).toBe("Granted");
+      const foreign = request(0, "/web/consent");
+      foreign.headers.set("Fidy-Session-Binding", sessions[1]);
+      expect((yield* Effect.tryPromise(() => send(db, foreign))).status).toBe(401);
+      const missing = request(0, "/web/consent");
+      missing.headers.delete("Fidy-Session-Binding");
+      expect((yield* Effect.tryPromise(() => send(db, missing))).status).toBe(401);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
+          .bind(DateTime.nowUnsafe().epochMilliseconds, sessions[0])
+          .run()
+      );
+      expect((yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")))).status).toBe(
+        401
+      );
+    })
+  ));

@@ -143,6 +143,7 @@ const ReviewResources = ({
         />
       ) : (
         <ReadyInbox
+          active={active}
           workspaceQuery={queries.source}
           decisions={decisions}
           view={state.value.data}
@@ -224,6 +225,14 @@ type ReadyInboxProps = Readonly<{
   workspaceQuery: ReviewWorkspaceQuery;
 }>;
 const ReadyInbox = ({
+  active,
+  ...props
+}: ReadyInboxProps & Readonly<{ active: boolean }>): JSX.Element => {
+  const [displayed, setDisplayed] = useState(active);
+  if (active && !displayed) setDisplayed(true);
+  return displayed ? <ReadyInboxView {...props} /> : <></>;
+};
+const ReadyInboxView = ({
   workspaceQuery,
   decisions,
   notice,

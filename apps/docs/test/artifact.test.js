@@ -11,6 +11,14 @@ await test("serves a Spanish task-first documentation home as static HTML", asyn
   assert.match(html, /https:\/\/docs\.fidyapp\.com\//u);
 });
 
+await test("readers can return through the Fidy brand and reach agent documentation without product navigation", async () => {
+  const html = await readFile(new URL("../dist/conectar/mcp/index.html", import.meta.url), "utf8");
+  assert.match(html, /<a[^>]+href="\/"[^>]*>[\s\S]*?<img[^>]+alt="Fidy · Inicio"/u);
+  assert.match(html, /href="\/llms\.txt"/u);
+  assert.match(html, /href="\/reference"/u);
+  assert.doesNotMatch(html, /href="\/(?:dashboard|transactions|budgets)"/u);
+});
+
 await test("offers the same guide to readers and agents through Markdown and llms.txt", async () => {
   const markdown = await readFile(new URL("../dist/index.md", import.meta.url), "utf8");
   assert.match(markdown, /# Guía de Fidy/u);
@@ -46,4 +54,10 @@ await test("all generated documentation and reference links resolve inside the p
       );
     })
   );
+});
+
+await test("missing pages contain one recovery heading instead of the default 404 hero", async () => {
+  const html = await readFile(new URL("../dist/404.html", import.meta.url), "utf8");
+  assert.equal(Array.from(html.matchAll(/<h1\b/gu)).length, 1);
+  assert.match(html, /Esta página no está aquí\./u);
 });

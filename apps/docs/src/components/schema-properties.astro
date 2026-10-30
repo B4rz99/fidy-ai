@@ -1,0 +1,50 @@
+---
+import { Option } from "effect";
+import { type schemaProperties, schemaTarget, schemaType } from "../lib/reference";
+
+type Props = {
+  rows: ReadonlyArray<{
+    property: ReturnType<typeof schemaProperties>[number];
+    visibility: "all" | "desktop" | "mobile";
+  }>;
+};
+const rows = Astro.props.rows.map((row) => ({
+  ...row,
+  target: schemaTarget(row.property.schema),
+}));
+---
+
+<table class="reference-properties">
+  <thead>
+    <tr>
+      <th scope="col">Propiedad</th>
+      <th scope="col">Tipo / contrato</th>
+    </tr>
+  </thead>
+  <tbody>
+    {rows.map(({ property, visibility, target }) => (
+      <tr
+        class:list={{
+          "reference-desktop-row": visibility === "desktop",
+          "reference-mobile-row": visibility === "mobile",
+        }}
+      >
+        <td>
+          <code>{property.name}</code>
+          <span class:list={["reference-required", { "is-required": property.required }]}>
+            {property.required ? "obligatorio" : "opcional"}
+          </span>
+        </td>
+        <td>
+          {Option.isSome(target) ? (
+            <a href={`/referencia/esquemas#schema-${target.value}`}>
+              <code>{schemaType(property.schema)}</code>
+            </a>
+          ) : (
+            <code>{schemaType(property.schema)}</code>
+          )}
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>

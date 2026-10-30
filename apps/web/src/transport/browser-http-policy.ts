@@ -8,7 +8,7 @@ import {
   Cause,
   Clock,
   Console,
-  type Duration,
+  Duration,
   Effect,
   Exit,
   Function,
@@ -16,6 +16,7 @@ import {
   Option,
   Schema,
   type Scope,
+  Semaphore,
   Stream,
 } from "effect";
 import {
@@ -83,6 +84,7 @@ const disableAutomaticHttpSpan = (): boolean => true;
 const safeResponseHeaders = ["content-type"] as const;
 const resourceLimitedStatus = 429;
 const maximumResourceRetries = 6;
+const canonicalTransferConcurrency = 2;
 const maximumResourceDelaySeconds = 5;
 const millisecondsPerSecond = 1_000;
 const RetrySeconds = Schema.NumberFromString.check(
@@ -400,6 +402,8 @@ type PolicyExecution = Readonly<{
   apiOrigin: string;
   boundary: BrowserHttpBoundary;
   observation: TransportObservation;
+  canonicalTransfers: Semaphore.Semaphore;
+  startedAt: number;
 }>;
 
 const canRetryResourceRefusal = (
@@ -429,16 +433,26 @@ const executePolicyRequest = (
     Object.values(connectionBrowserPaths).some((path) => path === destination.pathname);
   const policy = browserHttpPolicies[execution.boundary];
   const deadline = continuation ? "35 seconds" : policy.deadline;
-  const attempt = Effect.suspend(() => {
+  const deadlineFailure = (): Effect.Effect<never, HttpClientError.HttpClientError> => {
+    execution.observation.deadlineExceeded = true;
+    return Effect.fail(requestFailure(request, "browser request deadline exceeded"));
+  };
+  const attempt = Effect.gen(function* () {
+    if ((yield* Clock.currentTimeMillis) - execution.startedAt >= Duration.toMillis(deadline)) {
+      return yield* deadlineFailure();
+    }
     execution.observation.attempts++;
-    return execution.client.postprocess(Effect.succeed(request));
+    return yield* execution.client.postprocess(Effect.succeed(request));
   }).pipe(
     Effect.tap((response) => Effect.sync(() => observeResponse(execution.observation, response))),
     Effect.mapError(sanitizeHttpClientError),
     Effect.flatMap((response) =>
       materializeResponse(request, response, policy.maximumResponseBytes)
     ),
-    Effect.scoped
+    Effect.scoped,
+    execution.boundary === "canonical"
+      ? execution.canonicalTransfers.withPermits(1)
+      : Function.identity
   );
   const boundedRetries = isSafeRetryRequest(request)
     ? attempt.pipe(Effect.retry({ times: 1, while: isRetryableTransportFailure }))
@@ -449,10 +463,7 @@ const executePolicyRequest = (
   return admittedResponse.pipe(
     Effect.timeoutOrElse({
       duration: deadline,
-      orElse: () => {
-        execution.observation.deadlineExceeded = true;
-        return Effect.fail(requestFailure(request, "browser request deadline exceeded"));
-      },
+      orElse: deadlineFailure,
     }),
     Effect.provideService(HttpClient.TracerDisabledWhen, disableAutomaticHttpSpan),
     Effect.provideService(HttpClient.TracerPropagationEnabled, false)
@@ -485,6 +496,7 @@ const makePolicyClient = (
   boundary: BrowserHttpBoundary
 ): HttpClient.HttpClient => {
   const scopedClient = HttpClient.withScope(client);
+  const canonicalTransfers = Semaphore.makeUnsafe(canonicalTransferConcurrency);
   return HttpClient.makeWith(
     (requestEffect) =>
       Effect.gen(function* () {
@@ -495,7 +507,14 @@ const makePolicyClient = (
           statusClass: Option.none(),
           deadlineExceeded: false,
         };
-        const execution = { client: scopedClient, apiOrigin, boundary, observation };
+        const execution = {
+          client: scopedClient,
+          apiOrigin,
+          boundary,
+          observation,
+          canonicalTransfers,
+          startedAt,
+        };
         return yield* Effect.flatMap(requestEffect, (request) =>
           executePolicyRequest(request, execution)
         ).pipe(Effect.onExit(finishDiagnostic({ startedAt, boundary, observation })));
@@ -513,6 +532,8 @@ const makePolicyClient = (
  * retry, once. Canonical requests and safe web-auth reads can additionally retry a declared, unadmitted resource refusal
  * with bounded Retry-After pacing inside the same absolute deadline. Uncertain mutations and
  * enrollment/authentication refusals are never automatically replayed.
+ * Canonical requests share two active transfers per API client; queue time uses the original
+ * deadline, cancellation removes queued work, and retry pacing leaves transfer capacity available.
  */
 export const browserHttpClientLayer: {
   (

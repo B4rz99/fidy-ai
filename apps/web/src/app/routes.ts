@@ -5,7 +5,6 @@ import { consumeInitialTransactionConsent, transactionEntryConsent } from "./tra
 import { RecurringWorkspace, ReviewWorkspace } from "./workspace-components";
 import { NeedsReviewRoute } from "@/features/needs-review/feature";
 import { LoginSearch } from "@/session/login-destination";
-import { ProviderReturnFeature } from "@/features/provider-authentication/feature";
 import type { AtomRegistry } from "effect/reactivity";
 import { Option, Schema } from "effect";
 import {
@@ -41,6 +40,11 @@ type WebRouterOptions = WebRouterContext &
   Readonly<{
     history: Option.Option<RouterHistory>;
   }>;
+
+const ProviderReturnFeature = lazyRouteComponent(
+  () => import("@/features/provider-authentication/feature"),
+  "ProviderReturnFeature"
+);
 
 const RecurringDigestFeature = lazyRouteComponent(
   () => import("@/features/recurring-digest/feature"),

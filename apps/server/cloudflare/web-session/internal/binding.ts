@@ -51,7 +51,15 @@ export const bindingResponse = ({
     }
     const current = yield* Clock.currentTimeMillis;
     const session = yield* Effect.tryPromise({
-      try: () => authenticate({ request, db, current, freshness: "live", requireConsent: false }),
+      try: () =>
+        authenticate({
+          request,
+          db,
+          current,
+          freshness: "live",
+          requireConsent: false,
+          binding: Option.none(),
+        }),
       catch: () => undefined,
     });
     if (bootstrap) {

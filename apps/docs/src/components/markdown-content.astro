@@ -1,39 +1,58 @@
 ---
 import DefaultMarkdownContent from "@astrojs/starlight/components/MarkdownContent.astro";
+import Home from "./docs-home.astro";
+import NotFound from "./docs-not-found.astro";
+import MarkdownActions from "./markdown-actions.astro";
+import Operation from "./reference-operation.astro";
+import OperationCatalog from "./reference-catalog.astro";
+import SchemaCatalog from "./schema-catalog.astro";
 
 const { id } = Astro.locals.starlightRoute;
-const markdownPath = `/${id || "index"}.md`;
 ---
 
-{id !== "404" && (
-  <div class="page-actions">
-    <button type="button" data-copy-markdown={markdownPath}>
-      Copiar Markdown
-    </button>
-    <a href={markdownPath}>Ver Markdown</a>
-    <span data-copy-status role="status" aria-live="polite"></span>
-  </div>
+{id === "404" ? (
+  <NotFound />
+) : (
+  <>
+    {id === "" && (
+      <>
+        <Home />
+        <div class="docs-mobile-home-actions">
+          <MarkdownActions />
+        </div>
+      </>
+    )}
+    {id.startsWith("reference/") ? (
+      <Operation id={id} />
+    ) : id === "reference" ? (
+      <OperationCatalog />
+    ) : id === "referencia/esquemas" ? (
+      <SchemaCatalog />
+    ) : (
+      <div class:list={{ "docs-home-detail": id === "" }}>
+        <DefaultMarkdownContent>
+          <slot />
+        </DefaultMarkdownContent>
+      </div>
+    )}
+  </>
 )}
-<DefaultMarkdownContent>
-  <slot />
-</DefaultMarkdownContent>
-
 <script>
-  const button = document.querySelector<HTMLButtonElement>("[data-copy-markdown]");
-  const status = document.querySelector<HTMLElement>("[data-copy-status]");
-  button?.addEventListener("click", async () => {
-    const path = button.dataset.copyMarkdown;
-    if (!path || !status) return;
-    button.disabled = true;
-    try {
-      const response = await fetch(path, { credentials: "omit", redirect: "error" });
-      if (!response.ok) throw new Error("Markdown unavailable");
-      await navigator.clipboard.writeText(await response.text());
-      status.textContent = "Markdown copiado";
-    } catch {
-      status.textContent = "No se pudo copiar. Usa «Ver Markdown».";
-    } finally {
-      button.disabled = false;
-    }
+  const codePanels = document.querySelectorAll<HTMLElement>(".expressive-code pre");
+  const updateOverflow = (panel: HTMLElement): void => {
+    const overflow = panel.scrollWidth > panel.clientWidth;
+    panel.closest(".frame")?.toggleAttribute("data-docs-overflow", overflow);
+    if (overflow) panel.setAttribute("tabindex", "0");
+    else panel.removeAttribute("tabindex");
+  };
+  const resizeObserver = new ResizeObserver((entries) => {
+    entries.forEach(({ target }) => {
+      if (target instanceof HTMLElement) updateOverflow(target);
+    });
   });
+  codePanels.forEach((panel) => {
+    updateOverflow(panel);
+    resizeObserver.observe(panel);
+  });
+  document.fonts.addEventListener("loadingdone", () => codePanels.forEach(updateOverflow));
 </script>

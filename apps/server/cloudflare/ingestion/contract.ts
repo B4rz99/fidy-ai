@@ -110,3 +110,39 @@ export type ReviewEditWork = Readonly<{
 }>;
 export type ReviewAuditWork = Readonly<{ db: D1Database; subject: QueryCaller; current: number }>;
 export type ReviewRetentionWork = Readonly<{ db: D1Database; current: number }>;
+
+export const statementWorkflowRetention = {
+  successRetention: "3 days",
+  errorRetention: "3 days",
+} as const;
+
+/** Publish only versioned User/submission identity. A resolved send means the Queue accepted an
+ * offer, not that extraction completed; a rejected send may still have been accepted, so the
+ * outbox retries the same idempotent identity after its cooldown. No bytes or passwords enter it.
+ */
+export type StatementQueue = Readonly<{
+  send: (work: typeof StatementWork.Type) => Promise<unknown>;
+}>;
+/** Create one Workflow instance keyed by submission id. A resolved create means the instance
+ * exists, not that it finished. If creation rejects ambiguously, get must resolve an existing
+ * instance before Queue acknowledgement; a missing/unavailable get must reject for redelivery.
+ * get may return an errored instance: the scheduled reconciler inspects status and settles it
+ * under the User coordinator. The three-day retention applies to Workflow state only.
+ */
+export type StatementWorkflow = Readonly<{
+  create: (options: {
+    id: string;
+    params: typeof StatementWork.Type;
+    retention: typeof statementWorkflowRetention;
+  }) => Promise<unknown>;
+  get: (id: string) => Promise<unknown>;
+}>;
+
+export class StatementDeliveryUnavailable extends Data.TaggedError("StatementDeliveryUnavailable")<{
+  readonly cause: unknown;
+}> {}
+export type StatementDispatchBindings = Readonly<{
+  DB: D1Database;
+  STATEMENT_EXTRACTION_QUEUE: StatementQueue;
+  STATEMENT_EXTRACTION_WORKFLOW: Option.Option<StatementWorkflow>;
+}>;

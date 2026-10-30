@@ -1,15 +1,63 @@
-import type { CDPSession, Page } from "@playwright/test";
+import type { APIRequestContext, CDPSession, Page } from "@playwright/test";
 import { type Cause, Config, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 import { boundSessionRequests, signInNavigationPerformanceThroughCore } from "./real-core-fixture";
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 
 const { test, expect } = playwright;
 const dataset = Effect.runSync(Config.String("FIDY_ASSESSMENT").pipe(Config.withDefault("small")));
+const { api: apiOrigin, operator: operatorOrigin } = browserAcceptanceTopology();
+const AssessmentPreparation = Schema.Struct({
+  status: Schema.Literals(["unprepared", "preparing", "ready", "failed"]),
+});
+const assessmentPreparation = (
+  request: APIRequestContext
+): Promise<typeof AssessmentPreparation.Type> =>
+  request
+    .get(`${operatorOrigin}/assessment/prepare`)
+    .then((response) => {
+      expect(response.ok()).toBeTruthy();
+      return response.json();
+    })
+    .then(Schema.decodeUnknownSync(AssessmentPreparation));
+
+test.beforeAll(({ request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const started = yield* Effect.tryPromise(() =>
+        request.post(`${operatorOrigin}/assessment/prepare`)
+      );
+      expect(started.ok()).toBeTruthy();
+      let preparation = yield* Effect.tryPromise(() => assessmentPreparation(request));
+      while (preparation.status === "preparing") {
+        yield* Effect.sleep("500 millis");
+        preparation = yield* Effect.tryPromise(() => assessmentPreparation(request));
+      }
+      expect(preparation.status).toBe("ready");
+    })
+  )
+);
 const actionTimeout = 10_000;
 const readinessTimeout = 20_000;
 const navigationTimeout = 45_000;
 const sampleInterval = 50;
+const coldRepeats = Effect.runSync(
+  Config.Int("FIDY_ASSESSMENT_COLD_REPEATS").pipe(Config.withDefault(1))
+);
+const coldWorkspace = Effect.runSync(
+  Config.String("FIDY_ASSESSMENT_COLD_WORKSPACE").pipe(Config.withDefault(""))
+);
+const maximumColdRepeats = 5;
+if (coldRepeats < 1 || coldRepeats > maximumColdRepeats) {
+  throw new Error("Cold repeats must be between one and five");
+}
+const coldInteractions = Effect.runSync(
+  Config.Boolean("FIDY_ASSESSMENT_COLD_INTERACTIONS").pipe(Config.withDefault(false))
+);
 const resourceDeadline = 500;
+const previewCompression = Effect.runSync(
+  Config.String("PREVIEW_COMPRESSION").pipe(Config.withDefault("identity"))
+);
 const json = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const routes = [
   { name: "transactions", path: "/app/transactions", ready: "+ Registrar" },
@@ -32,6 +80,24 @@ type Sample = {
   longTasks: number[];
   resourceCount: number;
   resourceBytes: number;
+  transferredBytes: number;
+  resources: Array<{
+    path: string;
+    initiator: string;
+    start: number;
+    responseStart: number;
+    end: number;
+    encodedBytes: number;
+    decodedBytes: number;
+    transferredBytes: number;
+  }>;
+  nativeControlReadyMs: number;
+  navigation: {
+    responseStart: number;
+    responseEnd: number;
+    domInteractive: number;
+    domContentLoaded: number;
+  };
   domNodes: number;
 };
 type Measure = (
@@ -48,7 +114,7 @@ const observeRequests = (
   const requests: Sample["requests"] = [];
   const pending = new Set<Promise<void>>();
   page.on("response", (response) => {
-    if (!response.url().startsWith("https://127.0.0.1:4174/")) return;
+    if (!response.url().startsWith(`${apiOrigin}/`)) return;
     const entry = {
       path: new URL(response.url()).pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gu, ":id"),
       status: response.status(),
@@ -94,7 +160,19 @@ const paintOpportunity = (): Promise<void> => {
 };
 const browserMetrics = (
   page: Page
-): Promise<Pick<Sample, "longTasks" | "resourceCount" | "resourceBytes" | "domNodes">> =>
+): Promise<
+  Pick<
+    Sample,
+    | "longTasks"
+    | "resourceCount"
+    | "resourceBytes"
+    | "transferredBytes"
+    | "resources"
+    | "nativeControlReadyMs"
+    | "navigation"
+    | "domNodes"
+  >
+> =>
   page.evaluate(() => {
     const entries = performance
       .getEntriesByType("resource")
@@ -102,10 +180,41 @@ const browserMetrics = (
     const tasks = performance
       .getEntriesByName("assessment-longtask")
       .filter((entry) => entry instanceof PerformanceMark);
+    const navigation = performance
+      .getEntriesByType("navigation")
+      .find((entry) => entry instanceof PerformanceNavigationTiming);
+    const timing =
+      navigation === undefined
+        ? {
+            responseStart: -1,
+            responseEnd: -1,
+            domInteractive: -1,
+            domContentLoaded: -1,
+          }
+        : {
+            responseStart: navigation.responseStart,
+            responseEnd: navigation.responseEnd,
+            domInteractive: navigation.domInteractive,
+            domContentLoaded: navigation.domContentLoadedEventEnd,
+          };
     return {
+      nativeControlReadyMs:
+        performance.getEntriesByName("assessment-control-ready")[0]?.startTime ?? -1,
+      navigation: timing,
       longTasks: tasks.map((entry) => Number(entry.detail)),
       resourceCount: entries.length,
       resourceBytes: entries.reduce((sum, entry) => sum + entry.encodedBodySize, 0),
+      transferredBytes: entries.reduce((sum, entry) => sum + entry.transferSize, 0),
+      resources: entries.map((entry) => ({
+        path: new URL(entry.name).pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gu, ":id"),
+        initiator: entry.initiatorType,
+        start: entry.startTime,
+        responseStart: entry.responseStart,
+        end: entry.responseEnd,
+        encodedBytes: entry.encodedBodySize,
+        decodedBytes: entry.decodedBodySize,
+        transferredBytes: entry.transferSize,
+      })),
       domNodes: document.querySelectorAll("*").length,
     };
   });
@@ -119,6 +228,10 @@ const measureAction = Effect.fn(function* (
   yield* Effect.tryPromise(() => page.evaluate(paintOpportunity));
   return { outcome: "ready", loadingObservations };
 });
+const immediateColdJourneys = new Set([
+  "transactions:isolated-cold-document",
+  "transactions:cold-open-capture",
+]);
 const makeMeasure = (page: Page, samples: Sample[], profile: string): Measure => {
   const { requests, pending } = observeRequests(page);
   return Effect.fn(function* (journey, action, ready) {
@@ -137,7 +250,9 @@ const makeMeasure = (page: Page, samples: Sample[], profile: string): Measure =>
       })
     );
     const elapsedMs = performance.now() - start;
-    yield* Effect.tryPromise(() => Promise.race([Promise.all(pending), pause(resourceDeadline)]));
+    if (!coldInteractions || !immediateColdJourneys.has(journey)) {
+      yield* Effect.tryPromise(() => Promise.race([Promise.all(pending), pause(resourceDeadline)]));
+    }
     const metrics = yield* Effect.tryPromise(() => browserMetrics(page));
     samples.push({ journey, elapsedMs, ...result, requests: requests.slice(), ...metrics });
     process.stdout.write(
@@ -330,34 +445,129 @@ const visitWorkspace = Effect.fn(function* (journey: Journey, route: Workspace, 
     yield* reviewActions(journey);
   }
 });
-const prepareBrowser = Effect.fn(function* (page: Page, cdp: CDPSession, profile: string) {
+const installWorkspaceReadiness = (): void => {
+  const button = new Map([
+    ["/app/transactions", /^\+ Registrar$/u],
+    ["/app/budgets", /^Mes anterior$/u],
+    ["/app/recurring", /^Nuevo recurrente$/u],
+    ["/app/dashboard", /^Personalizar$/u],
+    ["/upgrade", /^mensual\b/iu],
+  ]).get(location.pathname);
+  const label = new Map([
+    ["/app/needs-review", "Valor"],
+    ["/settings/account", "Nuevo correo"],
+    ["/settings/privacy", "Tu autorización está vigente."],
+  ]).get(location.pathname);
+  const visible = (element: Element): boolean => element.getClientRects().length > 0;
+  const ready = (): boolean => {
+    if (button !== undefined) {
+      return Array.from(document.querySelectorAll("button")).some(
+        (control) =>
+          button.test(control.getAttribute("aria-label") ?? control.textContent.trim()) &&
+          !control.matches(":disabled,[aria-disabled='true']") &&
+          visible(control)
+      );
+    }
+    if (label !== undefined) {
+      const direct = Array.from(document.querySelectorAll("[aria-label]")).find(
+        (element) => element.getAttribute("aria-label") === label && visible(element)
+      );
+      return (
+        direct !== undefined ||
+        Array.from(document.querySelectorAll("label")).some(
+          (element) =>
+            element.textContent.trim() === label &&
+            element.control !== null &&
+            visible(element.control)
+        )
+      );
+    }
+    return (
+      location.pathname === "/settings/access" &&
+      Array.from(document.querySelectorAll('[data-slot="empty-title"]')).some(
+        (element) => element.textContent.trim() === "No tienes tokens activos." && visible(element)
+      )
+    );
+  };
+  const observer = new MutationObserver(() => {
+    if (!ready()) return;
+    observer.disconnect();
+    requestAnimationFrame(() => performance.mark("assessment-control-ready"));
+  });
+  observer.observe(document, { subtree: true, childList: true, attributes: true });
+};
+const installBrowserObservers = (): void => {
+  new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+      performance.mark("assessment-longtask", {
+        startTime: entry.startTime,
+        detail: entry.duration,
+      });
+    }
+  }).observe({ type: "longtask", buffered: true });
+};
+const prepareBrowser = Effect.fn(function* (page: Page, cdp: CDPSession) {
   page.setDefaultTimeout(actionTimeout);
-  yield* Effect.tryPromise(() =>
-    page.addInitScript(() => {
-      new PerformanceObserver((list) => {
-        for (const entry of list.getEntries()) {
-          performance.mark("assessment-longtask", {
-            startTime: entry.startTime,
-            detail: entry.duration,
-          });
-        }
-      }).observe({ type: "longtask", buffered: true });
-    })
-  );
-  if (profile !== "mobile-slow") return;
-  yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
-  yield* Effect.tryPromise(() => cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 }));
-  yield* Effect.tryPromise(() => cdp.send("Network.enable"));
-  yield* Effect.tryPromise(() =>
-    cdp.send("Network.emulateNetworkConditions", {
-      offline: false,
-      latency: 150,
-      downloadThroughput: 200_000,
-      uploadThroughput: 93_750,
-    })
-  );
+  yield* Effect.tryPromise(() => page.addInitScript(installBrowserObservers));
+  yield* Effect.tryPromise(() => page.addInitScript(installWorkspaceReadiness));
+  yield* Effect.tryPromise(() => cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 }));
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 1280, height: 720 }));
 });
-for (const profile of ["desktop", "mobile-slow"] as const) {
+const measureColdInteractions = Effect.fn(function* (
+  { page, measure, samples }: Journey,
+  route: Workspace
+) {
+  if (!coldInteractions || route.name !== "transactions" || samples.at(-1)?.outcome !== "ready") {
+    return;
+  }
+  const form = page.getByRole("form", { name: "Registrar transacción", exact: true });
+  yield* measure(
+    "transactions:cold-open-capture",
+    () => page.getByRole("button", { name: "+ Registrar", exact: true }).click(),
+    () => expect(form).toBeVisible()
+  );
+  if (samples.at(-1)?.outcome === "ready") {
+    yield* measure(
+      "transactions:cold-open-calendar",
+      () => form.getByRole("button", { name: /^Fecha:/u }).click(),
+      () =>
+        expect(page.getByRole("dialog", { name: "Seleccionar fecha", exact: true })).toBeVisible()
+    );
+  }
+});
+for (const profile of ["desktop"] as const) {
+  test(`measures the first date picker on ${profile}`, ({ page, request, context }) => {
+    const samples: Sample[] = [];
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() =>
+          signInNavigationPerformanceThroughCore({ page, request, identity: "navigationDashboard" })
+        );
+        yield* Effect.tryPromise(() => readyWorkspace(page, routes[0]));
+        const cdp = yield* Effect.tryPromise(() => context.newCDPSession(page));
+        yield* prepareBrowser(page, cdp);
+        yield* makeMeasure(page, samples, profile)(
+          "transactions:first-date-picker",
+          () => page.getByRole("button", { name: "Fecha", exact: true }).click(),
+          () => expect(page.getByRole("grid")).toBeVisible()
+        );
+        yield* Effect.tryPromise(() =>
+          test.info().attach("assessment-samples", {
+            body: json({
+              dataset,
+              previewCompression,
+              profile,
+              browser: context.browser()?.version(),
+              samples,
+            }),
+            contentType: "application/json",
+          })
+        );
+      })
+    );
+  });
+}
+for (const profile of ["desktop"] as const) {
   test(`assesses all workspaces on ${profile}`, ({ page, request, context }) => {
     page.setDefaultTimeout(actionTimeout);
     const samples: Sample[] = [];
@@ -370,7 +580,7 @@ for (const profile of ["desktop", "mobile-slow"] as const) {
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
         );
-        yield* prepareBrowser(page, cdp, profile);
+        yield* prepareBrowser(page, cdp);
         const journey = { page, samples, measure: makeMeasure(page, samples, profile) };
         for (const route of routes) {
           yield* visitWorkspace(journey, route, cdp);
@@ -379,7 +589,15 @@ for (const profile of ["desktop", "mobile-slow"] as const) {
         Effect.ensuring(
           Effect.tryPromise(() =>
             test.info().attach("assessment-samples", {
-              body: json({ dataset, profile, browser: context.browser()?.version(), samples }),
+              body: json({
+                dataset,
+                previewCompression,
+                nativeReadiness: "all-workspaces",
+                coldInteractions,
+                profile,
+                browser: context.browser()?.version(),
+                samples,
+              }),
               contentType: "application/json",
             })
           ).pipe(Effect.orDie)
@@ -389,7 +607,7 @@ for (const profile of ["desktop", "mobile-slow"] as const) {
   });
 }
 
-for (const profile of ["desktop", "mobile-slow"] as const) {
+for (const profile of ["desktop"] as const) {
   test(`assesses isolated cold documents on ${profile}`, ({ page, request, context }) => {
     const samples: Sample[] = [];
     return Effect.runPromise(
@@ -402,9 +620,13 @@ for (const profile of ["desktop", "mobile-slow"] as const) {
             identity: "navigationDashboard",
           })
         );
-        yield* prepareBrowser(page, cdp, profile);
+        yield* prepareBrowser(page, cdp);
         const measure = makeMeasure(page, samples, profile);
-        for (const route of routes) {
+        const coldRoutes = routes.filter(
+          (route) => coldWorkspace === "" || route.name === coldWorkspace
+        );
+        if (coldRoutes.length === 0) throw new Error("Unknown cold workspace");
+        for (const route of Array.from({ length: coldRepeats }, () => coldRoutes).flat()) {
           // Stop the previous document and let the unchanged ten-request allowance refill.
           // This setup is excluded from latency; the rapid navigation suite measures contention.
           yield* Effect.tryPromise(() => page.goto("about:blank"));
@@ -416,12 +638,21 @@ for (const profile of ["desktop", "mobile-slow"] as const) {
               page.goto(route.path, { waitUntil: "domcontentloaded", timeout: navigationTimeout }),
             () => readyWorkspace(page, route)
           );
+          yield* measureColdInteractions({ page, measure, samples }, route);
         }
       }).pipe(
         Effect.ensuring(
           Effect.tryPromise(() =>
             test.info().attach("assessment-samples", {
-              body: json({ dataset, profile, browser: context.browser()?.version(), samples }),
+              body: json({
+                dataset,
+                previewCompression,
+                nativeReadiness: "all-workspaces",
+                coldInteractions,
+                profile,
+                browser: context.browser()?.version(),
+                samples,
+              }),
               contentType: "application/json",
             })
           ).pipe(Effect.orDie)
@@ -446,7 +677,7 @@ test("measures the recurring response independently of the browser body limit", 
       for (const view of ["full", "compact"] as const) {
         const response = yield* Effect.tryPromise(() =>
           api.get(
-            `https://127.0.0.1:4174/recurring-plans?month=2026-10${view === "compact" ? "&view=compact" : ""}`
+            `${apiOrigin}/recurring-plans?month=2026-10${view === "compact" ? "&view=compact" : ""}`
           )
         );
         const bytes = yield* Effect.tryPromise(() => response.body());
@@ -457,5 +688,51 @@ test("measures the recurring response independently of the browser body limit", 
           })
         );
       }
+    })
+  ));
+
+test("measures navigation count payload without review rows", ({ page, request, context }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationDashboard" })
+      );
+      yield* Effect.sleep("2 seconds");
+      const api = boundSessionRequests(context.request);
+      const fullPage = 50;
+      const successStatus = 200;
+      const measurements: Array<{
+        limit: number;
+        bytes: number;
+        pendingCount: number;
+        items: number;
+      }> = [];
+      const body = Schema.Struct({
+        data: Schema.Struct({ pendingCount: Schema.Int, items: Schema.Array(Schema.Unknown) }),
+      });
+      for (const limit of [fullPage, 0]) {
+        const response = yield* Effect.tryPromise(() =>
+          api.get(`${apiOrigin}/ingestion/review-workspace?status=pending&limit=${limit}`)
+        );
+        expect(response.status()).toBe(successStatus);
+        const bytes = yield* Effect.tryPromise(() => response.body());
+        const decoded = yield* Schema.decodeUnknownEffect(body)(
+          yield* Effect.tryPromise(() => response.json())
+        );
+        expect(decoded.data.items).toHaveLength(Math.min(limit, decoded.data.pendingCount));
+        measurements.push({
+          limit,
+          bytes: bytes.length,
+          pendingCount: decoded.data.pendingCount,
+          items: decoded.data.items.length,
+        });
+      }
+      expect(measurements[0]?.pendingCount).toBe(measurements[1]?.pendingCount);
+      yield* Effect.tryPromise(() =>
+        test.info().attach("review-count-response-size", {
+          body: json({ dataset, measurements }),
+          contentType: "application/json",
+        })
+      );
     })
   ));

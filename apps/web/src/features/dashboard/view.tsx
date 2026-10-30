@@ -37,7 +37,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/component
 import { Input } from "@/ui/components/input";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { maximumSplitWeight, minimumSplitWeight } from "@/transport/client";
-import { Skeleton } from "@/ui/components/skeleton";
+import { LoadingDashboard } from "./loading";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import {
   exactChartAmount,
@@ -1101,17 +1101,6 @@ export const DashboardViewComponent = ({
 const InitialDashboard = (): JSX.Element => (
   <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
     <p className="text-muted-foreground">El tablero aún no se ha solicitado.</p>
-  </main>
-);
-
-const LoadingDashboard = (): JSX.Element => (
-  <main
-    className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-8 sm:px-6 lg:px-8"
-    aria-label="Cargando tablero"
-    aria-live="polite"
-  >
-    <Skeleton className="h-12 w-64" />
-    <Skeleton className="h-80 w-full" />
   </main>
 );
 

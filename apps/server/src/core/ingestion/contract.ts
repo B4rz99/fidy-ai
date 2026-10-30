@@ -715,7 +715,14 @@ export const ReviewSummary = Schema.Union([
   }),
 ]);
 export type ReviewSummary = typeof ReviewSummary.Type;
+export const reviewPageSize = 50;
 export const ReviewWorkspaceQuery = Schema.Struct({
+  limit: Schema.optionalKey(
+    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: reviewPageSize })).annotate({
+      description:
+        "Maximum returned item rows, from 0 through 50, defaulting to 50. Zero returns complete counts and an empty item list.",
+    })
+  ),
   status: Schema.OptionFromOptionalKey(
     Schema.Literals(["pending", "created", "skipped", "expired", "history"])
   ),
@@ -723,7 +730,6 @@ export const ReviewWorkspaceQuery = Schema.Struct({
     Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }))
   ),
 });
-export const reviewPageSize = 50;
 
 const maximumReviewDraftFieldLength = 120;
 const maximumReviewProvidedFields = 5;

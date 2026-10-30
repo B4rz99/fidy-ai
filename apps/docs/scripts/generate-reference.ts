@@ -2,34 +2,11 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Schema } from "effect";
 
-const Artifact = Schema.Struct({
-  openapi: Schema.String,
-  info: Schema.JsonObject,
-  paths: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.JsonObject)),
-  components: Schema.Struct({ schemas: Schema.Record(Schema.String, Schema.JsonObject) }),
-});
-const Operation = Schema.Struct({
-  operationId: Schema.String.check(
-    Schema.isPattern(/^[a-zA-Z][a-zA-Z0-9]*\.[a-zA-Z][a-zA-Z0-9]*$/u)
-  ),
-  description: Schema.optionalKey(Schema.String),
-  parameters: Schema.Array(Schema.JsonObject),
-  requestBody: Schema.optionalKey(Schema.JsonObject),
-  responses: Schema.Record(Schema.String, Schema.JsonObject),
-  "x-fidy-access": Schema.Struct({
-    type: Schema.Literal("user-owned-agent-scoped"),
-    scope: Schema.Union([
-      Schema.Struct({
-        evaluation: Schema.Literal("operation"),
-        capability: Schema.Literals(["read", "write", "dashboard"]),
-      }),
-      Schema.Struct({ evaluation: Schema.Literal("children") }),
-    ]),
-  }),
-  "x-fidy-agent-confirmation": Schema.Literals(["required", "not-required"]),
-  "x-fidy-operation-kind": Schema.Literals(["query", "mutation"]),
-  "x-fidy-required-tier": Schema.Literals(["free", "pro"]),
-});
+import {
+  ReferenceArtifact as Artifact,
+  ReferenceOperation as Operation,
+} from "../src/lib/reference-contract";
+
 type Operation = typeof Operation.Type;
 const args = process.argv.slice(2);
 const argument = (name: string, fallback: string): string => {

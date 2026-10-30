@@ -1,0 +1,327 @@
+{
+  "scope": "Isolated hosted Fidy Core Queue handoff with synthetic D1 rows and real no-op child Workflows. Measures eight-message handoff service time, not Queue waiting, extraction completion, erasure-recovery wrapper latency, or global API throughput. No public ingress or application provider bindings.",
+  "baselineRevision": "55e992057302ffecff406e7ff8fbde831659ed61",
+  "startedAt": "2026-10-29T06:00:13Z",
+  "warmup": [
+    {
+      "pair": -2,
+      "variant": "baseline",
+      "elapsedMs": 5452,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": -2,
+      "variant": "current",
+      "elapsedMs": 1071,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": -1,
+      "variant": "current",
+      "elapsedMs": 1352,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": -1,
+      "variant": "baseline",
+      "elapsedMs": 3906,
+      "acknowledged": 8,
+      "retries": 0
+    }
+  ],
+  "samples": [
+    {
+      "pair": 0,
+      "variant": "baseline",
+      "elapsedMs": 3365,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 0,
+      "variant": "current",
+      "elapsedMs": 1001,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 1,
+      "variant": "current",
+      "elapsedMs": 1315,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 1,
+      "variant": "baseline",
+      "elapsedMs": 4193,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "elapsedMs": 4532,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 2,
+      "variant": "current",
+      "elapsedMs": 1050,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 3,
+      "variant": "current",
+      "elapsedMs": 1274,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "elapsedMs": 4031,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 4,
+      "variant": "baseline",
+      "elapsedMs": 3624,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 4,
+      "variant": "current",
+      "elapsedMs": 874,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 5,
+      "variant": "current",
+      "elapsedMs": 888,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 5,
+      "variant": "baseline",
+      "elapsedMs": 3547,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 6,
+      "variant": "baseline",
+      "elapsedMs": 3381,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 6,
+      "variant": "current",
+      "elapsedMs": 1003,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 7,
+      "variant": "current",
+      "elapsedMs": 1310,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 7,
+      "variant": "baseline",
+      "elapsedMs": 3480,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 8,
+      "variant": "baseline",
+      "elapsedMs": 3839,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 8,
+      "variant": "current",
+      "elapsedMs": 872,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 9,
+      "variant": "current",
+      "elapsedMs": 1081,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 9,
+      "variant": "baseline",
+      "elapsedMs": 3030,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 10,
+      "variant": "baseline",
+      "elapsedMs": 2942,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 10,
+      "variant": "current",
+      "elapsedMs": 1295,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 11,
+      "variant": "current",
+      "elapsedMs": 977,
+      "acknowledged": 8,
+      "retries": 0
+    },
+    {
+      "pair": 11,
+      "variant": "baseline",
+      "elapsedMs": 2876,
+      "acknowledged": 8,
+      "retries": 0
+    }
+  ],
+  "cleanup": [
+    {
+      "resource": "shared-proof-b054cc6c-shared-child",
+      "deleted": true
+    },
+    {
+      "resource": "shared-proof-b054cc6c-shared-probe",
+      "deleted": true
+    },
+    {
+      "resource": "shared-proof-b054cc6c-shared",
+      "deleted": true
+    },
+    {
+      "resource": "database",
+      "deleted": true
+    }
+  ],
+  "bundleSha256": {
+    "shared": "22a1d16beea000cd4844ea80a7dc2b01138ba5a604965ead0581e5d78e2b674f"
+  },
+  "summary": {
+    "medianServiceMs": {
+      "baseline": 3513.5,
+      "current": 1026.5
+    },
+    "medianServiceSpeedup": 3.422795908426693,
+    "handoffsPerSecond": {
+      "baseline": 2.276931834353209,
+      "current": 7.793472966390648
+    },
+    "nearestRankP95ServiceMs": {
+      "baseline": 4532,
+      "current": 1315
+    },
+    "p95ServiceSpeedup": 3.4463878326996196,
+    "pairedBootstrapMedianSpeedup95Interval": [2.731554160125589, 3.8863270777479895],
+    "bootstrapReplicates": 10000,
+    "bootstrapSeed": 1589
+  },
+  "cleanupVerified": [
+    {
+      "resource": "shared-proof-b054cc6c-shared-probe",
+      "confirmedAbsent": true
+    },
+    {
+      "resource": "shared-proof-b054cc6c-shared-child",
+      "confirmedAbsent": true
+    },
+    {
+      "resource": "shared-proof-b054cc6c-shared",
+      "confirmedAbsent": true
+    },
+    {
+      "resource": "database",
+      "confirmedAbsent": true
+    }
+  ],
+  "method": {
+    "measuredPairs": 12,
+    "warmupPairs": 2,
+    "order": "Alternating baseline/current then current/baseline",
+    "sameWorkerSameParentSameChildSameD1": true,
+    "parentLocationHint": "enam",
+    "databaseLocationHint": "enam",
+    "sourceBaseline": "Exact historical queue dispatcher with its matching error-unwrapping runtime; shared current owner implementations/dependencies.",
+    "sourceCandidateCommit": "05decf157c02461be2b3cdfd23a9d7363311eb05",
+    "timing": "Effect monotonic Clock inside the same parent Workflow step; seed time and control-plane polling excluded.",
+    "scopeLimits": [
+      "No public ingress, application financial data or real extraction/email bindings.",
+      "Synthetic batch envelope and acknowledgement collector; real hosted eligibility SQL and child Workflow creation.",
+      "Direct synthetic D1; production erasure-recovery wrapper overhead excluded.",
+      "Handoff service throughput only; not Queue waiting, extraction completion, or maximum account-wide throughput."
+    ],
+    "fixture": "apps/server/cloudflare/queue/handoff-worker.fixture.ts",
+    "fixtureSha256": "d44f9f967d0a3a7782778e00dae14a48a9a156e6c7a61b636ea42efadbd194d3",
+    "dependencyLockSha256": "14043f779559896de534d396822eb0501dfa7ec464a446a43b7178f7285bb982",
+    "effectVersion": "4.0.5",
+    "wranglerVersion": "4.151.3",
+    "bunVersion": "1.4.3"
+  },
+  "buildHarness": {
+    "language": "TypeScript/Bun",
+    "runFrom": "Repository root with the recorded dependencies; output /tmp/fidy-handoff-sameworker.mjs",
+    "source": "const root=process.cwd();\nconst queue=root+\"/apps/server/cloudflare/queue\";\nconst old=new TextDecoder().decode(Bun.spawnSync([\"git\",\"show\",\"55e992057302ffecff406e7ff8fbde831659ed61:apps/server/cloudflare/queue/internal/dispatch.ts\"],{cwd:root}).stdout);\nconst runtime=(await Bun.file(queue+\"/runtime.ts\").text()).replace('\"./internal/dispatch\"','\"./internal/baseline-dispatch\"');\nlet fixture=await Bun.file(queue+\"/handoff-worker.fixture.ts\").text();\nconst swaps=[['const Probe = Schema.Struct({','const Probe = Schema.Struct({ variant: Schema.Literals([\"baseline\",\"current\"]),'],['const consume = makeCoreQueue(makeWorkerTelemetry(() => undefined));','const consumers={baseline:makeBaselineCoreQueue(makeWorkerTelemetry(() => undefined)),current:makeCoreQueue(makeWorkerTelemetry(() => undefined))};'],['const { ids } = yield* Schema.decodeUnknownEffect(Probe)(payload);','const { ids, variant } = yield* Schema.decodeUnknownEffect(Probe)(payload);'],['consume(batch, {','consumers[variant](batch, {']];\nfor(const[a,b]of swaps){if(!fixture.includes(a))throw new Error(\"Missing fixture anchor\");fixture=fixture.replace(a,b)}\nfixture='import {makeCoreQueue as makeBaselineCoreQueue} from \"baseline-runtime\";\\n'+fixture;\nconst result=await Bun.build({entrypoints:[queue+\"/handoff-worker.fixture.ts\"],target:\"browser\",external:[\"cloudflare:workers\"],plugins:[{name:\"shared-control\",setup(build){\n build.onResolve({filter:/^baseline-runtime$/},()=>({path:queue+\"/baseline-runtime.ts\"}));\n build.onResolve({filter:/baseline-dispatch$/},()=>({path:queue+\"/internal/baseline-dispatch.ts\"}));\n build.onLoad({filter:/baseline-runtime\\.ts$/},()=>({contents:runtime,loader:\"ts\"}));\n build.onLoad({filter:/baseline-dispatch\\.ts$/},()=>({contents:old,loader:\"ts\"}));\n build.onLoad({filter:/handoff-worker\\.fixture\\.ts$/},()=>({contents:fixture,loader:\"ts\"}));\n}}]});if(!result.success)throw new Error(String(result.logs));await Bun.write(\"/tmp/fidy-handoff-sameworker.mjs\",result.outputs[0]);console.log(\"Single Worker contains exact baseline and candidate queue dispatchers\");\n"
+  },
+  "deploymentSettings": {
+    "name": "shared-proof-b054cc6c-shared",
+    "main": "worker.mjs",
+    "compatibility_date": "2026-09-08",
+    "account_id": "a32350b6918ad7e78bc589b6630af1c2",
+    "workers_dev": false,
+    "preview_urls": false,
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "shared-proof-b054cc6c",
+        "database_id": "33dcef3c-1ef8-45a9-bdd8-fb22a6311c68"
+      }
+    ],
+    "workflows": [
+      {
+        "binding": "PROBE",
+        "name": "shared-proof-b054cc6c-shared-probe",
+        "class_name": "HandoffProbe"
+      },
+      {
+        "binding": "CHILD",
+        "name": "shared-proof-b054cc6c-shared-child",
+        "class_name": "HandoffChild"
+      }
+    ]
+  },
+  "instanceRequestTemplate": {
+    "instance_id": "unique UUIDv4 per run",
+    "location_hint": "enam",
+    "params": {
+      "ids": "eight fresh unique UUIDv4 per run",
+      "variant": "baseline or current"
+    }
+  },
+  "schema": "CREATE TABLE statement_submissions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,status TEXT NOT NULL,retention_expires_at_ms INTEGER NOT NULL) STRICT"
+}

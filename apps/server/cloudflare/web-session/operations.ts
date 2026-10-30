@@ -1,16 +1,41 @@
 import { readMetadata } from "./internal/metadata";
 import { bindingResponse } from "./internal/binding";
-import { type Effect, Option } from "effect";
+import { type Effect, Option, Schema } from "effect";
+import { WebSessionId } from "../../src/core/web-session/contract";
+import { browserSessionBindingHeader } from "../../src/shell/web-session/contract";
 import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
 import { completePairing, logout } from "./internal/lifecycle";
 import { currentUser } from "./internal/current-user";
 import type {
   AuthenticatedWebSession,
+  BoundWebSessionLookup,
   WebSessionAuthentication,
   WebSessionEstablishment,
   WebSessionRequest,
 } from "./contract";
-import { authenticate, observeEntry } from "./internal/authentication";
+import {
+  authenticate,
+  decodeSessionLookup,
+  observeEntry,
+  prepareSessionLookup,
+} from "./internal/authentication";
+
+/** Prepare exact cookie, mounted identity, expiry and Consent proof for one atomic admission batch. */
+export const prepareBoundCanonicalWebSession = (
+  input: Readonly<{ request: Request; current: number }>
+): Promise<Option.Option<BoundWebSessionLookup>> => {
+  const binding = Schema.decodeUnknownOption(WebSessionId)(
+    input.request.headers.get(browserSessionBindingHeader)
+  );
+  return Option.isNone(binding)
+    ? Promise.resolve(Option.none())
+    : prepareSessionLookup({ ...input, binding, freshness: "live", requireConsent: true });
+};
+
+/** Decode only the row returned by the exact prepared lookup; later work must recheck authority. */
+export const resolveBoundCanonicalWebSession = (
+  input: Readonly<{ lookup: BoundWebSessionLookup; row: unknown }>
+): Option.Option<AuthenticatedWebSession> => decodeSessionLookup(input);
 
 /**
  * Authenticate one browser cookie against authoritative expiry, revocation and optional freshness.
@@ -20,7 +45,21 @@ import { authenticate, observeEntry } from "./internal/authentication";
 export const authenticateWebSession = (
   input: WebSessionAuthentication
 ): Promise<Option.Option<AuthenticatedWebSession>> =>
-  authenticate({ ...input, requireConsent: false });
+  authenticate({ ...input, requireConsent: false, binding: Option.none() });
+
+/** Discover the cookie's subject and verify its expected binding in one live lookup.
+ * Protected work still rechecks credential authority in its own atomic unit.
+ */
+export const authenticateBoundWebSession = (
+  input: WebSessionAuthentication
+): Promise<Option.Option<AuthenticatedWebSession>> => {
+  const binding = Schema.decodeUnknownOption(WebSessionId)(
+    input.request.headers.get(browserSessionBindingHeader)
+  );
+  return Option.isNone(binding)
+    ? Promise.resolve(Option.none())
+    : authenticate({ ...input, requireConsent: false, binding });
+};
 
 /**
  * Revoke only the presented credential at the caller's Clock and expire its browser cookie;
@@ -54,7 +93,11 @@ export const readCurrentWebSessionMetadata = (
 export const browserSession = (
   input: WebSessionRequest & Readonly<{ input: Readonly<{ current: number; fresh: boolean }> }>
 ): Promise<Option.Option<FreshSessionSubject>> =>
-  authenticate({ ...inputWithFreshness(input), requireConsent: false }).then((session) =>
+  authenticate({
+    ...inputWithFreshness(input),
+    requireConsent: false,
+    binding: Option.none(),
+  }).then((session) =>
     Option.map(session, (subject) => ({ id: subject.id, user_id: subject.userId }))
   );
 
@@ -77,7 +120,7 @@ export const freshBrowserSession = (
 export const authenticateCanonicalWebSession = (
   input: WebSessionRequest & Readonly<{ current: number }>
 ): Promise<Option.Option<AuthenticatedWebSession>> =>
-  authenticate({ ...input, freshness: "live", requireConsent: true });
+  authenticate({ ...input, freshness: "live", requireConsent: true, binding: Option.none() });
 
 /** Check browser lifetime binding at private HTTP ingress; correlation never replaces the cookie. */
 export const browserSessionBindingResponse = (

@@ -1223,6 +1223,7 @@ it("offers eligible statement identities in publication order even after an earl
       const offered: Array<unknown> = [];
       yield* dispatchStatementExtraction({
         DB: runtime.db,
+        STATEMENT_EXTRACTION_WORKFLOW: Option.none(),
         STATEMENT_EXTRACTION_QUEUE: {
           send: (body) => {
             offered.push(body);
@@ -1231,6 +1232,143 @@ it("offers eligible statement identities in publication order even after an earl
         },
       });
       expect(offered).toEqual(identities);
+    })
+  ));
+
+it.each(["created", "existing", "unavailable", "expired"] as const)(
+  "tries the committed statement Workflow before Queue fallback: %s",
+  (outcome) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const staged = yield* fromTestPromise(() => stageOne(runtime));
+        const submitted = yield* fromTestPromise(() =>
+          publishFixture(runtime, {
+            index: 0,
+            reference: staged.staged,
+            idempotencyKey: "20000000-0000-4000-8000-000000000985",
+          })
+        );
+        const submission = yield* fromTestPromise(() => submissionOf(submitted));
+        const clock = yield* Clock.Clock;
+        const liveTime = yield* Clock.currentTimeMillis;
+        const current = outcome === "expired" ? liveTime + 365 * dayMilliseconds : liveTime;
+        const dispatchClock: Clock.Clock = {
+          currentTimeMillisUnsafe: () => current,
+          currentTimeMillis: Effect.succeed(current),
+          currentTimeNanosUnsafe: () => BigInt(current) * 1_000_000n,
+          currentTimeNanos: Effect.succeed(BigInt(current) * 1_000_000n),
+          monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+          monotonicTimeNanos: clock.monotonicTimeNanos,
+          sleep: (duration) => clock.sleep(duration),
+        };
+        const created: Array<unknown> = [];
+        const lookedUp: Array<string> = [];
+        const queued: Array<unknown> = [];
+        yield* dispatchStatementExtraction({
+          DB: runtime.db,
+          STATEMENT_EXTRACTION_WORKFLOW: Option.some({
+            create: (options) => {
+              created.push(options);
+              return outcome === "created"
+                ? Promise.resolve({})
+                : Promise.reject(new Error("Ambiguous create"));
+            },
+            get: (id) => {
+              lookedUp.push(id);
+              return outcome === "existing"
+                ? Promise.resolve({})
+                : Promise.reject(new Error("Workflow unavailable"));
+            },
+          }),
+          STATEMENT_EXTRACTION_QUEUE: {
+            send: (body) => {
+              queued.push(body);
+              return Promise.resolve();
+            },
+          },
+        }).pipe(Effect.provideService(Clock.Clock, dispatchClock));
+        const work = { version: 1, userId: userA, submissionId: submission.id };
+        expect(created).toEqual(
+          outcome === "expired"
+            ? []
+            : [
+                {
+                  id: submission.id,
+                  params: work,
+                  retention: { successRetention: "3 days", errorRetention: "3 days" },
+                },
+              ]
+        );
+        expect(lookedUp).toEqual(
+          outcome === "created" || outcome === "expired" ? [] : [submission.id]
+        );
+        expect(queued).toEqual(outcome === "unavailable" ? [work] : []);
+      })
+    )
+);
+
+it("a User coordinator alarm dispatches only its own published statements", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const submissions: Array<string> = [];
+      for (const index of [0, 1]) {
+        const stagedResponse = yield* fromTestPromise(() =>
+          stageFixture(runtime, { index, body: statementBytes() })
+        );
+        const { data: staged } = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            data: Schema.Struct({
+              stagingId: Schema.String,
+              byteLength: Schema.Finite,
+              sha256: Schema.String,
+            }),
+          })
+        )(yield* fromTestPromise(() => stagedResponse.json()));
+        const submitted = yield* fromTestPromise(() =>
+          publishFixture(runtime, {
+            index,
+            reference: staged,
+            idempotencyKey: `20000000-0000-4000-8000-00000000098${index}`,
+          })
+        );
+        submissions.push((yield* fromTestPromise(() => submissionOf(submitted))).id);
+      }
+      const queued: Array<unknown> = [];
+      const coordinator = new UserTransactionCoordinator(
+        {
+          id: { name: userA },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
+        },
+        {
+          DB: runtime.db,
+          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          STATEMENT_EXTRACTION_QUEUE: {
+            send: (body: unknown): Promise<void> => {
+              queued.push(body);
+              return Promise.resolve();
+            },
+          },
+        }
+      );
+      yield* fromTestPromise(() => coordinator.alarm());
+      expect(queued).toEqual([{ version: 1, userId: userA, submissionId: submissions[0] }]);
+      const unclaimed = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare("SELECT work_last_attempt_at_ms FROM statement_submissions WHERE user_id = ?")
+          .bind(userB)
+          .first()
+      );
+      const decoded = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ work_last_attempt_at_ms: Schema.OptionFromNullOr(Schema.Int) })
+      )(unclaimed);
+      expect(Option.isNone(decoded.work_last_attempt_at_ms)).toBe(true);
     })
   ));
 
@@ -1325,6 +1463,7 @@ it(
         const offered: Array<unknown> = [];
         yield* dispatchStatementExtraction({
           DB: runtime.db,
+          STATEMENT_EXTRACTION_WORKFLOW: Option.none(),
           STATEMENT_EXTRACTION_QUEUE: {
             send: (body) => {
               offered.push(body);
@@ -1485,6 +1624,7 @@ it(
         const failed = yield* Effect.exit(
           dispatchStatementExtraction({
             DB: runtime.db,
+            STATEMENT_EXTRACTION_WORKFLOW: Option.none(),
             STATEMENT_EXTRACTION_QUEUE: { send: () => Promise.reject(new Error("Queue down")) },
           })
         );
@@ -1502,6 +1642,7 @@ it(
         const offered: Array<unknown> = [];
         yield* dispatchStatementExtraction({
           DB: runtime.db,
+          STATEMENT_EXTRACTION_WORKFLOW: Option.none(),
           STATEMENT_EXTRACTION_QUEUE: {
             send: (body) => {
               offered.push(body);
@@ -4070,11 +4211,11 @@ it("shows an isolated ingestion inbox with the original evidence deadline", () =
       yield* fromTestPromise(() =>
         clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
       );
-      const read = (index: number): Promise<Response> =>
+      const read = (index: number, limit = 50): Promise<Response> =>
         send(
           runtime,
           new Request(
-            "https://api.fidyapp.com/ingestion/review-workspace?status=pending&offset=0",
+            `https://api.fidyapp.com/ingestion/review-workspace?status=pending&offset=0&limit=${limit}`,
             {
               headers: sessionHeaders(index),
             }
@@ -4101,6 +4242,19 @@ it("shows an isolated ingestion inbox with the original evidence deadline", () =
       expect(body.data.items).toHaveLength(1);
       expect(body.data.items[0]?.source).toBe("statement");
       expect(body.data.items[0]?.status).toBe("pending");
+      const counts = yield* fromTestPromise(() => read(0, 0));
+      expect(counts.status).toBe(200);
+      expect(yield* fromTestPromise(() => counts.json())).toMatchObject({
+        data: { pendingCount: 1, total: 1, items: [] },
+      });
+      const foreignCounts = yield* fromTestPromise(() => read(1, 0));
+      expect(foreignCounts.status).toBe(200);
+      expect(yield* fromTestPromise(() => foreignCounts.json())).toMatchObject({
+        data: { pendingCount: 0, total: 0, items: [] },
+      });
+      for (const invalid of [-1, 51, 0.5]) {
+        expect((yield* fromTestPromise(() => read(0, invalid))).status).toBe(400);
+      }
       const foreign = yield* fromTestPromise(() => read(1));
       expect(foreign.status).toBe(200);
       expect(yield* fromTestPromise(() => foreign.json())).toMatchObject({

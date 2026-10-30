@@ -1,0 +1,88 @@
+---
+import { Code } from "astro:components";
+import type { Schema } from "effect";
+
+type Props = { value: Schema.Json; label: string };
+const { value, label } = Astro.props;
+const code = JSON.stringify(value, undefined, 2);
+const codeTheme = {
+  name: "fidy-json",
+  colors: { "editor.background": "#202020", "editor.foreground": "#FFF6EF" },
+  tokenColors: [
+    {
+      scope: ["string", "constant.numeric", "constant.language"],
+      settings: { foreground: "#B5DB7E" },
+    },
+  ],
+};
+---
+
+<div class="reference-json">
+  <div class="reference-json-heading">
+    <span>{label}</span>
+    <button
+      type="button"
+      data-reference-copy
+      aria-label={`Copiar ${label}`}
+      title={`Copiar ${label}`}
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        aria-hidden="true"
+      >
+        <rect x="8" y="8" width="12" height="13" rx="2" />
+        <path d="M15 3H4v13" />
+      </svg>
+    </button>
+  </div>
+  <Code code={code} lang="json" theme={codeTheme} />
+  <div class="reference-json-footer" hidden>
+    Desliza para ver el código completo <span aria-hidden="true">↔</span>
+  </div>
+  <span class="reference-copy-status" role="status" aria-live="polite"></span>
+</div>
+<script>
+  const codePanels = document.querySelectorAll<HTMLElement>(".reference-json pre");
+  const updateOverflow = (panel: HTMLElement): void => {
+    const footer = panel
+      .closest(".reference-json")
+      ?.querySelector<HTMLElement>(".reference-json-footer");
+    if (!footer) return;
+    const horizontal = panel.scrollWidth > panel.clientWidth;
+    const vertical = panel.scrollHeight > panel.clientHeight;
+    footer.hidden = !horizontal && !vertical;
+    const direction = footer.querySelector("span");
+    if (direction) direction.textContent = `${horizontal ? "↔" : ""} ${vertical ? "↕" : ""}`.trim();
+  };
+  const resizeObserver = new ResizeObserver((entries) => {
+    entries.forEach(({ target }) => {
+      if (target instanceof HTMLElement) updateOverflow(target);
+    });
+  });
+  codePanels.forEach((panel) => {
+    updateOverflow(panel);
+    resizeObserver.observe(panel);
+  });
+  document.fonts.addEventListener("loadingdone", () => codePanels.forEach(updateOverflow));
+  document.fonts.ready.then(() => codePanels.forEach(updateOverflow));
+
+  document.querySelectorAll<HTMLButtonElement>("[data-reference-copy]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const container = button.closest(".reference-json");
+      const code = container?.querySelector("pre code")?.textContent;
+      const status = container?.querySelector("[role=status]");
+      if (!code || !status) return;
+      try {
+        await navigator.clipboard.writeText(code);
+        status.textContent = "Código copiado";
+      } catch {
+        status.textContent = "No se pudo copiar. Selecciona el código para copiarlo.";
+      }
+    });
+  });
+</script>

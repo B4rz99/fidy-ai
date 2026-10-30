@@ -1,14 +1,18 @@
 import { sweepReviewDrafts as sweepDrafts } from "./internal/review-retention";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
+import { withPublicationWake } from "./internal/publication-wake";
 import type { ErasureStore } from "../erasure-store/contract";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Crypto, Effect } from "effect";
+import { Crypto, Effect, Option } from "effect";
+import type { UserId } from "../../src/core/identity/contract";
 import type {
   ForwardedEmailEnvironment,
   ForwardedEmailMessage,
   ReviewRetentionWork,
   ReviewUnavailable,
+  StatementDeliveryUnavailable,
+  StatementDispatchBindings,
 } from "./contract";
 import {
   cloudflareWorkerTelemetry,
@@ -41,9 +45,21 @@ import { expireStatementReviewEvidence as expireReview } from "./internal/statem
 /** Bounded inactive-User cleanup of expired media locators, held capacity and aged accountability. */
 export const sweepMediaSubmissions: typeof sweepMedia = (input) => sweepMedia(input);
 
-/** Reoffer bounded committed extraction identities; a Queue offer never authorizes extraction. */
-export const dispatchStatementExtraction: typeof dispatchStatements = (input) =>
-  dispatchStatements(input);
+/** Reoffer committed extraction identities directly to their Workflow, with Queue fallback. */
+export const dispatchStatementExtraction = (
+  input: StatementDispatchBindings
+): Effect.Effect<void, StatementDeliveryUnavailable> =>
+  dispatchStatements({ ...input, userId: Option.none() });
+
+/** A User's durable alarm discovers only that User's retained publication intents. */
+export const dispatchUserStatementExtraction = (
+  input: StatementDispatchBindings & Readonly<{ userId: UserId }>
+): Effect.Effect<void, StatementDeliveryUnavailable> =>
+  dispatchStatements({ ...input, userId: Option.some(input.userId) });
+
+/** Supply a coordinator-owned durable wake-up; absent or failed wake-ups retain cron recovery. */
+export const withStatementPublicationWake: typeof withPublicationWake = (schedule) =>
+  withPublicationWake(schedule);
 /** Decode Queue work and check current owner state before handing the stable identity to its Workflow. */
 export const receiveStatementExtraction: typeof receiveStatements = (input) =>
   receiveStatements(input);

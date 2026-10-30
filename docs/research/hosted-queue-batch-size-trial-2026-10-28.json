@@ -1,0 +1,400 @@
+{
+  "scope": "Isolated hosted Cloudflare primitives in the production account, synthetic data only. Not application end-to-end latency or total billing proof.",
+  "startedAt": "2026-10-29T03:41:19Z",
+  "queueSamples": [
+    {
+      "pair": 0,
+      "variant": "current",
+      "dispatchMs": 289,
+      "attempt": 1
+    },
+    {
+      "pair": 0,
+      "variant": "single",
+      "dispatchMs": 4096,
+      "attempt": 1
+    },
+    {
+      "pair": 1,
+      "variant": "single",
+      "dispatchMs": 212,
+      "attempt": 1
+    },
+    {
+      "pair": 1,
+      "variant": "current",
+      "dispatchMs": 1094,
+      "attempt": 1
+    },
+    {
+      "pair": 2,
+      "variant": "current",
+      "dispatchMs": 842,
+      "attempt": 1
+    },
+    {
+      "pair": 2,
+      "variant": "single",
+      "dispatchMs": 321,
+      "attempt": 1
+    },
+    {
+      "pair": 3,
+      "variant": "single",
+      "dispatchMs": 1028,
+      "attempt": 1
+    },
+    {
+      "pair": 3,
+      "variant": "current",
+      "dispatchMs": 271,
+      "attempt": 1
+    },
+    {
+      "pair": 4,
+      "variant": "current",
+      "dispatchMs": 67,
+      "attempt": 1
+    },
+    {
+      "pair": 4,
+      "variant": "single",
+      "dispatchMs": 81,
+      "attempt": 1
+    },
+    {
+      "pair": 5,
+      "variant": "single",
+      "dispatchMs": 837,
+      "attempt": 1
+    },
+    {
+      "pair": 5,
+      "variant": "current",
+      "dispatchMs": 66,
+      "attempt": 1
+    },
+    {
+      "pair": 6,
+      "variant": "current",
+      "dispatchMs": 99,
+      "attempt": 1
+    },
+    {
+      "pair": 6,
+      "variant": "single",
+      "dispatchMs": 427,
+      "attempt": 1
+    },
+    {
+      "pair": 7,
+      "variant": "single",
+      "dispatchMs": 227,
+      "attempt": 1
+    },
+    {
+      "pair": 7,
+      "variant": "current",
+      "dispatchMs": 99,
+      "attempt": 1
+    },
+    {
+      "pair": 8,
+      "variant": "current",
+      "dispatchMs": 164,
+      "attempt": 1
+    },
+    {
+      "pair": 8,
+      "variant": "single",
+      "dispatchMs": 675,
+      "attempt": 1
+    },
+    {
+      "pair": 9,
+      "variant": "single",
+      "dispatchMs": 261,
+      "attempt": 1
+    },
+    {
+      "pair": 9,
+      "variant": "current",
+      "dispatchMs": 88,
+      "attempt": 1
+    },
+    {
+      "pair": 10,
+      "variant": "current",
+      "dispatchMs": 226,
+      "attempt": 1
+    },
+    {
+      "pair": 10,
+      "variant": "single",
+      "dispatchMs": 256,
+      "attempt": 1
+    },
+    {
+      "pair": 11,
+      "variant": "single",
+      "dispatchMs": 209,
+      "attempt": 1
+    },
+    {
+      "pair": 11,
+      "variant": "current",
+      "dispatchMs": 187,
+      "attempt": 1
+    },
+    {
+      "pair": 12,
+      "variant": "current",
+      "dispatchMs": 104,
+      "attempt": 1
+    },
+    {
+      "pair": 12,
+      "variant": "single",
+      "dispatchMs": 127,
+      "attempt": 1
+    },
+    {
+      "pair": 13,
+      "variant": "single",
+      "dispatchMs": 204,
+      "attempt": 1
+    },
+    {
+      "pair": 13,
+      "variant": "current",
+      "dispatchMs": 91,
+      "attempt": 1
+    },
+    {
+      "pair": 14,
+      "variant": "current",
+      "dispatchMs": 215,
+      "attempt": 1
+    },
+    {
+      "pair": 14,
+      "variant": "single",
+      "dispatchMs": 261,
+      "attempt": 1
+    },
+    {
+      "pair": 15,
+      "variant": "single",
+      "dispatchMs": 260,
+      "attempt": 1
+    },
+    {
+      "pair": 15,
+      "variant": "current",
+      "dispatchMs": 120,
+      "attempt": 1
+    },
+    {
+      "pair": 16,
+      "variant": "current",
+      "dispatchMs": 214,
+      "attempt": 1
+    },
+    {
+      "pair": 16,
+      "variant": "single",
+      "dispatchMs": 306,
+      "attempt": 1
+    },
+    {
+      "pair": 17,
+      "variant": "single",
+      "dispatchMs": 239,
+      "attempt": 1
+    },
+    {
+      "pair": 17,
+      "variant": "current",
+      "dispatchMs": 226,
+      "attempt": 1
+    },
+    {
+      "pair": 18,
+      "variant": "current",
+      "dispatchMs": 136,
+      "attempt": 1
+    },
+    {
+      "pair": 18,
+      "variant": "single",
+      "dispatchMs": 251,
+      "attempt": 1
+    },
+    {
+      "pair": 19,
+      "variant": "single",
+      "dispatchMs": 290,
+      "attempt": 1
+    },
+    {
+      "pair": 19,
+      "variant": "current",
+      "dispatchMs": 133,
+      "attempt": 1
+    },
+    {
+      "pair": 20,
+      "variant": "current",
+      "dispatchMs": 125,
+      "attempt": 1
+    },
+    {
+      "pair": 20,
+      "variant": "single",
+      "dispatchMs": 337,
+      "attempt": 1
+    },
+    {
+      "pair": 21,
+      "variant": "single",
+      "dispatchMs": 112,
+      "attempt": 1
+    },
+    {
+      "pair": 21,
+      "variant": "current",
+      "dispatchMs": 170,
+      "attempt": 1
+    },
+    {
+      "pair": 22,
+      "variant": "current",
+      "dispatchMs": 259,
+      "attempt": 1
+    },
+    {
+      "pair": 22,
+      "variant": "single",
+      "dispatchMs": 309,
+      "attempt": 1
+    },
+    {
+      "pair": 23,
+      "variant": "single",
+      "dispatchMs": 92,
+      "attempt": 1
+    },
+    {
+      "pair": 23,
+      "variant": "current",
+      "dispatchMs": 277,
+      "attempt": 1
+    }
+  ],
+  "warmupQueueSamples": [
+    {
+      "pair": -2,
+      "variant": "current",
+      "dispatchMs": 3642,
+      "attempt": 1
+    },
+    {
+      "pair": -2,
+      "variant": "single",
+      "dispatchMs": 5254,
+      "attempt": 1
+    },
+    {
+      "pair": -1,
+      "variant": "single",
+      "dispatchMs": 676,
+      "attempt": 1
+    },
+    {
+      "pair": -1,
+      "variant": "current",
+      "dispatchMs": 5055,
+      "attempt": 1
+    }
+  ],
+  "settlingSeconds": 30,
+  "warmupPairs": 2,
+  "queueWorkerIsolation": "one identical Worker per queue; shared synthetic receipt database",
+  "d1Samples": [],
+  "cleanup": [
+    {
+      "resource": "queue-current",
+      "deleted": true
+    },
+    {
+      "resource": "queue-single",
+      "deleted": true
+    },
+    {
+      "resource": "infra-proof-153aadc0-current",
+      "deleted": true
+    },
+    {
+      "resource": "infra-proof-153aadc0-single",
+      "deleted": true
+    },
+    {
+      "resource": "database",
+      "deleted": true
+    }
+  ],
+  "consumerSettings": {
+    "current": [
+      {
+        "script_name": null,
+        "script": "infra-proof-153aadc0-current",
+        "settings": {
+          "batch_size": 10,
+          "max_retries": 3,
+          "max_wait_time_ms": 0,
+          "retry_delay": 0
+        },
+        "type": "worker"
+      }
+    ],
+    "single": [
+      {
+        "script_name": null,
+        "script": "infra-proof-153aadc0-single",
+        "settings": {
+          "batch_size": 1,
+          "max_retries": 3,
+          "max_wait_time_ms": 0,
+          "retry_delay": 0
+        },
+        "type": "worker"
+      }
+    ]
+  },
+  "summary": {
+    "current": 167.0,
+    "single": 260.5
+  },
+  "analysis": {
+    "variants": "current: batch size 10, timeout 0; single: batch size 1, timeout 0",
+    "results": {
+      "current": {
+        "medianMs": 167.0,
+        "p95Ms": 842,
+        "minMs": 66,
+        "maxMs": 1094
+      },
+      "single": {
+        "medianMs": 260.5,
+        "p95Ms": 1028,
+        "minMs": 81,
+        "maxMs": 4096
+      }
+    },
+    "limitations": [
+      "Synthetic sparse messages, 24 alternating pairs and two warmup pairs.",
+      "This run did not reproduce the prior size-10 tail spikes. Batch size 1 made median worse; no production change is justified.",
+      "All isolated resources deleted."
+    ]
+  }
+}

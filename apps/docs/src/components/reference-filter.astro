@@ -1,0 +1,58 @@
+---
+type Props = { label: string; placeholder: string };
+const { label, placeholder } = Astro.props;
+---
+
+<label class="reference-filter">
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.7"
+    aria-hidden="true"
+  >
+    <circle cx="10" cy="10" r="6.5" />
+    <path d="m15 15 6 6" />
+  </svg>
+  <input
+    type="search"
+    aria-label={label}
+    placeholder={placeholder}
+    maxlength="120"
+    data-reference-filter
+  />
+</label>
+<p
+  class="reference-filter-status"
+  data-reference-filter-status
+  role="status"
+  aria-live="polite"
+></p>
+<script>
+  const searchable = (value: string): string =>
+    value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+  document.querySelectorAll<HTMLInputElement>("[data-reference-filter]").forEach((input) => {
+    const catalog = input.closest("[data-reference-catalog]");
+    const items = catalog?.querySelectorAll<HTMLElement>("[data-reference-item]");
+    const status = catalog?.querySelector("[data-reference-filter-status]");
+    if (!catalog || !items || !status) return;
+    input.addEventListener("input", () => {
+      const query = searchable(input.value.trim());
+      let count = 0;
+      items.forEach((item) => {
+        const matches = searchable(item.dataset.referenceItem ?? "").includes(query);
+        item.hidden = !matches;
+        if (matches) count += 1;
+        if (item instanceof HTMLDetailsElement) {
+          item.open = matches && (query.length > 0 || count === 1);
+        }
+      });
+      catalog.querySelectorAll<HTMLElement>("[data-reference-group]").forEach((group) => {
+        group.hidden = !group.querySelector("[data-reference-item]:not([hidden])");
+      });
+      status.textContent = query ? `${count} resultado${count === 1 ? "" : "s"}` : "";
+    });
+  });
+</script>

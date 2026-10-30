@@ -1,6 +1,9 @@
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { AxeBuilder } from "@axe-core/playwright";
 import { type APIRequestContext, type Page, expect, test } from "@playwright/test";
 import { type Cause, Effect } from "effect";
+
+const topology = browserAcceptanceTopology();
 
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
@@ -29,7 +32,7 @@ test("serves the checked-in security policy on SPA fallbacks", ({ request }) =>
       expect(yield* wait(shell.text())).toContain('id="root"');
       expect(shell.headers()["cache-control"]).toBe("no-cache");
       expect(shell.headers()["content-security-policy"]).toContain(
-        "connect-src https://127.0.0.1:4174 https://sandbox.wompi.co https://production.wompi.co https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox;"
+        `connect-src ${topology.api} https://sandbox.wompi.co https://production.wompi.co https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox;`
       );
       expect(shell.headers()["x-frame-options"]).toBe("DENY");
       expect(shell.headers()["referrer-policy"]).toBe("no-referrer");
@@ -72,8 +75,8 @@ test("keeps API ownership and credentialed CORS on the real ingress, not the sta
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const api = "https://127.0.0.1:4174";
-      const browser = "https://127.0.0.1:4173";
+      const api = topology.api;
+      const browser = topology.app;
       const headers = {
         origin: browser,
         "access-control-request-method": "POST",
@@ -111,20 +114,18 @@ test("keeps API ownership and credentialed CORS on the real ingress, not the sta
     })
   ));
 const expectUnauthenticated = (request: APIRequestContext, path: string): Promise<void> =>
-  request
-    .get(`https://127.0.0.1:4174${path}`, { headers: { origin: "https://127.0.0.1:4173" } })
-    .then((result) => {
-      expect(result.status(), path).toBe(unauthorized);
-      expect(result.headers()["cache-control"], path).toBe("no-store");
-      expect(result.headers()["set-cookie"], path).toBeUndefined();
-    });
+  request.get(`${topology.api}${path}`, { headers: { origin: topology.app } }).then((result) => {
+    expect(result.status(), path).toBe(unauthorized);
+    expect(result.headers()["cache-control"], path).toBe("no-store");
+    expect(result.headers()["set-cookie"], path).toBeUndefined();
+  });
 test("Core refuses unauthenticated financial routes and untrusted support decisions", ({
   request,
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const api = "https://127.0.0.1:4174";
-      const headers = { origin: "https://127.0.0.1:4173" };
+      const api = topology.api;
+      const headers = { origin: topology.app };
       const protectedPaths = [
         "/categories",
         "/transactions",

@@ -22,6 +22,7 @@ import {
   assertQueuedStatement,
   assertRefusedDocument,
   assertSettledStatement,
+  assertStatementPublicationWake,
   assertStatementQuestion,
   confirmStatementWithRecovery,
   documentStorage,
@@ -268,7 +269,9 @@ it.each([
           start: startDocument,
           inference: inferenceModel,
           deliver: () => ({ _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends }),
-        });
+        }).pipe(
+          assertStatementPublicationWake({ refused: refusal !== "none", checkpoint: publication })
+        );
         expect(response.status).toBe(202);
         if (refusal !== "none") {
           yield* assertRefusedDocument({ db, bucket, refusal, mediaRequests, delivered });

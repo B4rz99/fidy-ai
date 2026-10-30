@@ -133,6 +133,10 @@ See [ADR 0009](../../docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.m
 Consent owns current standing and retained disclosure evidence. Exact admitted work can retain its
 original bounded Consent basis; transport payloads and recurring schedules cannot supply that basis.
 Privacy controls remain independently reachable after processing withdrawal or commercial expiry.
+Cookie-only Consent handlers discover the subject and verify the expected browser binding in one
+live session lookup. Core does not repeat that discovery before dispatch. Protected reads and
+coordinated decisions still recheck credential authority in their existing atomic units; no
+session or Consent result is cached across requests.
 
 Provider adapters use published bounded transport contracts. Hosted inference uses Workers AI
 behind its own provider-neutral interface. Security policy owns validation, authenticity, Secret
@@ -182,6 +186,20 @@ See [ADR 0014](../../docs/adr/0014-deep-hosted-turn-modules.md) and
 Queues carry bounded versioned identities/facts; Cloudflare Workflows run durable execution with
 Effect inside owned steps. Workers recheck retained owner state on redelivery. D1 records domain
 intent, authorization and provider outcomes; workflow progress cannot substitute for them.
+
+Statement dispatch first offers a claimed, committed intent directly to its stable Workflow.
+The same receiver checks current submission ownership, retention and state on either path.
+An ambiguous creation requires an existing-instance lookup; unavailable creation and lookup fall
+back to the Queue with the unchanged identity. The D1 intent and scheduled retry remain the
+recovery path when both offers fail. Neither handoff means extraction has completed.
+
+Committed queued statement readback can wake the owning User coordinator's durable alarm.
+Its dispatcher selects only that User's published intents. One coalesced alarm preserves the
+earliest statement or hosted recovery deadline; the alarm attempts both recovery owners and
+hosted recovery restores any later deadline. Erasure retires the resident alarm scheduler before
+joining pending native writes and clearing the alarm, so late callbacks cannot recreate custody.
+Publication succeeds when a best-effort wake fails; D1 intent and independent cron discovery
+remain authoritative recovery.
 
 Maintenance composes owner discovery, reconciliation and retention without acquiring domain SQL or
 policy. Post-commit publication accelerates durable handoff; scheduled recovery handles missed

@@ -1,4 +1,5 @@
 import { makeWorkerCrypto } from "../secret-material/runtime";
+import { makeUserRecoveryAlarm } from "./internal/recovery-alarm";
 import {
   bancolombiaSandboxAdmission,
   makeBancolombiaSandboxActivation,
@@ -35,7 +36,11 @@ import { makeConsentErasureStores } from "../consent/runtime";
 import { makeDashboardErasureStores } from "../dashboard/runtime";
 import { makeEmailAuthenticationErasureStores } from "../email-authentication/runtime";
 import { makeIdentityErasureStores } from "../identity/runtime";
-import { makeIngestionErasureStores } from "../ingestion/runtime";
+import {
+  dispatchUserStatementExtraction,
+  makeIngestionErasureStores,
+  withStatementPublicationWake,
+} from "../ingestion/runtime";
 import { makeMemoryErasureStores } from "../memory/runtime";
 import { makeOauthAgentsErasureStores } from "../oauth-agents/runtime";
 import { makeOauthConfirmationErasureStores } from "../oauth-confirmation/runtime";
@@ -99,7 +104,11 @@ import {
 import { optionalHostedInference } from "../ai/runtime";
 import type { WorkersAiEnvironment } from "../ai/contract";
 import { type TransactionCaller, transactionUnavailable } from "../canonical-work/operations";
-import { ForwardedEmailWork, StatementCoordinatorActivity } from "../ingestion/contract";
+import {
+  ForwardedEmailWork,
+  StatementCoordinatorActivity,
+  type StatementQueue,
+} from "../ingestion/contract";
 import {
   failStatementSubmission,
   processForwardedEmail,
@@ -148,6 +157,8 @@ type CoordinatorEnvironment = Readonly<{
       ERASURE_BUCKET: R2Bucket;
       ERASURE_REQUIRED: string;
       STATEMENT_STAGING_BUCKET: R2Bucket;
+      STATEMENT_EXTRACTION_QUEUE: StatementQueue;
+      STATEMENT_EXTRACTION_WORKFLOW: Workflow;
       EMAIL_BUCKET: R2Bucket;
       KAPSO_API_KEY: string;
       WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
@@ -670,6 +681,7 @@ export class UserTransactionCoordinator {
   private readonly institutions: typeof registeredConnectionInstitutionIds;
   private readonly bank: Option.Option<ConnectionBankPreparation>;
   private readonly activation: Option.Option<ConnectionBankActivation>;
+  private readonly recoveryAlarm: ReturnType<typeof makeUserRecoveryAlarm>;
   constructor(
     state: Readonly<{
       id: Readonly<{ name: string }>;
@@ -687,6 +699,7 @@ export class UserTransactionCoordinator {
     }
   ) {
     this.state = state;
+    this.recoveryAlarm = makeUserRecoveryAlarm(state.storage);
     this.institutions = configuration.institutions;
     this.bank = Option.orElse(configuration.bank, () =>
       makeBancolombiaSandboxPreparation({ environment: env, userId: state.id.name })
@@ -757,7 +770,7 @@ export class UserTransactionCoordinator {
     const hosted = makeAgentService({
       environment,
       userId: UserId.make(userId),
-      scheduleRecovery: (due) => this.state.storage.setAlarm(due),
+      scheduleRecovery: this.recoveryAlarm.schedule,
       connectionAdmission: bancolombiaSandboxAdmission(environment),
     }).accept({ request, preceding: this.pending });
     if (Option.isSome(hosted)) {
@@ -774,21 +787,15 @@ export class UserTransactionCoordinator {
   }
 
   private clearErasureCoordinator(): Effect.Effect<boolean, ErasureUnavailable> {
-    const storage = this.state.storage;
+    const alarm = this.recoveryAlarm;
     const mcp = this.mcp;
     return Effect.gen(function* () {
       yield* mcp.retireConnections(Option.none());
       if (!(yield* mcp.erasureSettled())) return false;
-      yield* Effect.tryPromise({
-        try: () => storage.deleteAlarm(),
+      return yield* Effect.tryPromise({
+        try: alarm.clear,
         catch: () => new ErasureUnavailable(),
       });
-      return (
-        (yield* Effect.tryPromise({
-          try: () => storage.getAlarm(),
-          catch: () => new ErasureUnavailable(),
-        })) === null
-      );
     });
   }
 
@@ -853,6 +860,7 @@ export class UserTransactionCoordinator {
 
   private withConnectionContext<A, E>(work: Effect.Effect<A, E>): Effect.Effect<A, E> {
     return work.pipe(
+      withStatementPublicationWake(this.recoveryAlarm.schedule),
       Effect.provideService(ConnectionInstitutions, this.institutions),
       Effect.provideService(ConnectionSandboxAdmission, bancolombiaSandboxAdmission(this.env)),
       Effect.provideService(ConnectionBank, this.bank),
@@ -879,14 +887,41 @@ export class UserTransactionCoordinator {
   }
 
   private recoverAbandonedWork(): Promise<void> {
-    return makeAgentService({
-      connectionAdmission: bancolombiaSandboxAdmission(this.env),
-      environment: this.env,
-      userId: UserId.make(this.state.id.name),
-      scheduleRecovery: (due) => this.state.storage.setAlarm(due),
-    }).recover();
+    const queue = Option.fromUndefinedOr(this.env.STATEMENT_EXTRACTION_QUEUE);
+    const statement = Option.isSome(queue)
+      ? dispatchUserStatementExtraction({
+          DB: this.env.DB,
+          userId: UserId.make(this.state.id.name),
+          STATEMENT_EXTRACTION_QUEUE: queue.value,
+          STATEMENT_EXTRACTION_WORKFLOW: Option.fromUndefinedOr(
+            this.env.STATEMENT_EXTRACTION_WORKFLOW
+          ),
+        })
+      : Effect.void;
+    const agent = Effect.tryPromise({
+      try: () =>
+        makeAgentService({
+          environment: this.env,
+          userId: UserId.make(this.state.id.name),
+          connectionAdmission: bancolombiaSandboxAdmission(this.env),
+          scheduleRecovery: this.recoveryAlarm.schedule,
+        }).recover(),
+      catch: () => new CoordinatorRecoveryUnavailable(),
+    });
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const results = yield* Effect.all([Effect.exit(statement), Effect.exit(agent)], {
+          concurrency: "unbounded",
+        });
+        if (results.some((result) => result._tag === "Failure")) {
+          return yield* new CoordinatorRecoveryUnavailable();
+        }
+      })
+    );
   }
 }
+
+class CoordinatorRecoveryUnavailable extends Data.TaggedError("CoordinatorRecoveryUnavailable") {}
 
 /** Advance at most four incomplete Users once per private scheduled tick. */
 export const repairDashboardProjections: typeof ownerRepairDashboardProjections = (...args) =>

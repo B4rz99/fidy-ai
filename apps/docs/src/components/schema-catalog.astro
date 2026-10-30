@@ -1,0 +1,99 @@
+---
+import { referenceSchemas, schemaType } from "../lib/reference";
+import ReferenceFilter from "./reference-filter.astro";
+import ReferenceJson from "./reference-json.astro";
+import SchemaTable from "./schema-table.astro";
+import "../styles/reference.css";
+---
+
+<div class="schema-catalog" data-reference-catalog>
+  <p>Los nombres de esquema corresponden al OpenAPI público.</p>
+  <div id="explorar-esquemas">
+    <ReferenceFilter
+      label="Buscar por nombre de esquema"
+      placeholder="Buscar por nombre de esquema"
+    />
+  </div>
+  {referenceSchemas.map(([name, schema], index) => (
+    <details
+      class="schema-entry"
+      id={`schema-${name}`}
+      data-reference-item={name}
+      open={index === 0}
+    >
+      <summary>
+        <h2>{name}</h2>
+      </summary>
+      <div class="schema-entry-content">
+        <p class="schema-kind">
+          <span class="reference-chip">{schemaType(schema)}</span>
+          <span>Esquema del contrato</span>
+        </p>
+        <div
+          id={index === 0 ? "propiedades" : `schema-${name}-propiedades`}
+          data-schema-section="propiedades"
+          data-docs-section
+        >
+          <SchemaTable schema={schema} preview={5} />
+        </div>
+        <h3
+          id={index === 0 ? "json-completo" : `schema-${name}-json-completo`}
+          data-schema-section="json-completo"
+          data-docs-section
+        >
+          JSON completo
+        </h3>
+        <ReferenceJson label="JSON" value={schema} />
+      </div>
+    </details>
+  ))}
+</div>
+<script>
+  const catalog = document.querySelector(".schema-catalog");
+  const entries = Array.from(catalog?.querySelectorAll<HTMLDetailsElement>(".schema-entry") ?? []);
+  const links = Array.from(
+    document.querySelectorAll<HTMLAnchorElement>(".docs-toc a, .docs-mobile-toc a")
+  ).flatMap((link) => {
+    const section = link.hash.slice(1);
+    return section === "propiedades" || section === "json-completo" ? [{ link, section }] : [];
+  });
+  const showSchemaLinks = (entry: HTMLDetailsElement): void => {
+    links.forEach(({ link, section }) => {
+      const target = entry.querySelector<HTMLElement>(`[data-schema-section="${section}"]`);
+      if (!target) return;
+      link.hidden = false;
+      link.hash = target.id;
+    });
+  };
+  const refreshNavigation = (): void => {
+    const entry = entries.find((candidate) => !candidate.hidden && candidate.open);
+    if (entry) showSchemaLinks(entry);
+    else {
+      links.forEach(({ link }) => {
+        link.hidden = true;
+      });
+    }
+  };
+  const revealSchema = (): void => {
+    const target = document.getElementById(window.location.hash.slice(1));
+    const entry = target?.closest<HTMLDetailsElement>(".schema-entry");
+    if (!entry) return;
+    const input = catalog?.querySelector<HTMLInputElement>("[data-reference-filter]");
+    if (input && input.value && entry.hidden) {
+      input.value = "";
+      input.dispatchEvent(new Event("input"));
+    }
+    entry.open = true;
+    showSchemaLinks(entry);
+    target?.scrollIntoView();
+  };
+  catalog?.addEventListener("input", refreshNavigation);
+  entries.forEach((entry) => {
+    entry.querySelector("summary")?.addEventListener("click", () => {
+      if (!entry.open) showSchemaLinks(entry);
+      else queueMicrotask(refreshNavigation);
+    });
+  });
+  revealSchema();
+  window.addEventListener("hashchange", revealSchema);
+</script>

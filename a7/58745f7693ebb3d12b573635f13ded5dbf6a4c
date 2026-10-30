@@ -1,0 +1,32 @@
+infra/cloudflare/production-release.test.ts
+  s_d9571b3fccd032::t_8971672b8cbfd0 12
+  s_d9571b3fccd032::t_1f54054afc2850 21-50,52-53,56-69
+infra/cloudflare/production-release.ts
+  s_d9571b3fccd032::t_0606069afd54fb 435-436,447-448,464,1084
+apps/server/ARCHITECTURE.md
+  s_d9571b3fccd032::t_47a5ce8d0c461f 25-28
+docs/research/core-placement-production-2026-10-30.json
+  s_d9571b3fccd032::t_970b8a3fec2189 548,566-586
+  s_d9571b3fccd032::t_1f54054afc2850 1-547,549-565,587
+infra/cloudflare/verify-edge-policy.ts
+  s_d9571b3fccd032::t_55f78397042dda 5
+docs/research/core-placement-2026-10-30.md
+  s_d9571b3fccd032::t_970b8a3fec2189 104-107
+  s_d9571b3fccd032::t_1f54054afc2850 3-7,18,64-65,69-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a758745f7693ebb3d12b573635f13ded5dbf6a4c",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

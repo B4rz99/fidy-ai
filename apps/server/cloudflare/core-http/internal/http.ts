@@ -54,9 +54,11 @@ import { categoryUnavailable } from "../../../src/shell/categories/operations";
 import { listCategoriesPath } from "../../../src/shell/categories/contract";
 import { MemoryId, RememberInput, ReviseInput } from "../../../src/core/memory/contract";
 import { type TelemetryService } from "../../../src/shell/observability/contract";
+import { observeCanonicalResponse } from "../../runtime/application-observation/operations";
 import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import {
   correctionInput,
+  prepareBoundTransactionRead,
   transactionInput,
   transactionPairInput,
   transactionSession,
@@ -1461,6 +1463,12 @@ const withBrowserBinding = <E, R>(
     Effect.flatMap(Option.match({ onNone: () => work, onSome: Effect.succeed }))
   );
 
+const supportsBoundHistory = (operation: CatalogOperation): boolean =>
+  operation.id === "transactions.listTransactions" &&
+  operation.policy.requiredTier === "free" &&
+  operation.policy.kind === "query" &&
+  operation.policy.access._tag === "UserOwnedAgentScoped";
+
 const browserCanonicalResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
@@ -1468,6 +1476,15 @@ const browserCanonicalResponse = (
 ): Effect.Effect<Response> =>
   Clock.currentTimeMillis.pipe(
     Effect.flatMap((current) => {
+      if (supportsBoundHistory(operation) && request.method === "GET") {
+        return protectCanonicalBrowserSnapshot({
+          request,
+          db: environment.DB,
+          current,
+          operation: "transactions.listTransactions",
+          read: prepareBoundTransactionRead(request),
+        }).pipe(observeCanonicalResponse(operation.id));
+      }
       if (
         operation.id === "categories.listCategories" &&
         request.method === "GET" &&

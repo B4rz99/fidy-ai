@@ -108,7 +108,7 @@ const applyApiPolicy = (
   appendVary(headers, "Origin");
   headers.set(
     "access-control-expose-headers",
-    `Fidy-Canonical-Allowance, Fidy-Canonical-Limit, Fidy-Canonical-Remaining, Fidy-Canonical-Reset, Retry-After, ${telemetryTraceHeader}`
+    `Server-Timing, Fidy-Canonical-Allowance, Fidy-Canonical-Limit, Fidy-Canonical-Remaining, Fidy-Canonical-Reset, Retry-After, ${telemetryTraceHeader}`
   );
 
   if (Option.contains(origin, browserOrigin)) {

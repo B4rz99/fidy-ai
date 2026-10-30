@@ -18,7 +18,12 @@ import {
   maximumTransactionPageSize,
 } from "../../../src/core/transactions/contract";
 import { Currency } from "../../../src/core/_shared/money";
-import { effectiveHistoryPage, effectiveTransactionRelation } from "./effective-transaction";
+import {
+  effectiveHistoryPage,
+  effectiveTransactionRelation,
+  selectedEffectiveHistoryPage,
+} from "./effective-transaction";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { PrivacyTransactionPage } from "../../../src/shell/processing-consent/contract";
 import {
@@ -93,7 +98,7 @@ const HTTP_INVALID = 400;
 const HTTP_NOT_FOUND = 404;
 const HTTP_UNAUTHENTICATED = 401;
 
-const invalid = (): Response => failure("validation_failed", HTTP_INVALID);
+export const invalid = (): Response => failure("validation_failed", HTTP_INVALID);
 const notFound = (): Response => failure("not_found", HTTP_NOT_FOUND);
 
 const noSession = (): Response => failure("unauthenticated", HTTP_UNAUTHENTICATED);
@@ -167,7 +172,7 @@ const validDecodedQuery = (query: typeof Query.Type, search: boolean): boolean =
   (search ? Option.isSome(query.q) : Option.isNone(query.q)) &&
   (Option.isNone(query.cursor) || Option.isSome(decodeCursor(query.cursor.value)));
 
-const parseQuery = (
+export const parseQuery = (
   selection: Pick<Selection, "id" | "request" | "search">
 ): Option.Option<typeof Query.Type> => {
   if (!validSelectedId(selection.id)) return Option.none();
@@ -195,13 +200,24 @@ type HistoryRow = Readonly<{
  * One bounded effective-history page for the caller. Filters and the keyset cursor apply to the
  * effective Transaction, so a linked pair is filtered and paged as the one record it represents.
  */
-const listStatement = ({ db, userId, query, authority }: HistoryRow): D1PreparedStatement => {
+const listFilters = ({
+  userId,
+  query,
+  authority,
+}: Readonly<{
+  userId: Option.Option<string>;
+  query: HistoryRow["query"];
+  authority: AuthorityCondition;
+}>): Omit<Parameters<typeof effectiveHistoryPage>[0], "userId"> => {
   const conditions = [
-    "user_id = ?",
+    ...Option.toArray(Option.map(userId, () => "user_id = ?")),
     `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
   ];
 
-  const values: Array<string | number | Uint8Array> = [userId, ...authority.bindings];
+  const values: Array<string | number | Uint8Array> = [
+    ...Option.toArray(userId),
+    ...authority.bindings,
+  ];
 
   const fields: ReadonlyArray<readonly [string, Option.Option<string | number>]> = [
     ["occurred_at_ms >=", Option.map(query.from, DateTime.toEpochMillis)],
@@ -232,11 +248,32 @@ const listStatement = ({ db, userId, query, authority }: HistoryRow): D1Prepared
       recordId
     );
   }
-  const page = effectiveHistoryPage({
-    userId,
+  return {
     where: conditions.join(" AND "),
     bindings: values,
     limit: Option.getOrElse(query.limit, () => pageSize) + 1,
+  };
+};
+
+const listStatement = ({ db, userId, query, authority }: HistoryRow): D1PreparedStatement => {
+  const page = effectiveHistoryPage({
+    userId,
+    ...listFilters({ userId: Option.some(userId), query, authority }),
+  });
+  return db.prepare(page.sql).bind(...page.bindings);
+};
+
+/** Prepare the same bounded page from a live, owner-prepared User selection in this snapshot. */
+export const selectedListStatement = ({
+  db,
+  userSelection,
+  query,
+  authority,
+}: Omit<HistoryRow, "userId"> &
+  Readonly<{ userSelection: OwnedStatement }>): D1PreparedStatement => {
+  const page = selectedEffectiveHistoryPage({
+    userSelection,
+    ...listFilters({ userId: Option.none(), query, authority }),
   });
   return db.prepare(page.sql).bind(...page.bindings);
 };
@@ -397,11 +434,15 @@ const decodedHistoryPage = (
   }));
 };
 
-const presentHistory = (
-  rows: D1Result,
-  selection: Pick<Selection, "id" | "request" | "search">,
-  query: typeof Query.Type
-): Response => {
+export const presentHistory = ({
+  rows,
+  selection,
+  query,
+}: Readonly<{
+  rows: D1Result;
+  selection: Pick<Selection, "id" | "request" | "search">;
+  query: typeof Query.Type;
+}>): Response => {
   const { id } = selection;
   if (Option.isSome(id)) {
     const first = rows.results[0];
@@ -635,7 +676,7 @@ const presentPATHistory = (
   }
   const rows = results[1];
   return Promise.resolve(
-    rows === undefined ? unavailable() : presentHistory(rows, selection, query.value)
+    rows === undefined ? unavailable() : presentHistory({ rows, selection, query: query.value })
   );
 };
 
@@ -674,7 +715,9 @@ const readOAuthHistory = Effect.fn(function* ({
   }
   if (Option.isNone(query)) return invalid();
   const rows = results[0];
-  return rows === undefined ? unavailable() : presentHistory(rows, selection, query.value);
+  return rows === undefined
+    ? unavailable()
+    : presentHistory({ rows, selection, query: query.value });
 });
 
 const readAuthorizedHistory = (
@@ -705,7 +748,9 @@ const readAuthorizedHistory = (
     )
     .then(([rows, audit]) => {
       if (audit?.meta.changes !== 1) return noSession();
-      return rows === undefined ? unavailable() : presentHistory(rows, selection, query.value);
+      return rows === undefined
+        ? unavailable()
+        : presentHistory({ rows, selection, query: query.value });
     });
 };
 

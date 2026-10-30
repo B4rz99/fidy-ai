@@ -3381,5 +3381,199 @@
       "fullStatic": "passed"
     },
     "productionLatencyMeasured": false
+  },
+  "coordinatedReadFollowUp": {
+    "windowStartedAt": "2026-10-30T06:20:34.400Z",
+    "samples": [
+      {
+        "stage": "after-dashboard-and-placement",
+        "revision": "c5c9b43b0fa7bdc64faca083efdbb00be42b918d",
+        "journey": "recurring",
+        "repeat": 1,
+        "apiSpans": [
+          ["/web/session/binding", 205.2, 1145.1],
+          ["/user", 1176.3, 2341.1],
+          ["/ingestion/review-workspace", 1426.6, 1427.5],
+          ["/ingestion/review-workspace", 1722.3, 2282.1],
+          ["/recurring-plans", 2349.2, 4721.5],
+          ["/categories", 2350.6, 2692.9]
+        ],
+        "completedEncodedResourceBytes": 618634,
+        "observedMs": 4769.6,
+        "ready": true,
+        "resourceCount": 109,
+        "timeOrigin": 1793341247353.3
+      },
+      {
+        "stage": "after-dashboard-and-placement",
+        "revision": "c5c9b43b0fa7bdc64faca083efdbb00be42b918d",
+        "journey": "recurring",
+        "repeat": 2,
+        "apiSpans": [
+          ["/web/session/binding", 215.2, 458.6],
+          ["/user", 486.9, 1088.2],
+          ["/ingestion/review-workspace", 752.5, 754.2],
+          ["/ingestion/review-workspace", 1013.3, 1591.5],
+          ["/recurring-plans", 1099.8, 3335.3],
+          ["/categories", 1598.7, 2027.2]
+        ],
+        "completedEncodedResourceBytes": 618557,
+        "observedMs": 3377.8,
+        "ready": true,
+        "resourceCount": 109,
+        "timeOrigin": 1793341264162.6
+      },
+      {
+        "stage": "after-dashboard-and-placement",
+        "revision": "c5c9b43b0fa7bdc64faca083efdbb00be42b918d",
+        "journey": "recurring",
+        "repeat": 3,
+        "apiSpans": [
+          ["/web/session/binding", 187.6, 433.6],
+          ["/user", 471.5, 2011.3],
+          ["/ingestion/review-workspace", 775.6, 781.2],
+          ["/ingestion/review-workspace", 1036.3, 2205],
+          ["/recurring-plans", 2020.7, 4031.7],
+          ["/categories", 2216.2, 2515.9]
+        ],
+        "completedEncodedResourceBytes": 618661,
+        "observedMs": 4081.5,
+        "ready": true,
+        "resourceCount": 109,
+        "timeOrigin": 1793341279587.6
+      },
+      {
+        "stage": "after-dashboard-and-placement",
+        "revision": "c5c9b43b0fa7bdc64faca083efdbb00be42b918d",
+        "journey": "dashboard",
+        "repeat": 1,
+        "apiSpans": [
+          ["/web/session/binding", 240.1, 448.4],
+          ["/dashboard/view", 610.7, 2906.5],
+          ["/dashboard/catalog", 611.6, 628.9],
+          ["/ingestion/review-workspace", 636.5, 639],
+          ["/ingestion/review-workspace", 685.8, 688.3],
+          ["/ingestion/review-workspace", 930.5, 1487.3],
+          ["/dashboard/catalog", 1496.2, 2175.1]
+        ],
+        "completedEncodedResourceBytes": 684661,
+        "observedMs": 2980.8,
+        "ready": true,
+        "resourceCount": 100,
+        "timeOrigin": 1793341301368.8
+      },
+      {
+        "stage": "after-dashboard-and-placement",
+        "revision": "c5c9b43b0fa7bdc64faca083efdbb00be42b918d",
+        "journey": "dashboard",
+        "repeat": 2,
+        "apiSpans": [
+          ["/web/session/binding", 178.9, 431],
+          ["/dashboard/view", 556.4, 2325.2],
+          ["/dashboard/catalog", 557, 579.3],
+          ["/ingestion/review-workspace", 622, 625.6],
+          ["/ingestion/review-workspace", 636.5, 637.3],
+          ["/ingestion/review-workspace", 884.6, 1332.5],
+          ["/dashboard/catalog", 1342.3, 2063]
+        ],
+        "completedEncodedResourceBytes": 684658,
+        "observedMs": 2394.6,
+        "ready": true,
+        "resourceCount": 100,
+        "timeOrigin": 1793341316363.8
+      },
+      {
+        "stage": "after-dashboard-and-placement",
+        "revision": "c5c9b43b0fa7bdc64faca083efdbb00be42b918d",
+        "journey": "dashboard",
+        "repeat": 3,
+        "apiSpans": [
+          ["/web/session/binding", 184, 363.5],
+          ["/dashboard/view", 503.5, 2268.7],
+          ["/dashboard/catalog", 504.2, 522.7],
+          ["/ingestion/review-workspace", 544.9, 545.9],
+          ["/ingestion/review-workspace", 576.9, 580.7],
+          ["/ingestion/review-workspace", 825.6, 1413.8],
+          ["/dashboard/catalog", 1422.2, 2081.8]
+        ],
+        "completedEncodedResourceBytes": 684658,
+        "observedMs": 2344.8,
+        "ready": true,
+        "resourceCount": 100,
+        "timeOrigin": 1793341330791.1
+      }
+    ],
+    "gitRevision": "c5c9b43b0fa7bdc64faca083efdbb00be42b918d",
+    "contractDigest": "601bd69a4a42aeb9d4317f7aef8bf71092da08ad2e78c277c8565b4d85c11b8f",
+    "windowElapsedMs": 98776,
+    "viewport": {
+      "width": 1280,
+      "height": 720,
+      "mobile": false
+    },
+    "cpuRate": 1,
+    "cacheDisabled": true,
+    "refillGapMs": 12000,
+    "readinessDeadlineMs": 20000,
+    "allReady": true,
+    "qualifiedSampleCount": 6,
+    "corePlacement": {
+      "observedAt": "2026-10-30T06:13:09.005772+00:00",
+      "placements": [
+        {
+          "path": "result.default_environment.script.placement",
+          "placement": {
+            "mode": "smart",
+            "status": "SUCCESS",
+            "last_analyzed_at": "2026-10-30T05:52:46.539995Z"
+          }
+        }
+      ]
+    },
+    "releaseNotes": "Includes merged linked-reference, Dashboard overlap and Core placement changes; not an isolated causal estimate.",
+    "summary": [
+      {
+        "journey": "recurring",
+        "originalMedianMs": 3039.7,
+        "startupCodeMedianMs": 2366.5,
+        "medianMs": 4081.5,
+        "speedupVersusOriginal": 0.7447507043978929,
+        "speedupVersusStartupCode": 0.5798113438686757,
+        "meetsTwoX": false
+      },
+      {
+        "journey": "dashboard",
+        "originalMedianMs": 3820.3,
+        "startupCodeMedianMs": 3058.9,
+        "medianMs": 2394.6,
+        "speedupVersusOriginal": 1.5953812745343692,
+        "speedupVersusStartupCode": 1.2774158523344192,
+        "meetsTwoX": false
+      }
+    ]
+  },
+  "restoredReleaseTraceDiagnostic": {
+    "revision": "995ce13120386d65e7bceed25a5a4f5f518f6fe0",
+    "qualified": false,
+    "reason": "No coordinated quiet window; diagnostic correlation only",
+    "recurring": {
+      "status": 200,
+      "clientMs": 3571,
+      "coreSpanMs": 3421,
+      "coreWallMs": 3426,
+      "coreCpuMs": 10,
+      "coordinatorSpanMs": 1242,
+      "coordinatorWallMs": 1307,
+      "coordinatorCpuMs": 88,
+      "coreOutsideCoordinatorMs": 2179
+    },
+    "user": {
+      "status": 200,
+      "clientMs": 518.9,
+      "coreSpanMs": 305,
+      "coreWallMs": 317,
+      "coreCpuMs": 8
+    },
+    "limitation": "Outside-coordinator elapsed time does not identify admission, transport, queueing or final allowance as the cause"
   }
 }

@@ -1,5 +1,68 @@
 # Production desktop startup: October 29, 2026
 
+## October 30 coordinated-read follow-up
+
+Six further qualified desktop cold loads ran on `c5c9b43b0fa7bdc64faca083efdbb00be42b918d`
+in a coordinated 120-second quiet window, starting at 06:20:34.400 UTC and finishing in
+98.776 seconds. All six reached the unchanged usable-control criteria. The 1280×720 viewport,
+CPU rate 1, disabled cache, excluded 12-second refill gap and 20-second deadline were retained;
+browser overrides were restored. App deployment metadata and API health matched this release
+before and after the window, with the same contract digest as the previous cohort.
+
+| Page      | Original median ms | Startup-code median ms | Current median ms | Original/current |
+| --------- | -----------------: | ---------------------: | ----------------: | ---------------: |
+| Recurring |             3039.7 |                 2366.5 |            4081.5 |           0.745× |
+| Dashboard |             3820.3 |                 3058.9 |            2394.6 |           1.595× |
+
+Neither page reaches 2×. Recurring remains regressed in this cohort; its `/user` response
+precedes the workspace request, whose three resource durations were 2372.3, 2235.5 and
+2011.0 ms. Dashboard's three view durations were 2295.8, 1768.8 and 1765.2 ms. Usable controls
+were observed roughly 40–80 ms after these financial responses; this gap includes rendering
+and polling. The sequential API path is the next useful boundary. Resource entries alone do
+not establish outcomes of short opaque attempts.
+
+This release combines the linked-reference snapshot, overlapping independent Dashboard reads
+and Core Smart Placement. The measured account has no linked references. Cloudflare reported
+Core placement `mode: smart`, `status: SUCCESS` at 06:13:09 UTC, last analyzed 05:52:46.540 UTC;
+a later public health diagnostic returned `cf-placement: remote-IAD`. These configuration and
+routing observations do not isolate any change's effect or establish a placement speedup.
+The placement trial was subsequently rolled back in `995ce13120386d65e7bceed25a5a4f5f518f6fe0`
+after the separate matched Category experiment regressed. These six timings describe the
+trial release, not the restored default execution.
+
+All six raw observations are retained in `coordinatedReadFollowUp` in the JSON artifact,
+including the slow first Recurring load. The latest complete nine-page cohort remains the
+27 qualified startup-code observations, with 0/9 medians at 2×.
+
+### Restored-release trace diagnostic (not a qualified cohort)
+
+A diagnostic on `995ce13120386d65e7bceed25a5a4f5f518f6fe0` correlated response trace IDs
+with filtered Worker events. Recurring returned HTTP 200 in 3571 ms; its Core span was
+3421 ms (Worker wall 3426 ms, CPU 10 ms). The same trace's coordinator span was 1242 ms
+(Worker wall 1307 ms, CPU 88 ms). Thus roughly 2179 ms of Core elapsed time was outside
+the observed coordinator span. This does not identify admission, transport, queueing or
+final allowance as the cause. A separate User diagnostic returned HTTP 200 in 518.9 ms,
+with Core span 305 ms (Worker wall 317 ms, CPU 8 ms). These observations were not taken
+in a coordinated quiet window and are excluded from the qualified performance comparison.
+Only status, elapsed time, byte counts and opaque trace correlation were retained.
+
+### Protected browser phase diagnostics
+
+The legacy protected browser path appends fixed numeric `Server-Timing` metrics for total,
+native admission, owner callback and final allowance. `canonical-other` is the nonnegative
+remainder. Only completed phases accumulate a duration; an interrupted or failed phase is
+included in total/other, so zero is not evidence of zero failed work. The owner callback
+includes coordinator RPC transport and dispatch, not just the coordinator's internal span.
+Total starts before mounted-proof preparation and ends after protected work and cleanup;
+it excludes the outer public source guard. Existing response timings, body streams,
+allowance headers and cache policy are preserved. CORS exposes the header for diagnostics.
+This instrumentation changes no reads, authority checks, Audit or lease behavior.
+
+An unqualified `89c87e384c14c6e90e22571665215aadd6ffc555` bootstrap diagnostic returned
+HTTP 200 in 874.8 ms: bootstrap 624 ms, entry 107 ms, metadata 205 ms, history 0 ms,
+authority 98 ms, admission 214 ms and encoding/other 0 ms. It is not pooled with quiet-window
+page measurements and does not establish a speedup.
+
 The matched production comparison does **not** establish the app-wide 2x target. All 54
 observations reached usable controls, but none of the nine page medians improved by 2x.
 Most pages transferred 71–75% fewer completed encoded resource bytes. API waits still

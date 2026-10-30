@@ -1,0 +1,37 @@
+apps/server/cloudflare/canonical-admission/internal/response-timing.ts
+  s_1cebf747fbaef6::t_829e6d3ec78802 1-4,6-52,54-55
+  s_1cebf747fbaef6::t_e8f50d7ec7bcb6 5
+  s_1cebf747fbaef6::t_624faef36b188f 53
+apps/server/cloudflare/public-worker-telemetry.test.ts
+  s_1cebf747fbaef6::t_2b26ba5f467aee 64
+docs/research/app-performance-production-desktop-2026-10-29.md
+  s_1cebf747fbaef6::t_e8f50d7ec7bcb6 49-65
+apps/server/cloudflare/canonical-admission/operations.test.ts
+  s_1cebf747fbaef6::t_852f2704eafb69 170-177,288
+  s_1cebf747fbaef6::t_325e695c9656aa 155-160
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_1cebf747fbaef6::t_4728215458fb2f 2-5,734,738-748,760-768,838-845,847-849,860-864,866-867,870-874,877-879
+  s_1cebf747fbaef6::t_7060c6fa953051 1
+  s_1cebf747fbaef6::t_e6217d20bfb794 902-912
+infra/cloudflare/verify-edge-policy.ts
+  s_1cebf747fbaef6::t_c2a203413f42f4 5
+  s_1cebf747fbaef6::t_9872e82000a764 7-12
+apps/server/cloudflare/public-worker.ts
+  s_1cebf747fbaef6::t_88045247562c78 111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0497cf6525c22e647dd58b27bf6cb35f5b91ea98",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

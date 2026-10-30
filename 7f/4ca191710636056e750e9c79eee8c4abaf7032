@@ -1,0 +1,27 @@
+apps/cli/src/direct-client/runtime.ts
+  s_68bfd164593579::t_dc5134311422ac 10
+apps/server/src/browser-bootstrap.ts
+  s_68bfd164593579::t_bd8b6aaca37359 14
+apps/server/src/browser-transport.ts
+  s_68bfd164593579::t_f7687c48de98bd 7
+apps/server/src/shell/browser-transport/operations.ts
+  s_68bfd164593579::t_7a82fe5f8c115c 1-8
+apps/server/src/shell/public-http/operations.ts
+  s_68bfd164593579::t_c8a8dac20bf53f 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7f4ca191710636056e750e9c79eee8c4abaf7032",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

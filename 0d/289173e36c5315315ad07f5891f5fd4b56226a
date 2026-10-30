@@ -1,0 +1,30 @@
+apps/web/ARCHITECTURE.md
+  s_68bfd164593579::t_3c54bab5c9a5fd 466-468
+  s_68bfd164593579::t_b93c9cc31c431b 465
+apps/web/e2e/oauth-navigation.spec.ts
+  s_68bfd164593579::t_8c2230bf2d7958 17-20,117
+  s_68bfd164593579::t_ba83d5c2e3cf0b 48-68
+apps/web/src/app/navigation-preparation.ts
+  s_68bfd164593579::t_689baa09e22c0f 11-13,17-19,32,35-47,49
+apps/web/src/app/routes.ts
+  s_68bfd164593579::t_fb9599bad08cec 118,193
+  s_68bfd164593579::t_cca20d19d4b2fd 209,219
+.gitleaksignore
+  s_68bfd164593579::t_b04e5f407b683b 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0d289173e36c5315315ad07f5891f5fd4b56226a",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

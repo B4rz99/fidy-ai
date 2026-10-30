@@ -1,0 +1,38 @@
+docs/research/app-performance-production-desktop-2026-10-29.json
+  s_1cebf747fbaef6::t_a33f4024e49349 1618-1623,1635-1640,1652-1656,1668-1674,1686-1692,1704-1710,1715
+  s_1cebf747fbaef6::t_9062ca246fdac1 1744-1940
+  s_1cebf747fbaef6::t_5f601d35075680 1585-1617,1624-1634,1641-1651,1657-1667,1675-1685,1693-1703,1711-1714,1716-1740,1742
+  s_1cebf747fbaef6::t_e2b240a573cf2d 1741,1743
+apps/web/src/app/bound-application.tsx
+  s_1cebf747fbaef6::t_53a185340edbd8 15-20,23-39,43-48,51-57
+  s_1cebf747fbaef6::t_8a355ea3febcad 3
+  s_1cebf747fbaef6::t_41e1e72f5dcaa7 1-2,4-14,21-22,40-42,49-50,58-59
+apps/web/src/app/application.tsx
+  s_1cebf747fbaef6::t_a9b29033126fcd 11-12,14-15
+  s_1cebf747fbaef6::t_53a185340edbd8 8-9,13,16-17,19-20,25
+  s_1cebf747fbaef6::t_8a355ea3febcad 3
+  s_1cebf747fbaef6::t_dd95fedf8e6284 2,10
+  s_1cebf747fbaef6::t_41e1e72f5dcaa7 7
+  s_1cebf747fbaef6::t_3ec88ff6d8cbaf 26-29
+docs/research/app-performance-production-desktop-2026-10-29.md
+  s_1cebf747fbaef6::t_2a28d3dce82929 203-212
+  s_1cebf747fbaef6::t_0c8e8e3fe00b42 59-60,174-184,189-201
+  s_1cebf747fbaef6::t_53a185340edbd8 185-188
+  s_1cebf747fbaef6::t_1fc6735b90f7c2 202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2d5623ec1882fbc21e562beb6fefd2bd8438d727",
+  "prompts": {},
+  "sessions": {
+    "s_1cebf747fbaef6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18563-78d2-7c12-9e96-1d468276187a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

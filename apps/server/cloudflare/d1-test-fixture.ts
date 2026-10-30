@@ -361,11 +361,13 @@ const observeRetentionStatement = ({
   bind,
   queries,
   record,
+  onRequest,
 }: Readonly<{
   native: D1PreparedStatement;
   query: RetentionQuery;
   bind: (values: ReadonlyArray<unknown>) => D1PreparedStatement;
   queries: Array<RetentionQuery>;
+  onRequest: () => void;
   record: <Row>(result: D1Result<Row>, discovery: boolean, query: RetentionQuery) => D1Result<Row>;
 }>): D1PreparedStatement =>
   new Proxy(native, {
@@ -376,12 +378,14 @@ const observeRetentionStatement = ({
       if (property === "all" || property === "run") {
         return () => {
           queries.push(query);
+          onRequest();
           return target[property]().then((result) => record(result, property === "all", query));
         };
       }
       if (property === "first") {
         return (column?: string) => {
           queries.push(query);
+          onRequest();
           return target.all().then((result) => {
             const row = record(result, false, query).results[0];
             if (row === undefined) return null;
@@ -407,19 +411,22 @@ const retentionBatch =
     nativeStatements,
     preparedQueries,
     record,
+    onRequest,
   }: Readonly<{
     db: D1Database;
     queries: Array<RetentionQuery>;
     nativeStatements: WeakMap<D1PreparedStatement, D1PreparedStatement>;
     preparedQueries: WeakMap<D1PreparedStatement, RetentionQuery>;
+    onRequest: () => void;
     record: <Row>(
       result: D1Result<Row>,
       discovery: boolean,
       query: RetentionQuery
     ) => D1Result<Row>;
   }>): D1Database["batch"] =>
-  <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
-    db
+  <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> => {
+    onRequest();
+    return db
       .batch<Row>(
         statements.map((statement) => {
           const query = preparedQueries.get(statement);
@@ -437,20 +444,26 @@ const retentionBatch =
           return record(result, false, query);
         })
       );
+  };
 
-/** Count native all/first/run/batch work; discovery counts standalone all calls, excluding plans. */
-export const observeRetentionCost = (
-  db: D1Database
-): Readonly<{
+type RetentionCostObservation = Readonly<{
   database: D1Database;
   cost: () => Readonly<{ rowsRead: number; rowsWritten: number }>;
   discovery: () => number;
+  roundTrips: () => number;
   statements: () => ReadonlyArray<Readonly<{ sql: string; rowsRead: number; rowsWritten: number }>>;
   plans: () => Promise<ReadonlyArray<string>>;
-}> => {
+}>;
+
+/** Count native all/first/run/batch work; discovery counts standalone all calls, excluding plans. */
+export const observeRetentionCost = (db: D1Database): RetentionCostObservation => {
   let rowsRead = 0;
   let rowsWritten = 0;
   let discoveryReads = 0;
+  let requests = 0;
+  const onRequest = (): void => {
+    requests++;
+  };
   const statementCosts: Array<Readonly<{ sql: string; rowsRead: number; rowsWritten: number }>> =
     [];
   const queries: Array<RetentionQuery> = [];
@@ -479,6 +492,7 @@ export const observeRetentionCost = (
       bind: (values) => prepare(sql, values),
       queries,
       record,
+      onRequest,
     });
     nativeStatements.set(statement, native);
     preparedQueries.set(statement, { sql, params });
@@ -490,10 +504,11 @@ export const observeRetentionCost = (
       exec: db.exec.bind(db),
       dump: db.dump.bind(db),
       withSession: db.withSession.bind(db),
-      batch: retentionBatch({ db, queries, nativeStatements, preparedQueries, record }),
+      batch: retentionBatch({ db, queries, nativeStatements, preparedQueries, record, onRequest }),
     },
     cost: () => ({ rowsRead, rowsWritten }),
     discovery: () => discoveryReads,
+    roundTrips: () => requests,
     statements: () => statementCosts,
     plans: () => explainRetentionPlans(db, queries),
   };

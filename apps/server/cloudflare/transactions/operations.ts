@@ -1,7 +1,4 @@
-import {
-  effectiveHistoryPage,
-  effectiveTransactionRelation,
-} from "./internal/effective-transaction";
+import { effectiveTransactionRelation } from "./internal/effective-transaction";
 import { prepareDeletion as ownerPrepareDeletion } from "./internal/transaction-deletion";
 import {
   findSnapshot,
@@ -11,8 +8,7 @@ import {
 } from "./internal/recurring-query";
 import type { UserId } from "../../src/core/identity/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
-import { DateTime, Effect, Option, Schema } from "effect";
-import { UtcTimestamp } from "../../src/core/_shared/time";
+import { Effect, Option, Schema } from "effect";
 import type {
   BudgetContributionCursor,
   PrivacyTransactionsRead,
@@ -23,17 +19,19 @@ import type {
 } from "./contract";
 import { readDashboardTransactions as ownerReadDashboardTransactions } from "./internal/dashboard-read";
 import {
+  readPlanningTransactionSnapshot as ownerReadPlanningTransactionSnapshot,
+  readPlanningTransactions as ownerReadPlanningTransactions,
+} from "./internal/planning-read";
+import {
   findDashboardAggregate as ownerFindDashboardAggregate,
   periodAggregateGuard,
   readPeriodAggregates,
 } from "./internal/dashboard-projection";
 import type {
   CompletePeriodAggregates,
-  Transaction,
   TransactionPeriod,
 } from "../../src/core/transactions/contract";
 import {
-  decodeTransactionRow,
   browseTransactions as ownerBrowseTransactions,
   findTransaction as ownerFindCapturedTransaction,
   readPrivacyTransactions as ownerReadPrivacyTransactions,
@@ -203,56 +201,14 @@ export const prepareDeletion: typeof ownerPrepareDeletion = (input) => ownerPrep
 const PlanningMonthRow = Schema.Struct({
   month: Schema.String.check(Schema.isPattern(/^20[0-9]{2}-(?:0[1-9]|1[0-2])$/u)),
 });
-const maximumSelection = 128;
 const maximumMonths = 1200;
-/** Bounded same-User effective facts. The canonical coordinator owns live authority and serializes reads. */
-export const readPlanningTransactions = ({
-  db,
-  userId,
-  selection,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  selection:
-    | Readonly<{ kind: "ids"; ids: ReadonlyArray<string> }>
-    | Readonly<{ kind: "range"; from: string; through: string }>;
-}>): Effect.Effect<
-  Option.Option<Readonly<{ transactions: ReadonlyArray<Transaction>; complete: boolean }>>
-> =>
-  Effect.gen(function* () {
-    if (selection.kind === "ids" && selection.ids.length === 0) {
-      return Option.some({ transactions: [], complete: true });
-    }
-    if (selection.kind === "ids" && selection.ids.length > maximumSelection) return Option.none();
-    const selected =
-      selection.kind === "ids"
-        ? {
-            where: `user_id = ? AND id IN (${selection.ids.map(() => "?").join(",")})`,
-            bindings: [userId, ...selection.ids],
-          }
-        : {
-            where: "user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?",
-            bindings: [
-              userId,
-              DateTime.toEpochMillis(yield* Schema.decodeEffect(UtcTimestamp)(selection.from)),
-              DateTime.toEpochMillis(yield* Schema.decodeEffect(UtcTimestamp)(selection.through)),
-            ],
-          };
-    const query = effectiveHistoryPage({ userId, ...selected, limit: maximumSelection + 1 });
-    const rows = yield* Effect.tryPromise(() =>
-      db
-        .prepare(query.sql)
-        .bind(...query.bindings)
-        .all()
-    );
-    const transactions = Option.all(
-      rows.results.slice(0, maximumSelection).map(decodeTransactionRow)
-    );
-    return Option.map(transactions, (facts) => ({
-      transactions: facts,
-      complete: rows.results.length <= maximumSelection,
-    }));
-  }).pipe(Effect.orElseSucceed(() => Option.none()));
+/** Read bounded same-User matching facts through their native owner. */
+export const readPlanningTransactions: typeof ownerReadPlanningTransactions = (input) =>
+  ownerReadPlanningTransactions(input);
+/** Compose caller-owned context and independently complete matching ranges. */
+export const readPlanningTransactionSnapshot: typeof ownerReadPlanningTransactionSnapshot = (
+  input
+) => ownerReadPlanningTransactionSnapshot(input);
 
 /** Complete bounded month identities, without transferring financial facts to a peer. */
 export const readPlanningTransactionMonths = ({

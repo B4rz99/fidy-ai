@@ -115,6 +115,7 @@ const dashboardRoute = createRoute({
 const budgetsRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/budgets",
+  preload: false,
   validateSearch: (search) =>
     Schema.decodeSync(
       Schema.Struct({
@@ -189,6 +190,7 @@ const needsReviewRoute = createRoute({
 const recurringPlansRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/recurring",
+  preload: false,
   validateSearch: (search) =>
     Schema.decodeSync(
       Schema.Struct({
@@ -204,6 +206,7 @@ const recurringPlansRoute = createRoute({
     Effect.runPromise(
       Effect.gen(function* () {
         yield* Effect.tryPromise(() => Promise.resolve(RecurringWorkspace.preload?.()));
+        if (preload) return;
         const { RecurringRoute } = yield* Effect.tryPromise(
           () => import("@/features/recurring/feature")
         );
@@ -213,7 +216,7 @@ const recurringPlansRoute = createRoute({
             registry: context.registry,
             month: Option.fromUndefinedOr(deps.month),
             signal: abortController.signal,
-            intent: preload,
+            intent: false,
           })
         );
       })

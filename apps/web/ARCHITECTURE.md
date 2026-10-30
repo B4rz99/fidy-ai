@@ -462,8 +462,10 @@ Dashboard initialization remains exclusive to a declared uninitialized response 
 actual visit. Consent, session binding and security settings reads retain their fresh access
 checks. Router intent preloading prepares destination code without executing writes. The owned
 navigation hook prepares display reads only while an authenticated product route is active;
-independent controls such as OAuth do not start product reads on hover. Automatic Budget loader
-preloads warm code only, while actual visits and the owned product intent retain data preparation.
+independent controls such as OAuth do not start product reads on hover. Automatic Budget and Recurring
+loader preloads are disabled so a code-only speculative match cannot satisfy the actual visit.
+The owned product intent retains data preparation and the active product route's AbortSignal,
+including after deferred code import. Idle destination code warming remains independent.
 Needs Review and Recurring route loaders preload the same presentation component used by their
 retained workspace, so resolving destination code does not introduce another lazy suspension. Retained panels activate
 only for successful route matches after destination code and mandatory access checks complete.

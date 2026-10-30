@@ -14,10 +14,10 @@ const returnToOAuth = (): void => {
 const focusWindow = (): void => {
   window.dispatchEvent(new Event("focus"));
 };
-const observeBudgetHover = Effect.fnUntraced(function* (page: Page) {
-  yield* Effect.tryPromise(() =>
-    page.getByRole("link", { name: "Presupuestos", exact: true }).hover()
-  );
+const observeProductHovers = Effect.fnUntraced(function* (page: Page) {
+  for (const name of ["Presupuestos", "Recurrentes"]) {
+    yield* Effect.tryPromise(() => page.getByRole("link", { name, exact: true }).hover());
+  }
   // Observe forbidden speculative requests after an explicit hover, not just timer disposal.
   yield* Effect.sleep("100 millis");
 });
@@ -44,6 +44,27 @@ const visitPrivateWorkspaces = Effect.fnUntraced(function* (page: Page) {
     })
   );
 });
+
+test("fresh OAuth controls do not prepare product data on navigation hover", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const observed = yield* installOAuthReview(page, {
+        review: "unavailable",
+        consent: "signed-out",
+        mutation: "success",
+      });
+      yield* Effect.tryPromise(() => page.goto(`/oauth/review/${reviewReference}`));
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("main").getByRole("link", { name: "Iniciar sesión", exact: true })
+        ).toBeVisible()
+      );
+      yield* observeProductHovers(page);
+      expect(observed.unexpected).toEqual([]);
+      expect(observed.mutations).toEqual([]);
+      observed.release();
+    })
+  ));
 
 for (const { identity, ...condition } of conditions) {
   test(`Returning to OAuth ${condition.review} with ${condition.consent} Consent disposes previously visited private workspaces`, ({
@@ -93,7 +114,7 @@ for (const { identity, ...condition } of conditions) {
         }
         yield* Effect.tryPromise(() => page.evaluate(focusWindow));
         yield* Effect.tryPromise(() => page.clock.fastForward(observationMilliseconds));
-        yield* observeBudgetHover(page);
+        yield* observeProductHovers(page);
         yield* Effect.tryPromise((signal) =>
           expect(
             page.getByRole("heading", { name: "Por revisar", exact: true, includeHidden: true })

@@ -17,11 +17,11 @@ import { findDashboardAggregate, readDashboardTransactions } from "../../transac
 type LayoutWidgets = ReturnType<typeof collectLayoutWidgets>;
 type Groups = DashboardFacts["groups"];
 
-const loadBase = (
+const loadLists = (
   db: D1Database,
   userId: string,
   widgets: LayoutWidgets
-): Effect.Effect<Option.Option<Omit<DashboardFacts, "groups">>> =>
+): Effect.Effect<Option.Option<Omit<DashboardFacts, "groups" | "budgets">>> =>
   Effect.gen(function* () {
     const lists = widgets.filter((widget) => widget.type === "transaction-list");
     const categories = yield* Effect.option(listCategories({ db }));
@@ -57,14 +57,26 @@ const loadBase = (
       )
     );
     if (Option.isNone(listFacts)) return Option.none();
-    const budgets = yield* readBudgetCaps({ db, userId });
-    return Option.map(budgets, (owned) => ({
+    return Option.some({
       lists: new Map(listFacts.value),
-      budgets: owned,
       categories: new Map(categories.value.map((category) => [category.id, category])),
       context: selected.value.snapshot,
-    }));
+    });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
+
+const loadBase = (
+  db: D1Database,
+  userId: string,
+  widgets: LayoutWidgets
+): Effect.Effect<Option.Option<Omit<DashboardFacts, "groups">>> =>
+  Effect.gen(function* () {
+    const { lists, budgets } = yield* Effect.all(
+      { lists: loadLists(db, userId, widgets), budgets: readBudgetCaps({ db, userId }) },
+      { concurrency: 2 }
+    );
+    if (Option.isNone(lists) || Option.isNone(budgets)) return Option.none();
+    return Option.some({ ...lists.value, budgets: budgets.value });
+  });
 
 const findCached = (
   cache: Map<string, ReadonlyArray<EffectiveTransactionAggregate>>,

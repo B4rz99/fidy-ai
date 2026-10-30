@@ -1,0 +1,30 @@
+docs/research/app-performance-production-desktop-2026-10-29.md
+  s_68bfd164593579::t_e6556952a7d3e6 93-129
+apps/server/cloudflare/web-authentication/bound-user.test.ts
+  s_68bfd164593579::t_e6556952a7d3e6 1-182
+infra/cloudflare/verify-edge-policy.ts
+  s_68bfd164593579::t_e6556952a7d3e6 5,50-51
+  s_68bfd164593579::t_38df1f807c09c0 52
+apps/server/cloudflare/web-session/internal/current-user.ts
+  s_68bfd164593579::t_e6556952a7d3e6 5-6,28-30,41-49
+apps/server/cloudflare/web-session/internal/binding.ts
+  s_68bfd164593579::t_e6556952a7d3e6 35-43,51
+docs/research/app-performance-production-desktop-2026-10-29.json
+  s_68bfd164593579::t_e6556952a7d3e6 964-1105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5bda050e73419c306018af58b8dfeebeb122acc7",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

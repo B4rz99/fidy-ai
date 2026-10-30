@@ -1,0 +1,84 @@
+{
+  "scope": "Local native workerd SQL footprint; both variants use Effect 4.0.6, baseline server source 952157f1 and candidate working tree. Not production latency or invoice evidence.",
+  "schemaStatements": 1108,
+  "schemaWrites": 1474,
+  "schemaReads": 8299,
+  "results": [
+    {
+      "kind": "baseline",
+      "status": 200,
+      "bodyHash": "a22a14b134e4f607155c09195c4a2dc16ae83a7ec4c14b382020290eeb52b1ec",
+      "phases": [
+        {
+          "kind": "r2",
+          "ms": 1
+        },
+        {
+          "kind": "d1-cost",
+          "rowsRead": 13,
+          "rowsWritten": 9
+        },
+        {
+          "kind": "d1",
+          "ms": 1,
+          "statements": 6
+        },
+        {
+          "kind": "r2",
+          "ms": 0
+        },
+        {
+          "kind": "d1-cost",
+          "rowsRead": 23,
+          "rowsWritten": 11
+        },
+        {
+          "kind": "d1",
+          "ms": 1,
+          "statements": 4
+        },
+        {
+          "kind": "r2",
+          "ms": 1
+        },
+        {
+          "kind": "d1-cost",
+          "rowsRead": 5,
+          "rowsWritten": 3
+        },
+        {
+          "kind": "d1",
+          "ms": 1,
+          "statements": 4
+        }
+      ],
+      "rowsWritten": 23,
+      "rowsRead": 41
+    },
+    {
+      "kind": "candidate",
+      "status": 200,
+      "bodyHash": "a22a14b134e4f607155c09195c4a2dc16ae83a7ec4c14b382020290eeb52b1ec",
+      "phases": [
+        {
+          "kind": "r2",
+          "ms": 0
+        },
+        {
+          "kind": "d1-cost",
+          "rowsRead": 40,
+          "rowsWritten": 16
+        },
+        {
+          "kind": "d1",
+          "ms": 2,
+          "statements": 9
+        }
+      ],
+      "rowsWritten": 16,
+      "rowsRead": 40
+    }
+  ],
+  "candidateRevision": "dcfd4b3670",
+  "observedAt": "2026-10-30T00:42:40Z"
+}

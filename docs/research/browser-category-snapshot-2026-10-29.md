@@ -95,7 +95,7 @@ The [retained hosted observations](browser-category-snapshot-hosted-2026-10-30.j
 64 HTTP 200 completions and zero refusals. Median burst completion was 2,358.5 ms for the
 baseline and 811.5 ms for the candidate: **2.91x faster** in this synthetic native comparison.
 Maximum observed burst completion was 2,719 ms versus 1,520 ms (**1.79x**); four bursts per
-variant do not establish a reliable tail percentile. All projections were empty; this does
+variant do not establish a reliable tail percentile. All projections contained the same 16 built-in Categories without User custom Categories; this does
 not establish production, populated-data, provider extraction, CPU, memory or invoice gains.
 Both variants used the same browser policy; baseline server Effect was 4.0.5 and candidate
 4.0.6, so the ratio includes that dependency change.
@@ -104,3 +104,20 @@ The meter ended at 31,395 reads and 4,614 writes including its conservative prio
 reservation; measured writes across both fixtures were 4,088. All six continuation resources
 independently returned HTTP 404 after cleanup. Signed-in production baseline and candidate
 verification are still blocked by browser access; the candidate remains in draft.
+
+## Current trunk and production baseline
+
+After integrating trunk `952157f1`, 92 focused authentication, admission, quota and Consent tests
+passed. A fresh [local SQL comparison](browser-category-snapshot-local-after-sync-2026-10-30.json)
+against that trunk, with Effect 4.0.6 on both sides, retained identical response hashes,
+3/3 to 1/1 native units, writes 23 to 16 and reads 41 to 40. Full CI passed for the synchronized
+functional head `dcfd4b3670`.
+
+The in-app connection recovered after the User reopened Fidy. The signed-in Category and
+Transaction requests returned 200. The [paced production baseline](browser-category-production-baseline-2026-10-30.json)
+captures 16 successful Category reads, plus two excluded warmups, against production `952157f1`:
+median 600.15 ms and maximum 722.7 ms. Every response contains 16 Categories and the same
+1,086-byte body hash as the synthetic fixture. The earlier empty-projection description was
+incorrect; both have the built-in Category projection. This is a separate, bounded production
+read experiment after closing the native fixture, with fresh account-wide preflight and a
+48-request ceiling including setup. The candidate production cohort remains pending promotion.

@@ -459,6 +459,7 @@ const recoverWorkspace = (owner: Owner): void => {
       if (succeeded) {
         owner.phase = "idle";
         owner.feedback = "";
+        yield* Reactivity.invalidate([reviewCountKey]);
       } else failBulk(owner);
       notify(owner);
     })

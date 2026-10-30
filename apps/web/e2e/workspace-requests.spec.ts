@@ -190,6 +190,61 @@ test("updates the persistent Review count after a decision", ({ page, request })
       yield* Effect.tryPromise(() => expect(badge).toHaveText(String(pending - 1)));
     })
   ));
+const loseCommittedReviewReply = (route: Route): Promise<void> =>
+  route
+    .fetch()
+    .then((response) =>
+      response.status() === successfulStatus ? route.abort("failed") : route.fulfill({ response })
+    );
+
+test("recovers the Review count after a committed bulk decision loses its reply", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationDashboard" })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      const checkbox = page.getByRole("checkbox", { name: /^Seleccionar/u }).first();
+      yield* Effect.tryPromise(() => expect(checkbox).toBeEnabled());
+      const badge = page
+        .getByRole("link", { name: /^Por revisar/u })
+        .getByLabel(/^\d+ pendientes$/u);
+      yield* Effect.tryPromise(() => expect(badge).toBeVisible());
+      const pending = Number(yield* Effect.tryPromise(() => badge.textContent()));
+      expect(pending).toBeGreaterThan(0);
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace/edits`, loseCommittedReviewReply)
+      );
+      yield* Effect.tryPromise(() => checkbox.check());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Omitir 1 seleccionado", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("No pudimos confirmar el cambio. Actualiza antes de continuar.", {
+            exact: true,
+          })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page
+          .locator('[data-review="bulk"]')
+          .getByRole("button", { name: "Actualizar", exact: true })
+          .click()
+      );
+      yield* Effect.tryPromise(() => expect(badge).toHaveText(String(pending - 1)));
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("No pudimos confirmar el cambio. Actualiza antes de continuar.", {
+            exact: true,
+          })
+        ).toHaveCount(0)
+      );
+    })
+  ));
 test("coalesces Review focus refreshes already in flight", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {

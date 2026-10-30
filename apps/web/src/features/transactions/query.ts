@@ -1,4 +1,4 @@
-import { type Context, Data, type DateTime, type Effect, Option } from "effect";
+import { type Context, Data, type DateTime, type Effect, Option, pipe } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient, InitialTransactionPage } from "@/transport/client";
 import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
@@ -33,9 +33,12 @@ const makeSource = (period: Period): Atom.Atom<Result> => {
       refresh(remote);
       refresh(initial);
     }
-  ).pipe(Atom.setIdleTTL("1 minute"), revalidateWorkspaceQuery);
+  ).pipe(Atom.setIdleTTL("1 minute"));
 };
+// Retain the canonical owner in the registry. SWR intentionally removes its own idle TTL,
+// so its collectible view must not be the weak family's only reference to that owner.
 const sources = Atom.family(makeSource);
+const views = Atom.family((source: Atom.Atom<Result>) => source.pipe(revalidateWorkspaceQuery));
 /** One canonical page owner; the fresh bootstrap handoff is retired on explicit refresh. */
 export const transactionFirstPage = ({
   client,
@@ -43,7 +46,8 @@ export const transactionFirstPage = ({
 }: Readonly<{
   client: FidyClient;
   period: PeriodBounds;
-}>): Atom.Atom<Result> => sources(new Period({ client, from: period.from, to: period.to }));
+}>): Atom.Atom<Result> =>
+  pipe(new Period({ client, from: period.from, to: period.to }), sources, views);
 export const transactionPageInitialValue = ({
   client,
   page,

@@ -1,3 +1,4 @@
+import { TransactionRowsSkeleton } from "@/ui/components/transaction-loading";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Toaster, toast } from "sonner";
 import { use, useState } from "react";
@@ -642,7 +643,6 @@ const ContinuationNotice = (props: WorkspaceProps): JSX.Element =>
   );
 const continuationLabels = {
   complete: "",
-  loading: "Cargando más transacciones…",
   failure: "Reintentar carga de más transacciones",
   available: "Al seguir bajando cargaremos más transacciones.",
 };
@@ -661,6 +661,14 @@ const ContinuationControl = (
     return observeContinuation({ element, onMore: props.onMore });
   };
   if (props.continuation === "complete") return <></>;
+  const continuation =
+    props.continuation === "loading" ? (
+      <div className="w-full">
+        <TransactionRowsSkeleton />
+      </div>
+    ) : (
+      <span>{continuationLabels[props.continuation]}</span>
+    );
   return (
     <div
       ref={attachContinuation}
@@ -683,7 +691,7 @@ const ContinuationControl = (
           {continuationLabels[props.continuation]}
         </Button>
       ) : (
-        <span>{continuationLabels[props.continuation]}</span>
+        continuation
       )}
     </div>
   );

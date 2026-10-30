@@ -1,3 +1,4 @@
+import { RecurringSkeleton } from "@/ui/components/recurring-loading";
 import { RecurringWorkspace } from "./workspace-components";
 import { useMatch, useRouterState } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -39,7 +40,7 @@ const VisitedRecurringWorkspace = (): JSX.Element => {
   if (Option.isNone(current)) return <></>;
   return (
     <div hidden={!active} inert={!active} ref={resume}>
-      <Suspense fallback={<output>Cargando recurrentes…</output>}>
+      <Suspense fallback={<RecurringSkeleton />}>
         <RecurringWorkspace month={Option.fromUndefinedOr(current.value.month)} />
       </Suspense>
     </div>

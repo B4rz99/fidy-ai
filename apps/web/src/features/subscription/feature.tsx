@@ -1,3 +1,12 @@
+import { SubscriptionInputDecoration } from "@/ui/components/subscription-input-decoration";
+import { Input } from "@/ui/components/input";
+import { Button } from "@/ui/components/button";
+import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
+import {
+  OffersSkeleton,
+  PaymentFormSkeleton,
+  PaymentMethodsSkeleton,
+} from "@/ui/components/subscription-loading";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Array as EffectArray, Option, Redacted } from "effect";
@@ -27,13 +36,8 @@ import {
 } from "react";
 import { useSession } from "@/session/session-context";
 import { useSubscriptionEnrollmentClient } from "@/session/subscription-enrollment-context";
-import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
-import { Button } from "@/ui/components/button";
-import { Input } from "@/ui/components/input";
-import { SubscriptionInputDecoration } from "@/ui/components/subscription-input-decoration";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type EnrollmentMethod, type FidyClient } from "@/transport/client";
-import { Skeleton } from "@/ui/components/skeleton";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import {
   type SubscriptionOfferPresentation,
@@ -89,14 +93,6 @@ export type SubscriptionOffersPageState =
       onRetry: () => void;
       waiting: boolean;
     }>;
-
-const LoadingOffers = (): JSX.Element => (
-  <section className="grid gap-4 lg:grid-cols-3" aria-label="Cargando ofertas" aria-live="polite">
-    <Skeleton className="h-96 w-full" />
-    <Skeleton className="h-96 w-full" />
-    <Skeleton className="h-96 w-full" />
-  </section>
-);
 
 const CardField = ({
   id,
@@ -647,6 +643,7 @@ const renderPaymentEnrollment = (
 
 const EnrollmentContent = ({
   offer,
+  method,
   gateway,
   onDaviplataSubmitted,
   enrollment,
@@ -657,6 +654,7 @@ const EnrollmentContent = ({
 }: Readonly<{
   enrollment: Option.Option<PaymentFlowView>;
   offer: SubscriptionOfferPresentation;
+  method: EnrollmentMethod;
   busy: boolean;
   prepare: (replaceFailedSource?: boolean) => void;
   submit: (email: string, fields?: PaymentFields) => void;
@@ -664,7 +662,7 @@ const EnrollmentContent = ({
 }> &
   DaviplataFormActions): JSX.Element =>
   Option.match(enrollment, {
-    onNone: () => (busy ? <p aria-live="polite">Cargando formulario…</p> : <></>),
+    onNone: () => (busy ? <PaymentFormSkeleton method={method} /> : <></>),
     onSome: (current) =>
       renderPaymentEnrollment({
         current,
@@ -723,6 +721,7 @@ const PaymentDetails = ({
       </Button>
     ) : null}
     <EnrollmentContent
+      method={method}
       offer={offer}
       gateway={gateway}
       onDaviplataSubmitted={onDaviplataSubmitted}
@@ -775,7 +774,6 @@ const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): Subscr
 const methodAvailabilityMessage = (
   selection: Pick<SubscriptionSelection, "methodsWaiting" | "methodsFailed">
 ): string => {
-  if (selection.methodsWaiting) return "Consultando métodos de pago…";
   if (selection.methodsFailed) return "No pudimos consultar los métodos de pago. Intenta de nuevo.";
   return "No hay métodos de pago disponibles en este momento.";
 };
@@ -802,9 +800,13 @@ const OfferOverview = ({
     />
     {selection.enabledMethods.length === 0 && (
       <div>
-        <p aria-live="polite" className="subscription-muted">
-          {methodAvailabilityMessage(selection)}
-        </p>
+        {selection.methodsWaiting ? (
+          <PaymentMethodsSkeleton />
+        ) : (
+          <p aria-live="polite" className="subscription-muted">
+            {methodAvailabilityMessage(selection)}
+          </p>
+        )}
         <Button
           type="button"
           variant="outline"
@@ -953,15 +955,14 @@ const SubscriptionOffersContent = ({
 }>): JSX.Element => {
   switch (state._tag) {
     case "Initial":
-      return <p className="text-muted-foreground">La consulta de ofertas aún no se ha iniciado.</p>;
     case "Loading":
-      return <LoadingOffers />;
+      return <OffersSkeleton />;
     case "Ready":
       return <ReadyOffers gateway={gateway} offers={state.offers} standing={standing} />;
     case "Refreshing":
       return (
         <>
-          <p aria-live="polite" className="text-sm text-muted-foreground">
+          <p aria-live="polite" className="sr-only">
             Actualizando ofertas…
           </p>
           <ReadyOffers gateway={gateway} offers={state.offers} standing={standing} />

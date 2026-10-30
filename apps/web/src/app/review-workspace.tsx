@@ -1,3 +1,4 @@
+import { ReviewPageSkeleton } from "@/ui/components/review-loading";
 import { ReviewWorkspace } from "./workspace-components";
 import { useMatch, useRouterState } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -37,7 +38,7 @@ const VisitedReviewWorkspace = (): JSX.Element => {
   if (Option.isNone(current)) return <></>;
   return (
     <div hidden={!active} inert={!active}>
-      <Suspense fallback={<p className="p-5">Cargando elementos…</p>}>
+      <Suspense fallback={<ReviewPageSkeleton />}>
         <ReviewWorkspace
           active={active}
           filter={current.value.status ?? "pending"}

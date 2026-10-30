@@ -1,3 +1,4 @@
+import { RecurringSkeleton } from "@/ui/components/recurring-loading";
 import { DateTime, Effect, Option } from "effect";
 import { preparationActive, prepareQuery } from "@/transport/query-preparation";
 import type { AtomRegistry } from "effect/reactivity";
@@ -11,7 +12,6 @@ import { type JSX, Suspense, lazy, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { RecurringQueryFailure } from "./query-failure";
 import { Button } from "@/ui/components/button";
-import { Skeleton } from "@/ui/components/skeleton";
 import { RecurringWorkspace } from "./workspace";
 import { type SaveState, recurringWorkspaceQuery, useRecurringPlanning } from "./controller";
 import { type Filters, type PlanInput, shiftMonth } from "./model";
@@ -52,7 +52,7 @@ const Resources = (props: Props): JSX.Element => {
     );
   }
   if (state._tag !== "Ready" || categoryState._tag !== "Ready") {
-    return <LoadingRecurring />;
+    return <RecurringSkeleton />;
   }
   const navigate = (month: string): void => {
     router.navigate({ to: "/app/recurring", search: { month } }).catch(() => undefined);
@@ -67,7 +67,7 @@ const Resources = (props: Props): JSX.Element => {
     />
   );
   return (
-    <Suspense fallback={<LoadingRecurring />}>
+    <Suspense fallback={<RecurringSkeleton />}>
       <PreviewWorkspace
         key={`${props.month}:${JSON.stringify(props.filters)}:${Option.getOrElse(props.previous, () => "")}:${view.document.revision}`}
         notice={notice}
@@ -109,7 +109,7 @@ export const RecurringFeature = ({
     );
   }
   if (state._tag !== "Ready") {
-    return <output>Cargando recurrentes…</output>;
+    return <RecurringSkeleton />;
   }
   const user = state.value.data;
   const currentMonth = DateTime.formatIsoDate(
@@ -163,12 +163,6 @@ const SaveNotice = ({
       </div>
     ) : null}
   </>
-);
-const LoadingRecurring = (): JSX.Element => (
-  <div className="p-5" aria-label="Cargando recurrentes">
-    <Skeleton className="h-24" />
-    <Skeleton className="mt-5 h-64" />
-  </div>
 );
 /** Application composition owns the retained workspace. This route retains code preloading. */
 export const RecurringRoute = (): JSX.Element => <></>;

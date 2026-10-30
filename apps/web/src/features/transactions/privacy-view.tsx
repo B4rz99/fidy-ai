@@ -1,3 +1,5 @@
+import { TransactionPrivacyNotice } from "@/ui/components/transaction-privacy-notice";
+import { TransactionsSkeleton } from "@/ui/components/transaction-loading";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, lazyRouteComponent, useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -12,19 +14,13 @@ const TransactionWorkspace = lazyRouteComponent(
 );
 
 const ReadOnlyNotice = (): JSX.Element => (
-  <div className="m-5">
-    <Alert>
-      <AlertTitle>Solo lectura</AlertTitle>
-      <AlertDescription>
-        Tu autorización está retirada. Puedes consultar tus transacciones guardadas sin reactivar el
-        tratamiento. Esta consulta es gratuita. Para solicitar una corrección u otros datos,{" "}
-        <Link to="/settings/privacy" className="underline">
-          contacta a Fidy
-        </Link>
-        .
-      </AlertDescription>
-    </Alert>
-  </div>
+  <TransactionPrivacyNotice
+    privacyLink={
+      <Link to="/settings/privacy" className="underline">
+        contacta a Fidy
+      </Link>
+    }
+  />
 );
 
 /** Read-only Transaction access grants neither mutation nor hosted-agent authority. */
@@ -38,7 +34,7 @@ export const PrivacyTransactions = (): JSX.Element => {
   const dispatch = useAtomSet(historyResource.action);
   const state = history.query;
   if (state._tag === "Initial") {
-    return <output className="p-5">Cargando transacciones…</output>;
+    return <TransactionsSkeleton readOnly={true} notice={<ReadOnlyNotice />} />;
   }
   if (state._tag === "Failure" || Option.isSome(state.refreshFailure)) {
     return (
@@ -59,7 +55,7 @@ export const PrivacyTransactions = (): JSX.Element => {
     );
   }
   return (
-    <Suspense fallback={<output className="p-5">Cargando transacciones…</output>}>
+    <Suspense fallback={<TransactionsSkeleton readOnly={true} notice={<ReadOnlyNotice />} />}>
       <TransactionWorkspace
         key={history.generation}
         readOnly

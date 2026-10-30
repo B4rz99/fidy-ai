@@ -1,3 +1,4 @@
+import { OffersSkeleton } from "@/ui/components/subscription-loading";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -34,7 +35,7 @@ const ConsentResult = ({
   children: ReactNode;
 }>): JSX.Element => {
   if (status._tag === "Initial" || status.waiting) {
-    return <output>Verificando autorización…</output>;
+    return <OffersSkeleton />;
   }
   if (status._tag === "Failure" || Option.isSome(status.refreshFailure)) {
     return (

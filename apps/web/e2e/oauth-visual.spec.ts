@@ -1,3 +1,4 @@
+import { expectSameLoadingFrame, measureLoadingFrame } from "./loading-geometry";
 import type { Page } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
@@ -257,9 +258,21 @@ for (const destination of destinations) {
           )
         );
         yield* capture(page, `${destination.name}-loading`);
+        const frameParts = [
+          "settings-columns",
+          "settings-main",
+          "settings-panel",
+          "oauth-client",
+        ].map((name) => ({ name, selector: `.${name}` }));
+        const loadingFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
+        observed.release();
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: destination.action, exact: true })).toBeVisible()
+        );
+        const loadedFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
+        expectSameLoadingFrame(loadingFrame, loadedFrame);
         expect(observed.unexpected).toEqual([]);
         expect(observed.mutations).toEqual([]);
-        observed.release();
       })
     ));
 }

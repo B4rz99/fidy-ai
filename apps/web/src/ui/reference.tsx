@@ -1,3 +1,4 @@
+import { TransactionRowsSkeleton } from "@/ui/components/transaction-loading";
 import { useCallback, useState, useSyncExternalStore } from "react";
 import type { JSX, RefCallback } from "react";
 import { CheckmarkCircle02Icon, InformationCircleIcon } from "@hugeicons/core-free-icons";
@@ -9,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
-import { Skeleton } from "@/ui/components/skeleton";
 import { Spinner } from "@/ui/components/spinner";
 import { CompactTableReference } from "./compact-table-reference";
 import { cn } from "./class-names";
@@ -265,11 +265,7 @@ const EmptyReference = (): JSX.Element => (
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
-      <div aria-label="Ejemplo de carga" className="flex flex-col gap-3">
-        <p className="text-sm text-muted-foreground">Cargando transacciones…</p>
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-16 w-full" />
-      </div>
+      <TransactionRowsSkeleton />
     </CardContent>
   </Card>
 );

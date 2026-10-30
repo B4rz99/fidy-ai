@@ -1,10 +1,7 @@
+import { ReviewInboxSkeleton } from "./review-loading";
 import type { JSX, ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  CheckmarkCircle02Icon,
-  InformationCircleIcon,
-  Loading03Icon,
-} from "@hugeicons/core-free-icons";
+import { CheckmarkCircle02Icon, InformationCircleIcon } from "@hugeicons/core-free-icons";
 import { Alert, AlertDescription } from "./alert";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "./empty";
 import "./review-workspace.css";
@@ -43,31 +40,33 @@ export const ReviewFullState = ({
   description: string;
   state: "empty" | "loading" | "error";
   children: ReactNode;
-}>): JSX.Element => (
-  <div data-review="empty">
-    <Empty>
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <HugeiconsIcon
-            icon={
-              {
-                empty: CheckmarkCircle02Icon,
-                loading: Loading03Icon,
-                error: InformationCircleIcon,
-              }[state]
-            }
-            aria-hidden="true"
-          />
-        </EmptyMedia>
-        <EmptyTitle>
-          <h2>{title}</h2>
-        </EmptyTitle>
-        {description === "" ? null : <EmptyDescription>{description}</EmptyDescription>}
-      </EmptyHeader>
-      {children}
-    </Empty>
-  </div>
-);
+}>): JSX.Element =>
+  state === "loading" ? (
+    <ReviewInboxSkeleton />
+  ) : (
+    <div data-review="empty">
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <HugeiconsIcon
+              icon={
+                {
+                  empty: CheckmarkCircle02Icon,
+                  error: InformationCircleIcon,
+                }[state]
+              }
+              aria-hidden="true"
+            />
+          </EmptyMedia>
+          <EmptyTitle>
+            <h2>{title}</h2>
+          </EmptyTitle>
+          {description === "" ? null : <EmptyDescription>{description}</EmptyDescription>}
+        </EmptyHeader>
+        {children}
+      </Empty>
+    </div>
+  );
 
 export const ReviewDraftFooter = ({
   feedback,

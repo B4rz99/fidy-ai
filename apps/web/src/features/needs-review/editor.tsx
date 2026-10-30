@@ -1,3 +1,5 @@
+import { ReviewDetailSkeleton } from "@/ui/components/review-loading";
+import { TextSkeleton } from "@/ui/components/loading-skeletons";
 import { reviewItemQuery } from "./query";
 import { workspaceCategoriesQuery } from "@/transport/workspace-query";
 import { ReviewDraftFooter, ReviewNotice } from "@/ui/components/review-workspace";
@@ -13,7 +15,6 @@ import {
   File01Icon,
   Image01Icon,
   InformationCircleIcon,
-  Loading03Icon,
   Mail01Icon,
   PauseCircleIcon,
   Tick02Icon,
@@ -128,10 +129,9 @@ const ReviewItemUnavailable = ({
 }>): JSX.Element => (
   <ReviewItemFrame item={item}>
     {loading ? (
-      <output data-review="detail-loading">
-        <HugeiconsIcon icon={Loading03Icon} aria-hidden="true" />
-        Cargando elemento…
-      </output>
+      <div>
+        <ReviewDetailSkeleton />
+      </div>
     ) : (
       <ReviewItemFailure recover={recover} />
     )}
@@ -154,12 +154,12 @@ const RecoveringReviewItem = ({
 }: Readonly<{
   recover: () => void;
 }>): JSX.Element => (
-  <output className="block p-5">
-    <p>Actualizando la versión guardada…</p>
+  <div className="p-5">
+    <TextSkeleton label="Actualizando la versión guardada" lines={2} />
     <Button variant="outline" onClick={recover}>
       Reintentar actualización
     </Button>
-  </output>
+  </div>
 );
 const ReviewItemFailure = ({
   recover,

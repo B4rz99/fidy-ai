@@ -80,8 +80,9 @@ or deployment was created for it. Keep #1589 open; neither approach yet establis
 A Transactions-owned implementation now prepares ordered intervals in sequential batches of four,
 up to 128 intervals. Each batch retains current Consent and projection readiness; all batches must
 agree on the fact revision. Dashboard deduplicates interval identities before reading and restores
-widget/bucket order afterward. Native provider calls remain sequential inside the same coordinated
-query, with its existing admission lease, fresh recovery fence per batch and final authority/Audit.
+widget/bucket order afterward. Chart range batches remain sequential; base fact reads retain their existing bounded overlap. The
+same coordinated query retains its admission lease, fresh recovery fence per batch and final
+authority/Audit.
 
 The native regression test first failed with **36 calls instead of the targeted 12** for an October
 daily chart. The prototype then passed with **12 calls**, all 31 day buckets plus two complete
@@ -90,3 +91,54 @@ the whole read after a valid Consent withdrawal or a fact-revision change betwee
 starting a third chunk. These are native footprint/correctness observations, not hosted or production
 latency evidence. Hosted timing, current authenticated production baseline, required CI and deployment
 validation remain pending. The candidate is not deployed.
+
+
+## Local hosted-fixture validation
+
+A separate private harness now freezes baseline `feb20327069e65bc363805ee205325602ecd4bcc`
+and candidate `ce08003692278f8ebc7cc7f5b398b84caa79faa3`, both with installed Effect 4.0.6.
+Its 212 loaded application source files differ only in the three changed implementation files.
+Complete migration hashes, individual source/bundle hashes and the unchanged hardened budget meter
+are recorded. The older Category baseline copies are not used. No provider resource or hosted
+request was created for this validation.
+
+Native Miniflare 5 installed all 1,106 current selected schema statements, valid processing grants
+and five native Transactions across two synthetic Users. Their ready projection metadata produced
+five leaves, ten buckets and 88 digit rows. Four own Transactions cover COP/USD, inflow/outflow,
+local-day boundaries and exact Money `9007199254740993.01`; the foreign User's Transaction is absent
+from both rendered results. The real erasure database guard reads the isolated R2 generation afresh
+and asserts it in every native D1 batch.
+
+| Layout | Baseline D1 calls / fresh R2 reads | Candidate D1 calls / fresh R2 reads | Baseline D1 rows read | Candidate D1 rows read |
+| --- | ---: | ---: | ---: | ---: |
+| Default | 5 | 5 | 152 | 152 |
+| 31-day chart | 36 | 12 | 548 | 500 |
+
+All four views wrote zero D1 rows. The canonical DashboardView JSON was byte-identical per layout:
+default 3,406 bytes, SHA-256 `d5057d95ed7db7347ad4afd9f83cbb3643107d68c75e134c0f8d3c2c79d3baff`;
+daily 3,723 bytes, SHA-256 `cce23cfabb7ab95c359751ed9ead092e27d527583226cdaa12f2c65b0b444b5b`.
+Maximum outstanding native batches remained two. Whole schema/seed/four-view validation used
+8,761 reads and 1,761 writes locally across the metered schema/seed/view phases; these are not
+production charges or hosted reservations. Local-only diagnostic SQL checking projection metadata
+and row counts is outside those phase totals and is absent from the hosted controller.
+
+The hosted-ready controller accepts schema offsets of at most 250 statements/five native batches,
+a separate seed phase, and one view per Workflow instance. It persists an issuance/reservation step
+before each write batch or whole-view service call, reserves before every native batch, validates
+row metadata and restores cumulative usage from cached successful steps. A cached issue without a
+persisted execution result refuses native replay and retains its reservation. Local cached-step
+simulations verified successful replay without SQL, uncertain-issue refusal and retained usage;
+they do not establish Cloudflare Workflow durability behavior. Native budget exhaustion refused
+before SQL. Cleanup removed only the known marker, skipped an empty delete and refused unknown keys.
+
+Private artifacts are retained under `dashboard-range-batch-work/harness/`: two versioned bundles,
+controller, frozen sources, builders, native local test/results, source audit and operator protocol.
+Root must review that protocol and obtain fresh account-wide headroom before provisioning or each
+bounded phase. The complete hosted experiment remains capped at 5,000 writes and 100,000 reads,
+with production reserves intact and failures carried forward. Integer-resolution local timings
+are not latency evidence. This proves a threefold reduction in native calls for the selected daily
+layout, not a threefold production speedup, a default-layout gain or universal 2× improvement.
+
+The security manifest was reviewed against the new published Transactions query: User scope,
+current Consent/readiness per chunk, fresh recovery fencing and final authority/Audit are retained.
+No credential transport, cache authority, erasure protocol or admission policy changed.

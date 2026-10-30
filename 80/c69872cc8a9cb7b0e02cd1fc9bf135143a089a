@@ -1,0 +1,29 @@
+patches/@distilled.cloud%2Fcloudflare@1.0.0-rc.13.patch
+  s_d9571b3fccd032::t_1380788b47de76 48-67
+  s_d9571b3fccd032::t_0294e301499ec6 69-93
+  s_d9571b3fccd032::t_e41d267508482a 68
+infra/cloudflare/production-resources.test.ts
+  s_d9571b3fccd032::t_890f06a2289dd4 2-6,55-74
+  s_d9571b3fccd032::t_0e91738a2b5cec 84-89
+  s_d9571b3fccd032::t_15de1c5af4bf9f 1,75-83,90-92
+apps/docs/package.json
+  s_d9571b3fccd032::t_4f4da864cdd0cb 16
+bun.lock
+  s_d9571b3fccd032::t_c5378b97c28734 46,252,256,262,2310-2311,2568-2569
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "80c69872cc8a9cb7b0e02cd1fc9bf135143a089a",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

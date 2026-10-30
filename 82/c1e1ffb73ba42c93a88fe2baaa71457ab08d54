@@ -1,0 +1,29 @@
+apps/web/e2e/oauth-navigation.spec.ts
+  s_68bfd164593579::t_13155e5703d1ef 17-23,96
+apps/web/playwright.config.ts
+  s_68bfd164593579::t_6d2022e1510411 55-56
+apps/web/src/app/routes.ts
+  s_68bfd164593579::t_7fca0904f14192 128,137-144
+apps/web/e2e/brand-token-contrast.spec.ts
+  s_68bfd164593579::t_d75c648d6a42b1 96-98
+apps/web/src/app/navigation-preparation.ts
+  s_68bfd164593579::t_1aeee71cbd544b 2,11-13,16,33
+apps/web/ARCHITECTURE.md
+  s_68bfd164593579::t_f5413c5c1b0a2c 463-466
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "82c1e1ffb73ba42c93a88fe2baaa71457ab08d54",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

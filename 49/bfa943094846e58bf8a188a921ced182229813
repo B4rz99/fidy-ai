@@ -1,0 +1,23 @@
+apps/server/cloudflare/core-http/internal/browser-entry.ts
+  s_68bfd164593579::t_7e60f57ac862fc 282,287-288
+apps/web/src/features/recurring/management.tsx
+  s_68bfd164593579::t_433815f4410519 87
+apps/web/src/features/transactions/ledger.tsx
+  s_68bfd164593579::t_4e4044179062de 380-383
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "49bfa943094846e58bf8a188a921ced182229813",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

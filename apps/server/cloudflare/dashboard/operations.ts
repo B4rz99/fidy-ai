@@ -32,6 +32,7 @@ import {
   editWrite,
   failure,
   findDashboardDocument,
+  findDashboardSource,
   firstUse,
   projectDashboardValue,
   validCategories,
@@ -272,6 +273,27 @@ export const browseDashboard = (input: DashboardRequest): Effect.Effect<Response
       : yield* input.runMutation({ operation: input.operation, input: Option.some({}) });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
+const uninitializedDashboard: Effect.Effect<Response, Schema.SchemaError> = Effect.gen(
+  function* () {
+    const failure = DashboardUninitialized.make({
+      error: {
+        code: "dashboard_uninitialized",
+        message: "Initialize your Dashboard explicitly, then read it again.",
+      },
+      next: [],
+    });
+    const body = yield* Schema.encodeEffect(Schema.toCodecJson(DashboardUninitialized))(failure);
+    return Response.json(body, { status: 404, headers: transactionNoStore });
+  }
+);
+
+const refusedDashboardCaller = (): Response =>
+  transactionFailure({
+    code: "unauthenticated",
+    status: 401,
+    message: "Present a valid credential and retry.",
+  });
+
 const queryDashboard = ({
   db,
   subject,
@@ -283,14 +305,10 @@ const queryDashboard = ({
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const current = DateTime.toEpochMillis(yield* DateTime.now);
-    const live = yield* Effect.tryPromise(() => liveTransactionAuthority({ db, subject, current }));
-    if (!live) {
-      return transactionFailure({
-        code: "unauthenticated",
-        status: 401,
-        message: "Present a valid credential and retry.",
-      });
-    }
+    const live =
+      operation === "dashboard.getDashboardView" ||
+      (yield* Effect.tryPromise(() => liveTransactionAuthority({ db, subject, current })));
+    if (!live) return refusedDashboardCaller();
     if (operation === "dashboard.listDashboardCatalog") {
       yield* accountQuery({ db, subject, current, operation });
       const data = yield* Schema.encodeEffect(Schema.toCodecJson(DashboardCatalog))(
@@ -298,24 +316,18 @@ const queryDashboard = ({
       );
       return Response.json({ data, next: [] }, { headers: transactionNoStore });
     }
-    const found = yield* findDashboardDocument({ db, userId: subject.userId });
-    if (Option.isNone(found)) {
+    const source = yield* findDashboardSource({ db, subject, current, operation });
+    if (!source.live) return refusedDashboardCaller();
+    if (Option.isNone(source.document)) {
       yield* accountQuery({ db, subject, current, operation });
-      const failure = DashboardUninitialized.make({
-        error: {
-          code: "dashboard_uninitialized",
-          message: "Initialize your Dashboard explicitly, then read it again.",
-        },
-        next: [],
-      });
-      const body = yield* Schema.encodeEffect(Schema.toCodecJson(DashboardUninitialized))(failure);
-      return Response.json(body, { status: 404, headers: transactionNoStore });
+      return yield* uninitializedDashboard;
     }
     const value = yield* projectDashboardValue({
       db,
       userId: subject.userId,
       operation,
-      document: found.value.document,
+      document: source.document.value.document,
+      viewContext: source.viewContext,
     });
     if (Option.isNone(value) || value.value._tag !== "Owner") return transactionUnavailable();
     yield* accountQuery({ db, subject, current, operation });

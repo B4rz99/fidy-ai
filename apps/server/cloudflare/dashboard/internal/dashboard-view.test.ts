@@ -6,9 +6,26 @@ import {
   isolatedTestDatabases,
   observeRetentionCost,
 } from "../../d1-test-fixture";
-import { defaultDocument } from "./dashboard-mutation";
-import { loadDashboardFacts } from "./dashboard-view";
+import { defaultDocument, findDashboardSource } from "./dashboard-mutation";
+import { loadDashboardFacts as loadFacts } from "./dashboard-view";
+import { dashboardSourceCaller, seedDashboardSourceCaller } from "../dashboard-read.test-fixture";
 import { findDashboardAggregateRanges } from "../../transactions/operations";
+// Include the real document/context and taxonomy reads in every measured fixture call.
+const loadDashboardFacts = (
+  input: Omit<Parameters<typeof loadFacts>[0], "initial">
+): Effect.Effect<
+  Effect.Success<ReturnType<typeof loadFacts>>,
+  Effect.Error<ReturnType<typeof findDashboardSource>>
+> =>
+  Effect.gen(function* () {
+    const source = yield* findDashboardSource({
+      db: input.db,
+      subject: dashboardSourceCaller(input.userId),
+      current: 0,
+      operation: "dashboard.getDashboardView",
+    });
+    return yield* loadFacts({ ...input, initial: Option.getOrThrow(source.viewContext) });
+  });
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
@@ -67,7 +84,7 @@ const observeConcurrency = (
   };
 };
 
-it("overlaps independent Dashboard facts while retaining complete native projections", () =>
+it("serializes the authorized source and complete financial projections", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
@@ -87,6 +104,7 @@ it("overlaps independent Dashboard facts while retaining complete native project
             .bind(userId, userId),
         ])
       );
+      yield* Effect.tryPromise(() => seedDashboardSourceCaller({ db, userId }));
       const cost = observeRetentionCost(db);
       const observed = observeConcurrency(cost.database);
       const result = Option.getOrThrow(
@@ -102,8 +120,8 @@ it("overlaps independent Dashboard facts while retaining complete native project
       expect([...result.lists.values()]).toEqual([[]]);
       expect(result.budgets).toEqual([]);
       expect(result.groups.size).toBe(3);
-      expect(observed.maximum()).toBe(2);
-      expect(cost.roundTrips()).toBe(5);
+      expect(observed.maximum()).toBe(1);
+      expect(cost.roundTrips()).toBe(2);
     })
   ));
 
@@ -146,6 +164,7 @@ it("loads all daily chart intervals in bounded native batches without rereading 
             .bind(userId, userId),
         ])
       );
+      yield* Effect.tryPromise(() => seedDashboardSourceCaller({ db, userId }));
       const cost = observeRetentionCost(db);
       const original = defaultDocument();
       const result = Option.getOrThrow(
@@ -164,7 +183,7 @@ it("loads all daily chart intervals in bounded native batches without rereading 
       expect(
         [...result.groups.values()].flatMap((ranges) => ranges.map((range) => range.contributions))
       ).toEqual(Array.from({ length: 33 }, () => []));
-      expect(cost.roundTrips()).toBe(12);
+      expect(cost.roundTrips()).toBe(9);
     })
   ));
 
@@ -190,6 +209,7 @@ it.each(["revision", "consent"] as const)(
               .bind(userId, userId),
           ])
         );
+        yield* Effect.tryPromise(() => seedDashboardSourceCaller({ db, userId }));
         expect(
           Option.isSome(
             yield* loadDashboardFacts({
@@ -200,24 +220,7 @@ it.each(["revision", "consent"] as const)(
             })
           )
         ).toBe(true);
-        const session = "10000000-0000-4000-8000-000000000055";
-        if (change === "consent") {
-          const pairing = "10000000-0000-4000-8000-000000000054";
-          yield* Effect.tryPromise(() =>
-            db.batch([
-              db
-                .prepare(
-                  "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,user_id,state,created_at_ms,expires_at_ms) VALUES (?, 'BCDF-BBB1', ?, ?, 'consumed', 0, 600000)"
-                )
-                .bind(pairing, new Uint8Array(32), userId),
-              db
-                .prepare(
-                  "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES (?,?,?,?,0,600000,3600000,7776000000)"
-                )
-                .bind(session, pairing, userId, new Uint8Array(32)),
-            ])
-          );
-        }
+        const session = dashboardSourceCaller(userId).id;
         const services = yield* Effect.context<never>();
         let batches = 0;
         const changing = new Proxy(db, {

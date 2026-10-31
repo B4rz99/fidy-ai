@@ -2,8 +2,32 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "ae61d99556a7ff40e74381c56ca749a40a23f1ca773d06d21b84474c6aab36e4";
+const expectedEdgePolicyDigest = "6e2f2f12260150216d9c83a46fa5c19e3a29a87792c261ecd9c900667f6d8af2";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/user-documents/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/dashboard/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/dashboard/internal/dashboard-mutation.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/dashboard/internal/dashboard-view.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/categories/internal/projection.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/transactions/internal/dashboard-read.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/operations.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL(
       "../../apps/server/cloudflare/canonical-admission/internal/response-timing.ts",

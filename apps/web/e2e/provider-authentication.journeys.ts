@@ -1141,6 +1141,7 @@ const enterWhatsAppSignup = ({
     );
   });
 const nativeTimestampPrecisionMs = 1000;
+const nativeTimestampPollMilliseconds = 100;
 const nativeConfirmationSuccess = 200;
 const sendPreparedConfirmation = ({
   page,
@@ -1171,7 +1172,9 @@ const sendPreparedConfirmation = ({
     );
     // Native WhatsApp timestamps have one-second precision; cross the review boundary honestly.
     yield* Effect.tryPromise(() =>
-      expect.poll(elapsed).toBeGreaterThan(nativeTimestampPrecisionMs)
+      expect
+        .poll(elapsed, { intervals: [nativeTimestampPollMilliseconds] })
+        .toBeGreaterThan(nativeTimestampPrecisionMs)
     );
     const confirmation = yield* Effect.tryPromise(() =>
       request.post(

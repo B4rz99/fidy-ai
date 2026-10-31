@@ -1,0 +1,20 @@
+.patterns/effect-4-stable.md
+  s_d9571b3fccd032::t_d5428aca7249bf 71-72
+  s_d9571b3fccd032::t_1981ea5ae02911 73-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "45d8144fa147d3a27e82eeee62f7f2c112f222f7",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

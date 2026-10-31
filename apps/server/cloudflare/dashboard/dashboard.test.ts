@@ -644,7 +644,7 @@ it("rejects a substituted query target, mutation id or foreign User admission be
     })
   ));
 
-type QueryFault = "revoked" | "withdrawn" | "audit-failed";
+type QueryFault = "revoked" | "withdrawn" | "audit-failed" | "audit-ignored";
 const assertQueryRefusal = Effect.fn(function* ({
   reply,
   http,
@@ -687,10 +687,10 @@ const queryFault = ({
           .bind(sessions[0])
           .run();
   }
-  if (fault === "audit-failed") {
+  if (fault === "audit-failed" || fault === "audit-ignored") {
     return db
       .prepare(
-        `CREATE TRIGGER refuse_query_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type = '${pat ? "credential_call" : "session_call"}' BEGIN SELECT RAISE(ABORT, 'test_unavailable'); END`
+        `CREATE TRIGGER refuse_query_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type = '${pat ? "credential_call" : "session_call"}' BEGIN SELECT ${fault === "audit-ignored" ? "RAISE(IGNORE)" : "RAISE(ABORT, 'test_unavailable')"}; END`
       )
       .run();
   }
@@ -812,7 +812,7 @@ const queryReleaseFailure = Effect.fnUntraced(function* ({
   ).toEqual({ last_used_at_ms: null });
 });
 
-for (const fault of ["revoked", "withdrawn", "audit-failed"] as const) {
+for (const fault of ["revoked", "withdrawn", "audit-failed", "audit-ignored"] as const) {
   for (const caller of [
     { pat: false, http: false },
     { pat: false, http: true },
@@ -1859,6 +1859,7 @@ it("keeps the complete browser Dashboard journey within five fresh recovery-fenc
       );
       expect(observed.roundTrips()).toBe(5);
       expect(generationReads).toBe(5);
+      expect(observed.cost().rowsWritten).toBeLessThanOrEqual(19);
     })
   ));
 

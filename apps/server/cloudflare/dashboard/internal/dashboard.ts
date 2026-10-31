@@ -1,4 +1,3 @@
-import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Data, Effect, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
@@ -68,7 +67,8 @@ export const accountQuery = ({
             )
           : []),
         audit,
-        prepareChangedRowAssertion({ db, scope: "dashboard" }),
+        // Abort the batch on a missing Audit without writing a persistent assertion slot.
+        db.prepare("SELECT json(CASE WHEN changes() = 1 THEN 'true' ELSE '' END) AS accepted"),
       ]);
     },
     catch: () => new DashboardUnavailable(),

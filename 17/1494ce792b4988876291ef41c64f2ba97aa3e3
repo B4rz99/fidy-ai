@@ -1,0 +1,19 @@
+apps/web/e2e/workspace-requests.spec.ts
+  s_49a6ea3dcec880::t_cdc272d7e9e3ee 35-38,65,89,101,322
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "171494ce792b4988876291ef41c64f2ba97aa3e3",
+  "prompts": {},
+  "sessions": {
+    "s_49a6ea3dcec880": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19320-20ee-7781-841c-5837c27b9d8f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

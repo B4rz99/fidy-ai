@@ -8,10 +8,10 @@
     "qs": "6.16.1"
   },
   "devDependencies": {
-    "@stryker-mutator/api": "10.0.0",
-    "@stryker-mutator/core": "10.0.0",
-    "@stryker-mutator/instrumenter": "10.0.0",
-    "@stryker-mutator/vitest-runner": "10.0.0",
+    "@stryker-mutator/api": "10.1.1",
+    "@stryker-mutator/core": "10.1.1",
+    "@stryker-mutator/instrumenter": "10.1.1",
+    "@stryker-mutator/vitest-runner": "10.1.1",
     "ajv": "8.20.0",
     "mutation-testing-report-schema": "3.9.0",
     "typescript": "6.0.3",
@@ -27,7 +27,7 @@
     "zod": "4.6.7"
   },
   "patchedDependencies": {
-    "@stryker-mutator/vitest-runner@10.0.0": "patches/@stryker-mutator%2Fvitest-runner@10.0.0.patch",
-    "@stryker-mutator/instrumenter@10.0.0": "patches/@stryker-mutator%2Finstrumenter@10.0.0.patch"
+    "@stryker-mutator/vitest-runner@10.1.1": "patches/@stryker-mutator%2Fvitest-runner@10.1.1.patch",
+    "@stryker-mutator/instrumenter@10.1.1": "patches/@stryker-mutator%2Finstrumenter@10.1.1.patch"
   }
 }

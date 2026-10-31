@@ -24,8 +24,8 @@
     {
       "name": "jsdom",
       "manifest": "apps/web/package.json",
-      "reason": "jsdom 30.1.3 still breaks the Vitest 5.0.5 jsdom worker environment: its Window addEventListener rejects Vitest's Window proxy as an invalid EventTarget. Reproduced on 2026-10-24 UTC with the pinned Bun runtime and the normal web unit command: 197 tests passed but six jsdom workers failed before executing, exiting with status 1. Keep 30.0.1 until the integration is fixed; rerun the normal web unit and browser checks before updating. Trial evidence: /tmp/fidy-dep-web-unit.log.",
-      "until": "2026-10-31T00:00:00Z"
+      "reason": "Revalidated on 2026-10-31 UTC: jsdom 30.1.3 with Vitest 5.0.5 still rejects the worker Window proxy as an invalid EventTarget in addEventListener. The normal web unit command exits 1: 272 tests pass but seven jsdom workers fail before running. Restoring 30.0.1 retains the complete suite. Revisit after the jsdom/Vitest integration is corrected; rerun the normal unit and browser checks before upgrading. Trial evidence: /tmp/fidy-jsdom-3013-trial.log.",
+      "until": "2026-11-07T00:00:00Z"
     },
     {
       "name": "typescript",
@@ -48,8 +48,8 @@
     {
       "name": "@effect/tsgo",
       "manifest": "package.json",
-      "reason": "0.53.3 introduces 3,417 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the normal warning-failing project-reference build exits with status 2 and no TypeScript errors. Reproduced by normal installation and bun run typecheck with the pinned Bun runtime on 2026-10-24 UTC. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification. Trial evidence: /tmp/fidy-dep-tsgo-trial.log.",
-      "until": "2026-10-31T00:00:00Z"
+      "reason": "Revalidated on 2026-10-31 UTC: normally installing 0.56.1 and forcing the project-reference build exits 2 with 3,851 unstableApiUsage warnings for required Effect v4 APIs and six runEffectInsideEffect errors in existing server tests. Retain verified 0.46.1 without suppressing diagnostics. Revisit supported stable API replacements and isolated test execution before upgrading, then rerun installation, forced type checking and the complete unit suites. Trial evidence: /tmp/fidy-tsgo-0561-trial.log.",
+      "until": "2026-11-07T00:00:00Z"
     },
     {
       "name": "@effect/vitest",

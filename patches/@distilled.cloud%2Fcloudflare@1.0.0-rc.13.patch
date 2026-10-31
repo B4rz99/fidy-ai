@@ -45,3 +45,49 @@ index 476df346840cc07c836fd0ac517264d76d1b654b..324ce0e904a8967147c70bfd0d24f35c
      headSamplingRate: S.optional(
        S.NullOr(S.Number).pipe(T.Body("head_sampling_rate")),
      ),
+diff --git a/lib/protocol.js b/lib/protocol.js
+index dae791deddbf0ee88590d4783a3396ff718fc155..ac12b989d07bda59f34aecc71d359fe5ceaf2fa1 100644
+--- a/lib/protocol.js
++++ b/lib/protocol.js
+@@ -287,10 +287,13 @@ const makeDecode = (options) => ({ response, outputAst, errors: errorClasses, })
+         if (status >= 400 && status < 500) {
+             const StatusErrorClass = HTTP_STATUS_MAP[status];
+             if (StatusErrorClass) {
+-                return yield* fail(tagBlip(new StatusErrorClass({
++                const refusal = new StatusErrorClass({
+                     message: errorMessage,
+                     retryAfter: parseRetryAfterForStatus(status, headers),
+-                })));
++                });
++                // Generic HTTP classes omit provider fields; retain only the native numeric code.
++                if (typeof first?.code === "number") Object.assign(refusal, { code: first.code });
++                return yield* fail(tagBlip(refusal));
+             }
+         }
+         if (status >= 500) {
+diff --git a/src/protocol.ts b/src/protocol.ts
+index c9ddb060db4086ea8b906db45649fb3c65716e22..49ac5ad03e51cc63b0488979e247a08f66356dc2 100644
+--- a/src/protocol.ts
++++ b/src/protocol.ts
+@@ -424,14 +424,13 @@ const makeDecode =
+           const StatusErrorClass =
+             HTTP_STATUS_MAP[status as keyof typeof HTTP_STATUS_MAP];
+           if (StatusErrorClass) {
+-            return yield* fail(
+-              tagBlip(
+-                new StatusErrorClass({
+-                  message: errorMessage,
+-                  retryAfter: parseRetryAfterForStatus(status, headers),
+-                } as any),
+-              ),
+-            );
++            const refusal = new StatusErrorClass({
++              message: errorMessage,
++              retryAfter: parseRetryAfterForStatus(status, headers),
++            } as any);
++            // Generic HTTP classes omit provider fields; retain only the native numeric code.
++            if (typeof first?.code === "number") Object.assign(refusal, { code: first.code });
++            return yield* fail(tagBlip(refusal));
+           }
+         }
+         if (status >= 500) {

@@ -1,3 +1,4 @@
+import { RecurringOccurrenceColumns } from "@/ui/components/recurring-occurrence-columns";
 import { BigDecimal, DateTime } from "effect";
 import { type JSX, useState } from "react";
 import { ArrowDown01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
@@ -95,13 +96,7 @@ const DesktopItem = ({ item, open, categories, today, save, disabled }: ItemProp
 const DesktopList = ({ items, ...props }: ListProps): JSX.Element => (
   <div className="hidden @min-5xl:block">
     <Table layout="fixed">
-      <colgroup>
-        <col className="w-3/12" />
-        <col className="w-1/12" />
-        <col className="w-2/12" />
-        <col className="w-3/12" />
-        <col className="w-3/12" />
-      </colgroup>
+      <RecurringOccurrenceColumns />
       <TableHeader>
         <TableRow>
           {["Recurrente", "Fecha", "Cuenta de pago", "Categoría", "Importe"].map((label) => (

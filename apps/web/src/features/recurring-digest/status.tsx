@@ -1,5 +1,6 @@
+import { ReportSkeleton } from "@/ui/components/report-loading";
 import type { JSX, ReactNode } from "react";
-import { Alert02Icon, Clock01Icon } from "@hugeicons/core-free-icons";
+import { Alert02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription } from "@/ui/components/alert";
@@ -58,19 +59,4 @@ export const ReportRefreshFailure = ({ onRetry, waiting }: RetryProps): JSX.Elem
   </div>
 );
 
-export const ReportLoading = (): JSX.Element => (
-  <div className="recurring-report-loading">
-    <output>
-      <span className="recurring-report-state-icon" aria-hidden="true">
-        <HugeiconsIcon icon={Clock01Icon} size={24} />
-      </span>
-      Cargando informe…
-    </output>
-    <div className="recurring-report-skeleton" aria-hidden="true">
-      <span />
-      <span />
-      <span />
-      <span />
-    </div>
-  </div>
-);
+export const ReportLoading = (): JSX.Element => <ReportSkeleton />;

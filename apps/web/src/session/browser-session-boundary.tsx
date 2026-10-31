@@ -156,8 +156,10 @@ const observeBinding = ({
 export const BrowserSessionBoundary = ({
   apiOrigin,
   initial,
+  pending,
   children,
 }: Readonly<{
+  pending: ReactNode;
   apiOrigin: string;
   initial: InitialBrowserSession;
   children: (session: BrowserSessionLifetime, initial: BrowserSessionObservation) => ReactNode;
@@ -181,15 +183,16 @@ export const BrowserSessionBoundary = ({
       }),
     [apiOrigin, initial, owner, expireAuthentication]
   );
+  const pendingContent = failed ? (
+    <p role="alert">No pudimos comprobar tu sesión. Recarga para continuar.</p>
+  ) : (
+    pending
+  );
   return (
     <>
       <span hidden ref={attach} />
       {Option.isNone(state) ? (
-        <p role={failed ? "alert" : "status"}>
-          {failed
-            ? "No pudimos comprobar tu sesión. Recarga para continuar."
-            : "Comprobando sesión…"}
-        </p>
+        pendingContent
       ) : (
         <div inert={state.value.checking} hidden={state.value.checking}>
           {children(state.value.session, state.value.initial)}

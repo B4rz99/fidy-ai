@@ -1,3 +1,4 @@
+import { SubscriptionIntroduction } from "@/ui/components/subscription-introduction";
 import { useAtomSet } from "@effect/atom-react";
 import { InformationCircleIcon, SquareLock02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -50,12 +51,7 @@ const DocumentForm = ({
 }>): JSX.Element => (
   <fieldset className="subscription-document-fields" disabled={disabled}>
     <legend className="sr-only">Cédula de ciudadanía y número de DaviPlata</legend>
-    <div>
-      <h3 className="subscription-form-heading">Datos de autorización</h3>
-      <p className="subscription-form-description">
-        Completa tus datos para continuar con la autorización en DaviPlata a través de Wompi.
-      </p>
-    </div>
+    <SubscriptionIntroduction method="daviplata" />
     <label className="subscription-field" htmlFor="daviplata-document">
       Número de cédula
       <Input

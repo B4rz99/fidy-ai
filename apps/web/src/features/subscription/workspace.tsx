@@ -1,3 +1,4 @@
+import { SubscriptionStandingSkeleton } from "@/ui/components/subscription-loading";
 import {
   Cancel01Icon,
   CreditCardIcon,
@@ -15,7 +16,6 @@ import type { JSX, ReactNode } from "react";
 import type { EnrollmentMethod, SubscriptionStatus } from "@/transport/client";
 import { formatMoneyWithCompactCode } from "@/transport/money";
 import { Button } from "@/ui/components/button";
-import { Skeleton } from "@/ui/components/skeleton";
 import {
   Table,
   TableBody,
@@ -299,7 +299,7 @@ export const SubscriptionStandingView = ({
   state,
   onRetry,
 }: Readonly<{ state: StandingViewState; onRetry: () => void }>): JSX.Element => {
-  if (state._tag === "Initial") return <Skeleton className="h-24 w-full" />;
+  if (state._tag === "Initial") return <SubscriptionStandingSkeleton />;
   if (state._tag === "Failure") {
     return (
       <PaymentFeedback tone="unavailable" title="Estado no disponible">

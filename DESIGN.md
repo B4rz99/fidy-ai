@@ -370,6 +370,12 @@ Place helper text and errors beside the affected field. A placeholder is an exam
 not a replacement for its label. Focus has a visible contrasting outline.
 
 Loading preserves the control's dimensions and identifies the action in progress.
+Pending data and view code use a skeleton matching the destination's rows, fields, panels or
+figures, rather than a separate text-only loading page. Keep already loaded information visible
+during background refreshes; append pagination skeletons below existing rows. Skeletons are
+non-interactive, retain a screen-reader loading status and respect reduced motion. Submission,
+payment settlement and external approval retain their action-specific feedback; errors and empty
+results keep their distinct recovery and explanation.
 Disabled controls remain readable and explain unavailable actions when necessary.
 Destructive actions (deactivation, revocation, deletion, unlinking, reversal, stopping or pausing
 tracking) use the shared `Button` destructive variant, including the action that opens a confirmation.

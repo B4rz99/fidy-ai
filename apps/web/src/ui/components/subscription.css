@@ -306,7 +306,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 0.45fr) minmax(0, 0.3fr);
   gap: 30px 20px;
 }
-.subscription-card-fields > label:last-child {
+.subscription-card-fields > .subscription-field:last-child {
   grid-column: 1 / -1;
 }
 .subscription-consents {

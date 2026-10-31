@@ -1,3 +1,4 @@
+import { PairingRequestSkeleton } from "@/ui/components/settings-loading";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter, useSearch } from "@tanstack/react-router";
 import { Effect, Option, Schema } from "effect";
@@ -80,7 +81,7 @@ const PreselectedApproval = ({
     )
   );
   const result = useAtomValue(request).pipe(presentCanonicalQuery);
-  if (result._tag === "Initial") return <output>Cargando solicitud…</output>;
+  if (result._tag === "Initial") return <PairingRequestSkeleton />;
   if (result._tag === "Failure") {
     return (
       <div className="flex flex-col gap-4">

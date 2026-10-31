@@ -1,3 +1,4 @@
+import { DashboardCatalogSkeleton } from "@/ui/components/dashboard-loading";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Option } from "effect";
 import type { AsyncResult } from "effect/reactivity";
@@ -71,7 +72,7 @@ const DashboardQueryNotice = <E,>({
 }>): JSX.Element => (
   <>
     {state.waiting ? (
-      <p className="m-4 text-sm text-muted-foreground" aria-live="polite">
+      <p className="sr-only" aria-live="polite">
         Actualizando tablero…
       </p>
     ) : null}
@@ -101,16 +102,7 @@ const CatalogQueryNotice = <E,>({
     state._tag === "Failure" || (state._tag === "Ready" && Option.isSome(state.refreshFailure));
   return (
     <>
-      {state._tag === "Initial" && !state.waiting ? (
-        <p className="m-4 text-sm text-muted-foreground">
-          El catálogo del tablero aún no se ha solicitado.
-        </p>
-      ) : null}
-      {state.waiting ? (
-        <p className="m-4 text-sm text-muted-foreground" aria-live="polite">
-          Cargando catálogo del tablero…
-        </p>
-      ) : null}
+      {state._tag === "Initial" ? <DashboardCatalogSkeleton /> : null}
       {failed ? (
         <Button
           className="m-4"
@@ -151,19 +143,11 @@ const DashboardLoadNotice = ({
     case "reading":
       return <></>;
     case "initializing":
-      return (
-        <p aria-live="polite">
-          {waiting ? "Inicializando tablero…" : "No pudimos inicializar el tablero."}
-        </p>
-      );
+      if (waiting) return <></>;
+      return <p aria-live="polite">No pudimos inicializar el tablero.</p>;
     case "reading-initialized":
-      return (
-        <p aria-live="polite">
-          {waiting
-            ? "Leyendo el tablero inicializado…"
-            : "El tablero se inicializó, pero no pudimos leerlo."}
-        </p>
-      );
+      if (waiting) return <></>;
+      return <p aria-live="polite">El tablero se inicializó, pero no pudimos leerlo.</p>;
   }
 };
 

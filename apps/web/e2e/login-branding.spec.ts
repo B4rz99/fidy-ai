@@ -37,7 +37,9 @@ test("signup waits for Consent and clears acceptance when returning to login", (
         page.getByRole("button", { name: "Crea tu cuenta", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("Cargando información de Consentimiento…")).toBeVisible()
+        expect(
+          page.getByRole("status", { name: "Cargando información de Consentimiento", exact: true })
+        ).toHaveAttribute("aria-busy", "true")
       );
       yield* Effect.tryPromise(() => expectProvidersAvailable(page, false));
       yield* Effect.tryPromise(disclosure.release);

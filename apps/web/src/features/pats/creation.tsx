@@ -1,3 +1,4 @@
+import { PATCreationSkeleton } from "@/ui/components/settings-loading";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Option } from "effect";
 import { type JSX, type RefCallback, useCallback, useRef, useState } from "react";
@@ -52,6 +53,12 @@ const ResumedPATCreation = (props: CreationProps): JSX.Element => {
       </div>
     );
   }
-  if (Option.isNone(draft)) return <output ref={mounted}>Comprobando tu identidad…</output>;
+  if (Option.isNone(draft)) {
+    return (
+      <div ref={mounted}>
+        <PATCreationSkeleton />
+      </div>
+    );
+  }
   return <FreshPATCreation {...props} initialDraft={draft.value} />;
 };

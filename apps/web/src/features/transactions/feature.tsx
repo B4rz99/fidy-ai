@@ -12,7 +12,7 @@ import { PrivacyTransactions } from "./privacy-view";
 import { TransactionCorrectionContext } from "./correction-context";
 import { type TransactionCorrections, makeTransactionCorrections } from "./corrections";
 import type { JSX, ReactNode } from "react";
-import { Skeleton } from "@/ui/components/skeleton";
+import { TransactionsSkeleton } from "@/ui/components/transaction-loading";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import { type HistoryState, transactionHistory } from "./history";
@@ -54,13 +54,6 @@ export type TransactionPageState =
       onRetry: () => void;
       waiting: boolean;
     }>;
-const LoadingTransactions = (): JSX.Element => (
-  <section className="flex flex-col gap-3" aria-label="Cargando transacciones" aria-live="polite">
-    <Skeleton className="h-20 w-full" />
-    <Skeleton className="h-20 w-full" />
-    <Skeleton className="h-20 w-full" />
-  </section>
-);
 const QueryError = ({
   boundary,
   onRetry,
@@ -108,9 +101,8 @@ const TransactionPageContent = ({
 }>): JSX.Element => {
   switch (state._tag) {
     case "Initial":
-      return <p className="text-muted-foreground">La consulta aún no se ha iniciado.</p>;
     case "Loading":
-      return <LoadingTransactions />;
+      return <TransactionsSkeleton readOnly={false} notice={null} />;
     case "CanonicalError":
     case "BoundaryError":
       return (
@@ -126,15 +118,20 @@ export const TransactionListView = ({
   state,
 }: Readonly<{
   state: TransactionPageState;
-}>): JSX.Element => (
-  <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-    <header className="flex flex-col gap-2">
-      <h1 className="font-heading text-3xl font-semibold tracking-tight">Transacciones</h1>
-      <p className="text-muted-foreground">Movimientos del mes actual.</p>
-    </header>
-    <TransactionPageContent state={state} />
-  </main>
-);
+}>): JSX.Element =>
+  state._tag === "Initial" || state._tag === "Loading" ? (
+    <main>
+      <TransactionsSkeleton readOnly={false} notice={null} />
+    </main>
+  ) : (
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
+      <header className="flex flex-col gap-2">
+        <h1 className="font-heading text-3xl font-semibold tracking-tight">Transacciones</h1>
+        <p className="text-muted-foreground">Movimientos del mes actual.</p>
+      </header>
+      <TransactionPageContent state={state} />
+    </main>
+  );
 const FailedTransactionQuery = ({
   boundary,
   onRetry,
@@ -462,7 +459,7 @@ const CurrentUserQuery = ({
       return (
         <>
           {state.waiting ? (
-            <p aria-live="polite" className="text-sm text-muted-foreground">
+            <p aria-live="polite" className="sr-only">
               Actualizando perfil de transacciones…
             </p>
           ) : null}

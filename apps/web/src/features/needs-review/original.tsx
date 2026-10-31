@@ -1,3 +1,4 @@
+import { TextSkeleton } from "@/ui/components/loading-skeletons";
 import { reviewMaterialQuery } from "./material-query";
 import { useReviewExpired } from "./expiry";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
@@ -54,6 +55,12 @@ const RetainedMaterial = ({
   const query = useMaterialQuery(item);
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
+  const unavailable =
+    state._tag === "Failure" ? (
+      <p className="text-sm text-muted-foreground">No pudimos cargar el original.</p>
+    ) : (
+      <TextSkeleton label="Cargando original" lines={6} />
+    );
   return (
     <details open data-review="original">
       <summary>
@@ -61,13 +68,7 @@ const RetainedMaterial = ({
         <HugeiconsIcon icon={ArrowDown01Icon} size={16} aria-hidden="true" />
       </summary>
       <div data-review="original-body">
-        {state._tag === "Ready" ? (
-          <MaterialBody material={state.value.data} />
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {state._tag === "Failure" ? "No pudimos cargar el original." : "Cargando original…"}
-          </p>
-        )}
+        {state._tag === "Ready" ? <MaterialBody material={state.value.data} /> : unavailable}
         {state._tag === "Failure" ? (
           <Button type="button" variant="outline" onClick={refresh}>
             Reintentar original

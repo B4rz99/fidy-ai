@@ -12,6 +12,7 @@ export default defineConfig({
   test: {
     environment: "node",
     clearMocks: true,
+    maxWorkers: 4,
     // Vitest 5's failure for unawaited asynchronous assertions is deliberate: assertion failures
     // must remain attached to their owning test.
     include: ["src/**/*.test.ts", "cloudflare/**/*.test.ts", "scripts/**/*.test.ts"],

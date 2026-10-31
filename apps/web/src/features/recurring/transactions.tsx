@@ -1,3 +1,4 @@
+import { SelectionListSkeleton } from "@/ui/components/loading-skeletons";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
@@ -54,7 +55,7 @@ const TransactionPage = ({ choose, disabled, cursor, next }: PageProps): JSX.Ele
       </Button>
     );
   }
-  if (state._tag !== "Ready") return <output>Cargando transacciones…</output>;
+  if (state._tag !== "Ready") return <SelectionListSkeleton label="Cargando transacciones" />;
   const blocked = disabled || state.waiting;
   return (
     <TransactionResults

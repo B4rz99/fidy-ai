@@ -1,3 +1,4 @@
+import { expectSameLoadingFrame, measureLoadingFrame } from "./loading-geometry";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { acceptSubscriptionContracts } from "./subscription-interactions";
 import { PaymentEnrollmentId, ResourceLimited } from "@fidy/server/client";
@@ -467,11 +468,18 @@ test("renders loading until the real Core answers Transactions", ({ page, reques
       yield* fromPlaywright(reloadTransactionsThroughCore(page));
       yield* fromPlaywright(
         expect(
-          page.getByRole("region", {
+          page.getByRole("status", {
             name: "Cargando transacciones",
           })
         ).toBeVisible()
       );
+      const frameParts = [
+        "transaction-page-header",
+        "transaction-columns",
+        "transaction-records",
+        "transaction-context-panel",
+      ].map((slot) => ({ name: slot, selector: `[data-transaction-slot="${slot}"]` }));
+      const loadingFrame = yield* fromPlaywright(measureLoadingFrame(page, frameParts));
       yield* fromPlaywright(held.received);
       // Observe logical success after any bounded native-admission retries.
       const completed = page.waitForResponse(
@@ -482,11 +490,13 @@ test("renders loading until the real Core answers Transactions", ({ page, reques
       yield* fromPlaywright(completed);
       yield* fromPlaywright(
         expect(
-          page.getByRole("region", {
+          page.getByRole("status", {
             name: "Cargando transacciones",
           })
         ).toHaveCount(0)
       );
+      const loadedFrame = yield* fromPlaywright(measureLoadingFrame(page, frameParts));
+      expectSameLoadingFrame(loadingFrame, loadedFrame);
     }).pipe(Effect.ensuring(Effect.sync(() => release.resolve())))
   );
 });

@@ -1,8 +1,7 @@
 diff --git a/dist/src/transformers/babel-transformer.js b/dist/src/transformers/babel-transformer.js
-index 494e3064201511f9e9658b87e0311fa0f626d0f6..ea48f1649a9513cfce38e6ee925a20dbaee274dd 100644
 --- a/dist/src/transformers/babel-transformer.js
 +++ b/dist/src/transformers/babel-transformer.js
-@@ -173,7 +173,19 @@ export const transformBabel = ({ root, originFileName, rawContent, offset }, mut
+@@ -173,7 +173,19 @@
       */
      function collectMutants(path) {
          return [...mutate(path)]

@@ -421,6 +421,9 @@ const integratedThemeJourney = (page: Page): Journey =>
     yield* wait(() => page.goto("/app/transactions"));
     const theme = page.getByRole("button", { name: "Activar tema oscuro", exact: true });
     yield* wait(() => expect(theme).toBeVisible());
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
+    );
     const header = yield* wait(() =>
       page.locator('[data-transaction-slot="transaction-page-header"]').boundingBox()
     );

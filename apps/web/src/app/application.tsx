@@ -1,3 +1,4 @@
+import { ApplicationSkeleton } from "@/ui/components/application-loading";
 import type { InitialBrowserSession } from "@/transport/initial-session";
 import { BrowserSessionBoundary } from "@/session/browser-session-boundary";
 import { useAtomValue } from "@effect/atom-react";
@@ -33,7 +34,13 @@ const BoundApplication = ({
 }>): JSX.Element => {
   const loaded = useAtomValue(applicationCode);
   if (AsyncResult.isFailure(loaded)) throw new ApplicationCodeUnavailable();
-  if (!AsyncResult.isSuccess(loaded)) return <output>Cargando…</output>;
+  if (!AsyncResult.isSuccess(loaded)) {
+    return (
+      <ApplicationSkeleton
+        surface={window.location.pathname === "/login" ? "access" : "application"}
+      />
+    );
+  }
   return Result.match(loaded.value, {
     onSuccess: (module) => (
       <module.BoundApplication apiOrigin={apiOrigin} session={session} initial={initial} />
@@ -48,7 +55,15 @@ const RoutedApplication = ({
 }: Readonly<{ initial: InitialBrowserSession }>): JSX.Element => {
   const apiOrigin = parseApiOrigin(import.meta.env.VITE_API_ORIGIN);
   return (
-    <BrowserSessionBoundary apiOrigin={apiOrigin} initial={initial}>
+    <BrowserSessionBoundary
+      apiOrigin={apiOrigin}
+      initial={initial}
+      pending={
+        <ApplicationSkeleton
+          surface={window.location.pathname === "/login" ? "access" : "application"}
+        />
+      }
+    >
       {(session, observation) => (
         <BoundApplication apiOrigin={apiOrigin} session={session} initial={observation} />
       )}

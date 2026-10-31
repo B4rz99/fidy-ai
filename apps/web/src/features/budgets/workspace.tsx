@@ -1,7 +1,7 @@
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Alert, AlertDescription } from "@/ui/components/alert";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
-import "./layout.css";
+import "@/ui/components/budget-layout.css";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowDown01Icon,

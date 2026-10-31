@@ -8,8 +8,8 @@ export const ReportSkeleton = (): JSX.Element => (
     <div className="recurring-report-columns">
       <div className="recurring-report-main">
         <section className="recurring-report-heading">
-          <Skeleton className="size-[58px] shrink-0 rounded-full" />
-          <div className="grid gap-[6px]">
+          <Skeleton className="settings-section-icon size-[58px] shrink-0 rounded-full" />
+          <div className="grid min-w-0 gap-[6px]">
             <Skeleton className="h-[31px] w-56" />
             <Skeleton className="h-[21px] w-72 max-w-full" />
           </div>

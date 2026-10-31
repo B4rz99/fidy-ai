@@ -1,0 +1,43 @@
+scripts/cli-release/build.sh
+  s_d9571b3fccd032::t_82a25b78d0b2ee 3
+apps/cli/src/credential/runtime.ts
+  s_d9571b3fccd032::t_82a25b78d0b2ee 13
+package.json
+  s_d9571b3fccd032::t_82a25b78d0b2ee 106
+docs/research/bun-1-4-4-runtime-compatibility-2026-10-31.md
+  s_d9571b3fccd032::t_0b740375a3309b 125-130
+  s_d9571b3fccd032::t_891abef35ae27a 1-124
+.github/actions/bun-runtime/action.yml
+  s_d9571b3fccd032::t_82a25b78d0b2ee 8
+apps/cli/src/command/internal/presentation.ts
+  s_d9571b3fccd032::t_82a25b78d0b2ee 19
+scripts/install-bun.sh
+  s_d9571b3fccd032::t_82a25b78d0b2ee 6-11,14,18,44
+docs/operations/support-recovery.md
+  s_d9571b3fccd032::t_82a25b78d0b2ee 75
+apps/cli/ARCHITECTURE.md
+  s_d9571b3fccd032::t_82a25b78d0b2ee 16-17,44-50,100
+scripts/cli-release/BUN-NOTICES.md
+  s_d9571b3fccd032::t_82a25b78d0b2ee 21,23-47,51,78
+  s_d9571b3fccd032::t_79788600c65588 22,48-50,52-77
+apps/cli/src/support-recovery/FEATURE.md
+  s_d9571b3fccd032::t_82a25b78d0b2ee 29
+scripts/cli-release/notices.py
+  s_d9571b3fccd032::t_82a25b78d0b2ee 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ef69d41d2ff70dd186039654924262474e8ec46b",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

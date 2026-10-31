@@ -1,0 +1,70 @@
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_d9571b3fccd032::t_97c7389cddf8ed 1830,1861
+  s_d9571b3fccd032::t_b1cd4bfb662030 382,388-390,400,1860
+apps/server/cloudflare/categories/operations.ts
+  s_d9571b3fccd032::t_679a19ef583550 2,9,20,24,36-42
+  s_d9571b3fccd032::t_67a739efd4a2e2 43
+apps/server/cloudflare/categories/internal/projection.ts
+  s_d9571b3fccd032::t_f1627d9e7aef27 7-19
+apps/server/cloudflare/dashboard/internal/dashboard-mutation.ts
+  s_d9571b3fccd032::t_f391ac7dd1aa55 286,297-298,303-304
+  s_d9571b3fccd032::t_73b947312ecbce 4,26,119,137,140-142,147-169,173-174,176,187-188,192-193,197-199
+  s_d9571b3fccd032::t_b1cd4bfb662030 291-295
+  s_d9571b3fccd032::t_b2f03faa882fdf 7
+apps/server/cloudflare/dashboard/operations.ts
+  s_d9571b3fccd032::t_679a19ef583550 290-296,311,320
+  s_d9571b3fccd032::t_73b947312ecbce 308-310,319
+apps/server/cloudflare/user-documents/operations.ts
+  s_d9571b3fccd032::t_679a19ef583550 15-30,70,73-75
+  s_d9571b3fccd032::t_b1cd4bfb662030 2-6
+  s_d9571b3fccd032::t_f1627d9e7aef27 1,10-14,31-69,71-72,76-83
+infra/cloudflare/verify-edge-policy.ts
+  s_d9571b3fccd032::t_626caed12e9d02 7-30
+  s_d9571b3fccd032::t_8e95fe099500f3 5
+apps/server/cloudflare/dashboard/internal/dashboard-snapshot.test.ts
+  s_d9571b3fccd032::t_1b49ef94be8e52 3-7
+  s_d9571b3fccd032::t_88938516c7cecf 8,87-90,94-98,100-101,103-107,111-112,115-136,138-142,145,147,150-185
+  s_d9571b3fccd032::t_022a6ef35c618a 91-93,99
+  s_d9571b3fccd032::t_b1cd4bfb662030 343-344
+  s_d9571b3fccd032::t_97c7389cddf8ed 12-13,80-81
+  s_49a6ea3dcec880::t_101eb842cc3ef3 1,102,108-110,113-114,137,143-144,146,148-149,186
+apps/server/cloudflare/dashboard/internal/dashboard-view.test.ts
+  s_d9571b3fccd032::t_97c7389cddf8ed 11,23-24,107,167
+  s_d9571b3fccd032::t_b1cd4bfb662030 87,123-124,186,212,223
+apps/server/cloudflare/dashboard/dashboard-read.test-fixture.ts
+  s_d9571b3fccd032::t_007c33130e3757 3,8,12,17-18,29-30
+  s_d9571b3fccd032::t_6050972efe2310 1,4-7,9-11,13-16,19-28,31
+  s_d9571b3fccd032::t_138ffd5e484f59 2
+docs/research/dashboard-authorized-snapshot-implementation-2026-10-31.md
+  s_d9571b3fccd032::t_7262b7cd205c54 1-32
+docs/research/dashboard-authorized-source-snapshot-2026-10-31.md
+  s_d9571b3fccd032::t_65b8d1e7714734 3-7
+docs/research/dashboard-default-snapshot-plan-2026-10-30.md
+  s_d9571b3fccd032::t_a8661dadc80df6 3-7
+docs/research/dashboard-next-source-composition-2026-10-31.md
+  s_d9571b3fccd032::t_3eed58856d74e4 3-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e9603ad69bca5fc7b87f1b5587f98cd4e39cc4df",
+  "prompts": {},
+  "sessions": {
+    "s_49a6ea3dcec880": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19320-20ee-7781-841c-5837c27b9d8f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

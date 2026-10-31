@@ -1,0 +1,91 @@
+apps/server/cloudflare/ai/adversarial-evaluation.test.ts
+  s_d9571b3fccd032::t_1d9e57fc2c8660 52,59
+apps/server/src/core/recurring-plans/contract.ts
+  s_d9571b3fccd032::t_0beca8f3aef5df 1,213-215
+  s_d9571b3fccd032::t_0609922cc8c63e 216
+apps/server/cloudflare/runtime/telemetry.test.ts
+  s_d9571b3fccd032::t_1d9e57fc2c8660 106,109
+apps/server/cloudflare/subscription/refund-support.test.ts
+  s_d9571b3fccd032::t_1d9e57fc2c8660 322,341,350
+tsconfig.base.json
+  s_d9571b3fccd032::t_14dcb339056eed 25-26
+apps/server/src/shell/operations/contract.ts
+  s_d9571b3fccd032::t_0beca8f3aef5df 2,68-70
+  s_d9571b3fccd032::t_109ec49e6e387c 71
+tools/mutation/patches/@stryker-mutator%2Fvitest-runner@10.1.1.patch
+  s_d9571b3fccd032::t_1d9e57fc2c8660 4-37
+apps/server/src/shell/browser-login/contract.ts
+  s_d9571b3fccd032::t_0beca8f3aef5df 30-33,51-54,113-116,119-122,140-146,149-151
+  s_d9571b3fccd032::t_c05147242807ee 7
+  s_d9571b3fccd032::t_fce95891ff3a6e 152
+apps/server/src/shell/email-authentication/contract.ts
+  s_d9571b3fccd032::t_0beca8f3aef5df 2,62-82,85-88,149-154,156-162,164-170,172-178,180-182
+  s_d9571b3fccd032::t_c17e85dc4c155b 183-186
+infra/cloudflare/verify-edge-policy.ts
+  s_d9571b3fccd032::t_577be1a27a18c4 5
+apps/server/src/shell/tokens/contract.ts
+  s_d9571b3fccd032::t_0beca8f3aef5df 47-50,72-74,95-97,119-121,270-272,290-292,402-409,420-423,426-428
+  s_d9571b3fccd032::t_c05147242807ee 8
+  s_d9571b3fccd032::t_4f59035d873f50 429
+apps/server/src/shell/memory/contract.ts
+  s_d9571b3fccd032::t_0beca8f3aef5df 1,14-16
+  s_d9571b3fccd032::t_98b9b25a37ca50 17
+tools/mutation/README.md
+  s_d9571b3fccd032::t_14dcb339056eed 26
+apps/server/cloudflare/weekly-summary.test-fixture.ts
+  s_d9571b3fccd032::t_1d9e57fc2c8660 141-143
+apps/server/src/shell/public-http/contract.ts
+  s_d9571b3fccd032::t_0beca8f3aef5df 2,219-221,234-237,256-260,267-269,272-276,279-284,287-291,294,300-302,316,318
+  s_d9571b3fccd032::t_e1cf5aed98f27f 317
+apps/server/cloudflare/maintenance/monitoring-isolation.test.ts
+  s_d9571b3fccd032::t_1d9e57fc2c8660 68,84
+apps/server/src/shell/dashboard/contract.ts
+  s_d9571b3fccd032::t_0beca8f3aef5df 131
+  s_d9571b3fccd032::t_c05147242807ee 20
+  s_d9571b3fccd032::t_b72c4133dc93d0 129-130,132
+apps/server/cloudflare/insights/insight-store.test.ts
+  s_d9571b3fccd032::t_1d9e57fc2c8660 581-583
+apps/server/cloudflare/insights/proactivity-runtime.test.ts
+  s_d9571b3fccd032::t_1d9e57fc2c8660 158
+apps/server/src/shell/subscription/contract.ts
+  s_d9571b3fccd032::t_0beca8f3aef5df 1,126-129,132-135,138-141,144-147,150-153,156-159,170-172
+  s_d9571b3fccd032::t_eeaf479c75d63d 173
+apps/server/package.json
+  s_d9571b3fccd032::t_676556789070b4 310
+apps/web/package.json
+  s_d9571b3fccd032::t_afd1161b77b83c 56
+bun.lock
+  s_d9571b3fccd032::t_7fe23c09a36aa4 12,70,142,160,222,224,378,382,384,386,388,390,392,460,462,464,466,468,470,472,474,544,1318,1556,1646,2146,2236,2242
+infra/cloudflare/package.json
+  s_d9571b3fccd032::t_540a1af9d36e3f 20
+package.json
+  s_d9571b3fccd032::t_72ca4e87ad3ffa 66
+tools/astro/bun.lock
+  s_d9571b3fccd032::t_22934f9ae5f2bf 10,18,20,22,24,26,28,30,32,34,36,38,40,114,176-177
+tools/astro/package.json
+  s_d9571b3fccd032::t_6abf59f6c9c23b 10
+tools/mcp-inspector/bun.lock
+  s_d9571b3fccd032::t_2fd3accf71b039 8,19,21,325-330
+tools/mcp-inspector/package.json
+  s_d9571b3fccd032::t_01ebcf149e74a1 13
+tools/mutation/bun.lock
+  s_d9571b3fccd032::t_6577ec1660cdad 12-15,24-25,189,191,193,195,197
+tools/mutation/package.json
+  s_d9571b3fccd032::t_962c0236974ce0 11-14,30-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "54e1d919336263836ec6cefc9ab8bf7e89ae0b91",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

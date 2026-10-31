@@ -1,3 +1,27 @@
+diff --git a/dist/src/stryker-setup.js b/dist/src/stryker-setup.js
+--- a/dist/src/stryker-setup.js
++++ b/dist/src/stryker-setup.js
+@@ -65,7 +65,7 @@
+         nameParts.unshift(currentSuite.name);
+         currentSuite = currentSuite.suite;
+     }
+-    return nameParts.join(separator).trim();
++    return nameParts.filter(Boolean).join(separator);
+ }
+ function toRawTestId(test, separator) {
+     return `${test.file?.filepath ?? 'unknown.js'}#${collectTestName(test, separator)}`;
+diff --git a/dist/src/test-helpers.js b/dist/src/test-helpers.js
+--- a/dist/src/test-helpers.js
++++ b/dist/src/test-helpers.js
+@@ -16,7 +16,7 @@
+         nameParts.unshift(currentSuite.name);
+         currentSuite = currentSuite.suite;
+     }
+-    return nameParts.join(separator).trim();
++    return nameParts.filter(Boolean).join(separator);
+ }
+ export function toRawTestId(test, separator = VITEST_LEGACY_TEST_NAME_SEPARATOR) {
+     return `${test.file?.filepath ?? 'unknown.js'}#${collectTestName(test, separator)}`;
 diff --git a/dist/src/vitest-test-runner.js b/dist/src/vitest-test-runner.js
 --- a/dist/src/vitest-test-runner.js
 +++ b/dist/src/vitest-test-runner.js

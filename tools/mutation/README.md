@@ -23,12 +23,15 @@ selects covered tests instead of launching the entire suite for every mutant. Th
 mutation Vitest configuration isolates modules so instrumentation and coverage stay with
 the correct test file; ordinary core tests continue using their normal configuration.
 
-Stryker 10.1.1 selects Vitest 5's `>` separator for coverage and test-selection identities.
-Its upstream runner also preserves file-level collection errors. The remaining runner patch
-classifies a file-level failure caused by an active mutant as killed; an unmutated baseline
-failure still rejects the run. The regression exercises multiple files and nested suites,
-including module-initialization mutations. Asserted behavior must be killed and deliberately
-unasserted controls must survive, preventing inflated scores.
+Stryker 10.1.1 selects the installed Vitest version's test-name separator. The retained runner patch filters empty root suite names from both coverage and test-selection identities, preserving the greater-than separator used by Vitest 5. The upstream file-level error handling replaces the former local dry-run error patch.
+The runner regression mutates a small module across multiple test files and nested suites,
+including a mutation made during module initialization. It requires asserted behavior mutants
+to be killed and deliberately unasserted control mutants to survive, preventing inflated scores.
+
+The patch also retains Vitest file-level failures when module initialization prevents tests from
+being registered. Such a failure rejects the baseline run or kills the active mutant; it must
+not become a surviving mutant merely because the failed file contains no runnable test tasks.
+The regression uses an unmutated validator that throws when its mutated configuration is invalid.
 
 Some mutations preserve behavior for every valid domain input. For example, the monthly date
 projection's final ISO date bounds remove the injected `"Stryker was here"` array member;

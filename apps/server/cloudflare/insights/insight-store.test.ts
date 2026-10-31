@@ -578,11 +578,9 @@ effectIt.effect(
           )
           .run()
       );
-      yield* fromTestPromise(() =>
-        expect(
-          Effect.runPromiseExit(findInsightAttempt({ db, userId: users[0], id: event.id }))
-        ).resolves.toMatchObject({ _tag: "Failure" })
-      );
+      expect(
+        yield* Effect.exit(findInsightAttempt({ db, userId: users[0], id: event.id }))
+      ).toMatchObject({ _tag: "Failure" });
     })
 );
 

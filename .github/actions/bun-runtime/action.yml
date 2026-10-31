@@ -5,4 +5,4 @@ runs:
   steps:
     - name: Install checksum-verified Bun
       shell: bash
-      run: bash scripts/install-bun.sh "$RUNNER_TEMP/fidy-bun-13a98b0db"
+      run: bash scripts/install-bun.sh "$RUNNER_TEMP/fidy-bun-38afee6c8"

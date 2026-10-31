@@ -319,6 +319,7 @@ it("aborts the owned signing-key lookup when its request is cancelled without ca
     Effect.gen(function* () {
       const prepared = yield* setup();
       const assertion = yield* Effect.tryPromise(() => prepared.token("refund-permission"));
+      const runExit = Effect.runPromiseExitWith(yield* Effect.context<never>());
       const firstEntered = Promise.withResolvers<AbortSignal>();
       const secondEntered = Promise.withResolvers<AbortSignal>();
       const firstReply = Promise.withResolvers<Response>();
@@ -337,7 +338,7 @@ it("aborts the owned signing-key lookup when its request is cancelled without ca
         else secondEntered.resolve(incoming.signal);
         return reply.promise;
       });
-      const first = Effect.runPromiseExit(
+      const first = runExit(
         Effect.tryPromise(() =>
           handleRefundSupport({
             request: new Request(request(assertion), { signal: controller.signal }),
@@ -346,7 +347,7 @@ it("aborts the owned signing-key lookup when its request is cancelled without ca
         )
       );
       const firstSignal = yield* Effect.tryPromise(() => firstEntered.promise);
-      const second = Effect.runPromiseExit(
+      const second = runExit(
         Effect.tryPromise(() =>
           handleRefundSupport({ request: request(assertion), environment: prepared.environment })
         )

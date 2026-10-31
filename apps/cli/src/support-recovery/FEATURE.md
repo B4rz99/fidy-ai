@@ -26,7 +26,7 @@ claimant proof entry. The CLI reported approval; the original pairing browser re
 Transactions and retained authenticated access after reload. No secret was copied into evidence.
 
 Use the repository's pinned Bun executable directly when the shell PATH contains another Bun:
-`/Users/obarbozaa/.fidy/bun-13a98b0db/bun apps/cli/src/main.ts support-recovery`.
+`/Users/obarbozaa/.fidy/bun-38afee6c8/bun apps/cli/src/main.ts support-recovery`.
 Enter the public reference from the open pairing tab first, then the saved recovery code at the
 second hidden prompt. Cloudflare Access success alone authenticates the operator.
 

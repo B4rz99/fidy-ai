@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { type Brand, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api";
 import { Memory, MemoryId, RecallOutput, RememberInput, ReviseInput } from "~/core/memory/contract";
 import {
@@ -11,9 +11,10 @@ import {
 } from "~/shell/public-http/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 /** Declared content-free failure when a Memory write would exceed aggregate capacity. */
-export class MemoryCapacityExceededApi extends Schema.Error<MemoryCapacityExceededApi>(
-  "MemoryCapacityExceededApi"
-)(
+export class MemoryCapacityExceededApi extends Schema.Error<
+  MemoryCapacityExceededApi,
+  Brand.Brand<"MemoryCapacityExceededApi">
+>("MemoryCapacityExceededApi")(
   {
     _tag: Schema.tagDefaultOmit("MemoryCapacityExceededApi"),
     error: Schema.Struct({

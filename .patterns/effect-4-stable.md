@@ -68,6 +68,13 @@ available at `https://unpkg.com/effect@4.0.6/src/<module>.ts` and
   Apply phases through the public SDK; actual-engine fixture tests cover tracked generations,
   dependency ordering and refusal before mutation. Import success is not live deployment parity.
 
+The compiler is @effect/tsgo 0.56.1. Its new
+[`unstableApiUsage`](https://github.com/Effect-TS/tsgo/blob/main/docs/rules/unstable-api-usage.md)
+notice is disabled because the deliberately adopted, integrity-locked Effect 4 platform modules
+still carry upstream unstable annotations. Existing error/suggestion/warning exit policies stay
+enabled; exact dependency pins and the owned contract/native gates remain the adoption policy.
+Schema error class brands use the published `Brand.Brand` type, not handwritten symbols.
+
 Stable package version does not mean every individual module is upstream marked stable.
 Keep exact pins, owned boundaries, focused behavior tests and the complete release gates.
 The completed migration’s verification and release evidence is recorded in

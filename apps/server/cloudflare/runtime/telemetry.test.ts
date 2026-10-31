@@ -103,9 +103,10 @@ it.effect(
 
 it.effect("preserves an interrupted Effect exit and projects one interrupted record", () =>
   Effect.gen(function* () {
+    const runExit = Effect.runPromiseExitWith(yield* Effect.context<never>());
     const records: TelemetryWorkRecord[] = [];
     const exit = yield* Effect.tryPromise(() =>
-      Effect.runPromiseExit(
+      runExit(
         observeWorkerExecution(Effect.interrupt, {
           environment: { RELEASE_GIT_SHA: "invalid" },
           telemetry: makeWorkerTelemetry((record) => {

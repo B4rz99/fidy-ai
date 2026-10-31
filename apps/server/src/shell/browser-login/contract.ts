@@ -4,7 +4,7 @@ import {
   StartedBrowserLoginPairing,
   browserLoginPollingIntervalSeconds,
 } from "~/core/browser-login/contract";
-import { Schema } from "effect";
+import { type Brand, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
@@ -27,7 +27,10 @@ export const browserLoginApprovalGenericMessage =
 
 /** Generic rejection for any public code that cannot be approved without revealing why. */
 export class BrowserLoginPairingApprovalRejected
-  extends Schema.Error<BrowserLoginPairingApprovalRejected>("BrowserLoginPairingApprovalRejected")(
+  extends Schema.Error<
+    BrowserLoginPairingApprovalRejected,
+    Brand.Brand<"BrowserLoginPairingApprovalRejected">
+  >("BrowserLoginPairingApprovalRejected")(
     {
       _tag: Schema.tagDefaultOmit("BrowserLoginPairingApprovalRejected"),
       error: Schema.Struct({
@@ -45,9 +48,10 @@ export class BrowserLoginPairingApprovalRejected
 
 /** Generic rejection carrying the stable delay before this User may try another code. */
 export class BrowserLoginPairingApprovalRateLimited
-  extends Schema.Error<BrowserLoginPairingApprovalRateLimited>(
-    "BrowserLoginPairingApprovalRateLimited"
-  )(
+  extends Schema.Error<
+    BrowserLoginPairingApprovalRateLimited,
+    Brand.Brand<"BrowserLoginPairingApprovalRateLimited">
+  >("BrowserLoginPairingApprovalRateLimited")(
     {
       _tag: Schema.tagDefaultOmit("BrowserLoginPairingApprovalRateLimited"),
       error: Schema.Struct({
@@ -106,14 +110,16 @@ const BrowserLoginUnavailableError = Schema.Struct({
 });
 
 /** Documented 429 shape; the handler adds Retry-After on its raw encoded response. */
-export class BrowserLoginRateLimitedApi extends Schema.Error<BrowserLoginRateLimitedApi>(
-  "BrowserLoginRateLimitedApi"
-)({ error: BrowserLoginUnavailableError }, { httpApiStatus: 429 }) {}
+export class BrowserLoginRateLimitedApi extends Schema.Error<
+  BrowserLoginRateLimitedApi,
+  Brand.Brand<"BrowserLoginRateLimitedApi">
+>("BrowserLoginRateLimitedApi")({ error: BrowserLoginUnavailableError }, { httpApiStatus: 429 }) {}
 
 /** Capacity exhaustion intentionally shares the generic public message. */
-export class BrowserLoginUnavailableApi extends Schema.Error<BrowserLoginUnavailableApi>(
-  "BrowserLoginUnavailableApi"
-)({ error: BrowserLoginUnavailableError }, { httpApiStatus: 503 }) {}
+export class BrowserLoginUnavailableApi extends Schema.Error<
+  BrowserLoginUnavailableApi,
+  Brand.Brand<"BrowserLoginUnavailableApi">
+>("BrowserLoginUnavailableApi")({ error: BrowserLoginUnavailableError }, { httpApiStatus: 503 }) {}
 
 /** Shared non-enumerating response body for temporarily unavailable browser login admission. */
 export const browserLoginUnavailableBody = Schema.encodeSync(
@@ -131,14 +137,19 @@ const BrowserLoginPairingInvalidError = Schema.Struct({
 });
 
 /** One non-enumerating public refusal for every invalid pairing proof and terminal state. */
-export class BrowserLoginPairingInvalidApi extends Schema.Error<BrowserLoginPairingInvalidApi>(
-  "BrowserLoginPairingInvalidApi"
-)({ error: BrowserLoginPairingInvalidError }, { httpApiStatus: 400 }) {}
+export class BrowserLoginPairingInvalidApi extends Schema.Error<
+  BrowserLoginPairingInvalidApi,
+  Brand.Brand<"BrowserLoginPairingInvalidApi">
+>("BrowserLoginPairingInvalidApi")(
+  { error: BrowserLoginPairingInvalidError },
+  { httpApiStatus: 400 }
+) {}
 
 /** Polling cadence refusal; the global response adapter derives Retry-After from this body. */
-export class BrowserLoginPollingRateLimitedApi extends Schema.Error<BrowserLoginPollingRateLimitedApi>(
-  "BrowserLoginPollingRateLimitedApi"
-)(
+export class BrowserLoginPollingRateLimitedApi extends Schema.Error<
+  BrowserLoginPollingRateLimitedApi,
+  Brand.Brand<"BrowserLoginPollingRateLimitedApi">
+>("BrowserLoginPollingRateLimitedApi")(
   {
     error: Schema.Struct({
       code: Schema.Literal("rate_limited"),

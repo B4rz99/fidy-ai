@@ -1,4 +1,4 @@
-import { BigDecimal, DateTime, Option, Schema } from "effect";
+import { BigDecimal, type Brand, DateTime, Option, Schema } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 
@@ -210,9 +210,10 @@ export type RecurringOccurrence = Omit<
   }> &
   Partial<Readonly<{ remaining: ReadonlyMoney }>>;
 
-export class InvalidRecurringEdit extends Schema.Error<InvalidRecurringEdit>(
-  "InvalidRecurringEdit"
-)({ message: Schema.String }) {}
+export class InvalidRecurringEdit extends Schema.Error<
+  InvalidRecurringEdit,
+  Brand.Brand<"InvalidRecurringEdit">
+>("InvalidRecurringEdit")({ message: Schema.String }) {}
 export const RecurringMatchFact = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   money: Money,

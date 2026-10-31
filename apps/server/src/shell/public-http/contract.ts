@@ -1,5 +1,5 @@
 import * as Arr from "effect/Array";
-import { Option, Schema } from "effect";
+import { type Brand, Option, Schema } from "effect";
 import { HttpApiMiddleware } from "effect/http-api";
 import {
   type CatalogOperation,
@@ -216,7 +216,9 @@ const unavailableTag = "Unavailable";
 const resourceLimitedTag = "ResourceLimited";
 
 /** A Free capability remains available, but its concrete monthly allowance is exhausted. */
-export class QuotaExhausted extends Schema.Error<QuotaExhausted>("QuotaExhausted")(
+export class QuotaExhausted extends Schema.Error<QuotaExhausted, Brand.Brand<"QuotaExhausted">>(
+  "QuotaExhausted"
+)(
   errorResponse(
     "QuotaExhausted",
     Schema.Struct({
@@ -229,7 +231,10 @@ export class QuotaExhausted extends Schema.Error<QuotaExhausted>("QuotaExhausted
 ) {}
 
 /** Invalid input with attributable field issues; encoding omits the internal _tag. */
-export class ValidationFailed extends Schema.Error<ValidationFailed>(validationFailedTag)(
+export class ValidationFailed extends Schema.Error<
+  ValidationFailed,
+  Brand.Brand<"ValidationFailed">
+>(validationFailedTag)(
   errorResponse(
     validationFailedTag,
     Schema.Struct({
@@ -248,55 +253,53 @@ export class ValidationFailed extends Schema.Error<ValidationFailed>(validationF
  * The request named no caller, or one that could not be resolved to a user.
  * Carries no suggested operation: nothing the API offers changes a PAT.
  */
-export class Unauthenticated extends Schema.Error<Unauthenticated>(unauthenticatedTag)(
-  errorResponse(unauthenticatedTag, detail("unauthenticated")),
-  {
-    httpApiStatus: 401,
-  }
-) {}
+export class Unauthenticated extends Schema.Error<Unauthenticated, Brand.Brand<"Unauthenticated">>(
+  unauthenticatedTag
+)(errorResponse(unauthenticatedTag, detail("unauthenticated")), {
+  httpApiStatus: 401,
+}) {}
 
 /**
  * The bearer is valid but does not grant the scope declared by the attempted operation. PAT
  * changes happen at `/settings/access`, outside this canonical API, so the failure carries no
  * suggested operation.
  */
-export class ScopeMissing extends Schema.Error<ScopeMissing>(scopeMissingTag)(
-  errorResponse(scopeMissingTag, detail("scope_missing")),
-  { httpApiStatus: 403 }
-) {}
+export class ScopeMissing extends Schema.Error<ScopeMissing, Brand.Brand<"ScopeMissing">>(
+  scopeMissingTag
+)(errorResponse(scopeMissingTag, detail("scope_missing")), { httpApiStatus: 403 }) {}
 
 /** The stable User has no current onboarding grant, so no canonical operation may run. */
-export class ConsentRequired extends Schema.Error<ConsentRequired>(consentRequiredTag)(
-  errorResponse(consentRequiredTag, detail("consent_required")),
-  {
-    httpApiStatus: 403,
-  }
-) {}
+export class ConsentRequired extends Schema.Error<ConsentRequired, Brand.Brand<"ConsentRequired">>(
+  consentRequiredTag
+)(errorResponse(consentRequiredTag, detail("consent_required")), {
+  httpApiStatus: 403,
+}) {}
 
 /** Explicit revocation requires the User to return to a Fidy-owned surface before PAT work. */
-export class UserActionRequired extends Schema.Error<UserActionRequired>(userActionRequiredTag)(
-  errorResponse(userActionRequiredTag, detail("user_action_required")),
-  {
-    httpApiStatus: 403,
-  }
-) {}
+export class UserActionRequired extends Schema.Error<
+  UserActionRequired,
+  Brand.Brand<"UserActionRequired">
+>(userActionRequiredTag)(errorResponse(userActionRequiredTag, detail("user_action_required")), {
+  httpApiStatus: 403,
+}) {}
 
 /** The User has exhausted Free access to a capability that remains available in Pro. */
-export class PaywallRequired extends Schema.Error<PaywallRequired>(paywallRequiredTag)(
-  errorResponse(paywallRequiredTag, detail("paywall_required")),
-  {
-    httpApiStatus: 402,
-  }
-) {}
+export class PaywallRequired extends Schema.Error<PaywallRequired, Brand.Brand<"PaywallRequired">>(
+  paywallRequiredTag
+)(errorResponse(paywallRequiredTag, detail("paywall_required")), {
+  httpApiStatus: 402,
+}) {}
 
 /** Missing and foreign records share the same caller-visible failure. */
-export class NotFound extends Schema.Error<NotFound>(notFoundTag)(
+export class NotFound extends Schema.Error<NotFound, Brand.Brand<"NotFound">>(notFoundTag)(
   errorResponse(notFoundTag, detail("not_found")),
   { httpApiStatus: 404 }
 ) {}
 
 /** The caller's stable-User request or write admission budget is exhausted. No domain write was accepted. */
-export class ResourceLimited extends Schema.Error<ResourceLimited>(resourceLimitedTag)(
+export class ResourceLimited extends Schema.Error<ResourceLimited, Brand.Brand<"ResourceLimited">>(
+  resourceLimitedTag
+)(
   errorResponse(
     resourceLimitedTag,
     Schema.Struct({
@@ -310,7 +313,9 @@ export class ResourceLimited extends Schema.Error<ResourceLimited>(resourceLimit
 ) {}
 
 /** A required private dependency could not complete the canonical operation. */
-export class Unavailable extends Schema.Error<Unavailable>(unavailableTag)(
+export class Unavailable extends Schema.Error<Unavailable, Brand.Brand<"Unavailable">>(
+  unavailableTag
+)(
   errorResponse(
     unavailableTag,
     Schema.Struct({

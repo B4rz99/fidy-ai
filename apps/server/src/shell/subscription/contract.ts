@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { type Brand, Schema } from "effect";
 import { type OwnedStatement } from "~/shell/owner-write/contract";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import {
@@ -123,34 +123,40 @@ const InvalidFields = {
 };
 
 /** Generic direct-browser refusal that never reflects a transient token or provider response. */
-export class PaymentEnrollmentInvalidApi extends Schema.Error<PaymentEnrollmentInvalidApi>(
-  "PaymentEnrollmentInvalidApi"
-)(InvalidFields, { httpApiStatus: 400 }) {}
+export class PaymentEnrollmentInvalidApi extends Schema.Error<
+  PaymentEnrollmentInvalidApi,
+  Brand.Brand<"PaymentEnrollmentInvalidApi">
+>("PaymentEnrollmentInvalidApi")(InvalidFields, { httpApiStatus: 400 }) {}
 
 /** Missing or expired WebSession authority at the dedicated enrollment boundary. */
-export class PaymentEnrollmentUnauthenticatedApi extends Schema.Error<PaymentEnrollmentUnauthenticatedApi>(
-  "PaymentEnrollmentUnauthenticatedApi"
-)(InvalidFields, { httpApiStatus: 401 }) {}
+export class PaymentEnrollmentUnauthenticatedApi extends Schema.Error<
+  PaymentEnrollmentUnauthenticatedApi,
+  Brand.Brand<"PaymentEnrollmentUnauthenticatedApi">
+>("PaymentEnrollmentUnauthenticatedApi")(InvalidFields, { httpApiStatus: 401 }) {}
 
 /** Cross-origin enrollment attempt rejected before any provider or persistence effect. */
-export class PaymentEnrollmentOriginRejectedApi extends Schema.Error<PaymentEnrollmentOriginRejectedApi>(
-  "PaymentEnrollmentOriginRejectedApi"
-)(InvalidFields, { httpApiStatus: 403 }) {}
+export class PaymentEnrollmentOriginRejectedApi extends Schema.Error<
+  PaymentEnrollmentOriginRejectedApi,
+  Brand.Brand<"PaymentEnrollmentOriginRejectedApi">
+>("PaymentEnrollmentOriginRejectedApi")(InvalidFields, { httpApiStatus: 403 }) {}
 
 /** Bounded-body rejection that does not parse or report the rejected secret-bearing body. */
-export class PaymentEnrollmentPayloadTooLargeApi extends Schema.Error<PaymentEnrollmentPayloadTooLargeApi>(
-  "PaymentEnrollmentPayloadTooLargeApi"
-)(InvalidFields, { httpApiStatus: 413 }) {}
+export class PaymentEnrollmentPayloadTooLargeApi extends Schema.Error<
+  PaymentEnrollmentPayloadTooLargeApi,
+  Brand.Brand<"PaymentEnrollmentPayloadTooLargeApi">
+>("PaymentEnrollmentPayloadTooLargeApi")(InvalidFields, { httpApiStatus: 413 }) {}
 
 /** Non-JSON secret-bearing submission rejected without provider work. */
-export class PaymentEnrollmentUnsupportedMediaTypeApi extends Schema.Error<PaymentEnrollmentUnsupportedMediaTypeApi>(
-  "PaymentEnrollmentUnsupportedMediaTypeApi"
-)(InvalidFields, { httpApiStatus: 415 }) {}
+export class PaymentEnrollmentUnsupportedMediaTypeApi extends Schema.Error<
+  PaymentEnrollmentUnsupportedMediaTypeApi,
+  Brand.Brand<"PaymentEnrollmentUnsupportedMediaTypeApi">
+>("PaymentEnrollmentUnsupportedMediaTypeApi")(InvalidFields, { httpApiStatus: 415 }) {}
 
 /** Bounded preparation-attempt pressure refuses before provider work, not as an outage. */
-export class PaymentEnrollmentRateLimitedApi extends Schema.Error<PaymentEnrollmentRateLimitedApi>(
-  "PaymentEnrollmentRateLimitedApi"
-)(
+export class PaymentEnrollmentRateLimitedApi extends Schema.Error<
+  PaymentEnrollmentRateLimitedApi,
+  Brand.Brand<"PaymentEnrollmentRateLimitedApi">
+>("PaymentEnrollmentRateLimitedApi")(
   {
     error: Schema.Struct({
       code: Schema.Literal(rateLimitedError.code),
@@ -161,9 +167,10 @@ export class PaymentEnrollmentRateLimitedApi extends Schema.Error<PaymentEnrollm
 ) {}
 
 /** Bounded provider/configuration outage response carrying no provider details. */
-export class PaymentEnrollmentUnavailableApi extends Schema.Error<PaymentEnrollmentUnavailableApi>(
-  "PaymentEnrollmentUnavailableApi"
-)(
+export class PaymentEnrollmentUnavailableApi extends Schema.Error<
+  PaymentEnrollmentUnavailableApi,
+  Brand.Brand<"PaymentEnrollmentUnavailableApi">
+>("PaymentEnrollmentUnavailableApi")(
   {
     error: Schema.Struct({
       code: Schema.Literal(unavailableError.code),

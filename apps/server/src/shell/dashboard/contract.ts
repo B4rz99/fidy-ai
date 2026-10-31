@@ -17,7 +17,7 @@ import {
 import { type Budget, BudgetProgress } from "~/core/budgets/contract";
 import type { UserContext } from "~/core/identity/contract";
 
-import { Data, Schema } from "effect";
+import { type Brand, Data, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { Currency, MoneyGroups } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
@@ -126,9 +126,10 @@ const DashboardEditFailures = [NotFound, ValidationFailed] as const;
 export const InitializeDashboardCanonicalInput = Schema.Struct({});
 
 /** A missing document is an observed state, never permission to create or repair it. */
-export class DashboardUninitialized extends Schema.Error<DashboardUninitialized>(
-  "DashboardUninitialized"
-)(
+export class DashboardUninitialized extends Schema.Error<
+  DashboardUninitialized,
+  Brand.Brand<"DashboardUninitialized">
+>("DashboardUninitialized")(
   {
     _tag: Schema.tagDefaultOmit("DashboardUninitialized"),
     error: Schema.Struct({

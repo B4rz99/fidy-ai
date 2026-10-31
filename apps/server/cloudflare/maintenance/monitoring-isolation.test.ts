@@ -65,6 +65,7 @@ it("a stalled canary offer cannot skip later Core retention", () =>
           db.prepare("INSERT INTO resource_admission_grants VALUES ('workers-ai-expired',1,1)"),
         ])
       );
+      const runExit = Effect.runPromiseExitWith(yield* Effect.context<never>());
       const current = Math.floor((yield* Clock.currentTimeMillis) / 3_600_000) * 3_600_000 + 5_000;
       const liveClock = yield* Clock.Clock;
       const canaryClock: Clock.Clock = {
@@ -80,7 +81,7 @@ it("a stalled canary offer cannot skip later Core retention", () =>
       const send = vi.fn(() => held.promise);
       try {
         const result = yield* Effect.tryPromise(() =>
-          Effect.runPromiseExit(
+          runExit(
             runCoreMaintenance(
               environment(db, {
                 ASYNC_HEALTH_ENABLED: Option.some("enabled"),

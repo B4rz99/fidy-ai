@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "699b51b0965b43fede3c583928f0c0bb263ca3a76cd219e7c8095bc3604b9d1d";
+const expectedEdgePolicyDigest = "ae61d99556a7ff40e74381c56ca749a40a23f1ca773d06d21b84474c6aab36e4";
 const securityArtifacts = [
   await Bun.file(
     new URL(

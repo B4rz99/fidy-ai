@@ -1,5 +1,5 @@
 import type { OwnedStatement } from "~/shell/owner-write/contract";
-import { Data, type Effect, Schema } from "effect";
+import { type Brand, Data, type Effect, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { BrowserLoginPairingInvalidApi } from "~/shell/browser-login/contract";
 import { BrowserLoginPairingId, BrowserLoginPrivateVerifier } from "~/core/browser-login/contract";
@@ -59,26 +59,33 @@ const emailReplacementInvalidFields = {
 };
 
 /** Generic browser response for an invalid or unavailable replacement proof. */
-export class EmailReplacementInvalidApi extends Schema.Error<EmailReplacementInvalidApi>(
-  "EmailReplacementInvalidApi"
-)(emailReplacementInvalidFields, { httpApiStatus: 400 }) {}
+export class EmailReplacementInvalidApi extends Schema.Error<
+  EmailReplacementInvalidApi,
+  Brand.Brand<"EmailReplacementInvalidApi">
+>("EmailReplacementInvalidApi")(emailReplacementInvalidFields, { httpApiStatus: 400 }) {}
 
-export class EmailReplacementOriginRejectedApi extends Schema.Error<EmailReplacementOriginRejectedApi>(
-  "EmailReplacementOriginRejectedApi"
-)(emailReplacementInvalidFields, { httpApiStatus: 403 }) {}
+export class EmailReplacementOriginRejectedApi extends Schema.Error<
+  EmailReplacementOriginRejectedApi,
+  Brand.Brand<"EmailReplacementOriginRejectedApi">
+>("EmailReplacementOriginRejectedApi")(emailReplacementInvalidFields, { httpApiStatus: 403 }) {}
 
-export class EmailReplacementPayloadTooLargeApi extends Schema.Error<EmailReplacementPayloadTooLargeApi>(
-  "EmailReplacementPayloadTooLargeApi"
-)(emailReplacementInvalidFields, { httpApiStatus: 413 }) {}
+export class EmailReplacementPayloadTooLargeApi extends Schema.Error<
+  EmailReplacementPayloadTooLargeApi,
+  Brand.Brand<"EmailReplacementPayloadTooLargeApi">
+>("EmailReplacementPayloadTooLargeApi")(emailReplacementInvalidFields, { httpApiStatus: 413 }) {}
 
-export class EmailReplacementUnsupportedMediaTypeApi extends Schema.Error<EmailReplacementUnsupportedMediaTypeApi>(
-  "EmailReplacementUnsupportedMediaTypeApi"
-)(emailReplacementInvalidFields, { httpApiStatus: 415 }) {}
+export class EmailReplacementUnsupportedMediaTypeApi extends Schema.Error<
+  EmailReplacementUnsupportedMediaTypeApi,
+  Brand.Brand<"EmailReplacementUnsupportedMediaTypeApi">
+>("EmailReplacementUnsupportedMediaTypeApi")(emailReplacementInvalidFields, {
+  httpApiStatus: 415,
+}) {}
 
 /** Browser response requiring the User to establish fresh WebSession authority again. */
-export class EmailReplacementFreshPairingRequiredApi extends Schema.Error<EmailReplacementFreshPairingRequiredApi>(
-  "EmailReplacementFreshPairingRequiredApi"
-)(
+export class EmailReplacementFreshPairingRequiredApi extends Schema.Error<
+  EmailReplacementFreshPairingRequiredApi,
+  Brand.Brand<"EmailReplacementFreshPairingRequiredApi">
+>("EmailReplacementFreshPairingRequiredApi")(
   {
     error: Schema.Struct({
       code: Schema.Literal(emailReplacementFreshError.code),
@@ -139,25 +146,44 @@ export const ApprovedBrowserPairingEmailAuthentication = Schema.Struct({
 }).annotate({ identifier: "ApprovedBrowserPairingEmailAuthentication" });
 
 /** Generic malformed, mismatched, expired, or exhausted email-authentication failure. */
-export class BrowserPairingEmailAuthenticationInvalidApi extends Schema.Error<BrowserPairingEmailAuthenticationInvalidApi>(
-  "BrowserPairingEmailAuthenticationInvalidApi"
-)(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 400 }) {}
+export class BrowserPairingEmailAuthenticationInvalidApi extends Schema.Error<
+  BrowserPairingEmailAuthenticationInvalidApi,
+  Brand.Brand<"BrowserPairingEmailAuthenticationInvalidApi">
+>("BrowserPairingEmailAuthenticationInvalidApi")(BrowserPairingEmailAuthenticationInvalidFields, {
+  httpApiStatus: 400,
+}) {}
 /** Exact-origin rejection projected through the same non-enumerating error body. */
-export class BrowserPairingEmailAuthenticationOriginRejectedApi extends Schema.Error<BrowserPairingEmailAuthenticationOriginRejectedApi>(
-  "BrowserPairingEmailAuthenticationOriginRejectedApi"
-)(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 403 }) {}
+export class BrowserPairingEmailAuthenticationOriginRejectedApi extends Schema.Error<
+  BrowserPairingEmailAuthenticationOriginRejectedApi,
+  Brand.Brand<"BrowserPairingEmailAuthenticationOriginRejectedApi">
+>("BrowserPairingEmailAuthenticationOriginRejectedApi")(
+  BrowserPairingEmailAuthenticationInvalidFields,
+  { httpApiStatus: 403 }
+) {}
 /** Bounded-body rejection projected through the same non-enumerating error body. */
-export class BrowserPairingEmailAuthenticationPayloadTooLargeApi extends Schema.Error<BrowserPairingEmailAuthenticationPayloadTooLargeApi>(
-  "BrowserPairingEmailAuthenticationPayloadTooLargeApi"
-)(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 413 }) {}
+export class BrowserPairingEmailAuthenticationPayloadTooLargeApi extends Schema.Error<
+  BrowserPairingEmailAuthenticationPayloadTooLargeApi,
+  Brand.Brand<"BrowserPairingEmailAuthenticationPayloadTooLargeApi">
+>("BrowserPairingEmailAuthenticationPayloadTooLargeApi")(
+  BrowserPairingEmailAuthenticationInvalidFields,
+  { httpApiStatus: 413 }
+) {}
 /** Non-JSON request rejection projected through the same non-enumerating error body. */
-export class BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi extends Schema.Error<BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi>(
-  "BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi"
-)(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 415 }) {}
+export class BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi extends Schema.Error<
+  BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi,
+  Brand.Brand<"BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi">
+>("BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi")(
+  BrowserPairingEmailAuthenticationInvalidFields,
+  { httpApiStatus: 415 }
+) {}
 /** Local concurrency rejection projected through the same non-enumerating error body. */
-export class BrowserPairingEmailAuthenticationUnavailableApi extends Schema.Error<BrowserPairingEmailAuthenticationUnavailableApi>(
-  "BrowserPairingEmailAuthenticationUnavailableApi"
-)(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 503 }) {}
+export class BrowserPairingEmailAuthenticationUnavailableApi extends Schema.Error<
+  BrowserPairingEmailAuthenticationUnavailableApi,
+  Brand.Brand<"BrowserPairingEmailAuthenticationUnavailableApi">
+>("BrowserPairingEmailAuthenticationUnavailableApi")(
+  BrowserPairingEmailAuthenticationInvalidFields,
+  { httpApiStatus: 503 }
+) {}
 
 const requestEmailReplacement = HttpApiEndpoint.post(
   "requestEmailReplacement",

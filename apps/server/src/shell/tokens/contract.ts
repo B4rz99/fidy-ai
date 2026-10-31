@@ -5,7 +5,7 @@ import {
   type CanonicalCapability,
   CanonicalOperationId,
 } from "~/core/canonical-operations/contract";
-import { type Option, Schema } from "effect";
+import { type Brand, type Option, Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import {
   ActivePATList,
@@ -44,7 +44,10 @@ import { type AuditCredentialOperation } from "~/shell/audit/contract";
 
 /** A live browser may read metadata while needing renewed proof for credential issuance. */
 export class ManualPATReauthenticationRequired
-  extends Schema.Error<ManualPATReauthenticationRequired>("ManualPATReauthenticationRequired")(
+  extends Schema.Error<
+    ManualPATReauthenticationRequired,
+    Brand.Brand<"ManualPATReauthenticationRequired">
+  >("ManualPATReauthenticationRequired")(
     {
       _tag: Schema.tagDefaultOmit("ManualPATReauthenticationRequired"),
       error: Schema.Struct({
@@ -66,7 +69,9 @@ export const issuanceConsumedMessage =
 
 /** Safe refusal when a retried request cannot redisclose its previously consumed bearer. */
 export class ManualPATIssuanceConsumed
-  extends Schema.Error<ManualPATIssuanceConsumed>("ManualPATIssuanceConsumed")(
+  extends Schema.Error<ManualPATIssuanceConsumed, Brand.Brand<"ManualPATIssuanceConsumed">>(
+    "ManualPATIssuanceConsumed"
+  )(
     {
       _tag: Schema.tagDefaultOmit("ManualPATIssuanceConsumed"),
       error: Schema.Struct({
@@ -87,7 +92,9 @@ export const issuanceLimitedMessage =
 
 /** Cheap User-bound refusal preventing unbounded PAT and Consent evidence creation. */
 export class ManualPATIssuanceRateLimited
-  extends Schema.Error<ManualPATIssuanceRateLimited>("ManualPATIssuanceRateLimited")(
+  extends Schema.Error<ManualPATIssuanceRateLimited, Brand.Brand<"ManualPATIssuanceRateLimited">>(
+    "ManualPATIssuanceRateLimited"
+  )(
     {
       _tag: Schema.tagDefaultOmit("ManualPATIssuanceRateLimited"),
       error: Schema.Struct({
@@ -109,7 +116,9 @@ export const reviewExpiredMessage =
 
 /** Safe refusal when confirmation no longer matches one recent reviewed absolute expiration. */
 export class ManualPATReviewExpired
-  extends Schema.Error<ManualPATReviewExpired>("ManualPATReviewExpired")(
+  extends Schema.Error<ManualPATReviewExpired, Brand.Brand<"ManualPATReviewExpired">>(
+    "ManualPATReviewExpired"
+  )(
     {
       _tag: Schema.tagDefaultOmit("ManualPATReviewExpired"),
       error: Schema.Struct({
@@ -258,7 +267,9 @@ export const patPairingGenericMessage =
 
 /** One generic non-enumerating refusal for malformed, unknown, expired, or cross-User requests. */
 export class PATPairingReviewRejected
-  extends Schema.Error<PATPairingReviewRejected>("PATPairingReviewRejected")(
+  extends Schema.Error<PATPairingReviewRejected, Brand.Brand<"PATPairingReviewRejected">>(
+    "PATPairingReviewRejected"
+  )(
     {
       _tag: Schema.tagDefaultOmit("PATPairingReviewRejected"),
       error: Schema.Struct({
@@ -276,7 +287,9 @@ export class PATPairingReviewRejected
 
 /** Bounded review admission failure without revealing whether a submitted code exists. */
 export class PATPairingReviewRateLimited
-  extends Schema.Error<PATPairingReviewRateLimited>("PATPairingReviewRateLimited")(
+  extends Schema.Error<PATPairingReviewRateLimited, Brand.Brand<"PATPairingReviewRateLimited">>(
+    "PATPairingReviewRateLimited"
+  )(
     {
       _tag: Schema.tagDefaultOmit("PATPairingReviewRateLimited"),
       error: Schema.Struct({
@@ -386,12 +399,14 @@ const UnavailableError = Schema.Struct({
   message: Schema.Literal(unavailableError.message),
 });
 
-export class PATPairingRateLimitedApi extends Schema.Error<PATPairingRateLimitedApi>(
-  "PATPairingRateLimitedApi"
-)({ error: UnavailableError }, { httpApiStatus: 429 }) {}
-export class PATPairingUnavailableApi extends Schema.Error<PATPairingUnavailableApi>(
-  "PATPairingUnavailableApi"
-)({ error: UnavailableError }, { httpApiStatus: 503 }) {}
+export class PATPairingRateLimitedApi extends Schema.Error<
+  PATPairingRateLimitedApi,
+  Brand.Brand<"PATPairingRateLimitedApi">
+>("PATPairingRateLimitedApi")({ error: UnavailableError }, { httpApiStatus: 429 }) {}
+export class PATPairingUnavailableApi extends Schema.Error<
+  PATPairingUnavailableApi,
+  Brand.Brand<"PATPairingUnavailableApi">
+>("PATPairingUnavailableApi")({ error: UnavailableError }, { httpApiStatus: 503 }) {}
 export const patPairingUnavailableBody = { error: unavailableError } as const;
 
 const invalidError = {
@@ -402,14 +417,16 @@ const InvalidError = Schema.Struct({
   code: Schema.Literal(invalidError.code),
   message: Schema.Literal(invalidError.message),
 });
-export class PATPairingInvalidApi extends Schema.Error<PATPairingInvalidApi>(
-  "PATPairingInvalidApi"
-)({ error: InvalidError }, { httpApiStatus: 400 }) {}
+export class PATPairingInvalidApi extends Schema.Error<
+  PATPairingInvalidApi,
+  Brand.Brand<"PATPairingInvalidApi">
+>("PATPairingInvalidApi")({ error: InvalidError }, { httpApiStatus: 400 }) {}
 export const patPairingInvalidBody = { error: invalidError } as const;
 
-export class PATPairingPollingRateLimitedApi extends Schema.Error<PATPairingPollingRateLimitedApi>(
-  "PATPairingPollingRateLimitedApi"
-)(
+export class PATPairingPollingRateLimitedApi extends Schema.Error<
+  PATPairingPollingRateLimitedApi,
+  Brand.Brand<"PATPairingPollingRateLimitedApi">
+>("PATPairingPollingRateLimitedApi")(
   {
     error: Schema.Struct({
       code: Schema.Literal("rate_limited"),

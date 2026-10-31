@@ -1,5 +1,5 @@
 import * as Arr from "effect/Array";
-import { type Effect, Option, Schema } from "effect";
+import { type Brand, type Effect, Option, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
@@ -65,7 +65,10 @@ export type AtomicBatchOutput = Readonly<{ results: NonEmptyMutationResults }>;
  * Actionable failure of one child mutation. The whole batch has rolled back; `failedCallIndex` and
  * `operation` identify the correction target without retaining any request or response body.
  */
-export class AtomicBatchRejected extends Schema.Error<AtomicBatchRejected>("AtomicBatchRejected")(
+export class AtomicBatchRejected extends Schema.Error<
+  AtomicBatchRejected,
+  Brand.Brand<"AtomicBatchRejected">
+>("AtomicBatchRejected")(
   {
     error: Schema.Struct({
       code: ErrorCode,

@@ -49,13 +49,14 @@ it.effect(
   "reserves concurrent calls before hashing and refuses the first call beyond the hard run budget",
   () =>
     Effect.gen(function* () {
+      const runExit = Effect.runPromiseExitWith(yield* Effect.context<never>());
       let actual = 0;
       const late: Array<Promise<Exit.Exit<unknown, unknown>>> = [];
       const budget: EvaluationBudget = makeEvaluationBudget(
         environment(() => {
           actual++;
           if (actual === 1) {
-            late.push(Effect.runPromiseExit(budget.run(approvedWorkersAiModel, request)));
+            late.push(runExit(budget.run(approvedWorkersAiModel, request)));
           }
           return Promise.resolve(accepted());
         })

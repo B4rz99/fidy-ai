@@ -138,6 +138,9 @@ const weeklyWorkflowFixtureContext = {
   props: {},
   exports: {},
   abort: (): void => undefined,
+  mapVirtualHost: (): string => {
+    throw new Error("Unexpected virtual host mapping");
+  },
   get tracing(): Tracing {
     throw new Error("Workflow fixture does not grant tracing authority");
   },

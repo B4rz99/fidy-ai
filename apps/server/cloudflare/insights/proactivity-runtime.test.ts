@@ -155,6 +155,7 @@ it("strips untrusted diagnostic fields before forwarding proactivity coordinator
           props: {},
           exports: {},
           abort: (): void => undefined,
+          mapVirtualHost: (): string => unexpected(),
           get tracing(): Tracing {
             return unexpected();
           },

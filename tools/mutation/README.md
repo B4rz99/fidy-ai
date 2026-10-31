@@ -23,10 +23,7 @@ selects covered tests instead of launching the entire suite for every mutant. Th
 mutation Vitest configuration isolates modules so instrumentation and coverage stay with
 the correct test file; ordinary core tests continue using their normal configuration.
 
-The Vitest runner patch joins nested names with a greater-than sign surrounded by spaces, as implemented
-by `getTestName` in the installed `vitest/dist/task-utils.js`. Stryker 10 otherwise builds
-space-separated filters and reports nested-suite mutants as surviving after executing zero
-tests. Both coverage identities and test-selection identities must use the same separator.
+Stryker 10.1.1 selects the installed Vitest version's test-name separator. The retained runner patch filters empty root suite names from both coverage and test-selection identities, preserving the greater-than separator used by Vitest 5. The upstream file-level error handling replaces the former local dry-run error patch.
 The runner regression mutates a small module across multiple test files and nested suites,
 including a mutation made during module initialization. It requires asserted behavior mutants
 to be killed and deliberately unasserted control mutants to survive, preventing inflated scores.

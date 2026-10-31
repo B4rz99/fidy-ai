@@ -15,7 +15,9 @@ test("real Core/D1 MCP continuation stays within Accesos without duplicate conne
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInAccessThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInAccessThroughCore({ page, deferFreshEntry: true, request })
+      );
       yield* Effect.tryPromise(() => page.goto("/settings/access"));
       const rows = page.locator("tr[data-connection-id]");
       yield* Effect.tryPromise(() => expect(rows).toHaveCount(pageSize));

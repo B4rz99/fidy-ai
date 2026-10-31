@@ -66,7 +66,7 @@ for (const unavailable of [serviceUnavailable, resourceLimited]) {
   }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+        yield* Effect.tryPromise(() => signInThroughCore({ page, deferFreshEntry: true, request }));
         let available = false;
         const paymentRequests: Array<string> = [];
         page.on("request", (request) => {

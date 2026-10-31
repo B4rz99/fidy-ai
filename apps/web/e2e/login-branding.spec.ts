@@ -3,7 +3,6 @@ import type { Page, Route } from "@playwright/test";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
-test.use({ reducedMotion: "no-preference" });
 const runningAnimations = (): number =>
   document.getAnimations().filter((animation) => animation.playState === "running").length;
 

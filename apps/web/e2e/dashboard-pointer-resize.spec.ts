@@ -54,7 +54,9 @@ test("a pointer resize submits the canonical edit and retains its weight after r
         request.post(`${operator}/dashboard/reset?dashboard=true`)
       );
       expect(reset.status()).toBe(noContentStatus);
-      yield* Effect.tryPromise(() => signInDashboardThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInDashboardThroughCore({ page, deferFreshEntry: true, request })
+      );
       yield* Effect.tryPromise(() => page.clock.resume());
       yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());

@@ -43,8 +43,6 @@ export default defineConfig({
     },
     {
       name: "browser",
-      // Functional assertions do not need decorative motion; latency prerequisites keep it.
-      use: { reducedMotion: measuringBrowserCost ? "no-preference" : "reduce" },
       testIgnore: ["cli-login.spec.ts", "acceptance-clock.spec.ts"],
       dependencies: ["performance"],
       grepInvert:

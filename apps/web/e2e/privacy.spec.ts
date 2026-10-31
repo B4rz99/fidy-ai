@@ -239,7 +239,9 @@ test("a withdrawn User explicitly renews the saved authorization through real Co
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInPrivacyRenewalThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInPrivacyRenewalThroughCore({ page, deferFreshEntry: true, request })
+      );
       yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
       yield* Effect.tryPromise(() =>
         page.route(`${apiOrigin}/web/consent/authorization`, unavailableResponse, { times: 1 })
@@ -262,7 +264,9 @@ test("an expired-trial User withdraws through real Core and can recover the same
   Effect.runPromise(
     Effect.gen(function* () {
       test.setTimeout(completeWithdrawalJourneyMilliseconds);
-      yield* Effect.tryPromise(() => signInPrivacyThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInPrivacyThroughCore({ page, deferFreshEntry: true, request })
+      );
       const privacyReviewRequests = observePrivacyReviewRequests(page);
       yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
       yield* Effect.tryPromise(() =>
@@ -547,7 +551,9 @@ test("account deletion uses fresh Core authority and an explicit retry returns t
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInPrivacyErasureThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInPrivacyErasureThroughCore({ page, deferFreshEntry: true, request })
+      );
       yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
       const region = page.getByRole("region", { name: "Solicitud de eliminación" });
       const button = region.getByRole("button", { name: "Solicitar eliminación", exact: true });

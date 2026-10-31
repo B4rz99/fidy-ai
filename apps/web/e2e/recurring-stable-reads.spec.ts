@@ -26,7 +26,12 @@ test("settled recurring reads stay quiet after presentation and month changes", 
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringStableReads" })
+        signInRecurringThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "recurringStableReads",
+        })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* Effect.tryPromise(() =>

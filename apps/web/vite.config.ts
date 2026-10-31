@@ -2,6 +2,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { serverClientBoundary } from "./server-client-boundary.ts";
+import { entryPreload } from "./entry-preload.ts";
 
 const publicDirectory = (mode: string): string | false => {
   if (mode === "production") return "cloudflare/production";
@@ -9,7 +10,7 @@ const publicDirectory = (mode: string): string | false => {
 };
 
 export default defineConfig(({ mode }) => ({
-  plugins: [serverClientBoundary(), react(), tailwindcss()],
+  plugins: [serverClientBoundary(), react(), tailwindcss(), entryPreload()],
   publicDir: publicDirectory(mode),
   resolve: {
     alias: {

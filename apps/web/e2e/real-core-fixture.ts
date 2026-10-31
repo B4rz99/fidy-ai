@@ -28,7 +28,9 @@ export const visiblePairingCode = (page: Page): Promise<string> =>
 export const openBrowserLogin = (page: Page): Promise<void> =>
   page.goto("/login").then(() => undefined);
 
-type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
+type BrowserFixture = Readonly<{ page: Page; request: APIRequestContext }>;
+type SignInFixture = BrowserFixture &
+  (Readonly<{ deferFreshEntry: true }> | Readonly<Record<never, never>>);
 type ConsentRead = Readonly<{ status: number }>;
 const consentReads = new WeakMap<Page, ConsentRead>();
 const isConsentRead = (response: Response): boolean => {
@@ -201,7 +203,11 @@ const startSessionThroughCore = (
         expect(redemption.status()).toBe(successStatus);
         return input.clockMode === "controlled" ? installAcceptanceClock(page) : undefined;
       })
-      .then(() => openTransactionsThroughCore(page))
+      .then(() =>
+        input.clockMode === "controlled" && "deferFreshEntry" in input
+          ? undefined
+          : openTransactionsThroughCore(page)
+      )
       // Request-count and latency probes begin after prerequisite reads have settled.
       .then(() =>
         input.clockMode === "native-performance"
@@ -260,7 +266,7 @@ export const signInWithVerifiedEmailThroughCore = ({
   page,
   request,
   email,
-}: SignInFixture & Readonly<{ email: string }>): Promise<void> =>
+}: BrowserFixture & Readonly<{ email: string }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => installAcceptanceClock(page));
@@ -293,7 +299,7 @@ export const signInWithVerifiedEmailThroughCore = ({
   );
 
 /** Independent unfunded User: never switches or deletes the first-card User's retained history. */
-export const signInFirstDaviplataThroughCore = (input: SignInFixture): Promise<void> =>
+export const signInFirstDaviplataThroughCore = (input: BrowserFixture): Promise<void> =>
   signInWithVerifiedEmailThroughCore({ ...input, email: "daviplata@example.com" });
 
 /** Signs in the seeded User with an available PaymentSource through real Core redemption. */
@@ -414,12 +420,14 @@ type NavigationFixture = SignInFixture &
 export const signInNavigationThroughCore = (input: NavigationFixture): Promise<void> =>
   signInWithIdentity({ ...input, clockMode: "controlled" });
 /** Public proof exchange prepares the session; timing probes keep native clocks throughout. */
-export const signInNavigationPerformanceThroughCore = (input: NavigationFixture): Promise<void> =>
-  signInWithIdentity({ ...input, clockMode: "native-performance" });
+export const signInNavigationPerformanceThroughCore = (
+  input: Omit<NavigationFixture, "deferFreshEntry">
+): Promise<void> => signInWithIdentity({ ...input, clockMode: "native-performance" });
 
 /** The clock guard retains the complete login UI and its native polling delay. */
-export const signInNativeClockThroughCore = (input: NavigationFixture): Promise<void> =>
-  signInThroughBrowser({ ...input, clockMode: "native-performance" });
+export const signInNativeClockThroughCore = (
+  input: Omit<NavigationFixture, "deferFreshEntry">
+): Promise<void> => signInThroughBrowser({ ...input, clockMode: "native-performance" });
 
 /** Budget editor journeys cannot race the Budget Widget's cap mutations. */
 export const signInBudgetEditingThroughCore = (input: SignInFixture): Promise<void> =>

@@ -16,7 +16,7 @@ test("recurring plans persist through the real canonical API and share monthly l
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurring" })
+        signInRecurringThroughCore({ page, deferFreshEntry: true, request, identity: "recurring" })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* createPlan({
@@ -193,7 +193,12 @@ test("keeps income, transfers, unknown expenses and filtered summaries separate"
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringSummary" })
+        signInRecurringThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "recurringSummary",
+        })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* createPlan({
@@ -271,7 +276,12 @@ test("keeps an uncertain save blocked across navigation until an explicit reread
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringEditing" })
+        signInRecurringThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "recurringEditing",
+        })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* Effect.tryPromise(() => page.route("**/recurring-plans/edits", loseAcknowledgement));
@@ -449,7 +459,12 @@ test("manual tracking can be reversed and skipped", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringTracking" })
+        signInRecurringThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "recurringTracking",
+        })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* createPlan({
@@ -489,7 +504,12 @@ test("pause, resume and stop survive reload", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringLifecycle" })
+        signInRecurringThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "recurringLifecycle",
+        })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* createPlan({
@@ -565,7 +585,12 @@ test("one-occurrence edits stay local and forward edits preserve earlier monthly
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringExceptions" })
+        signInRecurringThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "recurringExceptions",
+        })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* createPlan({

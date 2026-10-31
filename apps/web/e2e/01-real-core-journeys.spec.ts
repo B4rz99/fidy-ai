@@ -218,7 +218,7 @@ test("fresh and concurrent Dashboard first use explicitly initializes through au
       expect((yield* fromPlaywright(request.post(`${operator}/dashboard/reset`))).status()).toBe(
         noContent
       );
-      yield* fromPlaywright(signInFirstCardThroughCore({ page, request }));
+      yield* fromPlaywright(signInFirstCardThroughCore({ page, deferFreshEntry: true, request }));
       for (const path of ["/dashboard", "/dashboard/view"]) {
         const absent = yield* inspectCanonicalSnapshot(page, `${api}${path}`);
         expect(absent.status).toBe(notFound);
@@ -262,6 +262,7 @@ const startPatPairing = Effect.fnUntraced(function* (page: Page, request: APIReq
   yield* fromPlaywright(
     signInThroughCore({
       page,
+      deferFreshEntry: true,
       request,
     })
   );
@@ -344,6 +345,7 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
       yield* fromPlaywright(
         signInThroughCore({
           page,
+          deferFreshEntry: true,
           request,
         })
       );
@@ -435,6 +437,7 @@ test("a browser cannot render or fetch another User's private Transaction throug
       yield* fromPlaywright(
         signInThroughCore({
           page,
+          deferFreshEntry: true,
           request,
         })
       );
@@ -513,6 +516,7 @@ test("replaces a verified EmailCredential through public operations after fixtur
       yield* fromPlaywright(
         signInThroughCore({
           page,
+          deferFreshEntry: true,
           request,
         })
       );
@@ -572,6 +576,7 @@ const submitReusedCard = Effect.fnUntraced(function* (page: Page, request: APIRe
   yield* fromPlaywright(
     signInThroughCore({
       page,
+      deferFreshEntry: true,
       request,
     })
   );
@@ -713,7 +718,7 @@ test("tokenizes a first card without an email-login credential through real publ
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* fromPlaywright(signInFirstCardThroughCore({ page, request }));
+      yield* fromPlaywright(signInFirstCardThroughCore({ page, deferFreshEntry: true, request }));
       const cardNumber = "4111111111111111";
       const capture = { providerTokens: 0 };
       const fidyBodies: Array<string> = [];
@@ -981,7 +986,7 @@ test("authorizes DaviPlata directly in the built browser and grants paid Pro onl
   ));
 
 const issueReadOnlyPat = Effect.fnUntraced(function* (page: Page, request: APIRequestContext) {
-  yield* fromPlaywright(signInThroughCore({ page, request }));
+  yield* fromPlaywright(signInThroughCore({ page, deferFreshEntry: true, request }));
   yield* fromPlaywright(page.goto("/settings/access"));
   yield* fromPlaywright(
     page

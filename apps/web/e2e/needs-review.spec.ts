@@ -1175,7 +1175,7 @@ for (const picker of reviewPickers) {
   test(`dismisses ${picker.label} when leaving the retained review`, ({ page, request }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+        yield* Effect.tryPromise(() => signInThroughCore({ page, deferFreshEntry: true, request }));
         yield* Effect.tryPromise(() => page.clock.resume());
         yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
         yield* Effect.tryPromise(() =>

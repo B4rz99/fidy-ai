@@ -73,7 +73,9 @@ for (const { identity, ...condition } of conditions) {
   }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        yield* Effect.tryPromise(() => signInNavigationThroughCore({ page, request, identity }));
+        yield* Effect.tryPromise(() =>
+          signInNavigationThroughCore({ page, deferFreshEntry: true, request, identity })
+        );
         yield* Effect.tryPromise((signal) =>
           page.goto(`/oauth/review/${reviewReference}`, { signal })
         );

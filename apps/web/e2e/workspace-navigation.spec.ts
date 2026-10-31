@@ -211,7 +211,12 @@ test("dismisses a recurring editor when leaving its retained workspace", ({ page
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInNavigationThroughCore({ page, request, identity: "navigationRecurring" })
+        signInNavigationThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "navigationRecurring",
+        })
       );
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
       yield* Effect.tryPromise(() => openWorkspace(page, "Recurrentes"));
@@ -256,7 +261,12 @@ test("refreshes the retained recurring default month after midnight", ({ page, r
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInNavigationThroughCore({ page, request, identity: "navigationClock" })
+        signInNavigationThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "navigationClock",
+        })
       );
       yield* Effect.tryPromise(() => page.clock.setFixedTime("2026-11-01T04:59:00Z"));
       yield* Effect.tryPromise(() => page.goto("/app/recurring"));

@@ -106,7 +106,12 @@ test("Transactions retries an explicitly refused Consent read without replacing 
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInNavigationThroughCore({ page, request, identity: "navigationConsentRetry" })
+        signInNavigationThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "navigationConsentRetry",
+        })
       );
       yield* Effect.tryPromise(() => page.goto("/settings/account"));
       const counts = { reads: 0, pairings: 0 };

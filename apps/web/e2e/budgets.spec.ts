@@ -348,7 +348,9 @@ test("saves a monthly cap from the view through real Core and retains it after r
   Effect.runPromise(
     Effect.gen(function* () {
       test.setTimeout(budgetJourneyMilliseconds);
-      yield* Effect.tryPromise(() => signInBudgetEditingThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInBudgetEditingThroughCore({ page, deferFreshEntry: true, request })
+      );
       yield* Effect.tryPromise(() => page.clock.resume());
       yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
       yield* Effect.tryPromise(() =>

@@ -3,6 +3,8 @@ import { captureWhatsApp, whatsappOperator } from "./browser-acceptance-whatsapp
 import {
   AcceptanceClockAdvance,
   advanceAcceptanceClock,
+  pauseAcceptanceClock,
+  resumeAcceptanceClock,
   synchronizeAcceptanceClock,
 } from "./browser-acceptance-clock.test-fixture";
 import { Array, Clock, Effect, Option, Schema } from "effect";
@@ -346,6 +348,14 @@ const cliEvidence = (): Promise<Response> =>
       })
     );
 const clockOperator = (request: Request): Option.Option<Promise<Response>> => {
+  if (operatorRoute(request, "/clock/pause", "POST")) {
+    pauseAcceptanceClock();
+    return Option.some(Promise.resolve(new Response(null, { status: noContent })));
+  }
+  if (operatorRoute(request, "/clock/resume", "POST")) {
+    resumeAcceptanceClock();
+    return Option.some(Promise.resolve(new Response(null, { status: noContent })));
+  }
   if (operatorRoute(request, "/clock/advance", "POST")) {
     return Option.some(
       request.json().then((body: unknown) => {

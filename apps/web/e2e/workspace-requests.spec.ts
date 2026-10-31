@@ -1,6 +1,6 @@
 import { prepareAssessmentFixture } from "./assessment-fixture";
 import { type Cause, Clock, Deferred, Effect } from "effect";
-import type { Page, Response, Route } from "@playwright/test";
+import type { Page, Request, Response, Route } from "@playwright/test";
 import { apiOrigin } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 import { signInNavigationPerformanceThroughCore } from "./real-core-fixture";
@@ -16,9 +16,18 @@ const isWorkspaceRead = (response: Response): boolean =>
   new URL(response.url()).pathname === "/ingestion/review-workspace";
 const observeSuccessfulReads = (page: Page): string[] => {
   const reads: string[] = [];
+  const requests = new WeakSet<Request>();
+  let documentStarted = false;
+  page.on("request", (request) => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+      documentStarted = true;
+    }
+    if (documentStarted) requests.add(request);
+  });
   page.on("response", (response) => {
     const read = response.request();
     if (
+      requests.has(read) &&
       read.url().startsWith(apiOrigin) &&
       read.method() === "GET" &&
       response.status() === successfulStatus

@@ -1,9 +1,11 @@
 import { ResourceLimited } from "@fidy/server/client";
-import type { APIResponse, Page } from "@playwright/test";
-import { Effect, Option, Schema } from "effect";
+import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
+import { type Cause, Effect, Option, Schema } from "effect";
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import {
   advanceAcceptancePoll,
   advanceRefusedRequest,
+  disposeAcceptanceClock,
   installAcceptanceClock,
 } from "./acceptance-clock";
 import { apiOrigin } from "./http-fixtures";
@@ -20,6 +22,16 @@ const { test, expect } = playwright;
 const admissionProbeRequests = 12;
 const admittedStatus = 200;
 const resourceLimitedStatus = 429;
+const noContentStatus = 204;
+const controlClock = (
+  request: APIRequestContext,
+  action: "pause" | "resume"
+): Effect.Effect<APIResponse, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    request.post(`${browserAcceptanceTopology().operator}/clock/${action}`)
+  ).pipe(
+    Effect.tap((response) => Effect.sync(() => expect(response.status()).toBe(noContentStatus)))
+  );
 test("native admission still refuses the burst and recovers only after the fixture clock advances", ({
   page,
   request,
@@ -28,7 +40,10 @@ test("native admission still refuses the burst and recovers only after the fixtu
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => signInBudgetEditingThroughCore({ page, request }));
       yield* Effect.tryPromise(() => openBrowserLogin(page));
+      yield* Effect.tryPromise(() => disposeAcceptanceClock(page));
       const headers = yield* Effect.tryPromise(() => browserSessionHeaders(page.request));
+      yield* Effect.addFinalizer(() => controlClock(request, "resume").pipe(Effect.orDie));
+      yield* controlClock(request, "pause");
       let refusal = Option.none<APIResponse>();
       for (let attempt = 0; attempt < admissionProbeRequests; attempt++) {
         const result = yield* Effect.tryPromise(() =>
@@ -63,7 +78,7 @@ test("native admission still refuses the burst and recovers only after the fixtu
           page.request.get(`${apiOrigin}/categories`, { headers })
         )).status()
       ).toBe(admittedStatus);
-    })
+    }).pipe(Effect.scoped)
   ));
 
 const nativePerformanceEvidence = (): Readonly<{ native: boolean; marks: number }> => {

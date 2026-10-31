@@ -156,7 +156,7 @@ Use the existing entrypoint rather than adding another loader or runtime fallbac
 
 The patch `patches/alchemy@2.0.0-beta.80.patch` preserves and verifies the uploaded Worker version
 receipt using `getScriptVersion`. It also forwards placement into self-rollout version metadata,
-verified with the [native placement controls](../docs/research/core-placement-2026-10-30.md).
+verified with the [native placement controls](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/research/core-placement-2026-10-30.md).
 An upload receipt is not proof of active traffic assignment;
 retain the deployment/version checks at their existing owners.
 

@@ -4,7 +4,7 @@ Latest production audit, 22 October 2026: protected reads became unavailable aft
 `ff37f818fbf86bc766e090dc5cba8ee746cdd80a`. The deployed standing query requires
 `payment_source_context`, which is absent from production D1; read-only preparation reproduces the
 missing-view error. This is confirmed code/schema mismatch evidence, not a renewed quota diagnosis.
-The guarded rollback failed closed. [Incident evidence and deferred checks](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+The guarded rollback failed closed. [Incident evidence and deferred checks](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/audit-20261022-schema-mismatch.md)
 record the recovery boundary. Earlier successes below remain dated evidence; they do not establish
 availability after this deployment. No further production financial or access mutation was attempted.
 

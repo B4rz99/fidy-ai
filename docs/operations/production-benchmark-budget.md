@@ -1,10 +1,6 @@
 # Production benchmark budget
 
-A separate D1 database still spends the account's shared allowance. On 29 October 2026,
-account-wide analytics reported 107,974 rows written against the Free daily limit of 100,000.
-Production used 43,552; other databases used 64,422, including isolated experiments.
-Those experiments contributed to exhausting production headroom. Hosted write-heavy experiments
-stopped; all resources from the failed Category experiment independently returned 404 on cleanup.
+A separate D1 database shares its account allowance with Production.
 
 Cloudflare's [Free limit enforcement](https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/)
 blocks queries after the shared daily limit until midnight UTC. Admission and Audit writes mean
@@ -15,8 +11,7 @@ requires the account owner's approval of recurring charges; it is not an automat
 ## Before any hosted experiment
 
 1. Run the complete fixture locally with native workerd first. Count schema installation, seed
-   records, indexes, triggers, admission, Audit, retries and cleanup. The complete 1,108-statement
-   Category fixture measured 1,474 rows written locally before request work.
+   records, indexes, triggers, admission, Audit, retries and cleanup.
 2. Obtain fresh account-wide D1 analytics for the current UTC day, including deleted databases.
    An empty result, error or missing counter is unavailable evidence, not zero usage. Analytics
    may lag; the counters do not reserve capacity against concurrent production work.

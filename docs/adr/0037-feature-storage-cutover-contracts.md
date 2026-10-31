@@ -4,7 +4,7 @@ The feature designs indexed in [#1394](https://github.com/B4rz99/fidy-ai/issues/
 Identity from feature-owned state. Coupled records and their production callers move together on
 `refactor/schema-low-medium`, with [#1494](https://github.com/B4rz99/fidy-ai/issues/1494) blocking the
 final release. A smaller table or column count cannot justify inferred authority, lost evidence,
-or an intermediate extraction release. The [implementation contracts](../operations/database-cutover-1428.md)
+or an intermediate extraction release. The [implementation contracts](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/database-cutover-1428.md)
 record the owners, typed keys, cyclic relationships and preservation gates.
 
 For account deletion, accepted #1425 supersedes selective retention and content archives. Ordinary

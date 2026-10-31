@@ -116,7 +116,7 @@ Real authenticated Worker/D1 and built-browser journeys are local evidence. Depl
 callbacks and real WhatsApp delivery/confirmation remain prelaunch checks. Legacy mailbox-code signup adapters are deleted in #1093, with no compatibility path. Both provider
 browser journeys prove backup recovery and rotation without WhatsApp or mailbox authority; the
 authenticated operator CLI and its deployed evidence remain tracked in #1092.
-See the [authentication feature map](../operations/authentication-feature-map.md) for current local
+See the [authentication feature map](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/authentication-feature-map.md) for current local
 evidence and remaining prelaunch checks.
 
 ## Link-first interaction amendment (#1531)

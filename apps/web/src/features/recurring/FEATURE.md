@@ -3,14 +3,14 @@
 Local functional control, 22 October 2026, revision `de6cbc88d194c526975005d5e5733375220cf169`:
 the complete browser project passed 182 checks with three opt-in cost checks skipped under
 reviewed Bun and one worker. This is browser functional evidence, not production availability
-or concurrency capacity. The [incident evidence](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+or concurrency capacity. The [incident evidence](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/audit-20261022-schema-mismatch.md)
 retains the failed parallel diagnostics and the required live recovery checks.
 
 Latest production audit, 22 October 2026: protected reads became unavailable after release
 `ff37f818fbf86bc766e090dc5cba8ee746cdd80a`. The deployed standing query requires
 `payment_source_context`, which is absent from production D1; read-only preparation reproduces the
 missing-view error. This is confirmed code/schema mismatch evidence, not a renewed quota diagnosis.
-The guarded rollback failed closed. [Incident evidence and deferred checks](../../../../../docs/operations/audit-20261022-schema-mismatch.md)
+The guarded rollback failed closed. [Incident evidence and deferred checks](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/audit-20261022-schema-mismatch.md)
 record the recovery boundary. Earlier successes below remain dated evidence; they do not establish
 availability after this deployment. No further production financial or access mutation was attempted.
 
@@ -167,7 +167,7 @@ release stopped before promotion because the separately introduced Titular-erasu
 registry had not received its first operator initialization. Read-only checks confirmed an initial
 native generation, no approved case and a missing external checkpoint. This is independent of AI
 quota. The ingress bootstrap-routing fix and operator procedure are recorded in the
-[erasure runbook](../../../../../docs/operations/titular-erasure-1274.md). The protected operator
+[erasure runbook](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/titular-erasure-1274.md). The protected operator
 bootstrap returned 204 on 16-10-2026. [Production run 38899280216](https://github.com/B4rz99/fidy-ai/actions/runs/38899280216)
 passed both candidate/intermediate pairings and normal-traffic smoke; live health reported
 `available` at exact revision `0f2df68a9233094e40223fab15d167b671cced24`. The overnight Fidy session was recovered through ordinary existing-account sign-in; a

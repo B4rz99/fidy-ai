@@ -19,6 +19,11 @@ Issues and PRDs live as **GitHub issues** in `B4rz99/fidy-ai`, managed via the `
 
 ## Architecture and conventions
 
+### Documentation
+
+Keep durable decisions and repeatable procedures in the repository; put dated research, implementation reports and performance
+evidence with the relevant GitHub issue or PR, and generated measurements in ignored test results.
+
 Before writing code, always read:
 
 - **`GLOSSARY.md`** — the ubiquitous language. Use these terms; avoid the listed synonyms.

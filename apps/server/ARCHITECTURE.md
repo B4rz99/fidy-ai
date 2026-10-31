@@ -24,8 +24,6 @@ narrow Ingestion and maintenance capabilities. Infrastructure owns bindings, not
 
 Production Core uses default execution near the incoming request. Staging requires the exact
 Core version to omit placement metadata; live settings cannot establish a candidate's configuration.
-The measured Smart Placement trial increased Category latency and was rejected; see
-[`core-placement-2026-10-30.md`](../../docs/research/core-placement-2026-10-30.md).
 
 ## 2. Ownership and publication
 
@@ -132,8 +130,8 @@ native receipt can settle its per-provider-attempt review. Original accepted-cha
 Onboarding composes owner preparations in one D1 unit with exact originating proof consumption.
 Returning authentication preserves established User identity and creation facts. Browser Login alone
 establishes a WebSession with the browser's private verifier.
-See [ADR 0009](../../docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.md) and
-[authentication integration](../../docs/operations/authentication-feature-map.md).
+See [ADR 0009](../../docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.md) and the
+[browser authentication feature](../web/src/features/provider-authentication/FEATURE.md).
 
 Consent owns current standing and retained disclosure evidence. Exact admitted work can retain its
 original bounded Consent basis; transport payloads and recurring schedules cannot supply that basis.
@@ -173,8 +171,8 @@ An independent registry fences ordinary activity after database restoration unti
 Fresh authenticated account deletion fences new activity and waits for confirmed upload settlement
 before removing owner records and User file prefixes. Minimal independent markers protect restoration;
 external acknowledgments remain distinct from verified cleanup. Metadata outlives supported backups,
-then expires after external completion. The [cutover contracts](../../docs/operations/database-cutover-1428.md)
-own migration prerequisites, provider evidence and release gates.
+then expires after external completion. Migration and release checks follow the
+[release procedure](../../docs/operations/production-releases.md).
 
 A naked browser Category GET can compose mounted-cookie authentication, User pressure, the
 bounded Category projection, its Audit record and quota standing into one
@@ -196,8 +194,7 @@ An accepted User entry and Pending Turn commit together. A generated reply is a 
 verified visible-delivery evidence permits completion. WhatsApp publishes channel evidence; Agent
 owns the resulting Turn and Transcript transition. Alarms and independent maintenance recover
 abandoned work without granting new execution authority.
-See [ADR 0014](../../docs/adr/0014-deep-hosted-turn-modules.md) and
-[hosted-agent scope](../../docs/operations/hosted-agent-scope.md).
+See [ADR 0014](../../docs/adr/0014-deep-hosted-turn-modules.md).
 
 ## 7. Background execution and availability
 
@@ -253,14 +250,13 @@ implementation remains private; fixtures isolate mutable state. Test conventions
 Read the relevant reference when changing that feature; implementation status belongs with its
 specification and operational evidence.
 
-| Area                                | Reference                                                                                                                                                                                                                              |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Financial projections and Dashboard | [Projection ownership](../../docs/adr/0030-dashboard-exact-write-maintained-projection.md), [explicit Dashboard mutations](../../docs/adr/0032-explicit-dashboard-creation-and-canonical-queries.md)                                   |
-| Recurring                           | [Historical detection](../../docs/adr/0032-deterministic-recurring-charge-detection.md), [planning](../../docs/adr/0036-recurring-planning.md)                                                                                         |
-| Billing                             | [Enrollment](../../docs/adr/0021-browser-only-payment-credential-enrollment.md), [renewal](../../docs/adr/0034-weekly-card-renewal.md), [provider ambiguity](../../docs/runbooks/billing-ambiguity.md)                                 |
-| Connections                         | [Authorization preparation](../../docs/operations/bancolombia-authorization-preparation-1267.md); [sandbox application authentication](../../docs/operations/bancolombia-sandbox-handoff-1266.md#protected-application-authentication) |
-| Privacy                             | [Withdrawal](../../docs/operations/processing-withdrawal-1273.md), [installed erasure procedure](../../docs/operations/titular-erasure-1274.md), [inventory](../../docs/operations/titular-erasure-inventory-1274.md)                  |
-| Schema redesign                     | [Feature specs](https://github.com/B4rz99/fidy-ai/issues/1394), [ownership and cutover checklist](../../docs/operations/database-cutover-1428.md)                                                                                      |
+| Area                                | Reference                                                                                                                                                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Financial projections and Dashboard | [Projection ownership](../../docs/adr/0030-dashboard-exact-write-maintained-projection.md), [explicit Dashboard mutations](../../docs/adr/0032-explicit-dashboard-creation-and-canonical-queries.md)   |
+| Recurring                           | [Historical detection](../../docs/adr/0032-deterministic-recurring-charge-detection.md), [planning](../../docs/adr/0036-recurring-planning.md)                                                         |
+| Billing                             | [Enrollment](../../docs/adr/0021-browser-only-payment-credential-enrollment.md), [renewal](../../docs/adr/0034-weekly-card-renewal.md), [provider ambiguity](../../docs/runbooks/billing-ambiguity.md) |
+| Connections                         | [Connection contracts](src/core/connections/contract.ts)                                                                                                                                               |
+| Privacy                             | [Withdrawal](../../docs/operations/processing-withdrawal-1273.md), [Titular procedure](../../docs/operations/titular-requests-1273.md)                                                                 |
 
 Connection authorization preparation privately owns its attempt-bound verifier, state digest
 and bounded PAR handoff in `connection_authorizations`. Claim and Audit commit before external bank
@@ -279,5 +275,4 @@ the User coordinator then settles validated Accounts, Active authority and Audit
 `connection_grants` owns claimed/quarantined/active/cleanup-required authority; its recoverable
 credentials use purpose-bound AES-GCM under a separate Core secret. `connection_accounts` retains
 stable Fidy identities across reauthorization and exposes only the currently active grant's exact
-Account set. [Activation custody and recovery](../../docs/operations/bancolombia-activation-1268.md)
-defines the encryption context, interrupted-work disposition and sandbox verification boundary.
+Account set. The [Connections adapter](cloudflare/connections/) owns credential custody and recovery.

@@ -6,7 +6,7 @@ accepted or executed by this implementation, even if the operator has refund per
 
 ## Enable protected Sandbox support
 
-- Apply `0035_billing_corrections.sql` through the normal private-Core D1 migration process.
+- Verify the deployed schema against the current [baseline](../../apps/server/cloudflare/migrations/0001_schema.sql) through the [release procedure](../operations/production-releases.md#d1-migration-history).
 - Use `WOMPI_ENVIRONMENT=sandbox` and the merchant's `prv_test_…` private key.
 - Configure a **separate Cloudflare Access application** for
   `/internal/support/billing-refunds` and its read subpaths. Its allow policy grants refund permission
@@ -69,8 +69,7 @@ Newer unrelated paid periods and an independently active original TrialPeriod st
 Original successful BillingAttempts, Price snapshots and purchased-period intervals remain unchanged.
 Historical attempt views retain their original period end; current standing and protected Pro checks
 use the separate access adjustment. Renewal stops remove due intents and prevent late charge
-settlement from recreating them. A future automatic-renewal implementation must honor these stops;
-re-enrollment/restarting renewals is not implemented here.
+settlement from recreating them. Renewal execution must honor these stops.
 
 Available Money is collected Money minus successful corrections and pending reservations. The D1
 insertion guard enforces this atomically, including concurrent support requests. A User can have at

@@ -232,10 +232,7 @@ afterAll(() =>
       );
       yield* Effect.tryPromise(() =>
         Bun.write(
-          new URL(
-            "../../../../docs/research/recurring-detector-measurements.json",
-            import.meta.url
-          ),
+          new URL("../../test-results/recurring-detector-measurements.json", import.meta.url),
           encoded
         )
       );

@@ -22,7 +22,6 @@
         "ignoreEffectWarningsInTscExitCode": false,
         "ignoreEffectErrorsInTscExitCode": false,
         "diagnosticSeverity": {
-          // Effect 4 platform APIs remain upstream unstable; exact pins and owned contract/native tests are the adoption gate.
           "unstableApiUsage": "off",
           "anyUnknownInErrorContext": "error",
           "asyncFunction": "error",

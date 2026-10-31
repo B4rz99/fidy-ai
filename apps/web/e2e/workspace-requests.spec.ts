@@ -32,6 +32,10 @@ const dispatchFocus = (page: Page): Promise<boolean> =>
   page.evaluate(() => window.dispatchEvent(new Event("focus")));
 const dispatchVisibility = (page: Page): Promise<boolean> =>
   page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")));
+const expectTransactionsReady = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeEnabled()
+  );
 const expectEntryRecheck = (
   reads: ReadonlyArray<string>,
   contexts: ReadonlyArray<string>
@@ -58,9 +62,7 @@ const returnToHandoffAfterCollection = (page: Page, reads: ReadonlyArray<string>
       yield* Effect.tryPromise(() =>
         page.getByRole("link", { name: "Transacciones", exact: true }).click()
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeEnabled()
-      );
+      yield* expectTransactionsReady(page);
       expect(reads.filter((path) => path === "/transactions")).toHaveLength(0);
       expect(reads.filter((path) => path === "/web/consent")).toHaveLength(1);
       yield* Effect.tryPromise(() =>
@@ -84,6 +86,7 @@ test("reuses the latched session and recent profile and categories across worksp
           identity: "navigationTransactions",
         })
       );
+      yield* expectTransactionsReady(page);
       // Hold only the display freshness clock fixed; the server still checks live authority.
       yield* freezeDisplayClock(page);
       const reads = observeSuccessfulReads(page);
@@ -95,9 +98,7 @@ test("reuses the latched session and recent profile and categories across worksp
         if (url.pathname === "/recurring-series") seriesReads += 1;
       });
       yield* Effect.tryPromise(() => page.reload());
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeEnabled()
-      );
+      yield* expectTransactionsReady(page);
       expectEntryRecheck(reads, bindingContexts);
       for (const workspace of [
         { name: "Presupuestos", ready: "Mes anterior" },
@@ -318,9 +319,7 @@ test("keeps the current information visible until first Recurring data is ready"
       yield* Effect.tryPromise(() =>
         signInNavigationPerformanceThroughCore({ page, request, identity: "navigationRecurring" })
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeEnabled()
-      );
+      yield* expectTransactionsReady(page);
       const reached = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
       yield* Effect.tryPromise(() =>

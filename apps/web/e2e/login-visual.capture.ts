@@ -1,3 +1,4 @@
+import { analyzeAccessibility } from "./accessibility";
 import type { Page } from "@playwright/test";
 import { type Cause, Config, Effect, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
@@ -5,7 +6,6 @@ import { openBrowserLogin } from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
-const { AxeBuilder } = await import("@axe-core/playwright");
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
 const apiOrigin = browserAcceptanceTopology().api;
@@ -201,7 +201,7 @@ const auditLogin = (page: Page, scenario: CaptureScenario): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* wait(page.clock.resume());
-      const result = yield* wait(new AxeBuilder({ page }).analyze());
+      const result = yield* wait(analyzeAccessibility(page));
       const report = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
         violations: result.violations,
       });
@@ -307,7 +307,7 @@ const captureProviderCancellation = (page: Page, scenario: ProviderCapture): Pro
       yield* wait(page.evaluate(() => document.fonts.ready));
       const filename = `${captureDirectory}/${provider}-cancelled-${theme}-${viewport.width}`;
       yield* wait(page.screenshot({ path: `${filename}.png`, scale: "css", caret: "hide" }));
-      const audit = yield* wait(new AxeBuilder({ page }).analyze());
+      const audit = yield* wait(analyzeAccessibility(page));
       expect(audit.violations).toEqual([]);
       const report = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
         violations: audit.violations,

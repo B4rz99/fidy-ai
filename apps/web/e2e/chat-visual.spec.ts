@@ -1,3 +1,4 @@
+import { analyzeAccessibility } from "./accessibility";
 import type { Page } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
@@ -9,7 +10,6 @@ import {
 } from "./chat-visual-fixture";
 
 const { test, expect } = playwright;
-const { AxeBuilder } = await import("@axe-core/playwright");
 const desktop = { name: "desktop", width: 1467, height: 1072 };
 const mobile = { name: "mobile", width: 390, height: 844 };
 const landscape = { name: "landscape", width: 667, height: 390 };
@@ -192,7 +192,7 @@ const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
       scale: "css",
     })
   );
-  const result = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+  const result = yield* Effect.tryPromise(() => analyzeAccessibility(page));
   const report = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result);
   yield* Effect.tryPromise(() => Bun.write(`${captureDirectory}/${filename}.axe.json`, report));
   expect(result.violations).toEqual([]);

@@ -1,10 +1,10 @@
+import { analyzeAccessibility } from "./accessibility";
 import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { signInBudgetEditingThroughCore } from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
 
-const { AxeBuilder } = await import("@axe-core/playwright");
 const { expect, test } = playwright;
 const budgetJourneyMilliseconds = 60_000;
 const categories = [
@@ -86,7 +86,7 @@ const installLostAcknowledgement = ({
 
 const checkAccessibility = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const result = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+    const result = yield* Effect.tryPromise(() => analyzeAccessibility(page));
     expect(
       result.violations.filter(({ impact }) => impact === "serious" || impact === "critical")
     ).toEqual([]);

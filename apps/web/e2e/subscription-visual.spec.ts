@@ -1,3 +1,4 @@
+import { analyzeAccessibility } from "./accessibility";
 import { acceptSubscriptionContracts } from "./subscription-interactions";
 import type { Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
@@ -9,7 +10,6 @@ import {
 } from "./subscription-visual-fixture";
 
 const { test, expect } = playwright;
-const { AxeBuilder } = await import("@axe-core/playwright");
 const captureDirectory = "test-results/subscription-visual";
 const desktop = { name: "desktop", width: 1467, height: 1072 };
 const mobile = { name: "mobile", width: 390, height: 844 };
@@ -53,7 +53,7 @@ const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
       scale: "css",
     })
   );
-  const result = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+  const result = yield* Effect.tryPromise(() => analyzeAccessibility(page));
   const report = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result);
   yield* Effect.tryPromise(() => Bun.write(`${captureDirectory}/${filename}.axe.json`, report));
   expect(result.violations).toEqual([]);

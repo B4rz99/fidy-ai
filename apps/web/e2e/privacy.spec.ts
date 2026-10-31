@@ -1,3 +1,4 @@
+import { analyzeAccessibility } from "./accessibility";
 import {
   consultAuthorizationThroughCore,
   openPrivacyTransactionsThroughCore,
@@ -18,7 +19,6 @@ import type { Locator, Page, Route } from "@playwright/test";
 import { apiOrigin } from "./http-fixtures";
 import { exerciseTitularCase } from "./titular-case-fixture";
 
-const { AxeBuilder } = await import("@axe-core/playwright");
 const { expect, test } = playwright;
 test.describe.configure({ mode: "parallel" });
 const unauthenticatedStatus = 401;
@@ -34,7 +34,7 @@ const withdrawalCheckbox = (page: Page): Locator =>
 const verifyAccessibility = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const result = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+      const result = yield* Effect.tryPromise(() => analyzeAccessibility(page));
       expect(
         result.violations.filter(({ impact }) => impact === "serious" || impact === "critical")
       ).toEqual([]);

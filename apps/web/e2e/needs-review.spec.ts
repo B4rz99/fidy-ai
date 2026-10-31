@@ -965,7 +965,7 @@ for (const [destination, identity] of [
         yield* Effect.tryPromise(() =>
           page
             .getByRole("navigation", { name: "Aplicación" })
-            .getByText("Por revisar", { exact: true })
+            .getByRole("link", { name: /^Por revisar/u })
             .click()
         );
         yield* Effect.tryPromise(() =>

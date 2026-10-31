@@ -14,7 +14,7 @@ import {
   openBrowserLogin,
   reloadTransactionsThroughCore,
   signInBudgetEditingThroughCore,
-  signInNavigationPerformanceThroughCore,
+  signInNativeClockThroughCore,
 } from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
 
@@ -97,7 +97,7 @@ test("native performance survives full-document login and reload", ({ page, requ
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationClock" })
+        signInNativeClockThroughCore({ page, request, identity: "navigationClock" })
       );
       expect(yield* Effect.tryPromise(() => page.evaluate(nativePerformanceEvidence))).toEqual({
         native: true,

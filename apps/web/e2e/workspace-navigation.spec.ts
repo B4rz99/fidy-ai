@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import { type Cause, Effect, type Scope } from "effect";
+import { type Cause, Clock, Effect, type Scope } from "effect";
 import { apiOrigin } from "./http-fixtures";
 import {
   navigateThroughConsent,
@@ -12,6 +12,7 @@ const { test, expect } = playwright;
 const targetMilliseconds = 10;
 const budgetTargetMilliseconds = 16;
 const measurementSamples = 5;
+const expiredDisplayMilliseconds = 6_000;
 const freshConsentTimeoutMilliseconds = 500;
 const workspaces = [
   {
@@ -98,8 +99,13 @@ for (const workspace of workspaces) {
         const count = workspace.name === "Transacciones" ? 1 : measurementSamples;
         for (let sample = 0; sample < count; sample++) {
           if (sample > 0) yield* Effect.tryPromise(() => openWorkspace(page, "Por revisar"));
-          // Exercise expired display revalidation; recent returns now reuse the five-second snapshot.
-          if (workspace.name === "Recurrentes" && sample === 0) yield* Effect.sleep("6 seconds");
+          // Expire only display freshness; rendering, timers and native authority keep real time.
+          if (workspace.name === "Recurrentes" && sample === 0) {
+            const current = yield* Clock.currentTimeMillis;
+            yield* Effect.tryPromise(() =>
+              page.clock.setFixedTime(current + expiredDisplayMilliseconds)
+            );
+          }
           yield* Effect.tryPromise(() => page.evaluate(observeSwitch, workspace.ready));
           yield* Effect.tryPromise(() => revisitWorkspace(page, workspace.name));
           yield* Effect.tryPromise(() =>

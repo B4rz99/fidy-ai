@@ -205,7 +205,7 @@ const checks: Array<Check> = [
   ]),
   rootCheck("unit", "CI tooling", ["bun", "run", "test:ci-tools"]),
   rootCheck("unit", "Contract checker tests", ["bun", "run", "test:contracts"]),
-  rootCheck("builds", "Customer documentation", ["bun", "run", "docs:verify"]),
+  rootCheck("builds", "Customer documentation", ["bun", "run", "docs:verify:built"]),
   rootCheck("builds", "Public site browser checks", [
     "bun",
     "run",

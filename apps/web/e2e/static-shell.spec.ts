@@ -1,3 +1,4 @@
+import { analyzeAccessibility } from "./accessibility";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { AxeBuilder } from "@axe-core/playwright";
 import { type APIRequestContext, type Page, expect, test } from "@playwright/test";
@@ -11,7 +12,7 @@ const json = (value: object, space: number): string => JSON.stringify(value, und
 const expectSeriousAccessibilityViolations = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const results = yield* wait(new AxeBuilder({ page }).analyze());
+      const results = yield* wait(analyzeAccessibility(page));
       const seriousViolations = results.violations.filter(
         ({ impact }) => impact === "serious" || impact === "critical"
       );
@@ -24,6 +25,49 @@ const accepted = 204;
 const forbidden = 403;
 const unauthorized = 401;
 const methodNotAllowed = 405;
+const inaccessibleDocument =
+  '<!doctype html><html lang="en"><head><title>Accessibility fixture</title></head><body><main><h1>Example</h1><button id="missing-name"></button></main></body></html>';
+const accessibilityTargets = (
+  result: Awaited<ReturnType<typeof analyzeAccessibility>>
+): ReadonlyArray<string> =>
+  result.violations
+    .flatMap(({ id, nodes }) => nodes.map((node) => `${id}:${JSON.stringify(node.target)}`))
+    .sort();
+
+test("single-document accessibility checks retain the full engine's violations", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(page.setContent(inaccessibleDocument));
+      const expected = yield* wait(new AxeBuilder({ page }).analyze());
+      const actual = yield* wait(analyzeAccessibility(page));
+      expect(accessibilityTargets(actual)).toEqual(accessibilityTargets(expected));
+      expect(actual.violations.map(({ id }) => id)).toContain("button-name");
+    })
+  ));
+
+test("accessibility checks retain violations inside cross-origin frames", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(
+        page.route("https://*.accessibility.invalid/**", (route) =>
+          route.fulfill({
+            contentType: "text/html",
+            body:
+              new URL(route.request().url()).hostname === "child.accessibility.invalid"
+                ? inaccessibleDocument
+                : '<!doctype html><html lang="en"><head><title>Frame fixture</title></head><body><main><h1>Example</h1><iframe title="Example content" src="https://child.accessibility.invalid/"></iframe></main></body></html>',
+          })
+        )
+      );
+      yield* wait(page.goto("https://top.accessibility.invalid/"));
+      yield* wait(expect(page.frameLocator("iframe").locator("#missing-name")).toBeVisible());
+      const actual = yield* wait(analyzeAccessibility(page));
+      const unnamed = actual.violations.filter(({ id }) => id === "button-name");
+      expect(unnamed).toHaveLength(1);
+      expect(accessibilityTargets(actual).join("\n")).toContain("missing-name");
+    })
+  ));
+
 test("serves the checked-in security policy on SPA fallbacks", ({ request }) =>
   Effect.runPromise(
     Effect.gen(function* () {

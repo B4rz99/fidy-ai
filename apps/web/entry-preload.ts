@@ -31,13 +31,16 @@ export const entryPreload = (): Plugin => ({
           visit(chunk.fileName);
         }
       }
-      return [...files]
-        .filter((name) => !html.includes(`href="/${name}"`))
-        .map((name): HtmlTagDescriptor => ({
+      const tags: Array<HtmlTagDescriptor> = [];
+      for (const name of files) {
+        if (html.includes(`href="/${name}"`)) continue;
+        tags.push({
           tag: "link",
           attrs: { rel: "modulepreload", crossorigin: "", href: `/${name}`, fetchpriority: "low" },
           injectTo: "head-prepend",
-        }));
+        });
+      }
+      return tags;
     },
   },
 });

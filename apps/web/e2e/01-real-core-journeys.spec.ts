@@ -345,7 +345,6 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
       yield* fromPlaywright(
         signInThroughCore({
           page,
-          deferFreshEntry: true,
           request,
         })
       );

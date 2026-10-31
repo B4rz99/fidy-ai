@@ -1,0 +1,47 @@
+docs/research/dashboard-next-source-composition-2026-10-31.md
+  s_d9571b3fccd032::t_597e15b92b558c 1-304
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_d9571b3fccd032::t_fa75054901e60c 383-398,400-409,1836-1869
+  s_d9571b3fccd032::t_240f542e1a29ff 382,399
+  s_d9571b3fccd032::t_59ba49ae43bf7a 1870
+docs/research/dashboard-authorized-source-snapshot-2026-10-31.md
+  s_d9571b3fccd032::t_b4123f3e1bebeb 1-176
+apps/server/cloudflare/budgets/operations.ts
+  s_d9571b3fccd032::t_547bcc434ee2d1 18,486,496-498,503-550
+apps/server/cloudflare/dashboard/internal/dashboard-mutation.ts
+  s_d9571b3fccd032::t_78fb5c23c0c1fb 1-5,8-9,23,117-196,290-298,307,313,323,330
+apps/server/cloudflare/dashboard/internal/dashboard-snapshot.test.ts
+  s_d9571b3fccd032::t_0395c4cf35ce91 1-315
+apps/server/cloudflare/dashboard/internal/dashboard-view.test.ts
+  s_d9571b3fccd032::t_0f0a04a4369d02 9-10,12-26,121,182
+apps/server/cloudflare/dashboard/internal/dashboard-view.ts
+  s_d9571b3fccd032::t_0fefc27862d94b 2,4-9,15-18,20-23,25-31,33-74,79-82,90-95,97-99,101,103-115,117-120,122,128,134,138-159
+apps/server/cloudflare/dashboard/operations.ts
+  s_d9571b3fccd032::t_a60f34b3e313d9 35,276-289,316-317,319,325-326
+apps/server/cloudflare/transactions/contract.ts
+  s_d9571b3fccd032::t_b8abb942e3f052 4,12,148-151,158,166
+apps/server/cloudflare/transactions/internal/dashboard-projection.ts
+  s_d9571b3fccd032::t_e93b3dd31c4afb 47-50,87-93,99-100,175,177,187,203-209,235,249,252,268,319-326,337-338
+apps/server/cloudflare/transactions/internal/dashboard-read.ts
+  s_d9571b3fccd032::t_f2b27e526748f7 1,9-19,33-67,69-71,73-81,84-86,89-107,109-111,114,117-163
+apps/server/cloudflare/transactions/peer-reads.test.ts
+  s_d9571b3fccd032::t_34e6ce64909470 269,272-285
+docs/research/dashboard-default-snapshot-plan-2026-10-30.md
+  s_d9571b3fccd032::t_08ae31f7ec5b59 1-199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4b0a6db0e94959eeaac8b1756c65787059b2dd29",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

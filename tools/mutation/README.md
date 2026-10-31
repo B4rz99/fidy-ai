@@ -23,18 +23,12 @@ selects covered tests instead of launching the entire suite for every mutant. Th
 mutation Vitest configuration isolates modules so instrumentation and coverage stay with
 the correct test file; ordinary core tests continue using their normal configuration.
 
-The Vitest runner patch joins nested names with a greater-than sign surrounded by spaces, as implemented
-by `getTestName` in the installed `vitest/dist/task-utils.js`. Stryker 10 otherwise builds
-space-separated filters and reports nested-suite mutants as surviving after executing zero
-tests. Both coverage identities and test-selection identities must use the same separator.
-The runner regression mutates a small module across multiple test files and nested suites,
-including a mutation made during module initialization. It requires asserted behavior mutants
-to be killed and deliberately unasserted control mutants to survive, preventing inflated scores.
-
-The patch also retains Vitest file-level failures when module initialization prevents tests from
-being registered. Such a failure rejects the baseline run or kills the active mutant; it must
-not become a surviving mutant merely because the failed file contains no runnable test tasks.
-The regression uses an unmutated validator that throws when its mutated configuration is invalid.
+Stryker 10.1.1 selects Vitest 5's `>` separator for coverage and test-selection identities.
+Its upstream runner also preserves file-level collection errors. The remaining runner patch
+classifies a file-level failure caused by an active mutant as killed; an unmutated baseline
+failure still rejects the run. The regression exercises multiple files and nested suites,
+including module-initialization mutations. Asserted behavior must be killed and deliberately
+unasserted controls must survive, preventing inflated scores.
 
 Some mutations preserve behavior for every valid domain input. For example, the monthly date
 projection's final ISO date bounds remove the injected `"Stryker was here"` array member;

@@ -1,3 +1,4 @@
+import { ReviewInboxSkeleton } from "@/ui/components/review-inbox-loading";
 import type { FidyClient } from "@/transport/client";
 import { type ReviewDecisions, type ReviewWorkspaceQuery, makeReviewDecisions } from "./decisions";
 import { ReviewFullState, ReviewWorkspaceLayout } from "@/ui/components/review-workspace";
@@ -207,13 +208,17 @@ const ReviewUnavailable = ({
         search={search}
         setSearch={setSearch}
       />
-      <ReviewFullState
-        state={loading ? "loading" : "error"}
-        title={loading ? "Cargando elementos…" : "No pudimos cargar los elementos"}
-        description={loading ? "" : "Intenta cargar la bandeja de nuevo."}
-      >
-        {loading ? null : <Button onClick={refresh}>Reintentar</Button>}
-      </ReviewFullState>
+      {loading ? (
+        <ReviewInboxSkeleton />
+      ) : (
+        <ReviewFullState
+          state="error"
+          title="No pudimos cargar los elementos"
+          description="Intenta cargar la bandeja de nuevo."
+        >
+          <Button onClick={refresh}>Reintentar</Button>
+        </ReviewFullState>
+      )}
     </>
   );
 };

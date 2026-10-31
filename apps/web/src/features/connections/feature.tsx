@@ -1,3 +1,5 @@
+import { BankRequestSkeleton } from "@/ui/components/settings-loading";
+import { TextSkeleton } from "@/ui/components/loading-skeletons";
 import { ConnectionResult } from "./result";
 import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
@@ -172,7 +174,7 @@ const Continuation = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX
     )
   );
   const run = useAtomSet(command);
-  if (result._tag === "Initial") return <output>Cargando solicitud…</output>;
+  if (result._tag === "Initial") return <BankRequestSkeleton />;
   if (result._tag === "Failure") return <Unavailable attempt={attempt} />;
   return (
     <div className="flex w-full max-w-md flex-col gap-3">
@@ -228,7 +230,7 @@ export const ConnectionResultFeature = (): JSX.Element => {
         </Button>
       </WorkspaceHeader>
       <div className="flex max-w-2xl flex-col gap-5 p-5">
-        {result._tag === "Initial" ? <output>Consultando conexión…</output> : null}
+        {result._tag === "Initial" ? <TextSkeleton label="Consultando conexión" lines={3} /> : null}
         {result._tag === "Failure" ? (
           <div role="alert">
             <p>

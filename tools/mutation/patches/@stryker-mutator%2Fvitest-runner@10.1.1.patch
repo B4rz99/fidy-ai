@@ -1,0 +1,27 @@
+diff --git a/dist/src/vitest-test-runner.js b/dist/src/vitest-test-runner.js
+--- a/dist/src/vitest-test-runner.js
++++ b/dist/src/vitest-test-runner.js
+@@ -4,7 +4,7 @@
+ import fs from 'fs';
+ import { INSTRUMENTER_CONSTANTS, } from '@stryker-mutator/api/core';
+ import { commonTokens, tokens, } from '@stryker-mutator/api/plugin';
+-import { DryRunStatus, toMutantRunResult, determineHitLimitReached, TestStatus, } from '@stryker-mutator/api/test-runner';
++import { DryRunStatus, toMutantRunResult, determineHitLimitReached, TestStatus, MutantRunStatus, } from '@stryker-mutator/api/test-runner';
+ import { errorToString, escapeRegExp, normalizeFileName, notEmpty, testFilesProvided, } from '@stryker-mutator/util';
+ import { vitestWrapper } from './vitest-wrapper.js';
+ import { VITEST_MODERN_TEST_NAME_SEPARATOR, VITEST_LEGACY_TEST_NAME_SEPARATOR, } from './test-helpers.js';
+@@ -188,6 +188,14 @@
+             testIds: options.testFilter,
+             relatedFiles: [options.sandboxFileName],
+         });
++        if (dryRunResult.status === DryRunStatus.Error &&
++            this.ctx.state.getFiles().some((file) => file.result?.state === 'fail')) {
++            return {
++                status: MutantRunStatus.Killed,
++                killedBy: [],
++                failureMessage: dryRunResult.errorMessage,
++            };
++        }
+         const hitCount = this.readHitCount();
+         const timeOut = determineHitLimitReached(hitCount, options.hitLimit);
+         return toMutantRunResult(timeOut ?? dryRunResult);

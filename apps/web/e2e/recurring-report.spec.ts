@@ -1,3 +1,4 @@
+import { expectSameLoadingFrame, measureLoadingFrame } from "./loading-geometry";
 import type { Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { apiOrigin, installUser, response } from "./http-fixtures";
@@ -96,7 +97,19 @@ const retryJourney = Effect.fnUntraced(function* (page: Page) {
   });
   yield* Effect.tryPromise(() => page.route(`${apiOrigin}${reportPath}`, handler));
   yield* Effect.tryPromise(() => page.goto(reportPath));
-  yield* Effect.tryPromise(() => expect(page.getByText("Cargando informe…")).toBeVisible());
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("status", { name: "Cargando informe", exact: true })).toHaveAttribute(
+      "aria-busy",
+      "true"
+    )
+  );
+  const frameParts = [
+    "recurring-report-columns",
+    "recurring-report-main",
+    "recurring-report-context",
+    "recurring-report-labels",
+  ].map((name) => ({ name, selector: `.${name}` }));
+  const loadingFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
   initial.resolve();
   yield* Effect.tryPromise(() => expect(page.getByText("Informe no disponible")).toBeVisible());
   yield* Effect.tryPromise(() =>
@@ -114,6 +127,8 @@ const retryJourney = Effect.fnUntraced(function* (page: Page) {
       page.getByRole("list", { name: "Todos los patrones confirmados" }).getByRole("listitem")
     ).toHaveCount(reportItemCount)
   );
+  const loadedFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
+  expectSameLoadingFrame(loadingFrame, loadedFrame);
   expect(calls).toBe(2);
 });
 
@@ -224,12 +239,16 @@ const prepareVisualReport = Effect.fnUntraced(function* (page: Page, state: Visu
   );
   const ready = {
     report: "Patrones históricos",
-    loading: "Cargando informe…",
+    loading: "Cargando informe",
     invalid: "Enlace no válido",
     unavailable: "Informe no disponible",
   };
   yield* Effect.tryPromise(() =>
-    expect(page.getByText(ready[state], { exact: true })).toBeVisible()
+    expect(
+      state === "loading"
+        ? page.getByRole("status", { name: ready[state], exact: true })
+        : page.getByText(ready[state], { exact: true })
+    ).toBeVisible()
   );
   return pending.resolve;
 });

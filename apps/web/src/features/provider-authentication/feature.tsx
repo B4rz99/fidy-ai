@@ -1,3 +1,4 @@
+import { ConsentDisclosureSkeleton } from "@/ui/components/settings-loading";
 import { Option } from "effect";
 import type { AuthenticationProvider } from "@/transport/client";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
@@ -32,7 +33,7 @@ const ConsentNotice = ({
   return (
     <div data-access-consent="">
       {AsyncResult.match(disclosure, {
-        onInitial: () => <p>Cargando información de Consentimiento…</p>,
+        onInitial: () => <ConsentDisclosureSkeleton />,
         onFailure: () => (
           <>
             <p role="alert">No pudimos cargar el Consentimiento.</p>

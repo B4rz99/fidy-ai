@@ -1,3 +1,4 @@
+import { AccessListSkeleton } from "@/ui/components/settings-loading";
 import { UserGroupIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { RefreshButton } from "@/ui/components/refresh-button";
@@ -57,7 +58,7 @@ const ManagementContent = ({
   revoke: (id: Option.Option<OAuthConnectionId>) => void;
   next: (id: OAuthConnectionId) => void;
 }>): JSX.Element => {
-  if (listing._tag === "Initial") return <output>Cargando agentes…</output>;
+  if (listing._tag === "Initial") return <AccessListSkeleton kind="agents" />;
   if (listing._tag === "Failure") {
     return <ConnectionReadFailure failure={listing.failure} />;
   }

@@ -5,7 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import type { RecurringDigestReport } from "@/transport/client";
 import { formatMoney } from "@/transport/money";
 import { Alert, AlertDescription } from "@/ui/components/alert";
-import "./report.css";
+import "@/ui/components/recurring-report.css";
 
 export const HistoricalReport = ({
   report,

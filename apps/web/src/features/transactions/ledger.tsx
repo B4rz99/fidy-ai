@@ -1,3 +1,4 @@
+import { TransactionSkeletonRows } from "@/ui/components/transaction-loading";
 import {
   type ColumnDef,
   type Table as ReactTable,
@@ -34,6 +35,7 @@ import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { CategoryVisual } from "@/ui/components/category-visual";
 import { DirectionIndicator } from "@/ui/components/icon-indicator";
 import { formatMoney } from "@/transport/money";
+import type { HistoryState } from "./history";
 import type { TransactionListRow } from "./presentation";
 
 const columns: Array<ColumnDef<TransactionListRow>> = [
@@ -43,7 +45,7 @@ const columns: Array<ColumnDef<TransactionListRow>> = [
   { accessorKey: "moneyText", header: "Monto", enableSorting: false },
 ];
 type LedgerProps = Readonly<{
-  partial: boolean;
+  continuation: HistoryState["continuation"];
   readOnly: boolean;
   rows: ReadonlyArray<TransactionListRow>;
   selected: Option.Option<string>;
@@ -431,6 +433,9 @@ const LedgerBody = ({
           )}
         </Fragment>
       ))}
+      {rowProps.continuation === "loading" ? (
+        <TransactionSkeletonRows phase="continuation" />
+      ) : null}
     </TableBody>
   );
 };
@@ -473,6 +478,46 @@ const SelectionBar = ({
     ) : null}
   </>
 );
+const LedgerContents = ({
+  rows,
+  table,
+  ...props
+}: LedgerProps & Readonly<{ table: ReactTable<TransactionListRow> }>): JSX.Element => {
+  const sortedRows = table.getRowModel().rows;
+  const dates = Array.from(new Set(rows.map((row) => row.occurredOnText)));
+  return (
+    <>
+      {rows.length === 0 ? (
+        <>
+          <EmptyLedger partial={props.continuation !== "complete"} readOnly={props.readOnly} />
+          {props.continuation === "loading" ? (
+            <Table>
+              <TableBody>
+                <TransactionSkeletonRows phase="initial" />
+              </TableBody>
+            </Table>
+          ) : null}
+        </>
+      ) : (
+        <Table aria-label="Tabla de transacciones">
+          <LedgerHeader table={table} />
+          <LedgerBody
+            dates={dates}
+            rows={rows}
+            sortedRows={sortedRows}
+            locale={props.locale}
+            rowProps={props}
+          />
+        </Table>
+      )}
+      {props.continuation === "loading" ? (
+        <output className="sr-only" aria-label="Cargando transacciones" aria-busy="true">
+          Cargando transacciones
+        </output>
+      ) : null}
+    </>
+  );
+};
 /** A date-grouped ledger; sorting preserves dates as the primary grouping key. */
 export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element => {
   const [visibility, setVisibility] = useState({});
@@ -489,8 +534,6 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
     getSortedRowModel: getSortedRowModel(),
     getRowId: (row) => row.id,
   });
-  const sortedRows = table.getRowModel().rows;
-  const dates = Array.from(new Set(rows.map((row) => row.occurredOnText)));
   return (
     <section
       aria-label={props.readOnly ? "Transacciones guardadas" : "Transacciones del mes"}
@@ -510,20 +553,7 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
         readOnly={props.readOnly}
       />
       <SelectionBar selection={props.selection} disabled={props.disabled} />
-      {rows.length === 0 ? (
-        <EmptyLedger partial={props.partial} readOnly={props.readOnly} />
-      ) : (
-        <Table aria-label="Tabla de transacciones">
-          <LedgerHeader table={table} />
-          <LedgerBody
-            dates={dates}
-            rows={rows}
-            sortedRows={sortedRows}
-            locale={props.locale}
-            rowProps={props}
-          />
-        </Table>
-      )}
+      <LedgerContents {...props} rows={rows} table={table} />
     </section>
   );
 };

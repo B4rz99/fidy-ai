@@ -1,3 +1,4 @@
+import { AccessListSkeleton } from "@/ui/components/settings-loading";
 import { Key01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { DateTime, Option } from "effect";
@@ -392,9 +393,9 @@ const PATQueryContent = ({
   controller: ReturnType<typeof useRevocationController>;
 }>): JSX.Element => {
   if (state._tag === "Initial") {
-    return <p className="text-muted-foreground">La consulta de tokens aún no se ha iniciado.</p>;
+    return <AccessListSkeleton kind="tokens" />;
   }
-  if (state._tag === "Loading") return <p aria-live="polite">Cargando tokens activos…</p>;
+  if (state._tag === "Loading") return <AccessListSkeleton kind="tokens" />;
   if (state._tag === "Ready") {
     return (
       <>

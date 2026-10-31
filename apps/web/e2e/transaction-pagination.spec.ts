@@ -192,6 +192,11 @@ test("browses beyond 100 Transactions and discloses loaded filter and summary sc
         ).toBeVisible()
       );
       yield* Effect.tryPromise(() => expect.poll(pendingReceived(fixture)).toBe(true));
+      yield* wait(() =>
+        expect(
+          page.locator("section.transaction-ledger [data-slot=table-row][aria-hidden=true]").first()
+        ).toBeVisible()
+      );
       yield* wait(() => completePending(fixture));
       yield* Effect.tryPromise(() =>
         expect(
@@ -253,6 +258,34 @@ for (const count of [0, pageSize, multiplePages]) {
       })
     ));
 }
+const rowBounds = (
+  element: Element
+): ReadonlyArray<Readonly<{ x: number; width: number; height: number }>> =>
+  [element, ...element.querySelectorAll("[data-slot=table-cell]")].map((part) => {
+    const { x, width, height } = part.getBoundingClientRect();
+    return { x, width, height };
+  });
+const expectContinuationAlignment = Effect.fnUntraced(function* (page: Page) {
+  const pendingRows = page.getByRole("status", { name: "Cargando transacciones" });
+  yield* wait(() => expect(pendingRows).toBeVisible());
+  const loadedRow = page
+    .locator(
+      "section.transaction-ledger [data-slot=table-body] [data-slot=table-row]:not([data-date-group])"
+    )
+    .first();
+  const pendingRow = page
+    .locator("section.transaction-ledger [data-slot=table-row][aria-hidden=true]")
+    .first();
+  const existingBounds = yield* wait(() => loadedRow.evaluate(rowBounds));
+  const skeletonBounds = yield* wait(() => pendingRow.evaluate(rowBounds));
+  expect(skeletonBounds).toHaveLength(existingBounds.length);
+  for (const [index, bounds] of existingBounds.entries()) {
+    expect(skeletonBounds[index]?.x).toBeCloseTo(bounds.x, 0);
+    expect(skeletonBounds[index]?.width).toBeCloseTo(bounds.width, 0);
+  }
+  expect(skeletonBounds[0]?.height).toBeCloseTo(existingBounds[0]?.height ?? 0, 0);
+});
+
 test("retains loaded Transactions on interruption and retries the same bounded page", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -274,6 +307,7 @@ test("retains loaded Transactions on interruption and retries the same bounded p
         )
       );
       yield* wait(() => expect.poll(pendingReceived(fixture)).toBe(true));
+      yield* expectContinuationAlignment(page);
       fixture.mode = "failure";
       yield* wait(() => interruptPending(fixture));
       yield* wait(() =>

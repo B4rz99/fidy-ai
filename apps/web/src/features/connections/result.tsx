@@ -1,3 +1,4 @@
+import { TextSkeleton } from "@/ui/components/loading-skeletons";
 import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -38,6 +39,9 @@ const AuthorizedAccounts = ({ connection }: Readonly<{ connection: Connection }>
     })
   );
   const result = useAtomValue(query).pipe(presentCanonicalQuery);
+  if (result._tag === "Initial") {
+    return <TextSkeleton label="Cargando cuentas autorizadas" lines={1} />;
+  }
   if (result._tag !== "Ready") {
     return <p>La consulta de cuentas autorizadas aún no está disponible.</p>;
   }

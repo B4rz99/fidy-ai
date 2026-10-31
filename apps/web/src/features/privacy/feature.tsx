@@ -1,3 +1,4 @@
+import { PrivacyAuthorizationSkeleton } from "@/ui/components/settings-loading";
 import {
   ArrowUpRight01Icon,
   CreditCardIcon,
@@ -101,7 +102,7 @@ const ConsentContent = ({
   client: WebAuthClient;
 }>): JSX.Element => {
   if (status._tag === "Initial") {
-    return <output>Consultando autorización…</output>;
+    return <PrivacyAuthorizationSkeleton />;
   }
   if (status._tag === "Failure" || Option.isSome(status.refreshFailure)) {
     return (

@@ -605,7 +605,7 @@ const WorkspaceContent = ({
           refreshDisabled={refreshLocked(panel, corrections)}
         />
         <TransactionLedger
-          partial={props.continuation !== "complete"}
+          continuation={props.continuation}
           toolbar={<WorkspaceToolbar filters={filters} onFilters={onFilters} disabled={locked} />}
           readOnly={props.readOnly === true}
           canEdit={props.editable}
@@ -618,6 +618,7 @@ const WorkspaceContent = ({
           renderCategory={(row, disabled) => renderCategoryCell(row, disabled, props)}
           onSelect={(id) => onPanel(detailPanel(id, props.editable))}
         />
+        <ContinuationControl {...props} editing={panelEditing(panel)} />
       </div>
       <WorkspaceContext panel={panel} onPanel={onPanel} busy={correctionBusy}>
         <WorkspacePanel
@@ -642,7 +643,6 @@ const ContinuationNotice = (props: WorkspaceProps): JSX.Element =>
   );
 const continuationLabels = {
   complete: "",
-  loading: "Cargando más transacciones…",
   failure: "Reintentar carga de más transacciones",
   available: "Al seguir bajando cargaremos más transacciones.",
 };
@@ -661,6 +661,8 @@ const ContinuationControl = (
     return observeContinuation({ element, onMore: props.onMore });
   };
   if (props.continuation === "complete") return <></>;
+  const continuation =
+    props.continuation === "loading" ? null : <span>{continuationLabels[props.continuation]}</span>;
   return (
     <div
       ref={attachContinuation}
@@ -683,7 +685,7 @@ const ContinuationControl = (
           {continuationLabels[props.continuation]}
         </Button>
       ) : (
-        <span>{continuationLabels[props.continuation]}</span>
+        continuation
       )}
     </div>
   );
@@ -734,7 +736,6 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
           visible={visible}
           rows={rows}
         />
-        <ContinuationControl {...props} editing={editing} />
       </TransactionSurface>
     </>
   );

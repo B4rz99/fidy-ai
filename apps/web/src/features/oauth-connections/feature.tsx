@@ -1,3 +1,4 @@
+import { AuthorizationSkeleton } from "@/ui/components/authorization-loading";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useParams, useRouter, useSearch } from "@tanstack/react-router";
 import { Effect, Option, Schema } from "effect";
@@ -81,9 +82,9 @@ const CancelledRequest = (): JSX.Element => (
   </OAuthState>
 );
 const LoadingRequest = (): JSX.Element => (
-  <OAuthState title="Consultando solicitud" kind="warning">
-    <output>Cargando solicitud…</output>
-  </OAuthState>
+  <OAuthWorkspace title="Conectar con Fidy">
+    <AuthorizationSkeleton />
+  </OAuthWorkspace>
 );
 const ReviewContent = ({ requestId }: Readonly<{ requestId: string }>): JSX.Element => {
   const router = useRouter();

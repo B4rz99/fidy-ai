@@ -1,3 +1,4 @@
+import { BudgetSkeleton } from "@/ui/components/budget-loading";
 import { workspaceProfileQuery } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter, useSearch } from "@tanstack/react-router";
@@ -5,8 +6,6 @@ import { Option } from "effect";
 import { type JSX, Suspense, lazy, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
-import { Skeleton } from "@/ui/components/skeleton";
-import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { currentBudgetMonth } from "./model";
 import { useMonthlyBudgets } from "./controller";
 import { BudgetWorkspace } from "./workspace";
@@ -16,12 +15,6 @@ const Workspace = import.meta.env.DEV
   ? lazy(() => import("./dev-preview").then((module) => ({ default: module.BudgetDataPreview })))
   : BudgetWorkspace;
 
-const Loading = (): JSX.Element => (
-  <div className="p-5" aria-label="Cargando presupuestos">
-    <Skeleton className="h-20 w-full" />
-    <Skeleton className="mt-4 h-64 w-full" />
-  </div>
-);
 const Failure = ({
   retry,
   waiting,
@@ -51,13 +44,13 @@ const MonthlyBudgets = ({
     profileCurrent,
   });
   if (state._tag === "Failure") return <Failure retry={state.refresh} waiting={state.waiting} />;
-  if (state._tag !== "Ready") return <Loading />;
+  if (state._tag !== "Ready") return <BudgetSkeleton />;
   return (
     <>
       {state.stale ? (
         <Failure retry={state.workspace.editing.refresh} waiting={state.waiting} />
       ) : null}
-      <Suspense fallback={<Loading />}>
+      <Suspense fallback={<BudgetSkeleton />}>
         <Workspace {...state.workspace} />
       </Suspense>
     </>
@@ -88,14 +81,7 @@ export const BudgetScreen = (): JSX.Element => {
   const refresh = useAtomRefresh(profile);
   if (state._tag === "Failure") return <Failure retry={refresh} waiting={state.waiting} />;
   if (state._tag !== "Ready") {
-    return (
-      <>
-        <WorkspaceHeader title="Presupuestos" context={null}>
-          {null}
-        </WorkspaceHeader>
-        <Loading />
-      </>
-    );
+    return <BudgetSkeleton />;
   }
   return (
     <>

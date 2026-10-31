@@ -1,3 +1,4 @@
+import { HistoricalSuggestionsSkeleton } from "@/ui/components/recurring-loading";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -136,7 +137,7 @@ const LoadedSuggestions = ({
       </div>
     );
   }
-  if (state._tag !== "Ready") return <output>Buscando patrones históricos…</output>;
+  if (state._tag !== "Ready") return <HistoricalSuggestionsSkeleton />;
   return (
     <SuggestionResults
       data={state.value.data}

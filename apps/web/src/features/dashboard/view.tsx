@@ -1098,12 +1098,6 @@ export const DashboardViewComponent = ({
   );
 };
 
-const InitialDashboard = (): JSX.Element => (
-  <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-    <p className="text-muted-foreground">El tablero aún no se ha solicitado.</p>
-  </main>
-);
-
 const DashboardError = ({
   boundaryFailure,
   onRefresh,
@@ -1135,7 +1129,7 @@ export const DashboardRouteContent = ({
   const state = presentCanonicalQuery(result);
   switch (state._tag) {
     case "Initial":
-      return state.waiting ? <LoadingDashboard /> : <InitialDashboard />;
+      return <LoadingDashboard />;
     case "Failure":
       return (
         <DashboardError

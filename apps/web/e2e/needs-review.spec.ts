@@ -1,3 +1,4 @@
+import { expectSameLoadingFrame, measureLoadingFrame } from "./loading-geometry";
 import { signInNavigationPerformanceThroughCore, signInThroughCore } from "./real-core-fixture";
 import type { Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
@@ -1361,9 +1362,9 @@ const unavailableStateRoute =
         });
   };
 for (const [state, copy] of Object.entries({
-  loading: "Cargando elementos…",
+  loading: "Cargando elementos",
   error: "No pudimos cargar los elementos",
-  "detail-loading": "Cargando elemento…",
+  "detail-loading": "Cargando elemento",
   "detail-error": "No pudimos cargar todos los datos del elemento.",
 })) {
   test(`preserves the approved review surface during ${state}`, ({ page }) =>
@@ -1381,14 +1382,21 @@ for (const [state, copy] of Object.entries({
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("button", { name: "Historial", exact: true })).toBeVisible()
         );
-        yield* Effect.tryPromise(() =>
-          expect(
-            page
-              .locator(`[data-review="${state.startsWith("detail-") ? "detail" : "empty"}"]`)
-              .first()
-          ).toBeVisible()
-        );
-        yield* Effect.tryPromise(() => expect(page.getByText(copy).first()).toBeVisible());
+        if (state.endsWith("loading")) {
+          const loading = page.getByRole("status", { name: copy, exact: true });
+          yield* Effect.tryPromise(() => expect(loading).toHaveAttribute("aria-busy", "true"));
+          yield* Effect.tryPromise(() =>
+            expect(loading.locator('[data-slot="skeleton"]').first()).toBeVisible()
+          );
+          yield* Effect.tryPromise(() => expect(loading).toContainText(copy));
+          yield* Effect.tryPromise(() =>
+            expect(
+              page.getByRole("button", { name: "Crear transacción", exact: true })
+            ).toHaveCount(0)
+          );
+        } else {
+          yield* Effect.tryPromise(() => expect(page.getByText(copy).first()).toBeVisible());
+        }
       })
     ));
 }
@@ -1504,3 +1512,45 @@ test("discards an unsent review draft when entering Privacy", ({ page }) =>
       expect(writes).toBe(0);
     })
   ));
+
+const compactDesktopWidth = 1280;
+const wideDesktopWidth = 1440;
+const releaseReviewRoute =
+  (release: Promise<void>) =>
+  (route: Route): Promise<void> =>
+    release.then(() => reviewRoute(route));
+for (const width of [compactDesktopWidth, wideDesktopWidth]) {
+  test(`Review skeleton matches the loaded frame at desktop width ${width}`, ({ page }) => {
+    const release = Promise.withResolvers<void>();
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() => page.setViewportSize({ width, height: 900 }));
+        yield* Effect.tryPromise(() => installUser(page));
+        yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+        yield* Effect.tryPromise(() =>
+          page.route(
+            `${apiOrigin}/ingestion/review-workspace**`,
+            releaseReviewRoute(release.promise)
+          )
+        );
+        yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+        yield* Effect.tryPromise(() =>
+          expect(
+            page.getByRole("status", { name: "Cargando elementos", exact: true })
+          ).toHaveAttribute("aria-busy", "true")
+        );
+        const frameParts = ["grid", "inbox", "detail", "columns"].map((name) => ({
+          name,
+          selector: `[data-review="${name}"]`,
+        }));
+        const loadingFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
+        release.resolve();
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: "Confirmar", exact: true })).toBeVisible()
+        );
+        const loadedFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
+        expectSameLoadingFrame(loadingFrame, loadedFrame);
+      }).pipe(Effect.ensuring(Effect.sync(() => release.resolve())))
+    );
+  });
+}

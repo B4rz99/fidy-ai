@@ -1,0 +1,193 @@
+apps/server/cloudflare/insights/proactivity-runtime.test.ts
+  s_d9571b3fccd032::t_31dd26621ec8ad 158
+apps/server/cloudflare/weekly-summary.test-fixture.ts
+  s_d9571b3fccd032::t_31dd26621ec8ad 141-142
+DESIGN.md
+  s_d9571b3fccd032::t_d3ac2bb840924a 373-378
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_d9571b3fccd032::t_5db735df6b37b0 1,471,476-482,493,498-499
+apps/web/e2e/loading-geometry.ts
+  s_d9571b3fccd032::t_b95a9b57612bba 1-42
+apps/web/e2e/login-branding.spec.ts
+  s_d9571b3fccd032::t_dc35a2f47b1fff 40-42
+apps/web/e2e/needs-review.spec.ts
+  s_d9571b3fccd032::t_d48b3610f38f25 1,1365,1367,1385-1399,1515-1556
+apps/web/e2e/oauth-visual.spec.ts
+  s_d9571b3fccd032::t_c64467a5c29810 1,14-16,264-283
+apps/web/e2e/recurring-report.spec.ts
+  s_d9571b3fccd032::t_d9b6445f609c6c 1,100-112,130-131,242,247-251
+apps/web/e2e/subscription-visual.spec.ts
+  s_d9571b3fccd032::t_f6a8202e87c81d 2,910-982
+apps/web/e2e/transaction-pagination.spec.ts
+  s_d9571b3fccd032::t_fe453449543f19 195-199,261-288,310
+apps/web/e2e/transactions-approved.spec.ts
+  s_d9571b3fccd032::t_91a48b443d082c 424-426
+apps/web/loading-preview.html
+  s_d9571b3fccd032::t_d4167e9d1f15fa 1-13
+apps/web/scripts/browser-topology.test.ts
+  s_d9571b3fccd032::t_341f1d180c7b60 1-4,11-37,39-72,74-81,83-109,111-119
+apps/web/src/app/application.tsx
+  s_d9571b3fccd032::t_3e8decfeef8c89 1,37-43,58-66
+apps/web/src/app/loading-preview.tsx
+  s_d9571b3fccd032::t_3190bbfb5bfbe0 1-14
+apps/web/src/app/recurring-workspace.tsx
+  s_d9571b3fccd032::t_00c6fd90fccf92 1,43
+apps/web/src/app/review-workspace.tsx
+  s_d9571b3fccd032::t_593dffd2d20549 1,41
+apps/web/src/app/transactions-page.tsx
+  s_d9571b3fccd032::t_ecf10e2eb7ba86 1,46
+apps/web/src/features/budgets/screen.tsx
+  s_d9571b3fccd032::t_6e58cf46b8032f 1,47,53,84
+apps/web/src/features/budgets/workspace.tsx
+  s_d9571b3fccd032::t_e038d5c33b0f1e 4
+apps/web/src/features/connections/feature.tsx
+  s_d9571b3fccd032::t_c58935415a5b80 1-2,177,233
+apps/web/src/features/connections/result.tsx
+  s_d9571b3fccd032::t_c3e7883196e53b 1,42-44
+apps/web/src/features/dashboard/feature.tsx
+  s_d9571b3fccd032::t_8bd1ff3267c0a3 1,75,105,146-147,149-150
+apps/web/src/features/dashboard/loading.tsx
+  s_d9571b3fccd032::t_7e32b8cf02903b 2,4
+apps/web/src/features/dashboard/view.tsx
+  s_d9571b3fccd032::t_51792261b0e6a1 1132
+apps/web/src/features/needs-review/editor.tsx
+  s_d9571b3fccd032::t_485d00a2eebd27 1-2,132-134,157-158,162
+apps/web/src/features/needs-review/original.tsx
+  s_d9571b3fccd032::t_5ed5108ba30c92 1,58-63,71
+apps/web/src/features/needs-review/workspace.tsx
+  s_d9571b3fccd032::t_f6ff420c642d40 1,211-221
+apps/web/src/features/oauth-connections/feature.tsx
+  s_d9571b3fccd032::t_4f4955179fd18b 1,85-87
+apps/web/src/features/oauth-connections/management-feature.tsx
+  s_d9571b3fccd032::t_459682482c45d9 1,61
+apps/web/src/features/pats/cli-feature.tsx
+  s_d9571b3fccd032::t_a6060158920149 1,84
+apps/web/src/features/pats/creation.tsx
+  s_d9571b3fccd032::t_9ccba4a153106a 1,56-62
+apps/web/src/features/pats/management-view.tsx
+  s_d9571b3fccd032::t_f83cf726f7cf8d 1,396,398
+apps/web/src/features/privacy/feature.tsx
+  s_d9571b3fccd032::t_4e75de7c05401a 1,105
+apps/web/src/features/privacy/renewal.tsx
+  s_d9571b3fccd032::t_8ff8c18fbcdf01 1,132
+apps/web/src/features/provider-authentication/feature.tsx
+  s_d9571b3fccd032::t_d3313a0ab4fdce 1,36
+apps/web/src/features/recurring-digest/report.tsx
+  s_d9571b3fccd032::t_78e024be3c97d9 8
+apps/web/src/features/recurring-digest/status.tsx
+  s_d9571b3fccd032::t_04c7fdc9be4087 1,3,62
+apps/web/src/features/recurring/feature.tsx
+  s_d9571b3fccd032::t_27fc977df0de89 1,55,70,112
+apps/web/src/features/recurring/management.tsx
+  s_d9571b3fccd032::t_bc6dfbf8496871 1,140
+apps/web/src/features/recurring/occurrence-list.tsx
+  s_d9571b3fccd032::t_14a8d134746a50 1,99
+apps/web/src/features/recurring/transactions.tsx
+  s_d9571b3fccd032::t_504fc8921dd7b5 1,58
+apps/web/src/features/subscription/consent-boundary.tsx
+  s_d9571b3fccd032::t_23be29e2293b7c 1,38
+apps/web/src/features/subscription/daviplata-form.tsx
+  s_d9571b3fccd032::t_543ac00f642aeb 1,54
+apps/web/src/features/subscription/feature.tsx
+  s_d9571b3fccd032::t_07c786a6a3b92a 1-10,377,642,653,661,720,799-805,955,961
+apps/web/src/features/subscription/workspace.tsx
+  s_d9571b3fccd032::t_848e34da88c323 1,302
+apps/web/src/features/transactions/feature.tsx
+  s_d9571b3fccd032::t_f65d56c936085a 15,105,121-134,462
+apps/web/src/features/transactions/ledger.tsx
+  s_d9571b3fccd032::t_008ffdaf57e969 1,38,48,436-438,481-520,556
+apps/web/src/features/transactions/privacy-view.tsx
+  s_d9571b3fccd032::t_839caeb29faec0 1-2,17-23,37,58
+apps/web/src/features/transactions/workspace.tsx
+  s_d9571b3fccd032::t_cb732a16b0f174 608,621,664-665,688
+apps/web/src/session/browser-session-boundary.tsx
+  s_d9571b3fccd032::t_16444a73531497 159,162,186-190,195
+apps/web/src/ui/components/application-loading.tsx
+  s_d9571b3fccd032::t_231667c76dac32 1-77
+apps/web/src/ui/components/authorization-loading.tsx
+  s_d9571b3fccd032::t_8a8aa8c73e6d15 1-59
+apps/web/src/ui/components/budget-loading.tsx
+  s_d9571b3fccd032::t_c5bc29e7b04b88 1-115
+apps/web/src/ui/components/dashboard-loading.tsx
+  s_d9571b3fccd032::t_5c311aafd8f367 1-129
+apps/web/src/ui/components/loading-preview-frame.tsx
+  s_d9571b3fccd032::t_44bf5d804b2899 1-62
+apps/web/src/ui/components/loading-skeletons.tsx
+  s_d9571b3fccd032::t_cc15084bda46f6 1-37
+apps/web/src/ui/components/recurring-control-loading.tsx
+  s_d9571b3fccd032::t_cb8494c05e7267 1-22
+apps/web/src/ui/components/recurring-header-loading.tsx
+  s_d9571b3fccd032::t_875daa17e0ab57 1-31
+apps/web/src/ui/components/recurring-identity-loading.tsx
+  s_d9571b3fccd032::t_26ce79e0460216 1-12
+apps/web/src/ui/components/recurring-loading.tsx
+  s_d9571b3fccd032::t_95b2f2357dcab9 1-75
+apps/web/src/ui/components/recurring-month-controls-loading.tsx
+  s_d9571b3fccd032::t_9c2058532ddc80 1-31
+apps/web/src/ui/components/recurring-occurrence-columns.tsx
+  s_d9571b3fccd032::t_41706f1e9c6a62 1-11
+apps/web/src/ui/components/recurring-occurrence-compact-loading.tsx
+  s_d9571b3fccd032::t_8195b77e297e2c 1-24
+apps/web/src/ui/components/recurring-occurrence-desktop-loading.tsx
+  s_d9571b3fccd032::t_7731f8168cffe5 1-47
+apps/web/src/ui/components/recurring-occurrence-loading.tsx
+  s_d9571b3fccd032::t_fc3d9aaaf04729 1-20
+apps/web/src/ui/components/recurring-occurrence-totals-loading.tsx
+  s_d9571b3fccd032::t_b468ddecdea5be 1-16
+apps/web/src/ui/components/report-loading.tsx
+  s_d9571b3fccd032::t_265c67febbc6c2 1-60
+apps/web/src/ui/components/review-detail-loading.tsx
+  s_d9571b3fccd032::t_4783d5dd1a137e 1-10
+apps/web/src/ui/components/review-inbox-loading.tsx
+  s_d9571b3fccd032::t_8425e180b75435 1-10
+apps/web/src/ui/components/review-loading-content.tsx
+  s_d9571b3fccd032::t_ebeb65eebc48d7 1-54
+apps/web/src/ui/components/review-loading-field.tsx
+  s_d9571b3fccd032::t_d9fea82193662f 1-9
+apps/web/src/ui/components/review-loading-inbox.tsx
+  s_d9571b3fccd032::t_18f609ba1e3b1f 1-44
+apps/web/src/ui/components/review-loading-original.tsx
+  s_d9571b3fccd032::t_cb8e6e43a6bf24 1-10
+apps/web/src/ui/components/review-page-loading.tsx
+  s_d9571b3fccd032::t_361616285d9cd8 1-28
+apps/web/src/ui/components/review-workspace.tsx
+  s_d9571b3fccd032::t_cc2a116b296664 1,4,43-69
+apps/web/src/ui/components/settings-loading.tsx
+  s_d9571b3fccd032::t_021885245bc2eb 1-189
+apps/web/src/ui/components/subscription-introduction.tsx
+  s_d9571b3fccd032::t_1148bf843ce784 1-21
+apps/web/src/ui/components/subscription-loading.tsx
+  s_d9571b3fccd032::t_fe0fda4d33f8cf 1-143
+apps/web/src/ui/components/subscription.css
+  s_d9571b3fccd032::t_befddf99c5a7ee 309
+apps/web/src/ui/components/transaction-loading.tsx
+  s_d9571b3fccd032::t_e7832efd4983f5 1-157
+apps/web/src/ui/components/transaction-privacy-notice.tsx
+  s_d9571b3fccd032::t_59ed5b8eec2f31 1-17
+apps/web/src/ui/loading-reference.tsx
+  s_d9571b3fccd032::t_9f9bfd100589c8 1-354
+apps/web/src/ui/reference.tsx
+  s_d9571b3fccd032::t_ff3e97636c62ac 1,268
+apps/web/vitest.config.ts
+  s_d9571b3fccd032::t_2a798e7300b867 15
+dependency-policy.json
+  s_d9571b3fccd032::t_48d69e6b067224 27-28,51-52
+tools/mutation/patches/@stryker-mutator%2Finstrumenter@10.1.1.patch
+  s_d9571b3fccd032::t_fd80e19585148a 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f49f83e3e5e0a6313d1e4117f4d6715c4328900c",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

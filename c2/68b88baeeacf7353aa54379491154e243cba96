@@ -1,0 +1,25 @@
+apps/server/cloudflare/dashboard/internal/dashboard.ts
+  s_d9571b3fccd032::t_18dd35770d2707 70-71
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_d9571b3fccd032::t_18dd35770d2707 647,690,693,815,1862
+infra/cloudflare/verify-edge-policy.ts
+  s_d9571b3fccd032::t_18dd35770d2707 14-15
+  s_d9571b3fccd032::t_4c03e017c8753d 5
+  s_d9571b3fccd032::t_33ee1a59b4b473 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c268b88baeeacf7353aa54379491154e243cba96",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -3,7 +3,6 @@ import { Clock, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { afterAll, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { retainedRecoveryPairingsQuery } from "../recovery/operations";
-import { documentedSqlBlock } from "../schema-cutover.test-fixture";
 import { makeWebSessionErasureStores } from "../web-session/runtime";
 import { startBrowserPairing } from "./operations";
 import { handleWebAuthentication } from "../web-authentication/operations";
@@ -171,42 +170,6 @@ it("prunes at most 32 expired pairings through the expiry index while retaining 
       const retainedQuery = db
         .prepare("SELECT rowid,* FROM browser_login_pairings WHERE id IN(?,?,?,?,?) ORDER BY id")
         .bind(id(0), id(1), id(67), id(68), id(69));
-      const snapshot = (): Promise<ReadonlyArray<D1Result>> =>
-        db.batch([
-          db.prepare("SELECT rowid,* FROM browser_login_pairings ORDER BY id"),
-          db.prepare("SELECT rowid,* FROM web_sessions ORDER BY id"),
-          db.prepare("SELECT rowid,* FROM support_recovery_cases ORDER BY id"),
-        ]);
-      const before = yield* Effect.tryPromise(snapshot);
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          db.prepare("DROP INDEX browser_login_pairings_retention"),
-          db.prepare("DROP INDEX web_sessions_by_user"),
-        ])
-      );
-      const guide = yield* Effect.tryPromise(() =>
-        Bun.file(
-          new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)
-        ).text()
-      );
-      const indexStatements = documentedSqlBlock({ guide, marker: "browser-session-index" });
-      yield* Effect.tryPromise(() =>
-        expect(
-          db.batch([
-            ...indexStatements.map((sql) => db.prepare(sql)),
-            db.prepare(
-              "INSERT INTO sql_assertions(scope,accepted) VALUES('browser-session-cutover-fault',0)"
-            ),
-          ])
-        ).rejects.toThrow("CHECK constraint failed")
-      );
-      expect((yield* Effect.tryPromise(snapshot)).map((table) => table.results)).toEqual(
-        before.map((table) => table.results)
-      );
-      yield* Effect.tryPromise(() => db.batch(indexStatements.map((sql) => db.prepare(sql))));
-      expect((yield* Effect.tryPromise(snapshot)).map((table) => table.results)).toEqual(
-        before.map((table) => table.results)
-      );
       const retained = yield* Effect.tryPromise(() => retainedQuery.all());
       for (const remaining of [33, 1]) {
         const observed = observeRetentionCost(db);

@@ -5,27 +5,7 @@ import { AtomRegistry } from "effect/reactivity";
 import { makeFidyClient } from "@/transport/client";
 import { recurringWorkspaceQuery } from "./controller";
 
-it("retains the prepared recurring display source across equivalent render inputs", () => {
-  const client = makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" });
-  const prepared = recurringWorkspaceQuery({
-    apiClient: client,
-    query: { month: "2026-10", view: "compact" },
-  });
-  const rendered = recurringWorkspaceQuery({
-    apiClient: client,
-    query: { month: "2026-10", view: "compact" },
-  });
-  expect(rendered.view).toBe(prepared.view);
-  expect(rendered.source).toBe(prepared.source);
-  expect(
-    recurringWorkspaceQuery({
-      apiClient: client,
-      query: { month: "2026-11", view: "compact" },
-    }).view
-  ).not.toBe(prepared.view);
-});
-
-it("keeps the mounted Recurring query owner through garbage collection and a local rerender", () =>
+it("retains equivalent mounted Recurring queries through collection and rerender while separating months", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       let reads = 0;
@@ -83,6 +63,12 @@ it("keeps the mounted Recurring query owner through garbage collection and a loc
         });
         expect(rerendered.source).toBe(source);
         expect(rerendered.view).toBe(view);
+        expect(
+          recurringWorkspaceQuery({
+            apiClient: client,
+            query: { month: "2026-11", view: "compact" },
+          }).view
+        ).not.toBe(view);
         mounts.push(registry.mount(rerendered.view));
         yield* Effect.sleep("30 millis");
         expect(reads).toBe(1);

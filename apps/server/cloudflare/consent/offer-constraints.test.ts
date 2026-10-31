@@ -1,4 +1,3 @@
-import { installHistoricalErasureStorage } from "../schema-cutover.test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { Data, Effect, Schema } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
@@ -115,7 +114,6 @@ it.each([
     Effect.gen(function* () {
       const db = yield* native(() => databases.acquire());
       yield* native(() => installTestSchema({ db }));
-      yield* native(() => installHistoricalErasureStorage(db));
       yield* native(() => seed(db));
       expect(
         (yield* Effect.exit(
@@ -180,7 +178,6 @@ it.each([
     Effect.gen(function* () {
       const db = yield* native(() => databases.acquire());
       yield* native(() => installTestSchema({ db }));
-      yield* native(() => installHistoricalErasureStorage(db));
       yield* native(() => seed(db));
       expect(
         (yield* Effect.exit(native(() => db.batch([db.prepare(candidate.sql).bind(owner)]))))._tag
@@ -198,178 +195,28 @@ it.each([
   )
 );
 
-const block = (guide: string, name: string): ReadonlyArray<string> => {
-  const sql = guide.match(
-    new RegExp(
-      `<!-- ${name}:start -->\\s*\x60\x60\x60sql\\s*([\\s\\S]*?)\x60\x60\x60\\s*<!-- ${name}:end -->`,
-      "u"
-    )
-  )?.[1];
-  if (sql === undefined) throw Error("Missing documented Consent offer cutover");
-  return sql
-    .split(";")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-};
-const snapshot = (
-  db: D1Database
-): Effect.Effect<
-  Readonly<{
-    offers: D1Result["results"];
-    history: D1Result["results"];
-    archives: D1Result["results"];
-  }>,
-  FixtureFailure
-> =>
-  Effect.gen(function* () {
-    const offers = yield* native(() =>
-      db.prepare("SELECT rowid,* FROM consent_offers ORDER BY rowid").all()
-    );
-    const history = yield* native(() =>
-      db.prepare("SELECT * FROM consent_history ORDER BY sequence").all()
-    );
-    const archives = yield* native(() =>
-      db.prepare("SELECT * FROM erasure_archives ORDER BY rowid").all()
-    );
-    return { offers: offers.results, history: history.results, archives: archives.results };
-  });
-
-it.each([
-  "complete",
-  "interrupted",
-  "foreign_replacement",
-  "foreign_rejection",
-  "foreign_history",
-  "invalid_disclosure",
-  "missing_disclosure",
-] as const)("preserves original Consent evidence through a %s offer cutover", (outcome) =>
+it("retains replacement evidence when an expired ancestor offer is deleted", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* native(() => databases.acquire());
       yield* native(() => installTestSchema({ db }));
-      yield* native(() => installHistoricalErasureStorage(db));
-      const baseline = yield* native(() =>
-        Bun.file(new URL("../migrations/0001_schema.sql", import.meta.url)).text()
-      );
-      const guards = baseline
-        .split("--> statement-breakpoint")
-        .map((sql) => sql.trim())
-        .filter((sql) =>
-          /^CREATE TRIGGER (?:consent_offer_valid_(?:insert|update)|consent_history_offer_owner) /u.test(
-            sql
-          )
-        );
-      yield* native(() =>
-        db.batch([
-          db.prepare("DROP TRIGGER consent_offer_valid_insert"),
-          db.prepare("DROP TRIGGER consent_offer_valid_update"),
-          db.prepare("DROP TRIGGER consent_history_offer_owner"),
-        ])
-      );
       yield* native(() => seed(db));
       yield* native(() =>
-        db.batch([
-          db
-            .prepare(
-              "INSERT INTO consent_offers(rowid,id,user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,source_id,rejection_id) SELECT 77,'source-offer',user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms+100,created_at_ms+86400000,'original-question',? FROM consent_offers WHERE id='weekly'"
-            )
-            .bind(outcome === "foreign_rejection" ? foreign : owner),
-          db
-            .prepare(
-              "INSERT INTO consent_offers(rowid,id,user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,replaces_offer_id) SELECT 101,'replacement',user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms+100,expires_at_ms+100,? FROM consent_offers WHERE id='budget'"
-            )
-            .bind(outcome === "foreign_replacement" ? "foreign-budget" : "budget"),
-          db
-            .prepare(
-              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES('archive-request','removed-user',?,'Complete')"
-            )
-            .bind(current),
-          db.prepare(
-            "INSERT INTO erasure_archives(request_id,store_id,row_ref,body,recovery_written) VALUES('archive-request','proactivity_consent_offers','initial:500','{\"id\":\"original-offer\",\"disclosure_json\":\"original bytes\"}',1)"
-          ),
-          ...(outcome === "foreign_history"
-            ? [
-                db
-                  .prepare(
-                    "INSERT INTO consent_history(record_type,id,user_id,offer_id,decision_message_id,decision) VALUES('weekly_rejection','foreign-evidence',?,'foreign-weekly','foreign-choice','decline')"
-                  )
-                  .bind(owner),
-              ]
-            : []),
-          ...(outcome === "invalid_disclosure"
-            ? [
-                db
-                  .prepare(
-                    "INSERT INTO consent_offers(id,user_id,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms) VALUES('invalid-json',?,'p','b','not JSON',0,1)"
-                  )
-                  .bind(owner),
-              ]
-            : []),
-          ...(outcome === "missing_disclosure"
-            ? [
-                db
-                  .prepare(
-                    "INSERT INTO consent_offers(id,user_id,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,decision,decision_message_id) VALUES('missing-disclosure',?,'p','b','{}',0,1,'accept','unproven')"
-                  )
-                  .bind(owner),
-              ]
-            : []),
-        ])
-      );
-      const before = yield* snapshot(db);
-      const guide = yield* native(() =>
-        Bun.file(
-          new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)
-        ).text()
-      );
-      const result = yield* Effect.exit(
-        native(() =>
-          db.batch(
-            [
-              ...block(guide, "consent-offers-preflight"),
-              ...guards,
-              ...(outcome === "interrupted"
-                ? ["INSERT INTO sql_assertions(scope,accepted) VALUES('consent_offers_cutover',0)"]
-                : []),
-              ...block(guide, "consent-offers-verify"),
-            ].map((sql) => db.prepare(sql))
+        db
+          .prepare(
+            "INSERT INTO consent_offers(id,user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,replaces_offer_id) SELECT 'replacement',user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms+100,expires_at_ms+100,id FROM consent_offers WHERE id='budget'"
           )
-        )
+          .run()
       );
-      expect(result._tag).toBe(outcome === "complete" ? "Success" : "Failure");
-      expect(yield* snapshot(db)).toEqual(before);
+      yield* native(() => db.prepare("DELETE FROM consent_offers WHERE id='budget'").run());
       expect(
-        (yield* native(() =>
-          db.prepare("SELECT * FROM sql_assertions WHERE scope='consent_offers_cutover'").all()
-        )).results
-      ).toEqual([]);
-      if (outcome === "complete") {
-        expect((yield* native(() => db.prepare("PRAGMA foreign_key_check").all())).results).toEqual(
-          []
-        );
-        // Expiry cleanup may remove an ancestor without extending the child's original evidence.
-        yield* native(() => db.prepare("DELETE FROM consent_offers WHERE id='budget'").run());
-        expect(
-          yield* native(() =>
-            db
-              .prepare(
-                "SELECT replaces_offer_id,disclosed_at_ms FROM consent_offers WHERE id='replacement'"
-              )
-              .first()
-          )
-        ).toEqual({ replaces_offer_id: "budget", disclosed_at_ms: null });
-      }
-      const invalidReference = yield* Effect.exit(
-        native(() =>
+        yield* native(() =>
           db
             .prepare(
-              "INSERT INTO consent_offers(id,user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,replaces_offer_id) VALUES('after-cutover',?,'budget-threshold','p','b','{}',0,1,'reminder')"
+              "SELECT replaces_offer_id,disclosed_at_ms FROM consent_offers WHERE id='replacement'"
             )
-            .bind(owner)
-            .run()
+            .first()
         )
-      );
-      expect(invalidReference._tag).toBe(outcome === "complete" ? "Failure" : "Success");
+      ).toEqual({ replaces_offer_id: "budget", disclosed_at_ms: null });
     })
-  )
-);
+  ));

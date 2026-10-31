@@ -96,31 +96,7 @@ const seedExistingTranscript = Effect.fn(function* (url: string) {
 });
 
 test(
-  "applies the Production schema baseline to a clean local database",
-  Effect.gen(function* () {
-    const names = yield* migrationNames();
-    const migrationStack = createMigrationStack("D1MigrationCleanInstall", migrationsPath);
-
-    const migrationCheck = Effect.gen(function* () {
-      const deployed = yield* resetAndDeployLocalMigrationStack(migrationStack);
-
-      const state = yield* readState(yield* workerUrl(Option.fromUndefinedOr(deployed.worker.url)));
-      expect(state).toMatchObject({
-        appliedMigrationNames: [...names].sort(),
-        transcriptHasIteration: true,
-        whatsAppEventRecordsExists: true,
-        whatsAppServiceWindowsExists: true,
-        foreignKeyViolationCount: 0,
-        transcriptEvidence: { _tag: "Empty" },
-      });
-    });
-    yield* Effect.ensuring(migrationCheck, destroy(migrationStack).pipe(Effect.ignore));
-  }).pipe(Effect.orDie),
-  { timeout: 120_000 }
-);
-
-test(
-  "preserves populated Transcript evidence when redeploying the same baseline",
+  "installs the schema baseline and preserves populated Transcript evidence on redeployment",
   Effect.gen(function* () {
     const names = yield* migrationNames();
     const migrationStack = createMigrationStack("D1BaselinePopulatedRedeploy", migrationsPath);
@@ -132,6 +108,8 @@ test(
       const beforeUrl = yield* workerUrl(Option.fromUndefinedOr(before.worker.url));
       expect(yield* readState(beforeUrl)).toMatchObject({
         appliedMigrationNames: [...names].sort(),
+        transcriptHasIteration: true,
+        foreignKeyViolationCount: 0,
         whatsAppEventRecordsExists: true,
         whatsAppServiceWindowsExists: true,
         transcriptEvidence: { _tag: "Empty" },

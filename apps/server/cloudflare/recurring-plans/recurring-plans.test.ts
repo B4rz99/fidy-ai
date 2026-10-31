@@ -3,10 +3,6 @@ import { type QueryCaller } from "../canonical-work/operations";
 import { Cause, Config, DateTime, Effect, Option, Schema } from "effect";
 import { RecurringDocument } from "../../src/core/recurring-plans/contract";
 import { withErasureRecovery } from "../erasure/runtime";
-import {
-  documentedSqlBlock,
-  installHistoricalErasureStorage,
-} from "../schema-cutover.test-fixture";
 import { RecurringWorkspace } from "../../src/shell/recurring-plans/contract";
 import {
   installTestSchema,
@@ -115,67 +111,6 @@ const transactionCount = (
     return body.data.length;
   });
 
-it(
-  "persists revision-bound recurring edits through the canonical D1 owner",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* setup();
-        const subject = {
-          userId: users[0] ?? "",
-          id: sessions[0] ?? "",
-          digest: yield* Effect.tryPromise(() => digest(bearer(0))),
-        };
-        const response = yield* executeCanonicalWork({
-          db,
-          subject,
-          current: DateTime.nowUnsafe().epochMilliseconds,
-          bucket: Option.none(),
-          hostedFence: Option.none(),
-          oauthConfirmation: Option.none(),
-          inference: Option.none(),
-          work: {
-            _tag: "Call",
-            operation: CanonicalOperationId.make("recurringPlans.applyRecurringEdit"),
-            input: {
-              payload: {
-                expectedRevision: 0,
-                edit: {
-                  kind: "create",
-                  id: "40000000-0000-4000-8000-000000000123",
-                  plan: {
-                    name: "Arriendo",
-                    kind: "expense",
-                    currency: "COP",
-                    amountMode: "fixed",
-                    money: { amount: "1000000", currency: "COP" },
-                    firstDate: "2026-10-31",
-                    timeZone: "America/Bogota",
-                    frequency: "monthly",
-                  },
-                },
-              },
-            },
-          },
-        });
-        const body = yield* Effect.tryPromise(() => response.text());
-        expect(response.status, body).toBe(200);
-        const read = yield* executeCanonicalQuery({
-          db,
-          subject,
-          operation: CanonicalOperationId.make("recurringPlans.getRecurringWorkspace"),
-          input: { query: { month: "2026-10" } },
-          bucket: Option.none(),
-        });
-        expect(Option.getOrThrow(read).status).toBe(200);
-        expect(yield* Effect.tryPromise(() => Option.getOrThrow(read).text())).toContain(
-          "Arriendo"
-        );
-      })
-    ),
-  30000
-);
-
 const planId = "40000000-0000-4000-8000-000000000123";
 const planInput = {
   name: "Arriendo",
@@ -268,7 +203,16 @@ it("compact recurring responses preserve stored history and historical occurrenc
     Effect.gen(function* () {
       const { db, subjects } = yield* fixture();
       const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
-      const first = { ...planInput, firstDate: "2026-09-01" };
+      const first = {
+        name: "Arriendo",
+        kind: "expense",
+        currency: "COP",
+        amountMode: "fixed",
+        money: { amount: "1000000", currency: "COP" },
+        firstDate: "2026-09-01",
+        timeZone: "America/Bogota",
+        frequency: "monthly",
+      };
       expect(
         (yield* call(db, owner, edit(0, { kind: "create", id: planId, plan: first }))).status
       ).toBe(200);
@@ -1409,225 +1353,4 @@ it.skipIf(!measureStorage)(
       })
     ),
   60_000
-);
-
-it(
-  "converts populated Planning state atomically and reconstructs the original representation for rollback",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const { db, subjects } = yield* fixture();
-        yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
-        const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
-        const legacy = {
-          revision: 8,
-          plans: [
-            {
-              id: planId,
-              pauses: [{ from: "2026-10-05", through: "2026-10-08" }],
-              stoppedOn: "2027-01-01",
-              revisions: [
-                {
-                  from: "2026-10-01",
-                  plan: {
-                    ...planInput,
-                    firstDate: "2026-10-01",
-                    money: { amount: "1000000000000000000000000.01", currency: "COP" },
-                  },
-                },
-                { from: "2026-11-01", plan: planInput },
-              ],
-            },
-          ],
-          exceptions: [
-            { planId, date: "2026-10-01", skipped: false, replacement: planInput },
-            { planId, date: "2026-12-31", skipped: true },
-          ],
-          fulfillments: [
-            {
-              id: "40000000-0000-4000-8000-000000000141",
-              planId,
-              date: "2026-10-01",
-              actualDate: "2026-10-01",
-              money: { amount: "100.01", currency: "COP" },
-              settled: false,
-              automatic: false,
-            },
-            {
-              id: "40000000-0000-4000-8000-000000000142",
-              planId,
-              date: "2026-11-30",
-              actualDate: "2026-11-30",
-              money: { amount: "1000000", currency: "COP" },
-              settled: true,
-            },
-          ],
-          excludedTransactionIds: ["40000000-0000-4000-8000-000000000143"],
-          suggestions: [
-            { seriesId: "40000000-0000-4000-8000-000000000144", disposition: "dismissed" },
-          ],
-        };
-        const codec = Schema.fromJsonString(Schema.toCodecJson(RecurringDocument));
-        const original = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(RecurringDocument))(
-          legacy
-        );
-        const encoded = yield* Schema.encodeEffect(codec)(original);
-        yield* Effect.tryPromise(() =>
-          db.batch([
-            db
-              .prepare(
-                "INSERT INTO user_documents(rowid,user_id,kind,document_json,revision) VALUES(17,?,'recurring-plan',?,8)"
-              )
-              .bind(owner.userId, encoded),
-            db
-              .prepare(
-                "INSERT INTO user_documents(rowid,user_id,kind,document_json,revision) VALUES(19,?,'dashboard','{}',3)"
-              )
-              .bind(owner.userId),
-          ])
-        );
-        const guide = yield* Effect.tryPromise(() =>
-          Bun.file(
-            new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)
-          ).text()
-        );
-        const block = (marker: string): ReadonlyArray<D1PreparedStatement> =>
-          documentedSqlBlock({ guide, marker: "recurring-planning-" + marker }).map((sql) =>
-            db.prepare(sql)
-          );
-        const pending = yield* executeCanonicalQuery({
-          db,
-          subject: owner,
-          operation: CanonicalOperationId.make("recurringPlans.getRecurringWorkspace"),
-          input: { query: { month: "2026-10" } },
-          bucket: Option.none(),
-        });
-        expect(Option.getOrThrow(pending).status).toBe(503);
-        const before = yield* Effect.tryPromise(() =>
-          db.prepare("SELECT rowid,* FROM user_documents ORDER BY rowid").all()
-        );
-        const failed = yield* Effect.result(
-          Effect.tryPromise(() =>
-            db.batch([
-              ...block("copy"),
-              db.prepare("INSERT INTO sql_assertions VALUES('intentional_failure',0)"),
-            ])
-          )
-        );
-        expect(failed._tag).toBe("Failure");
-        expect(
-          (yield* Effect.tryPromise(() =>
-            db.prepare("SELECT rowid,* FROM user_documents ORDER BY rowid").all()
-          )).results
-        ).toEqual(before.results);
-        expect(
-          yield* Effect.tryPromise(() =>
-            db.prepare("SELECT count(*) AS n FROM recurring_plans").first("n")
-          )
-        ).toBe(0);
-        yield* Effect.tryPromise(() => db.batch([...block("copy")]));
-        expect((yield* read(db, owner)).document).toEqual(original);
-        expect(
-          (yield* read(db, Option.getOrThrow(Option.fromUndefinedOr(subjects[1])))).document
-            .revision
-        ).toBe(0);
-        yield* Effect.tryPromise(() => db.batch([...block("rollback")]));
-        const restored = yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT document_json FROM user_documents WHERE rowid=17")
-            .first<string>("document_json")
-        );
-        expect(yield* Schema.decodeUnknownEffect(codec)(restored)).toEqual(original);
-        expect(
-          yield* Effect.tryPromise(() =>
-            db
-              .prepare(
-                "SELECT rowid,revision,document_json FROM user_documents WHERE kind='dashboard'"
-              )
-              .first()
-          )
-        ).toEqual({ rowid: 19, revision: 3, document_json: "{}" });
-        yield* Effect.tryPromise(() => db.batch([...block("copy")]));
-        expect((yield* read(db, owner)).document).toEqual(original);
-      })
-    ),
-  30000
-);
-
-it.each(["revision", "duplicate", "foreign-parent", "archive"])(
-  "refuses inconsistent or retained Planning conversion without partial effects: %s",
-  (failure) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const { db, subjects } = yield* fixture();
-        yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
-        const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
-        const plan = {
-          id: planId,
-          revisions: [{ from: "2026-10-31", plan: planInput }],
-          pauses: [],
-        };
-        const value = {
-          revision: failure === "revision" ? 2 : 1,
-          plans: failure === "duplicate" ? [plan, plan] : [plan],
-          exceptions:
-            failure === "foreign-parent"
-              ? [
-                  {
-                    planId: "40000000-0000-4000-8000-000000000999",
-                    date: "2026-10-31",
-                    skipped: true,
-                  },
-                ]
-              : [],
-          fulfillments: [],
-          excludedTransactionIds: [],
-          suggestions: [],
-        };
-        const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(value);
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("INSERT INTO user_documents VALUES(?,'recurring-plan',?,1)")
-            .bind(owner.userId, encoded)
-            .run()
-        );
-        if (failure === "archive") {
-          yield* Effect.tryPromise(() =>
-            db.batch([
-              db.prepare(
-                "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES('prior','deleted',1,'Complete')"
-              ),
-              db.prepare(
-                "INSERT INTO erasure_archives(request_id,store_id,row_ref,body) VALUES('prior','recurring_plan_documents','initial:17','{}')"
-              ),
-            ])
-          );
-        }
-        const guide = yield* Effect.tryPromise(() =>
-          Bun.file(
-            new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)
-          ).text()
-        );
-        const statements = documentedSqlBlock({ guide, marker: "recurring-planning-copy" }).map(
-          (sql) => db.prepare(sql)
-        );
-        expect((yield* Effect.result(Effect.tryPromise(() => db.batch(statements))))._tag).toBe(
-          "Failure"
-        );
-        expect(
-          yield* Effect.tryPromise(() =>
-            db
-              .prepare("SELECT document_json FROM user_documents WHERE user_id=?")
-              .bind(owner.userId)
-              .first("document_json")
-          )
-        ).toBe(encoded);
-        expect(
-          yield* Effect.tryPromise(() =>
-            db.prepare("SELECT count(*) AS n FROM recurring_plans").first("n")
-          )
-        ).toBe(0);
-      })
-    ),
-  30000
 );

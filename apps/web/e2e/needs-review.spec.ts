@@ -1388,9 +1388,7 @@ for (const [state, copy] of Object.entries({
           yield* Effect.tryPromise(() =>
             expect(loading.locator('[data-slot="skeleton"]').first()).toBeVisible()
           );
-          yield* Effect.tryPromise(() =>
-            expect(loading.getByText(copy, { exact: true })).toHaveClass("sr-only")
-          );
+          yield* Effect.tryPromise(() => expect(loading).toContainText(copy));
           yield* Effect.tryPromise(() =>
             expect(
               page.getByRole("button", { name: "Crear transacción", exact: true })

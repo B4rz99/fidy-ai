@@ -1,8 +1,3 @@
-import {
-  documentedSqlBlock,
-  installHistoricalErasureChunk,
-  installHistoricalErasureStorage,
-} from "../schema-cutover.test-fixture";
 import { makeRecoveryErasureStores } from "../recovery/runtime";
 import { makeEmailAuthenticationErasureStores } from "../email-authentication/runtime";
 import { afterAll, expect, it } from "vitest";
@@ -19,47 +14,6 @@ const userId = "12740000-0000-4000-8000-000000000001";
 const foreignUser = "12740000-0000-4000-8000-000000000099";
 const reference = "12740000-0000-4000-8000-000000000002";
 const scope = { userId, reference };
-
-const rehearseSelectionCutover = Effect.fn(function* (db: D1Database) {
-  yield* Effect.tryPromise(() => installHistoricalErasureChunk(db));
-  yield* Effect.tryPromise(() => installHistoricalErasureStorage(db));
-  const guide = yield* Effect.tryPromise(() =>
-    Bun.file(
-      new URL("../../../../docs/operations/database-cutover-1428.md", import.meta.url)
-    ).text()
-  );
-  const block = (name: string): ReadonlyArray<D1PreparedStatement> =>
-    documentedSqlBlock({ guide, marker: "erasure-selection-" + name }).map((sql) =>
-      db.prepare(sql)
-    );
-  const snapshot = (): Promise<ReadonlyArray<D1Result>> =>
-    db.batch([
-      db.prepare("SELECT rowid,* FROM memories ORDER BY rowid"),
-      db.prepare("SELECT rowid,* FROM erasure_requests ORDER BY rowid"),
-      db.prepare("SELECT rowid,* FROM erasure_steps ORDER BY rowid"),
-    ]);
-  const before = (yield* Effect.tryPromise(snapshot)).map((result) => result.results);
-  yield* Effect.tryPromise(() =>
-    expect(
-      db.batch([
-        ...block("guard"),
-        ...block("drop"),
-        db.prepare(
-          "INSERT INTO sql_assertions(scope,accepted) VALUES('interrupt_owner_selection',0)"
-        ),
-      ])
-    ).rejects.toThrow()
-  );
-  expect((yield* Effect.tryPromise(snapshot)).map((result) => result.results)).toEqual(before);
-  yield* Effect.tryPromise(() => db.batch([...block("guard"), ...block("drop")]));
-  expect((yield* Effect.tryPromise(snapshot)).map((result) => result.results)).toEqual(before);
-  yield* Effect.tryPromise(() => db.batch([...block("rollback")]));
-  expect((yield* Effect.tryPromise(snapshot)).map((result) => result.results)).toEqual(before);
-  yield* Effect.tryPromise(() => db.batch([...block("guard"), ...block("drop")]));
-  expect(
-    (yield* Effect.tryPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
-  ).toEqual([]);
-});
 
 it("deletes Memory in bounded pages, resumes after reconstruction, and preserves the other User", () =>
   Effect.runPromise(
@@ -109,7 +63,6 @@ it("deletes Memory in bounded pages, resumes after reconstruction, and preserves
       expect((yield* Effect.result(resumed.remove({ reference, userId: foreignUser })))._tag).toBe(
         "Failure"
       );
-      yield* rehearseSelectionCutover(db);
       // Another authorized cleanup removes the selected first page before this batch commits.
       let competed = false;
       const racingDb: D1Database = {

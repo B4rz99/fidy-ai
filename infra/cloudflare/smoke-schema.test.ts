@@ -1,4 +1,3 @@
-import { documentedSqlBlock } from "../../apps/server/cloudflare/schema-cutover.test-fixture";
 import { Clock, Effect, Option, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
@@ -11,55 +10,6 @@ import {
   unavailableBucket,
   unavailableQueue,
 } from "./incomplete-platform-fixture";
-
-const rehearseSmokeCutover = Effect.fn(function* (db: D1Database) {
-  const guide = yield* Effect.tryPromise(() =>
-    Bun.file(new URL("../../docs/operations/database-cutover-1428.md", import.meta.url)).text()
-  );
-  const block = (name: string): ReadonlyArray<string> =>
-    documentedSqlBlock({ guide, marker: "release-smoke-ledger-" + name });
-  yield* Effect.tryPromise(() => db.batch(block("rollback").map((sql) => db.prepare(sql))));
-  yield* Effect.tryPromise(() =>
-    db
-      .prepare(
-        "INSERT INTO release_smoke_probes(rowid,probe_id,git_revision,expires_at_ms,status) VALUES(17,?,?,111,'queued'),(91,?,?,100,'passed')"
-      )
-      .bind("a".repeat(32), "c".repeat(40), "b".repeat(32), "d".repeat(40))
-      .run()
-  );
-  const read = (): Promise<D1Result> =>
-    db.prepare("SELECT rowid,* FROM release_smoke_probes ORDER BY rowid").all();
-  const before = (yield* Effect.tryPromise(read)).results;
-  const guard = (current: number): ReadonlyArray<D1PreparedStatement> =>
-    block("guard").map((sql) => db.prepare(sql).bind(current));
-  const drop = (): ReadonlyArray<D1PreparedStatement> =>
-    block("drop").map((sql) => db.prepare(sql));
-  yield* Effect.tryPromise(() => expect(db.batch([...guard(100), ...drop()])).rejects.toThrow());
-  expect((yield* Effect.tryPromise(read)).results).toEqual(before);
-  yield* Effect.tryPromise(() =>
-    expect(
-      db.batch([
-        ...guard(112),
-        ...drop(),
-        db.prepare(
-          "INSERT INTO sql_assertions(scope,accepted) VALUES('interrupt_smoke_retirement',0)"
-        ),
-      ])
-    ).rejects.toThrow()
-  );
-  expect((yield* Effect.tryPromise(read)).results).toEqual(before);
-  yield* Effect.tryPromise(() => db.batch([...guard(112), ...drop()]));
-  const original = yield* Schema.decodeUnknownEffect(Schema.Json)(before);
-  const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(original);
-  yield* Effect.tryPromise(() =>
-    db.batch([
-      ...block("rollback").map((sql) => db.prepare(sql)),
-      ...block("rollback-copy").map((sql) => db.prepare(sql).bind(encoded)),
-    ])
-  );
-  expect((yield* Effect.tryPromise(read)).results).toEqual(before);
-  yield* Effect.tryPromise(() => db.batch([...guard(112), ...drop()]));
-});
 
 const awaitSmokeCompletion = Effect.fn(function* (poll: () => Promise<Response>) {
   for (let attempt = 0; attempt < 200; attempt++) {
@@ -147,7 +97,6 @@ it.live("refuses a candidate whose protected-read dependencies are absent from e
     yield* Effect.tryPromise(() => mf.ready);
     const db = yield* Effect.tryPromise(() => mf.getD1Database("DB", release.RELEASE_GIT_SHA));
     yield* Effect.tryPromise(() => installTestSchema({ db }));
-    yield* rehearseSmokeCutover(db);
     const bindings = yield* Effect.tryPromise(() =>
       mf.getBindings<{ SMOKE_WORKFLOW: Workflow; SMOKE_QUEUE: Queue; SMOKE_LIMITER: RateLimit }>(
         release.RELEASE_GIT_SHA

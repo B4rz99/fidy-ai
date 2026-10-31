@@ -1,4 +1,5 @@
-import { verifyProviderOwnershipCutover } from "./ownership-cutover.test-fixture";
+import { observeRetentionCost } from "../d1-test-fixture";
+import { sweepProviderAuthentication } from "./runtime";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { type Cause, Effect, Schema } from "effect";
 import {
@@ -146,11 +147,11 @@ type ProviderFixture = Partial<
     signingKeyAborted: () => void;
   }>
 >;
-const authenticate = (
+const verifyProvider = (
   journey: Journey,
   pairing: typeof Pairing.Type,
   fixture: ProviderFixture = {}
-): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
+): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     const disclosure = yield* Effect.tryPromise(() => journey.send("/web/providers/disclosure"));
     const revision = yield* Schema.decodeUnknownEffect(Schema.Struct({ revision: Schema.String }))(
@@ -231,8 +232,17 @@ const authenticate = (
         )
       ).toBe("verified");
     }
-    return yield* Effect.tryPromise(() => journey.send("/web/providers/google/complete", pairing));
   });
+const authenticate = (
+  journey: Journey,
+  pairing: typeof Pairing.Type,
+  fixture: ProviderFixture = {}
+): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
+  verifyProvider(journey, pairing, fixture).pipe(
+    Effect.andThen(() =>
+      Effect.tryPromise(() => journey.send("/web/providers/google/complete", pairing))
+    )
+  );
 const nextPairing = (
   journey: Journey
 ): Effect.Effect<typeof Pairing.Type, Cause.UnknownError | Schema.SchemaError> =>
@@ -296,11 +306,13 @@ it("preserves stable Google ownership across changed/missing emails and never me
         })).status
       ).toBe(200);
       expect(yield* countRows(journey.db, "users")).toBe(2);
-      yield* verifyProviderOwnershipCutover({
-        db: journey.db,
-        pairingId: journey.pairing.pairingId,
-        subject: "stable-google-user",
-      });
+      const observed = observeRetentionCost(journey.db);
+      yield* sweepProviderAuthentication({ db: observed.database, current: 0 });
+      expect(
+        (yield* Effect.tryPromise(observed.plans)).some(
+          (plan) => plan.includes("provider_attempt_expiry") && plan.includes("expires_at_ms<?")
+        )
+      ).toBe(true);
       yield* Effect.tryPromise(() =>
         expect(
           journey.db
@@ -358,7 +370,7 @@ for (const fixture of [
 }
 
 it.each(onboardingRefusals)(
-  "rolls back every new owner record after $description, and concurrent completion discloses recovery once",
+  "rolls back every new owner record after $description and permits a successful retry",
   ({ clause }) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -376,15 +388,11 @@ it.each(onboardingRefusals)(
           expect(yield* countRows(journey.db, table)).toBe(0);
         }
         yield* Effect.tryPromise(() => journey.db.prepare("DROP TRIGGER refuse_provider").run());
-        const results = yield* Effect.tryPromise(() =>
-          Promise.all([
-            journey.send("/web/providers/google/complete", journey.pairing),
-            journey.send("/web/providers/google/complete", journey.pairing),
-          ])
-        );
-        expect(results.map((result) => result.status).sort((left, right) => left - right)).toEqual([
-          200, 400,
-        ]);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            journey.send("/web/providers/google/complete", journey.pairing)
+          )).status
+        ).toBe(200);
         expect(yield* countRows(journey.db, "users")).toBe(1);
         expect(
           (yield* Effect.tryPromise(() =>
@@ -394,6 +402,40 @@ it.each(onboardingRefusals)(
       })
     )
 );
+
+it("concurrent Google completion creates one User and discloses recovery only to the winner", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const journey = yield* Effect.tryPromise(setup);
+      yield* verifyProvider(journey, journey.pairing);
+      const results = yield* Effect.tryPromise(() =>
+        Promise.all([
+          journey.send("/web/providers/google/complete", journey.pairing),
+          journey.send("/web/providers/google/complete", journey.pairing),
+        ])
+      );
+      expect(results.map((result) => result.status).sort((left, right) => left - right)).toEqual([
+        200, 400,
+      ]);
+      for (const result of results) {
+        const body = yield* Effect.tryPromise(() => result.json());
+        if (result.status === 200) {
+          const created = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({ status: Schema.Literal("created"), backupRecoveryCode: Schema.String })
+          )(body);
+          expect(created.backupRecoveryCode.length).toBeGreaterThan(20);
+        } else {
+          expect(body).toEqual({ status: "invalid" });
+        }
+      }
+      expect(yield* countRows(journey.db, "users")).toBe(1);
+      const replay = yield* Effect.tryPromise(() =>
+        journey.send("/web/providers/google/complete", journey.pairing)
+      );
+      expect(replay.status).toBe(400);
+      expect(yield* Effect.tryPromise(() => replay.json())).toEqual({ status: "invalid" });
+    })
+  ));
 
 it("keeps configured Google credentials and protocol proofs out of exported diagnostics", () =>
   Effect.runPromise(

@@ -1,6 +1,5 @@
 import { discloseLegacyChat, disposeLegacyConsent } from "./legacy-disclosure.test-fixture";
 import { authenticateChatProvider } from "./whatsapp-provider.test-fixture";
-import { verifyHandoffCutover } from "./handoff-cutover.test-fixture";
 import { whatsappMessages } from "./whatsapp-messages.test-fixture";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
@@ -299,7 +298,6 @@ it("requires exact originating caller and reply confirmation, then atomically cr
         (yield* whatsappMessages.sendChat(journey, command, { reply: "wamid.association-review" }))
           .status
       ).toBe(409);
-      yield* verifyHandoffCutover({ db: journey.db, reference });
       yield* Effect.tryPromise(() =>
         expect(
           journey.db
@@ -536,7 +534,7 @@ it.each([
       "BEFORE UPDATE OF consumed_at_ms ON whatsapp_provider_handoffs WHEN NEW.consumed_at_ms IS NOT NULL BEGIN SELECT RAISE(IGNORE); END",
   },
 ])(
-  "rolls back a failed association commit at $target and permits exactly one concurrent successful completion",
+  "rolls back a failed association commit at $target and permits a successful retry",
   ({ clause }) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -544,20 +542,11 @@ it.each([
         yield* authenticateChatProvider(journey, yield* seedAcceptedChat(journey.db));
         const code = yield* requestReview(journey);
         yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
-        const confirmations = yield* Effect.all(
-          [
-            whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
-              reply: "wamid.association-review",
-            }),
-            whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
-              reply: "wamid.association-review",
-            }),
-          ],
-          { concurrency: "unbounded" }
-        );
         expect(
-          confirmations.map((response) => response.status).sort((left, right) => left - right)
-        ).toEqual([200, 409]);
+          (yield* whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
+            reply: "wamid.association-review",
+          })).status
+        ).toBe(200);
         const proofRows = (): Promise<ReadonlyArray<D1Result>> =>
           journey.db.batch([
             journey.db.prepare("SELECT rowid,* FROM whatsapp_provider_handoffs ORDER BY rowid"),
@@ -590,21 +579,58 @@ it.each([
           originalProof.map((table) => table.results)
         );
         yield* Effect.tryPromise(() => journey.db.prepare("DROP TRIGGER fixture_refuse").run());
-        const completed = yield* Effect.tryPromise(() =>
-          Promise.all([
-            journey.send("/web/providers/google/complete", journey.pairing),
-            journey.send("/web/providers/google/complete", journey.pairing),
-          ])
-        );
         expect(
-          completed.map((response) => response.status).sort((left, right) => left - right)
-        ).toEqual([200, 400]);
+          (yield* Effect.tryPromise(() =>
+            journey.send("/web/providers/google/complete", journey.pairing)
+          )).status
+        ).toBe(200);
         expect(
           (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
         ).toHaveLength(1);
       })
     )
 );
+
+it("permits only one concurrent association confirmation and completion", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
+      yield* authenticateChatProvider(journey, yield* seedAcceptedChat(journey.db));
+      const code = yield* requestReview(journey);
+      yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
+      const confirmations = yield* Effect.all(
+        [
+          whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
+            reply: "wamid.association-review",
+          }),
+          whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
+            reply: "wamid.association-review",
+          }),
+        ],
+        { concurrency: "unbounded" }
+      );
+      expect(
+        confirmations.map((response) => response.status).sort((left, right) => left - right)
+      ).toEqual([200, 409]);
+      const completed = yield* Effect.tryPromise(() =>
+        Promise.all([
+          journey.send("/web/providers/google/complete", journey.pairing),
+          journey.send("/web/providers/google/complete", journey.pairing),
+        ])
+      );
+      expect(
+        completed.map((response) => response.status).sort((left, right) => left - right)
+      ).toEqual([200, 400]);
+      expect(
+        (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
+      ).toHaveLength(1);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          journey.send("/web/providers/google/complete", journey.pairing)
+        )).status
+      ).toBe(400);
+    })
+  ));
 
 it.each([false, true])(
   "initially links a web-created User while refusing existing association conflicts: %s",

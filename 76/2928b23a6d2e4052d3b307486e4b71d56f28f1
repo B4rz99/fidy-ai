@@ -1,0 +1,41 @@
+apps/web/src/features/needs-review/workspace.tsx
+  s_68bfd164593579::t_a44ad2f38345ac 1
+apps/web/src/ui/components/review-loading-content.tsx
+  s_68bfd164593579::t_a44ad2f38345ac 1-54
+apps/web/src/ui/components/review-loading-inbox.tsx
+  s_68bfd164593579::t_a44ad2f38345ac 1-44
+apps/web/src/ui/components/review-workspace.tsx
+  s_68bfd164593579::t_a44ad2f38345ac 1
+apps/web/src/features/needs-review/editor.tsx
+  s_68bfd164593579::t_a44ad2f38345ac 1
+apps/web/src/ui/loading-reference.tsx
+  s_68bfd164593579::t_a44ad2f38345ac 22-24
+apps/web/src/ui/components/review-detail-loading.tsx
+  s_68bfd164593579::t_a44ad2f38345ac 1-10
+apps/web/src/ui/components/review-loading-original.tsx
+  s_68bfd164593579::t_a44ad2f38345ac 1-10
+apps/web/src/app/review-workspace.tsx
+  s_68bfd164593579::t_a44ad2f38345ac 1
+apps/web/src/ui/components/review-inbox-loading.tsx
+  s_68bfd164593579::t_a44ad2f38345ac 1-10
+apps/web/src/ui/components/review-page-loading.tsx
+  s_68bfd164593579::t_a44ad2f38345ac 1-28
+apps/web/src/ui/components/review-loading-field.tsx
+  s_68bfd164593579::t_a44ad2f38345ac 1-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "762928b23a6d2e4052d3b307486e4b71d56f28f1",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

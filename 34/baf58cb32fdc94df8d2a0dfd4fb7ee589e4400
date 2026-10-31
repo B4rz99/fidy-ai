@@ -1,0 +1,27 @@
+apps/web/src/ui/components/recurring-loading.tsx
+  s_68bfd164593579::t_8ab132d02134b9 4,10
+apps/web/src/ui/components/recurring-month-controls-loading.tsx
+  s_68bfd164593579::t_8ab132d02134b9 1-53
+apps/docs/package.json
+  s_68bfd164593579::t_8ab132d02134b9 16
+bun.lock
+  s_68bfd164593579::t_0b981019afc498 8,10,46,252,256,262,298,306,324,2310-2311,2568-2569
+package.json
+  s_68bfd164593579::t_6badfdee9e9ab7 62,64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34baf58cb32fdc94df8d2a0dfd4fb7ee589e4400",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+apps/web/e2e/transactions-approved.spec.ts
+  s_68bfd164593579::t_fe30878232e8db 424-426
+apps/web/src/ui/components/report-loading.tsx
+  s_68bfd164593579::t_fe30878232e8db 11-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ce6bb3ae81ab40206ecba69e694818fd9d7f46c6",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

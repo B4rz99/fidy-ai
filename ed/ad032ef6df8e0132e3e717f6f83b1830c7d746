@@ -1,0 +1,23 @@
+apps/web/src/ui/components/settings-loading.tsx
+  s_68bfd164593579::t_1b515604b5e15f 62,78-83
+apps/web/src/ui/loading-reference.tsx
+  s_68bfd164593579::t_53937f25a6fcb6 189
+apps/web/src/ui/components/transaction-loading.tsx
+  s_68bfd164593579::t_55736a7a4ca5cf 56-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "edad032ef6df8e0132e3e717f6f83b1830c7d746",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

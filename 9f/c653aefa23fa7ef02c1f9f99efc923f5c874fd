@@ -1,0 +1,48 @@
+apps/server/cloudflare/insights/proactivity-runtime.test.ts
+  s_68bfd164593579::t_fbac724842d646 158
+tools/mutation/package.json
+  s_68bfd164593579::t_98453b12378e7f 11-14
+  s_68bfd164593579::t_acdd9027dfc438 30-31
+tools/mutation/README.md
+  s_68bfd164593579::t_c1ed6cb5fe46e1 26-31
+tools/mutation/patches/@stryker-mutator%2Fvitest-runner@10.1.1.patch
+  s_68bfd164593579::t_acdd9027dfc438 1-27
+apps/server/cloudflare/weekly-summary.test-fixture.ts
+  s_68bfd164593579::t_fbac724842d646 141-143
+infra/cloudflare/package.json
+  s_68bfd164593579::t_98453b12378e7f 20
+tools/mcp-inspector/package.json
+  s_68bfd164593579::t_98453b12378e7f 13
+dependency-policy.json
+  s_68bfd164593579::t_98453b12378e7f 27-28,51-52
+tools/mutation/patches/@stryker-mutator%2Finstrumenter@10.1.1.patch
+  s_68bfd164593579::t_acdd9027dfc438 1-24
+tools/astro/package.json
+  s_68bfd164593579::t_98453b12378e7f 10
+apps/server/package.json
+  s_68bfd164593579::t_98453b12378e7f 310
+bun.lock
+  s_68bfd164593579::t_b472e3f4ddbf45 70,160,378
+tools/astro/bun.lock
+  s_68bfd164593579::t_1d02c0af8e7451 10,18,20,22,24,26,28,30,32,34,36,38,40,114,176-177
+tools/mcp-inspector/bun.lock
+  s_68bfd164593579::t_76636529cdbbb4 8,19,21,325-330
+tools/mutation/bun.lock
+  s_68bfd164593579::t_933956d19b8db9 12-15,24-25,189,191,193,195,197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9fc653aefa23fa7ef02c1f9f99efc923f5c874fd",
+  "prompts": {},
+  "sessions": {
+    "s_68bfd164593579": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18564-8e38-7591-83c6-2c751480d1e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

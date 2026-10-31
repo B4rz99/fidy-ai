@@ -3,19 +3,19 @@ set -euo pipefail
 platform="$(uname -s)"
 architecture="$(uname -m)"
 case "$platform/$architecture" in
-  Darwin/arm64) archive=bun-darwin-aarch64; digest=a51c03e0abe19b706f310f33feed5724a9b32b5c2279cf41751910307a60d792 ;;
-  Darwin/x86_64) archive=bun-darwin-x64; digest=55c0d5851d9297e64329e798065f8fa19da8a86dc2ca37f9f539bfa2ef33f4be ;;
-  Linux/aarch64) archive=bun-linux-aarch64; digest=d82163414c1a1d0918bb5804f86c1843b7050b763ca11fda212b5a9965cc1c33 ;;
-  Linux/x86_64) archive=bun-linux-x64; digest=dd32f30cc152ca915ccf9adfee7313b1d578ee9c407d235f64dc9d1be1087951 ;;
-  MINGW*/aarch64|MSYS*/aarch64) archive=bun-windows-aarch64; digest=0852178fc218b1c3276857b0d7a1020a4fccfe2297a12a69ef990deb9eac589d ;;
-  MINGW*/x86_64|MSYS*/x86_64) archive=bun-windows-x64; digest=dd81403369b1435ae419e3d16137ec136614c882212e54961a47a2eb39f5b3e7 ;;
+  Darwin/arm64) archive=bun-darwin-aarch64; digest=c240d7f0ccb90c263a849fcdb09b7ee62630d921348ed6aafda86b9d577bc510 ;;
+  Darwin/x86_64) archive=bun-darwin-x64; digest=50a3491f73abc2fe81673171a85762d3bc2cc1680ccecadd983de99adf77977e ;;
+  Linux/aarch64) archive=bun-linux-aarch64; digest=baa6bb36f51d6e58561e02bbea825038a9df454f673d6d776e8bbf86f8c7850e ;;
+  Linux/x86_64) archive=bun-linux-x64; digest=bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c ;;
+  MINGW*/aarch64|MSYS*/aarch64) archive=bun-windows-aarch64; digest=2d57a0eec0cb44d95c918c3f9734f60455a1306ae5085d76fc68f44e3ee30d09 ;;
+  MINGW*/x86_64|MSYS*/x86_64) archive=bun-windows-x64; digest=cd2c0fccc78f3ede1f50ca827a15f063eda13d4d150a3d0674f4f6e323d864a5 ;;
   *) printf 'Unsupported Bun installation platform. See apps/cli/ARCHITECTURE.md.\n' >&2; exit 1 ;;
 esac
-install_directory="${1:-$HOME/.fidy/bun-13a98b0db}"
+install_directory="${1:-$HOME/.fidy/bun-38afee6c8}"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
 curl --fail --silent --show-error --location --retry 2 --connect-timeout 15 --max-time 600 \
-  "https://github.com/B4rz99/fidy-ai/releases/download/runtime-bun-13a98b0db/$archive.zip" \
+  "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/$archive.zip" \
   -o "$temporary_directory/bun.zip"
 if command -v sha256sum >/dev/null; then
   actual="$(sha256sum "$temporary_directory/bun.zip" | cut -d ' ' -f 1)"
@@ -41,7 +41,7 @@ if [[ "$executable" == bun.exe ]]; then
 else
   ln -sf bun "$install_directory/bunx"
 fi
-if [[ "$("$install_directory/$executable" --revision)" != '1.4.3-canary.1+13a98b0db' ]]; then
+if [[ "$("$install_directory/$executable" --revision)" != '1.4.4+38afee6c8' ]]; then
   printf 'Pinned Bun revision mismatch; refusing installation.\n' >&2
   exit 1
 fi

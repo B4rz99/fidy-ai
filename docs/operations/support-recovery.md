@@ -72,7 +72,7 @@ reload, without redisclosing the new code; no recovery value was copied into evi
 2. Accept only its public reference and the pre-issued BackupRecoveryCode. The User enters no
    browser-private verifier into support.
 3. Run the repository-pinned Bun directly from an interactive terminal, for example
-   `/Users/obarbozaa/.fidy/bun-13a98b0db/bun apps/cli/src/main.ts support-recovery`,
+   `/Users/obarbozaa/.fidy/bun-38afee6c8/bun apps/cli/src/main.ts support-recovery`,
    if the shell PATH selects a different Bun. Complete Cloudflare Access in
    the browser as the recovery operator, enter the public pairing reference, then enter the
    BackupRecoveryCode in the hidden prompt. Do not run `cloudflared access token` separately or

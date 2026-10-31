@@ -1,0 +1,287 @@
+apps/server/cloudflare/resource-admission/pat-admission-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 77,204
+docs/operations/security-response.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 3
+apps/server/cloudflare/agent/atomic-guards-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 33
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 32,36
+  s_49a6ea3dcec880::t_0916fbb3b65791 6
+apps/server/cloudflare/agent/transcript-cost.test-fixture.ts
+  s_49a6ea3dcec880::t_7d11eb8c8d9c60 185
+apps/server/ARCHITECTURE.md
+  s_49a6ea3dcec880::t_dffb246b58cfa0 133-134,174-175,197,278
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 253-259
+apps/server/cloudflare/oauth-agents/lineage-cutover.test.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 5
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 209,213
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 210
+apps/server/cloudflare/oauth-agents/oauth-confirmation-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 62
+  s_49a6ea3dcec880::t_0916fbb3b65791 4
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 61,65,70
+apps/server/cloudflare/budgets/work-cutover.test.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 7
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 39,54,58,175,179-180
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 176
+SECURITY_STANDARDS.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 584
+apps/server/cloudflare/ingestion/user-file-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 5,163
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 162,194
+docs/operations/titular-requests-1273.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 187
+apps/server/cloudflare/recovery/credentials-cutover.test.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 2
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 250,257,259,263,270
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 251
+apps/server/cloudflare/recovery/evidence-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 556
+  s_49a6ea3dcec880::t_0916fbb3b65791 5
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 408-409,411,555,565-566,572,574,583
+apps/server/cloudflare/whatsapp/service-window-cutover.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 41,45,81
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 42
+  s_49a6ea3dcec880::t_0916fbb3b65791 10
+apps/web/src/features/privacy/FEATURE.md
+  s_49a6ea3dcec880::t_03d363d68da06d 35
+apps/server/cloudflare/email-authentication/credentials-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 254
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 253,260,262,265,268
+  s_49a6ea3dcec880::t_0916fbb3b65791 2
+apps/server/cloudflare/recurring/workflow-cost.test.ts
+  s_49a6ea3dcec880::t_7d11eb8c8d9c60 191,332
+apps/server/cloudflare/memory/timestamps-cutover.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 36,40
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 37
+  s_49a6ea3dcec880::t_0916fbb3b65791 10
+apps/server/cloudflare/subscription/standing-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 152
+  s_49a6ea3dcec880::t_0916fbb3b65791 6
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 151,272,278-279,288,293
+apps/web/src/features/pats/FEATURE.md
+  s_49a6ea3dcec880::t_03d363d68da06d 7
+apps/web/src/features/recurring/FEATURE.md
+  s_49a6ea3dcec880::t_03d363d68da06d 6,13,170
+apps/server/cloudflare/provider-authentication/handoff-cutover.test-fixture.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 5
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 39
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 38,48
+apps/server/cloudflare/resource-admission/compaction-admission-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 51,163
+apps/server/cloudflare/resource-admission/email-counter-cutover.test.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 4
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 98,103
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 99
+docs/operations/provider-inventory.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 6
+apps/server/cloudflare/ingestion/email-media-review-cutover.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 216,223,231-232,239,244
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 217
+  s_49a6ea3dcec880::t_0916fbb3b65791 7
+apps/cli/ARCHITECTURE.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 280
+apps/server/cloudflare/recurring-plans/recurring-plans.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 6,1487,1602
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 1486,1490,1601,1604
+docs/runbooks/billing-corrections.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 9,72
+docs/adr/0037-feature-storage-cutover-contracts.md
+  s_49a6ea3dcec880::t_03d363d68da06d 7
+apps/server/cloudflare/subscription/refund-cutover.test.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 6
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 263,270,275-276,284,289
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 264
+apps/server/cloudflare/browser-login/operations.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 187,190
+  s_49a6ea3dcec880::t_0916fbb3b65791 6
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 188
+apps/server/cloudflare/resource-admission/FEATURE.md
+  s_49a6ea3dcec880::t_03d363d68da06d 48,156,194,226
+docs/operations/microsoft-authentication.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 1,3,15,18
+apps/server/cloudflare/subscription/cancellation-cutover.test.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 6
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 111,222,224-225,232,237
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 112
+infra/cloudflare/smoke-schema.test.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 1
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 16,22
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 17-19
+apps/server/cloudflare/ingestion/forwarding-cutover.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 134,140,142-143,150,155
+  s_49a6ea3dcec880::t_0916fbb3b65791 6
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 135
+apps/server/cloudflare/insights/governor-cutover.test.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 12
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 80,84
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 81
+apps/server/cloudflare/ingestion/statement-review-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 167
+  s_49a6ea3dcec880::t_0916fbb3b65791 6
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 166,172,178-179,183,188
+apps/server/cloudflare/budgets/months-cutover.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 41,49,73,76,97,99-101,258,262,281
+  s_49a6ea3dcec880::t_0916fbb3b65791 9
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 259
+docs/operations/processing-withdrawal-1273.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 1
+apps/server/cloudflare/ingestion/materialization-cutover.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 214,220,229-230,237,242,316,331-332,338,344
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 215
+  s_49a6ea3dcec880::t_0916fbb3b65791 7
+apps/server/cloudflare/subscription/price-notice-cutover.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 161,167,172-173,180,185
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 162
+  s_49a6ea3dcec880::t_0916fbb3b65791 6
+apps/docs/ARCHITECTURE.md
+  s_49a6ea3dcec880::t_dffb246b58cfa0 53
+apps/server/cloudflare/connections/ownership-cutover.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 47,51,110
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 48
+  s_49a6ea3dcec880::t_0916fbb3b65791 7
+apps/server/cloudflare/agent/transcript-session-cutover.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 22,56
+  s_49a6ea3dcec880::t_0916fbb3b65791 5
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 23
+apps/server/cloudflare/audit/FEATURE.md
+  s_49a6ea3dcec880::t_03d363d68da06d 42,55
+apps/web/src/features/budgets/FEATURE.md
+  s_49a6ea3dcec880::t_03d363d68da06d 6,13
+apps/cli/src/support-recovery/FEATURE.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 15
+apps/server/cloudflare/subscription/source-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 133
+  s_49a6ea3dcec880::t_0916fbb3b65791 6
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 132,248,253,255,264
+apps/web/src/features/dashboard/FEATURE.md
+  s_49a6ea3dcec880::t_03d363d68da06d 6,13
+apps/server/cloudflare/audit/admission-cutover.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 131,135
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 132
+  s_49a6ea3dcec880::t_0916fbb3b65791 13
+apps/server/cloudflare/erasure/owner-disposition.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 27
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 26,30
+  s_49a6ea3dcec880::t_0916fbb3b65791 2
+apps/server/cloudflare/budgets/scheduling-cost.test.ts
+  s_49a6ea3dcec880::t_7d11eb8c8d9c60 169
+apps/server/cloudflare/schema-cutover.test-fixture.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 28,35
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 29,31-32
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 33
+apps/server/cloudflare/agent/document-clock-cutover.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 42,46,96
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 43
+  s_49a6ea3dcec880::t_0916fbb3b65791 6
+apps/server/cloudflare/whatsapp/recipient-cutover.test.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 11
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 63,67
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 64
+apps/server/cloudflare/ingestion/backfill-progress-cutover.test.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 195,202,204-205,212,217
+  s_49a6ea3dcec880::t_0916fbb3b65791 7
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 196
+apps/server/cloudflare/insights/control-cutover.test.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 11
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 76
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 75,79
+apps/server/cloudflare/consent/history-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 26,367
+apps/server/cloudflare/schema-cutover.test-fixture.sql
+  s_49a6ea3dcec880::t_0916fbb3b65791 1-2341
+apps/server/cloudflare/insights/content-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 200
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 199,203
+  s_49a6ea3dcec880::t_0916fbb3b65791 5
+apps/server/cloudflare/tokens/pats.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 723
+  s_49a6ea3dcec880::t_0916fbb3b65791 2
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 722,726,732
+apps/web/src/features/transactions/FEATURE.md
+  s_49a6ea3dcec880::t_03d363d68da06d 6,13
+apps/server/cloudflare/transactions/projection-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 262
+  s_49a6ea3dcec880::t_0916fbb3b65791 9
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 42-43,47,83-84,88,114-115,119-121,261,265,268
+apps/server/cloudflare/consent/exchanges-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 2,47-48,238
+apps/server/cloudflare/recurring/timestamps-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 216
+  s_49a6ea3dcec880::t_0916fbb3b65791 8
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 215,219
+docs/operations/provider-rights-1275.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 4,7
+  s_49a6ea3dcec880::t_dffb246b58cfa0 6
+docs/adr/0025-evidence-backed-notification-interpretation.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 18
+docs/operations/google-authentication.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 1,14
+docs/operations/privacy-decisions-1276.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 11,50,119
+docs/operations/production-releases.md
+  s_49a6ea3dcec880::t_dffb246b58cfa0 55,303
+AGENTS.md
+  s_49a6ea3dcec880::t_28cc174abd575b 24
+  s_49a6ea3dcec880::t_d81975f3237100 22-23,25-26
+docs/operations/production-benchmark-budget.md
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 14
+  s_49a6ea3dcec880::t_abde66b8cc00a1 3
+apps/server/cloudflare/recurring/detection-comparison.test.ts
+  s_49a6ea3dcec880::t_7d11eb8c8d9c60 235
+docs/operations/privacy-applicability-1276.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 4,34,84,89,105,125
+apps/server/cloudflare/categories/keyword-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 120
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 119,123,125
+  s_49a6ea3dcec880::t_0916fbb3b65791 6
+apps/server/cloudflare/transactions/history-cutover.test.ts
+  s_49a6ea3dcec880::t_0916fbb3b65791 8
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 51-52,60,76,292,296-297
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 293
+docs/adr/0020-mandatory-verified-email-authentication-and-recovery.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 119
+apps/web/src/features/agent/FEATURE.md
+  s_49a6ea3dcec880::t_03d363d68da06d 6,13
+apps/server/cloudflare/whatsapp/delivery-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 36
+  s_49a6ea3dcec880::t_0916fbb3b65791 7
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 35,39,122
+apps/server/cloudflare/audit/internal/retention-permit-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 34,144
+.patterns/alchemy.md
+  s_49a6ea3dcec880::t_0916fbb3b65791 159
+apps/server/cloudflare/provider-authentication/ownership-cutover.test-fixture.ts
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 51,62
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 52
+  s_49a6ea3dcec880::t_0916fbb3b65791 6
+docs/adr/0021-browser-only-payment-credential-enrollment.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 36
+README.md
+  s_49a6ea3dcec880::t_dffb246b58cfa0 36,41
+apps/server/cloudflare/consent/offers-cutover.test.ts
+  s_49a6ea3dcec880::t_982ff32cfcf0c0 203,318
+apps/server/src/core/subscription/FEATURE.md
+  s_49a6ea3dcec880::t_74a86e2b3cef4c 58-59,342
+docs/operations/cloudflare-background-work.md
+  s_49a6ea3dcec880::t_8c9b8ae8712f43 3-5
+docs/operations/hosted-mcp-release.md
+  s_49a6ea3dcec880::t_226435245e5033 3-4
+docs/operations/kapso-launch-readiness.md
+  s_49a6ea3dcec880::t_aec8885f58596b 5-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cd239f699007c2b6ff6289392bff588f73770d40",
+  "prompts": {},
+  "sessions": {
+    "s_49a6ea3dcec880": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19320-20ee-7781-841c-5837c27b9d8f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

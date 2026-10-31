@@ -1,6 +1,12 @@
-import { findUserDocument, prepareUserDocumentWrite } from "../../user-documents/operations";
+import {
+  findUserDocument,
+  prepareUserDocumentWrite,
+  readAuthorizedUserDocumentSnapshot,
+} from "../../user-documents/operations";
 import { type DashboardMutationOperation, type DashboardOperation } from "../contract";
-import { listCategories } from "../../categories/operations";
+import { listCategories, prepareCategorySnapshot } from "../../categories/operations";
+import { UserContext, UserId } from "../../../src/core/identity/contract";
+import { prepareUserContext } from "../../identity/user-context/operations";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
@@ -14,9 +20,10 @@ import {
 import { categoryIds } from "../../../src/core/categories/contract";
 import { DashboardDocument, WidgetId } from "../../../src/core/dashboard/contract";
 import { DashboardView } from "../../../src/shell/dashboard/contract";
-import { loadDashboardFacts } from "./dashboard-view";
+import { type DashboardReadContext, loadDashboardFacts } from "./dashboard-view";
 import { renderDashboardView } from "../../../src/shell/dashboard/operations";
 import {
+  type QueryCaller,
   type TransactionCaller,
   callerAuthority,
   isPATCaller,
@@ -108,6 +115,90 @@ export const findDashboardDocument = ({
     Effect.mapError(() => new InvalidStoredDashboard())
   );
 
+type DashboardSource = Readonly<{
+  live: boolean;
+  document: Option.Option<StoredDashboard>;
+  viewContext: Option.Option<DashboardReadContext>;
+}>;
+const decodeStoredDashboard = (
+  row: Readonly<{ encoded: string; revision: number }>
+): Effect.Effect<StoredDashboard, Schema.SchemaError> =>
+  Schema.decodeEffect(DocumentJson)(row.encoded).pipe(
+    Effect.map((document) => ({ ...row, document }))
+  );
+
+const decodeViewContext = (related: ReadonlyArray<D1Result>): Option.Option<UserContext> => {
+  const rows = related[0]?.results;
+  return related.length === 1 && rows?.length === 1
+    ? Schema.decodeUnknownOption(UserContext)(rows[0])
+    : Option.none();
+};
+
+/** Observe live authority and its gated view sources in one read-only native snapshot. */
+const readViewSource = ({
+  db,
+  subject,
+  current,
+}: Readonly<{ db: D1Database; subject: QueryCaller; current: number }>): Effect.Effect<
+  DashboardSource,
+  InvalidStoredDashboard
+> =>
+  Effect.gen(function* () {
+    const authority = callerAuthority({ subject, current });
+    const taxonomy = prepareCategorySnapshot({ db, authority });
+    const retained = yield* readAuthorizedUserDocumentSnapshot({
+      db,
+      subject,
+      current,
+      kind: "dashboard",
+      related: [
+        prepareUserContext({
+          db,
+          userId: UserId.make(subject.userId),
+          statement: {
+            sql: `SELECT serviceMarket, locale, timeZone FROM identity_user_context
+              WHERE EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
+            params: authority.bindings,
+          },
+        }),
+        taxonomy.statement,
+      ],
+    });
+    if (!retained.live) {
+      return { live: false, document: Option.none(), viewContext: Option.none() };
+    }
+    const document = Option.isNone(retained.document)
+      ? Option.none()
+      : Option.some(yield* decodeStoredDashboard(retained.document.value));
+    const context = decodeViewContext(retained.related.slice(0, 1));
+    const categories = taxonomy.decode(retained.related[1]?.results);
+    return {
+      live: true,
+      document,
+      viewContext:
+        Option.isSome(context) && Option.isSome(categories)
+          ? Option.some({ context: context.value, categories: categories.value })
+          : Option.none(),
+    };
+  }).pipe(Effect.mapError(() => new InvalidStoredDashboard()));
+
+export const findDashboardSource = ({
+  db,
+  subject,
+  current,
+  operation,
+}: Readonly<{
+  db: D1Database;
+  subject: QueryCaller;
+  current: number;
+  operation: DashboardOperation;
+}>): Effect.Effect<DashboardSource, InvalidStoredDashboard> =>
+  operation === "dashboard.getDashboardView"
+    ? readViewSource({ db, subject, current })
+    : findDashboardDocument({ db, userId: subject.userId }).pipe(
+        Effect.map((document) => ({ live: true, document, viewContext: Option.none() }))
+      );
+
 export const defaultDocument = (): DashboardDocument =>
   makeDefaultDashboard({
     restaurantCategoryId: categoryIds.restaurantes,
@@ -192,18 +283,26 @@ export const dashboardOutcome = (operation: DashboardMutationOperation): OwnerOu
   read: (db, userId) => findDashboardValue({ db, userId, operation }),
 });
 
-/** Read the committed document or ephemeral view from the same User after the unit commits. */
+/** Read the committed document from the same User after the mutation unit commits. */
 export const findDashboardValue = ({
   db,
   userId,
   operation,
-}: Readonly<{ db: D1Database; userId: string; operation: DashboardOperation }>): Effect.Effect<
-  Option.Option<CommittedMutationValue>
-> =>
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  operation: DashboardMutationOperation;
+}>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   Effect.gen(function* () {
-    const found = yield* findDashboardDocument({ db, userId });
-    if (Option.isNone(found)) return Option.none();
-    return yield* projectDashboardValue({ db, userId, operation, document: found.value.document });
+    const document = yield* findDashboardDocument({ db, userId });
+    if (Option.isNone(document)) return Option.none();
+    return yield* projectDashboardValue({
+      db,
+      userId,
+      operation,
+      document: document.value.document,
+      viewContext: Option.none(),
+    });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 /** Project a document already established in this canonical read, without retaining it afterward. */
@@ -212,11 +311,13 @@ export const projectDashboardValue = ({
   userId,
   operation,
   document,
+  viewContext,
 }: Readonly<{
   db: D1Database;
   userId: string;
   operation: DashboardOperation;
   document: DashboardDocument;
+  viewContext: Option.Option<DashboardReadContext>;
 }>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   Effect.gen(function* () {
     if (operation !== "dashboard.getDashboardView") {
@@ -226,12 +327,14 @@ export const projectDashboardValue = ({
         encode: () => Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(document),
       });
     }
+    if (Option.isNone(viewContext)) return Option.none();
     const now = yield* DateTime.now;
     const facts = yield* loadDashboardFacts({
       db,
       userId,
       document,
       now,
+      initial: viewContext.value,
     });
     if (Option.isNone(facts)) return Option.none();
     const view = yield* renderDashboardView({

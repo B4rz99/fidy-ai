@@ -245,6 +245,41 @@ it("requires an exact unique fixed amount within three days and never allocates 
   ).toEqual([]);
 });
 
+it("keeps same-date exceptions and payments separate for different plans", () => {
+  const otherId = RecurringPlanId.make("20000000-0000-4000-8000-000000000012");
+  const created = command(createdPlan(), { kind: "create", id: otherId, plan: monthly });
+  const moved = command(created, {
+    kind: "edit",
+    planId,
+    date: "2026-01-31",
+    scope: "once",
+    plan: { ...monthly, firstDate: "2026-02-02" },
+  });
+  const paid = command(moved, {
+    kind: "fulfill",
+    fulfillment: Schema.decodeSync(RecurringFulfillment)({
+      id: "20000000-0000-4000-8000-000000000014",
+      planId: otherId,
+      date: "2026-01-31",
+      actualDate: "2026-01-31",
+      settled: true,
+      money: { amount: "120", currency: "COP" },
+    }),
+  });
+  const now = DateTime.makeUnsafe("2026-02-04T12:00:00Z");
+  const january = projectRecurringMonth({ document: paid, month: "2026-01", now });
+  expect(january.map((item) => [item.planId, item.expectedDate, item.status])).toEqual([
+    [otherId, "2026-01-31", "completed"],
+  ]);
+  const february = projectRecurringMonth({ document: paid, month: "2026-02", now });
+  expect(february.map((item) => [item.planId, item.expectedDate, item.status])).toEqual([
+    [planId, "2026-02-02", "unconfirmed"],
+    [planId, "2026-02-28", "upcoming"],
+    [otherId, "2026-02-28", "upcoming"],
+  ]);
+  expect(february.every((item) => item.fulfillments.length === 0)).toBe(true);
+});
+
 it("moves only one occurrence, keeps its identity, permits actual values above a fixed projection, and reverses the mark", () => {
   const changed = command(createdPlan(), {
     kind: "edit",

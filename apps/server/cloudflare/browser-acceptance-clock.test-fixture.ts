@@ -1,5 +1,5 @@
 import { setSystemTime } from "bun:test";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 
 const maximumAdvanceMilliseconds = 5_000;
 export const AcceptanceClockAdvance = Schema.Struct({
@@ -9,12 +9,25 @@ export const AcceptanceClockAdvance = Schema.Struct({
   ),
 });
 const origin = Effect.runSync(Clock.currentTimeMillis);
-const monotonicOrigin = performance.now();
+let monotonicOrigin = performance.now();
 let advancedMilliseconds = 0;
+let pausedAt = Option.none<number>();
 
 /** The acceptance process owns this clock. Native storage and production admission stay active. */
 export const synchronizeAcceptanceClock = (): void => {
-  setSystemTime(Math.floor(origin + performance.now() - monotonicOrigin + advancedMilliseconds));
+  const elapsed = Option.getOrElse(pausedAt, () => performance.now()) - monotonicOrigin;
+  setSystemTime(Math.floor(origin + elapsed + advancedMilliseconds));
+};
+
+export const pauseAcceptanceClock = (): void => {
+  if (Option.isNone(pausedAt)) pausedAt = Option.some(performance.now());
+  synchronizeAcceptanceClock();
+};
+
+export const resumeAcceptanceClock = (): void => {
+  if (Option.isSome(pausedAt)) monotonicOrigin += performance.now() - pausedAt.value;
+  pausedAt = Option.none();
+  synchronizeAcceptanceClock();
 };
 
 /** Advance only after an observed, declared refusal; never alter grants or retained authority. */

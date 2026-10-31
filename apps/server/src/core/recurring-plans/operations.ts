@@ -233,6 +233,9 @@ const generatedDates = (
       return (next === undefined || date < next.from) && trackedOn({ plan, date });
     })
   );
+const occurrenceKey = (entry: Readonly<{ planId: string; date: string }>): string =>
+  `${entry.planId}:${entry.date}`;
+
 /** One complete month, plus displaced exceptions; completed records survive schedule and lifecycle changes. */
 export const projectRecurringMonth = ({
   document,
@@ -247,16 +250,31 @@ export const projectRecurringMonth = ({
   const through = DateTime.formatIsoDateUtc(
     DateTime.makeUnsafe(from).pipe(DateTime.add({ months: 1 }), DateTime.subtract({ days: 1 }))
   );
+  const exceptions = Map.groupBy(document.exceptions, occurrenceKey);
+  const fulfillments = Map.groupBy(document.fulfillments, occurrenceKey);
+  const retained = Map.groupBy(
+    [...document.exceptions, ...document.fulfillments],
+    (entry) => entry.planId
+  );
   return document.plans
     .flatMap((plan) => {
-      const retained = [...document.exceptions, ...document.fulfillments]
-        .filter((entry) => entry.planId === plan.id)
-        .map((entry) => entry.date);
-      const dates = new Set([...generatedDates(plan, from, through), ...retained]);
+      const dates = new Set([
+        ...generatedDates(plan, from, through),
+        ...(retained.get(plan.id) ?? []).map((entry) => entry.date),
+      ]);
       return [...dates]
+        .filter((date) => {
+          const exception = exceptions.get(occurrenceKey({ planId: plan.id, date }))?.[0];
+          const expectedDate = exception?.replacement?.firstDate ?? date;
+          return expectedDate >= from && expectedDate <= through;
+        })
         .map((date) =>
           occurrenceAt({
-            document,
+            document: {
+              ...document,
+              exceptions: exceptions.get(occurrenceKey({ planId: plan.id, date })) ?? [],
+              fulfillments: fulfillments.get(occurrenceKey({ planId: plan.id, date })) ?? [],
+            },
             plan,
             date,
             today: (input) =>
@@ -264,10 +282,7 @@ export const projectRecurringMonth = ({
           })
         )
         .filter(
-          (item) =>
-            item.expectedDate >= from &&
-            item.expectedDate <= through &&
-            (item.fulfillments.length > 0 || trackedOn({ plan, date: item.expectedDate }))
+          (item) => item.fulfillments.length > 0 || trackedOn({ plan, date: item.expectedDate })
         );
     })
     .sort(

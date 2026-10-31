@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, vi } from "vitest";
+import { afterEach, expect, vi } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Effect, Option, Schema } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -8,7 +8,6 @@ import { executeErasureAdmission, executeErasureRestore } from "./operations";
 import { nativeErasurePlatform } from "./native.test-fixture";
 import { makeMemoryErasureStores } from "../memory/runtime";
 
-beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
 afterEach(() => vi.useRealTimers());
 const userId = "12740000-0000-4000-8000-000000000001";
 const foreignUser = "12740000-0000-4000-8000-000000000099";
@@ -118,7 +117,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         const duplicate = yield* submit(native);
         expect(duplicate.status).toBe(202);
         expect(yield* Effect.tryPromise(() => duplicate.text())).toBe(original);
-        vi.setSystemTime((yield* Clock.currentTimeMillis) + 600001);
+        vi.useFakeTimers({ toFake: ["Date"], now: (yield* Clock.currentTimeMillis) + 600001 });
         expect((yield* submit(native)).status).toBe(401);
         expect(
           (yield* Effect.tryPromise(() =>

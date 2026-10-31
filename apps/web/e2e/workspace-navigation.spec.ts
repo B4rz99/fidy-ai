@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import { Effect } from "effect";
+import { type Cause, Effect, type Scope } from "effect";
 import { apiOrigin } from "./http-fixtures";
 import {
   navigateThroughConsent,
@@ -93,7 +93,7 @@ for (const workspace of workspaces) {
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("heading", { name: "Por revisar", exact: true })).toBeVisible()
         );
-        yield* Effect.tryPromise(() => page.route(`${apiOrigin}${workspace.path}`, delayedData));
+        yield* holdWorkspaceData(page, `${apiOrigin}${workspace.path}`);
         const samples: number[] = [];
         const count = workspace.name === "Transacciones" ? 1 : measurementSamples;
         for (let sample = 0; sample < count; sample++) {
@@ -127,7 +127,7 @@ for (const workspace of workspaces) {
           }
         }
         yield* Effect.tryPromise(() => recordSamples(workspace.name, samples, development));
-      })
+      }).pipe(Effect.scoped)
     ));
 }
 
@@ -181,10 +181,25 @@ const observeSwitch = (ready: string): void => {
     { capture: true, once: true }
   );
 };
-const delayedData = (route: Route): Promise<void> =>
-  Effect.runPromise(
-    Effect.sleep("1 second").pipe(Effect.andThen(Effect.tryPromise(() => route.continue())))
-  );
+const holdWorkspaceData = (
+  page: Page,
+  path: string
+): Effect.Effect<void, Cause.UnknownError, Scope.Scope> =>
+  Effect.gen(function* () {
+    const release = Promise.withResolvers<void>();
+    const pending: Array<Promise<void>> = [];
+    const hold = (route: Route): Promise<void> => {
+      const work = release.promise.then(() => route.continue());
+      pending.push(work);
+      return work;
+    };
+    const cleanup = (): Promise<void> => {
+      release.resolve();
+      return Promise.all(pending).then(() => page.unroute(path, hold));
+    };
+    yield* Effect.addFinalizer(() => Effect.tryPromise(cleanup).pipe(Effect.orDie));
+    yield* Effect.tryPromise(() => page.route(path, hold));
+  });
 
 test("dismisses a recurring editor when leaving its retained workspace", ({ page, request }) =>
   Effect.runPromise(

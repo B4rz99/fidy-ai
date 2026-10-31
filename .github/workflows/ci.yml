@@ -258,7 +258,7 @@ jobs:
       - name: Cloudflare infrastructure validation
         env:
           CLOUDFLARE_TEST_REPORT: "true"
-          VERIFY_TIMINGS_PATH: infra/cloudflare/test-results/verify-infra.json
+          VERIFY_TIMING_REPORT: infra/cloudflare/test-results/verify-infra.json
         run: |
           export TMPDIR="$(mktemp -d /dev/shm/fidy-infra.XXXXXX)"
           export NATIVE_TEST_IMAGE_CACHE="$TMPDIR/pristine-native-images"

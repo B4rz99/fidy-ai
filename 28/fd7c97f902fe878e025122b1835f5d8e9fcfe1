@@ -1,0 +1,60 @@
+infra/cloudflare/d1-migrations.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 99,111-112
+apps/server/cloudflare/provider-authentication/microsoft.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 231,235,308-319,431,449-453,464-496
+  s_d9571b3fccd032::t_3b622908f121e2 497
+apps/server/cloudflare/provider-authentication/journey.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-2,150,154,236-245,309-315,373,391-395,406-438
+  s_d9571b3fccd032::t_d2ea1ff6ead3a1 439
+apps/server/cloudflare/recurring-plans/recurring-plans.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 206-215
+apps/server/cloudflare/whatsapp/recipient.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-50
+apps/server/cloudflare/ingestion/review-evidence-guards.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-81
+apps/server/cloudflare/oauth-agents/approval-constraints.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-45
+apps/server/cloudflare/oauth-agents/lineage.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-140
+apps/server/cloudflare/consent/exchanges-schema.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-96
+apps/server/cloudflare/insights/reminder-control-evidence.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-60
+apps/server/cloudflare/resource-admission/compaction-capacity.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-115
+apps/server/cloudflare/consent/offer-constraints.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-222
+apps/server/cloudflare/consent/history-schema.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-61
+apps/web/src/features/recurring/controller.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 8,66-71
+apps/server/cloudflare/resource-admission/pat-capacity.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-96
+apps/server/cloudflare/recovery/event-erasure.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-218
+apps/server/cloudflare/resource-admission/email-capacity.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-115
+apps/server/cloudflare/subscription/storage-guards.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 1-128
+apps/server/cloudflare/provider-authentication/whatsapp-association.test.ts
+  s_d9571b3fccd032::t_c1ad6f5641e2b4 537,546-549,583-586,594-633
+  s_d9571b3fccd032::t_bbefdbbfec0c2d 634
+docs/research/dashboard-authorized-snapshot-implementation-2026-10-31.md
+  s_d9571b3fccd032::t_872e464ba2aee7 7,24,33-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "28fd7c97f902fe878e025122b1835f5d8e9fcfe1",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

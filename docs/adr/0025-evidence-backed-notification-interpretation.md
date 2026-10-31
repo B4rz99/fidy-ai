@@ -15,7 +15,7 @@ selects interpretation rules; it never authenticates a bank or establishes User 
 first-match ordering nor dropping an invalid competing format may manufacture a unique match.
 
 The first supported formats are the DAVIbank card notification, BBVA PSE notification, and RappiCard
-purchase notification documented in [the evidence note](../research/notification-email-format-evidence.md).
+purchase notification documented in [the evidence note](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/research/notification-email-format-evidence.md).
 For those recognized revisions, missing Currency or a bare `$` means COP under an explicit format
 rule; explicit unambiguous Currency takes precedence and conflicting/unsupported Currency goes to
 review. This deliberately replaces explicit-Currency-only email extraction for these formats, not

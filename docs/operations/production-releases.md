@@ -52,12 +52,7 @@ integrations and deployment triggers for those systems; they are not recovery pa
 release Git revision, and the canonical contract digest. The response is `no-store`. It does not
 expose binding names, environment values, internal routes, exception text, or Secrets.
 
-## Retention migration prerequisite (#1136)
-
-The `0074_hosted_retention.sql` triggers add D1 writes. Earlier Core code incorrectly counts these
-trigger writes as lifecycle changes. Land and deploy the separate code-only `RETURNING` compatibility
-fix before merging the retention migration. The migration draft remains blocked until that release
-is actually serving traffic; a merged prerequisite or a green build is insufficient.
+## Retention compatibility floor
 
 `retentionCompatibilityRevision` pins the reviewed prerequisite commit. If it is squash-merged,
 replace the pin with the reviewed landed commit and rerun the gates before merging this migration.
@@ -305,8 +300,7 @@ applied baseline does **not** upgrade an existing database.
 Before deploying a changed baseline against an existing development database, apply and verify the
 corresponding schema changes or deliberately recreate the disposable database. Compare the actual
 schema with the target and check foreign keys before aligning its migration ledger. Never update a
-ledger hash without applying the schema changes. The October 21 consolidation repair preserved
-retained development records and applied the reviewed consolidation SQL before aligning the ledger.
+ledger hash without applying the schema changes.
 The standalone applied-file hash checker and baseline-adoption machinery have been removed.
 
 Additional incremental migrations retain the existing PR immutability policy. The **Verify unapplied

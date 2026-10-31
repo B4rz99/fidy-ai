@@ -1,40 +1,8 @@
 # Cloudflare background work
 
-D1 owns accepted intent and outcomes. Queues redeliver bounded identities; a Workflow owns execution.
-A successful HTTP response means the mutation and its outbox committed, not that email or billing
-completed. After commit, Core tries an identity-targeted offer within its execution-context lifetime.
-The offer has a two-second budget. Failure leaves the accepted response intact, and the next
-five-minute recovery sweep can retry after the shared publication cooldown.
-
-User-triggered forwarded email, statement extraction, browser pairing email, email replacement and
-hosted WhatsApp consumers use a zero batch-fill wait, retaining ten-message batches, three retries
-and the existing dead-letter queue. A sparse message need not wait for nine more messages or the
-platform's default five-second timeout. This removes the batching delay, not Workflow, provider or
-delivery latency. Shorter waits can increase consumer invocations for closely spaced arrivals;
-Queue operations remain per message. Scheduled billing and weekly delivery retain default batching.
-See [Cloudflare batching](https://developers.cloudflare.com/queues/configuration/batching-retries/).
-
-The opt-in `queue/delivery-latency.test.ts` compares a single message with five-second and zero-second
-batch waits in the native local runtime. It measures Queue dispatch only. The
-`whatsapp/operational-cost.test.ts` measures guarded health inspection over retained successful
-delivery history, including R2 generation reads; a changed generation must still report unavailable.
-History contention measurements explicitly select a due maintenance window and verify that expired
-grants were removed. `foregroundElapsedMs` excludes waiting for maintenance to finish, while
-`elapsedMs` includes both workloads. Local timings are not production latency or CPU measurements.
-
-The [2026-10-27 measurements](../research/infra-performance-2026-10-27.json) retain matched
-before/after samples and the separate read-only dashboard observations. WhatsApp inspection batches
-its three samples into one guarded D1 unit, so it reads the external recovery generation once for
-that snapshot. Partial indexes select pending deliveries and recent failures without walking
-successful history. They add storage and index maintenance when a delivery enters or leaves those
-states; read savings are not a promise that every individual write becomes cheaper. Apply the
-additive `0005_whatsapp_health_indexes.sql` migration through the normal release process.
-
-History reads the ready projection directly and gates the authoritative repair branch in the same
-SQL snapshot. The final local fixture reads 105 rows per 101-item page versus 304 before (2.9× fewer).
-The broad 2× target remains unproven: final repeated History latency and throughput samples do not
-consistently reach it, and no production CPU, capacity, reliability or total-bill improvement has
-been measured. Resource counts are stable; local wall timings vary with host load.
+D1 owns accepted intent and outcomes. Queues redeliver bounded identities; Workflows execute durable
+steps. A committed mutation does not establish provider settlement or delivery. Inspect the owning
+lifecycle before retrying work.
 
 ## Maintenance cadence
 
@@ -72,38 +40,6 @@ retains its existing bounded page sizes and erasure/hold guards. Verify that tho
 the deployed workload: for example, an hourly 128-grant admission cleanup can process at most 3,072
 grants per day, and a daily Audit sweep selects at most eight subjects with 64 rows per projection.
 The idle budget below is not evidence of production backlog capacity.
-
-## Idle D1 budget
-
-Core inspects operational health every minute and emits closed native log observations without
-writing a health snapshot or alert ledger.
-The Queue→Workflow canary publishes in the first minute of each five-minute period, with the existing
-ten-minute stale threshold. A missed publication window is detected by that threshold rather than
-replayed on every subsequent minute. Repeated empty/final-page control-object sweeps do not rewrite
-a cursor; multi-page cursors still advance durably and lawful-hold checks remain unchanged.
-
-`maintenance/idle-budget.test.ts` installs every migration in native D1, applies the production
-recovery wrapper, and runs Core, Email and all control-bucket sweeps over a complete hourly
-cycle, adding the midnight tick's cost to the daily projection. The native execution canary writes no D1 state. The test asserts fewer than 10,000 projected daily
-idle writes (10% of the Free allowance) and 750,000 reads. This protects idle overhead, not total
-account usage: real work, incidents and other databases still consume the account-wide allowance.
-The opt-in performance benchmark also includes the recovery guard.
-
-## Recurring-charge detection cadence
-
-A completed User evaluation becomes eligible again after seven days, and only changed Transaction
-facts require another analysis. The first evaluation is eligible at the next discovery. Completion
-times anchor each User's cadence rather than one product-wide weekday. Discovery checks for newly
-due Users hourly when idle, recording its next wakeup on the existing fair-dispatch cursor.
-
-Core's other maintenance still runs each minute. Between discovery sweeps, recurring work reads only
-its schedule row and indexed unfinished User identities. Interrupted evaluations resume on these
-minute ticks, including when changed facts require restarting that unfinished evaluation. Full
-four-User batches keep discovery open until the backlog drains; each tick retains bounded work and
-round-robin fairness rather than postponing all remaining Users for another hour. A missed tick
-catches up from the durable due timestamp, and account erasure can remove and recreate the cursor.
-The seven-day boundary is an eligibility time, not an exact delivery deadline: discovery, backlog,
-retries and bounded evaluation steps can delay completion. No Transaction write triggers detection.
 
 ## Operational signals
 
@@ -161,44 +97,6 @@ acknowledgement and Workflow completion have independent native monitors. Messag
 minutes are rejected. Do not pause business Queues, purge retained messages or manufacture User work
 for a monitoring test. Cloudflare ingestion/evaluation/delivery adds delay; these are not instant or
 globally independent outage detectors. A Cloudflare-wide failure can affect logs and notifications.
-
-### Verified platform behavior — October 24, 2026
-
-The five-monitor limit was observed in the account dashboard. Coverage marker PR #1535 deployed
-successfully in run `40118710940`. Production native issue detection is explicitly enabled by
-PR #1536, including provider serialization and release settings read-back; query redaction, disabled
-automatic invocation logs and disabled tracing remain required. Failed Work exports use
-`console.error` with the same closed metadata envelope, preserving original failures and swallowing
-exporter faults. Success, rejection and interruption retain their existing projections.
-
-An isolated binding-free Worker exercised handled and uncaught/nested failures with fake query,
-Authorization, custom-header, body and private-cause markers. Full rendered native issue events
-retained the closed outer message, source stack, method/path and a header allowlist, without those
-fake private markers. This does not sanitize arbitrary private text deliberately placed in an outer
-error message; entrypoints must continue to produce closed outer errors. No resource-limit fault was
-injected. Native Issues documents CPU/memory failures; this account's actual privacy and delivery
-probes exercised handled/uncaught errors. Private proof is retained outside the repository.
-
-The actual Issues SQL monitor fired at 18:14:02 UTC; its alert email arrived at 18:17:19 UTC with count 1.
-After the probe stopped, it returned to zero at 18:24:02 UTC and the actual Resolved email arrived at
-18:27:20 UTC. Both were read in the configured mailbox. This is real event-driven evaluation and
-recovery delivery, not the sample notification button. Emails carry counts/policy metadata rather
-than issue diagnostic payloads. Native Issues itself retains issues until resolved manually; that
-lifecycle is distinct from the SQL monitor's recovery when its recent occurrence count returns zero.
-
-A dedicated Queue delivery pause on October 23, 19:48–19:58 Bogota produced a real missing-execution
-alert, then successful consumption and completed native Workflow instances after resumption, and a
-real recovery email at 20:11. A later data-only missing-Workflow test held its query constant on one
-closed test instance. Zero-count firing at 18:16:57 UTC produced an email at 18:20:13 UTC; the valid
-`operational-recovery-proof-20261024` instance completed after creation around 18:28 UTC. The unchanged query observed recovery at 18:36:57 UTC; its actual Resolved email arrived at
-18:40:14 UTC with count 1 and was read in the configured mailbox. The original production canary
-success query was then restored. Ordinary canary/business execution was
-not stopped. The earlier test that changed a query proves absence firing only, not recovery.
-
-The combined health policy sent a real alert at 18:30:05 UTC. Native owner observations identify an
-actual dead-letter backlog; retain/investigate it rather than clearing it to produce green evidence.
-The saved complete-sweep query has a positive baseline in native Logs. Never interpret missing or
-stale observations as health. Monitoring does not authorize replay, deletion or domain changes.
 
 ## Private operational view and account usage alerts
 
@@ -268,48 +166,3 @@ The outbox remains the recovery source. Current Cloudflare behavior is documente
 [delivery guarantees](https://developers.cloudflare.com/queues/reference/delivery-guarantees/),
 [dead-letter queues](https://developers.cloudflare.com/queues/configuration/dead-letter-queues/), and
 [Queue metrics](https://developers.cloudflare.com/queues/observability/metrics/).
-
-### October 20 retained-canary investigation
-
-At 13:20 UTC, the shared dead-letter Queue reported 679 messages, no consumer, and zero ingestions
-or retries in the preceding 24 hours. All ten dashboard-preview messages were operational canaries
-(`version`, `sentAtMs`) from October 18; this sample does not classify every retained message.
-The source canary Queue reported 286 ingestions, 286 acknowledgements, no retries and no current
-backlog over the same rolling day. Current canary execution has recovered; a nonempty dead-letter
-Queue is not evidence that it is still failing.
-
-The source consumer logs confirm rejected canary invocations during October 18's D1 outage,
-including 18:59:11 UTC, adjacent to the latest sampled dead letter. Those logs retain only a generic
-Promise failure, so they cannot establish each message's original provider error. Production run
-39157824267 independently confirmed the daily D1 quota refusal at 19:17 UTC that day. The canary
-consumer writes its D1 execution checkpoint before Workflow handoff; refusal therefore prevents
-acknowledgement and can exhaust its three Queue retries. This is consistent with the sampled failure path,
-not every message or the first October 10 incident. The alert's October 10 `first_seen_ms` is a
-continuous-condition timestamp, not the age of each currently retained message.
-
-The dashboard displays 86,400-second retention, while Cloudflare's DLQ-specific documentation says
-messages without a consumer persist four days. The October 18 previews were still present on
-October 20; do not promise immediate expiry from the generic settings alone. No message was
-acknowledged, replayed or purged during this investigation. Expired canaries must not be replayed:
-they cannot prove present health. Inspect all remaining identities before any destructive cleanup.
-
-The unnecessary D1 writes came from the alert observation UPSERT, not a consumer repeatedly running
-these retained messages. Its prior minute refresh cost up to 1,440 observation writes per active
-alert per day. The five-minute heartbeat reduces that steady observation component to 288;
-notification claims, confirmations and actual state changes retain their separate writes.
-
-## Capability status and release evidence
-
-Browser-pairing email, email replacement, billing collection, and statement
-extraction have installed Queue/Workflow paths. Statement extraction executes bounded chunks through
-the User coordinator and exposes Transactions or NeedsReviewItems with truthful terminal state.
-Statement dispatch, reconciliation, and review-evidence expiry participate in independent scheduling;
-its Workflow binding and Queue dead letters participate in the same operational inspection.
-Statement publication uses its durable cron outbox path; the three email/billing owners also use
-prompt postcommit offers. Forwarded-email ingress and retention are installed separately; this
-runbook's Queue/Workflow execution claims concern the four listed Core consumers.
-
-Before enabling a changed stack, run the relevant Worker/platform regression tests and deploy through
-the existing GitHub Actions release path. In Production, verify a harmless accepted operation reaches
-its expected terminal outcome, the corresponding signal returns to healthy, and the intended operator
-channel receives its configured test alert. Local tests do not replace these live checks.

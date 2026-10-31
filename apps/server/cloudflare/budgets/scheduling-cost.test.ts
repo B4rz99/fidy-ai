@@ -166,7 +166,7 @@ afterAll(() =>
       );
       yield* Effect.tryPromise(() =>
         Bun.write(
-          new URL("../../../../docs/research/budget-scheduling-measurements.json", import.meta.url),
+          new URL("../../test-results/budget-scheduling-measurements.json", import.meta.url),
           encoded
         )
       );

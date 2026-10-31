@@ -32,7 +32,7 @@ in progress, never completed deletion or a pending operator review. Reload and e
 the same request; no erasure UUID, provider reference, raw error or operator controls are shown.
 Support remains accessible without login. The final admission, confirmed-upload drain and minimal
 restore protection are described in the
-[integration contract](../../../../../docs/operations/database-cutover-1428.md#direct-account-deletion-and-minimal-metadata-1489--1490-integration).
+[integration contract](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/database-cutover-1428.md#direct-account-deletion-and-minimal-metadata-1489--1490-integration).
 
 The production-built local browser test exercises real public ingress/Core/D1 and the native R2
 registry, confirms disabled submission until explicit choice, records HTTP 202, refuses a false

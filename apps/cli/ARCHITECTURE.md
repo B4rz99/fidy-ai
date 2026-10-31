@@ -275,7 +275,7 @@ triggers a release, while unrelated edits do not allocate a new version. Publica
 complete GitHub release before anonymous verification and advancing GitHub's latest marker.
 The web artifact serves canonical installer bytes; the API exposes the bounded anonymous latest
 version manifest. Installers configure user PATH idempotently and upgrades run on demand.
-See [installation and automated releases](../../docs/guides/cli-installation.md). Runtime guards,
+See [installation and automated releases](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/guides/cli-installation.md). Runtime guards,
 credential storage and server authorization remain the same.
 
 ## Packaged credential verification

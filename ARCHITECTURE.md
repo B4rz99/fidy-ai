@@ -81,11 +81,6 @@ GitHub Actions deploys an exact trunk revision, applies migrations and verifies 
 versions before promotion. Code rollback changes traffic, not database or external state. The
 [Production runbook](docs/operations/production-releases.md) owns the release procedure.
 
-Accepted schema designs are indexed in [#1394](https://github.com/B4rz99/fidy-ai/issues/1394).
-Their [cutover checklist](docs/operations/database-cutover-1428.md) owns migration dependencies,
-historical-data preservation and unresolved design gates. Acceptance is distinct from implementation
-or deployment; architecture documents are not migration histories or feature-status logs.
-
 Domain terms belong in [GLOSSARY.md](GLOSSARY.md), coding and storage conventions in
 [CODING_STANDARDS.md](CODING_STANDARDS.md), security invariants in
 [SECURITY_STANDARDS.md](SECURITY_STANDARDS.md), and durable design rationale in [ADRs](docs/adr/).

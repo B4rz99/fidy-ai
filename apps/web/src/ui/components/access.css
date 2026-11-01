@@ -73,7 +73,7 @@
   height: 510px;
   max-width: none;
   object-fit: contain;
-  animation: access-float 6s ease-in-out infinite;
+  animation: access-float 1s ease-in-out;
   filter: drop-shadow(0 16px 14px #1414140c);
 }
 [data-access-content] {

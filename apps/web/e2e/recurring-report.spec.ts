@@ -15,6 +15,7 @@ const { expect, test } = playwright;
 
 test.use({
   storageState: { cookies: [], origins: [] },
+  reducedMotion: "reduce",
   deviceScaleFactor: 1,
   timezoneId: "Pacific/Honolulu",
 });

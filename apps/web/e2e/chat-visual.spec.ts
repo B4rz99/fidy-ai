@@ -30,7 +30,11 @@ const cases: ReadonlyArray<
   { viewport: landscape, scenarios: ["confirmation"] },
 ];
 
-test.use({ storageState: { cookies: [], origins: [] }, deviceScaleFactor: 1 });
+test.use({
+  storageState: { cookies: [], origins: [] },
+  reducedMotion: "reduce",
+  deviceScaleFactor: 1,
+});
 
 test.afterEach(({ page }, information) =>
   Effect.runPromise(
@@ -256,6 +260,9 @@ test("chat suggestions remain drafts across dismissal and theme changes until ex
     Effect.gen(function* () {
       const observed = yield* installChatScenario(page, "start");
       yield* prepare(page, "start");
+      const popup = page.locator('[data-slot="popover-content"]');
+      yield* Effect.tryPromise(() => expect(popup).toHaveCSS("animation-name", "none"));
+      yield* Effect.tryPromise(() => expect(popup).toHaveCSS("transition-duration", "0s"));
       for (const suggestion of [
         "Revisar mis gastos",
         "Ver mis presupuestos",

@@ -27,6 +27,7 @@ const captureDirectory = "test-results/settings-visual";
 
 test.use({
   storageState: { cookies: [], origins: [] },
+  reducedMotion: "reduce",
   deviceScaleFactor: 1,
 });
 
@@ -59,6 +60,9 @@ const prepareAccessForm = Effect.fnUntraced(function* (page: Page) {
   );
   yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Lectura:/u }).check());
   yield* Effect.tryPromise(() => page.getByRole("button", { name: "Duración del token" }).click());
+  const menu = page.locator('[data-slot="dropdown-menu-content"]');
+  yield* Effect.tryPromise(() => expect(menu).toHaveCSS("animation-name", "none"));
+  yield* Effect.tryPromise(() => expect(menu).toHaveCSS("transition-duration", "0s"));
   yield* Effect.tryPromise(() =>
     page.getByRole("menuitemradio", { name: "30 días", exact: true }).click()
   );

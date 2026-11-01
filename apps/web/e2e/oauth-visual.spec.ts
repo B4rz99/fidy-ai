@@ -23,7 +23,11 @@ const destinations = [
   },
 ];
 const captureDirectory = "test-results/oauth-visual";
-test.use({ storageState: { cookies: [], origins: [] }, deviceScaleFactor: 1 });
+test.use({
+  storageState: { cookies: [], origins: [] },
+  reducedMotion: "reduce",
+  deviceScaleFactor: 1,
+});
 test.afterEach(({ page }, information) =>
   Effect.runPromise(
     Effect.gen(function* () {

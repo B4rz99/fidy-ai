@@ -17,7 +17,11 @@ const themes = ["light", "dark"] as const;
 type Theme = (typeof themes)[number];
 type MethodLabel = "tarjeta" | "Nequi" | "DaviPlata";
 
-test.use({ storageState: { cookies: [], origins: [] }, deviceScaleFactor: 1 });
+test.use({
+  storageState: { cookies: [], origins: [] },
+  reducedMotion: "reduce",
+  deviceScaleFactor: 1,
+});
 test.afterEach(({ page }, information) =>
   Effect.runPromise(
     Effect.gen(function* () {

@@ -7,7 +7,10 @@ jq --exit-status '
     and all($jobs | to_entries[];
       .key as $job
       | ($jobs.changes.outputs[$job] // "true") as $selected
-      | if $selected == "false" then .value.result == "skipped"
+      | if $job == "browser" then
+          ($selected == "true" or $selected == "false")
+          and .value.result == "success" and .value.outputs.selected == $selected
+        elif $selected == "false" then .value.result == "skipped"
         elif $selected == "true" then .value.result == "success"
         else false end
     )

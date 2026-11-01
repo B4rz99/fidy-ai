@@ -276,8 +276,9 @@ jobs:
           retention-days: 7
 
   browser:
-    needs: changes
-    if: ${{ needs.changes.outputs.browser == 'true' }}
+    # The source scan remains required; browser fixtures do not consume its result.
+    outputs:
+      selected: ${{ steps.plan.outputs.browser }}
     name: Web browser and accessibility checks (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     strategy:
@@ -287,25 +288,36 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
+          filter: blob:none
           sparse-checkout: |
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
-      - uses: ./.github/actions/bun-install
-        with:
-          save-cache: "false"
-          scope: unit-tests
+      - uses: ./.github/actions/bun-runtime
+      - name: Plan browser checks from the complete PR diff
+        id: plan
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bun scripts/ci-changes.ts
+      - name: Install frozen browser dependencies
+        if: ${{ steps.plan.outputs.browser == 'true' }}
+        run: bash scripts/install-workspace.sh --unit-tests
       - name: Select installed Playwright version
+        if: ${{ steps.plan.outputs.browser == 'true' }}
         id: playwright-version
         working-directory: apps/web
         run: bun -e 'console.log("version=" + require("@playwright/test/package.json").version)' >> "$GITHUB_OUTPUT"
       - name: Restore Playwright browser cache
+        if: ${{ steps.plan.outputs.browser == 'true' }}
         id: browser-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
       - name: Reuse or install Chromium headless shell
+        if: ${{ steps.plan.outputs.browser == 'true' }}
         env:
           BROWSER_CACHE_HIT: ${{ steps.browser-cache.outputs.cache-hit }}
         run: |
@@ -314,18 +326,19 @@ jobs:
             time bunx --bun playwright install --only-shell chromium
           fi
       - name: Select native package cache identity
-        if: ${{ matrix.shard == 1 }}
+        if: ${{ steps.plan.outputs.browser == 'true' && matrix.shard == 1 }}
         id: native-packages
         run: |
           echo "image=$ImageVersion" >> "$GITHUB_OUTPUT"
           mkdir -p /tmp/fidy-native-package-archives
       - name: Restore native package downloads
-        if: ${{ matrix.shard == 1 }}
+        if: ${{ steps.plan.outputs.browser == 'true' && matrix.shard == 1 }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: /tmp/fidy-native-package-archives/*.deb
           key: ${{ runner.os }}-${{ runner.arch }}-native-packages-v2-${{ steps.native-packages.outputs.image }}
       - name: Verify Chromium system dependencies
+        if: ${{ steps.plan.outputs.browser == 'true' }}
         run: |
           verify_chromium() {
             node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();'
@@ -336,10 +349,11 @@ jobs:
             verify_chromium
           fi
       - name: Static-shell browser validation
+        if: ${{ steps.plan.outputs.browser == 'true' }}
         env:
           BROWSER_TEST_SHARD: ${{ matrix.shard }}/2
           # Playwright assigns whole files by case count; retain their existing jobs after theme reuse.
-          PWTEST_SHARD_WEIGHTS: "180:149"
+          PWTEST_SHARD_WEIGHTS: "176:149"
           VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
         run: |
           export TMPDIR="$(mktemp -d /dev/shm/fidy-browser.XXXXXX)"
@@ -363,7 +377,7 @@ jobs:
             /usr/bin/time -p bun run verify -- --group browser
           fi
       - name: Preserve browser timing evidence
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.plan.outputs.browser == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: browser-timings-${{ matrix.shard }}

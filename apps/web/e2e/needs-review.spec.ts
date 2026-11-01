@@ -1170,65 +1170,78 @@ const reviewPickers = [
   { label: "Categoría", trigger: "button", popup: "menu" },
   { label: "Tipo de transacción", trigger: "button", popup: "menu" },
 ] as const;
-for (const picker of reviewPickers) {
+type ReviewPicker = (typeof reviewPickers)[number];
+const checkPickerDismissal = Effect.fnUntraced(function* (page: Page, picker: ReviewPicker) {
   const pickerName = new RegExp(`^${RegExp.escape(picker.label)}(?:$|:)`, "u");
-  test(`dismisses ${picker.label} when leaving the retained review`, ({ page, request }) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        yield* Effect.tryPromise(() => signInThroughCore({ page, deferFreshEntry: true, request }));
-        yield* Effect.tryPromise(() => page.clock.resume());
-        yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
-        yield* Effect.tryPromise(() =>
-          page.route(
-            `${apiOrigin}/ingestion/review-workspace**`,
-            lifecycleRoute([
-              {
-                id,
-                revision: 0,
-                status: "pending",
-                draft: {
-                  amount: "13500",
-                  currency: "COP",
-                  direction: "outflow",
-                  counterparty: "Café",
-                  occurredAt: "2026-01-01T17:30:00Z",
-                  userProvidedFields: [],
-                },
-              },
-            ])
-          )
-        );
-        yield* Effect.tryPromise(() => page.goto("/app/recurring"));
-        yield* Effect.tryPromise(() => page.getByRole("link", { name: /^Por revisar/u }).click());
-        yield* Effect.tryPromise(() =>
-          page.getByRole(picker.trigger, { name: pickerName }).click()
-        );
-        yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toBeVisible());
-        yield* Effect.tryPromise(() => page.goBack());
-        yield* verifyHiddenReview(page, picker.popup);
-        yield* Effect.tryPromise(() => page.goForward());
-        yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toHaveCount(0));
-        yield* Effect.tryPromise(() =>
-          expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Café")
-        );
-        yield* Effect.tryPromise(() =>
-          page.getByRole("button", { name: "Historial", exact: true }).click()
-        );
-        yield* Effect.tryPromise(() => page.getByRole("button", { name: /^Pendientes/u }).click());
-        yield* Effect.tryPromise(() =>
-          page.getByRole(picker.trigger, { name: pickerName }).click()
-        );
-        yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toBeVisible());
-        yield* Effect.tryPromise(() => page.goBack());
-        yield* verifyHiddenReview(page, picker.popup);
-        yield* Effect.tryPromise(() => page.goForward());
-        yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toHaveCount(0));
-        yield* Effect.tryPromise(() =>
-          expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Café")
-        );
-      })
-    ));
-}
+  yield* Effect.tryPromise(() =>
+    page.getByRole("link", { name: "Recurrentes", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => page.getByRole("link", { name: /^Por revisar/u }).click());
+  yield* Effect.tryPromise(() => page.getByRole(picker.trigger, { name: pickerName }).click());
+  yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toBeVisible());
+  yield* Effect.tryPromise(() => page.goBack());
+  yield* verifyHiddenReview(page, picker.popup);
+  yield* Effect.tryPromise(() => page.goForward());
+  yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toHaveCount(0));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Café")
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Historial", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => page.getByRole("button", { name: /^Pendientes/u }).click());
+  yield* Effect.tryPromise(() => page.getByRole(picker.trigger, { name: pickerName }).click());
+  yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toBeVisible());
+  yield* Effect.tryPromise(() => page.goBack());
+  yield* verifyHiddenReview(page, picker.popup);
+  yield* Effect.tryPromise(() => page.goForward());
+  yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toHaveCount(0));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Café")
+  );
+});
+const prepareReviewPickers = Effect.fnUntraced(function* (
+  page: Page,
+  request: Parameters<typeof signInThroughCore>[0]["request"]
+) {
+  yield* Effect.tryPromise(() => signInThroughCore({ page, deferFreshEntry: true, request }));
+  yield* Effect.tryPromise(() => page.clock.resume());
+  yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+  yield* Effect.tryPromise(() =>
+    page.route(
+      `${apiOrigin}/ingestion/review-workspace**`,
+      lifecycleRoute([
+        {
+          id,
+          revision: 0,
+          status: "pending",
+          draft: {
+            amount: "13500",
+            currency: "COP",
+            direction: "outflow",
+            counterparty: "Café",
+            occurredAt: "2026-01-01T17:30:00Z",
+            userProvidedFields: [],
+          },
+        },
+      ])
+    )
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Café")
+  );
+});
+test("dismisses every editor picker when leaving the retained review", ({ page, request }) =>
+  Effect.runPromise(
+    prepareReviewPickers(page, request).pipe(
+      Effect.andThen(
+        Effect.forEach(reviewPickers, (picker) => checkPickerDismissal(page, picker), {
+          discard: true,
+        })
+      )
+    )
+  ));
 
 test("clears bulk selection when filtering and retains paging after no local matches", ({ page }) =>
   Effect.runPromise(

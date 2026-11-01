@@ -1,0 +1,50 @@
+infra/cloudflare/verify-edge-policy.ts
+  s_d9571b3fccd032::t_4c1aa09f258ae7 5
+apps/server/src/shell/sql-assertions/operations.ts
+  s_d9571b3fccd032::t_c392854678627d 4-36
+apps/server/cloudflare/dashboard/internal/dashboard-mutation.ts
+  s_d9571b3fccd032::t_db7248b464dbaa 39
+  s_d9571b3fccd032::t_7fa0c8dc605fe7 349
+apps/server/cloudflare/quotas/operations.ts
+  s_d9571b3fccd032::t_8e46386ab641ff 13,191-193
+  s_d9571b3fccd032::t_4c3934d296b408 189-190,194-195
+  s_d9571b3fccd032::t_267dd0bed5cd7d 1-4
+  s_d9571b3fccd032::t_c392854678627d 174
+apps/server/cloudflare/categories/internal/canonical-category.ts
+  s_d9571b3fccd032::t_c392854678627d 10,74
+  s_d9571b3fccd032::t_7fa0c8dc605fe7 33,84,170
+apps/server/cloudflare/sql-assertions.test.ts
+  s_d9571b3fccd032::t_4c3934d296b408 155
+  s_d9571b3fccd032::t_267dd0bed5cd7d 97,149-154,156-193
+  s_d9571b3fccd032::t_56d4c4a59385de 7-8,96,98-100,121-132,148
+  s_d9571b3fccd032::t_752e4bd7cf33ae 194
+apps/server/src/shell/categories/internal/query.ts
+  s_d9571b3fccd032::t_7fa0c8dc605fe7 7,27
+apps/server/cloudflare/canonical-admission/internal/protection.ts
+  s_d9571b3fccd032::t_c392854678627d 3,48,81
+apps/server/src/shell/dashboard/operations.ts
+  s_d9571b3fccd032::t_7fa0c8dc605fe7 18-19,27
+apps/server/src/core/quotas/operations.ts
+  s_d9571b3fccd032::t_8e46386ab641ff 7,23-24,27,30-55
+apps/server/src/core/quotas/operations.test.ts
+  s_d9571b3fccd032::t_509b9422688891 3-4,10-15,36-39
+  s_d9571b3fccd032::t_4c3934d296b408 6-9
+  s_d9571b3fccd032::t_267dd0bed5cd7d 40-87,89,91
+  s_d9571b3fccd032::t_d8042b5184d5ec 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3f87802180a49609b73a7cc5f6ebe0fe033982ae",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

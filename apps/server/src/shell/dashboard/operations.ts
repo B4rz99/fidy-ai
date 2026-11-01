@@ -15,6 +15,8 @@ import {
 } from "./contract";
 import { renderDashboardView as render } from "~/shell/dashboard/internal/presentation";
 
+const decodeDashboardView = Schema.decodeEffect(Schema.toType(DashboardView));
+
 /**
  * Publish a complete, validated view of one User's decoded facts at an explicit instant.
  * The caller supplies authorized, same-User projections with complete per-Widget totals.
@@ -22,7 +24,7 @@ import { renderDashboardView as render } from "~/shell/dashboard/internal/presen
  */
 export const renderDashboardView: typeof render = (input) =>
   render(input).pipe(
-    Effect.flatMap(Schema.decodeEffect(Schema.toType(DashboardView))),
+    Effect.flatMap(decodeDashboardView),
     Effect.mapError(() => new DashboardUnavailable())
   );
 

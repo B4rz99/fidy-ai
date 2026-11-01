@@ -2,7 +2,7 @@ import { analyzeAccessibility } from "./accessibility";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { AxeBuilder } from "@axe-core/playwright";
 import { type APIRequestContext, type Page, expect, test } from "@playwright/test";
-import { type Cause, Effect } from "effect";
+import { type Cause, DateTime, Effect } from "effect";
 
 const topology = browserAcceptanceTopology();
 
@@ -68,21 +68,45 @@ const accessibilityTargets = (
     .flatMap(({ id, nodes }) => nodes.map((node) => `${id}:${JSON.stringify(node.target)}`))
     .sort();
 
-test("single-document accessibility checks retain the full engine's violations", ({ page }) =>
+const addShadowAccessibilityControl = (): void => {
+  const region = document.createElement("section");
+  region.attachShadow({ mode: "open" }).innerHTML = '<button id="shadow-missing-name"></button>';
+  document.querySelector("main")?.append(region);
+};
+test("accessibility retains every result and shadow control while the application clock is paused", ({
+  page,
+}) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* wait(page.setContent(inaccessibleDocument));
+      yield* wait(page.evaluate(addShadowAccessibilityControl));
+      yield* wait(page.evaluate('document.documentElement.dataset.clockProbe = "waiting"'));
       const expected = yield* wait(new AxeBuilder({ page }).analyze());
+      const time = DateTime.toDateUtc(DateTime.makeUnsafe("2026-10-25T12:00:00Z"));
+      yield* wait(page.clock.install({ time }));
+      yield* wait(page.clock.pauseAt(time));
+      yield* wait(
+        page.evaluate(`
+        setTimeout(() => document.documentElement.dataset.clockProbe = "advanced", 10);
+      `)
+      );
       const actual = yield* wait(analyzeAccessibility(page));
       expect(actual.testEngine).toEqual(expected.testEngine);
       expect(actual.testRunner).toEqual(expected.testRunner);
+      expect(actual.testEnvironment).toEqual(expected.testEnvironment);
+      expect(actual.url).toBe(expected.url);
       for (const group of ["violations", "passes", "incomplete", "inapplicable"] as const) {
-        expect(actual[group].map(({ id }) => id).sort()).toEqual(
-          expected[group].map(({ id }) => id).sort()
-        );
+        expect(actual[group]).toEqual(expected[group]);
       }
       expect(accessibilityTargets(actual)).toEqual(accessibilityTargets(expected));
-      expect(actual.violations.map(({ id }) => id)).toContain("button-name");
+      expect(accessibilityTargets(actual)).toContain('button-name:["#missing-name"]');
+      expect(accessibilityTargets(actual)).toContain(
+        'button-name:[["section","#shadow-missing-name"]]'
+      );
+      expect(yield* wait(page.evaluate<number>("Date.now()"))).toBe(time.getTime());
+      expect(yield* wait(page.evaluate(() => document.documentElement.dataset.clockProbe))).toBe(
+        "waiting"
+      );
     })
   ));
 

@@ -1,3 +1,4 @@
+import { captureInThemes } from "./themed-capture";
 import { analyzeAccessibility } from "./accessibility";
 import type { Page } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
@@ -13,7 +14,7 @@ const { test, expect } = playwright;
 const desktop = { name: "desktop", width: 1467, height: 1072 };
 const mobile = { name: "mobile", width: 390, height: 844 };
 const landscape = { name: "landscape", width: 667, height: 390 };
-const themes = ["light", "dark"] as const;
+const initialTheme = "light" as const;
 const captureDirectory = "test-results/chat-visual";
 const progressIntervalMilliseconds = 5000;
 const compactViewportInset = 8;
@@ -185,6 +186,9 @@ const dimensions = (): Readonly<{ content: number; viewport: number }> => ({
   content: document.documentElement.scrollWidth,
   viewport: document.documentElement.clientWidth,
 });
+
+const captureThemes = (page: Page, filename: string): ReturnType<typeof capture> =>
+  captureInThemes(page, (theme) => capture(page, filename.replace("-light-", `-${theme}-`)));
 const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
   yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
   yield* Effect.tryPromise(() =>
@@ -212,44 +216,42 @@ const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
 });
 
 for (const { viewport, scenarios } of cases) {
-  for (const theme of themes) {
-    for (const scenario of scenarios) {
-      test(`chat ${scenario} is accessible and keeps its composer visible in ${theme} ${viewport.name}`, ({
-        page,
-      }) =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            yield* Effect.tryPromise(() => page.setViewportSize(viewport));
-            yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme: theme }));
+  for (const scenario of scenarios) {
+    test(`chat ${scenario} is accessible and keeps its composer visible in light and dark ${viewport.name}`, ({
+      page,
+    }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() => page.setViewportSize(viewport));
+          yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme: initialTheme }));
+          yield* Effect.tryPromise(() =>
+            page.clock.install({
+              time: DateTime.toDateUtc(DateTime.makeUnsafe("2026-10-25T14:00:00Z")),
+            })
+          );
+          const observed = yield* installChatScenario(page, scenario);
+          yield* prepare(page, scenario);
+          const filename = `${scenario}-${initialTheme}-${viewport.name}`;
+          if (viewport.name === "landscape" && scenario === "confirmation") {
+            yield* frameCompactConfirmation(page);
+          }
+          yield* captureThemes(page, filename);
+          expect(observed.mutations).toEqual([]);
+          expect(observed.missingReads).toEqual([]);
+          if (scenario === "confirmation") {
             yield* Effect.tryPromise(() =>
-              page.clock.install({
-                time: DateTime.toDateUtc(DateTime.makeUnsafe("2026-10-25T14:00:00Z")),
-              })
+              page.getByRole("button", { name: "Confirmar cambio", exact: true }).click()
             );
-            const observed = yield* installChatScenario(page, scenario);
-            yield* prepare(page, scenario);
-            const filename = `${scenario}-${theme}-${viewport.name}`;
-            if (viewport.name === "landscape" && scenario === "confirmation") {
-              yield* frameCompactConfirmation(page);
-            }
-            yield* capture(page, filename);
-            expect(observed.mutations).toEqual([]);
-            expect(observed.missingReads).toEqual([]);
-            if (scenario === "confirmation") {
-              yield* Effect.tryPromise(() =>
-                page.getByRole("button", { name: "Confirmar cambio", exact: true }).click()
-              );
-              yield* Effect.tryPromise(() =>
-                expect(page.getByText("Cambio confirmado.", { exact: true })).toBeVisible()
-              );
-              expect(observed.submissions).toEqual([
-                { text: "Quiero pausar Netflix en mis recurrentes." },
-                { text: confirmationCommand },
-              ]);
-            }
-          })
-        ));
-    }
+            yield* Effect.tryPromise(() =>
+              expect(page.getByText("Cambio confirmado.", { exact: true })).toBeVisible()
+            );
+            expect(observed.submissions).toEqual([
+              { text: "Quiero pausar Netflix en mis recurrentes." },
+              { text: confirmationCommand },
+            ]);
+          }
+        })
+      ));
   }
 }
 

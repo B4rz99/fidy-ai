@@ -1,3 +1,4 @@
+import { captureInThemes } from "./themed-capture";
 import { analyzeAccessibility } from "./accessibility";
 import { acceptSubscriptionContracts } from "./subscription-interactions";
 import type { Page, Route } from "@playwright/test";
@@ -13,6 +14,7 @@ const { test, expect } = playwright;
 const captureDirectory = "test-results/subscription-visual";
 const desktop = { name: "desktop", width: 1467, height: 1072 };
 const mobile = { name: "mobile", width: 390, height: 844 };
+const initialTheme = "light" as const;
 const themes = ["light", "dark"] as const;
 type Theme = (typeof themes)[number];
 type MethodLabel = "tarjeta" | "Nequi" | "DaviPlata";
@@ -45,6 +47,9 @@ const dimensions = (): Readonly<{ content: number; viewport: number }> => ({
   content: document.documentElement.scrollWidth,
   viewport: document.documentElement.clientWidth,
 });
+
+const captureThemes = (page: Page, filename: string): ReturnType<typeof capture> =>
+  captureInThemes(page, (theme) => capture(page, filename.replace("-light-", `-${theme}-`)));
 const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
   yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
   yield* Effect.tryPromise((signal) =>
@@ -261,51 +266,49 @@ const expectSeparateConsents = Effect.fnUntraced(function* (page: Page) {
 });
 
 for (const viewport of [desktop, mobile]) {
-  for (const theme of themes) {
-    test(`Subscription selection and card review remain accessible in ${theme} ${viewport.name}`, ({
-      page,
-    }) =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          const observed = yield* openSubscription(page, { viewport, theme });
-          for (const period of [/^semanal\b/iu, /^mensual\b/iu, /^anual\b/iu]) {
-            yield* Effect.tryPromise((signal) =>
-              expect(page.getByRole("button", { name: period })).toHaveAttribute(
-                "aria-pressed",
-                "false",
-                { signal }
-              )
-            );
-          }
+  test(`Subscription selection and card review remain accessible in light and dark ${viewport.name}`, ({
+    page,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const observed = yield* openSubscription(page, { viewport, theme: initialTheme });
+        for (const period of [/^semanal\b/iu, /^mensual\b/iu, /^anual\b/iu]) {
           yield* Effect.tryPromise((signal) =>
-            expect(
-              page.getByRole("button", { name: "Continuar con tarjeta", exact: true })
-            ).toBeDisabled({ signal })
+            expect(page.getByRole("button", { name: period })).toHaveAttribute(
+              "aria-pressed",
+              "false",
+              { signal }
+            )
           );
-          expect(observed.preparations).toEqual([]);
-          yield* chooseMonthly(page);
-          yield* expectSeparatePaymentMethods(page);
-          expect(observed.preparations).toEqual([]);
-          if (viewport.name === "mobile") yield* expectMobileOfferAlignment(page);
-          yield* capture(page, `overview-${theme}-${viewport.name}`);
-          yield* continueWith(page, "tarjeta");
-          yield* Effect.tryPromise((signal) =>
-            expect(page.getByLabel("Número de tarjeta", { exact: true })).toBeVisible({ signal })
-          );
-          yield* expectSeparateConsents(page);
-          yield* Effect.tryPromise((signal) =>
-            expect(page.getByRole("button", { name: "Activar Pro", exact: true })).toBeDisabled({
-              signal,
-            })
-          );
-          yield* capture(page, `card-${theme}-${viewport.name}`);
-          expect(observed.preparations).toEqual(["card"]);
-          expect(observed.submissions).toEqual([]);
-          expect(observed.providerCalls).toEqual([]);
-          expect(observed.unexpectedRequests).toEqual([]);
-        })
-      ));
-  }
+        }
+        yield* Effect.tryPromise((signal) =>
+          expect(
+            page.getByRole("button", { name: "Continuar con tarjeta", exact: true })
+          ).toBeDisabled({ signal })
+        );
+        expect(observed.preparations).toEqual([]);
+        yield* chooseMonthly(page);
+        yield* expectSeparatePaymentMethods(page);
+        expect(observed.preparations).toEqual([]);
+        if (viewport.name === "mobile") yield* expectMobileOfferAlignment(page);
+        yield* captureThemes(page, `overview-${initialTheme}-${viewport.name}`);
+        yield* continueWith(page, "tarjeta");
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByLabel("Número de tarjeta", { exact: true })).toBeVisible({ signal })
+        );
+        yield* expectSeparateConsents(page);
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByRole("button", { name: "Activar Pro", exact: true })).toBeDisabled({
+            signal,
+          })
+        );
+        yield* captureThemes(page, `card-${initialTheme}-${viewport.name}`);
+        expect(observed.preparations).toEqual(["card"]);
+        expect(observed.submissions).toEqual([]);
+        expect(observed.providerCalls).toEqual([]);
+        expect(observed.unexpectedRequests).toEqual([]);
+      })
+    ));
 }
 
 const beginDaviplata = Effect.fnUntraced(function* (page: Page) {
@@ -327,63 +330,62 @@ const beginDaviplata = Effect.fnUntraced(function* (page: Page) {
     expect(page.getByLabel("Número de cédula", { exact: true })).toHaveCount(0, { signal })
   );
 });
-for (const theme of themes) {
-  test(`Nequi authorization shows only its active stage in ${theme}`, ({ page }) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const observed = yield* openSubscription(page, { viewport: desktop, theme });
-        yield* chooseMonthly(page);
-        yield* continueWith(page, "Nequi");
-        yield* expectSeparateConsents(page);
-        yield* capture(page, `nequi-form-${theme}-desktop`);
-        yield* Effect.tryPromise((signal) =>
-          page.getByLabel("Número de Nequi", { exact: true }).fill("3991111111", { signal })
-        );
-        yield* fillBillingEmail(page);
-        yield* acceptSubscriptionContracts(page);
-        yield* Effect.tryPromise((signal) =>
-          page.getByRole("button", { name: "Autorizar con Nequi", exact: true }).click({ signal })
-        );
-        yield* Effect.tryPromise((signal) =>
-          expect(page.getByText(/Aprueba la suscripción en Nequi/u)).toBeVisible({ signal })
-        );
-        yield* Effect.tryPromise((signal) =>
-          expect(page.getByLabel("Número de Nequi", { exact: true })).toHaveCount(0, { signal })
-        );
-        yield* capture(page, `nequi-waiting-${theme}-desktop`);
-        expect(observed.submissions).toEqual([]);
-        expect(observed.unexpectedRequests).toEqual([]);
-      })
-    ));
-  test(`DaviPlata entry and one-time code are alternative accessible views in ${theme}`, ({
-    page,
-  }) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const observed = yield* openSubscription(page, { viewport: desktop, theme });
-        yield* chooseMonthly(page);
-        yield* continueWith(page, "DaviPlata");
-        yield* expectSeparateConsents(page);
-        yield* Effect.tryPromise((signal) =>
-          expect(page.getByText(/Por ahora solo admitimos CC/u)).toHaveCount(0, { signal })
-        );
-        yield* capture(page, `daviplata-form-${theme}-desktop`);
-        yield* beginDaviplata(page);
-        yield* capture(page, `daviplata-otp-${theme}-desktop`);
-        yield* Effect.tryPromise((signal) =>
-          page.getByRole("button", { name: "Cancelar autorización", exact: true }).click({ signal })
-        );
-        yield* Effect.tryPromise((signal) =>
-          expect(page.getByLabel("Código de verificación", { exact: true })).toHaveCount(0, {
-            signal,
-          })
-        );
-        expect(observed.submissions).toEqual([]);
-        expect(observed.providerCalls).toEqual(["/v1/tokens/daviplata", "RESEND_OTP"]);
-        expect(observed.unexpectedRequests).toEqual([]);
-      })
-    ));
-}
+
+test(`Nequi authorization shows only its active stage in light and dark`, ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const observed = yield* openSubscription(page, { viewport: desktop, theme: initialTheme });
+      yield* chooseMonthly(page);
+      yield* continueWith(page, "Nequi");
+      yield* expectSeparateConsents(page);
+      yield* captureThemes(page, `nequi-form-${initialTheme}-desktop`);
+      yield* Effect.tryPromise((signal) =>
+        page.getByLabel("Número de Nequi", { exact: true }).fill("3991111111", { signal })
+      );
+      yield* fillBillingEmail(page);
+      yield* acceptSubscriptionContracts(page);
+      yield* Effect.tryPromise((signal) =>
+        page.getByRole("button", { name: "Autorizar con Nequi", exact: true }).click({ signal })
+      );
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByText(/Aprueba la suscripción en Nequi/u)).toBeVisible({ signal })
+      );
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByLabel("Número de Nequi", { exact: true })).toHaveCount(0, { signal })
+      );
+      yield* captureThemes(page, `nequi-waiting-${initialTheme}-desktop`);
+      expect(observed.submissions).toEqual([]);
+      expect(observed.unexpectedRequests).toEqual([]);
+    })
+  ));
+test(`DaviPlata entry and one-time code are alternative accessible views in light and dark`, ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const observed = yield* openSubscription(page, { viewport: desktop, theme: initialTheme });
+      yield* chooseMonthly(page);
+      yield* continueWith(page, "DaviPlata");
+      yield* expectSeparateConsents(page);
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByText(/Por ahora solo admitimos CC/u)).toHaveCount(0, { signal })
+      );
+      yield* captureThemes(page, `daviplata-form-${initialTheme}-desktop`);
+      yield* beginDaviplata(page);
+      yield* captureThemes(page, `daviplata-otp-${initialTheme}-desktop`);
+      yield* Effect.tryPromise((signal) =>
+        page.getByRole("button", { name: "Cancelar autorización", exact: true }).click({ signal })
+      );
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByLabel("Código de verificación", { exact: true })).toHaveCount(0, {
+          signal,
+        })
+      );
+      expect(observed.submissions).toEqual([]);
+      expect(observed.providerCalls).toEqual(["/v1/tokens/daviplata", "RESEND_OTP"]);
+      expect(observed.unexpectedRequests).toEqual([]);
+    })
+  ));
 
 const paymentStates = [
   { state: "pending", copy: "Estamos esperando la confirmación del pago." },
@@ -541,33 +543,32 @@ test("Uncertain DaviPlata confirmation does not offer a fresh authorization or i
     })
   ));
 
-for (const theme of themes) {
-  for (const viewport of [desktop, mobile]) {
-    test(`Paid access and recent attempts remain distinct in ${theme} ${viewport.name}`, ({
-      page,
-    }) =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          const observed = yield* openSubscription(page, { viewport, theme }, "paid");
-          yield* Effect.tryPromise((signal) =>
-            expect(page.getByText(/Último período pagado/u)).toBeVisible({ signal })
-          );
-          yield* Effect.tryPromise((signal) =>
-            expect(
-              page.getByRole("heading", { name: "Intentos de cobro recientes", exact: true })
-            ).toBeVisible({ signal })
-          );
-          yield* Effect.tryPromise((signal) =>
-            expect(page.getByText(/Precio cobrado:/u)).toContainText("28.900", { signal })
-          );
-          yield* capture(page, `paid-${theme}-${viewport.name}`);
-          expect(observed.preparations).toEqual([]);
-          expect(observed.submissions).toEqual([]);
-          expect(observed.unexpectedRequests).toEqual([]);
-        })
-      ));
-  }
+for (const viewport of [desktop, mobile]) {
+  test(`Paid access and recent attempts remain distinct in light and dark ${viewport.name}`, ({
+    page,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const observed = yield* openSubscription(page, { viewport, theme: initialTheme }, "paid");
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByText(/Último período pagado/u)).toBeVisible({ signal })
+        );
+        yield* Effect.tryPromise((signal) =>
+          expect(
+            page.getByRole("heading", { name: "Intentos de cobro recientes", exact: true })
+          ).toBeVisible({ signal })
+        );
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByText(/Precio cobrado:/u)).toContainText("28.900", { signal })
+        );
+        yield* captureThemes(page, `paid-${initialTheme}-${viewport.name}`);
+        expect(observed.preparations).toEqual([]);
+        expect(observed.submissions).toEqual([]);
+        expect(observed.unexpectedRequests).toEqual([]);
+      })
+    ));
 }
+
 test("Unavailable subscription standing retains a retry without blocking historical data", ({
   page,
 }) =>

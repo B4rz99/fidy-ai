@@ -123,7 +123,12 @@ const expectDestination = Effect.fnUntraced(function* (
 const waitForFonts = (): Promise<void> => document.fonts.ready.then(() => undefined);
 
 const captureThemes = (page: Page, filename: string): ReturnType<typeof capturePage> =>
-  captureInThemes(page, (theme) => capturePage(page, filename.replace("-light-", `-${theme}-`)));
+  captureInThemes(page, (theme) =>
+    Effect.gen(function* () {
+      yield* expectHeaderDivider(page, theme);
+      yield* capturePage(page, filename.replace("-light-", `-${theme}-`));
+    })
+  );
 const capturePage = Effect.fnUntraced(function* (page: Page, filename: string) {
   yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
   yield* Effect.tryPromise(() =>
@@ -280,7 +285,6 @@ for (const { viewport, destinations: targets } of captureViewports) {
           if (compact && destination.title === "Accesos") {
             yield* expectCompactAccess(page, viewport.width);
           }
-          yield* expectHeaderDivider(page, initialTheme);
           yield* captureThemes(page, `${destination.filename}-${initialTheme}-${viewport.name}`);
           expect(observed.mutations).toEqual([]);
           expect(observed.missingReads).toEqual([]);

@@ -1,3 +1,4 @@
+import { captureInThemes } from "./themed-capture";
 import { expectSameLoadingFrame, measureLoadingFrame } from "./loading-geometry";
 import type { Page, Route } from "@playwright/test";
 import { Effect } from "effect";
@@ -221,7 +222,7 @@ const viewports = [
   { name: "desktop", width: 1440, height: 900 },
   { name: "mobile", width: 390, height: 844 },
 ];
-const themes = ["light", "dark"] as const;
+const initialTheme = "light" as const;
 const visualItemCount = 6;
 const visualStates = ["report", "loading", "invalid", "unavailable"] as const;
 type VisualState = (typeof visualStates)[number];
@@ -270,50 +271,52 @@ const assertVisualReport = Effect.fnUntraced(function* (page: Page) {
 });
 
 for (const viewport of viewports) {
-  for (const theme of themes) {
-    for (const state of visualStates) {
-      test(`historical report ${state} is accessible in ${theme} ${viewport.name}`, ({ page }) =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            yield* Effect.tryPromise(() => page.setViewportSize(viewport));
-            yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme: theme }));
-            const release = yield* prepareVisualReport(page, state);
-            const filename = `${state}-${theme}-${viewport.name}`;
-            if (viewport.name === "desktop") {
-              yield* Effect.tryPromise(() =>
-                expect(
-                  page.getByRole("button", { name: "Cerrar sesión", exact: true })
-                ).toBeVisible()
-              );
-            }
-            if (state === "report") yield* assertVisualReport(page);
-            yield* captureReport(page, filename);
-            if (state === "report" && viewport.name === "mobile") {
-              yield* Effect.tryPromise(() =>
+  for (const state of visualStates) {
+    test(`historical report ${state} is accessible in light and dark ${viewport.name}`, ({
+      page,
+    }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() => page.setViewportSize(viewport));
+          yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme: initialTheme }));
+          const release = yield* prepareVisualReport(page, state);
+          const filename = `${state}-${initialTheme}-${viewport.name}`;
+          if (viewport.name === "desktop") {
+            yield* Effect.tryPromise(() =>
+              expect(page.getByRole("button", { name: "Cerrar sesión", exact: true })).toBeVisible()
+            );
+          }
+          if (state === "report") yield* assertVisualReport(page);
+          yield* captureInThemes(page, (theme) =>
+            captureReport(page, filename.replace("-light-", `-${theme}-`))
+          );
+          if (state === "report" && viewport.name === "mobile") {
+            yield* Effect.tryPromise(() =>
+              page
+                .getByText(
+                  "El informe conserva los datos registrados cuando se confirmaron estos patrones.",
+                  { exact: true }
+                )
+                .scrollIntoViewIfNeeded()
+            );
+            yield* Effect.tryPromise(() =>
+              expect(page.getByText("Herramienta de trabajo", { exact: true })).toBeInViewport()
+            );
+            yield* captureInThemes(page, (theme) =>
+              captureReport(page, `${filename}-scroll-final`.replace("-light-", `-${theme}-`))
+            );
+          }
+          release();
+          if (state === "loading") {
+            yield* Effect.tryPromise(() =>
+              expect(
                 page
-                  .getByText(
-                    "El informe conserva los datos registrados cuando se confirmaron estos patrones.",
-                    { exact: true }
-                  )
-                  .scrollIntoViewIfNeeded()
-              );
-              yield* Effect.tryPromise(() =>
-                expect(page.getByText("Herramienta de trabajo", { exact: true })).toBeInViewport()
-              );
-              yield* captureReport(page, `${filename}-scroll-final`);
-            }
-            release();
-            if (state === "loading") {
-              yield* Effect.tryPromise(() =>
-                expect(
-                  page
-                    .getByRole("list", { name: "Todos los patrones confirmados" })
-                    .getByRole("listitem")
-                ).toHaveCount(visualItemCount)
-              );
-            }
-          })
-        ));
-    }
+                  .getByRole("list", { name: "Todos los patrones confirmados" })
+                  .getByRole("listitem")
+              ).toHaveCount(visualItemCount)
+            );
+          }
+        })
+      ));
   }
 }

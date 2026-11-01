@@ -324,11 +324,12 @@ const checkReview = Effect.fnUntraced(function* (page: Page, theme: Theme) {
   yield* contrast(notice, "color", minimumTextContrast);
   yield* capture(page, `review-error-${theme}`);
 });
-for (const theme of themes) {
-  test(`Review email, controls and warning/error notices preserve approved contrast in ${theme}`, ({
-    page,
-  }) => Effect.runPromise(checkReview(page, theme)));
-}
+test(`Review email, controls and warning/error notices preserve approved contrast in light and dark`, ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.forEach(themes, (theme) => checkReview(page, theme), { discard: true })
+  ));
 
 const transaction = {
   categoryId: "24000000-0000-4000-8000-000000000301",
@@ -448,11 +449,12 @@ const checkTransactions = Effect.fnUntraced(function* (page: Page, theme: Theme)
   yield* checkTransactionForm(page, theme);
   expect(mutations).toBe(1);
 });
-for (const theme of themes) {
-  test(`Transaction controls remain distinguishable through default, hover, focus, selected and disabled states in ${theme}`, ({
-    page,
-  }) => Effect.runPromise(checkTransactions(page, theme)));
-}
+test(`Transaction controls remain distinguishable through default, hover, focus, selected and disabled states in light and dark`, ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.forEach(themes, (theme) => checkTransactions(page, theme), { discard: true })
+  ));
 
 const categoryId = "24000000-0000-4000-8000-000000000301";
 const budgetPeriod = {
@@ -516,11 +518,12 @@ const checkBudget = Effect.fnUntraced(function* (page: Page, theme: Theme) {
   expect(treatment.background).toBe(palette[theme].errorBackground);
   yield* capture(page, `budget-exceeded-negative-${theme}`);
 });
-for (const theme of themes) {
-  test(`Exceeded Budget text and negative allocation use readable semantic pairs in ${theme}`, ({
-    page,
-  }) => Effect.runPromise(checkBudget(page, theme)));
-}
+test(`Exceeded Budget text and negative allocation use readable semantic pairs in light and dark`, ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.forEach(themes, (theme) => checkBudget(page, theme), { discard: true })
+  ));
 
 const checkAccessMethods = Effect.fnUntraced(function* (page: Page, theme: Theme) {
   const provider = page.getByRole("button", { name: "Continuar con Google", exact: true });
@@ -616,11 +619,12 @@ const checkAccess = Effect.fnUntraced(function* (page: Page, theme: Theme) {
   yield* checkSignupBorders(page, theme);
   expect(mutations).toBe(0);
 });
-for (const theme of themes) {
-  test(`Active Access control borders are distinguishable without changing focus or the disabled signup treatment in ${theme}`, ({
-    page,
-  }) => Effect.runPromise(checkAccess(page, theme)));
-}
+test(`Active Access control borders are distinguishable without changing focus or the disabled signup treatment in light and dark`, ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.forEach(themes, (theme) => checkAccess(page, theme), { discard: true })
+  ));
 
 const dashboardView = {
   title: "Tablero de ejemplo",
@@ -680,8 +684,9 @@ const checkDashboard = Effect.fnUntraced(function* (page: Page, theme: Theme) {
   yield* contrast(personalize, "outlineColor", minimumControlContrast);
   yield* capture(page, `dashboard-personalize-focus-hover-${theme}`);
 });
-for (const theme of themes) {
-  test(`Dashboard Personalizar retains its accessible control border and focus in ${theme}`, ({
-    page,
-  }) => Effect.runPromise(checkDashboard(page, theme)));
-}
+test(`Dashboard Personalizar retains its accessible control border and focus in light and dark`, ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.forEach(themes, (theme) => checkDashboard(page, theme), { discard: true })
+  ));

@@ -338,6 +338,8 @@ jobs:
       - name: Static-shell browser validation
         env:
           BROWSER_TEST_SHARD: ${{ matrix.shard }}/2
+          # Playwright assigns whole files by case count; retain their existing jobs after theme reuse.
+          PWTEST_SHARD_WEIGHTS: "180:149"
           VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
         run: |
           export TMPDIR="$(mktemp -d /dev/shm/fidy-browser.XXXXXX)"

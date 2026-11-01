@@ -184,10 +184,10 @@ const backHoverCoverage = (
   };
 };
 
-for (const colorScheme of ["light", "dark"] as const) {
-  test(`back hover contains its complete label in ${colorScheme}`, ({ page }) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
+test(`back hover contains its complete label in light and dark`, ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      for (const colorScheme of ["light", "dark"] as const) {
         yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme }));
         yield* Effect.tryPromise(() => page.goto("/login"));
         yield* Effect.tryPromise(() =>
@@ -201,6 +201,6 @@ for (const colorScheme of ["light", "dark"] as const) {
         const coverage = yield* Effect.tryPromise(() => back.evaluate(backHoverCoverage));
         expect(coverage.contained).toBe(true);
         expect(coverage.background).not.toBe("rgba(0, 0, 0, 0)");
-      })
-    ));
-}
+      }
+    })
+  ));

@@ -49,7 +49,14 @@ const dimensions = (): Readonly<{ content: number; viewport: number }> => ({
 });
 
 const captureThemes = (page: Page, filename: string): ReturnType<typeof capture> =>
-  captureInThemes(page, (theme) => capture(page, filename.replace("-light-", `-${theme}-`)));
+  captureInThemes(page, (theme) =>
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("main")).toHaveCSS("color-scheme", theme)
+      );
+      yield* capture(page, filename.replace("-light-", `-${theme}-`));
+    })
+  );
 const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
   yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
   yield* Effect.tryPromise((signal) =>

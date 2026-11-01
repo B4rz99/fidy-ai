@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import axe from "axe-core";
 
 const { AxeBuilder } = await import("@axe-core/playwright");
 type AccessibilityResult = Awaited<ReturnType<InstanceType<typeof AxeBuilder>["analyze"]>>;
@@ -11,9 +12,13 @@ const hasFrames = (page: Page): Promise<boolean> =>
 const analyzeFrames = (page: Page): Promise<AccessibilityResult> =>
   new AxeBuilder({ page }).analyze();
 const analyzeDocument = (page: Page): Promise<AccessibilityResult> =>
-  new AxeBuilder({ page })
-    .setLegacyMode()
-    .analyze()
+  page
+    .evaluate(axe.source)
+    .then(() =>
+      page.evaluate<AccessibilityResult>(
+        'axe.configure({allowedOrigins:["<same_origin>"],branding:{application:"playwright"}}); axe.run(document)'
+      )
+    )
     .then((result) => hasFrames(page).then((frames) => (frames ? analyzeFrames(page) : result)));
 
 /** Avoid the extra result-aggregation page only when the complete document has no frames. */

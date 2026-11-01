@@ -40,6 +40,13 @@ test("single-document accessibility checks retain the full engine's violations",
       yield* wait(page.setContent(inaccessibleDocument));
       const expected = yield* wait(new AxeBuilder({ page }).analyze());
       const actual = yield* wait(analyzeAccessibility(page));
+      expect(actual.testEngine).toEqual(expected.testEngine);
+      expect(actual.testRunner).toEqual(expected.testRunner);
+      for (const group of ["violations", "passes", "incomplete", "inapplicable"] as const) {
+        expect(actual[group].map(({ id }) => id).sort()).toEqual(
+          expected[group].map(({ id }) => id).sort()
+        );
+      }
       expect(accessibilityTargets(actual)).toEqual(accessibilityTargets(expected));
       expect(actual.violations.map(({ id }) => id)).toContain("button-name");
     })

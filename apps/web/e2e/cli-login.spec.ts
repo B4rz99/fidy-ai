@@ -228,7 +228,7 @@ const cliJourney = Effect.fn(function* ({
   page,
   request,
 }: Readonly<{ page: Page; request: APIRequestContext }>) {
-  yield* wait(signInThroughCore({ page, request }));
+  yield* wait(signInThroughCore({ page, deferFreshEntry: true, request }));
   const filesystem = yield* FileSystem.FileSystem;
   const directory = yield* filesystem.makeTempDirectoryScoped();
   const entry = yield* bundleJourney(directory);

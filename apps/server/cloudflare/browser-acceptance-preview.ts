@@ -25,6 +25,7 @@ import {
   db,
   erasureRegistry,
   firstCardUserId,
+  firstDaviplataUserId,
   fixtureUserId,
   navigationIdentities,
   oauthOperationUserId,
@@ -464,6 +465,7 @@ const fixtureIdentities = [
   { key: "budgetEditing", userId: budgetEditingUserId },
   { key: "pagination", userId: paginationUserId },
   { key: "firstCard", userId: firstCardUserId },
+  { key: "firstDaviplata", userId: firstDaviplataUserId },
   { key: "subscriptionReflow", userId: subscriptionReflowUserId },
   { key: "pairing", userId: pairingUserId },
 ];

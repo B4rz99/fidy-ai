@@ -128,6 +128,7 @@ const signInThroughBrowser = ({
     identity:
       | "primary"
       | "firstCard"
+      | "firstDaviplata"
       | "subscriptionReflow"
       | "dashboard"
       | "budget"
@@ -299,8 +300,8 @@ export const signInWithVerifiedEmailThroughCore = ({
   );
 
 /** Independent unfunded User: never switches or deletes the first-card User's retained history. */
-export const signInFirstDaviplataThroughCore = (input: BrowserFixture): Promise<void> =>
-  signInWithVerifiedEmailThroughCore({ ...input, email: "daviplata@example.com" });
+export const signInFirstDaviplataThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithIdentity({ ...input, identity: "firstDaviplata", clockMode: "controlled" });
 
 /** Signs in the seeded User with an available PaymentSource through real Core redemption. */
 export const signInThroughCore = (input: SignInFixture): Promise<void> =>

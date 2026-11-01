@@ -932,7 +932,9 @@ test("authorizes DaviPlata directly in the built browser and grants paid Pro onl
   Effect.runPromise(
     Effect.gen(function* () {
       test.setTimeout(enrollmentJourneyMilliseconds);
-      yield* fromPlaywright(signInFirstDaviplataThroughCore({ page, request }));
+      yield* fromPlaywright(
+        signInFirstDaviplataThroughCore({ page, deferFreshEntry: true, request })
+      );
       const providerCalls: Array<DaviplataFixtureStep> = [];
       const fidyBodies: Array<ObservedFidyBody> = [];
       captureDaviplataFidyBodies(page, fidyBodies);

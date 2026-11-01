@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
-import axe from "axe-core";
 
 const { AxeBuilder } = await import("@axe-core/playwright");
+const axeSource = await Bun.file(new URL(import.meta.resolve("axe-core/axe.min.js"))).text();
 type AccessibilityResult = Awaited<ReturnType<InstanceType<typeof AxeBuilder>["analyze"]>>;
 
 const hasFrames = (page: Page): Promise<boolean> =>
@@ -10,10 +10,10 @@ const hasFrames = (page: Page): Promise<boolean> =>
     .count()
     .then((count) => count > 0 || page.frames().length > 1);
 const analyzeFrames = (page: Page): Promise<AccessibilityResult> =>
-  new AxeBuilder({ page }).analyze();
+  new AxeBuilder({ page, axeSource }).analyze();
 const analyzeDocument = (page: Page): Promise<AccessibilityResult> =>
   page
-    .evaluate(axe.source)
+    .evaluate(axeSource)
     .then(() =>
       page.evaluate<AccessibilityResult>(
         'axe.configure({allowedOrigins:["<same_origin>"],branding:{application:"playwright"}}); axe.run(document)'

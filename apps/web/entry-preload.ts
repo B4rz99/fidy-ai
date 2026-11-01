@@ -37,7 +37,8 @@ export const entryPreload = (): Plugin => ({
         tags.push({
           tag: "link",
           attrs: { rel: "modulepreload", crossorigin: "", href: `/${name}`, fetchpriority: "low" },
-          injectTo: "head-prepend",
+          // Keep encoding, viewport and bootstrap discovery ahead of speculative requests.
+          injectTo: "head",
         });
       }
       return tags;

@@ -25,7 +25,7 @@ it.effect("preloads shared entry code without eagerly loading a dynamic workspac
       Promise.all([
         Bun.write(
           join(directory, "index.html"),
-          '<script type="module" src="/src/main.ts"></script>'
+          '<!doctype html><html><head><meta charset="UTF-8"></head><body><script type="module" src="/src/main.ts"></script></body></html>'
         ),
         Bun.write(
           join(directory, "src/main.ts"),
@@ -65,8 +65,11 @@ it.effect("preloads shared entry code without eagerly loading a dynamic workspac
     const workspace = built.output.find((asset) => asset.fileName.startsWith("assets/dashboard-"));
     expect(render).toBeDefined();
     expect(workspace).toBeDefined();
-    expect(html.source).toContain(`href="/${render?.fileName}"`);
+    const renderHref = `href="/${render?.fileName}"`;
+    expect(html.source).toContain(renderHref);
     expect(html.source).not.toContain(workspace?.fileName);
+    expect(html.source.indexOf('charset="UTF-8"')).toBeLessThan(1024);
+    expect(html.source.indexOf('charset="UTF-8"')).toBeLessThan(html.source.indexOf(renderHref));
   })
 );
 

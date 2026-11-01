@@ -2,8 +2,17 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "78b75ed6107694ac2aaf6eb067a5ef9bf7b3d7caeb43bfcb3216b4aeadf63165";
+const expectedEdgePolicyDigest = "6bb6df833ac2ff0b67986167d06e84f56e4947d1c3a0042a7e7d0ea1ec3d028b";
 const securityArtifacts = [
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/runtime/release-smoke/internal/database.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/migrations/0006_audit_media_index.sql", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/user-documents/operations.ts", import.meta.url)
   ).text(),

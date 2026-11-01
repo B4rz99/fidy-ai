@@ -91,11 +91,21 @@ it("records only approved canonical-call metadata and never returns another User
         current,
         afterOwnerWrite: false,
       });
-      yield* attempt(() =>
+      const recorded = yield* attempt(() =>
         db
           .prepare(statement.sql)
           .bind(...statement.params)
           .run()
+      );
+      expect(recorded.meta.rows_written).toBe(8);
+      const mediaLookup = yield* attempt(() =>
+        db
+          .prepare("EXPLAIN QUERY PLAN SELECT id FROM audit_entries WHERE media_submission_id = ?")
+          .bind("unrelated-media")
+          .all()
+      );
+      expect(mediaLookup.results.map((row) => row.detail).join("\n")).toContain(
+        "USING INDEX audit_entries_media"
       );
       const audit = makeAudit({ database: db });
       const entries = yield* audit.query({ userId, limit: 10 });

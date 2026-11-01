@@ -1,5 +1,11 @@
 import { Effect, Result } from "effect";
-import { expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
+import {
+  installTestSchema,
+  isolatedTestDatabases,
+  observeRetentionCost,
+} from "../../d1-test-fixture";
+import { verifySmokeDatabase } from "./internal/database";
 import { platform } from "./internal/platform";
 
 it("classifies only closed D1 quota failures at database stages", () =>
@@ -48,5 +54,35 @@ it("classifies only closed D1 quota failures at database stages", () =>
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result)) expect(result.failure.stage).toBe(expected);
       }
+    })
+  ));
+
+const databases = isolatedTestDatabases();
+afterAll(() => databases.dispose());
+
+it("proves native rollback with a bounded absence check and refuses a preexisting scratch table", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      yield* Effect.tryPromise(() => installTestSchema({ db }));
+      const observed = observeRetentionCost(db);
+      yield* verifySmokeDatabase(observed.database);
+      // Failed-batch metadata is unavailable: this bounds the successful absence query only.
+      expect(observed.cost().rowsRead).toBeLessThanOrEqual(4);
+      expect(observed.cost().rowsWritten).toBe(0);
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare("CREATE TABLE fidy_release_verification(value INTEGER NOT NULL) STRICT"),
+          db.prepare("INSERT INTO fidy_release_verification VALUES(7)"),
+        ])
+      );
+      const collision = yield* verifySmokeDatabase(db).pipe(Effect.result);
+      expect(Result.isFailure(collision)).toBe(true);
+      if (Result.isFailure(collision)) expect(collision.failure.stage).toBe("schema");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT value FROM fidy_release_verification").first("value")
+        )
+      ).toBe(7);
     })
   ));

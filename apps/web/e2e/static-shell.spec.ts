@@ -8,6 +8,40 @@ const topology = browserAcceptanceTopology();
 
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
+
+for (const provider of ["google", "microsoft"] as const) {
+  test(`${provider} return closes without loading application code or reading a session`, ({
+    page,
+    context,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const reads: Array<string> = [];
+        yield* wait(
+          context.route(`${topology.api}/**`, (route) => {
+            reads.push(new URL(route.request().url()).pathname);
+            return route.abort("blockedbyclient");
+          })
+        );
+        yield* wait(
+          context.route(/\/assets\/(?:render|initial-session)-[^/]+\.js$/u, (route) =>
+            route.abort("blockedbyclient")
+          )
+        );
+        yield* wait(
+          page.setContent(
+            `<a href="${topology.app}/auth/${provider}-return" target="_blank" rel="noopener">Return</a>`
+          )
+        );
+        const popup = page.waitForEvent("popup");
+        yield* wait(page.getByRole("link", { name: "Return", exact: true }).click());
+        const opened = yield* wait(popup);
+        yield* wait(expect.poll(() => opened.isClosed()).toBe(true));
+        expect(reads).toEqual([]);
+      })
+    ));
+}
+
 const json = (value: object, space: number): string => JSON.stringify(value, undefined, space);
 const expectSeriousAccessibilityViolations = (page: Page): Promise<void> =>
   Effect.runPromise(

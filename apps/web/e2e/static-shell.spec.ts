@@ -107,6 +107,13 @@ test("accessibility retains every result and shadow control while the applicatio
       expect(yield* wait(page.evaluate(() => document.documentElement.dataset.clockProbe))).toBe(
         "waiting"
       );
+      yield* wait(
+        page.getByRole("button").evaluateAll((buttons) => {
+          for (const button of buttons) button.setAttribute("aria-label", "Named control");
+        })
+      );
+      const updated = yield* wait(analyzeAccessibility(page));
+      expect(updated.violations.map(({ id }) => id)).not.toContain("button-name");
     })
   ));
 

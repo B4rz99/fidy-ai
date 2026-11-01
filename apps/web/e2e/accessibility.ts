@@ -4,6 +4,8 @@ import { readAccessibilityResult } from "./accessibility-result";
 const { AxeBuilder } = await import("@axe-core/playwright");
 const axeSource = await Bun.file(new URL(import.meta.resolve("axe-core/axe.min.js"))).text();
 type AccessibilityResult = Awaited<ReturnType<InstanceType<typeof AxeBuilder>["analyze"]>>;
+const auditExpression =
+  'axe.configure({allowedOrigins:["<same_origin>"],branding:{application:"playwright"}}),axe.run(document)';
 
 const hasFrames = (page: Page): Promise<boolean> =>
   page
@@ -27,12 +29,25 @@ const analyzeWithNativeTimers = (page: Page): Promise<AccessibilityResult> =>
         )
         // Playwright installs its application clock in the main world. Axe needs native timers.
         .then(({ executionContextId }) =>
-          session.send("Runtime.evaluate", {
-            contextId: executionContextId,
-            expression: `${axeSource};axe.configure({allowedOrigins:["<same_origin>"],branding:{application:"playwright"}});axe.run(document)`,
-            awaitPromise: true,
-            returnByValue: true,
-          })
+          session
+            .send("Runtime.evaluate", {
+              contextId: executionContextId,
+              expression: `typeof axe === "undefined" ? undefined : (${auditExpression})`,
+              awaitPromise: true,
+              returnByValue: true,
+            })
+            .then((evaluated) => {
+              if (evaluated.exceptionDetails !== undefined) {
+                throw new Error("Accessibility evaluation failed");
+              }
+              if (evaluated.result.type !== "undefined") return evaluated;
+              return session.send("Runtime.evaluate", {
+                contextId: executionContextId,
+                expression: `${axeSource};${auditExpression}`,
+                awaitPromise: true,
+                returnByValue: true,
+              });
+            })
         )
         .then((evaluated) => {
           if (evaluated.exceptionDetails !== undefined) {

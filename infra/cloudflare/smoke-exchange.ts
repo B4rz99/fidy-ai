@@ -156,12 +156,6 @@ const smokeDiagnostic = (response: SmokeExchange, expectedPublic: SmokeIdentity)
   });
   return `Candidate smoke response rejected (status=${response.status}, version=${versionState}, noStore=${response.noStore}${detail})`;
 };
-const isRoutingFallback = (response: SmokeExchange, expectedPublic: SmokeIdentity): boolean =>
-  response.status >= successStart &&
-  response.status < successEnd &&
-  response.noStore &&
-  Option.isSome(response.publicVersion) &&
-  response.publicVersion.value !== expectedPublic.workerVersionId;
 const isIdentityRefusal = (response: SmokeExchange, expectedPublic: SmokeIdentity): boolean =>
   response.status === refusedStatus &&
   response.noStore &&
@@ -182,9 +176,7 @@ const isQuotaRefusal = (response: SmokeExchange, expectedPublic: SmokeIdentity):
 const shouldReplay = (
   response: SmokeExchange,
   expected: Readonly<{ public: SmokeIdentity; replayIdentity: boolean }>
-): boolean =>
-  isRoutingFallback(response, expected.public) ||
-  (expected.replayIdentity && isIdentityRefusal(response, expected.public));
+): boolean => expected.replayIdentity && isIdentityRefusal(response, expected.public);
 
 /** Classifies only pre-admission routing evidence as replayable. The runner decides whether and how to retry. */
 export const checkSmokeExchange = Effect.fn(function* (

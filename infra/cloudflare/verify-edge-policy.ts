@@ -2,8 +2,10 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "6bb6df833ac2ff0b67986167d06e84f56e4947d1c3a0042a7e7d0ea1ec3d028b";
+const expectedEdgePolicyDigest = "a014d68eb4fc25e27edbeb2a5aba666810433f14977a1a55322eeda71d0b96ae";
 const securityArtifacts = [
+  await Bun.file(new URL("../../patches/alchemy@2.0.0-beta.80.patch", import.meta.url)).text(),
+  await Bun.file(new URL("./smoke-exchange.ts", import.meta.url)).text(),
   await Bun.file(
     new URL(
       "../../apps/server/cloudflare/runtime/release-smoke/internal/database.ts",

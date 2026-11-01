@@ -315,12 +315,14 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
-      - name: Install Chromium headless shell
+      - name: Reuse or install Chromium headless shell
         env:
           BROWSER_CACHE_HIT: ${{ steps.browser-cache.outputs.cache-hit }}
         run: |
           echo "Browser cache hit: $BROWSER_CACHE_HIT"
-          time bunx --bun playwright install --only-shell chromium
+          if [[ "$BROWSER_CACHE_HIT" != "true" ]]; then
+            time bunx --bun playwright install --only-shell chromium
+          fi
       - name: Select native package cache identity
         if: ${{ matrix.shard == 1 }}
         id: native-packages
@@ -335,8 +337,14 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-native-packages-v2-${{ steps.native-packages.outputs.image }}
       - name: Verify Chromium system dependencies
         run: |
-          node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();' ||
-            sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
+          verify_chromium() {
+            node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();'
+          }
+          if ! verify_chromium; then
+            bunx --bun playwright install --only-shell chromium
+            verify_chromium || sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
+            verify_chromium
+          fi
       - name: Static-shell browser validation
         env:
           BROWSER_TEST_SHARD: ${{ matrix.shard }}/2

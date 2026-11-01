@@ -406,31 +406,3 @@ declare module "@tanstack/react-router" {
     router: ReturnType<typeof createWebRouter>;
   }
 }
-const entryCode: Readonly<Record<string, () => Promise<unknown>>> = {
-  "/login": () => import("./login-page"),
-  "/app/transactions": () => Promise.resolve(TransactionListFeature.preload?.()),
-  "/app/dashboard": () => Promise.resolve(DashboardRoute.preload?.()),
-  "/app/needs-review": () => ReviewWorkspace.preload(),
-  "/app/budgets": () => Promise.resolve(BudgetRoute.preload?.()),
-  "/app/recurring": () => Promise.resolve(RecurringWorkspace.preload?.()),
-  "/settings/account": () => import("./account-page"),
-  "/settings/access": () => Promise.resolve(AccessManagementPage.preload?.()),
-  "/settings/privacy": () => import("@/features/privacy/feature"),
-  "/upgrade": () => Promise.resolve(SubscriptionOffersFeature.preload?.()),
-  "/auth/google-return": () => Promise.resolve(ProviderReturnFeature.preload?.()),
-  "/auth/microsoft-return": () => Promise.resolve(ProviderReturnFeature.preload?.()),
-};
-const preloadEntryCode = (pathname: string): Promise<unknown> =>
-  pathname.startsWith("/oauth/review/")
-    ? Promise.resolve(OAuthReviewFeature.preload?.())
-    : Promise.resolve(entryCode[pathname]?.());
-
-/** Fetch the requested presentation, without starting another workspace or any data reads. */
-export const preloadWebRouteCode = (pathname: string): Promise<void> =>
-  Effect.runPromise(
-    Effect.asVoid(
-      Effect.tryPromise(() =>
-        Promise.allSettled([ApplicationFrame.preload?.(), preloadEntryCode(pathname)])
-      )
-    )
-  );

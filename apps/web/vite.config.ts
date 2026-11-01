@@ -12,6 +12,20 @@ const publicDirectory = (mode: string): string | false => {
 export default defineConfig(({ mode }) => ({
   plugins: [serverClientBoundary(), react(), tailwindcss(), entryPreload()],
   publicDir: publicDirectory(mode),
+  build: {
+    rolldownOptions: {
+      preserveEntrySignatures: false,
+      output: {
+        codeSplitting: {
+          // Avoid tiny shared-module requests while keeping styles in their extracted files.
+          experimentalInlineCommonChunks: {
+            maxSize: 20_000,
+            exclude: /\.css(?:\?|$)/u,
+          },
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": Bun.fileURLToPath(new URL("./src", import.meta.url)),

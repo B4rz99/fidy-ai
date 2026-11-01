@@ -1,3 +1,4 @@
+import { preloadWebRouteCode } from "./entry-code";
 import { beginInitialBrowserRequest } from "@/transport/initial-request";
 import { parseApiOrigin } from "@/transport/origin";
 import { observeInitialBrowserRequest } from "@/session/initial-request";
@@ -14,9 +15,9 @@ export const mountWebApplication = (): void => {
       transactions: window.location.pathname === "/app/transactions",
     })
   );
+  preloadWebRouteCode(window.location.pathname).catch(() => undefined);
   Promise.all([import("./render"), import("@/transport/initial-session")])
-    .then(([{ mountWebApplication, preloadWebRouteCode }, { beginInitialBrowserSession }]) => {
-      preloadWebRouteCode(window.location.pathname).catch(() => undefined);
+    .then(([{ mountWebApplication }, { beginInitialBrowserSession }]) => {
       const initial = beginInitialBrowserSession({ ...request, request });
       return ready.promise.then(() => {
         const root = document.querySelector("#root");

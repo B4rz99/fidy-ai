@@ -488,6 +488,22 @@ const retryPendingProvider = Effect.fn(function* (page: Page) {
   yield* Effect.tryPromise(() => expect(page.getByText("Esperando confirmación…")).toBeVisible());
   return popup;
 });
+const expectClosedProviderCancellation = Effect.fnUntraced(function* (page: Page, popup: Page) {
+  const now = yield* Effect.tryPromise(() =>
+    page.evaluate(() => performance.timeOrigin + performance.now())
+  );
+  yield* Effect.tryPromise(() => page.clock.pauseAt(now + 100));
+  const polled = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith("/status")
+  );
+  yield* Effect.tryPromise(() => popup.close());
+  yield* Effect.tryPromise(() => advanceAcceptancePoll({ page, milliseconds: 1_000 }));
+  const response = yield* Effect.tryPromise(() => polled);
+  expect(response.status()).toBe(successStatus);
+  yield* Effect.tryPromise(() => page.clock.runFor(1));
+  yield* Effect.tryPromise(() => expect(page.getByText("Cancelaste el acceso.")).toBeVisible());
+  yield* Effect.tryPromise(() => page.clock.resume());
+});
 const openProviderEntry = Effect.fn(function* (page: Page) {
   const loginResponse = yield* Effect.tryPromise(() => page.goto("/login"));
   expect(loginResponse?.headers()["cross-origin-opener-policy"]).toBe("same-origin-allow-popups");
@@ -548,8 +564,7 @@ export const denialAndCancellationJourney = ({
         context.route(configuration.authorizationPattern, pendingProvider)
       );
       const closedPopup = yield* retryPendingProvider(page);
-      yield* Effect.tryPromise(() => closedPopup.close());
-      yield* Effect.tryPromise(() => expect(page.getByText("Cancelaste el acceso.")).toBeVisible());
+      yield* expectClosedProviderCancellation(page, closedPopup);
       const cancelledPopup = yield* retryPendingProvider(page);
       yield* cancelExternalProvider(page, cancelledPopup, configuration);
       expect(page.url()).toContain("/login");

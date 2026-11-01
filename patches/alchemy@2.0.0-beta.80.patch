@@ -1,5 +1,5 @@
 diff --git a/lib/Apply.d.ts b/lib/Apply.d.ts
-index d92584069ffec978ba02a0a3d74d71ba95f91c3c..4c44be9a40e6fd6c89cd9df154791e59a16695ab 100644
+index d92584069ffec978ba02a0a3d74d71ba95f91c3c..f01b2b1f1cf9c8f25357437c0e7b94bf0a65f9eb 100644
 --- a/lib/Apply.d.ts
 +++ b/lib/Apply.d.ts
 @@ -16,11 +16,16 @@ export type AppliedPlan<P extends Plan> = {
@@ -21,7 +21,7 @@ index d92584069ffec978ba02a0a3d74d71ba95f91c3c..4c44be9a40e6fd6c89cd9df154791e59
  export interface DeleteFailure {
      fqn: string;
 diff --git a/lib/Apply.js b/lib/Apply.js
-index 22a223eca67c519d34f7ced0f6cb9b2b85f53f14..7ecdd5447df4c24b8e82d6f3dba48fc3189f2e74 100644
+index 22a223eca67c519d34f7ced0f6cb9b2b85f53f14..8942824ec734877ee8509214526e617836de339a 100644
 --- a/lib/Apply.js
 +++ b/lib/Apply.js
 @@ -43,7 +43,20 @@ const instrumentLifecycle = (op, fqn, resourceType, logicalId, instanceId) => (e
@@ -65,22 +65,128 @@ index 22a223eca67c519d34f7ced0f6cb9b2b85f53f14..7ecdd5447df4c24b8e82d6f3dba48fc3
          yield* converge(plan, tracker, terminalStatuses, session, state, stackName, stage);
          yield* Effect.forEach(Array.from(terminalStatuses.values()), ({ fqn, id, type, status, providerMode }) => session.emit({
              _tag: "apply.resource.status",
+diff --git a/lib/Cloudflare/D1/ApplyMigrations.d.ts b/lib/Cloudflare/D1/ApplyMigrations.d.ts
+index 0c9935255b73ac427d76e4e1b19074aafabfcc0b..05f48c9b8e6cc4cd9715077675730399aebfd020 100644
+--- a/lib/Cloudflare/D1/ApplyMigrations.d.ts
++++ b/lib/Cloudflare/D1/ApplyMigrations.d.ts
+@@ -16,15 +16,13 @@ export interface D1QueryResult {
+         meta?: unknown;
+     }>;
+ }
+-export type D1SqlExecutor<E = unknown, R = never> = (sql: string) => Effect.Effect<D1QueryResult, E, R>;
++export type D1SqlExecutor<E = unknown, R = never> = (sql: string | ReadonlyArray<string>) => Effect.Effect<D1QueryResult, E, R>;
+ /**
+  * Adapt a raw D1 executor into the registry's {@link SqlExecutor} contract
+  * (see `src/SQL/Migrations/`). Parameters are inlined as SQL literals — the
+  * D1 HTTP protocol path here is raw-SQL-only, and the only parametrized
+- * queries are the migration formats' own bookkeeping. Batches join into a
+- * single multi-statement query: D1 over HTTP has no transactions, so one
+- * batched call is the closest available unit (matching wrangler's own
+- * behavior).
++ * queries are the migration formats' own bookkeeping. Batches preserve statement boundaries so large schema baselines respect D1
++ * per-statement limits. The migration ledger insert remains the final statement.
+  */
+ export declare const makeD1MigrationExecutor: <E>(raw: D1SqlExecutor<E>) => SqlExecutor;
+ //# sourceMappingURL=ApplyMigrations.d.ts.map
+\ No newline at end of file
+diff --git a/lib/Cloudflare/D1/ApplyMigrations.js b/lib/Cloudflare/D1/ApplyMigrations.js
+index 969249320fda95b2f0ce39544c0520db470bbc0f..dffef696aaa31126b62b87652b81c5d469937830 100644
+--- a/lib/Cloudflare/D1/ApplyMigrations.js
++++ b/lib/Cloudflare/D1/ApplyMigrations.js
+@@ -1,3 +1,4 @@
++import * as CloudflareRetry from "@distilled.cloud/cloudflare/Retry";
+ import * as Effect from "effect/Effect";
+ import { inlineSqlParams, MigrationError, } from "../../SQL/Migrations/index.js";
+ /**
+@@ -13,7 +14,7 @@ export const makeD1MigrationExecutor = (raw) => ({
+     dialect: "sqlite",
+     query: (sql, params) => raw(params && params.length > 0
+         ? inlineSqlParams(sql, params, "sqlite")
+-        : sql).pipe(Effect.map((result) => (result.result[0]?.results ?? [])), Effect.mapError((cause) => new MigrationError({
++        : sql).pipe(CloudflareRetry.none, Effect.map((result) => (result.result[0]?.results ?? [])), Effect.mapError((cause) => new MigrationError({
+         message: `D1 query failed: ${String(cause)}`,
+         cause,
+     }))),
+@@ -21,7 +22,7 @@ export const makeD1MigrationExecutor = (raw) => ({
+         .map((statement) => statement.trim())
+         .filter((statement) => statement.length > 0)
+         .map((statement) => statement.endsWith(";") ? statement : `${statement};`)
+-        .join("\n")).pipe(Effect.asVoid, Effect.mapError((cause) => new MigrationError({
++).pipe(CloudflareRetry.none, Effect.asVoid, Effect.mapError((cause) => new MigrationError({
+         message: `D1 migration batch failed: ${String(cause)}`,
+         cause,
+     }))),
+diff --git a/lib/Cloudflare/D1/Database.js b/lib/Cloudflare/D1/Database.js
+index 47ddc1d0a5d82948677271089404794bc57f7e5d..1a32c209fd6fea0033c0b36c944e118c6df07f25 100644
+--- a/lib/Cloudflare/D1/Database.js
++++ b/lib/Cloudflare/D1/Database.js
+@@ -346,7 +346,7 @@ export const ProviderLive = () => Provider.succeed(Database, {
+                 stamped: stampedOf(output),
+                 withExecutor: (apply) => Effect.gen(function* () {
+                     const queryDb = yield* d1.queryDatabase;
+-                    yield* apply(makeD1MigrationExecutor((sql) => queryDb({ accountId: acct, databaseId, sql })));
++                    yield* apply(makeD1MigrationExecutor((sql) => queryDb({ accountId: acct, databaseId, ...(typeof sql === "string" ? { sql } : { batch: sql.map((statement) => ({ sql: statement })) }) })));
+                 }),
+             })
+             : undefined;
+diff --git a/lib/Cloudflare/D1/LocalD1Gateway.js b/lib/Cloudflare/D1/LocalD1Gateway.js
+index 043ef83248abccd0bd8d94856cd421b3e66c1ca1..33a54845df0930937d17ded598ea435375b36a07 100644
+--- a/lib/Cloudflare/D1/LocalD1Gateway.js
++++ b/lib/Cloudflare/D1/LocalD1Gateway.js
+@@ -96,5 +96,5 @@ export const withLocalD1Query = (databaseId, use) => Effect.scoped(Effect.gen(fu
+  * SQL-only view of {@link withLocalD1Query} matching the migration flow's
+  * {@link D1SqlExecutor} contract.
+  */
+-export const withLocalD1Executor = (databaseId, use) => withLocalD1Query(databaseId, (query) => use((sql) => query({ sql })));
++export const withLocalD1Executor = (databaseId, use) => withLocalD1Query(databaseId, (query) => use((sql) => query(typeof sql === "string" ? { sql } : { batch: sql.map((statement) => ({ sql: statement })) })));
+ //# sourceMappingURL=LocalD1Gateway.js.map
+\ No newline at end of file
+diff --git a/lib/Cloudflare/D1/index.d.ts b/lib/Cloudflare/D1/index.d.ts
+index 6e573ae6ba45e9c36685d320dfa7f387c7eb3cd3..908ac18c9f6762ced666cc68fa707a76f3cf18c8 100644
+--- a/lib/Cloudflare/D1/index.d.ts
++++ b/lib/Cloudflare/D1/index.d.ts
+@@ -1,4 +1,5 @@
+ export * from "./Database.ts";
++export { makeD1MigrationExecutor } from "./ApplyMigrations.ts";
+ export * from "./QueryDatabase.ts";
+ export * from "./QueryDatabaseBinding.ts";
+ export * from "./QueryDatabaseLocal.ts";
+diff --git a/lib/Cloudflare/D1/index.js b/lib/Cloudflare/D1/index.js
+index 73e6838953ed6f594e1c59c6ae326ccdf84475c4..215c1798da14e22af089076165e00890992e0030 100644
+--- a/lib/Cloudflare/D1/index.js
++++ b/lib/Cloudflare/D1/index.js
+@@ -1,4 +1,5 @@
+ export * from "./Database.js";
++export { makeD1MigrationExecutor } from "./ApplyMigrations.js";
+ export * from "./QueryDatabase.js";
+ export * from "./QueryDatabaseBinding.js";
+ export * from "./QueryDatabaseLocal.js";
 diff --git a/lib/Cloudflare/Workers/WorkerProvider.js b/lib/Cloudflare/Workers/WorkerProvider.js
 index 622b336b29d2b8c60406cd84660719afae6c8c96..6fb5ae38ca0a5b2a0934ef456d439ce0536c91dd 100644
 --- a/lib/Cloudflare/Workers/WorkerProvider.js
 +++ b/lib/Cloudflare/Workers/WorkerProvider.js
-@@ -3044,4 +3044,4 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+@@ -3042,8 +3042,8 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+         // possible when the script already has a live deployment to split
+         // traffic against (otherwise the first deploy takes 100%), and only
          // for changes a version can carry — code, bindings, compatibility
 -        // settings, cache. Script-level settings in the upload metadata
 -        // (tags, observability, limits, placement, logpush) keep their live
 +        // settings, cache, and placement. Script-level settings in the upload metadata
 +        // (tags, observability, limits, logpush) keep their live
          // values until the next full deploy, matching
-@@ -3077,2 +3077,3 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+         // `wrangler versions upload` semantics.
+         if (rolloutTraffic !== undefined &&
+@@ -3075,6 +3075,7 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+                     compatibilityDate: metadata.compatibilityDate,
+                     compatibilityFlags: metadata.compatibilityFlags,
                      cacheOptions: metadata.cacheOptions,
 +                    placement: metadata.placement,
                      annotations: news.version?.alias !== undefined ||
-@@ -4135,2 +4136,8 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+                         news.version?.message !== undefined ||
+                         news.version?.tag !== undefined
+@@ -4133,6 +4134,12 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+             // with this Worker — see readWorkerRoutes. Empty-array props
+             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
              // can detect drift and converge deletions.
 +            // versionId is an immutable upload receipt, not current traffic.
 +            const uploadedVersionId = output?.versionId
@@ -89,17 +195,23 @@ index 622b336b29d2b8c60406cd84660719afae6c8c96..6fb5ae38ca0a5b2a0934ef456d439ce0
 +                    Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)))
 +                : undefined;
              const observeDomains = shouldObserveWorkerDomains(olds, output);
-@@ -4236,2 +4243,3 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
+             const observeCrons = shouldObserveWorkerCrons(olds, output);
+@@ -4234,6 +4241,7 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+                 // (a getPhas call per known zone on every read); carry the
+                 // cleanup list forward like any other stable cache.
                  affinityZoneIds: output?.affinityZoneIds,
 +                versionId: uploadedVersionId,
              };
+             // Centralized ownership decision: the engine routes `read`'s
+             // return value based on `AdoptPolicy`. We hand it the attrs
 diff --git a/src/Apply.ts b/src/Apply.ts
 index 473a9e7ebe81897693fbd09e70f77e4dd2f7a628..8910524517dc9595b6be10d4604b6c91c2750466 100644
 --- a/src/Apply.ts
 +++ b/src/Apply.ts
 @@ -84,11 +84,17 @@ export type AppliedPlan<P extends Plan> = {
  };
-
+ 
  export interface ApplyOptions {
 +  /** Keep tracked resources until release verification, or run only their cleanup. */
 +  deletions?: "defer" | "only";
@@ -107,7 +219,7 @@ index 473a9e7ebe81897693fbd09e70f77e4dd2f7a628..8910524517dc9595b6be10d4604b6c91
    /** Structured event sink for non-CLI callers. */
    session?: PlanStatusSession;
  }
-
+ 
 +export class DeletionPhaseError extends Data.TaggedError("DeletionPhaseError")<{
 +  message: string;
 +}> {}
@@ -164,114 +276,22 @@ index 473a9e7ebe81897693fbd09e70f77e4dd2f7a628..8910524517dc9595b6be10d4604b6c91
 @@ -276,7 +309,7 @@ export const apply = <P extends Plan>(
        // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
        // TODO(sam): should pivot be done separately? E.g shift traffic?
-
+ 
 -      yield* collectGarbage(plan, session);
 +      if (options.deletions !== "defer") yield* collectGarbage(plan, session);
-
+ 
        yield* converge(
          plan,
-diff --git a/src/Cloudflare/Workers/WorkerProvider.ts b/src/Cloudflare/Workers/WorkerProvider.ts
-index 798e8499d1db0184d14defbd50e1e5bd0288e291..27a134ef37831c7a96d120e9ebb858edff9e928f 100644
---- a/src/Cloudflare/Workers/WorkerProvider.ts
-+++ b/src/Cloudflare/Workers/WorkerProvider.ts
-@@ -4223,4 +4223,4 @@ export const LiveWorkerProvider = () =>
-         // for changes a version can carry — code, bindings, compatibility
--        // settings, cache. Script-level settings in the upload metadata
--        // (tags, observability, limits, placement, logpush) keep their live
-+        // settings, cache, and placement. Script-level settings in the upload metadata
-+        // (tags, observability, limits, logpush) keep their live
-         // values until the next full deploy, matching
-@@ -4263,2 +4263,3 @@ export const LiveWorkerProvider = () =>
-                 cacheOptions: metadata.cacheOptions,
-+                placement: metadata.placement,
-                 annotations:
-@@ -5589,2 +5590,15 @@ export const LiveWorkerProvider = () =>
-             // can detect drift and converge deletions.
-+            // versionId is the last upload receipt, not the current traffic
-+            // deployment. Retain it only while the immutable version exists;
-+            // omitting it on every read creates false gradual-rollout drift.
-+            const uploadedVersionId = output?.versionId
-+              ? yield* workers.getScriptVersion({
-+                  accountId,
-+                  scriptName: workerName,
-+                  versionId: output.versionId,
-+                }).pipe(
-+                  Effect.map(() => output.versionId),
-+                  Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
-+                )
-+              : undefined;
-             const observeDomains = shouldObserveWorkerDomains(olds, output);
-@@ -5706,2 +5720,3 @@ export const LiveWorkerProvider = () =>
-               affinityZoneIds: output?.affinityZoneIds,
-+              versionId: uploadedVersionId,
-             } satisfies Worker["Attributes"];
-diff --git a/lib/Cloudflare/D1/ApplyMigrations.d.ts b/lib/Cloudflare/D1/ApplyMigrations.d.ts
-index 0c9935255b73ac427d76e4e1b19074aafabfcc0b..05f48c9b8e6cc4cd9715077675730399aebfd020 100644
---- a/lib/Cloudflare/D1/ApplyMigrations.d.ts
-+++ b/lib/Cloudflare/D1/ApplyMigrations.d.ts
-@@ -16,15 +16,13 @@ export interface D1QueryResult {
-         meta?: unknown;
-     }>;
- }
--export type D1SqlExecutor<E = unknown, R = never> = (sql: string) => Effect.Effect<D1QueryResult, E, R>;
-+export type D1SqlExecutor<E = unknown, R = never> = (sql: string | ReadonlyArray<string>) => Effect.Effect<D1QueryResult, E, R>;
- /**
-  * Adapt a raw D1 executor into the registry's {@link SqlExecutor} contract
-  * (see `src/SQL/Migrations/`). Parameters are inlined as SQL literals — the
-  * D1 HTTP protocol path here is raw-SQL-only, and the only parametrized
-- * queries are the migration formats' own bookkeeping. Batches join into a
-- * single multi-statement query: D1 over HTTP has no transactions, so one
-- * batched call is the closest available unit (matching wrangler's own
-- * behavior).
-+ * queries are the migration formats' own bookkeeping. Batches preserve statement boundaries so large schema baselines respect D1
-+ * per-statement limits. The migration ledger insert remains the final statement.
-  */
- export declare const makeD1MigrationExecutor: <E>(raw: D1SqlExecutor<E>) => SqlExecutor;
- //# sourceMappingURL=ApplyMigrations.d.ts.map
-\ No newline at end of file
-diff --git a/lib/Cloudflare/D1/ApplyMigrations.js b/lib/Cloudflare/D1/ApplyMigrations.js
-index 969249320fda95b2f0ce39544c0520db470bbc0f..1074086744ccbec108f902a35f353805227379e1 100644
---- a/lib/Cloudflare/D1/ApplyMigrations.js
-+++ b/lib/Cloudflare/D1/ApplyMigrations.js
-@@ -21,7 +21,7 @@ export const makeD1MigrationExecutor = (raw) => ({
-         .map((statement) => statement.trim())
-         .filter((statement) => statement.length > 0)
-         .map((statement) => statement.endsWith(";") ? statement : `${statement};`)
--        .join("\n")).pipe(Effect.asVoid, Effect.mapError((cause) => new MigrationError({
-+).pipe(Effect.asVoid, Effect.mapError((cause) => new MigrationError({
-         message: `D1 migration batch failed: ${String(cause)}`,
-         cause,
-     }))),
-diff --git a/lib/Cloudflare/D1/Database.js b/lib/Cloudflare/D1/Database.js
-index 47ddc1d0a5d82948677271089404794bc57f7e5d..1a32c209fd6fea0033c0b36c944e118c6df07f25 100644
---- a/lib/Cloudflare/D1/Database.js
-+++ b/lib/Cloudflare/D1/Database.js
-@@ -346,7 +346,7 @@ export const ProviderLive = () => Provider.succeed(Database, {
-                 stamped: stampedOf(output),
-                 withExecutor: (apply) => Effect.gen(function* () {
-                     const queryDb = yield* d1.queryDatabase;
--                    yield* apply(makeD1MigrationExecutor((sql) => queryDb({ accountId: acct, databaseId, sql })));
-+                    yield* apply(makeD1MigrationExecutor((sql) => queryDb({ accountId: acct, databaseId, ...(typeof sql === "string" ? { sql } : { batch: sql.map((statement) => ({ sql: statement })) }) })));
-                 }),
-             })
-             : undefined;
-diff --git a/lib/Cloudflare/D1/LocalD1Gateway.js b/lib/Cloudflare/D1/LocalD1Gateway.js
-index 043ef83248abccd0bd8d94856cd421b3e66c1ca1..33a54845df0930937d17ded598ea435375b36a07 100644
---- a/lib/Cloudflare/D1/LocalD1Gateway.js
-+++ b/lib/Cloudflare/D1/LocalD1Gateway.js
-@@ -96,5 +96,5 @@ export const withLocalD1Query = (databaseId, use) => Effect.scoped(Effect.gen(fu
-  * SQL-only view of {@link withLocalD1Query} matching the migration flow's
-  * {@link D1SqlExecutor} contract.
-  */
--export const withLocalD1Executor = (databaseId, use) => withLocalD1Query(databaseId, (query) => use((sql) => query({ sql })));
-+export const withLocalD1Executor = (databaseId, use) => withLocalD1Query(databaseId, (query) => use((sql) => query(typeof sql === "string" ? { sql } : { batch: sql.map((statement) => ({ sql: statement })) })));
- //# sourceMappingURL=LocalD1Gateway.js.map
-\ No newline at end of file
 diff --git a/src/Cloudflare/D1/ApplyMigrations.ts b/src/Cloudflare/D1/ApplyMigrations.ts
-index aa79c99b10f59988b7c92de5cf8bf8ef4473e2f5..ce74814c4974a3e2924a128d94a029914168200d 100644
+index aa79c99b10f59988b7c92de5cf8bf8ef4473e2f5..6957703e73501d94670dea7b58e19cc5bda586e4 100644
 --- a/src/Cloudflare/D1/ApplyMigrations.ts
 +++ b/src/Cloudflare/D1/ApplyMigrations.ts
-@@ -23,17 +23,15 @@ export interface D1QueryResult {
+@@ -1,3 +1,4 @@
++import * as CloudflareRetry from "@distilled.cloud/cloudflare/Retry";
+ import * as Effect from "effect/Effect";
+ import {
+   inlineSqlParams,
+@@ -23,17 +24,15 @@ export interface D1QueryResult {
  }
  
  export type D1SqlExecutor<E = unknown, R = never> = (
@@ -292,15 +312,27 @@ index aa79c99b10f59988b7c92de5cf8bf8ef4473e2f5..ce74814c4974a3e2924a128d94a02991
   */
  export const makeD1MigrationExecutor = <E>(
    raw: D1SqlExecutor<E>,
-@@ -65,7 +63,7 @@ export const makeD1MigrationExecutor = <E>(
+@@ -45,6 +44,7 @@ export const makeD1MigrationExecutor = <E>(
+         ? inlineSqlParams(sql, params, "sqlite")
+         : sql,
+     ).pipe(
++      CloudflareRetry.none,
+       Effect.map(
+         (result) =>
+           (result.result[0]?.results ?? []) as Array<Record<string, unknown>>,
+@@ -65,8 +65,11 @@ export const makeD1MigrationExecutor = <E>(
          .map((statement) =>
            statement.endsWith(";") ? statement : `${statement};`,
          )
 -        .join("\n"),
 +        ,
      ).pipe(
++      // A failed response does not establish whether the SQL committed.
++      // Metadata calls outside this executor keep their configured retries.
++      CloudflareRetry.none,
        Effect.asVoid,
        Effect.mapError(
+         (cause) =>
 diff --git a/src/Cloudflare/D1/Database.ts b/src/Cloudflare/D1/Database.ts
 index f8a163f50e9cdcc905198002d7f1f94b0b9cf527..d1257791407bc0cc53beca54641ec1fcb4250b5e 100644
 --- a/src/Cloudflare/D1/Database.ts
@@ -324,3 +356,64 @@ index a9c3f808684f40e0c391f480093052846412d065..72c78e2fa19d41d11cdbd3c2cfd03bbc
    use: (executor: D1SqlExecutor<LocalD1QueryError>) => Effect.Effect<A, E, R>,
 -) => withLocalD1Query(databaseId, (query) => use((sql) => query({ sql })));
 +) => withLocalD1Query(databaseId, (query) => use((sql) => query(typeof sql === "string" ? { sql } : { batch: sql.map((statement) => ({ sql: statement })) })));
+diff --git a/src/Cloudflare/D1/index.ts b/src/Cloudflare/D1/index.ts
+index 0b08cf0116755e477df07fedbc23fa7a980fdc0d..b69e799f1d245f36f9e8dbde4bffe71bc7a0cf1a 100644
+--- a/src/Cloudflare/D1/index.ts
++++ b/src/Cloudflare/D1/index.ts
+@@ -1,4 +1,5 @@
+ export * from "./Database.ts";
++export { makeD1MigrationExecutor } from "./ApplyMigrations.ts";
+ export * from "./QueryDatabase.ts";
+ export * from "./QueryDatabaseBinding.ts";
+ export * from "./QueryDatabaseLocal.ts";
+diff --git a/src/Cloudflare/Workers/WorkerProvider.ts b/src/Cloudflare/Workers/WorkerProvider.ts
+index 798e8499d1db0184d14defbd50e1e5bd0288e291..27a134ef37831c7a96d120e9ebb858edff9e928f 100644
+--- a/src/Cloudflare/Workers/WorkerProvider.ts
++++ b/src/Cloudflare/Workers/WorkerProvider.ts
+@@ -4221,8 +4221,8 @@ export const LiveWorkerProvider = () =>
+         // possible when the script already has a live deployment to split
+         // traffic against (otherwise the first deploy takes 100%), and only
+         // for changes a version can carry — code, bindings, compatibility
+-        // settings, cache. Script-level settings in the upload metadata
+-        // (tags, observability, limits, placement, logpush) keep their live
++        // settings, cache, and placement. Script-level settings in the upload metadata
++        // (tags, observability, limits, logpush) keep their live
+         // values until the next full deploy, matching
+         // `wrangler versions upload` semantics.
+         if (
+@@ -4261,6 +4261,7 @@ export const LiveWorkerProvider = () =>
+                 compatibilityDate: metadata.compatibilityDate,
+                 compatibilityFlags: metadata.compatibilityFlags,
+                 cacheOptions: metadata.cacheOptions,
++                placement: metadata.placement,
+                 annotations:
+                   news.version?.alias !== undefined ||
+                   news.version?.message !== undefined ||
+@@ -5587,6 +5588,19 @@ export const LiveWorkerProvider = () =>
+             // with this Worker — see readWorkerRoutes. Empty-array props
+             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
+             // can detect drift and converge deletions.
++            // versionId is the last upload receipt, not the current traffic
++            // deployment. Retain it only while the immutable version exists;
++            // omitting it on every read creates false gradual-rollout drift.
++            const uploadedVersionId = output?.versionId
++              ? yield* workers.getScriptVersion({
++                  accountId,
++                  scriptName: workerName,
++                  versionId: output.versionId,
++                }).pipe(
++                  Effect.map(() => output.versionId),
++                  Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
++                )
++              : undefined;
+             const observeDomains = shouldObserveWorkerDomains(olds, output);
+             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
+             const observeCrons = shouldObserveWorkerCrons(olds, output);
+@@ -5704,6 +5718,7 @@ export const LiveWorkerProvider = () =>
+               // (a getPhas call per known zone on every read); carry the
+               // cleanup list forward like any other stable cache.
+               affinityZoneIds: output?.affinityZoneIds,
++              versionId: uploadedVersionId,
+             } satisfies Worker["Attributes"];
+ 
+             // Centralized ownership decision: the engine routes `read`'s

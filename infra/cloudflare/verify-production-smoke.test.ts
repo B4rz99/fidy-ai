@@ -814,7 +814,7 @@ describe("intermediate production smoke", () => {
       )
   );
 
-  it("waits for candidate routing to converge without accepting fallback or changing the probe identity", () =>
+  it("does not replay a successful candidate response from the wrong Public version", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const bodies: string[] = [];
@@ -867,11 +867,8 @@ describe("intermediate production smoke", () => {
               );
             })
           );
-          expect(Exit.isSuccess(exit)).toBe(true);
-          expect(bodies).toHaveLength(3);
-          const candidateBodies = bodies.filter((body) => body.includes(publicCandidate));
-          expect(candidateBodies).toHaveLength(2);
-          expect(candidateBodies[1]).toBe(candidateBodies[0]);
+          expect(Exit.isFailure(exit)).toBe(true);
+          expect(bodies).toHaveLength(1);
         } finally {
           mockedFetch.mockRestore();
         }
@@ -935,10 +932,7 @@ describe("intermediate production smoke", () => {
                 );
               })
             );
-            expect(calls).toEqual([
-              "new-public/new-Core",
-              ...Array.from({ length: 7 }, () => "old-public/new-Core"),
-            ]);
+            expect(calls).toEqual(["new-public/new-Core", "old-public/new-Core"]);
             expect(Exit.isFailure(exit)).toBe(true);
           } finally {
             mockedFetch.mockClear();

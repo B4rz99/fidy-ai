@@ -1,15 +1,78 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import { makeD1MigrationExecutor } from "alchemy/Cloudflare/D1";
+import * as CloudflareCredentials from "@distilled.cloud/cloudflare/Credentials";
+import * as CloudflareRetry from "@distilled.cloud/cloudflare/Retry";
+import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Test from "alchemy/Test/Vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import type * as PlatformError from "effect/PlatformError";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import { it } from "@effect/vitest";
 import { expect } from "vitest";
+
+for (const operation of ["query", "batch", "metadata"] as const) {
+  it.effect(
+    `does not replay ambiguous migration SQL while retaining metadata retries: ${operation}`,
+    Effect.fn(function* () {
+      let attempts = 0;
+      const client = HttpClient.make((request) => {
+        attempts += 1;
+        const successfulResults = operation === "metadata" ? [] : [{ success: true, results: [] }];
+        const response =
+          attempts === 1
+            ? Response.json(
+                { success: false, errors: [{ code: 1000, message: "Ambiguous server failure" }] },
+                { status: 503 }
+              )
+            : Response.json({
+                success: true,
+                errors: [],
+                messages: [],
+                result: successfulResults,
+              });
+        return Effect.succeed(HttpClientResponse.fromWeb(request, response));
+      });
+      const outcome = yield* Effect.gen(function* () {
+        if (operation === "metadata") {
+          return yield* d1.listDatabases({ accountId: "0".repeat(32) });
+        }
+        // Capture the outer retry policy as the real provider does. The executor must
+        // override it at invocation, without changing unrelated metadata calls.
+        const query = yield* d1.queryDatabase;
+        const executor = makeD1MigrationExecutor((sql) =>
+          query({
+            accountId: "0".repeat(32),
+            databaseId: "11111111-1111-4111-8111-111111111111",
+            ...(typeof sql === "string"
+              ? { sql }
+              : { batch: sql.map((statement) => ({ sql: statement })) }),
+          })
+        );
+        return yield* operation === "batch"
+          ? executor.batch(["CREATE TABLE migration_probe (value INTEGER)"])
+          : executor.query("INSERT INTO migration_probe VALUES (1)");
+      }).pipe(
+        CloudflareRetry.policy({ while: () => true, schedule: Schedule.recurs(1) }),
+        Effect.exit,
+        Effect.provideService(HttpClient.HttpClient, client),
+        Effect.provideService(
+          CloudflareCredentials.Credentials,
+          Effect.succeed(CloudflareCredentials.apiTokenCredentials({ apiToken: "local-only" }))
+        )
+      );
+      expect(Exit.isFailure(outcome)).toBe(operation !== "metadata");
+      expect(attempts).toBe(operation === "metadata" ? 2 : 1);
+    })
+  );
+}
 
 const migrationsPath = new URL("../../apps/server/cloudflare/migrations/", import.meta.url)
   .pathname;

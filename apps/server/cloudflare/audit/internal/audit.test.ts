@@ -91,11 +91,21 @@ it("records only approved canonical-call metadata and never returns another User
         current,
         afterOwnerWrite: false,
       });
-      yield* attempt(() =>
+      const recorded = yield* attempt(() =>
         db
           .prepare(statement.sql)
           .bind(...statement.params)
           .run()
+      );
+      expect(recorded.meta.rows_written).toBe(8);
+      const mediaLookup = yield* attempt(() =>
+        db
+          .prepare("EXPLAIN QUERY PLAN SELECT id FROM audit_entries WHERE media_submission_id = ?")
+          .bind("unrelated-media")
+          .all()
+      );
+      expect(mediaLookup.results.map((row) => row.detail).join("\n")).toContain(
+        "USING INDEX audit_entries_media"
       );
       const audit = makeAudit({ database: db });
       const entries = yield* audit.query({ userId, limit: 10 });
@@ -526,3 +536,74 @@ it("bounds retention work and resumes the remaining expired evidence on the next
       ).toBe(true);
     })
   ));
+
+it.each(["audit", "media", "schema"] as const)(
+  "refuses an over-budget %s index rebuild before changing the retained index",
+  (kind) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* attempt(() =>
+          db.batch([
+            db.prepare("DROP INDEX audit_entries_media"),
+            db.prepare("CREATE INDEX audit_entries_media ON audit_entries(media_submission_id)"),
+          ])
+        );
+        if (kind === "audit") {
+          yield* attempt(() =>
+            db
+              .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10001)
+        INSERT INTO audit_entries(record_type,id,user_id,session_id,operation,outcome,occurred_at_ms)
+        SELECT 'session_call',printf('40000000-0000-4000-8000-%012d',i),?,?,'transactions.listTransactions','success',? FROM n`)
+              .bind(userId, sessionId, current)
+              .run()
+          );
+        } else if (kind === "media") {
+          yield* attempt(() =>
+            db
+              .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<101)
+        INSERT INTO media_submissions(id,user_id,portfolio_id,bsuid,message_id,input_digest,accepted_at_ms,expires_at_ms,service_market,locale,time_zone,capacity_held)
+        SELECT 'media-'||i,?,'portfolio','sender','message-'||i,'digest',?,?,'CO','es-CO','UTC',0 FROM n`)
+              .bind(userId, current, current + 2592000000)
+              .run()
+          );
+          yield* attempt(() =>
+            db
+              .prepare(`INSERT INTO audit_entries(record_type,id,user_id,outcome,occurred_at_ms)
+        SELECT 'media_admission',id,user_id,'accepted',accepted_at_ms FROM media_submissions`)
+              .run()
+          );
+        } else {
+          yield* attempt(() =>
+            db.batch(
+              Array.from({ length: 800 }, (_, index) =>
+                db.prepare(`CREATE TABLE budget_guard_${index}(value INTEGER) STRICT`)
+              )
+            )
+          );
+        }
+        const before = yield* attempt(() =>
+          db.prepare("SELECT sql FROM sqlite_schema WHERE name='audit_entries_media'").first("sql")
+        );
+        const migration = yield* attempt(() =>
+          Bun.file(new URL("../../migrations/0006_audit_media_index.sql", import.meta.url)).text()
+        );
+        const applied = yield* Effect.tryPromise(() =>
+          db.batch(migration.split("--> statement-breakpoint").map((sql) => db.prepare(sql.trim())))
+        ).pipe(Effect.result);
+        expect(applied._tag).toBe("Failure");
+        expect(
+          yield* attempt(() =>
+            db
+              .prepare("SELECT sql FROM sqlite_schema WHERE name='audit_entries_media'")
+              .first("sql")
+          )
+        ).toBe(before);
+        expect(
+          yield* attempt(() =>
+            db.prepare("SELECT count(*) AS total FROM audit_entries").first("total")
+          )
+        ).toBe({ audit: 10001, media: 101, schema: 0 }[kind]);
+      })
+    )
+);

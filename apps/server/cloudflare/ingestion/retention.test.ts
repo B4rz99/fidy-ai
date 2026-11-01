@@ -163,6 +163,13 @@ it("media retention drains fixed-size batches at the exact content and accountab
           owner: other,
         })
       );
+      yield* io(() =>
+        db
+          .prepare(`INSERT INTO audit_entries(record_type,id,user_id,outcome,occurred_at_ms)
+          SELECT 'media_admission',id,user_id,'accepted',accepted_at_ms FROM media_submissions
+          WHERE id IN ('content-1','archive-1','foreign-live-1')`)
+          .run()
+      );
       yield* sweepMediaSubmissions({ db, now: now - 1 });
       expect(
         yield* io(() =>
@@ -192,6 +199,13 @@ it("media retention drains fixed-size batches at the exact content and accountab
           db.prepare("SELECT user_id FROM media_submissions WHERE capacity_held=1").first("user_id")
         )
       ).toBe(other);
+      expect(
+        yield* io(() =>
+          db
+            .prepare("SELECT id FROM audit_entries WHERE record_type='media_admission' ORDER BY id")
+            .all()
+        )
+      ).toMatchObject({ results: [{ id: "content-1" }, { id: "foreign-live-1" }] });
       const repeated = observeRetentionCost(db);
       yield* sweepMediaSubmissions({ db: repeated.database, now });
       expect(repeated.cost().rowsWritten).toBe(0);

@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import { type Cause, Effect } from "effect";
+import { type Cause, DateTime, Effect } from "effect";
 import { signInRecurringThroughCore } from "./real-core-fixture";
 import { apiOrigin } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
@@ -511,7 +511,11 @@ test("pause, resume and stop survive reload", ({ page, request }) =>
           identity: "recurringLifecycle",
         })
       );
-      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      // Pause and stop preserve historical occurrences; inspect a future month instead.
+      const month = DateTime.formatIsoDate(
+        DateTime.add(DateTime.startOf(DateTime.nowUnsafe(), "month"), { months: 1 })
+      ).slice(0, "2026-01".length);
+      yield* Effect.tryPromise(() => page.goto(`/app/recurring?month=${month}`));
       yield* createPlan({
         page,
         name: "Ciclo de seguimiento",

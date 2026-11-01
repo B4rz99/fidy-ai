@@ -430,15 +430,24 @@ it("linearizes parallel PAT and OAuth mutation admission at the last Free canoni
 it("resets the shared OAuth and PAT allowance at the exact Bogota month boundary without recharging live retries", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const instant = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-01T04:59:59.999Z"));
+      // D1 checks code expiry against its native clock, so credential setup cannot run in the past.
+      const month = DateTime.startOf(
+        DateTime.setZone(yield* DateTime.now, DateTime.zoneMakeNamedUnsafe("America/Bogota")),
+        "month"
+      );
+      const boundary = DateTime.toUtc(DateTime.add(month, { months: 1 }));
+      const instant = DateTime.toEpochMillis(boundary) - 1;
+      const resetsAt = DateTime.formatIso(boundary);
+      const nextResetsAt = DateTime.formatIso(DateTime.toUtc(DateTime.add(month, { months: 2 })));
+      expect(resetsAt).toMatch(/T05:00:00\.000Z$/u);
       const clock = vi.spyOn(Date, "now").mockReturnValue(instant);
       const fixture = yield* approvedFixture({
         scopes: ["read", "write"],
         lifetimeDays: 7,
       });
-      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
-        yield* wait((yield* wait(exchangeFixture(fixture))).json())
-      );
+      const exchange = yield* wait(exchangeFixture(fixture));
+      expect(exchange.status).toBe(200);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(yield* wait(exchange.json()));
       const patBearer = yield* allowancePAT(fixture);
       yield* seedCanonicalConsumption(fixture.db, 49);
       const call = (): Promise<Response> =>
@@ -455,7 +464,7 @@ it("resets the shared OAuth and PAT allowance at the exact Bogota month boundary
         result: {
           isError: false,
           _meta: {
-            "co.fidy/canonicalAllowance": { remaining: "0", resetsAt: "2026-11-01T05:00:00.000Z" },
+            "co.fidy/canonicalAllowance": { remaining: "0", resetsAt },
           },
         },
       });
@@ -472,7 +481,7 @@ it("resets the shared OAuth and PAT allowance at the exact Bogota month boundary
       expect(yield* wait(refused.json())).toMatchObject({
         result: {
           structuredContent: {
-            error: { code: "quota_exhausted", resetsAt: "2026-11-01T05:00:00.000Z" },
+            error: { code: "quota_exhausted", resetsAt },
           },
         },
       });
@@ -482,7 +491,7 @@ it("resets the shared OAuth and PAT allowance at the exact Bogota month boundary
         result: {
           isError: false,
           _meta: {
-            "co.fidy/canonicalAllowance": { remaining: "50", resetsAt: "2026-12-01T05:00:00.000Z" },
+            "co.fidy/canonicalAllowance": { remaining: "50", resetsAt: nextResetsAt },
           },
         },
       });

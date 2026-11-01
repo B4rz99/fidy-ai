@@ -4,6 +4,7 @@ import {
   type AllowanceKind,
   type AllowanceMeter,
   type AllowancePeriod,
+  type QuotaStatus,
   freeAllowanceLimits,
 } from "./contract";
 
@@ -19,24 +20,39 @@ export const allowancePeriod = (now: DateTime.Utc): AllowancePeriod => {
   };
 };
 
-/** Projects a decoded consumption count without granting authorization or reserving capacity. */
-export const allowanceMeter = (
+/** Projects four decoded counts under one calendar period, without granting authority or capacity. */
+export const projectQuotaStatus = (
   input: Readonly<{
-    allowance: AllowanceKind;
     accessTier: AccessTier;
-    consumed: number;
+    consumed: Readonly<Record<AllowanceKind, number>>;
     now: DateTime.Utc;
   }>
-): AllowanceMeter =>
-  input.accessTier === "pro"
-    ? { _tag: "Uncapped" }
-    : {
-        _tag: "Limited",
-        limit: limits[input.allowance],
-        consumed: input.consumed,
-        remaining: Math.max(0, limits[input.allowance] - input.consumed),
-        period: allowancePeriod(input.now),
-      };
+): QuotaStatus => {
+  if (input.accessTier === "pro") {
+    return {
+      accessTier: "pro",
+      forwardedEmails: { _tag: "Uncapped" },
+      mediaSubmissions: { _tag: "Uncapped" },
+      hostedHistoryTurns: { _tag: "Uncapped" },
+      canonicalCalls: { _tag: "Uncapped" },
+    };
+  }
+  const period = allowancePeriod(input.now);
+  const meter = (allowance: AllowanceKind): AllowanceMeter => ({
+    _tag: "Limited",
+    limit: limits[allowance],
+    consumed: input.consumed[allowance],
+    remaining: Math.max(0, limits[allowance] - input.consumed[allowance]),
+    period,
+  });
+  return {
+    accessTier: "free",
+    forwardedEmails: meter("forwarded_email"),
+    mediaSubmissions: meter("media_submission"),
+    hostedHistoryTurns: meter("hosted_history_turn"),
+    canonicalCalls: meter("canonical_call"),
+  };
+};
 
 /** Decides one new unit after replay handling. A caller must recheck the cap with its guarded acceptance commit. */
 export const decideConsumption = (

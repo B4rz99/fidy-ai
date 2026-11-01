@@ -36,6 +36,7 @@ import {
 } from "../../canonical-operations/contract";
 
 const DocumentJson = Schema.fromJsonString(Schema.toCodecJson(DashboardDocument));
+const encodeDashboardView = Schema.encodeEffect(Schema.toCodecJson(DashboardView));
 type MutationContext = Readonly<{
   db: D1Database;
   subject: TransactionCaller;
@@ -345,6 +346,6 @@ export const projectDashboardValue = ({
     return Option.some({
       _tag: "Owner" as const,
       payload: view,
-      encode: () => Schema.encodeEffect(Schema.toCodecJson(DashboardView))(view),
+      encode: () => encodeDashboardView(view),
     });
   }).pipe(Effect.orElseSucceed(() => Option.none()));

@@ -1,6 +1,6 @@
 import {
   prepareChangedRowAssertion,
-  prepareReservedChangeAssertion,
+  prepareReservedChangeCheck,
 } from "../../../src/shell/sql-assertions/operations";
 import { Effect, Option } from "effect";
 import type { AuthenticatedWebSession, BoundWebSessionLookup } from "../../web-session/contract";
@@ -45,7 +45,7 @@ export const prepareBoundBrowserSnapshot = ({
         policy.intervalMs,
         current + (policy.burst - 1) * policy.intervalMs
       ),
-    prepareReservedChangeAssertion({ db, scope: "canonical_request", reservation: statement }),
+    prepareReservedChangeCheck({ db, scope: "canonical_request", reservation: statement }),
     db.prepare(statement.sql).bind(...statement.params),
   ];
 };
@@ -78,7 +78,7 @@ const prepareBoundBrowserRequest = ({
         policy.intervalMs,
         current + (policy.burst - 1) * policy.intervalMs
       ),
-    prepareReservedChangeAssertion({
+    prepareReservedChangeCheck({
       db,
       scope: "canonical_request",
       reservation: {

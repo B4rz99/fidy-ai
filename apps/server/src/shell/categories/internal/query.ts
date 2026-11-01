@@ -4,6 +4,7 @@ import type { OwnedStatement } from "~/shell/owner-write/contract";
 import type { ListCategoriesResponse } from "~/shell/categories/contract";
 
 const maximumCategoryCount = 100;
+const decodeCategoryRows = Schema.decodeUnknownOption(Schema.Array(Category));
 
 type Authority = Readonly<{
   table: "pats" | "web_sessions" | "oauth_credentials" | "hosted_turns";
@@ -23,7 +24,7 @@ export const categoryRowsQuery = (authority?: Authority): OwnedStatement => ({
 export const categoryResponseFromRows = (
   rows: unknown
 ): Option.Option<typeof ListCategoriesResponse.Type> => {
-  const categories = Schema.decodeUnknownOption(Schema.Array(Category))(rows);
+  const categories = decodeCategoryRows(rows);
   return Option.flatMap(categories, (decoded) =>
     decoded.length <= maximumCategoryCount
       ? Option.some({ data: decoded, next: [] as const })

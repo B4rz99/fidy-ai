@@ -4,6 +4,8 @@ import { Effect } from "effect";
 import {
   prepareChangedRowAssertion,
   preparePredicateAssertion,
+  preparePredicateCheck,
+  prepareReservedChangeCheck,
 } from "../src/shell/sql-assertions/operations";
 import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
 
@@ -91,6 +93,11 @@ it.live("keeps specialized assertion failures atomic within each scope", () =>
       ["recurring_cursor", "recurring_cursor_changed"],
     ] as const;
     for (const [scope, failure] of failures) {
+      const checked = yield* run(() =>
+        db.batch([preparePredicateCheck({ db, scope, predicate: { sql: "SELECT 1", params: [] } })])
+      );
+      expect(checked[0]?.meta.changes).toBe(0);
+      expect(checked[0]?.meta.rows_written).toBe(0);
       expect(
         yield* run(() =>
           db
@@ -104,6 +111,18 @@ it.live("keeps specialized assertion failures atomic within each scope", () =>
           db.batch([
             db.prepare("UPDATE records SET value='partial' WHERE id='purchase'"),
             preparePredicateAssertion({
+              db,
+              scope,
+              predicate: { sql: "SELECT 1 WHERE 0", params: [] },
+            }),
+          ])
+        ).rejects.toThrow(failure)
+      );
+      yield* run(() =>
+        expect(
+          db.batch([
+            db.prepare("UPDATE records SET value='partial' WHERE id='purchase'"),
+            preparePredicateCheck({
               db,
               scope,
               predicate: { sql: "SELECT 1 WHERE 0", params: [] },
@@ -125,4 +144,51 @@ it.live("keeps specialized assertion failures atomic within each scope", () =>
     ).toBe("original");
     expect((yield* run(() => db.prepare("PRAGMA foreign_key_check").all())).results).toEqual([]);
   })
+);
+
+it.live(
+  "checks a reserved change without a successful write and preserves rollback on failure",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* run(() => databases.acquire());
+      yield* run(() => installTestSchema({ db }));
+      const check = (): D1PreparedStatement =>
+        prepareReservedChangeCheck({
+          db,
+          scope: "canonical_request",
+          reservation: { sql: "SELECT 1", params: [] },
+        });
+      const accepted = yield* run(() =>
+        db.batch([
+          db.prepare("CREATE TABLE records(id TEXT PRIMARY KEY,value TEXT NOT NULL) STRICT"),
+          db.prepare("INSERT INTO records VALUES('purchase','original')"),
+          check(),
+        ])
+      );
+      expect(accepted[2]?.meta.changes).toBe(0);
+      expect(accepted[2]?.meta.rows_written).toBe(0);
+      yield* run(() =>
+        expect(
+          db.batch([
+            db.prepare("UPDATE records SET value='partial' WHERE id='purchase'"),
+            db.prepare("UPDATE records SET value='absent' WHERE id='missing'"),
+            check(),
+          ])
+        ).rejects.toThrow("canonical_request_rate")
+      );
+      const missingReservation = yield* run(() =>
+        db.batch([
+          db.prepare("UPDATE records SET value='absent' WHERE id='missing'"),
+          prepareReservedChangeCheck({
+            db,
+            scope: "canonical_request",
+            reservation: { sql: "SELECT 1 WHERE 0", params: [] },
+          }),
+        ])
+      );
+      expect(missingReservation[1]?.meta.rows_written).toBe(0);
+      expect(
+        yield* run(() => db.prepare("SELECT value FROM records WHERE id='purchase'").first("value"))
+      ).toBe("original");
+    })
 );

@@ -16,7 +16,7 @@ export const mountWebApplication = (): void => {
   );
   Promise.all([import("./render"), import("@/transport/initial-session")])
     .then(([{ mountWebApplication, preloadWebRouteCode }, { beginInitialBrowserSession }]) => {
-      preloadWebRouteCode().catch(() => undefined);
+      preloadWebRouteCode(window.location.pathname).catch(() => undefined);
       const initial = beginInitialBrowserSession({ ...request, request });
       return ready.promise.then(() => {
         const root = document.querySelector("#root");

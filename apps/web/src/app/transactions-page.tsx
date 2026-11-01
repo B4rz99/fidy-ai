@@ -12,6 +12,9 @@ import { AccessRefused, SignedInContent } from "@/features/signed-in/feature";
 import { HostedAgentFeature } from "@/features/agent/feature";
 import { PrivacyTransactionFeature, TransactionListFeature } from "@/features/transactions/feature";
 
+// Fetch presentation with this route's code while its unchanged query owners check live access.
+TransactionListFeature.preload().catch(() => undefined);
+
 const currentConsent = <E,>(
   state: CanonicalQueryState<ProcessingConsentStatus, E>
 ): Option.Option<ProcessingConsentStatus> =>

@@ -19,7 +19,7 @@ const bootstrapModules = [
   "/apps/web/src/session/authentication-channel.ts",
 ];
 const sharedRuntimeModule = (id: string): boolean => {
-  const path = id.replaceAll("\\", "/").split("?")[0];
+  const path = id.replaceAll("\\", "/").replace(/\?.*$/u, "");
   if (bootstrapModules.some((suffix) => path.endsWith(suffix))) return false;
   return (
     /\/apps\/server\/src\/|node_modules\/(?:effect|@effect|react|react-dom|scheduler|@tanstack|@base-ui|@hugeicons|@floating-ui|sonner|clsx|class-variance-authority|tailwind-merge|use-sync-external-store|use-stick-to-bottom)\//u.test(

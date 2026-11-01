@@ -57,6 +57,16 @@ jobs:
             cat scripts/check-ci-results.sh
             echo 'FIDY_REQUIRED_CHECK_SCRIPT'
           } >> "$GITHUB_OUTPUT"
+      - name: Restore pinned source scanner image
+        if: ${{ steps.plan.outputs.security-sast == 'true' }}
+        id: scanner-image
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: /tmp/fidy-source-scanner.tar
+          key: ${{ runner.os }}-${{ runner.arch }}-source-scanner-v1-4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167
+      - name: Load pinned source scanner image
+        if: ${{ steps.plan.outputs.security-sast == 'true' && steps.scanner-image.outputs.cache-hit == 'true' }}
+        run: docker load --input /tmp/fidy-source-scanner.tar
       - name: Scan source partition 1 on this existing runner
         if: ${{ steps.plan.outputs.security-sast == 'true' }}
         env:
@@ -526,6 +536,16 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-runtime
+      - name: Restore pinned source scanner image
+        if: ${{ needs.changes.outputs.security-sast == 'true' }}
+        id: scanner-image
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: /tmp/fidy-source-scanner.tar
+          key: ${{ runner.os }}-${{ runner.arch }}-source-scanner-v1-4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167
+      - name: Load pinned source scanner image
+        if: ${{ needs.changes.outputs.security-sast == 'true' && steps.scanner-image.outputs.cache-hit == 'true' }}
+        run: docker load --input /tmp/fidy-source-scanner.tar
       - name: Start source partition 3 on this existing runner
         id: source-scan
         if: ${{ needs.changes.outputs.security-sast == 'true' }}
@@ -551,6 +571,9 @@ jobs:
           docker logs fidy-source-scan
           docker rm fidy-source-scan
           [[ "$result" == 0 ]]
+      - name: Retain pinned source scanner image
+        if: ${{ needs.changes.outputs.security-sast == 'true' && steps.scanner-image.outputs.cache-hit != 'true' }}
+        run: docker save --output /tmp/fidy-source-scanner.tar docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167
 
   cli-native:
     needs: [changes, cli-native-package]

@@ -24,8 +24,9 @@ for (const provider of ["google", "microsoft"] as const) {
           })
         );
         yield* wait(
-          context.route(/\/assets\/(?:render|initial-session)-[^/]+\.js$/u, (route) =>
-            route.abort("blockedbyclient")
+          context.route(
+            /\/assets\/(?:render|initial-session|shared-runtime)-[^/]+\.js$/u,
+            (route) => route.abort("blockedbyclient")
           )
         );
         yield* wait(

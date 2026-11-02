@@ -673,7 +673,9 @@ fragment, separate from editable Transaction facts. Page-local search covers dis
 available fragments, with visible scope guidance and no search-word highlighting. Selection and
 open controls reuse the source reference and describe the unconfirmed fragment. Missing fragments
 and expired originals have explicit text; expired fragments disappear from search and accessible
-descriptions as well as the visible list.
+descriptions as well as the visible list. Email references include the retained receipt date/time.
+When an email has no excerpt, its row directs the User to search the opened original; that search
+filters loaded lines without highlighting and states its scope explicitly.
 
 The pattern composes the actual Input, Currency selector, category choices, calendar and
 time controls. `CalendarField appearance="review"` changes only the compact Spanish date

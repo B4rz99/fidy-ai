@@ -1,12 +1,11 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
-import { useState } from "react";
 import type { CanonicalSuccess } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { useReviewPageExpiry } from "./expiry";
-import { reviewWorkspaceKey } from "./query-keys";
-import type { Item } from "./model";
+import { reviewContextKey } from "./query-keys";
+import { type Item, received } from "./model";
 import type { Filter } from "./view-navigation";
 
 export type SourceContext =
@@ -29,16 +28,18 @@ export const useReviewPageContext = ({
   refresh: () => void;
 }> => {
   const client = useRouter().options.context.apiClient;
-  const [query] = useState(() =>
-    client.query("ingestion", "getReviewPageContext", {
-      query: {
-        status: Option.some(filter),
-        offset: page === 0 ? Option.none() : Option.some(page),
-      },
-      reactivityKeys: ["ingestion-review", reviewWorkspaceKey],
-      timeToLive: "400 millis",
-    })
-  );
+  const query = client.query("ingestion", "getReviewPageContext", {
+    query: {
+      status: Option.some(filter),
+      offset: page === 0 ? Option.none() : Option.some(page),
+    },
+    reactivityKeys: [
+      "ingestion-review",
+      reviewContextKey,
+      `review-page:${items.map((item) => item.id).join(",")}`,
+    ],
+    timeToLive: "400 millis",
+  });
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   const entries = state._tag === "Ready" ? state.value.data.items : [];
@@ -75,3 +76,26 @@ export const sourceExcerpt = ({
     Option.flatMap((entry) => entry.excerpt),
     Option.filter((text) => text.trim() !== "")
   );
+
+export const sourceReference = ({
+  item,
+  context,
+  position,
+}: Readonly<{
+  item: Item;
+  context: Option.Option<SourceContext>;
+  position: number;
+}>): string => {
+  const reference = Option.match(context, {
+    onNone: () => `Elemento ${position}`,
+    onSome: (entry) => entry.reference,
+  });
+  if (item.source !== "email") return reference;
+  return Option.match(
+    Option.flatMap(context, (entry) => entry.receivedAt),
+    {
+      onNone: () => reference,
+      onSome: (time) => `${reference} · Recibido ${received({ item, time })}`,
+    }
+  );
+};

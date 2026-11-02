@@ -1,4 +1,4 @@
-import { type PageContexts, sourceExcerpt } from "./source-context";
+import { type PageContexts, sourceExcerpt, sourceReference } from "./source-context";
 import { useId } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { File01Icon, Image01Icon, Mail01Icon } from "@hugeicons/core-free-icons";
@@ -80,12 +80,13 @@ const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>)
   const description = useId();
   const context = Option.fromUndefinedOr(props.contexts.get(item.id));
   const position = props.page + props.view.items.indexOf(item) + 1;
-  const reference = Option.match(context, {
-    onNone: () => `Elemento ${position}`,
-    onSome: (entry) => entry.reference,
-  });
+  const reference = sourceReference({ item, context, position });
   const excerpt = sourceExcerpt({ item, context });
-  const evidenceLabel = contextState(expired, props.contextLoading);
+  const evidenceLabel = contextState({
+    expired,
+    loading: props.contextLoading,
+    source: item.source,
+  });
   const actionable = ["pending", "skipped"].includes(item.status);
   return (
     <div data-review="inbox-row" data-active={Option.contains(props.selected, item.id)}>
@@ -133,9 +134,16 @@ const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>)
   );
 };
 
-const contextState = (expired: boolean, loading: boolean): string => {
+const contextState = ({
+  expired,
+  loading,
+  source,
+}: Readonly<{ expired: boolean; loading: boolean; source: Item["source"] }>): string => {
   if (expired) return "Original vencido";
-  return loading ? "Cargando contexto…" : "Sin fragmento disponible";
+  if (loading) return "Cargando contexto…";
+  return source === "email"
+    ? "Sin fragmento disponible. Abre el correo para buscar en su original."
+    : "Sin fragmento disponible";
 };
 
 const RowContext = ({

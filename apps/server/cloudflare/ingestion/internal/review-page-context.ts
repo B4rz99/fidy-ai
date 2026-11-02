@@ -22,6 +22,7 @@ const ContextRow = Schema.Struct({
   id: Schema.String,
   record_number: Schema.OptionFromNullOr(Schema.Int),
   expires_at_ms: Schema.Finite,
+  received_at_ms: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
   excerpt: Schema.OptionFromNullOr(Schema.String),
 });
 
@@ -80,7 +81,7 @@ const contextSql = (filter: string): string => `WITH page AS MATERIALIZED (
         SELECT id,user_id,expires_at_ms FROM (
           ${reviewRelation}
         ) WHERE ${filter} ORDER BY expires_at_ms,id LIMIT ? OFFSET ?
-      ) SELECT p.id,r.record_number,p.expires_at_ms,
+      ) SELECT p.id,r.record_number,p.expires_at_ms,e.received_at_ms,
         CASE WHEN p.expires_at_ms > ? AND (r.source_kind='media' OR r.evidence_state='retained') THEN
           substr(CASE
             WHEN r.source_kind='media' AND m.expires_at_ms > ? THEN m.caption
@@ -94,6 +95,7 @@ const contextSql = (filter: string): string => `WITH page AS MATERIALIZED (
             ELSE r.original_evidence END,1,?) ELSE NULL END AS excerpt
         FROM page p JOIN ingestion_review_items r ON r.user_id=p.user_id AND r.id=p.id
         LEFT JOIN media_submissions m ON m.user_id=r.user_id AND m.id=r.media_submission_id
+        LEFT JOIN forwarded_email_receipts e ON e.user_id=r.user_id AND e.id=r.email_receipt_id
         ORDER BY p.expires_at_ms,p.id`;
 
 const projectContext = (
@@ -106,6 +108,10 @@ const projectContext = (
     onSome: (number) => `Fila ${number}`,
   }),
   expiresAt: DateTime.formatIso(DateTime.makeUnsafe(row.expires_at_ms)),
+  ...Option.match(row.received_at_ms, {
+    onNone: () => ({}),
+    onSome: (receivedAt) => ({ receivedAt: DateTime.formatIso(receivedAt) }),
+  }),
   ...(row.expires_at_ms > transactionNow()
     ? Option.match(row.excerpt, {
         onNone: () => ({}),

@@ -91,6 +91,7 @@ export const ReviewPageContext = Schema.Struct({
     Schema.Struct({
       id: NeedsReviewItemId,
       reference: Schema.NonEmptyString,
+      receivedAt: Schema.OptionFromOptionalKey(UtcTimestamp),
       expiresAt: UtcTimestamp,
       excerpt: Schema.OptionFromOptionalKey(
         Schema.String.check(Schema.isMaxLength(maximumReviewExcerptCharacters))

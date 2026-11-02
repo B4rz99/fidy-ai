@@ -4,7 +4,12 @@ import { type ReviewDecisions, type ReviewWorkspaceQuery, makeReviewDecisions } 
 import { ReviewFullState, ReviewWorkspaceLayout } from "@/ui/components/review-workspace";
 import { Button } from "@/ui/components/button";
 import { type InboxControl, useInboxControl } from "./inbox-controller";
-import { type PageContexts, sourceExcerpt, useReviewPageContext } from "./source-context";
+import {
+  type PageContexts,
+  sourceExcerpt,
+  sourceReference,
+  useReviewPageContext,
+} from "./source-context";
 import { reviewAmount, reviewTitle } from "./presentation";
 import { ReviewToolbar } from "./toolbar";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
@@ -291,10 +296,7 @@ const ReadyInboxView = ({
         filter={filter}
         select={select}
         count={Option.some(view.pendingCount)}
-        refresh={() => {
-          control.recover();
-          context.refresh();
-        }}
+        refresh={control.recover}
         source={source}
         setSource={(value) => {
           control.clearChecked();
@@ -411,13 +413,17 @@ const filterReviewPage = ({
 }>): Workspace => ({
   ...view,
   items: view.items.filter(
-    (item) =>
+    (item, index) =>
       (source === "all" || item.source === source) &&
       [
         reviewTitle(item),
         reviewAmount(item),
         sources[item.source],
-        contexts.get(item.id)?.reference ?? "",
+        sourceReference({
+          item,
+          context: Option.fromUndefinedOr(contexts.get(item.id)),
+          position: index + 1,
+        }),
         Option.getOrElse(
           sourceExcerpt({ item, context: Option.fromUndefinedOr(contexts.get(item.id)) }),
           () => ""

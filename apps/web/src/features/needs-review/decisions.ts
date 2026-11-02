@@ -1,4 +1,4 @@
-import { reviewCountKey, reviewItemKey, reviewWorkspaceKey } from "./query-keys";
+import { reviewContextKey, reviewCountKey, reviewItemKey, reviewWorkspaceKey } from "./query-keys";
 import {
   Cause,
   type Context,
@@ -24,7 +24,7 @@ const invalidateItems = ({
   Reactivity.invalidate([
     reviewWorkspaceKey,
     ...ids.map(reviewItemKey),
-    ...(countsChanged ? [reviewCountKey] : []),
+    ...(countsChanged ? [reviewCountKey, reviewContextKey] : []),
   ]);
 type Completion = Readonly<{ ids: ReadonlyArray<Item["id"]> }>;
 export type ReviewEditorState = Readonly<{
@@ -459,7 +459,7 @@ const recoverWorkspace = (owner: Owner): void => {
       if (succeeded) {
         owner.phase = "idle";
         owner.feedback = "";
-        yield* Reactivity.invalidate([reviewCountKey]);
+        yield* Reactivity.invalidate([reviewCountKey, reviewContextKey]);
       } else failBulk(owner);
       notify(owner);
     })

@@ -18735,6 +18735,9 @@
                               "id": {
                                 "$ref": "#/components/schemas/NeedsReviewItemId"
                               },
+                              "receivedAt": {
+                                "$ref": "#/components/schemas/UtcTimestamp"
+                              },
                               "reference": {
                                 "minLength": 1,
                                 "type": "string"

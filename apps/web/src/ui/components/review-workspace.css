@@ -755,3 +755,13 @@
     gap: 16px;
   }
 }
+
+[data-review="original-search"] {
+  display: grid;
+  gap: 12px;
+}
+[data-review="original-search"] > :is(p, output) {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  line-height: 1.7;
+}

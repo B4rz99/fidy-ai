@@ -79,6 +79,7 @@ material. A separate WebSession-only `ingestion.getReviewPageContext` read share
 and order, materializes at most 50 owned identities before inspecting retained evidence, and clips
 source excerpts to 180 characters inside D1. CSV records, up to sixteen XLSX cell displays and
 retained image captions supply unconfirmed context without another stored index or R2 fan-out.
+Email receipt timestamps provide source metadata without reading retained email objects.
 The query commits live authority and metadata-only Audit with its read, suppresses expired evidence,
 and returns no-store browser data; originals and excerpts stay out of agent queries and transcripts.
 Browser User responses can carry the bounded Category display catalog through its

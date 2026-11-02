@@ -4483,6 +4483,10 @@ it("presents spreadsheet cells and retained image captions as unconfirmed source
           .run()
       );
       yield* admitReviewImage(runtime);
+      const receivedAt = yield* Clock.currentTimeMillis;
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(receivedAt);
+      yield* admitReviewEmail(runtime);
       const read = yield* fromTestPromise(() =>
         send(
           runtime,
@@ -4504,6 +4508,9 @@ it("presents spreadsheet cells and retained image captions as unconfirmed source
       );
       expect(context.data.items).toContainEqual(
         expect.objectContaining({ excerpt: Option.some("Un comprobante") })
+      );
+      expect(context.data.items).toContainEqual(
+        expect.objectContaining({ receivedAt: Option.some(DateTime.makeUnsafe(receivedAt)) })
       );
     })
   ));

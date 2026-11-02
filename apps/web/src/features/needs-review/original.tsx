@@ -1,3 +1,4 @@
+import { Input } from "@/ui/components/input";
 import { TextSkeleton } from "@/ui/components/loading-skeletons";
 import { reviewMaterialQuery } from "./material-query";
 import { useReviewExpired } from "./expiry";
@@ -7,7 +8,7 @@ import type { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess } from "@/transport/client";
 import { useAtomMount, useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { type JSX, useState } from "react";
+import { type JSX, useId, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import type { Item } from "./model";
@@ -68,7 +69,11 @@ const RetainedMaterial = ({
         <HugeiconsIcon icon={ArrowDown01Icon} size={16} aria-hidden="true" />
       </summary>
       <div data-review="original-body">
-        {state._tag === "Ready" ? <MaterialBody material={state.value.data} /> : unavailable}
+        {state._tag === "Ready" ? (
+          <MaterialBody material={state.value.data} searchable={item.source === "email"} />
+        ) : (
+          unavailable
+        )}
         {state._tag === "Failure" ? (
           <Button type="button" variant="outline" onClick={refresh}>
             Reintentar original
@@ -86,8 +91,10 @@ const RetainedMaterial = ({
 type Material = CanonicalSuccess<"ingestion.getReviewMaterial">["data"];
 const MaterialBody = ({
   material,
+  searchable,
 }: Readonly<{
   material: Material;
+  searchable: boolean;
 }>): JSX.Element => {
   if (!material.available) {
     return (
@@ -100,12 +107,53 @@ const MaterialBody = ({
   }
   return (
     <>
-      <pre className="max-h-[45svh] lg:max-h-[calc(100dvh-29rem)] overflow-auto whitespace-pre-wrap break-words font-sans text-sm leading-7 [overflow-wrap:anywhere]">
-        {material.text}
-      </pre>
+      {searchable ? (
+        <SearchableOriginal text={material.text} />
+      ) : (
+        <OriginalText text={material.text} />
+      )}
       {material.truncated ? (
         <p className="mt-3 text-sm text-muted-foreground">Vista previa recortada.</p>
       ) : null}
     </>
+  );
+};
+
+const OriginalText = ({ text }: Readonly<{ text: string }>): JSX.Element => (
+  <pre className="max-h-[45svh] lg:max-h-[calc(100dvh-29rem)] overflow-auto whitespace-pre-wrap break-words font-sans text-sm leading-7 [overflow-wrap:anywhere]">
+    {text}
+  </pre>
+);
+
+const SearchableOriginal = ({ text }: Readonly<{ text: string }>): JSX.Element => {
+  const [search, setSearch] = useState("");
+  const help = useId();
+  const query = search.trim().toLocaleLowerCase("es-CO");
+  const matches = text
+    .split(/\r?\n/u)
+    .filter((line) => line.toLocaleLowerCase("es-CO").includes(query));
+  return (
+    <div data-review="original-search">
+      <Input
+        aria-label="Buscar en este original"
+        aria-describedby={help}
+        placeholder="Buscar en este original"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+      />
+      <p id={help}>Busca solo en el texto cargado de este original.</p>
+      {query === "" ? (
+        <OriginalText text={text} />
+      ) : (
+        <>
+          <output>
+            {matches.length === 0
+              ? "Sin coincidencias en este original."
+              : `${matches.length} ${matches.length === 1 ? "línea" : "líneas"} con coincidencias en este original.`}
+          </output>
+          {matches.length > 0 ? <OriginalText text={matches.join("\n")} /> : null}
+        </>
+      )}
+    </div>
   );
 };

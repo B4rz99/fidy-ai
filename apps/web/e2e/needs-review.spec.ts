@@ -1,6 +1,6 @@
 import { expectSameLoadingFrame, measureLoadingFrame } from "./loading-geometry";
 import { signInNavigationPerformanceThroughCore, signInThroughCore } from "./real-core-fixture";
-import type { Page, Route } from "@playwright/test";
+import type { Response as BrowserResponse, Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
@@ -1728,3 +1728,133 @@ test("removes expired source context from page search and accessible description
       );
     })
   ));
+
+test("keeps loaded source excerpts through draft autosaves without rereading originals", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let reads = 0;
+      const count = (): number => reads;
+      const route = (request: Route): Promise<void> => {
+        if (new URL(request.request().url()).pathname.endsWith("/context")) {
+          reads++;
+          return incompleteContextRoute([{ id, revision: 0, status: "pending", draft: undefined }])(
+            request
+          );
+        }
+        return reviewRoute(request);
+      };
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, route)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("2026-10-01,25000,Mercado", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        Promise.all([
+          page.waitForResponse(isWorkspaceResponse),
+          page.getByLabel("Valor", { exact: true }).fill("13500"),
+        ])
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toContainText("Borrador guardado")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("2026-10-01,25000,Mercado", { exact: true })).toBeVisible()
+      );
+      expect(count()).toBe(1);
+    })
+  ));
+
+const emailReviewItems = [
+  { ...item, source: "email", createdAt: "2026-10-15T12:00:00Z" },
+  { ...item, id: secondId, source: "email", createdAt: "2026-10-16T14:00:00Z" },
+];
+const emailReviewRoute = (route: Route): Promise<void> => {
+  const path = new URL(route.request().url()).pathname;
+  if (path.endsWith("/context")) {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response({
+        items: emailReviewItems.map((entry, index) => ({
+          id: entry.id,
+          reference: `Elemento ${index + 1}`,
+          receivedAt: entry.createdAt,
+          expiresAt: entry.expiresAt,
+        })),
+      }),
+    });
+  }
+  if (path.endsWith("/material")) {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response({
+        available: true,
+        text: "Asunto: Notificación bancaria\nCompra Farmacia COP 25000\nTransporte COP 18000",
+        truncated: false,
+      }),
+    });
+  }
+  const selected = emailReviewItems.find((entry) => path.endsWith(entry.id));
+  return route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: response(
+      selected === undefined
+        ? { items: emailReviewItems, pendingCount: 2, total: 2 }
+        : { item: selected, revision: 0 }
+    ),
+  });
+};
+
+test("identifies incomplete emails by receipt date and offers search inside their original", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, emailReviewRoute)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(2));
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: /Abrir Correo Elemento 2.*Recibido.*16\/10\/2026/u })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("textbox", { name: "Buscar pendientes en esta página" }).fill("16/10/2026")
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: /Abrir Correo Elemento 2/u }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("textbox", { name: "Buscar en este original" }).fill("Farmacia")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.locator("pre")).toHaveText("Compra Farmacia COP 25000")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("1 línea con coincidencias en este original.")).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(page.locator("mark")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("textbox", { name: "Buscar en este original" }).fill("Mercado")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Sin coincidencias en este original.")).toBeVisible()
+      );
+    })
+  ));
+
+const isWorkspaceResponse = (response: BrowserResponse): boolean =>
+  new URL(response.url()).pathname.endsWith("/review-workspace");

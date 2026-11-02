@@ -1,0 +1,35 @@
+DESIGN.md
+  s_a875b3cd0b32e9::t_42fa8427470747 789-797,800,804-805
+  s_a875b3cd0b32e9::t_f6389eb2a1b1c1 798-799,801-803
+apps/web/src/features/subscription/cancellation.tsx
+  s_a875b3cd0b32e9::t_1419a451178718 48,61-72,151,157,183,209,226-229,241
+  s_a875b3cd0b32e9::t_42fa8427470747 26-29,34-36,88-95,117,140-141,144,163-167,182,185,195-202,220-222,233,236
+  s_a875b3cd0b32e9::t_f7fef0ceba6f9c 7,73-87,96-108,114,203,210-216
+apps/web/e2e/subscription-cancellation-design.spec.ts
+  s_a875b3cd0b32e9::t_17f70fea699e9a 2-4,6-14,16-35,47-48,50-62,64-110,112-135,137-139,141-147,149-158,160-179,196,200,204-205,209,214,216,220,225,245,248,250-251,255-256,260-261,265,269
+  s_a875b3cd0b32e9::t_cfdceb9e9cd474 1,5,15,36-46,49,63,111,136,140,148,159,180-195,197-199,201-203,206-208,210-213,215,217-219,221-224,226-244,246-247,249,252-254,257-259,262-264,266-268,270
+apps/web/e2e/subscription-cancellation.spec.ts
+  s_a875b3cd0b32e9::t_b93f8319379ca6 322-343
+apps/web/src/features/subscription/workspace.tsx
+  s_a875b3cd0b32e9::t_ccf7bc70b680ef 260
+apps/web/src/ui/components/subscription-loading.tsx
+  s_a875b3cd0b32e9::t_9cdb7711244b27 19-26
+apps/web/src/ui/loading-reference.tsx
+  s_a875b3cd0b32e9::t_86fefca43f5a54 31,232-237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4d2f926163e48f76624053d422dae7986486287c",
+  "prompts": {},
+  "sessions": {
+    "s_a875b3cd0b32e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19c82-ac78-71d2-a32a-c37f0bf6bb91",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

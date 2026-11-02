@@ -1,0 +1,19 @@
+apps/web/src/features/subscription/cancellation.tsx
+  s_a875b3cd0b32e9::t_cb421f195dffd1 221-234
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b09d6cc5b39b6687f24ae287c3fa13eee5347c14",
+  "prompts": {},
+  "sessions": {
+    "s_a875b3cd0b32e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19c82-ac78-71d2-a32a-c37f0bf6bb91",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

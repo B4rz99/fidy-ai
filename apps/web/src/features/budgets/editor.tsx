@@ -2,7 +2,7 @@ import { BudgetDeletion } from "./deletion";
 import { AmountInput } from "@/ui/components/amount-input";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { BigDecimal, Option } from "effect";
-import { type FormEvent, type JSX, useState } from "react";
+import { type FormEvent, type JSX, type RefCallback, useCallback, useState } from "react";
 import { Currency } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
@@ -169,20 +169,28 @@ export const BudgetEditor = ({
   onRefresh,
   saveState,
 }: EditorProps): JSX.Element => {
-  const [removing, setRemoving] = useState(false);
+  const [deletionStep, setDeletionStep] = useState<"editing" | "reviewing" | "returning">(
+    "editing"
+  );
+  const focusRemoval = useCallback<RefCallback<HTMLButtonElement>>(
+    (button): void => {
+      if (deletionStep === "returning") button?.focus();
+    },
+    [deletionStep]
+  );
   const editor = useEditor({
     draft,
     groupCurrencies,
     disabled,
     onSubmit,
   });
-  if (removing) {
+  if (deletionStep === "reviewing") {
     return (
       <BudgetDeletion
         draft={draft}
         month={month}
         disabled={disabled}
-        onCancel={() => setRemoving(false)}
+        onCancel={() => setDeletionStep("returning")}
         onRemove={onRemove}
         onRefresh={onRefresh}
         saveState={saveState}
@@ -198,7 +206,8 @@ export const BudgetEditor = ({
       disabled={disabled}
       onClose={onClose}
       editor={editor}
-      onDelete={() => setRemoving(true)}
+      onDelete={() => setDeletionStep("reviewing")}
+      onRemovalMount={focusRemoval}
     />
   );
 };
@@ -212,8 +221,13 @@ const EditorForm = ({
   onClose,
   editor,
   onDelete,
+  onRemovalMount,
 }: Omit<EditorProps, "onSubmit" | "onRemove" | "onRefresh" | "saveState"> &
-  Readonly<{ editor: ReturnType<typeof useEditor>; onDelete: () => void }>): JSX.Element => {
+  Readonly<{
+    editor: ReturnType<typeof useEditor>;
+    onDelete: () => void;
+    onRemovalMount: RefCallback<HTMLButtonElement>;
+  }>): JSX.Element => {
   const { amount, setAmount, currency, setCurrency, group, onGroup, submit } = editor;
   return (
     <form
@@ -242,7 +256,14 @@ const EditorForm = ({
         <Button type="submit">{disabled ? "Guardando…" : "Guardar presupuesto"}</Button>
       </fieldset>
       {Option.isSome(draft.budget) && Option.isNone(draft.groupCategoryIds) ? (
-        <Button type="button" variant="destructive" disabled={disabled} onClick={onDelete}>
+        <Button
+          ref={onRemovalMount}
+          type="button"
+          variant="destructive"
+          contentLayout="wrap"
+          disabled={disabled}
+          onClick={onDelete}
+        >
           Eliminar presupuesto
         </Button>
       ) : null}

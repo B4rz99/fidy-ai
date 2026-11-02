@@ -931,3 +931,64 @@ const checkBackgroundDashboard = Effect.fn(function* (page: Page) {
 test("Budget removal and recovery never initialize a retained failed Dashboard outside its visit", ({
   page,
 }) => Effect.runPromise(checkBackgroundDashboard(page)));
+
+const holdDeletion = Effect.fn(function* (page: Page) {
+  const pending = Promise.withResolvers<void>();
+  const abort = (route: Route): Promise<void> => pending.promise.then(() => route.abort("failed"));
+  yield* Effect.tryPromise(() => page.route(`${apiOrigin}/budgets/*`, abort));
+  return pending.resolve;
+});
+const checkDeletionDesign = Effect.fn(function* (page: Page, colorScheme: "light" | "dark") {
+  yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme, reducedMotion: "reduce" }));
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+  yield* Effect.tryPromise(() => installUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  yield* Effect.tryPromise(() => installBudgetReport(page));
+  const release = yield* holdDeletion(page);
+  yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+  yield* Effect.tryPromise(() =>
+    page.evaluate(() => {
+      document.documentElement.style.fontSize = "32px";
+    })
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Configurar Vivienda", exact: true }).click()
+  );
+  const opener = page.getByRole("button", { name: "Eliminar presupuesto", exact: true });
+  yield* Effect.tryPromise(() => opener.press("Enter"));
+  const review = page.getByRole("region", { name: "Eliminar presupuesto de Vivienda" });
+  const cancel = review.getByRole("button", { name: "Cancelar", exact: true });
+  yield* Effect.tryPromise(() => expect(cancel).toBeFocused());
+  expect(
+    yield* Effect.tryPromise(() =>
+      review.evaluate((element) => element.scrollWidth <= element.clientWidth)
+    )
+  ).toBe(true);
+  yield* Effect.tryPromise(() => cancel.press("Space"));
+  yield* Effect.tryPromise(() => expect(opener).toBeFocused());
+  yield* Effect.tryPromise(() => opener.press("Enter"));
+  yield* Effect.tryPromise(() => expect(cancel).toBeFocused());
+  yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
+  const confirm = review.getByRole("button", { name: "Eliminar de todos los meses", exact: true });
+  yield* Effect.tryPromise(() => expect(confirm).toBeFocused());
+  yield* Effect.tryPromise(() => page.keyboard.press("Enter"));
+  yield* Effect.tryPromise(() =>
+    expect(review.getByRole("status")).toContainText("Eliminando presupuesto")
+  );
+  yield* Effect.tryPromise(() => expect(confirm).toBeDisabled());
+  release();
+  yield* Effect.tryPromise(() =>
+    expect(review.getByRole("alert")).toContainText("No pudimos confirmar la eliminación")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(
+      review.getByRole("button", { name: "Actualizar presupuestos", exact: true })
+    ).toBeVisible()
+  );
+  yield* checkAccessibility(page);
+});
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`Budget deletion keeps focus, enlarged-text actions and local progress in ${colorScheme}`, ({
+    page,
+  }) => Effect.runPromise(checkDeletionDesign(page, colorScheme)));
+}

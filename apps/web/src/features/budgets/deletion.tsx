@@ -1,7 +1,12 @@
-import { type JSX } from "react";
+import { type JSX, type RefCallback } from "react";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Button } from "@/ui/components/button";
 import type { BudgetDraft, SaveState } from "./model";
+import { BudgetWriteFeedback } from "./write-feedback";
+
+const focusCancel: RefCallback<HTMLButtonElement> = (button): void => {
+  button?.focus();
+};
 
 export const BudgetDeletion = ({
   draft,
@@ -34,21 +39,26 @@ export const BudgetDeletion = ({
       Tus transacciones se conservan y siguen contando en los resúmenes de gastos. Las alertas ya
       registradas en tu historial se conservan. Esta acción no se puede deshacer.
     </p>
+    <BudgetWriteFeedback saveState={saveState} writeAction="delete" />
     {saveState === "uncertain" || saveState === "failed" ? (
-      <>
-        <output className="text-sm text-muted-foreground">
-          {saveState === "uncertain"
-            ? "No pudimos confirmar la eliminación."
-            : "No se pudo eliminar el presupuesto."}{" "}
-          Actualiza para comprobar el plan antes de intentar otra acción.
-        </output>
-        <RefreshButton variant="outline" onClick={onRefresh} label="Actualizar presupuestos" />
-      </>
+      <RefreshButton variant="outline" onClick={onRefresh} label="Actualizar presupuestos" />
     ) : null}
-    <Button type="button" variant="outline" disabled={disabled} onClick={onCancel}>
+    <Button
+      ref={focusCancel}
+      type="button"
+      variant="outline"
+      disabled={disabled}
+      onClick={onCancel}
+    >
       Cancelar
     </Button>
-    <Button type="button" variant="destructive" disabled={disabled} onClick={onRemove}>
+    <Button
+      type="button"
+      variant="destructive"
+      contentLayout="wrap"
+      disabled={disabled}
+      onClick={onRemove}
+    >
       Eliminar de todos los meses
     </Button>
   </section>

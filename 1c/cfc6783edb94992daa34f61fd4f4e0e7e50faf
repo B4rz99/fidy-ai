@@ -1,0 +1,72 @@
+apps/web/e2e/recurring-plans.spec.ts
+  s_029c451e40829c::t_e924d5e98cee36 12-13,618,686
+  s_029c451e40829c::t_42df1fb262e3e6 136,544,546,575,605-610,613-617,619-620,627-639,646-650,680,685,695-715,717-719,721-724,732
+  s_029c451e40829c::t_33c4b922fa4035 529-543
+  s_029c451e40829c::t_8bbc2642bed70f 651-654,668
+  s_029c451e40829c::t_fb911092a946ca 133,135,665,667
+  s_029c451e40829c::t_ae0aa21fe1f8eb 143,655-664,669-679
+  s_029c451e40829c::t_ec74fcb5e1ce62 134,604,612,666,681-684
+  s_029c451e40829c::t_154c81dee11aea 621-626,640-645,687-694,727
+  s_029c451e40829c::t_6cb0271fb5dd06 132,137-138,142,545,551-552,611,716,720,725-726,728-731,733-734
+DESIGN.md
+  s_029c451e40829c::t_c55376acede870 744-752
+apps/web/src/features/recurring/workspace.tsx
+  s_029c451e40829c::t_c55376acede870 384
+  s_029c451e40829c::t_3d088ebdb9ba24 17,79,86-89,93,102,237-241,266,269,364,368
+  s_029c451e40829c::t_839468bb82eea5 80-83,94-101,365-367
+apps/web/src/features/recurring/feature.tsx
+  s_029c451e40829c::t_0f93ca84361750 149,151-152,154
+  s_029c451e40829c::t_3d088ebdb9ba24 15,71,79,162,168,172,180
+  s_029c451e40829c::t_5c5c7119747672 141,146-148,155-156,171,173,179
+  s_029c451e40829c::t_839468bb82eea5 17-22,142-145,150,153,174-178,186
+apps/web/src/features/recurring/controller.test.ts
+  s_029c451e40829c::t_5287b26bbe281a 106-163,166-173
+  s_029c451e40829c::t_dfa66ddd0a5403 1,3,5-6,9-14,39-40,50,54,60,82-85,104-105,164
+  s_029c451e40829c::t_ef6a0f682d2acd 15-38,41-49,51-53,55-59,61-81,86-87,91,100-103
+  s_029c451e40829c::t_10fe43a46099d9 4,165
+  s_029c451e40829c::t_b96e0b3529f86c 88,90
+  s_029c451e40829c::t_7b6600da0690bc 89,92-94,96-99
+  s_029c451e40829c::t_fb911092a946ca 95
+  s_029c451e40829c::t_e871ddf5f96fb1 174-175
+apps/web/src/features/recurring/lifecycle.tsx
+  s_029c451e40829c::t_3d088ebdb9ba24 1-38
+apps/web/src/features/recurring/model.ts
+  s_029c451e40829c::t_3d088ebdb9ba24 15-19
+apps/web/src/ui/components/recurring.css
+  s_029c451e40829c::t_3d088ebdb9ba24 482-501
+apps/web/src/features/recurring/controller.ts
+  s_029c451e40829c::t_1441f26cf1157e 147-153,161,169-171
+  s_029c451e40829c::t_0f93ca84361750 16-18,24,28,90,92-93,95,100-101,105-107,176,181-187,191-192
+  s_029c451e40829c::t_839468bb82eea5 23,25-26
+  s_029c451e40829c::t_3d088ebdb9ba24 19-22,35,180,208
+  s_029c451e40829c::t_5c5c7119747672 12,27,29-30
+  s_029c451e40829c::t_37265112e2aa9b 145-146,172
+  s_029c451e40829c::t_e82b1112591728 94
+apps/web/ARCHITECTURE.md
+  s_029c451e40829c::t_c55376acede870 453-457
+apps/web/src/ui/recurring-reference.tsx
+  s_029c451e40829c::t_15b9c0ab05fb55 6,12-25,57
+apps/web/src/ui/components/recurring.tsx
+  s_029c451e40829c::t_5c5c7119747672 23,26,29,43
+  s_029c451e40829c::t_839468bb82eea5 24-25,27-28
+  s_029c451e40829c::t_3d088ebdb9ba24 13,20-22,30-42,44-45
+apps/web/src/features/recurring/management.tsx
+  s_029c451e40829c::t_c55376acede870 10-11,372
+  s_029c451e40829c::t_154c81dee11aea 15-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ccfc6783edb94992daa34f61fd4f4e0e7e50faf",
+  "prompts": {},
+  "sessions": {
+    "s_029c451e40829c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19e52-c821-7f80-9e05-0b02baec65be",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,3 +1,5 @@
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { type JSX, type ReactNode } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
@@ -95,7 +97,7 @@ const LinkReview = ({
           disabled={disabled}
           onClick={clear}
         >
-          ×
+          <HugeiconsIcon icon={Cancel01Icon} size={20} strokeWidth={1.5} aria-hidden="true" />
         </Button>
       ) : null}
     </div>

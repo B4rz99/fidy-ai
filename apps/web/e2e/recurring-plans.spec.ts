@@ -1157,7 +1157,9 @@ test("capturing recurring income preserves its Currency and direction", ({ page,
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Registrar", exact: true }).click()
       );
-      yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        expectPayment(page.getByText("Transacción vinculada.", { exact: true })).toBeVisible()
+      );
       yield* Effect.tryPromise(() =>
         expectPayment(
           page.getByRole("button", { name: "Vincular transacción creada", exact: true })
@@ -1501,6 +1503,7 @@ test("finds and reviews an older recurring Transaction across 500 records before
           searchPageSize
         )
       );
+      yield* inspectLastSearchResult(page);
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Ver más transacciones", exact: true }).click()
       );
@@ -1652,4 +1655,22 @@ const inspectMobileResults = (page: Page): Effect.Effect<void, Cause.UnknownErro
     const candidate = page.getByRole("button", { name: /Revisar Internet antiguo/u }).first();
     yield* Effect.tryPromise(() => candidate.press("Enter"));
     yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toBeVisible());
+  });
+
+const inspectLastSearchResult = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const candidate = page
+      .getByRole("button", { name: /Revisar Internet antiguo/u })
+      .nth(searchPageSize - 1);
+    yield* Effect.tryPromise(() => candidate.click());
+    const heading = page.getByRole("heading", { name: "Revisar vínculo", exact: true });
+    const viewportHeight = page.viewportSize()?.height ?? 0;
+    const reviewVisible = (): Promise<boolean> =>
+      heading
+        .boundingBox()
+        .then((box) => box !== null && box.y >= 0 && box.y + box.height <= viewportHeight);
+    yield* Effect.tryPromise(() => expect.poll(reviewVisible).toBe(true));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar revisión", exact: true }).click()
+    );
   });

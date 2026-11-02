@@ -35,16 +35,9 @@ export const WorkspacePanel = ({
   const desktop = Option.getOrElse(containerDesktop, () => viewportDesktop);
   if (desktop) {
     return (
-      <aside
-        aria-label={title}
-        className={
-          Option.isNone(containerDesktop)
-            ? "self-stretch border-l bg-card p-6 xl:sticky xl:top-0 xl:min-h-[calc(100svh-72px)]"
-            : "min-w-0 self-stretch border-l bg-card p-6"
-        }
-      >
+      <DesktopPanel title={title} viewport={Option.isNone(containerDesktop)}>
         {children}
-      </aside>
+      </DesktopPanel>
     );
   }
   if (!open) {
@@ -76,3 +69,24 @@ export const WorkspacePanel = ({
     </Sheet>
   );
 };
+
+const DesktopPanel = ({
+  children,
+  title,
+  viewport,
+}: Pick<Props, "children" | "title"> & Readonly<{ viewport: boolean }>): JSX.Element => (
+  <aside
+    aria-label={title}
+    className={
+      viewport
+        ? "self-stretch border-l bg-card xl:min-h-[calc(100svh-72px)]"
+        : "min-w-0 self-stretch border-l bg-card p-6"
+    }
+  >
+    {viewport ? (
+      <div className="sticky top-0 max-h-dvh overflow-y-auto p-6">{children}</div>
+    ) : (
+      children
+    )}
+  </aside>
+);

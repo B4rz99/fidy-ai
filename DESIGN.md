@@ -851,7 +851,8 @@ intermediate and desktop widths, and with enlarged text.
 ### Linking recurring occurrences
 
 The linking workspace uses the shared application shell, flat search/results plane and 384px
-review rail. On smaller screens, selecting a candidate opens the shared full-screen review sheet.
+review rail. The full-height divider stays on the outer rail; review content sticks independently
+within the viewport and scrolls when needed, including beside later result rows. On smaller screens, selecting a candidate opens the shared full-screen review sheet.
 Search covers canonical effective Transaction history, with optional local date bounds, direction,
 Currency and exact amount. Search is explicitly applied with Buscar; the result scope and whether
 another bounded page exists remain visible. Amount drafts use Colombian separators.

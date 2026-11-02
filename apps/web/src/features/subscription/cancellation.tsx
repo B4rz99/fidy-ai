@@ -207,6 +207,8 @@ export const SubscriptionCancellationManagement = ({
 }: Readonly<{ client: FidyClient; command: CancellationCommand }>): JSX.Element => {
   const current = useCancellation(client, command);
   const [reviewState, setReviewState] = useState<"closed" | "open" | "returned">("closed");
+  const reviewing = reviewState === "open";
+  const restoreFocus = reviewState === "returned";
   if (current.loading) {
     return (
       <section aria-label="Renovaciones de la suscripción" className="py-5">
@@ -223,8 +225,8 @@ export const SubscriptionCancellationManagement = ({
         onNone: () => (
           <CancellationActions
             current={current}
-            reviewing={reviewState === "open"}
-            restoreFocus={reviewState === "returned"}
+            reviewing={reviewing}
+            restoreFocus={restoreFocus}
             review={() => setReviewState("open")}
             back={() => setReviewState("returned")}
           />

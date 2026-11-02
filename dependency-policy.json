@@ -94,6 +94,18 @@
       "path": "bun.lock",
       "reason": "The User explicitly accepted this scoped installed risk on 2026-10-28 UTC for PR #1581 until 2026-11-04 UTC. deepmerge 4.3.1 is inherited through shadcn and @shadcn/registry tooling; malicious merge inputs can poison the returned object prototype. Application reachability is not asserted. npm has no patched release as of acceptance. This is risk acceptance, not remediation. Keep the seven-day minimumReleaseAge and all other checks active. Before expiry, replace the dependency or upgrade to an eligible corrected release, rerun SCA and affected verification, and remove this record and its exact matching scanner exclusion. Upstream: https://github.com/TehShrike/deepmerge/issues/273",
       "until": "2026-11-04T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-118764",
+      "path": "bun.lock",
+      "reason": "The User explicitly accepted this scoped installed risk on 2026-11-02 for PR #1687 until 2026-11-03T22:26:03.755Z. CVE-2026-118764 affects the currently installed minimatch 10.x versions. The upstream fix is minimatch 11.0.1, published 2026-10-27T22:26:03.755Z; it is not eligible under the unchanged seven-day minimumReleaseAge until 2026-11-03T22:26:03.755Z. Retain the existing dependency under a temporary acceptance only until that instant. This is risk acceptance, not remediation. At expiry, review the minimatch 11 API removals, upgrade the affected tooling to an eligible patched version, rerun affected checks and SCA, and remove this record with its matching scanner exclusion. Do not extend automatically. Primary advisory: https://github.com/isaacs/minimatch/security/advisories/GHSA-g3hv-75wg-m249. Publication evidence: https://registry.npmjs.org/minimatch.",
+      "until": "2026-11-03T22:26:03.755Z"
+    },
+    {
+      "cve": "CVE-2026-118764",
+      "path": "tools/mutation/bun.lock",
+      "reason": "The User explicitly accepted this scoped installed risk on 2026-11-02 for PR #1687 until 2026-11-03T22:26:03.755Z. CVE-2026-118764 affects the currently installed minimatch 10.x versions. The upstream fix is minimatch 11.0.1, published 2026-10-27T22:26:03.755Z; it is not eligible under the unchanged seven-day minimumReleaseAge until 2026-11-03T22:26:03.755Z. Retain the existing dependency under a temporary acceptance only until that instant. This is risk acceptance, not remediation. At expiry, review the minimatch 11 API removals, upgrade the affected tooling to an eligible patched version, rerun affected checks and SCA, and remove this record with its matching scanner exclusion. Do not extend automatically. Primary advisory: https://github.com/isaacs/minimatch/security/advisories/GHSA-g3hv-75wg-m249. Publication evidence: https://registry.npmjs.org/minimatch.",
+      "until": "2026-11-03T22:26:03.755Z"
     }
   ]
 }

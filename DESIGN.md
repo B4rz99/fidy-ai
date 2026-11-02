@@ -786,4 +786,20 @@ screens, leaving the desktop fields icon-free and keeping the shared Input behav
 `/ui-reference.html#subscription` demonstrates the actual shared controls with local, non-payment
 examples; synthetic browser captures exercise the complete application composition in both themes.
 Canonical offers and status supply every real price, period and billing attempt. There are no
-invented invoices, stored-card details, next-charge dates or subscription cancellation controls.
+invented invoices, stored-card details or next-charge dates.
+
+Issue #1650 extends this composition with cancellation of future Subscription renewals. Keep the
+control and its inline review on the continuous canvas beside canonical standing and billing
+history. Both the initiator and confirmation use the shared filled destructive Button; backing
+out remains neutral. Controls wrap long labels and grow with enlarged text. The review explains
+future renewals, the paid-through date, reusable payment-source detachment and retained billing
+history without promising a refund or reversal of a charge already started.
+
+Only a canonical response confirms cancellation. Results distinguish local detachment, pending provider annulment
+and verified provider annulment; uncertain and unavailable states reuse the Subscription semantic
+feedback icons and pastel treatments. Explicit recovery rereads status without replaying the
+cancellation. Initial status reads use a non-interactive skeleton; background reads retain existing
+content. The confirmation label and control dimensions remain stable while separate feedback names
+submission or status refresh accurately. Back restores focus to the initiator; completed and uncertain requests move focus
+to their result or recovery message. Keep these states usable in Light and Grafito, at mobile,
+intermediate and desktop widths, and with enlarged text.

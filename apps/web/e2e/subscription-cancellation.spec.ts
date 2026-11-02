@@ -319,3 +319,25 @@ test("Subscription cancellation review and result fit a mobile screen", ({ page 
   ));
 const contentFitsViewport = (): boolean =>
   document.documentElement.scrollWidth <= document.documentElement.clientWidth;
+
+test("Subscription cancellation restores keyboard focus when review is dismissed", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* openPaidSubscription(page);
+      const trigger = page.getByRole("button", {
+        name: "Cancelar renovaciones futuras",
+        exact: true,
+      });
+      yield* Effect.tryPromise((signal) => trigger.focus({ signal }));
+      yield* Effect.tryPromise((signal) => trigger.press("Enter", { signal }));
+      yield* Effect.tryPromise((signal) =>
+        expect(page.getByRole("heading", { name: "¿Cancelar renovaciones futuras?" })).toBeFocused({
+          signal,
+        })
+      );
+      const back = page.getByRole("button", { name: "Conservar renovaciones", exact: true });
+      yield* Effect.tryPromise((signal) => back.focus({ signal }));
+      yield* Effect.tryPromise((signal) => back.press("Enter", { signal }));
+      yield* Effect.tryPromise((signal) => expect(trigger).toBeFocused({ signal }));
+    })
+  ));

@@ -75,8 +75,10 @@ accessible product flows such as login, pairing and onboarding remain separate f
 and legal documents belong to `apps/site`; links from the site enter these app-owned flows.
 
 Presentation shapes derive from the canonical server declaration, the dedicated server-declared
-hosted Turn browser API, or web-owned view state. The authenticated layout composes a persistent floating Agent chat;
-there is no standalone Agent route or sidebar link. A mounted conversation module owns Turn
+hosted Turn browser API, or web-owned view state. The authenticated layout composes a persistent Agent chat
+whose launcher stays in the application header beside the theme switch. Transaction and Dashboard
+headers reserve space for both controls; the non-modal chat opens below its launcher.
+There is no standalone Agent route or sidebar link. A mounted conversation module owns Turn
 transitions, exact receipt retention, delivery deduplication, submission gating and bounded visible
 history. Presentation receives a receipt-free display projection and actions; draft text, popup state
 and the browser visibility adapter remain with presentation. The feature's mounted state keeps a draft and

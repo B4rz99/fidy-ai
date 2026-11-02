@@ -14,6 +14,7 @@ const maximumNotes = 500;
 const maximumSelection = 12;
 const identifierWidth = 12;
 const maximumSingleLineHeight = 24;
+const actionHitInset = 12;
 const categories = [
   { id: "24000000-0000-4000-8000-000000000242", label: "Restaurantes" },
   { id: "24000000-0000-4000-8000-000000000244", label: "Transporte" },
@@ -334,6 +335,103 @@ test("bulk selection stops at twelve and mixed Currency keeps amount locked whil
 
 const waitForFonts = (page: Page): Promise<void> =>
   page.evaluate(() => document.fonts.ready.then(() => {}));
+const headerAgentJourney = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.setViewportSize({ width: 1280, height: 720 }));
+    yield* installWorkspace(page);
+    yield* wait(() => page.goto("/app/transactions"));
+    const agent = page.getByRole("button", { name: "Abrir agente Fidy", exact: true });
+    const theme = page.getByRole("button", { name: /Activar tema (claro|oscuro)/u });
+    const agentBounds = yield* wait(() => agent.boundingBox());
+    const themeBounds = yield* wait(() => theme.boundingBox());
+    expect(agentBounds).not.toBeNull();
+    expect(themeBounds).not.toBeNull();
+    if (agentBounds === null || themeBounds === null) throw new Error("Expected header controls");
+    expect(agentBounds.y).toBe(themeBounds.y);
+    expect(agentBounds.x + agentBounds.width).toBeLessThan(themeBounds.x);
+    const registerBounds = yield* wait(() =>
+      page.getByRole("button", { name: "+ Registrar", exact: true }).boundingBox()
+    );
+    if (registerBounds === null) throw new Error("Expected registration action");
+    expect(registerBounds.x + registerBounds.width).toBeLessThan(agentBounds.x);
+    yield* wait(() => agent.click());
+    const chat = page.getByRole("dialog", { name: "Agente Fidy", exact: true });
+    yield* wait(() => expect(chat).toBeVisible());
+    const chatBounds = yield* wait(() => chat.boundingBox());
+    expect(chatBounds).not.toBeNull();
+    if (chatBounds === null) throw new Error("Expected chat bounds");
+    expect(chatBounds.y).toBeGreaterThan(agentBounds.y + agentBounds.height);
+    yield* wait(() => expect(page.getByLabel("Mensaje", { exact: true })).toBeInViewport());
+    yield* wait(() => page.getByRole("button", { name: "Cerrar chat", exact: true }).click());
+    yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
+    yield* wait(() => page.getByRole("button", { name: "Cerrar registro", exact: true }).click());
+    expect(yield* wait(() => agent.boundingBox())).toEqual(agentBounds);
+  });
+test("the assistant stays beside the theme switch before and after transaction editing and opens below it", ({
+  page,
+}) => Effect.runPromise(headerAgentJourney(page)));
+const clearFormFooter = (page: Page, formName: string, submitLabel: string): Journey =>
+  Effect.gen(function* () {
+    const form = page.getByRole("form", { name: formName, exact: true });
+    const cancel = form.getByRole("button", { name: "Cancelar", exact: true });
+    const submit = form.getByRole("button", { name: submitLabel, exact: true });
+    const agent = page.getByRole("button", { name: "Abrir agente Fidy", exact: true });
+    for (const action of [cancel, submit]) {
+      yield* wait(() => action.scrollIntoViewIfNeeded());
+      yield* wait(() => expect(action).toBeInViewport({ ratio: 1 }));
+      const bounds = yield* wait(() => action.boundingBox());
+      if (bounds === null) throw new Error("Expected form action");
+      yield* wait(() =>
+        action.click({
+          trial: true,
+          position: { x: bounds.width - actionHitInset, y: bounds.height - actionHitInset },
+        })
+      );
+    }
+    yield* wait(() => cancel.focus());
+    yield* wait(() => page.keyboard.press("Tab"));
+    yield* wait(() => expect(submit).toBeFocused());
+    yield* wait(() => cancel.tap());
+    yield* wait(() => expect(form).toBeHidden());
+    yield* wait(() => agent.tap());
+    yield* wait(() => expect(page.getByLabel("Mensaje", { exact: true })).toBeInViewport());
+    yield* wait(() => page.getByRole("button", { name: "Cerrar chat", exact: true }).tap());
+  });
+const clearEditingActionsJourney = (
+  page: Page,
+  viewport: Readonly<{ width: number; height: number }>
+): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.setViewportSize(viewport));
+    yield* installWorkspace(page);
+    yield* openCapture(page);
+    yield* clearFormFooter(page, "Registrar transacción", "Registrar");
+    yield* wait(() =>
+      page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true }).click()
+    );
+    yield* clearFormFooter(page, "Corregir transacción", "Guardar");
+    yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
+    yield* wait(() =>
+      page.getByRole("checkbox", { name: "Seleccionar Prueba 1", exact: true }).check()
+    );
+    yield* wait(() =>
+      page.getByRole("button", { name: "Editar selección de transacciones", exact: true }).click()
+    );
+    yield* clearFormFooter(page, "Editar transacciones seleccionadas", "Guardar");
+  });
+test.describe("transaction actions remain clear of the assistant", () => {
+  test.use({ hasTouch: true });
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 1024, height: 600 },
+    { width: 390, height: 844 },
+    { width: 667, height: 390 },
+  ]) {
+    test(`registration and correction actions support pointer, touch and keyboard at ${viewport.width} × ${viewport.height}`, ({
+      page,
+    }) => Effect.runPromise(clearEditingActionsJourney(page, viewport)));
+  }
+});
 const responsiveJourney = (page: Page): Journey =>
   Effect.gen(function* () {
     yield* wait(() => page.setViewportSize({ width: 390, height: 844 }));

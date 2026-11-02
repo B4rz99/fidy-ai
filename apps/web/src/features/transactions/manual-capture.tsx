@@ -1,5 +1,5 @@
 import { MoneyField } from "./money-field";
-import { parseMoneyInput } from "./money-input";
+import { parseMoneyInput } from "@/transport/money-input";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import type { Category } from "./presentation";
 import type { CaptureStatus } from "./panel-state";

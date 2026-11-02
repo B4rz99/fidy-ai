@@ -1,9 +1,8 @@
-import { currencyMetadata } from "@fidy/server/client";
 import { Option } from "effect";
 import type { JSX } from "react";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
-import { parseMoneyInput } from "./money-input";
+import { moneyInputHint, parseMoneyInput } from "@/transport/money-input";
 import type { Transaction } from "./presentation";
 
 type MoneyFieldProps = Readonly<{
@@ -26,7 +25,6 @@ const MoneyFeedback = ({
     invalid: boolean;
   }>): JSX.Element => {
   if (disabled) return <></>;
-  const digits = currencyMetadata(currency).fractionalDigits;
   return (
     <p
       id={`${id}-help`}
@@ -34,9 +32,7 @@ const MoneyFeedback = ({
       className="text-sm text-muted-foreground"
     >
       {invalid ? "Ingresa un monto mayor que cero. " : ""}
-      {digits === 0
-        ? `Usa punto para miles. ${currency} no admite decimales.`
-        : `Usa punto para miles y coma para decimales. Máximo ${digits} decimales (ej.: 12.500,5).`}
+      {moneyInputHint(currency)}
     </p>
   );
 };

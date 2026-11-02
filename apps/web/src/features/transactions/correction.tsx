@@ -1,5 +1,5 @@
 import { MoneyField } from "./money-field";
-import { formatMoneyInput, parseMoneyInput } from "./money-input";
+import { formatMoneyInput, parseMoneyInput } from "@/transport/money-input";
 import { RefreshButton } from "@/ui/components/refresh-button";
 
 import { BigDecimal, DateTime, Option } from "effect";

@@ -1,6 +1,6 @@
 import { BigDecimal, Option } from "effect";
 import { expect, it } from "vitest";
-import { formatMoneyInput, parseMoneyInput } from "./money-input";
+import { formatMoneyInput, moneyInputHint, parseMoneyInput } from "./money-input";
 
 it("interprets Colombian thousands grouping as whole pesos", () => {
   const money = Option.getOrThrow(parseMoneyInput({ text: "12.500", currency: "COP" }));
@@ -56,4 +56,12 @@ it.each([
   expect(formatMoneyInput(money)).toBe(draft);
   const parsed = Option.getOrThrow(parseMoneyInput({ text: draft, currency: "COP" }));
   expect(BigDecimal.equals(parsed.amount, money.amount)).toBe(true);
+});
+
+it("explains separators and fractional precision for the selected Currency", () => {
+  expect(moneyInputHint("COP")).toBe(
+    "Usa punto para miles y coma para decimales. Máximo 2 decimales (ej.: 12.500,5)."
+  );
+  expect(moneyInputHint("JPY")).toBe("Usa punto para miles. JPY no admite decimales.");
+  expect(moneyInputHint("KWD")).toContain("Máximo 3 decimales");
 });

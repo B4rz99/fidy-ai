@@ -1,3 +1,4 @@
+import { TransactionSearch } from "@/features/transactions/feature";
 import { Effect, Option, Schema } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { BudgetRoute, RecurringRoute } from "./destination-components";
@@ -254,6 +255,8 @@ const independentApplicationRoute = createRoute({
 const transactionsRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/app/transactions",
+  validateSearch: (search) => Schema.decodeSync(TransactionSearch)(search),
+  loaderDeps: ({ search }) => ({ month: search.month, date: search.date }),
   // Authorization entry checks must run even when the browser clock moves backwards.
   shouldReload: true,
   // A speculative loader must never donate a code-only result to an actual Consent entry.
@@ -261,7 +264,7 @@ const transactionsRoute = createRoute({
   preloadStaleTime: 0,
   loader: {
     staleReloadMode: "blocking",
-    handler: ({ context, preload, abortController }) =>
+    handler: ({ context, deps, preload, cause, abortController }) =>
       Effect.runPromise(
         Effect.gen(function* () {
           yield* Effect.tryPromise(() => Promise.resolve(TransactionListFeature.preload?.()));
@@ -273,7 +276,7 @@ const transactionsRoute = createRoute({
                 registry: context.registry,
                 query: consent,
                 options: {
-                  mode: initial ? "cached" : "fresh",
+                  mode: initial || cause === "stay" ? "cached" : "fresh",
                   signal: Option.some(abortController.signal),
                 },
               })
@@ -290,6 +293,7 @@ const transactionsRoute = createRoute({
               // Consent has completed; data preparation remains owned by this route signal.
               return {
                 preparation: TransactionsPage.preloadData({
+                  search: deps,
                   apiClient: context.apiClient,
                   registry: context.registry,
                   signal: abortController.signal,

@@ -4,6 +4,7 @@ import { formatMoney } from "@/transport/money";
 import { type Transaction, formatOccurrence } from "./presentation";
 
 type SummaryProps = Readonly<{
+  scope: string;
   partial: boolean;
   transactions: ReadonlyArray<Transaction>;
   locale: string;
@@ -131,12 +132,10 @@ export const TransactionSummary = (props: SummaryProps): JSX.Element => {
           Solo transacciones cargadas que coinciden con los filtros.
         </p>
       ) : null}
-      {currencies.length !== 1 ? (
-        <p className="text-sm text-muted-foreground">
-          {props.transactions.length}{" "}
-          {props.transactions.length === 1 ? "transacción" : "transacciones"} en total
-        </p>
-      ) : null}
+      <p className="text-sm text-muted-foreground">
+        {props.transactions.length}{" "}
+        {props.transactions.length === 1 ? "transacción" : "transacciones"} · {props.scope}
+      </p>
       {currencies.map((currency) => (
         <CurrencySummary key={currency} currency={currency} props={props} />
       ))}

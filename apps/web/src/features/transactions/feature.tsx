@@ -1,10 +1,11 @@
+import { type TransactionSearch, selectedTransactionPeriod, transactionMonth } from "./period";
 import { transactionFirstPage, transactionPageInitialValue } from "./query";
 import { prepareQuery } from "@/transport/query-preparation";
 import type { AtomRegistry } from "effect/reactivity";
 import type { FidyClient } from "@/transport/client";
 import { workspaceCategoriesQuery, workspaceProfileQuery } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { lazyRouteComponent, useRouter } from "@tanstack/react-router";
+import { lazyRouteComponent, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { DateTime, Effect, Option } from "effect";
 import { type RefCallback, Suspense, useState } from "react";
 import { toast } from "sonner";
@@ -18,11 +19,13 @@ import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/can
 import { type HistoryState, transactionHistory } from "./history";
 import {
   type Category,
+  type CurrentMonthPeriod,
   type CurrentUser,
   type Transaction,
-  deriveCurrentMonthPeriod,
   presentPeriod,
 } from "./presentation";
+
+export { TransactionSearch } from "./period";
 
 const TransactionWorkspace = lazyRouteComponent(
   () => import("./workspace"),
@@ -177,7 +180,7 @@ type TransactionQueries = Readonly<{
     }>,
     unknown
   >;
-  period: ReturnType<typeof deriveCurrentMonthPeriod>;
+  period: CurrentMonthPeriod;
   transactionState: CanonicalQueryState<
     Readonly<{
       data: ReadonlyArray<Transaction>;
@@ -262,6 +265,8 @@ type TransactionResourceProps = Readonly<{
   dateFilter: Readonly<{
     value: string;
     onChange: (date: string) => void;
+    month: string;
+    onMonth: (month: string) => void;
   }>;
 }>;
 const TransactionResources = (props: TransactionResourceProps): JSX.Element => {
@@ -354,6 +359,7 @@ const ReadyTransactionResources = ({
         key={history.generation}
         readOnly={false}
         dateFilter={dateFilter}
+        monthFilter={Option.some({ value: dateFilter.month, onChange: dateFilter.onMonth })}
         continuation={history.continuation}
         onMore={onMore}
         onRetryMore={onRetryMore}
@@ -388,14 +394,14 @@ const TransactionPeriod = ({
   profileCurrent: boolean;
   children: ReactNode;
 }>): JSX.Element => {
-  const [selection, setSelection] = useState(() => ({
-    anchor: Effect.runSync(DateTime.now),
-    date: "",
-  }));
-  const period = deriveCurrentMonthPeriod({
-    now: selection.anchor,
-    timeZone: currentUser.timeZone,
-  });
+  const search = useSearch({ from: "/independent-application/app/transactions" });
+  const navigate = useNavigate();
+  const [now] = useState(() => Effect.runSync(DateTime.now));
+  const period = selectedTransactionPeriod({ search, now, timeZone: currentUser.timeZone });
+  const month = transactionMonth(period);
+  const change = (next: TransactionSearch): void => {
+    navigate({ to: "/app/transactions", search: next }).catch(() => undefined);
+  };
   return (
     <TransactionResources
       key={DateTime.toEpochMillis(period.from)}
@@ -403,20 +409,13 @@ const TransactionPeriod = ({
       profileCurrent={profileCurrent}
       period={period}
       dateFilter={{
-        value: selection.date,
-        onChange: (date) =>
-          setSelection((previous) => ({
-            date,
-            anchor:
-              date === ""
-                ? previous.anchor
-                : DateTime.toUtc(
-                    DateTime.makeZonedUnsafe(`${date}T00:00:00.000Z`, {
-                      timeZone: currentUser.timeZone,
-                      adjustForTimeZone: true,
-                    })
-                  ),
-          })),
+        value: search.date ?? "",
+        month,
+        onMonth: (next) => change({ month: next }),
+        onChange: (date) => {
+          if (date === (search.date ?? "")) return;
+          change(date === "" ? { month } : { date });
+        },
       }}
     >
       {children}
@@ -494,10 +493,12 @@ TransactionListFeature.preloadData = ({
   apiClient,
   registry,
   signal,
+  search,
 }: Readonly<{
   apiClient: FidyClient;
   registry: AtomRegistry.AtomRegistry;
   signal: AbortSignal;
+  search: TransactionSearch;
 }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -513,7 +514,8 @@ TransactionListFeature.preloadData = ({
       if (current._tag !== "Ready" || current.waiting || Option.isSome(current.refreshFailure)) {
         return;
       }
-      const period = deriveCurrentMonthPeriod({
+      const period = selectedTransactionPeriod({
+        search,
         now: DateTime.nowUnsafe(),
         timeZone: current.value.data.timeZone,
       });

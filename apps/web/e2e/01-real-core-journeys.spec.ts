@@ -452,56 +452,69 @@ test("a browser cannot render or fetch another User's private Transaction throug
       );
     })
   ));
-test("renders loading until the real Core answers Transactions", ({ page, request }) => {
-  const release = Promise.withResolvers<void>();
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      yield* fromPlaywright(
-        signInNavigationThroughCore({
-          page,
-          request,
-          identity: "navigationLoading",
-        })
-      );
-      yield* fromPlaywright(
-        expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
-      );
-      const held = yield* fromPlaywright(holdTransactionRead(page, release.promise));
-      yield* fromPlaywright(reloadTransactionsThroughCore(page));
-      yield* fromPlaywright(
-        expect(
-          page.getByRole("status", {
-            name: "Cargando transacciones",
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 375, height: 812 },
+]) {
+  test(`renders loading until the real Core answers Transactions at ${viewport.width}px`, ({
+    page,
+    request,
+  }) => {
+    const release = Promise.withResolvers<void>();
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPlaywright(page.setViewportSize(viewport));
+        yield* fromPlaywright(
+          signInNavigationThroughCore({
+            page,
+            request,
+            identity: "navigationLoading",
           })
-        ).toBeVisible()
-      );
-      const frameParts = [
-        "transaction-page-header",
-        "transaction-columns",
-        "transaction-records",
-        "transaction-context-panel",
-      ].map((slot) => ({ name: slot, selector: `[data-transaction-slot="${slot}"]` }));
-      const loadingFrame = yield* fromPlaywright(measureLoadingFrame(page, frameParts));
-      yield* fromPlaywright(held.received);
-      // Observe logical success after any bounded native-admission retries.
-      const completed = page.waitForResponse(
-        (response) => response.url().startsWith(`${api}/transactions?`) && response.status() === ok,
-        { timeout: canonicalRecoveryMilliseconds }
-      );
-      release.resolve();
-      yield* fromPlaywright(completed);
-      yield* fromPlaywright(
-        expect(
-          page.getByRole("status", {
-            name: "Cargando transacciones",
-          })
-        ).toHaveCount(0)
-      );
-      const loadedFrame = yield* fromPlaywright(measureLoadingFrame(page, frameParts));
-      expectSameLoadingFrame(loadingFrame, loadedFrame);
-    }).pipe(Effect.ensuring(Effect.sync(() => release.resolve())))
-  );
-});
+        );
+        yield* fromPlaywright(
+          expect(
+            page.getByRole("heading", { name: /^No hay transacciones (en|para)/u })
+          ).toBeVisible()
+        );
+        const held = yield* fromPlaywright(holdTransactionRead(page, release.promise));
+        yield* fromPlaywright(reloadTransactionsThroughCore(page));
+        yield* fromPlaywright(
+          expect(
+            page.getByRole("status", {
+              name: "Cargando transacciones",
+            })
+          ).toBeVisible()
+        );
+        const desktopPanelMinimumWidth = 900;
+        const frameParts = [
+          "transaction-page-header",
+          "transaction-columns",
+          "transaction-records",
+          ...(viewport.width >= desktopPanelMinimumWidth ? ["transaction-context-panel"] : []),
+        ].map((slot) => ({ name: slot, selector: `[data-transaction-slot="${slot}"]` }));
+        const loadingFrame = yield* fromPlaywright(measureLoadingFrame(page, frameParts));
+        yield* fromPlaywright(held.received);
+        // Observe logical success after any bounded native-admission retries.
+        const completed = page.waitForResponse(
+          (response) =>
+            response.url().startsWith(`${api}/transactions?`) && response.status() === ok,
+          { timeout: canonicalRecoveryMilliseconds }
+        );
+        release.resolve();
+        yield* fromPlaywright(completed);
+        yield* fromPlaywright(
+          expect(
+            page.getByRole("status", {
+              name: "Cargando transacciones",
+            })
+          ).toHaveCount(0)
+        );
+        const loadedFrame = yield* fromPlaywright(measureLoadingFrame(page, frameParts));
+        expectSameLoadingFrame(loadingFrame, loadedFrame);
+      }).pipe(Effect.ensuring(Effect.sync(() => release.resolve())))
+    );
+  });
+}
 test("approves a browser pairing through the real verified-email public route", ({
   page,
   request,

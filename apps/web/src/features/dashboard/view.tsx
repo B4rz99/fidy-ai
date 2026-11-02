@@ -3,7 +3,7 @@ import { RefreshButton } from "@/ui/components/refresh-button";
 import type { DashboardEditorError } from "./editing";
 import { PencilIcon, Settings01Icon, Tick02Icon, XIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { BigDecimal, Option } from "effect";
+import { BigDecimal, DateTime, Option } from "effect";
 import type { AsyncResult } from "effect/reactivity";
 import {
   type FormEvent,
@@ -320,6 +320,9 @@ const TransactionList = ({
     const date = dateFormatter.format(transaction.occurredAt.epochMilliseconds);
     const row = {
       id: transaction.id,
+      date: DateTime.formatIsoDate(
+        DateTime.setZone(transaction.occurredAt, DateTime.zoneMakeNamedUnsafe(timeZone))
+      ),
       counterparty: Option.getOrElse(transaction.counterparty, () => "Sin contraparte"),
       category: transaction.category.label,
       inflow: transaction.direction === "inflow",

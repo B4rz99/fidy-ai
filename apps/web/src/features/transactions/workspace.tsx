@@ -1,3 +1,4 @@
+import { TransactionPeriodControls } from "./period-controls";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Toaster, toast } from "sonner";
 import { use, useState } from "react";
@@ -39,6 +40,7 @@ type WorkspaceProps = Readonly<{
   currentUser: Pick<CurrentUser, "locale" | "timeZone">;
   transactions: ReadonlyArray<Transaction>;
   period: Readonly<{ monthLabel: string; timeZone: string }>;
+  monthFilter: Option.Option<Readonly<{ value: string; onChange: (month: string) => void }>>;
   queryNotice: ReactNode;
   dateFilter: Readonly<{ value: string; onChange: (date: string) => void }>;
   onRefresh: () => void;
@@ -320,12 +322,24 @@ const BulkPanel = (
     />
   );
 };
+const scopeLabel = (props: WorkspaceProps): string => {
+  if (props.dateFilter.value !== "") {
+    const date = DateTime.format(DateTime.makeUnsafe(`${props.dateFilter.value}T12:00:00Z`), {
+      locale: props.currentUser.locale,
+      timeZone: "UTC",
+      dateStyle: "long",
+    });
+    return `para el ${date}`;
+  }
+  return props.readOnly ? "en el historial guardado" : `en ${props.period.monthLabel}`;
+};
 const WorkspacePanel = (props: PanelProps): JSX.Element => {
   if (props.panel._tag === "Bulk") return <BulkPanel {...props} panel={props.panel} />;
   if (props.panel._tag === "Capture") return <CapturePanel {...props} panel={props.panel} />;
   if (props.panel._tag === "Detail") return <DetailPanel {...props} panel={props.panel} />;
   return props.renderPanel(
     <TransactionSummary
+      scope={scopeLabel(props)}
       partial={props.continuation !== "complete"}
       transactions={props.transactions}
       locale={props.currentUser.locale}
@@ -391,7 +405,8 @@ const FilterExpansion = ({
             timeZone={props.period.timeZone}
             disabled={disabled}
             required={false}
-            appearance="field"
+            appearance="filter"
+            month={Option.map(props.monthFilter, (filter) => filter.value)}
             onChange={(date) => onFilters({ ...filters, date })}
           />
         </div>
@@ -439,6 +454,7 @@ const TransactionFilters = ({
         onChange={(event) => onFilters({ ...filters, search: event.target.value })}
       />
       <TransactionDateFilter
+        month={Option.map(props.monthFilter, (filter) => filter.value)}
         value={filters.date}
         timeZone={props.period.timeZone}
         disabled={disabled}
@@ -605,6 +621,7 @@ const WorkspaceContent = ({
           refreshDisabled={refreshLocked(panel, corrections)}
         />
         <TransactionLedger
+          emptyTitle={`${hasFilters({ ...filters, date: "" }) ? "No hay coincidencias" : "No hay transacciones"} ${scopeLabel(props)}`}
           continuation={props.continuation}
           toolbar={<WorkspaceToolbar filters={filters} onFilters={onFilters} disabled={locked} />}
           readOnly={props.readOnly === true}
@@ -690,6 +707,24 @@ const ContinuationControl = (
     </div>
   );
 };
+const WorkspacePeriod = ({
+  props,
+  disabled,
+}: Readonly<{ props: WorkspaceProps; disabled: boolean }>): JSX.Element => (
+  <>
+    {Option.isNone(props.monthFilter) ? null : (
+      <TransactionPeriodControls
+        {...props.monthFilter.value}
+        label={props.period.monthLabel}
+        disabled={disabled}
+      />
+    )}
+    <p className="px-4 py-2 text-sm text-muted-foreground" aria-live="polite">
+      Mostrando transacciones {scopeLabel(props)}. Búsqueda y resumen sobre los registros cargados
+      que coinciden con los filtros.
+    </p>
+  </>
+);
 export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
   const [panel, onPanel] = useState<TransactionPanel>({ _tag: "Summary" });
@@ -723,6 +758,7 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
           readOnly={props.readOnly}
           onCapture={() => onPanel({ _tag: "Capture", status: "idle" })}
         />
+        <WorkspacePeriod props={props} disabled={editing || (!props.editable && !props.readOnly)} />
         {props.queryNotice}
         <ContinuationNotice {...props} />
         <WorkspaceContent

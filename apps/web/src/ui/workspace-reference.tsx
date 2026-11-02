@@ -90,6 +90,7 @@ export const WorkspaceReference = (): JSX.Element => {
           disabled={false}
           required={false}
           appearance="filter"
+          month={Option.none()}
           onChange={setDate}
         />
       </WorkspaceHeader>

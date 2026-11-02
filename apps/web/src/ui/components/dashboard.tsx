@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { ComponentProps, JSX, ReactNode } from "react";
@@ -106,6 +107,7 @@ export const DashboardBudget = ({
 
 type RecentRow = Readonly<{
   id: string;
+  date: string;
   counterparty: string;
   category: string;
   inflow: boolean;
@@ -117,8 +119,10 @@ const RecentDirection = ({ inflow }: Readonly<{ inflow: boolean }>): JSX.Element
   <DirectionIndicator inflow={inflow} />
 );
 const RecentRow = ({ row }: Readonly<{ row: RecentRow }>): JSX.Element => (
-  <article
-    className="dashboard-recent-row"
+  <Link
+    to="/app/transactions"
+    search={{ date: row.date }}
+    className="dashboard-recent-row rounded-md focus-visible:outline-2 focus-visible:outline-ring"
     aria-label={`${row.counterparty}, ${row.category}, ${row.inflow ? "Ingreso" : "Gasto"}, ${row.money} ${row.currency}`}
   >
     <div className="dashboard-recent-identity">
@@ -145,7 +149,7 @@ const RecentRow = ({ row }: Readonly<{ row: RecentRow }>): JSX.Element => (
       <span title={row.currency}>{row.money}</span>
       <HugeiconsIcon icon={ArrowRight01Icon} size={16} strokeWidth={1.5} aria-hidden="true" />
     </div>
-  </article>
+  </Link>
 );
 export const DashboardRecentList = ({
   groups,

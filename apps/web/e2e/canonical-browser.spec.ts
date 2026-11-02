@@ -45,7 +45,11 @@ test("revoked session hides Transactions without showing an internal response bo
       );
       yield* wait(page.goto("/app/transactions"));
       yield* wait(expect(page.getByText("No pudimos autorizar esta acción.")).toBeVisible());
-      yield* wait(expect(page.getByText("No hay transacciones para mostrar")).toHaveCount(0));
+      yield* wait(
+        expect(page.getByRole("heading", { name: /^No hay transacciones (en|para)/u })).toHaveCount(
+          0
+        )
+      );
       expect(yield* wait(page.locator("body").textContent())).not.toContain(secret);
     })
   ));

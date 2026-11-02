@@ -1,0 +1,38 @@
+apps/web/src/ui/components/connection-recovery.tsx
+  s_6c060da8503f0c::t_299d52530014a8 10-58
+  s_6c060da8503f0c::t_37293b80ae3335 1-9,59
+DESIGN.md
+  s_6c060da8503f0c::t_46da74e871448c 720-734
+.oxlintrc.ui.json
+  s_45a231b63e620e::t_736661fe084939 71-77
+apps/web/e2e/connection-recovery.spec.ts
+  s_6c060da8503f0c::t_4ac0d9fee94cf6 1-82
+apps/web/src/features/connections/feature.tsx
+  s_6c060da8503f0c::t_8e2ca4071b71f3 4-5,207-208,211-219,222
+apps/web/src/ui/components/connection-recovery.css
+  s_6c060da8503f0c::t_eef69f207014e7 1-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3f2ddb520bdd90965a6427b8256ba3d1ef83dc2f",
+  "prompts": {},
+  "sessions": {
+    "s_45a231b63e620e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19e58-ba89-7882-8934-6c83c601e2c8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_6c060da8503f0c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19e52-ed87-7612-bc80-9ebfbe27f3b2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import type { JSX, ReactNode } from "react";
 import { LoadingRegion } from "./loading-skeletons";
 import { Skeleton } from "./skeleton";
+import { Input } from "./input";
 import { Table, TableBody, TableCell, TableRow } from "./table";
 import "./transactions.css";
 
@@ -129,6 +130,17 @@ export const TransactionsSkeleton = ({
         <h1>Transacciones</h1>
         {readOnly ? null : <Skeleton className="h-[46px] w-28" />}
       </header>
+      {readOnly ? null : (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2" inert>
+          <Skeleton className="h-11 w-11" />
+          <Skeleton className="h-5 w-32" />
+          <Input type="month" className="w-auto" disabled />
+          <Skeleton className="h-11 w-11" />
+        </div>
+      )}
+      <div className="px-4 py-2 text-sm">
+        <Skeleton className="h-5 w-full" />
+      </div>
       <div inert>{notice}</div>
       <div data-transaction-slot="transaction-columns">
         <div data-transaction-slot="transaction-records">

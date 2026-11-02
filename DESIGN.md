@@ -290,6 +290,12 @@ weights for financial figures or deliberate emphasis within product illustration
 | Secondary text and controls | 14px         | 14px       | 14px        |
 | Demo labels                 | 12px         | 12px       | 12px        |
 
+In the application at widths up to 900px, editable text—including search, amount,
+counterparty and notes—uses at least 1rem (16 CSS pixels at the default root size).
+This takes precedence over compact control typography. Preserve text enlargement,
+user-controlled browser zoom, input modes and accessible labels; controls must grow
+with their text. Labels and buttons retain their existing type hierarchy.
+
 Use this small hierarchy consistently across sections. Eyebrows are not part of the
 default section pattern: lead with the actual heading. Compact text inside scaled
 product illustrations is a special case, not a size to reuse for functional controls.

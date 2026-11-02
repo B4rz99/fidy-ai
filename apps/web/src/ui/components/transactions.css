@@ -921,6 +921,11 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
   }
 }
 @media (max-width: 900px) {
+  [data-transaction-slot~="transaction-workspace"] input,
+  [data-transaction-slot~="transaction-workspace"] textarea {
+    font-size: 1rem;
+  }
+
   [data-transaction-slot~="transaction-workspace"] {
     min-height: calc(100svh - 84px);
     padding-top: 24px;

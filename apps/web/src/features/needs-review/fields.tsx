@@ -42,7 +42,7 @@ export const ReviewFields = (props: Props): JSX.Element => {
 const ReviewFieldControls = memo((props: Props): JSX.Element => (
   <div data-review="fields">
     <ReviewCounterparty {...props} />
-    <div className="grid grid-cols-2 items-start gap-3">
+    <div data-review="money" className="grid grid-cols-2 items-start gap-3">
       <div className="grid content-start gap-2.5">
         <Label htmlFor="review-amount">Valor</Label>
         <Input

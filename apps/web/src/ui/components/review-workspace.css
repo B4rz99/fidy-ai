@@ -298,6 +298,8 @@
 [data-review="fields"] {
   display: grid;
   gap: 18px;
+  min-width: 0;
+  container: review-fields / inline-size;
 }
 [data-review="fields"] [data-slot="label"] {
   font-size: 12px;
@@ -322,6 +324,12 @@
 }
 [data-review="fields"] [data-review="zone"] {
   font-size: 10px;
+}
+@container review-fields (width < 20rem) {
+  [data-review="fields"] [data-review="money"],
+  [data-review="fields"] [data-review="occurrence"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 [data-review="original"] {
   border-radius: 0;
@@ -526,6 +534,11 @@
   }
 }
 @media (max-width: 900px) {
+  [data-review="search"] [data-slot="input"],
+  [data-review="fields"] [data-slot="input"] {
+    font-size: 1rem;
+  }
+
   [data-review="workspace"] {
     padding: 24px 0 0;
   }

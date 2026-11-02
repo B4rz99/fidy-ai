@@ -891,10 +891,40 @@ test("an uncertain recurring capture stays locked across panel and month changes
     })
   ));
 
+const enlargeRecurringCaptureText = (): void => {
+  document.documentElement.style.fontSize = "32px";
+};
+const resetRecurringCaptureText = (): void => {
+  document.documentElement.style.fontSize = "";
+};
+const checkMobileCaptureText = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const viewport = page.viewportSize();
+    yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+    const capture = page.getByRole("form", { name: "Registrar transacción" });
+    const fields = [
+      capture.getByLabel("Monto · USD", { exact: true }),
+      capture.getByLabel("Contraparte (opcional)", { exact: true }),
+      capture.getByLabel("Notas (opcional)", { exact: true }),
+    ];
+    for (const field of fields) {
+      yield* Effect.tryPromise(() => expectPayment(field).toHaveCSS("font-size", "16px"));
+    }
+    yield* Effect.tryPromise(() => page.evaluate(enlargeRecurringCaptureText));
+    for (const field of fields) {
+      yield* Effect.tryPromise(() => expectPayment(field).toHaveCSS("font-size", "32px"));
+    }
+    yield* Effect.tryPromise(() => page.evaluate(resetRecurringCaptureText));
+    if (viewport !== null) {
+      yield* Effect.tryPromise(() => page.setViewportSize(viewport));
+    }
+  });
+
 test("capturing recurring income preserves its Currency and direction", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* prepareIncomeCapture(page, request);
+      yield* checkMobileCaptureText(page);
       yield* Effect.tryPromise(() =>
         expectPayment(page.getByLabel("Monto · USD", { exact: true })).toHaveValue("20,5")
       );

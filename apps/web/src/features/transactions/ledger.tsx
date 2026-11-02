@@ -45,6 +45,7 @@ const columns: Array<ColumnDef<TransactionListRow>> = [
   { accessorKey: "moneyText", header: "Monto", enableSorting: false },
 ];
 type LedgerProps = Readonly<{
+  emptyTitle: string;
   continuation: HistoryState["continuation"];
   readOnly: boolean;
   rows: ReadonlyArray<TransactionListRow>;
@@ -448,12 +449,11 @@ const emptyDescription = (partial: boolean, readOnly: boolean): string => {
 const EmptyLedger = ({
   partial,
   readOnly,
-}: Readonly<{ partial: boolean; readOnly: boolean }>): JSX.Element => (
+  title,
+}: Readonly<{ partial: boolean; readOnly: boolean; title: string }>): JSX.Element => (
   <div className="p-8">
     <h2 className="font-medium">
-      {partial
-        ? "No hay coincidencias entre las transacciones cargadas"
-        : "No hay transacciones para mostrar"}
+      {partial ? "No hay coincidencias entre las transacciones cargadas" : title}
     </h2>
     <p className="mt-2 text-sm text-muted-foreground">{emptyDescription(partial, readOnly)}</p>
   </div>
@@ -489,7 +489,11 @@ const LedgerContents = ({
     <>
       {rows.length === 0 ? (
         <>
-          <EmptyLedger partial={props.continuation !== "complete"} readOnly={props.readOnly} />
+          <EmptyLedger
+            title={props.emptyTitle}
+            partial={props.continuation !== "complete"}
+            readOnly={props.readOnly}
+          />
           {props.continuation === "loading" ? (
             <Table>
               <TableBody>

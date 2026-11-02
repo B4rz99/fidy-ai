@@ -85,7 +85,9 @@ test("captures a Transaction by canonical mutation and displays the confirmed re
       });
       yield* Effect.tryPromise(() => page.goto("/app/transactions"));
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
+        expect(
+          page.getByRole("heading", { name: /^No hay transacciones (en|para)/u })
+        ).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "+ Registrar", exact: true }).click()

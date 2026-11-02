@@ -160,6 +160,9 @@ test("pauses automatic continuation while a capture draft is open", ({ page }) =
       yield* wait(() => page.goto("/app/transactions"));
       yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
       yield* wait(() => page.getByLabel("Monto · COP", { exact: true }).fill("123"));
+      yield* wait(() =>
+        expect(page.getByRole("button", { name: "Mes anterior", exact: true })).toBeDisabled()
+      );
       yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
       yield* wait(() => expect(page.getByLabel("Monto · COP", { exact: true })).toHaveValue("123"));
       expect(fixture.requests).toHaveLength(1);
@@ -226,9 +229,7 @@ for (const count of [0, pageSize, multiplePages]) {
         const rows = page.getByRole("button", { name: /^Ver transacción Registro /u });
         if (count === 0) {
           yield* wait(() =>
-            expect(
-              page.getByText("No hay transacciones para mostrar", { exact: true })
-            ).toBeVisible()
+            expect(page.getByRole("heading", { name: /^No hay transacciones en /u })).toBeVisible()
           );
         }
         yield* wait(() => expect(rows).toHaveCount(Math.min(count, initialPageSize)));
@@ -503,7 +504,7 @@ test("calendar selection loads the selected month and clearing the day retains t
       const requests = yield* wait(() => installCalendarHistory(page, historical));
       yield* wait(() => page.goto("/app/transactions"));
       yield* wait(() =>
-        expect(page.getByText("No hay transacciones para mostrar", { exact: true })).toBeVisible()
+        expect(page.getByRole("heading", { name: /^No hay transacciones en /u })).toBeVisible()
       );
       yield* wait(() => page.getByRole("button", { name: "Fecha", exact: true }).click());
       yield* wait(() =>
@@ -526,9 +527,9 @@ test("calendar selection loads the selected month and clearing the day retains t
         date.slice(0, "YYYY-MM".length)
       );
       const count = requests.length;
-      yield* wait(() => page.getByRole("button", { name: "Fecha", exact: true }).click());
+      yield* wait(() => page.getByRole("button", { name: /^Fecha: / }).click());
       yield* wait(() =>
-        page.getByRole("button", { name: "Todas las fechas", exact: true }).click()
+        page.getByRole("button", { name: "Quitar filtro de día", exact: true }).click()
       );
       yield* wait(() =>
         expect(
@@ -538,3 +539,149 @@ test("calendar selection loads the selected month and clearing the day retains t
       expect(requests).toHaveLength(count);
     })
   ));
+
+const prepareHistoricalMonth = Effect.fnUntraced(function* (page: Page) {
+  yield* wait(() => installUser(page));
+  yield* wait(() => installCategories({ page, categories: [category] }));
+  yield* wait(() => installCalendarHistory(page, DateTime.makeUnsafe("2026-10-31T23:00:00Z")));
+});
+
+const expectHistoricalTransaction = Effect.fn((page: Page) =>
+  wait(() =>
+    expect(
+      page.getByRole("button", { name: "Ver transacción Registro histórico", exact: true })
+    ).toBeVisible()
+  )
+);
+
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 390, height: 844 },
+]) {
+  test(`history exposes its month and day across empty results, reload and Back at ${viewport.width}px`, ({
+    page,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* wait(() => page.setViewportSize(viewport));
+        yield* prepareHistoricalMonth(page);
+        yield* wait(() => page.goto("/app/transactions?month=2026-11&date=2026-11-01"));
+        yield* wait(() =>
+          expect(
+            page.getByRole("button", { name: "Fecha: 1 de noviembre de 2026", exact: true })
+          ).toBeVisible()
+        );
+        yield* wait(() =>
+          expect(
+            page.getByRole("heading", {
+              name: "No hay transacciones para el 1 de noviembre de 2026",
+              exact: true,
+            })
+          ).toBeVisible()
+        );
+        yield* wait(() =>
+          expect(
+            page.getByText("0 transacciones · para el 1 de noviembre de 2026", { exact: true })
+          ).toBeVisible()
+        );
+        yield* wait(() => page.getByRole("button", { name: "Mes anterior", exact: true }).click());
+        yield* expectHistoricalTransaction(page);
+        yield* wait(() =>
+          expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("2026-10")
+        );
+        yield* wait(() => page.reload());
+        yield* expectHistoricalTransaction(page);
+        yield* wait(() => page.getByLabel("Mes de transacciones", { exact: true }).fill("2026-12"));
+        yield* wait(() =>
+          expect(
+            page.getByRole("heading", {
+              name: "No hay transacciones en diciembre de 2026",
+              exact: true,
+            })
+          ).toBeVisible()
+        );
+        yield* wait(() => page.goBack());
+        yield* expectHistoricalTransaction(page);
+      })
+    ));
+}
+
+for (const search of ["date=2026-02-30", "month=2026-13", "month=2026-11&date=2026-10-31"]) {
+  test(`refuses invalid history period ${search} before requesting history`, ({ page }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* wait(() => installUser(page));
+        const fixture = yield* wait(() => installHistory(page, 0));
+        yield* wait(() => page.goto(`/app/transactions?${search}`));
+        yield* wait(() =>
+          expect(page.getByRole("alert")).toContainText("No pudimos cargar esta página")
+        );
+        expect(fixture.requests).toHaveLength(0);
+      })
+    ));
+}
+
+test("the day picker opens the displayed history month without requiring a selected day", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* prepareHistoricalMonth(page);
+      yield* wait(() => page.goto("/app/transactions?month=2026-10"));
+      yield* wait(() => page.getByRole("button", { name: "Fecha", exact: true }).click());
+      yield* wait(() =>
+        expect(
+          page.getByRole("button", { name: "jueves, 15 de octubre de 2026", exact: true })
+        ).toBeVisible()
+      );
+      yield* wait(() =>
+        page.getByRole("button", { name: "jueves, 15 de octubre de 2026", exact: true }).click()
+      );
+      yield* wait(() =>
+        expect(
+          page.getByRole("button", { name: "Fecha: 15 de octubre de 2026", exact: true })
+        ).toBeVisible()
+      );
+    })
+  ));
+
+const delayConsentRead = (page: Page, released: Promise<void>): Promise<void> =>
+  page
+    .route(`${apiOrigin}/web/consent`, (route) =>
+      released.then(() =>
+        route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({ status: "Granted", withdrawal: null }),
+        })
+      )
+    )
+    .then(() => {});
+
+test("changing and clearing a day preserves the active search within the mounted month", ({
+  page,
+}) => {
+  const released = Promise.withResolvers<void>();
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      yield* prepareHistoricalMonth(page);
+      yield* wait(() => page.goto("/app/transactions?month=2026-10"));
+      const search = page.getByRole("searchbox", { name: "Buscar transacciones", exact: true });
+      yield* wait(() => search.fill("histórico"));
+      yield* expectHistoricalTransaction(page);
+      yield* wait(() => delayConsentRead(page, released.promise));
+      yield* wait(() => page.getByRole("button", { name: "Fecha", exact: true }).click());
+      yield* wait(() =>
+        page.getByRole("button", { name: "jueves, 15 de octubre de 2026", exact: true }).click()
+      );
+      yield* wait(() => expect(search).toHaveValue("histórico"));
+      yield* wait(() =>
+        page.getByRole("button", { name: "Fecha: 15 de octubre de 2026", exact: true }).click()
+      );
+      yield* wait(() =>
+        page.getByRole("button", { name: "Quitar filtro de día", exact: true }).click()
+      );
+      yield* wait(() => expect(search).toHaveValue("histórico"));
+      yield* expectHistoricalTransaction(page);
+    }).pipe(Effect.ensuring(Effect.sync(() => released.resolve())))
+  );
+});

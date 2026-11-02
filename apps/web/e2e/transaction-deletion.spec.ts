@@ -121,7 +121,9 @@ test("mobile deletion waits for confirmation and locks the selected Transaction 
         expect(page.getByText("Transacción eliminada", { exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("No hay transacciones para mostrar", { exact: true })).toBeVisible()
+        expect(
+          page.getByRole("heading", { name: /^No hay transacciones (en|para)/u })
+        ).toBeVisible()
       );
       expect(fixture.requests).toBe(1);
     })
@@ -159,7 +161,7 @@ for (const outcome of ["rejected", "uncertain"] as const) {
         if (outcome === "uncertain") {
           yield* Effect.tryPromise(() =>
             expect(
-              page.getByText("No hay transacciones para mostrar", { exact: true })
+              page.getByRole("heading", { name: /^No hay transacciones (en|para)/u })
             ).toBeVisible()
           );
         } else {

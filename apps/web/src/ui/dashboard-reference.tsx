@@ -38,6 +38,7 @@ export const DashboardReference = (): JSX.Element => (
             rows: [
               {
                 id: "example",
+                date: "2026-10-24",
                 counterparty: "Mercado de ejemplo",
                 category: "Mercado",
                 inflow: false,

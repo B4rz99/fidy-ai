@@ -1,0 +1,27 @@
+apps/server/cloudflare/quotas/operations.ts
+  s_d9571b3fccd032::t_ae3cdcf6e95e29 152,159-161
+infra/cloudflare/verify-edge-policy.ts
+  s_d9571b3fccd032::t_f6109f2aa617a9 5
+apps/server/cloudflare/quotas/operations.test.ts
+  s_d9571b3fccd032::t_f458d91fce8cc4 153-160,163,165,167,170-171,181,184-188,192-195,199-204,208,214,222,248
+  s_d9571b3fccd032::t_fbaac2e734814c 228-237,245-247,249-252
+  s_d9571b3fccd032::t_57925151d48fe7 238-244
+  s_d9571b3fccd032::t_ae3cdcf6e95e29 4-10,161-162,168-169,172-180,182-183,190-191,196-198,205-207,209-213,215-221,223-227
+  s_d9571b3fccd032::t_551578a9a0d803 164,166,189,253-254
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "19dcdd4abf15e7f35e0db3fe5cc5a229e22ac054",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -27,8 +27,9 @@ export const useReviewExpired = (item: Item): boolean => {
 /** Wake page-local search when the next retained original or draft reaches its deadline. */
 export const useReviewPageExpiry = (items: ReadonlyArray<Pick<Item, "expiresAt">>): void => {
   const current = DateTime.toEpochMillis(DateTime.nowUnsafe());
-  const future = items
-    .map((item) => DateTime.toEpochMillis(item.expiresAt))
-    .filter((time) => time > current);
-  useAtomValue(deadlineExpired(future.length === 0 ? 0 : Math.min(...future)));
+  const next = items.reduce((nearest, item) => {
+    const deadline = DateTime.toEpochMillis(item.expiresAt);
+    return deadline > current ? Math.min(nearest, deadline) : nearest;
+  }, Infinity);
+  useAtomValue(deadlineExpired(Number.isFinite(next) ? next : 0));
 };

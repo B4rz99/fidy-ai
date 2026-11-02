@@ -1188,6 +1188,18 @@ const executeAdmittedTurn = ({
               scheduleRecovery,
             });
           }
+          const failedQuery = isWhatsAppHosted(subject) ? failedQueryReply(actions) : Option.none();
+          if (Option.isSome(failedQuery)) {
+            return yield* proposeDelivery({
+              db,
+              userId,
+              turnId,
+              answer: failedQuery.value,
+              deliver,
+              finish,
+              scheduleRecovery,
+            });
+          }
           const events = actions
             .filter((action) => action._tag === "Result")
             .map((action) => action.event);
@@ -1275,6 +1287,28 @@ const hostedResponseOutcome = (
 type HostedToolAction =
   | Readonly<{ _tag: "Result"; event: HostedToolEvent; mutationSucceeded: boolean }>
   | Readonly<{ _tag: "Challenge"; text: TranscriptText }>;
+const queryAbsence = Schema.Struct({ error: Schema.Struct({ code: Schema.Literal("not_found") }) });
+const confirmedQueryResult = (outcome: CanonicalToolOutcome): boolean =>
+  outcome._tag === "Succeeded" ||
+  (outcome._tag === "CanonicalOperationFailed" && Schema.is(queryAbsence)(outcome.failure));
+
+/** A rejected read supplies no data from which the model may infer an empty result. */
+const failedQueryReply = (
+  actions: ReadonlyArray<HostedToolAction>
+): Option.Option<TranscriptText> =>
+  actions.some(
+    (action) =>
+      action._tag === "Result" &&
+      operationCatalog.byId.get(action.event.operation)?.policy.kind === "query" &&
+      !confirmedQueryResult(action.event.outcome)
+  )
+    ? Option.some(
+        TranscriptText.make(
+          "No pude completar la consulta solicitada. No puedo confirmar sus resultados. Inténtalo de nuevo."
+        )
+      )
+    : Option.none();
+
 /** A completed canonical write never licenses an unqualified success for other failed calls. */
 const committedAnswer = (
   actions: Option.Option<ReadonlyArray<HostedToolAction>>,

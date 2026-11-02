@@ -1,5 +1,6 @@
 import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
-import { Effect, Schema } from "effect";
+import { Data, Effect, Schema } from "effect";
+import type { AnyRouter } from "@tanstack/react-router";
 import { HttpClientError } from "effect/http";
 import { type AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
@@ -17,18 +18,21 @@ type DashboardLoad = Readonly<{
  */
 const loadDashboard = Effect.fnUntraced(function* (
   apiClient: FidyClient,
-  setPhase: (phase: DashboardLoadPhase) => void
+  setPhase: (phase: DashboardLoadPhase) => void,
+  isVisiting: () => boolean
 ) {
   setPhase("reading");
   const client = yield* apiClient;
   return yield* client.dashboard.getDashboardView().pipe(
-    Effect.catchTag("DashboardUninitialized", () =>
-      Effect.gen(function* () {
-        setPhase("initializing");
-        yield* client.dashboard.initializeDashboard();
-        setPhase("reading-initialized");
-        return yield* client.dashboard.getDashboardView();
-      })
+    Effect.catchTag("DashboardUninitialized", (failure) =>
+      !isVisiting()
+        ? Effect.fail(failure)
+        : Effect.gen(function* () {
+            setPhase("initializing");
+            yield* client.dashboard.initializeDashboard();
+            setPhase("reading-initialized");
+            return yield* client.dashboard.getDashboardView();
+          })
     ),
     Effect.catchIf(
       (error) => Schema.isSchemaError(error) || HttpClientError.isHttpClientError(error),
@@ -40,19 +44,35 @@ const loadDashboard = Effect.fnUntraced(function* (
 const dashboardPhase = Atom.family((_apiClient: FidyClient) =>
   Atom.make<DashboardLoadPhase>("reading")
 );
-const retainedDashboardQuery = Atom.family((apiClient: FidyClient): DashboardLoad["result"] => {
-  const phase = dashboardPhase(apiClient);
-  const result = apiClient.runtime
-    .atom((get) => loadDashboard(apiClient, (value) => get.set(phase, value)))
-    .pipe(
-      Atom.setIdleTTL(workspaceQueryRetention.timeToLive),
-      apiClient.runtime.factory.withReactivity(["dashboard"]),
-      Atom.setIdleTTL(workspaceQueryRetention.timeToLive)
-    );
-  return result;
-});
+type DashboardQueryContext = Readonly<{ apiClient: FidyClient; router: AnyRouter }>;
+const dashboardVisits = new WeakMap<AnyRouter, () => boolean>();
+const dashboardVisit = (router: AnyRouter): (() => boolean) => {
+  const read =
+    dashboardVisits.get(router) ??
+    ((): boolean => router.state.location.pathname === "/app/dashboard");
+  dashboardVisits.set(router, read);
+  return read;
+};
+class DashboardQueryKey extends Data.Class<
+  Readonly<{ apiClient: FidyClient; isVisiting: () => boolean }>
+> {}
+const retainedDashboardQuery = Atom.family(
+  ({ apiClient, isVisiting }: DashboardQueryKey): DashboardLoad["result"] => {
+    const phase = dashboardPhase(apiClient);
+    const result = apiClient.runtime
+      .atom((get) => loadDashboard(apiClient, (value) => get.set(phase, value), isVisiting))
+      .pipe(
+        Atom.setIdleTTL(workspaceQueryRetention.timeToLive),
+        apiClient.runtime.factory.withReactivity(["dashboard"]),
+        Atom.setIdleTTL(workspaceQueryRetention.timeToLive)
+      );
+    return result;
+  }
+);
 
-export const dashboardQuery = (apiClient: FidyClient): DashboardLoad => {
-  const query = retainedDashboardQuery(apiClient);
-  return { phase: dashboardPhase(apiClient), result: revalidateWorkspaceQuery(query) };
+export const dashboardQuery = (input: DashboardQueryContext): DashboardLoad => {
+  const query = retainedDashboardQuery(
+    new DashboardQueryKey({ apiClient: input.apiClient, isVisiting: dashboardVisit(input.router) })
+  );
+  return { phase: dashboardPhase(input.apiClient), result: revalidateWorkspaceQuery(query) };
 };

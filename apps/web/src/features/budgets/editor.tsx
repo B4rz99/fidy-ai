@@ -1,3 +1,4 @@
+import { BudgetDeletion } from "./deletion";
 import { AmountInput } from "@/ui/components/amount-input";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { BigDecimal, Option } from "effect";
@@ -7,7 +8,7 @@ import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
-import { type BudgetDraft, type BudgetEdit } from "./model";
+import { type BudgetDraft, type BudgetEdit, type SaveState } from "./model";
 import { defaultBudgetGroup } from "./presentation";
 
 type EditorProps = Readonly<{
@@ -18,6 +19,9 @@ type EditorProps = Readonly<{
   disabled: boolean;
   onSubmit: (edit: BudgetEdit) => void;
   onClose: () => void;
+  onRemove: () => void;
+  onRefresh: () => void;
+  saveState: SaveState;
 }>;
 const AmountField = ({
   amount,
@@ -161,13 +165,56 @@ export const BudgetEditor = ({
   disabled,
   onSubmit,
   onClose,
+  onRemove,
+  onRefresh,
+  saveState,
 }: EditorProps): JSX.Element => {
-  const { amount, setAmount, currency, setCurrency, group, onGroup, submit } = useEditor({
+  const [removing, setRemoving] = useState(false);
+  const editor = useEditor({
     draft,
     groupCurrencies,
     disabled,
     onSubmit,
   });
+  if (removing) {
+    return (
+      <BudgetDeletion
+        draft={draft}
+        month={month}
+        disabled={disabled}
+        onCancel={() => setRemoving(false)}
+        onRemove={onRemove}
+        onRefresh={onRefresh}
+        saveState={saveState}
+      />
+    );
+  }
+  return (
+    <EditorForm
+      draft={draft}
+      month={month}
+      groups={groups}
+      groupCurrencies={groupCurrencies}
+      disabled={disabled}
+      onClose={onClose}
+      editor={editor}
+      onDelete={() => setRemoving(true)}
+    />
+  );
+};
+
+const EditorForm = ({
+  draft,
+  month,
+  groups,
+  groupCurrencies,
+  disabled,
+  onClose,
+  editor,
+  onDelete,
+}: Omit<EditorProps, "onSubmit" | "onRemove" | "onRefresh" | "saveState"> &
+  Readonly<{ editor: ReturnType<typeof useEditor>; onDelete: () => void }>): JSX.Element => {
+  const { amount, setAmount, currency, setCurrency, group, onGroup, submit } = editor;
   return (
     <form
       onSubmit={submit}
@@ -194,6 +241,11 @@ export const BudgetEditor = ({
         ) : null}
         <Button type="submit">{disabled ? "Guardando…" : "Guardar presupuesto"}</Button>
       </fieldset>
+      {Option.isSome(draft.budget) && Option.isNone(draft.groupCategoryIds) ? (
+        <Button type="button" variant="destructive" disabled={disabled} onClick={onDelete}>
+          Eliminar presupuesto
+        </Button>
+      ) : null}
     </form>
   );
 };

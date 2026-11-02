@@ -91,32 +91,44 @@ const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
     </WorkspaceHeader>
   );
 };
+const writeMessages = {
+  save: {
+    saving: "Guardando presupuesto…",
+    saved: "Presupuesto guardado.",
+    failed:
+      "No se pudo guardar. Usa un importe positivo con la precisión de su moneda y un nombre de grupo válido.",
+    uncertain:
+      "No pudimos confirmar el guardado. Actualiza para comprobar el plan antes de volver a editar.",
+  },
+  delete: {
+    saving: "Eliminando presupuesto…",
+    saved: "Presupuesto eliminado de todos los meses.",
+    failed:
+      "No se pudo eliminar el presupuesto. Actualiza para comprobar si todavía existe antes de intentarlo de nuevo.",
+    uncertain:
+      "No pudimos confirmar la eliminación. Actualiza para comprobar el plan antes de volver a editar.",
+  },
+};
 const BudgetFeedback = ({ props, controller }: ViewProps): JSX.Element => (
   <div className="px-5 empty:hidden [&:not(:empty)]:pt-4" aria-live="polite">
     {controller.saveState === "saving" ? (
       <Alert role="note" variant="pending">
-        <AlertDescription>Guardando presupuesto…</AlertDescription>
+        <AlertDescription>{writeMessages[controller.writeAction].saving}</AlertDescription>
       </Alert>
     ) : null}
     {controller.saveState === "saved" ? (
       <Alert role="note" variant="success">
-        <AlertDescription>Presupuesto guardado.</AlertDescription>
+        <AlertDescription>{writeMessages[controller.writeAction].saved}</AlertDescription>
       </Alert>
     ) : null}
     {controller.saveState === "failed" ? (
       <Alert variant="destructive">
-        <AlertDescription>
-          No se pudo guardar. Usa un importe positivo con la precisión de su moneda y un nombre de
-          grupo válido.
-        </AlertDescription>
+        <AlertDescription>{writeMessages[controller.writeAction].failed}</AlertDescription>
       </Alert>
     ) : null}
     {controller.saveState === "uncertain" ? (
       <Alert variant="destructive">
-        <AlertDescription>
-          No pudimos confirmar el guardado. Actualiza para comprobar el plan antes de volver a
-          editar.
-        </AlertDescription>
+        <AlertDescription>{writeMessages[controller.writeAction].uncertain}</AlertDescription>
       </Alert>
     ) : null}
     {props.report.initialized === false && props.report.statuses.length > 0 ? (
@@ -163,6 +175,9 @@ const BudgetPanel = ({
           disabled={controller.disabled}
           onClose={controller.closeEditor}
           onSubmit={controller.write}
+          onRemove={controller.remove}
+          onRefresh={controller.refresh}
+          saveState={controller.saveState}
         />
       ),
     })}

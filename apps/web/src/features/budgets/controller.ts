@@ -2,7 +2,7 @@ import { budgetStatusQuery } from "./queries";
 import { workspaceCategoriesQuery } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { BigDecimal, Cause, Effect, Exit, Option, Predicate, Schema } from "effect";
-import type { Atom } from "effect/reactivity";
+import { type Atom, Reactivity } from "effect/reactivity";
 import { useRef, useState } from "react";
 import { type CanonicalInput, Currency, type FidyClient } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
@@ -22,7 +22,9 @@ type BudgetMonth =
   | Readonly<{ _tag: "Loading" | "Failure"; waiting: boolean; refresh: () => void }>
   | Readonly<{ _tag: "Ready"; stale: boolean; waiting: boolean; workspace: WorkspaceProps }>;
 type WriteOutcome = "saved" | "failed" | "uncertain";
+const deletionProjectionKeys = ["budgets", "dashboard"];
 type ValidWrite =
+  | Readonly<{ type: "delete"; input: CanonicalInput<"budgets.deleteBudget"> }>
   | Readonly<{ type: "create"; input: CanonicalInput<"budgets.createBudget"> }>
   | Readonly<{ type: "update"; input: CanonicalInput<"budgets.updateBudget"> }>;
 const validatedWrite = ({
@@ -76,7 +78,8 @@ const makeBudgetWrite = (
       Effect.gen(function* () {
         const client = yield* apiClient;
         if (command.type === "create") yield* client.budgets.createBudget(command.input);
-        else yield* client.budgets.updateBudget(command.input);
+        else if (command.type === "update") yield* client.budgets.updateBudget(command.input);
+        else yield* client.budgets.deleteBudget(command.input);
         return "saved" as const;
       }).pipe(
         Effect.catch((failure) =>
@@ -90,6 +93,11 @@ const makeBudgetWrite = (
         ),
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause) ? Effect.interrupt : Effect.succeed("uncertain" as const)
+        ),
+        Effect.tap((outcome) =>
+          command.type === "delete" && outcome !== "failed"
+            ? Reactivity.invalidate(deletionProjectionKeys)
+            : Effect.void
         )
       ),
     { concurrent: false }
@@ -147,7 +155,14 @@ const useMonthQueries = ({ apiClient, user, month }: MonthInput): MonthRead => {
 };
 type BudgetWrites = Pick<
   BudgetEditing,
-  "saveState" | "disabled" | "draft" | "write" | "refresh" | "closeEditor"
+  | "saveState"
+  | "writeAction"
+  | "disabled"
+  | "draft"
+  | "write"
+  | "remove"
+  | "refresh"
+  | "closeEditor"
 > &
   Readonly<{
     refreshVersion: number;
@@ -160,13 +175,56 @@ const writeOutcome = (exit: Exit.Exit<WriteOutcome, never>): Option.Option<Write
 
 type BudgetInteraction = Readonly<{
   saveState: SaveState;
+  writeAction: "save" | "delete";
   draft: Option.Option<BudgetDraft>;
   refreshVersion: number;
 }>;
 const initialInteraction: BudgetInteraction = {
   saveState: "idle",
+  writeAction: "save",
   draft: Option.none(),
   refreshVersion: 0,
+};
+
+const deletionWrite = (draft: Option.Option<BudgetDraft>): Option.Option<ValidWrite> => {
+  if (
+    Option.isNone(draft) ||
+    Option.isSome(draft.value.groupCategoryIds) ||
+    Option.isNone(draft.value.budget)
+  ) {
+    return Option.none();
+  }
+  return Option.some({ type: "delete", input: { params: { id: draft.value.budget.value.id } } });
+};
+type BudgetSubmission = Readonly<{
+  refreshProjections: () => void;
+  pending: () => boolean;
+  submit: (write: ValidWrite, complete: (outcome: WriteOutcome) => void) => void;
+}>;
+const useBudgetSubmission = (apiClient: FidyClient): BudgetSubmission => {
+  const [command] = useState(() => makeBudgetWrite(apiClient));
+  const [refresh] = useState(() =>
+    apiClient.runtime.fn<void>()(() => Reactivity.invalidate(deletionProjectionKeys))
+  );
+  const refreshProjections = useAtomSet(refresh);
+  const submit = useAtomSet(command, { mode: "promiseExit" });
+  const admission = useRef(false);
+  return {
+    refreshProjections,
+    pending: () => admission.current,
+    submit: (write: ValidWrite, complete: (outcome: WriteOutcome) => void): void => {
+      admission.current = true;
+      submit(write)
+        .then((exit) => {
+          admission.current = false;
+          Option.match(writeOutcome(exit), { onNone: () => undefined, onSome: complete });
+        })
+        .catch(() => {
+          admission.current = false;
+          complete("uncertain");
+        });
+    },
+  };
 };
 
 const useBudgetWrites = ({
@@ -180,52 +238,52 @@ const useBudgetWrites = ({
   editable: boolean;
   refreshQueries: () => void;
 }>): BudgetWrites => {
-  const [save] = useState(() => makeBudgetWrite(apiClient));
-  const submit = useAtomSet(save, { mode: "promiseExit" });
-  const admission = useRef(false);
+  const { pending, submit, refreshProjections } = useBudgetSubmission(apiClient);
   const [interaction, setInteraction] = useState(initialInteraction);
   const update = (patch: Partial<typeof interaction>): void =>
     setInteraction((current) => ({ ...current, ...patch }));
   const { saveState, refreshVersion } = interaction;
   const disabled = !editable || saveState === "saving" || saveState === "uncertain";
   const refresh = (): void => {
-    if (admission.current) return;
+    if (pending()) return;
+    if (interaction.writeAction === "delete") refreshProjections();
     update({ refreshVersion: refreshVersion + 1, saveState: "idle", draft: Option.none() });
     refreshQueries();
   };
-  const complete = (outcome: WriteOutcome): void => {
-    admission.current = false;
+  const complete = (outcome: WriteOutcome, command: ValidWrite): void => {
     update(
       outcome === "saved" ? { saveState: outcome, draft: Option.none() } : { saveState: outcome }
     );
-    if (outcome === "saved") refreshQueries();
+    if (outcome === "saved" && command.type !== "delete") refreshQueries();
+  };
+  const execute = (command: ValidWrite): void => {
+    if (disabled || pending()) return;
+    update({ saveState: "saving", writeAction: command.type === "delete" ? "delete" : "save" });
+    submit(command, (outcome) => complete(outcome, command));
   };
   const write = (edit: BudgetEdit): void => {
-    if (disabled || admission.current) return;
-    const parsed = validatedWrite({ edit, month });
-    if (Option.isNone(parsed)) {
-      update({ saveState: "failed" });
-      return;
-    }
-    admission.current = true;
-    update({ saveState: "saving" });
-    submit(parsed.value)
-      .then((exit) => {
-        admission.current = false;
-        Option.match(writeOutcome(exit), { onNone: () => undefined, onSome: complete });
-      })
-      .catch(() => complete("uncertain"));
+    if (disabled || pending()) return;
+    Option.match(validatedWrite({ edit, month }), {
+      onNone: () => update({ saveState: "failed", writeAction: "save" }),
+      onSome: execute,
+    });
   };
+  const remove = (): void =>
+    Option.match(deletionWrite(interaction.draft), {
+      onNone: () => undefined,
+      onSome: execute,
+    });
   return {
     ...interaction,
     disabled,
     write,
+    remove,
     refresh,
     openEditor: (value) => {
-      if (!disabled && !admission.current) update({ draft: Option.some(value) });
+      if (!disabled && !pending()) update({ draft: Option.some(value) });
     },
     closeEditor: () => {
-      if (!admission.current && saveState !== "uncertain") update({ draft: Option.none() });
+      if (!pending() && saveState !== "uncertain") update({ draft: Option.none() });
     },
   };
 };
@@ -241,9 +299,11 @@ const budgetEditing = (data: MonthData, writes: BudgetWrites): BudgetEditing => 
     });
   return {
     saveState: writes.saveState,
+    writeAction: writes.writeAction,
     disabled: writes.disabled,
     draft: writes.draft,
     write: writes.write,
+    remove: writes.remove,
     refresh: writes.refresh,
     closeEditor: writes.closeEditor,
     assignCategory: (category: Category) =>

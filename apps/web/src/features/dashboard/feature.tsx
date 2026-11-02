@@ -3,7 +3,7 @@ import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Option } from "effect";
 import type { AsyncResult } from "effect/reactivity";
 import { type JSX, Suspense, useState } from "react";
-import { lazyRouteComponent } from "@tanstack/react-router";
+import { lazyRouteComponent, useRouter } from "@tanstack/react-router";
 import { LoadingDashboard } from "./loading";
 import { Button } from "@/ui/components/button";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
@@ -26,7 +26,8 @@ DashboardViewComponent.preload?.()?.catch(() => undefined);
 export const DashboardFeature = ({
   apiClient,
 }: Readonly<{ apiClient: FidyClient }>): JSX.Element => {
-  const [dashboard] = useState(() => dashboardQuery(apiClient));
+  const router = useRouter();
+  const [dashboard] = useState(() => dashboardQuery({ apiClient, router }));
   const result = useAtomValue(dashboard.result);
   const phase = useAtomValue(dashboard.phase);
   const refresh = useAtomRefresh(dashboard.result);

@@ -31,9 +31,11 @@ export type BudgetEdit = Readonly<{
 }>;
 export type BudgetEditing = Readonly<{
   saveState: SaveState;
+  writeAction: "save" | "delete";
   disabled: boolean;
   draft: Option.Option<BudgetDraft>;
   write: (edit: BudgetEdit) => void;
+  remove: () => void;
   refresh: () => void;
   closeEditor: () => void;
   assignCategory: (category: Category) => void;

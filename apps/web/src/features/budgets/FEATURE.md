@@ -25,8 +25,8 @@ close production cap create/update, reload persistence and read-only forward inh
 not establish independent future-month writes, Currency changes or cleanup.
 
 The sole test cap remains COP 23,456 for Restaurantes, October 2026, pending exact permanent-deletion
-approval. No production Transaction was created, edited or deleted by this Budget test. The current
-browser editor has no Budget deletion action; canonical deletion is a separate capability. Cleanup
+approval. No production Transaction was created, edited or deleted by this Budget test. At the time of this audit, the
+browser editor had no Budget deletion action; canonical deletion was a separate capability. Cleanup
 must use a supported authorized path, not a direct database write. Historical statements below that
 no production cap was saved describe earlier runs and are superseded by this entry.
 
@@ -56,6 +56,8 @@ Capability and verification map for `/app/budgets`. Product requirements remain 
 `controller.ts` owns canonical write construction, synchronous write admission, outcomes and query refresh. Presentation invokes Budget editing actions without assembling writes or coordinating reset identities. Pending writes lock editing and month navigation. A known refusal reports failure; an uncertain response blocks further writes until explicit refresh. Refresh rereads canonical state and discards unsent drafts instead of replaying the mutation.
 
 The first write materializes the selected month's inherited plan. Caps are month-specific, while group names organize Categories across months. Group Currency changes affect later plans without rewriting previously frozen Money. No implicit Currency conversion occurs.
+
+Existing Category editors offer permanent removal with a separate confirmation. The confirmation names the selected month and explains deletion across saved historical and later months, removal from inherited future plans, and deletion of operational monthly alert marks. Transactions and already-recorded alert history remain intact. Group settings do not expose individual removal. Deletion shares the mounted editing owner's write admission and freshness checks. Uncertain acknowledgements lock editing until an explicit successful reread; the confirmation panel includes recovery so a locked mobile Sheet can refresh. Successful or uncertain deletions invalidate retained Budget months and Dashboard summaries; reread never replays deletion.
 
 `presentation.ts` and `summary.tsx` calculate exact totals separately per Currency. Monthly expenses include uncapped Categories; monthly income allocation compares income to planned caps, not spending. A Dashboard Budget Widget consumes the same canonical Budget status and retains its own display Currency.
 

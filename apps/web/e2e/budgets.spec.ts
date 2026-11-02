@@ -60,6 +60,12 @@ const reportBase = {
 
 const report = { ...reportBase, budgets: reportBase.statuses.map((status) => status.budget) };
 
+const deletedReport = {
+  ...report,
+  budgets: report.budgets.slice(1),
+  statuses: report.statuses.slice(1),
+};
+
 const fitsViewport = (): boolean => document.documentElement.scrollWidth <= window.innerWidth;
 const installBudgetReport = (page: Page): Promise<unknown> =>
   page
@@ -393,6 +399,7 @@ test("saves a monthly cap from the view through real Core and retains it after r
       );
       yield* checkEarlierMonth(page);
       yield* checkGroupCurrency(page);
+      yield* checkPermanentRemoval(page);
     })
   ));
 
@@ -430,6 +437,47 @@ const checkGroupCurrency = (page: Page): Effect.Effect<void, Cause.UnknownError>
       expect(page.getByLabel("Presupuesto de Restaurantes (COP)")).toHaveValue("500000")
     );
   });
+
+const checkPermanentRemoval = Effect.fn(function* (page: Page) {
+  for (const month of ["2026-11", "2026-12"]) {
+    yield* Effect.tryPromise(() => page.getByRole("button", { name: "Mes siguiente" }).click());
+    yield* Effect.tryPromise(() => expect(page).toHaveURL(new RegExp(`month=${month}`, "u")));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Presupuesto de Restaurantes (USD)")).toHaveValue("500000")
+    );
+  }
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("Plan heredado del mes anterior.", { exact: false })).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Configurar Restaurantes", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Eliminar presupuesto", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Eliminar de todos los meses", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByText("Presupuesto eliminado de todos los meses.", { exact: true })
+    ).toBeVisible()
+  );
+  for (const month of ["2026-11", "2026-10", "2026-09"]) {
+    yield* Effect.tryPromise(() => page.getByRole("button", { name: "Mes anterior" }).click());
+    yield* Effect.tryPromise(() => expect(page).toHaveURL(new RegExp(`month=${month}`, "u")));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("Aún no tienes presupuestos.", { exact: false })).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel(/^Presupuesto de Restaurantes/u)).toHaveCount(0)
+    );
+  }
+  yield* Effect.tryPromise(() => page.reload());
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("Aún no tienes presupuestos.", { exact: false })).toBeVisible()
+  );
+});
 
 const largeReportSize = 1000;
 const largeGroupCount = 16;
@@ -509,3 +557,438 @@ const checkLargeReport = Effect.fn(function* (page: Page) {
 test("a thousand-cap report keeps all sixteen groups and the final Category reachable", ({
   page,
 }) => Effect.runPromise(checkLargeReport(page)));
+
+const checkDeletionReview = Effect.fn(function* (page: Page) {
+  const review = page.getByRole("region", { name: "Eliminar presupuesto de Vivienda" });
+  for (const consequence of [
+    "2026-10",
+    "meses anteriores",
+    "planes futuros",
+    "marcas de alerta",
+    "transacciones se conservan",
+  ]) {
+    yield* Effect.tryPromise(() => expect(review).toContainText(consequence));
+  }
+  yield* Effect.tryPromise(() =>
+    review.getByRole("button", { name: "Cancelar", exact: true }).click()
+  );
+});
+
+const checkBudgetDeletion = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => installUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  yield* Effect.tryPromise(() => installBudgetReport(page));
+  let deletions = 0;
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budgets/*`, (route) => {
+      expect(route.request().method()).toBe("DELETE");
+      deletions += 1;
+      return route.fulfill({
+        contentType: "application/json",
+        body: response("24000000-0000-4000-8000-000000000310"),
+      });
+    })
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Configurar Vivienda", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Eliminar presupuesto", exact: true }).click()
+  );
+  const review = page.getByRole("region", { name: "Eliminar presupuesto de Vivienda" });
+  yield* checkDeletionReview(page);
+  expect(deletions).toBe(0);
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Presupuesto", { exact: true })).toHaveValue("100000")
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Eliminar presupuesto", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budget-status?**`, (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: response(deletedReport),
+      })
+    )
+  );
+  yield* Effect.tryPromise(() =>
+    review.getByRole("button", { name: "Eliminar de todos los meses", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByText("Presupuesto eliminado de todos los meses.", { exact: true })
+    ).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Presupuesto de Vivienda (COP)")).toHaveCount(0)
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Presupuesto de Restaurantes (USD)")).toHaveValue("50.25")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("region", { name: "Resumen COP" })).toContainText("130.000")
+  );
+  expect(deletions).toBe(1);
+});
+test("removes a Category Budget only after reviewing all-month scope and allows cancellation", ({
+  page,
+}) => Effect.runPromise(checkBudgetDeletion(page)));
+
+const checkDeletionLock = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByRole("button", { name: "Eliminar de todos los meses", exact: true })
+    ).toBeDisabled()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("button", { name: "Cancelar", exact: true })).toBeDisabled()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.locator('button[aria-label="Mes siguiente"]')).toBeDisabled()
+  );
+});
+
+const checkDeletionReread = Effect.fn(function* (
+  page: Page,
+  availability: { unavailable: boolean }
+) {
+  availability.unavailable = true;
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Actualizar presupuestos", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("alert")).toContainText("No pudimos cargar tus presupuestos")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.locator('button[aria-label="Mes siguiente"]')).toBeDisabled()
+  );
+  availability.unavailable = false;
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Reintentar", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.locator('button[aria-label="Mes siguiente"]')).toBeEnabled()
+  );
+});
+
+const checkDeletionRecovery = Effect.fn(function* (page: Page, committed: boolean) {
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/ingestion/review-workspace?**`, (route) =>
+      route.fulfill({ status: 503 })
+    )
+  );
+
+  yield* Effect.tryPromise(() => installUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  let deleted = false;
+  const availability = { unavailable: false };
+  let deletions = 0;
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budget-status?**`, (route) =>
+      availability.unavailable
+        ? route.fulfill({ status: 503 })
+        : route.fulfill({
+            contentType: "application/json",
+            body: response(deleted ? deletedReport : report),
+          })
+    )
+  );
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budgets/*`, (route) => {
+      expect(route.request().method()).toBe("DELETE");
+      deletions += 1;
+      deleted = committed;
+      return route.abort("failed");
+    })
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Configurar Vivienda", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Eliminar presupuesto", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Eliminar de todos los meses", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("alert")).toContainText("No pudimos confirmar la eliminación")
+  );
+  yield* checkDeletionLock(page);
+  yield* checkDeletionReread(page, availability);
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Presupuesto de Vivienda (COP)")).toHaveCount(committed ? 0 : 1)
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("region", { name: "Eliminar presupuesto de Vivienda" })).toHaveCount(0)
+  );
+  expect(deletions).toBe(1);
+});
+for (const committed of [false, true]) {
+  test(`an uncertain deletion recovers a ${committed ? "removed" : "retained"} Budget without replay after a failed reread`, ({
+    page,
+  }) => Effect.runPromise(checkDeletionRecovery(page, committed)));
+}
+
+const checkMissingBudget = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => installUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  yield* Effect.tryPromise(() => installBudgetReport(page));
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budgets/*`, (route) =>
+      route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: { code: "not_found", message: "Budget not found" },
+          next: [],
+        }),
+      })
+    )
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Configurar Vivienda", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Eliminar presupuesto", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Eliminar de todos los meses", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("alert")).toContainText("No se pudo eliminar el presupuesto")
+  );
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budget-status?**`, (route) =>
+      route.fulfill({ contentType: "application/json", body: response(deletedReport) })
+    )
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Actualizar presupuestos", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Presupuesto de Vivienda (COP)")).toHaveCount(0)
+  );
+  yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toHaveCount(0));
+});
+test("a Budget removed elsewhere reports a refusal and rereads canonical state", ({ page }) =>
+  Effect.runPromise(checkMissingBudget(page)));
+
+const deletionMonthReport = (source: typeof report, future: boolean): typeof report => {
+  const appliedPeriod = future
+    ? { ...period, from: "2026-11-01T05:00:00Z", to: "2026-12-01T05:00:00Z" }
+    : period;
+  return {
+    ...source,
+    initialized: !future,
+    period: appliedPeriod,
+    statuses: source.statuses.map((status) => ({ ...status, period: appliedPeriod })),
+  };
+};
+
+const checkLateDeletion = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 1600, height: 1000 }));
+  yield* Effect.tryPromise(() => installUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  let deleted = false;
+  let deletionRequested = false;
+  let oldRereads = 0;
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budget-status?**`, (route) => {
+      const source = deleted ? deletedReport : report;
+      const future = new URL(route.request().url()).searchParams.get("month") === "2026-11";
+      if (deletionRequested && !deleted) oldRereads += 1;
+      return route.fulfill({
+        contentType: "application/json",
+        body: response(deletionMonthReport(source, future)),
+      });
+    })
+  );
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budgets/*`, (route) => {
+      deletionRequested = true;
+      return route.abort("failed");
+    })
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-11"));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Presupuesto de Vivienda (COP)")).toHaveValue("100000")
+  );
+  yield* Effect.tryPromise(() => page.getByRole("button", { name: "Mes anterior" }).click());
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Configurar Vivienda", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Eliminar presupuesto", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Eliminar de todos los meses", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => expect.poll(() => oldRereads).toBeGreaterThanOrEqual(2));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("button", { name: "Actualizar presupuestos", exact: true })).toBeVisible()
+  );
+  deleted = true;
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Actualizar presupuestos", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Presupuesto de Vivienda (COP)")).toHaveCount(0)
+  );
+  yield* Effect.tryPromise(() => page.getByRole("button", { name: "Mes siguiente" }).click());
+  yield* Effect.tryPromise(() => expect(page).toHaveURL(/month=2026-11/u));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Presupuesto de Restaurantes (USD)")).toHaveValue("50.25")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Presupuesto de Vivienda (COP)")).toHaveCount(0)
+  );
+});
+test("explicit deletion recovery refreshes cached inherited plans after a late commit", ({
+  page,
+}) => Effect.runPromise(checkLateDeletion(page)));
+
+const unavailableStatus = 503;
+const absentDashboardStatus = 404;
+const installFailedDashboard = Effect.fn(function* (
+  page: Page,
+  observation: { reads: number; initializationPaths: Array<string> }
+) {
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/dashboard/view`, (route) => {
+      observation.reads += 1;
+      return route.fulfill({
+        status: observation.reads === 1 ? unavailableStatus : absentDashboardStatus,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: {
+            code: observation.reads === 1 ? "unavailable" : "dashboard_uninitialized",
+            message: "Dashboard unavailable",
+          },
+          next: [],
+        }),
+      });
+    })
+  );
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/dashboard/initialize`, (route) => {
+      observation.initializationPaths.push(new URL(page.url()).pathname);
+      return route.fulfill({ status: 503 });
+    })
+  );
+});
+
+const checkBackgroundDashboard = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/dashboard/catalog`, (route) =>
+      route.fulfill({ contentType: "application/json", body: response([]) })
+    )
+  );
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 1600, height: 1000 }));
+  yield* Effect.tryPromise(() => installUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  yield* Effect.tryPromise(() => installBudgetReport(page));
+  const observation = { reads: 0, initializationPaths: new Array<string>() };
+  yield* installFailedDashboard(page, observation);
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budgets/*`, (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: response("24000000-0000-4000-8000-000000000310"),
+      })
+    )
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+  yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());
+  yield* Effect.tryPromise(() =>
+    page.getByRole("link", { name: "Presupuestos", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Configurar Vivienda", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Eliminar presupuesto", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Eliminar de todos los meses", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByText("Presupuesto eliminado de todos los meses.", { exact: true })
+    ).toBeVisible()
+  );
+  yield* Effect.tryPromise(() => expect.poll(() => observation.reads).toBeGreaterThanOrEqual(2));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Actualizar", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => expect.poll(() => observation.reads).toBeGreaterThanOrEqual(3));
+  expect(observation.initializationPaths).toEqual([]);
+});
+test("Budget removal and recovery never initialize a retained failed Dashboard outside its visit", ({
+  page,
+}) => Effect.runPromise(checkBackgroundDashboard(page)));
+
+const holdDeletion = Effect.fn(function* (page: Page) {
+  const pending = Promise.withResolvers<void>();
+  const abort = (route: Route): Promise<void> => pending.promise.then(() => route.abort("failed"));
+  yield* Effect.tryPromise(() => page.route(`${apiOrigin}/budgets/*`, abort));
+  return pending.resolve;
+});
+const checkDeletionDesign = Effect.fn(function* (page: Page, colorScheme: "light" | "dark") {
+  yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme, reducedMotion: "reduce" }));
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+  yield* Effect.tryPromise(() => installUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  yield* Effect.tryPromise(() => installBudgetReport(page));
+  const release = yield* holdDeletion(page);
+  yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+  yield* Effect.tryPromise(() =>
+    page.evaluate(() => {
+      document.documentElement.style.fontSize = "32px";
+    })
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Configurar Vivienda", exact: true }).click()
+  );
+  const opener = page.getByRole("button", { name: "Eliminar presupuesto", exact: true });
+  yield* Effect.tryPromise(() => opener.press("Enter"));
+  const review = page.getByRole("region", { name: "Eliminar presupuesto de Vivienda" });
+  const cancel = review.getByRole("button", { name: "Cancelar", exact: true });
+  yield* Effect.tryPromise(() => expect(cancel).toBeFocused());
+  expect(
+    yield* Effect.tryPromise(() =>
+      review.evaluate((element) => element.scrollWidth <= element.clientWidth)
+    )
+  ).toBe(true);
+  yield* Effect.tryPromise(() => cancel.press("Space"));
+  yield* Effect.tryPromise(() => expect(opener).toBeFocused());
+  yield* Effect.tryPromise(() => opener.press("Enter"));
+  yield* Effect.tryPromise(() => expect(cancel).toBeFocused());
+  yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
+  const confirm = review.getByRole("button", { name: "Eliminar de todos los meses", exact: true });
+  yield* Effect.tryPromise(() => expect(confirm).toBeFocused());
+  yield* Effect.tryPromise(() => page.keyboard.press("Enter"));
+  yield* Effect.tryPromise(() =>
+    expect(review.getByRole("status")).toContainText("Eliminando presupuesto")
+  );
+  yield* Effect.tryPromise(() => expect(confirm).toBeDisabled());
+  release();
+  yield* Effect.tryPromise(() =>
+    expect(review.getByRole("alert")).toContainText("No pudimos confirmar la eliminación")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(
+      review.getByRole("button", { name: "Actualizar presupuestos", exact: true })
+    ).toBeVisible()
+  );
+  yield* checkAccessibility(page);
+});
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`Budget deletion keeps focus, enlarged-text actions and local progress in ${colorScheme}`, ({
+    page,
+  }) => Effect.runPromise(checkDeletionDesign(page, colorScheme)));
+}

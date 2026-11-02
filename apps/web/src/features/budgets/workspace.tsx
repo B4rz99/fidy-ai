@@ -1,5 +1,5 @@
 import { RefreshButton } from "@/ui/components/refresh-button";
-import { Alert, AlertDescription } from "@/ui/components/alert";
+import { BudgetWriteFeedback } from "./write-feedback";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import "@/ui/components/budget-layout.css";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -93,32 +93,9 @@ const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
 };
 const BudgetFeedback = ({ props, controller }: ViewProps): JSX.Element => (
   <div className="px-5 empty:hidden [&:not(:empty)]:pt-4" aria-live="polite">
-    {controller.saveState === "saving" ? (
-      <Alert role="note" variant="pending">
-        <AlertDescription>Guardando presupuesto…</AlertDescription>
-      </Alert>
-    ) : null}
-    {controller.saveState === "saved" ? (
-      <Alert role="note" variant="success">
-        <AlertDescription>Presupuesto guardado.</AlertDescription>
-      </Alert>
-    ) : null}
-    {controller.saveState === "failed" ? (
-      <Alert variant="destructive">
-        <AlertDescription>
-          No se pudo guardar. Usa un importe positivo con la precisión de su moneda y un nombre de
-          grupo válido.
-        </AlertDescription>
-      </Alert>
-    ) : null}
-    {controller.saveState === "uncertain" ? (
-      <Alert variant="destructive">
-        <AlertDescription>
-          No pudimos confirmar el guardado. Actualiza para comprobar el plan antes de volver a
-          editar.
-        </AlertDescription>
-      </Alert>
-    ) : null}
+    {controller.writeAction === "delete" && Option.isSome(controller.draft) ? null : (
+      <BudgetWriteFeedback saveState={controller.saveState} writeAction={controller.writeAction} />
+    )}
     {props.report.initialized === false && props.report.statuses.length > 0 ? (
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-sm text-muted-foreground">
@@ -163,6 +140,13 @@ const BudgetPanel = ({
           disabled={controller.disabled}
           onClose={controller.closeEditor}
           onSubmit={controller.write}
+          onRemove={controller.remove}
+          onRefresh={controller.refresh}
+          saveState={
+            controller.writeAction === "delete" && controller.saveState !== "saved"
+              ? controller.saveState
+              : "idle"
+          }
         />
       ),
     })}

@@ -23,6 +23,7 @@ export const budgetStatusQuery = ({
   apiClient
     .query("budgets", "getBudgetStatus", {
       ...workspaceQueryRetention,
+      reactivityKeys: ["budgets"],
       query: { timeZone: user.timeZone, month },
     })
     .pipe(revalidateWorkspaceQuery);

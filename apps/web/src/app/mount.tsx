@@ -1,8 +1,11 @@
+import { preloadWebRouteCode } from "./entry-code";
+import { tryMountProviderReturn } from "./provider-return";
 import { beginInitialBrowserRequest } from "@/transport/initial-request";
 import { parseApiOrigin } from "@/transport/origin";
 import { observeInitialBrowserRequest } from "@/session/initial-request";
 
 export const mountWebApplication = (): void => {
+  if (tryMountProviderReturn()) return;
   const ready = Promise.withResolvers<void>();
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => ready.resolve(), { once: true });
@@ -14,9 +17,9 @@ export const mountWebApplication = (): void => {
       transactions: window.location.pathname === "/app/transactions",
     })
   );
+  preloadWebRouteCode(window.location.pathname).catch(() => undefined);
   Promise.all([import("./render"), import("@/transport/initial-session")])
-    .then(([{ mountWebApplication, preloadWebRouteCode }, { beginInitialBrowserSession }]) => {
-      preloadWebRouteCode().catch(() => undefined);
+    .then(([{ mountWebApplication }, { beginInitialBrowserSession }]) => {
       const initial = beginInitialBrowserSession({ ...request, request });
       return ready.promise.then(() => {
         const root = document.querySelector("#root");

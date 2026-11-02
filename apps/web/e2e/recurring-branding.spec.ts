@@ -66,7 +66,7 @@ test("recurring editor stays below the global header and closes without saving i
         page.setViewportSize({ width: desktopWidth, height: viewportHeight })
       );
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurring" })
+        signInRecurringThroughCore({ page, deferFreshEntry: true, request, identity: "recurring" })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* Effect.tryPromise(() =>

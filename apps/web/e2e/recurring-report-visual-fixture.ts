@@ -1,10 +1,10 @@
+import { analyzeAccessibility } from "./accessibility";
 import type { Page, Route } from "@playwright/test";
 import { Effect, Schema } from "effect";
 import { apiOrigin, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect } = playwright;
-const { AxeBuilder } = await import("@axe-core/playwright");
 const captureDirectory = "test-results/recurring-report-visual";
 const uuidSuffixLength = 12;
 const confirmationOffset = 600;
@@ -70,7 +70,7 @@ export const captureReport = Effect.fnUntraced(function* (page: Page, filename: 
       scale: "css",
     })
   );
-  const result = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+  const result = yield* Effect.tryPromise(() => analyzeAccessibility(page));
   const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result);
   yield* Effect.tryPromise(() => Bun.write(`${captureDirectory}/${filename}.axe.json`, encoded));
   expect(result.violations).toEqual([]);

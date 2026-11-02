@@ -43,7 +43,9 @@ describe("pull-request checks workflow policy", () => {
       browserJob.indexOf("- name: Verify Chromium system dependencies"),
       browserJob.indexOf("- name: Static-shell browser validation")
     );
-    expect(installation).not.toContain("if:");
+    expect(
+      Array.from(installation.matchAll(/if: \$\{\{ (.+) \}\}/gu), (match) => match[1])
+    ).toEqual(["steps.plan.outputs.browser == 'true'"]);
     expect(bunInstallAction).not.toContain("restore-keys:");
   });
 

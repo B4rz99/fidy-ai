@@ -28,8 +28,6 @@ const TransactionWorkspace = lazyRouteComponent(
   () => import("./workspace"),
   "TransactionWorkspace"
 );
-// Fetch presentation immediately while the unchanged query owners check live access and read data.
-TransactionWorkspace.preload?.()?.catch(() => undefined);
 type QueryActivity =
   | Readonly<{
       _tag: "Current";
@@ -535,3 +533,6 @@ TransactionListFeature.preloadData = ({
     })
   );
 TransactionListFeature.initialValue = transactionPageInitialValue;
+/** Entry code can overlap live access checks without loading this workspace on other routes. */
+TransactionListFeature.preload = (): Promise<void> =>
+  TransactionWorkspace.preload?.() ?? Promise.resolve();

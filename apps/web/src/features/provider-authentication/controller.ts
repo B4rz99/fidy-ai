@@ -49,8 +49,11 @@ const providerClient = (
 };
 type ProviderPoll = (
   client: Client,
-  provider: AuthenticationProvider,
-  pairing: Pairing
+  input: Readonly<{
+    provider: AuthenticationProvider;
+    pairing: Pairing;
+    beforeRequest: Option.Option<() => void>;
+  }>
 ) => Effect.Effect<
   WebAuthSuccess<"providerAuthentication", "status">,
   Effect.Error<ReturnType<Client["providerAuthentication"]["status"]>>
@@ -59,11 +62,12 @@ type ProviderPoll = (
 const makeProviderPoller = (): ProviderPoll => {
   const intervalMilliseconds = 1_000;
   let readyAt = 0;
-  return (client, provider, pairing): ReturnType<ProviderPoll> =>
+  return (client, { provider, pairing, beforeRequest }): ReturnType<ProviderPoll> =>
     Effect.gen(function* () {
       const current = yield* Clock.currentTimeMillis;
       if (readyAt > current) yield* Effect.sleep(readyAt - current);
       readyAt = (yield* Clock.currentTimeMillis) + intervalMilliseconds;
+      if (Option.isSome(beforeRequest)) beforeRequest.value();
       const result = yield* providerClient(client, provider).status({ payload: proof(pairing) });
       readyAt = (yield* Clock.currentTimeMillis) + intervalMilliseconds;
       return result;
@@ -81,13 +85,22 @@ const awaitProviderVerification = (
 ): Effect.Effect<Option.Option<AssociationReview>, "rejected" | "cancelled"> =>
   Effect.gen(function* () {
     for (;;) {
-      const popupClosed = input.popup.closed;
-      const result = yield* input.poll(client, input.provider, pairing).pipe(
-        Effect.catchCauseIf(
-          (cause) => !Cause.hasInterruptsOnly(cause),
-          () => Effect.fail(input.popup.closed ? ("cancelled" as const) : ("rejected" as const))
-        )
-      );
+      let popupClosed = input.popup.closed;
+      const observePopup = (): void => {
+        popupClosed = input.popup.closed;
+      };
+      const result = yield* input
+        .poll(client, {
+          provider: input.provider,
+          pairing,
+          beforeRequest: Option.some(observePopup),
+        })
+        .pipe(
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterruptsOnly(cause),
+            () => Effect.fail(input.popup.closed ? ("cancelled" as const) : ("rejected" as const))
+          )
+        );
       if (result.status === "verified") return Option.none();
       if (result.status === "awaiting_association") return Option.some(result);
       if (result.status === "awaiting_confirmation") {
@@ -289,7 +302,11 @@ const awaitChatApproval = (
     const client = yield* input.webAuthClient;
     for (;;) {
       const result = yield* active
-        .poll(client, active.provider, pairing.value)
+        .poll(client, {
+          provider: active.provider,
+          pairing: pairing.value,
+          beforeRequest: Option.none(),
+        })
         .pipe(Effect.mapError(() => "rejected" as const));
       if (result.status === "verified") break;
       if (result.status !== "awaiting_association" || result.associationCode !== code) {

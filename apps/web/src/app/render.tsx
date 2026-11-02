@@ -4,7 +4,6 @@ import { createRoot } from "react-dom/client";
 import { installBrowserDefectListeners, reportBrowserDefect } from "@/transport/browser-defects";
 import { WebApplication } from "./application";
 
-export { preloadWebRouteCode } from "./routes";
 export const mountWebApplication = ({
   root,
   initial,

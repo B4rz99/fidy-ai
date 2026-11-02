@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import { Effect } from "effect";
+import { type Cause, Clock, Effect, type Scope } from "effect";
 import { apiOrigin } from "./http-fixtures";
 import {
   navigateThroughConsent,
@@ -12,6 +12,7 @@ const { test, expect } = playwright;
 const targetMilliseconds = 10;
 const budgetTargetMilliseconds = 16;
 const measurementSamples = 5;
+const expiredDisplayMilliseconds = 6_000;
 const freshConsentTimeoutMilliseconds = 500;
 const workspaces = [
   {
@@ -93,13 +94,18 @@ for (const workspace of workspaces) {
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("heading", { name: "Por revisar", exact: true })).toBeVisible()
         );
-        yield* Effect.tryPromise(() => page.route(`${apiOrigin}${workspace.path}`, delayedData));
+        yield* holdWorkspaceData(page, `${apiOrigin}${workspace.path}`);
         const samples: number[] = [];
         const count = workspace.name === "Transacciones" ? 1 : measurementSamples;
         for (let sample = 0; sample < count; sample++) {
           if (sample > 0) yield* Effect.tryPromise(() => openWorkspace(page, "Por revisar"));
-          // Exercise expired display revalidation; recent returns now reuse the five-second snapshot.
-          if (workspace.name === "Recurrentes" && sample === 0) yield* Effect.sleep("6 seconds");
+          // Expire only display freshness; rendering, timers and native authority keep real time.
+          if (workspace.name === "Recurrentes" && sample === 0) {
+            const current = yield* Clock.currentTimeMillis;
+            yield* Effect.tryPromise(() =>
+              page.clock.setFixedTime(current + expiredDisplayMilliseconds)
+            );
+          }
           yield* Effect.tryPromise(() => page.evaluate(observeSwitch, workspace.ready));
           yield* Effect.tryPromise(() => revisitWorkspace(page, workspace.name));
           yield* Effect.tryPromise(() =>
@@ -127,7 +133,7 @@ for (const workspace of workspaces) {
           }
         }
         yield* Effect.tryPromise(() => recordSamples(workspace.name, samples, development));
-      })
+      }).pipe(Effect.scoped)
     ));
 }
 
@@ -181,16 +187,36 @@ const observeSwitch = (ready: string): void => {
     { capture: true, once: true }
   );
 };
-const delayedData = (route: Route): Promise<void> =>
-  Effect.runPromise(
-    Effect.sleep("1 second").pipe(Effect.andThen(Effect.tryPromise(() => route.continue())))
-  );
+const holdWorkspaceData = (
+  page: Page,
+  path: string
+): Effect.Effect<void, Cause.UnknownError, Scope.Scope> =>
+  Effect.gen(function* () {
+    const release = Promise.withResolvers<void>();
+    const pending: Array<Promise<void>> = [];
+    const hold = (route: Route): Promise<void> => {
+      const work = release.promise.then(() => route.continue());
+      pending.push(work);
+      return work;
+    };
+    const cleanup = (): Promise<void> => {
+      release.resolve();
+      return Promise.all(pending).then(() => page.unroute(path, hold));
+    };
+    yield* Effect.addFinalizer(() => Effect.tryPromise(cleanup).pipe(Effect.orDie));
+    yield* Effect.tryPromise(() => page.route(path, hold));
+  });
 
 test("dismisses a recurring editor when leaving its retained workspace", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInNavigationThroughCore({ page, request, identity: "navigationRecurring" })
+        signInNavigationThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "navigationRecurring",
+        })
       );
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
       yield* Effect.tryPromise(() => openWorkspace(page, "Recurrentes"));
@@ -235,7 +261,12 @@ test("refreshes the retained recurring default month after midnight", ({ page, r
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInNavigationThroughCore({ page, request, identity: "navigationClock" })
+        signInNavigationThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "navigationClock",
+        })
       );
       yield* Effect.tryPromise(() => page.clock.setFixedTime("2026-11-01T04:59:00Z"));
       yield* Effect.tryPromise(() => page.goto("/app/recurring"));

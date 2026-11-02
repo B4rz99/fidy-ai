@@ -12,7 +12,12 @@ test("persists the Dashboard title through the visible editor and browser reload
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInNavigationThroughCore({ page, request, identity: "navigationDashboard" })
+        signInNavigationThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "navigationDashboard",
+        })
       );
       yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
       yield* Effect.tryPromise(() => expect(page.getByRole("heading", { level: 1 })).toBeVisible());

@@ -1,6 +1,7 @@
 import type { APIRequestContext, APIResponse, Page, Response, Route } from "@playwright/test";
 import type { Cause } from "effect";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Redacted, Schema } from "effect";
+import { StartedBrowserLoginPairing } from "@fidy/server/client";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
 import { advanceRefusedRequest, installAcceptanceClock } from "./acceptance-clock";
@@ -27,7 +28,9 @@ export const visiblePairingCode = (page: Page): Promise<string> =>
 export const openBrowserLogin = (page: Page): Promise<void> =>
   page.goto("/login").then(() => undefined);
 
-type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
+type BrowserFixture = Readonly<{ page: Page; request: APIRequestContext }>;
+type SignInFixture = BrowserFixture &
+  (Readonly<{ deferFreshEntry: true }> | Readonly<Record<never, never>>);
 type ConsentRead = Readonly<{ status: number }>;
 const consentReads = new WeakMap<Page, ConsentRead>();
 const isConsentRead = (response: Response): boolean => {
@@ -114,7 +117,7 @@ type RecurringIdentity =
   | "recurringChat"
   | "recurringPagination";
 
-const signInWithIdentity = ({
+const signInThroughBrowser = ({
   page,
   request,
   identity,
@@ -125,6 +128,7 @@ const signInWithIdentity = ({
     identity:
       | "primary"
       | "firstCard"
+      | "firstDaviplata"
       | "subscriptionReflow"
       | "dashboard"
       | "budget"
@@ -168,6 +172,64 @@ const signInWithIdentity = ({
         .then(() => confirmConsentRead({ page, first: consent }))
     );
 
+/** Feature prerequisites use the real public proof exchange; login journeys exercise its UI. */
+const startSessionThroughCore = (
+  input: Parameters<typeof signInThroughBrowser>[0]
+): Promise<void> => {
+  const { page, request, identity } = input;
+  const headers = { origin: browserAcceptanceTopology().app };
+  return (
+    page.request
+      .post(`${apiOrigin}/web/pairings`, { headers })
+      .then((response) => {
+        expect(response.status()).toBe(successStatus);
+        return response.json();
+      })
+      .then(Schema.decodeUnknownPromise(Schema.toCodecJson(StartedBrowserLoginPairing)))
+      .then((pairing) =>
+        request
+          .post(`${operatorOrigin}/approve?code=${pairing.publicCode}&${identity}=true`)
+          .then((approval) => {
+            expect(approval.status()).toBe(noContentStatus);
+            return page.request.post(`${apiOrigin}/web/pairings/redeem`, {
+              headers,
+              data: {
+                pairingId: pairing.pairingId,
+                privateVerifier: Redacted.value(pairing.privateVerifier),
+              },
+            });
+          })
+      )
+      .then((redemption) => {
+        expect(redemption.status()).toBe(successStatus);
+        return input.clockMode === "controlled" ? installAcceptanceClock(page) : undefined;
+      })
+      .then(() =>
+        input.clockMode === "controlled" && "deferFreshEntry" in input
+          ? undefined
+          : openTransactionsThroughCore(page)
+      )
+      // Request-count and latency probes begin after prerequisite reads have settled.
+      .then(() =>
+        input.clockMode === "native-performance"
+          ? expect(page.getByRole("button", { name: "+ Registrar", exact: true }))
+              .toBeEnabled()
+              .then(() => page.waitForLoadState("networkidle"))
+          : undefined
+      )
+  );
+};
+
+const signInWithIdentity = (input: Parameters<typeof signInThroughBrowser>[0]): Promise<void> =>
+  input.page
+    .context()
+    .cookies()
+    .then((cookies) =>
+      cookies.some((cookie) => cookie.name === "__Host-fidy_session")
+        ? signInThroughBrowser(input)
+        : startSessionThroughCore(input)
+    );
+
 const PairingPublicCode = Schema.Struct({ publicCode: Schema.String });
 /** Capture the real upstream body independently of Chromium's document-scoped response cache. */
 const retainPairingCode = (route: Route, pending: PromiseWithResolvers<string>): Promise<void> =>
@@ -205,7 +267,7 @@ export const signInWithVerifiedEmailThroughCore = ({
   page,
   request,
   email,
-}: SignInFixture & Readonly<{ email: string }>): Promise<void> =>
+}: BrowserFixture & Readonly<{ email: string }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => installAcceptanceClock(page));
@@ -239,7 +301,7 @@ export const signInWithVerifiedEmailThroughCore = ({
 
 /** Independent unfunded User: never switches or deletes the first-card User's retained history. */
 export const signInFirstDaviplataThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithVerifiedEmailThroughCore({ ...input, email: "daviplata@example.com" });
+  signInWithIdentity({ ...input, identity: "firstDaviplata", clockMode: "controlled" });
 
 /** Signs in the seeded User with an available PaymentSource through real Core redemption. */
 export const signInThroughCore = (input: SignInFixture): Promise<void> =>
@@ -358,9 +420,15 @@ type NavigationFixture = SignInFixture &
 /** Navigation journeys own their User and retained data. */
 export const signInNavigationThroughCore = (input: NavigationFixture): Promise<void> =>
   signInWithIdentity({ ...input, clockMode: "controlled" });
-/** Timing probes use native clocks through login and navigation, including real polling waits. */
-export const signInNavigationPerformanceThroughCore = (input: NavigationFixture): Promise<void> =>
-  signInWithIdentity({ ...input, clockMode: "native-performance" });
+/** Public proof exchange prepares the session; timing probes keep native clocks throughout. */
+export const signInNavigationPerformanceThroughCore = (
+  input: Omit<NavigationFixture, "deferFreshEntry">
+): Promise<void> => signInWithIdentity({ ...input, clockMode: "native-performance" });
+
+/** The clock guard retains the complete login UI and its native polling delay. */
+export const signInNativeClockThroughCore = (
+  input: Omit<NavigationFixture, "deferFreshEntry">
+): Promise<void> => signInThroughBrowser({ ...input, clockMode: "native-performance" });
 
 /** Budget editor journeys cannot race the Budget Widget's cap mutations. */
 export const signInBudgetEditingThroughCore = (input: SignInFixture): Promise<void> =>

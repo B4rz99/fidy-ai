@@ -62,7 +62,12 @@ for (const failure of failures) {
     Effect.runPromise(
       Effect.gen(function* () {
         yield* Effect.tryPromise(() =>
-          signInRecurringThroughCore({ page, request, identity: failure.identity })
+          signInRecurringThroughCore({
+            page,
+            deferFreshEntry: true,
+            request,
+            identity: failure.identity,
+          })
         );
         const title =
           failure.status === limitedStatus

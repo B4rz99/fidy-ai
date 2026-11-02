@@ -1,10 +1,10 @@
+import { analyzeAccessibility } from "./accessibility";
 import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { signInBudgetEditingThroughCore } from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
 
-const { AxeBuilder } = await import("@axe-core/playwright");
 const { expect, test } = playwright;
 const budgetJourneyMilliseconds = 60_000;
 const categories = [
@@ -86,7 +86,7 @@ const installLostAcknowledgement = ({
 
 const checkAccessibility = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const result = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+    const result = yield* Effect.tryPromise(() => analyzeAccessibility(page));
     expect(
       result.violations.filter(({ impact }) => impact === "serious" || impact === "critical")
     ).toEqual([]);
@@ -348,7 +348,9 @@ test("saves a monthly cap from the view through real Core and retains it after r
   Effect.runPromise(
     Effect.gen(function* () {
       test.setTimeout(budgetJourneyMilliseconds);
-      yield* Effect.tryPromise(() => signInBudgetEditingThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInBudgetEditingThroughCore({ page, deferFreshEntry: true, request })
+      );
       yield* Effect.tryPromise(() => page.clock.resume());
       yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
       yield* Effect.tryPromise(() =>

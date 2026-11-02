@@ -16,7 +16,9 @@ test("persists Widget renaming and removal through the real Dashboard editor", (
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInFirstDaviplataThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInFirstDaviplataThroughCore({ page, deferFreshEntry: true, request })
+      );
       yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Personalizar", exact: true }).click()

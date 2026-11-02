@@ -1,3 +1,4 @@
+import { analyzeAccessibility } from "./accessibility";
 import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect } from "effect";
 import { apiOrigin, installCategories, response } from "./http-fixtures";
@@ -5,7 +6,6 @@ import { playwright } from "./playwright-runtime";
 import { signInRecurringThroughCore } from "./real-core-fixture";
 
 const { expect, test } = playwright;
-const { AxeBuilder } = await import("@axe-core/playwright");
 const planCount = 100;
 const pageCount = 5;
 const unsafeName = '<img src=x onerror="alert(1)">';
@@ -75,7 +75,12 @@ test("all 100 recurring items remain reachable in list pages and a crowded calen
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringPagination" })
+        signInRecurringThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "recurringPagination",
+        })
       );
       yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
       yield* Effect.tryPromise(() => page.route(`${apiOrigin}/recurring-plans?*`, serveWorkspace));
@@ -100,7 +105,7 @@ test("all 100 recurring items remain reachable in list pages and a crowded calen
           page.getByRole("button", { name: "Página siguiente de Próximos", exact: true })
         ).toBeDisabled()
       );
-      const accessibility = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+      const accessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
       expect(accessibility.violations).toEqual([]);
       yield* inspectCrowdedDay(page);
     })
@@ -131,6 +136,6 @@ const inspectCrowdedDay = (page: Page): Effect.Effect<void, Cause.UnknownError> 
       page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
     );
     expect(overflow).toBe(false);
-    const accessibility = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+    const accessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
     expect(accessibility.violations).toEqual([]);
   });

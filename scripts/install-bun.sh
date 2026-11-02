@@ -14,7 +14,8 @@ esac
 install_directory="${1:-$HOME/.fidy/bun-38afee6c8}"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
-curl --fail --silent --show-error --location --retry 2 --connect-timeout 15 --max-time 600 \
+curl --fail --silent --show-error --location --retry 2 --retry-all-errors --retry-max-time 120 \
+  --connect-timeout 15 --max-time 600 \
   "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/$archive.zip" \
   -o "$temporary_directory/bun.zip"
 if command -v sha256sum >/dev/null; then

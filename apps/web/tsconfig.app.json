@@ -21,6 +21,7 @@
     "cloudflare/**/*.ts",
     "scripts/**/*.ts",
     "e2e/**/*.ts",
+    "entry-preload.ts",
     "playwright.config.ts",
     "playwright.assessment.config.ts",
     "playwright.cli.config.ts",

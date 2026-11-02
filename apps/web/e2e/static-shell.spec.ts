@@ -1,17 +1,53 @@
+import { analyzeAccessibility } from "./accessibility";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { AxeBuilder } from "@axe-core/playwright";
 import { type APIRequestContext, type Page, expect, test } from "@playwright/test";
-import { type Cause, Effect } from "effect";
+import { type Cause, DateTime, Effect } from "effect";
 
 const topology = browserAcceptanceTopology();
 
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
+
+for (const provider of ["google", "microsoft"] as const) {
+  test(`${provider} return closes without loading application code or reading a session`, ({
+    page,
+    context,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const reads: Array<string> = [];
+        yield* wait(
+          context.route(`${topology.api}/**`, (route) => {
+            reads.push(new URL(route.request().url()).pathname);
+            return route.abort("blockedbyclient");
+          })
+        );
+        yield* wait(
+          context.route(
+            /\/assets\/(?:render|initial-session|shared-runtime)-[^/]+\.js$/u,
+            (route) => route.abort("blockedbyclient")
+          )
+        );
+        yield* wait(
+          page.setContent(
+            `<a href="${topology.app}/auth/${provider}-return" target="_blank" rel="noopener">Return</a>`
+          )
+        );
+        const popup = page.waitForEvent("popup");
+        yield* wait(page.getByRole("link", { name: "Return", exact: true }).click());
+        const opened = yield* wait(popup);
+        yield* wait(expect.poll(() => opened.isClosed()).toBe(true));
+        expect(reads).toEqual([]);
+      })
+    ));
+}
+
 const json = (value: object, space: number): string => JSON.stringify(value, undefined, space);
 const expectSeriousAccessibilityViolations = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const results = yield* wait(new AxeBuilder({ page }).analyze());
+      const results = yield* wait(analyzeAccessibility(page));
       const seriousViolations = results.violations.filter(
         ({ impact }) => impact === "serious" || impact === "critical"
       );
@@ -24,6 +60,87 @@ const accepted = 204;
 const forbidden = 403;
 const unauthorized = 401;
 const methodNotAllowed = 405;
+const inaccessibleDocument =
+  '<!doctype html><html lang="en"><head><title>Accessibility fixture</title></head><body><main><h1>Example</h1><button id="missing-name"></button></main></body></html>';
+const accessibilityTargets = (
+  result: Awaited<ReturnType<typeof analyzeAccessibility>>
+): ReadonlyArray<string> =>
+  result.violations
+    .flatMap(({ id, nodes }) => nodes.map((node) => `${id}:${JSON.stringify(node.target)}`))
+    .sort();
+
+const addShadowAccessibilityControl = (): void => {
+  const region = document.createElement("section");
+  region.attachShadow({ mode: "open" }).innerHTML = '<button id="shadow-missing-name"></button>';
+  document.querySelector("main")?.append(region);
+};
+test("accessibility retains every result and shadow control while the application clock is paused", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(page.setContent(inaccessibleDocument));
+      yield* wait(page.evaluate(addShadowAccessibilityControl));
+      yield* wait(page.evaluate('document.documentElement.dataset.clockProbe = "waiting"'));
+      const expected = yield* wait(new AxeBuilder({ page }).analyze());
+      const time = DateTime.toDateUtc(DateTime.makeUnsafe("2026-10-25T12:00:00Z"));
+      yield* wait(page.clock.install({ time }));
+      yield* wait(page.clock.pauseAt(time));
+      yield* wait(
+        page.evaluate(`
+        setTimeout(() => document.documentElement.dataset.clockProbe = "advanced", 10);
+      `)
+      );
+      const actual = yield* wait(analyzeAccessibility(page));
+      expect(actual.testEngine).toEqual(expected.testEngine);
+      expect(actual.testRunner).toEqual(expected.testRunner);
+      expect(actual.testEnvironment).toEqual(expected.testEnvironment);
+      expect(actual.url).toBe(expected.url);
+      for (const group of ["violations", "passes", "incomplete", "inapplicable"] as const) {
+        expect(actual[group]).toEqual(expected[group]);
+      }
+      expect(accessibilityTargets(actual)).toEqual(accessibilityTargets(expected));
+      expect(accessibilityTargets(actual)).toContain('button-name:["#missing-name"]');
+      expect(accessibilityTargets(actual)).toContain(
+        'button-name:[["section","#shadow-missing-name"]]'
+      );
+      expect(yield* wait(page.evaluate<number>("Date.now()"))).toBe(time.getTime());
+      expect(yield* wait(page.evaluate(() => document.documentElement.dataset.clockProbe))).toBe(
+        "waiting"
+      );
+      yield* wait(
+        page.getByRole("button").evaluateAll((buttons) => {
+          for (const button of buttons) button.setAttribute("aria-label", "Named control");
+        })
+      );
+      const updated = yield* wait(analyzeAccessibility(page));
+      expect(updated.violations.map(({ id }) => id)).not.toContain("button-name");
+    })
+  ));
+
+test("accessibility checks retain violations inside cross-origin frames", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(
+        page.route("https://*.accessibility.invalid/**", (route) =>
+          route.fulfill({
+            contentType: "text/html",
+            body:
+              new URL(route.request().url()).hostname === "child.accessibility.invalid"
+                ? inaccessibleDocument
+                : '<!doctype html><html lang="en"><head><title>Frame fixture</title></head><body><main><h1>Example</h1><iframe title="Example content" src="https://child.accessibility.invalid/"></iframe></main></body></html>',
+          })
+        )
+      );
+      yield* wait(page.goto("https://top.accessibility.invalid/"));
+      yield* wait(expect(page.frameLocator("iframe").locator("#missing-name")).toBeVisible());
+      const actual = yield* wait(analyzeAccessibility(page));
+      const unnamed = actual.violations.filter(({ id }) => id === "button-name");
+      expect(unnamed).toHaveLength(1);
+      expect(accessibilityTargets(actual).join("\n")).toContain("missing-name");
+    })
+  ));
+
 test("serves the checked-in security policy on SPA fallbacks", ({ request }) =>
   Effect.runPromise(
     Effect.gen(function* () {

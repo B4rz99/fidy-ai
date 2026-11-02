@@ -1,3 +1,5 @@
+import { captureInThemes } from "./themed-capture";
+import { analyzeAccessibility } from "./accessibility";
 import { expectSameLoadingFrame, measureLoadingFrame } from "./loading-geometry";
 import type { Page } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
@@ -5,11 +7,11 @@ import { playwright } from "./playwright-runtime";
 import { type ConsentState, installOAuthReview, reviewReference } from "./oauth-visual-fixture";
 
 const { test, expect } = playwright;
-const { AxeBuilder } = await import("@axe-core/playwright");
 const viewports = [
   { name: "desktop", width: 1440, height: 900 },
   { name: "mobile", width: 390, height: 844 },
 ];
+const initialTheme = "light" as const;
 const themes = ["light", "dark"] as const;
 const reviewControlCount = 6;
 const controlHeights = (elements: ReadonlyArray<Element>): ReadonlyArray<number> =>
@@ -23,7 +25,11 @@ const destinations = [
   },
 ];
 const captureDirectory = "test-results/oauth-visual";
-test.use({ storageState: { cookies: [], origins: [] }, deviceScaleFactor: 1 });
+test.use({
+  storageState: { cookies: [], origins: [] },
+  reducedMotion: "reduce",
+  deviceScaleFactor: 1,
+});
 test.afterEach(({ page }, information) =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -49,6 +55,9 @@ const dimensions = (): Readonly<{ content: number; viewport: number }> => ({
   content: document.documentElement.scrollWidth,
   viewport: document.documentElement.clientWidth,
 });
+
+const captureThemes = (page: Page, filename: string): ReturnType<typeof capture> =>
+  captureInThemes(page, (theme) => capture(page, filename.replace("-light-", `-${theme}-`)));
 const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
   yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
   yield* Effect.tryPromise((signal) =>
@@ -61,7 +70,7 @@ const capture = Effect.fnUntraced(function* (page: Page, filename: string) {
       scale: "css",
     })
   );
-  const result = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+  const result = yield* Effect.tryPromise(() => analyzeAccessibility(page));
   const report = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result);
   yield* Effect.tryPromise(() => Bun.write(`${captureDirectory}/${filename}.axe.json`, report));
   expect(result.violations).toEqual([]);
@@ -90,7 +99,7 @@ const captureMobile = Effect.fnUntraced(function* (
       .getByRole("button", { name: destination.action, exact: true })
       .scrollIntoViewIfNeeded({ signal })
   );
-  yield* capture(page, `${destination.name}-${theme}-mobile-actions`);
+  yield* captureThemes(page, `${destination.name}-${theme}-mobile-actions`);
   yield* Effect.tryPromise(() => page.evaluate(scrollToTop));
   yield* Effect.tryPromise((signal) =>
     page.getByRole("button", { name: "Menú de navegación" }).click({ signal })
@@ -102,102 +111,102 @@ const captureMobile = Effect.fnUntraced(function* (
         .getByRole("link", { name: "Tablero", exact: true })
     ).toBeVisible({ signal })
   );
-  yield* capture(page, `${destination.name}-${theme}-mobile-menu`);
+  yield* captureThemes(page, `${destination.name}-${theme}-mobile-menu`);
 });
 
 for (const viewport of viewports) {
-  for (const theme of themes) {
-    for (const destination of destinations) {
-      test(`OAuth ${destination.name} retains the application navigation and readable exact review in ${theme} ${viewport.name}`, ({
-        page,
-      }) =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            yield* prepare(page, viewport, theme);
-            const observed = yield* installOAuthReview(page);
-            yield* Effect.tryPromise((signal) => page.goto(destination.path, { signal }));
+  for (const destination of destinations) {
+    test(`OAuth ${destination.name} retains the application navigation and readable exact review in light and dark ${viewport.name}`, ({
+      page,
+    }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          yield* prepare(page, viewport, initialTheme);
+          const observed = yield* installOAuthReview(page);
+          yield* Effect.tryPromise((signal) => page.goto(destination.path, { signal }));
+          yield* Effect.tryPromise((signal) =>
+            expect(page.getByRole("heading", { name: destination.title, exact: true })).toBeVisible(
+              { signal }
+            )
+          );
+          yield* Effect.tryPromise((signal) =>
+            expect(page.getByRole("button", { name: destination.action, exact: true })).toBeEnabled(
+              { signal }
+            )
+          );
+          yield* Effect.tryPromise((signal) =>
+            expect(
+              page.getByText("Nombre declarado por el cliente; Fidy no verifica su identidad.", {
+                exact: true,
+              })
+            ).toBeVisible({ signal })
+          );
+          yield* Effect.tryPromise((signal) =>
+            expect(
+              page.getByRole("button", { name: "Abrir agente Fidy", exact: true })
+            ).toBeVisible({ signal })
+          );
+          yield* Effect.tryPromise((signal) =>
+            expect(page.getByRole("main").locator("time").first()).toHaveText(
+              "25 ene 2027 · 8:00 a. m.",
+              { signal }
+            )
+          );
+          if (viewport.name === "desktop") {
             yield* Effect.tryPromise((signal) =>
               expect(
-                page.getByRole("heading", { name: destination.title, exact: true })
+                page
+                  .getByRole("navigation", { name: "Aplicación" })
+                  .getByRole("link", { name: "Tablero", exact: true })
               ).toBeVisible({ signal })
             );
-            yield* Effect.tryPromise((signal) =>
-              expect(
-                page.getByRole("button", { name: destination.action, exact: true })
-              ).toBeEnabled({ signal })
-            );
-            yield* Effect.tryPromise((signal) =>
-              expect(
-                page.getByText("Nombre declarado por el cliente; Fidy no verifica su identidad.", {
-                  exact: true,
-                })
-              ).toBeVisible({ signal })
-            );
-            yield* Effect.tryPromise((signal) =>
-              expect(
-                page.getByRole("button", { name: "Abrir agente Fidy", exact: true })
-              ).toBeVisible({ signal })
-            );
-            yield* Effect.tryPromise((signal) =>
-              expect(page.getByRole("main").locator("time").first()).toHaveText(
-                "25 ene 2027 · 8:00 a. m.",
-                { signal }
-              )
-            );
-            if (viewport.name === "desktop") {
-              yield* Effect.tryPromise((signal) =>
-                expect(
-                  page
-                    .getByRole("navigation", { name: "Aplicación" })
-                    .getByRole("link", { name: "Tablero", exact: true })
-                ).toBeVisible({ signal })
-              );
-            }
-            yield* capture(page, `${destination.name}-${theme}-${viewport.name}`);
-            if (viewport.name === "mobile") yield* captureMobile(page, destination, theme);
-            expect(observed.unexpected).toEqual([]);
-            expect(observed.mutations).toEqual([]);
-          })
-        ));
-    }
+          }
+          yield* captureThemes(page, `${destination.name}-${initialTheme}-${viewport.name}`);
+          if (viewport.name === "mobile") yield* captureMobile(page, destination, initialTheme);
+          expect(observed.unexpected).toEqual([]);
+          expect(observed.mutations).toEqual([]);
+        })
+      ));
   }
 }
 
 for (const viewport of viewports) {
-  for (const theme of themes) {
-    for (const destination of destinations) {
-      test(`OAuth ${destination.name} keeps unavailable login continuity inside the shell in ${theme} ${viewport.name}`, ({
-        page,
-      }) =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            yield* prepare(page, viewport, theme);
-            const observed = yield* installOAuthReview(page, {
-              review: "unavailable",
-              consent: "signed-out",
-              mutation: "success",
-            });
-            yield* Effect.tryPromise((signal) => page.goto(destination.path, { signal }));
-            const login = page
-              .getByRole("main")
-              .getByRole("link", { name: "Iniciar sesión", exact: true });
-            yield* Effect.tryPromise((signal) => expect(login).toBeVisible({ signal }));
-            const parameter = "oauthRequest";
-            const reference = reviewReference;
-            yield* Effect.tryPromise((signal) =>
-              expect(login).toHaveAttribute("href", `/login?${parameter}=${reference}`, { signal })
-            );
-            yield* Effect.tryPromise((signal) =>
-              expect(
-                page.getByRole("button", { name: destination.action, exact: true })
-              ).toHaveCount(0, { signal })
-            );
-            yield* capture(page, `${destination.name}-unavailable-${theme}-${viewport.name}`);
-            expect(observed.unexpected).toEqual([]);
-            expect(observed.mutations).toEqual([]);
-          })
-        ));
-    }
+  for (const destination of destinations) {
+    test(`OAuth ${destination.name} keeps unavailable login continuity inside the shell in light and dark ${viewport.name}`, ({
+      page,
+    }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          yield* prepare(page, viewport, initialTheme);
+          const observed = yield* installOAuthReview(page, {
+            review: "unavailable",
+            consent: "signed-out",
+            mutation: "success",
+          });
+          yield* Effect.tryPromise((signal) => page.goto(destination.path, { signal }));
+          const login = page
+            .getByRole("main")
+            .getByRole("link", { name: "Iniciar sesión", exact: true });
+          yield* Effect.tryPromise((signal) => expect(login).toBeVisible({ signal }));
+          const parameter = "oauthRequest";
+          const reference = reviewReference;
+          yield* Effect.tryPromise((signal) =>
+            expect(login).toHaveAttribute("href", `/login?${parameter}=${reference}`, { signal })
+          );
+          yield* Effect.tryPromise((signal) =>
+            expect(page.getByRole("button", { name: destination.action, exact: true })).toHaveCount(
+              0,
+              { signal }
+            )
+          );
+          yield* captureThemes(
+            page,
+            `${destination.name}-unavailable-${initialTheme}-${viewport.name}`
+          );
+          expect(observed.unexpected).toEqual([]);
+          expect(observed.mutations).toEqual([]);
+        })
+      ));
   }
 }
 
@@ -378,41 +387,39 @@ const terminalStates = [
   },
 ] as const;
 for (const viewport of viewports) {
-  for (const theme of themes) {
-    test(`OAuth terminal outcomes remain truthful and readable in ${theme} ${viewport.name}`, ({
-      page,
-    }) =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          yield* prepare(page, viewport, theme);
-          for (const state of terminalStates) {
-            const observed = yield* installOAuthReview(page, {
-              review: "ready",
-              consent: "granted",
-              mutation: state.mutation,
-            });
-            yield* Effect.tryPromise((signal) => page.goto(state.path, { signal }));
+  test(`OAuth terminal outcomes remain truthful and readable in light and dark ${viewport.name}`, ({
+    page,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* prepare(page, viewport, initialTheme);
+        for (const state of terminalStates) {
+          const observed = yield* installOAuthReview(page, {
+            review: "ready",
+            consent: "granted",
+            mutation: state.mutation,
+          });
+          yield* Effect.tryPromise((signal) => page.goto(state.path, { signal }));
+          yield* Effect.tryPromise((signal) =>
+            page.getByRole("button", { name: state.button, exact: true }).click({ signal })
+          );
+          const result = page.getByRole(state.mutation === "unknown" ? "alert" : "status");
+          yield* Effect.tryPromise((signal) =>
+            expect(result).toContainText(state.message, { signal })
+          );
+          if (viewport.name === "mobile") {
             yield* Effect.tryPromise((signal) =>
-              page.getByRole("button", { name: state.button, exact: true }).click({ signal })
+              expect(page.getByRole("button", { name: "Menú de navegación" })).toBeInViewport({
+                signal,
+              })
             );
-            const result = page.getByRole(state.mutation === "unknown" ? "alert" : "status");
-            yield* Effect.tryPromise((signal) =>
-              expect(result).toContainText(state.message, { signal })
-            );
-            if (viewport.name === "mobile") {
-              yield* Effect.tryPromise((signal) =>
-                expect(page.getByRole("button", { name: "Menú de navegación" })).toBeInViewport({
-                  signal,
-                })
-              );
-            }
-            yield* capture(page, `${state.name}-${theme}-${viewport.name}`);
-            expect(observed.unexpected).toEqual([]);
-            expect(observed.mutations).toHaveLength(1);
           }
-        })
-      ));
-  }
+          yield* captureThemes(page, `${state.name}-${initialTheme}-${viewport.name}`);
+          expect(observed.unexpected).toEqual([]);
+          expect(observed.mutations).toHaveLength(1);
+        }
+      })
+    ));
 }
 
 for (const viewport of viewports) {

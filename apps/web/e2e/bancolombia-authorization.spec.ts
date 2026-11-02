@@ -22,6 +22,12 @@ const bankOrigin = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
 test.setTimeout(protocolJourneyBudget);
 
 type BrowserFailure = Cause.UnknownError | Schema.SchemaError;
+const signInForConnection = (
+  input: Readonly<{
+    page: Page;
+    request: APIRequestContext;
+  }>
+): Promise<void> => signInFirstCardThroughCore({ ...input, deferFreshEntry: true });
 type Continuation = Readonly<{
   session: ReturnType<typeof boundSessionRequests>;
   attempt: typeof ConnectionAttemptReference.Type;
@@ -118,7 +124,7 @@ test("hands off through Core only after browser proof, refuses replay and keeps 
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInFirstCardThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => signInForConnection({ page, request }));
       yield* selectScenario(request, "ready");
       const continuation = yield* startConnection({ page, request });
       const anonymous = yield* Effect.tryPromise(() =>
@@ -178,7 +184,7 @@ test("expires the bank handoff before the original attempt and permits leaving w
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInFirstCardThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => signInForConnection({ page, request }));
       const browserNow = (yield* Clock.currentTimeMillis) - browserClockLagMilliseconds;
       yield* Effect.tryPromise(() => page.clock.setSystemTime(browserNow));
       yield* selectScenario(request, "ready");
@@ -209,7 +215,7 @@ test("shows safe failure for destination, signing and transport refusals without
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInFirstCardThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => signInForConnection({ page, request }));
       for (const mode of ["destination", "signing", "transport"] as const) {
         yield* selectScenario(request, mode);
         const continuation = yield* startConnection({ page, request });
@@ -240,7 +246,7 @@ test("returns from the bank through public Core to truthful failed and Active re
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInFirstCardThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => signInForConnection({ page, request }));
       yield* selectScenario(request, "activation-malformed");
       const failed = yield* startConnection({ page, request });
       yield* begin(page, failed.path);

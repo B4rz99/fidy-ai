@@ -51,7 +51,7 @@ for (const screen of settings) {
   test(`${screen.path} keeps its action readable at 320px with doubled text`, ({ page, request }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        yield* wait(() => signInThroughCore({ page, request }));
+        yield* wait(() => signInThroughCore({ page, deferFreshEntry: true, request }));
         yield* wait(() => page.setViewportSize(narrowViewport));
         yield* wait(() => page.goto(screen.path));
         const action = page.getByRole("button", { name: screen.action, exact: true });
@@ -69,7 +69,9 @@ test("Upgrade keeps every payment choice and exact offer price reachable with do
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(() => signInSubscriptionReflowThroughCore({ page, request }));
+      yield* wait(() =>
+        signInSubscriptionReflowThroughCore({ page, deferFreshEntry: true, request })
+      );
       yield* wait(() => page.setViewportSize(narrowViewport));
       yield* wait(() => openUpgradeThroughCore(page));
       const yearly = page.getByRole("button", { name: /anual/u });
@@ -97,7 +99,9 @@ test("the recurring create action grows around its label and opens the editor wi
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(() => signInRecurringThroughCore({ page, request, identity: "recurring" }));
+      yield* wait(() =>
+        signInRecurringThroughCore({ page, deferFreshEntry: true, request, identity: "recurring" })
+      );
       yield* wait(() => page.setViewportSize(narrowViewport));
       yield* wait(() => page.goto("/app/recurring?month=2026-10"));
       const create = page.getByRole("button", { name: "Nuevo recurrente", exact: true });

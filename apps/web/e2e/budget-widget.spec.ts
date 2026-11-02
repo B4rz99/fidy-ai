@@ -127,7 +127,9 @@ test("Budget cap changes and deletion update the persisted Widget without mixing
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInBudgetThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInBudgetThroughCore({ page, deferFreshEntry: true, request })
+      );
       yield* Effect.tryPromise(() => page.clock.resume());
       const budgetId = yield* acquireFixture(page, "budgets", {
         categoryId,

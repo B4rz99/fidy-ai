@@ -117,7 +117,9 @@ test("application appearance follows the system until a manual choice survives n
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme: "dark" }));
-      yield* Effect.tryPromise(() => signInDashboardThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInDashboardThroughCore({ page, deferFreshEntry: true, request })
+      );
       yield* Effect.tryPromise(() => page.clock.resume());
       yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
       yield* Effect.tryPromise(() =>
@@ -158,7 +160,12 @@ test("mobile navigation keeps the header usable and hides the assistant until na
       const viewport = mobileViewport;
       yield* Effect.tryPromise(() => page.setViewportSize(viewport));
       yield* Effect.tryPromise(() =>
-        signInNavigationThroughCore({ page, request, identity: "navigationDashboard" })
+        signInNavigationThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "navigationDashboard",
+        })
       );
       yield* Effect.tryPromise(() => page.clock.resume());
       yield* Effect.tryPromise(() => page.goto("/app/dashboard"));

@@ -42,6 +42,37 @@ const noContentStatus = 204;
 const unauthorizedStatus = 401;
 const successStatus = 200;
 const unavailableStatus = 503;
+const providerCallbackTimeoutMilliseconds = 5_000;
+const providerPollMilliseconds = 1_000;
+/** The real callback commits before its response; advance only the subsequent polling cooldown. */
+const continueAfterProviderCallback = Effect.fnUntraced(function* (
+  page: Page,
+  configuration: ProviderJourneyConfiguration,
+  buttonName: string = `Continuar con ${configuration.label}`
+) {
+  yield* Effect.tryPromise(() => installAcceptanceClock(page));
+  const [returned] = yield* Effect.tryPromise(() =>
+    Promise.all([
+      page.context().waitForEvent("response", {
+        predicate: (response) =>
+          new URL(response.url()).pathname === `/providers/${configuration.provider}/callback` &&
+          response.status() === providerReturnStatus,
+        timeout: providerCallbackTimeoutMilliseconds,
+      }),
+      page.getByRole("button", { name: buttonName }).click(),
+    ])
+  );
+  const popup = returned.frame().page();
+  if (!popup.isClosed()) {
+    yield* Effect.tryPromise(() =>
+      popup.waitForEvent("close", { timeout: providerCallbackTimeoutMilliseconds })
+    );
+  }
+  yield* Effect.tryPromise(() =>
+    advanceAcceptancePoll({ page, milliseconds: providerPollMilliseconds })
+  );
+});
+
 const advancePastRequestDeadline = 10_001;
 const lateResponseAdvance = 1_000;
 const deliverUnavailable = (route: Route, available: boolean): Promise<void> =>
@@ -104,7 +135,7 @@ const retryStalledProvider = ({
       )
     );
     yield* Effect.tryPromise(() => page.clock.resume());
-    yield* Effect.tryPromise(() => page.getByRole("button", { name: "Volver a intentar" }).click());
+    yield* continueAfterProviderCallback(page, configuration, "Volver a intentar");
     yield* Effect.tryPromise(() =>
       expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
     );
@@ -152,9 +183,7 @@ export const unavailablePairingJourney = ({
         )
       ).toBe(false);
       yield* Effect.tryPromise(() => page.unroute("**/web/pairings"));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Volver a intentar" }).click()
-      );
+      yield* continueAfterProviderCallback(page, configuration, "Volver a intentar");
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
       );
@@ -204,9 +233,7 @@ export const disclosureRetryJourney = ({
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
-      );
+      yield* continueAfterProviderCallback(page, configuration);
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
       );
@@ -309,9 +336,7 @@ const returningSessionPolicies = (
       expect(page.getByText("Acceso no autorizado", { exact: true })).toBeVisible()
     );
     yield* Effect.tryPromise(() => page.goto("/login"));
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
-    );
+    yield* continueAfterProviderCallback(page, configuration);
     yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
     const revocation = yield* Effect.tryPromise(() =>
       request.post(
@@ -320,9 +345,7 @@ const returningSessionPolicies = (
     );
     expect(revocation.status()).toBe(noContentStatus);
     yield* Effect.tryPromise(() => page.goto("/login"));
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
-    );
+    yield* continueAfterProviderCallback(page, configuration);
     yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
     const blocked = yield* Effect.tryPromise(() =>
       boundSessionRequests(context.request).get(`${api}/transactions`)
@@ -434,9 +457,7 @@ export const signupJourney = ({
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
-      );
+      yield* continueAfterProviderCallback(page, configuration);
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
       );
@@ -487,6 +508,22 @@ const retryPendingProvider = Effect.fn(function* (page: Page) {
   }
   yield* Effect.tryPromise(() => expect(page.getByText("Esperando confirmación…")).toBeVisible());
   return popup;
+});
+const expectClosedProviderCancellation = Effect.fnUntraced(function* (page: Page, popup: Page) {
+  const now = yield* Effect.tryPromise(() =>
+    page.evaluate(() => performance.timeOrigin + performance.now())
+  );
+  yield* Effect.tryPromise(() => page.clock.pauseAt(now + 100));
+  const polled = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith("/status")
+  );
+  yield* Effect.tryPromise(() => popup.close());
+  yield* Effect.tryPromise(() => advanceAcceptancePoll({ page, milliseconds: 1_000 }));
+  const response = yield* Effect.tryPromise(() => polled);
+  expect(response.status()).toBe(successStatus);
+  yield* Effect.tryPromise(() => page.clock.runFor(1));
+  yield* Effect.tryPromise(() => expect(page.getByText("Cancelaste el acceso.")).toBeVisible());
+  yield* Effect.tryPromise(() => page.clock.resume());
 });
 const openProviderEntry = Effect.fn(function* (page: Page) {
   const loginResponse = yield* Effect.tryPromise(() => page.goto("/login"));
@@ -548,8 +585,7 @@ export const denialAndCancellationJourney = ({
         context.route(configuration.authorizationPattern, pendingProvider)
       );
       const closedPopup = yield* retryPendingProvider(page);
-      yield* Effect.tryPromise(() => closedPopup.close());
-      yield* Effect.tryPromise(() => expect(page.getByText("Cancelaste el acceso.")).toBeVisible());
+      yield* expectClosedProviderCancellation(page, closedPopup);
       const cancelledPopup = yield* retryPendingProvider(page);
       yield* cancelExternalProvider(page, cancelledPopup, configuration);
       expect(page.url()).toContain("/login");
@@ -678,9 +714,7 @@ export const lostCompletionJourney = ({
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
-      );
+      yield* continueAfterProviderCallback(page, configuration);
       yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());
       yield* Effect.tryPromise(() =>
         page.unroute(`**/web/providers/${configuration.provider}/complete`)
@@ -688,9 +722,7 @@ export const lostCompletionJourney = ({
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Ir a iniciar sesión" }).click()
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
-      );
+      yield* continueAfterProviderCallback(page, configuration);
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Guarda tu código de recuperación")).toHaveCount(0)
@@ -724,9 +756,7 @@ export const pendingRedemptionJourney = ({
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
-      );
+      yield* continueAfterProviderCallback(page, configuration);
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
       );
@@ -783,9 +813,7 @@ export const blockedPopupJourney = ({
         )
       );
       expect(authenticationMutations).toBe(0);
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Volver a intentar" }).click()
-      );
+      yield* continueAfterProviderCallback(page, configuration, "Volver a intentar");
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
       );
@@ -982,9 +1010,7 @@ const returningProviderLogin = ({
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
     yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/login$/u));
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
-    );
+    yield* continueAfterProviderCallback(page, configuration);
     yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
   });
 
@@ -1141,6 +1167,7 @@ const enterWhatsAppSignup = ({
     );
   });
 const nativeTimestampPrecisionMs = 1000;
+const nativeTimestampPollMilliseconds = 100;
 const nativeConfirmationSuccess = 200;
 const sendPreparedConfirmation = ({
   page,
@@ -1171,7 +1198,9 @@ const sendPreparedConfirmation = ({
     );
     // Native WhatsApp timestamps have one-second precision; cross the review boundary honestly.
     yield* Effect.tryPromise(() =>
-      expect.poll(elapsed).toBeGreaterThan(nativeTimestampPrecisionMs)
+      expect
+        .poll(elapsed, { intervals: [nativeTimestampPollMilliseconds] })
+        .toBeGreaterThan(nativeTimestampPrecisionMs)
     );
     const confirmation = yield* Effect.tryPromise(() =>
       request.post(

@@ -406,12 +406,3 @@ declare module "@tanstack/react-router" {
     router: ReturnType<typeof createWebRouter>;
   }
 }
-/** Only the shell and entry code compete with initial identity and foreground work. */
-export const preloadWebRouteCode = (): Promise<void> =>
-  Effect.runPromise(
-    Effect.asVoid(
-      Effect.tryPromise(() =>
-        Promise.allSettled([ApplicationFrame.preload?.(), TransactionListFeature.preload?.()])
-      )
-    )
-  );

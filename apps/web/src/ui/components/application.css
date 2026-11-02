@@ -314,7 +314,12 @@
 @media (prefers-reduced-motion: reduce) {
   .application-shell *,
   .application-shell *::before,
-  .application-shell *::after {
+  .application-shell *::after,
+  [data-slot="popover-content"],
+  [data-slot="dropdown-menu-content"],
+  :is([data-slot="popover-content"], [data-slot="dropdown-menu-content"]) *,
+  :is([data-slot="popover-content"], [data-slot="dropdown-menu-content"]) *::before,
+  :is([data-slot="popover-content"], [data-slot="dropdown-menu-content"]) *::after {
     animation: none;
     transition: none;
     scroll-behavior: auto;

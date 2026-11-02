@@ -492,7 +492,9 @@ const refuseOtherIdentity = (
 ): Effect.Effect<void, TestFailure> =>
   Effect.gen(function* () {
     const page = yield* Effect.tryPromise(() => input.context.newPage());
-    yield* Effect.tryPromise(() => signInFirstCardThroughCore({ page, request: input.request }));
+    yield* Effect.tryPromise(() =>
+      signInFirstCardThroughCore({ page, deferFreshEntry: true, request: input.request })
+    );
     yield* Effect.tryPromise(() => page.goto("/settings/access"));
     yield* Effect.tryPromise(() =>
       expect(page.getByText("No hay conexiones en esta página.")).toBeVisible()
@@ -645,7 +647,9 @@ test("expired identity proof keeps Accesos visible and returns from identity con
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInFirstCardThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInFirstCardThroughCore({ page, deferFreshEntry: true, request })
+      );
       let revocations = 0;
       const requireIdentity = (route: Route): Promise<void> => {
         revocations += 1;

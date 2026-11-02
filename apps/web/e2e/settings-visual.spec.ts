@@ -1,13 +1,15 @@
+import { captureInThemes } from "./themed-capture";
+import { analyzeAccessibility } from "./accessibility";
 import type { Locator, Page } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 import { installSettingsReads } from "./settings-visual-fixture";
 
 const { test, expect } = playwright;
-const { AxeBuilder } = await import("@axe-core/playwright");
 const desktop = { name: "desktop", width: 1467, height: 1072 };
 const mobile = { name: "mobile", width: 390, height: 844 };
 const viewports = [desktop, mobile];
+const initialTheme = "light" as const;
 const themes = ["light", "dark"] as const;
 const destinations = [
   { path: "/settings/account", title: "Cuenta", filename: "cuenta" },
@@ -27,6 +29,7 @@ const captureDirectory = "test-results/settings-visual";
 
 test.use({
   storageState: { cookies: [], origins: [] },
+  reducedMotion: "reduce",
   deviceScaleFactor: 1,
 });
 
@@ -59,6 +62,9 @@ const prepareAccessForm = Effect.fnUntraced(function* (page: Page) {
   );
   yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Lectura:/u }).check());
   yield* Effect.tryPromise(() => page.getByRole("button", { name: "Duración del token" }).click());
+  const menu = page.locator('[data-slot="dropdown-menu-content"]');
+  yield* Effect.tryPromise(() => expect(menu).toHaveCSS("animation-name", "none"));
+  yield* Effect.tryPromise(() => expect(menu).toHaveCSS("transition-duration", "0s"));
   yield* Effect.tryPromise(() =>
     page.getByRole("menuitemradio", { name: "30 días", exact: true }).click()
   );
@@ -116,6 +122,13 @@ const expectDestination = Effect.fnUntraced(function* (
 
 const waitForFonts = (): Promise<void> => document.fonts.ready.then(() => undefined);
 
+const captureThemes = (page: Page, filename: string): ReturnType<typeof capturePage> =>
+  captureInThemes(page, (theme) =>
+    Effect.gen(function* () {
+      yield* expectHeaderDivider(page, theme);
+      yield* capturePage(page, filename.replace("-light-", `-${theme}-`));
+    })
+  );
 const capturePage = Effect.fnUntraced(function* (page: Page, filename: string) {
   yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
   yield* Effect.tryPromise(() =>
@@ -127,7 +140,7 @@ const capturePage = Effect.fnUntraced(function* (page: Page, filename: string) {
       scale: "css",
     })
   );
-  const result = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+  const result = yield* Effect.tryPromise(() => analyzeAccessibility(page));
   const report = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result);
   yield* Effect.tryPromise(() => Bun.write(`${captureDirectory}/${filename}.axe.json`, report));
   expect(result.violations).toEqual([]);
@@ -237,50 +250,46 @@ const expectCompactAccess = Effect.fnUntraced(function* (page: Page, width: numb
 
 for (const { viewport, destinations: targets } of captureViewports) {
   const compact = viewport.name !== "desktop";
-  for (const theme of themes) {
-    for (const destination of targets) {
-      test(`${destination.title} remains accessible without overflow in ${theme} ${viewport.name}`, ({
-        page,
-      }) =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            yield* Effect.tryPromise(() => page.setViewportSize(viewport));
-            yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme: theme }));
-            yield* Effect.tryPromise(() =>
-              page.clock.setFixedTime(
-                DateTime.toDateUtc(DateTime.makeUnsafe("2026-10-25T14:00:00Z"))
-              )
+
+  for (const destination of targets) {
+    test(`${destination.title} remains accessible without overflow in light and dark ${viewport.name}`, ({
+      page,
+    }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() => page.setViewportSize(viewport));
+          yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme: initialTheme }));
+          yield* Effect.tryPromise(() =>
+            page.clock.setFixedTime(DateTime.toDateUtc(DateTime.makeUnsafe("2026-10-25T14:00:00Z")))
+          );
+          const observed = yield* installSettingsReads(page);
+          yield* Effect.tryPromise(() => page.goto(destination.path));
+          yield* expectDestination(page, destination, compact);
+          yield* Effect.tryPromise(() =>
+            expect(
+              page.getByRole("button", {
+                name: "Activar tema oscuro",
+              })
+            ).toBeVisible()
+          );
+          if (destination.title === "Accesos") yield* prepareAccessForm(page);
+          if (viewport.name === "desktop") {
+            yield* expectAlignedHeader(page, destination.title, /Activar tema (claro|oscuro)/u);
+          } else if (destination.title !== "Cuenta") {
+            yield* expectAlignedHeader(
+              page,
+              destination.title,
+              destination.title === "Privacidad" ? "Verificar autorización" : "Actualizar tokens"
             );
-            const observed = yield* installSettingsReads(page);
-            yield* Effect.tryPromise(() => page.goto(destination.path));
-            yield* expectDestination(page, destination, compact);
-            yield* Effect.tryPromise(() =>
-              expect(
-                page.getByRole("button", {
-                  name: theme === "dark" ? "Activar tema claro" : "Activar tema oscuro",
-                })
-              ).toBeVisible()
-            );
-            if (destination.title === "Accesos") yield* prepareAccessForm(page);
-            if (viewport.name === "desktop") {
-              yield* expectAlignedHeader(page, destination.title, /Activar tema (claro|oscuro)/u);
-            } else if (destination.title !== "Cuenta") {
-              yield* expectAlignedHeader(
-                page,
-                destination.title,
-                destination.title === "Privacidad" ? "Verificar autorización" : "Actualizar tokens"
-              );
-            }
-            if (compact && destination.title === "Accesos") {
-              yield* expectCompactAccess(page, viewport.width);
-            }
-            yield* expectHeaderDivider(page, theme);
-            yield* capturePage(page, `${destination.filename}-${theme}-${viewport.name}`);
-            expect(observed.mutations).toEqual([]);
-            expect(observed.missingReads).toEqual([]);
-          })
-        ));
-    }
+          }
+          if (compact && destination.title === "Accesos") {
+            yield* expectCompactAccess(page, viewport.width);
+          }
+          yield* captureThemes(page, `${destination.filename}-${initialTheme}-${viewport.name}`);
+          expect(observed.mutations).toEqual([]);
+          expect(observed.missingReads).toEqual([]);
+        })
+      ));
   }
 }
 

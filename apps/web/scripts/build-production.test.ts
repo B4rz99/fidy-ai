@@ -4,6 +4,8 @@ import { type Cause, Effect, Schema } from "effect";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import { validateProductionArtifact } from "../cloudflare/production-policy/artifact";
 import { releaseMetadata } from "./release-metadata";
+import { build } from "vite";
+import { entryPreload } from "../entry-preload";
 
 const gitRevision = "0123456789abcdef0123456789abcdef01234567";
 const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
@@ -12,6 +14,63 @@ const encodeMetadata = Schema.encodeSync(
   Schema.fromJsonString(
     Schema.Struct({ contractDigest: Schema.String, gitRevision: Schema.String })
   )
+);
+
+it.effect("preloads shared entry code without eagerly loading a dynamic workspace", () =>
+  Effect.gen(function* () {
+    const directory = yield* Effect.tryPromise(() => mkdtemp("/tmp/fidy-entry-preload-"));
+    temporaryDirectories.push(directory);
+    yield* Effect.tryPromise(() => mkdir(join(directory, "src/app"), { recursive: true }));
+    yield* Effect.tryPromise(() =>
+      Promise.all([
+        Bun.write(
+          join(directory, "index.html"),
+          '<!doctype html><html><head><meta charset="UTF-8"></head><body><script type="module" src="/src/main.ts"></script></body></html>'
+        ),
+        Bun.write(
+          join(directory, "src/main.ts"),
+          'Promise.all([import("./app/render"), import("./app/bound-application")]).then(([entry]) => entry.render());'
+        ),
+        Bun.write(
+          join(directory, "src/app/render.tsx"),
+          'import { value } from "../shared"; export const render = () => { console.log(value); document.body.onclick = () => import("../dashboard"); };'
+        ),
+        Bun.write(
+          join(directory, "src/app/bound-application.tsx"),
+          'import { value } from "../shared"; console.log(value);'
+        ),
+        Bun.write(join(directory, "src/shared.ts"), 'export const value = "shared entry";'),
+        Bun.write(join(directory, "src/dashboard.ts"), 'console.log("deferred workspace");'),
+      ])
+    );
+    const built = yield* Effect.tryPromise(() =>
+      build({
+        root: directory,
+        configFile: false,
+        logLevel: "silent",
+        plugins: [entryPreload()],
+        build: { write: false },
+      })
+    );
+    if (Array.isArray(built) || !("output" in built)) {
+      return yield* Effect.die("Expected one static build");
+    }
+    const html = built.output.find(
+      (asset) => asset.type === "asset" && asset.fileName === "index.html"
+    );
+    if (html?.type !== "asset" || typeof html.source !== "string") {
+      return yield* Effect.die("Expected built HTML");
+    }
+    const render = built.output.find((asset) => asset.fileName.startsWith("assets/render-"));
+    const workspace = built.output.find((asset) => asset.fileName.startsWith("assets/dashboard-"));
+    expect(render).toBeDefined();
+    expect(workspace).toBeDefined();
+    const renderHref = `href="/${render?.fileName}"`;
+    expect(html.source).toContain(renderHref);
+    expect(html.source).not.toContain(workspace?.fileName);
+    expect(html.source.indexOf('charset="UTF-8"')).toBeLessThan(1024);
+    expect(html.source.indexOf('charset="UTF-8"')).toBeLessThan(html.source.indexOf(renderHref));
+  })
 );
 
 afterEach(() =>

@@ -78,6 +78,7 @@ const journeyEnvironment = (directory: string, service: string): Readonly<Record
       USERPROFILE: Bun.env.USERPROFILE,
       SYSTEMROOT: Bun.env.SYSTEMROOT,
       DBUS_SESSION_BUS_ADDRESS: Bun.env.DBUS_SESSION_BUS_ADDRESS,
+      LD_LIBRARY_PATH: Bun.env.LD_LIBRARY_PATH,
       XDG_RUNTIME_DIR: Bun.env.XDG_RUNTIME_DIR,
       CLI_ACCEPTANCE_MODE: Bun.env.CLI_ACCEPTANCE_MODE,
       CLI_JOURNEY_DIRECTORY: directory,
@@ -228,7 +229,7 @@ const cliJourney = Effect.fn(function* ({
   page,
   request,
 }: Readonly<{ page: Page; request: APIRequestContext }>) {
-  yield* wait(signInThroughCore({ page, request }));
+  yield* wait(signInThroughCore({ page, deferFreshEntry: true, request }));
   const filesystem = yield* FileSystem.FileSystem;
   const directory = yield* filesystem.makeTempDirectoryScoped();
   const entry = yield* bundleJourney(directory);

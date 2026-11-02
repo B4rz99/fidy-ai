@@ -2,8 +2,10 @@ import type { Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { playwright } from "./playwright-runtime";
 import { signInThroughCore } from "./real-core-fixture";
+import { advanceAcceptancePoll } from "./acceptance-clock";
 
 const { test, expect } = playwright;
+const successStatus = 200;
 const pendingProvider = (route: Route): Promise<void> =>
   route.fulfill({ contentType: "text/html", body: "<p>Pending provider decision</p>" });
 const openProvider = (page: Page, label: string): Promise<Page> =>
@@ -37,9 +39,9 @@ for (const provider of [
           expect(popup.getByText("Pending provider decision")).toBeVisible()
         );
         for (const _ of [0, 1]) {
-          yield* Effect.tryPromise(() =>
-            page.waitForResponse(`**/web/providers/${provider.name}/status`)
-          );
+          const status = page.waitForResponse(`**/web/providers/${provider.name}/status`);
+          yield* Effect.tryPromise(() => advanceAcceptancePoll({ page, milliseconds: 1_000 }));
+          expect((yield* Effect.tryPromise(() => status)).status()).toBe(successStatus);
         }
         yield* Effect.tryPromise(() =>
           expect(page.getByText("Cancelaste el acceso.")).toHaveCount(0)

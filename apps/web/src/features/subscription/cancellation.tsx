@@ -218,20 +218,20 @@ export const SubscriptionCancellationManagement = ({
   }
   return (
     <section aria-label="Renovaciones de la suscripción" className="flex flex-col gap-4 py-5">
-      {Option.match(current.cancellation, {
-        onSome: (value) => (
-          <CancellationResult value={value} focus={current.interacted && !current.uncertain} />
-        ),
-        onNone: () => (
-          <CancellationActions
-            current={current}
-            reviewing={reviewing}
-            restoreFocus={restoreFocus}
-            review={() => setReviewState("open")}
-            back={() => setReviewState("returned")}
-          />
-        ),
-      })}
+      {Option.isSome(current.cancellation) ? (
+        <CancellationResult
+          value={current.cancellation.value}
+          focus={current.interacted && !current.uncertain}
+        />
+      ) : (
+        <CancellationActions
+          current={current}
+          reviewing={reviewing}
+          restoreFocus={restoreFocus}
+          review={() => setReviewState("open")}
+          back={() => setReviewState("returned")}
+        />
+      )}
       {current.uncertain ? <UncertainCancellation /> : null}
       <div>
         <Button

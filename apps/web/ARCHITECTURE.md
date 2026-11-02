@@ -412,7 +412,9 @@ metadata, scopes and fixed lifetime before an explicit approval click. Only the 
 bearer. Browser pairing and provider login preserve this allowlisted destination/code; no arbitrary
 return URL, private verifier or bearer is placed in navigation state. Without a code, the page offers
 the manual fallback for another device. Authentication registry replacement owns pending work.
-The signed-in `/app/budgets` workspace keys its canonical queries by User, time zone, and selected month. `budgets.getBudgetStatus` supplies historical spending and applied caps; `budgets.listBudgets` supplies existing identities when assigning a category in an earlier month. Category labels come from the canonical category query. Editing uses the same canonical create/update contracts, including a single guarded collection rename and a versioned group Currency setting; uncertain acknowledgements lock writes until an explicit refresh. The mounted Budget editing owner concentrates monthly query freshness, write validation, synchronous write admission and explicit reread recovery. Presentation receives canonical figures and editing actions; it does not assemble mutation inputs or recovery reset identities. Interaction state owns only drafts and save feedback. Exact Money totals remain separated by Currency, and the shared workspace panel becomes a sheet for editing on phones.
+The signed-in `/app/budgets` workspace keys its canonical queries by User, time zone, and selected month. `budgets.getBudgetStatus` supplies historical spending and applied caps; `budgets.listBudgets` supplies existing identities when assigning a category in an earlier month. Category labels come from the canonical category query. Editing uses the same canonical create/update/delete contracts, including a single guarded collection rename and a versioned group Currency setting; uncertain acknowledgements lock writes until an explicit refresh. The mounted Budget editing owner concentrates monthly query freshness, write validation, synchronous write admission and explicit reread recovery. Presentation receives canonical figures and editing actions; it does not assemble mutation inputs or recovery reset identities. Interaction state owns only drafts and save feedback. Exact Money totals remain separated by Currency, and the shared workspace panel becomes a sheet for editing on phones.
+
+Category editors offer confirmed permanent deletion across all months, with the selected month, historical caps, future inheritance and operational alert-mark consequences explained before submission. Transactions and recorded alert history remain intact. Accepted and uncertain deletions invalidate retained Budget and Dashboard projections. The locked mobile deletion panel provides explicit reread recovery.
 
 Category editors inherit their group Currency; only group settings or a new group expose the Currency selector. Decimal amount controls refuse non-numeric input before submission.
 
@@ -461,7 +463,8 @@ revision guards for every write; refresh failures still gate editing. Authentica
 two in-flight request permits within their session signal, including across feature clients. Queue
 time counts against the original request deadline and session retirement cancels queued work.
 Dashboard initialization remains exclusive to a declared uninitialized response during an
-actual visit. Consent, session binding and security settings reads retain their fresh access
+actual visit. The retained Dashboard query checks the live router location before initialization,
+so Budget deletion and recovery can refresh its projection without creating a Dashboard off-route. Consent, session binding and security settings reads retain their fresh access
 checks. Router intent preloading prepares destination code without executing writes. The owned
 navigation hook prepares display reads only while an authenticated product route is active;
 independent controls such as OAuth do not start product reads on hover. Automatic Budget and Recurring

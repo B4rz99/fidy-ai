@@ -106,13 +106,26 @@ const verifyCapChanges = (page: Page, budgetId: string): Effect.Effect<void, Cau
         expect(widget.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100")
       );
     }
-    const deleted = yield* admittedRequest(page, () =>
-      browserSessionHeaders(page.request).then((headers) =>
-        page.request.delete(`${api}/budgets/${budgetId}`, { headers })
-      )
+    yield* Effect.tryPromise(() =>
+      page.getByRole("link", { name: "Presupuestos", exact: true }).click()
     );
-    expect(deleted.status()).toBe(ok);
-    yield* Effect.tryPromise(() => page.reload());
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Configurar Restaurantes", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Eliminar presupuesto", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Eliminar de todos los meses", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByText("Presupuesto eliminado de todos los meses.", { exact: true })
+      ).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("link", { name: "Tablero", exact: true }).click()
+    );
     yield* Effect.tryPromise(() =>
       expect(widget).toContainText("No hay presupuesto configurado", {
         timeout: canonicalRecoveryMilliseconds,

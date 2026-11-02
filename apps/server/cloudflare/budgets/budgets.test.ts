@@ -2794,3 +2794,99 @@ it("refuses group currency precision loss including previously saved future caps
       ).toBeNull();
     })
   ));
+
+const monthlyDeletionReport = Effect.fn(function* (db: D1Database, month: string) {
+  const response = yield* Effect.tryPromise(() =>
+    send(db, request(0, `/budget-status?timeZone=America%2FBogota&month=${month}`))
+  );
+  expect(response.status).toBe(200);
+  return (yield* Schema.decodeUnknownEffect(Report)(
+    yield* Effect.tryPromise(() => response.json())
+  )).data;
+});
+
+it(
+  "permanent Budget deletion clears saved historical and inherited plans and alert marks while preserving Transactions",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.setSystemTime(DateTime.makeUnsafe("2026-10-06T17:00:00Z").epochMilliseconds);
+        const db = yield* setup();
+        const createdResponse = yield* Effect.tryPromise(() =>
+          send(db, request(0, "/budgets", "POST", { ...payload(), month: "2026-09" }))
+        );
+        expect(createdResponse.status).toBe(201);
+        const { data: budget } = yield* Schema.decodeUnknownEffect(Created)(
+          yield* Effect.tryPromise(() => createdResponse.json())
+        );
+        const saved = yield* Effect.tryPromise(() =>
+          send(
+            db,
+            request(0, `/budgets/${budget.id}`, "PUT", { ...payload("200"), month: "2026-10" })
+          )
+        );
+        expect(saved.status).toBe(200);
+        const capture = yield* Effect.tryPromise(() =>
+          send(
+            db,
+            request(0, "/transactions", "POST", {
+              money: { amount: "180", currency: "COP" },
+              categoryId: category,
+              direction: "outflow",
+              occurredAt: "2026-10-06T16:00:00Z",
+            })
+          )
+        );
+        expect(capture.status).toBe(201);
+        const { data: transaction } = yield* Schema.decodeUnknownEffect(Captured)(
+          yield* Effect.tryPromise(() => capture.json())
+        );
+        const october = yield* monthlyDeletionReport(db, "2026-10");
+        expect(october.initialized).toBe(true);
+        expect((yield* monthlyDeletionReport(db, "2026-09")).statuses).toHaveLength(1);
+        const inherited = yield* monthlyDeletionReport(db, "2026-11");
+        expect(inherited.initialized).toBe(false);
+        expect(
+          encodeMoneyAmount(
+            Option.getOrThrow(EffectArray.head(inherited.statuses)).budget.cap.amount
+          )
+        ).toBe("200");
+        const marks = (): Promise<D1Result<{ highest_reached: number }>> =>
+          db
+            .prepare(
+              "SELECT highest_reached FROM budget_month_latches WHERE user_id=? AND budget_id=?"
+            )
+            .bind(users[0], budget.id)
+            .all<{ highest_reached: number }>();
+        expect((yield* Effect.tryPromise(marks)).results).toContainEqual({ highest_reached: 80 });
+        expect(
+          (yield* Effect.tryPromise(() => send(db, request(1, `/budgets/${budget.id}`, "DELETE"))))
+            .status
+        ).toBe(404);
+        expect((yield* monthlyDeletionReport(db, "2026-10")).statuses).toHaveLength(1);
+        expect(
+          (yield* Effect.tryPromise(() => send(db, request(0, `/budgets/${budget.id}`, "DELETE"))))
+            .status
+        ).toBe(200);
+        for (const month of ["2026-09", "2026-10", "2026-11", "2026-12"]) {
+          expect((yield* monthlyDeletionReport(db, month)).statuses).toEqual([]);
+        }
+        const after = yield* monthlyDeletionReport(db, "2026-10");
+        expect(after.cashFlow).toEqual(october.cashFlow);
+        expect(
+          encodeMoneyAmount(Option.getOrThrow(EffectArray.head(after.cashFlow.expenses)).amount)
+        ).toBe("180");
+        const retained = yield* Effect.tryPromise(() =>
+          send(db, request(0, `/transactions/${transaction.id}`))
+        );
+        expect(retained.status).toBe(200);
+        expect(
+          (yield* Schema.decodeUnknownEffect(Captured)(
+            yield* Effect.tryPromise(() => retained.json())
+          )).data
+        ).toEqual(transaction);
+        expect((yield* Effect.tryPromise(marks)).results).toEqual([]);
+      })
+    ),
+  30_000
+);

@@ -1,13 +1,14 @@
+import { BudgetDeletion } from "./deletion";
 import { AmountInput } from "@/ui/components/amount-input";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { BigDecimal, Option } from "effect";
-import { type FormEvent, type JSX, useState } from "react";
+import { type FormEvent, type JSX, type RefCallback, useCallback, useState } from "react";
 import { Currency } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
-import { type BudgetDraft, type BudgetEdit } from "./model";
+import { type BudgetDraft, type BudgetEdit, type SaveState } from "./model";
 import { defaultBudgetGroup } from "./presentation";
 
 type EditorProps = Readonly<{
@@ -18,6 +19,9 @@ type EditorProps = Readonly<{
   disabled: boolean;
   onSubmit: (edit: BudgetEdit) => void;
   onClose: () => void;
+  onRemove: () => void;
+  onRefresh: () => void;
+  saveState: SaveState;
 }>;
 const AmountField = ({
   amount,
@@ -161,13 +165,70 @@ export const BudgetEditor = ({
   disabled,
   onSubmit,
   onClose,
+  onRemove,
+  onRefresh,
+  saveState,
 }: EditorProps): JSX.Element => {
-  const { amount, setAmount, currency, setCurrency, group, onGroup, submit } = useEditor({
+  const [deletionStep, setDeletionStep] = useState<"editing" | "reviewing" | "returning">(
+    "editing"
+  );
+  const focusRemoval = useCallback<RefCallback<HTMLButtonElement>>(
+    (button): void => {
+      if (deletionStep === "returning") button?.focus();
+    },
+    [deletionStep]
+  );
+  const editor = useEditor({
     draft,
     groupCurrencies,
     disabled,
     onSubmit,
   });
+  if (deletionStep === "reviewing") {
+    return (
+      <BudgetDeletion
+        draft={draft}
+        month={month}
+        disabled={disabled}
+        onCancel={() => setDeletionStep("returning")}
+        onRemove={onRemove}
+        onRefresh={onRefresh}
+        saveState={saveState}
+      />
+    );
+  }
+  return (
+    <EditorForm
+      draft={draft}
+      month={month}
+      groups={groups}
+      groupCurrencies={groupCurrencies}
+      disabled={disabled}
+      onClose={onClose}
+      editor={editor}
+      onDelete={() => setDeletionStep("reviewing")}
+      onRemovalMount={focusRemoval}
+    />
+  );
+};
+
+const EditorForm = ({
+  draft,
+  month,
+  groups,
+  groupCurrencies,
+  disabled,
+  onClose,
+  editor,
+  onDelete,
+  onRemovalMount,
+}: Omit<EditorProps, "onSubmit" | "onRemove" | "onRefresh" | "saveState"> &
+  Readonly<{
+    editor: ReturnType<typeof useEditor>;
+    onDelete: () => void;
+    onRemovalMount: RefCallback<HTMLButtonElement>;
+  }>): JSX.Element => {
+  const { amount, setAmount, currency, setCurrency, group, onGroup, submit } = editor;
   return (
     <form
       onSubmit={submit}
@@ -194,6 +255,18 @@ export const BudgetEditor = ({
         ) : null}
         <Button type="submit">{disabled ? "Guardando…" : "Guardar presupuesto"}</Button>
       </fieldset>
+      {Option.isSome(draft.budget) && Option.isNone(draft.groupCategoryIds) ? (
+        <Button
+          ref={onRemovalMount}
+          type="button"
+          variant="destructive"
+          contentLayout="wrap"
+          disabled={disabled}
+          onClick={onDelete}
+        >
+          Eliminar presupuesto
+        </Button>
+      ) : null}
     </form>
   );
 };

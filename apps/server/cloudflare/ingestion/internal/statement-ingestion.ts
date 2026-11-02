@@ -12,7 +12,6 @@ import {
   recordCanonicalPATWork,
 } from "../../../src/shell/audit/operations";
 import type { OAuthCaller } from "../../../src/shell/oauth-agents/contract";
-import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Clock, Data, Effect, Function, Option, Result, Schema } from "effect";
 import {
@@ -323,7 +322,7 @@ const readStatements = (
     return [oauthReadAudit({ database, subject, current, operation })];
   }
   if (!isPATCaller(subject)) {
-    const authority = liveWebSessionAuthority({ subject, current });
+    const authority = callerAuthority({ subject, current });
     return [
       operation === "ingestion.listNeedsReviewItems"
         ? prepareAuthorizedAuditCall({

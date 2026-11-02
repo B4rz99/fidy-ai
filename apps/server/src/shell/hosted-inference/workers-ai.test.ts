@@ -373,7 +373,7 @@ it("keeps union discriminants and calendar constraints visible to the tool templ
     properties: {
       edit: {
         description:
-          'Required shape: ({kind:"lifecycle",date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/} | {kind:"rename",name:string})',
+          'Shape: ({kind:"lifecycle",date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/}|{kind:"rename",name:string})',
         anyOf: [
           {
             properties: {
@@ -383,6 +383,28 @@ it("keeps union discriminants and calendar constraints visible to the tool templ
           },
           { properties: { kind: { enum: ["rename"] } } },
         ],
+      },
+    },
+  });
+});
+
+it("shares repeated shapes while keeping their discriminants visible at each tool argument", () => {
+  const edit = Schema.Union([
+    Schema.Struct({ kind: Schema.Literal("schedule"), date: RecurringDate }),
+    Schema.Struct({ kind: Schema.Literal("rename"), name: Schema.String }),
+  ]).annotate({ identifier: "RepeatedEdit" });
+  const schema = workersAiProviderSchema(Schema.Struct({ first: edit, second: edit }));
+  expect(schema).toMatchObject({
+    properties: {
+      first: {
+        $ref: "#/$defs/RepeatedEdit",
+        description:
+          'Shape: ({kind:"schedule",date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/}|{kind:"rename",name:string})',
+      },
+      second: {
+        $ref: "#/$defs/RepeatedEdit",
+        description:
+          'Shape: ({kind:"schedule",date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/}|{kind:"rename",name:string})',
       },
     },
   });

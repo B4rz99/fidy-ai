@@ -15,10 +15,11 @@ import { prepareOwnerAuditCall } from "../../../src/shell/audit/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 import {
+  type CanonicalCaller,
   type TransactionAuthority,
   type TransactionBoundaryFailure,
-  type TransactionCaller,
   type TransactionRefusal,
+  acceptedHostedStatement,
   acceptedOAuthStatement,
   acceptedPATStatements,
   alreadyLinkedMessage,
@@ -27,6 +28,7 @@ import {
   callerScope,
   credentialRefusedPreparation,
   failedPreparation,
+  isHostedCaller,
   isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
@@ -66,7 +68,7 @@ type Candidate = Readonly<{ member: ReconciliationMember; alreadyLinked: boolean
 
 type PairWork = Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   pair: Pair;
   current: number;
 }>;
@@ -172,6 +174,9 @@ const successStatements = ({
     operation: "transactions.linkTransactions" | "transactions.unlinkTransactions";
     state: "linked" | "keep-separate";
   }>): ReadonlyArray<D1PreparedStatement> => {
+  if (isHostedCaller(subject)) {
+    return [acceptedHostedStatement({ db, subject, operation, current })];
+  }
   if (isPATCaller(subject)) {
     return acceptedPATStatements({ db, subject, operation, current });
   }

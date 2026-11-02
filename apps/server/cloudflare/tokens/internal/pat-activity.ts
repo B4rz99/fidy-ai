@@ -12,7 +12,7 @@ export const getActivity = (
   input: PATMetadataQuery & Readonly<{ shortId: string }>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    if ("patId" in input.subject) return unauthorized();
+    if ("patId" in input.subject || "_tag" in input.subject) return unauthorized();
     const current = yield* Clock.currentTimeMillis;
     return yield* getHeldActivity({
       db: input.db,

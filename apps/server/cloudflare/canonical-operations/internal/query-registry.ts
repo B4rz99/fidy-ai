@@ -6,6 +6,7 @@ import { operationCatalog } from "../../../src/shell/api";
 import { type Cause, Effect, Option, Schema } from "effect";
 import {
   type QueryCaller,
+  isHostedCaller,
   isOAuthCaller,
   transactionNow,
   transactionUnavailable,
@@ -27,6 +28,7 @@ import {
 } from "../../insights/operations";
 import { getHeldPATActivity, getPATActivity, listPATs } from "../../tokens/operations";
 import type { StatementDecisionWork } from "../../ingestion/contract";
+import type { HostedCanonicalCaller } from "../../canonical-work/contract";
 import {
   browseReviewItem,
   browseReviewMaterial,
@@ -110,7 +112,7 @@ const queryOwners = new Map<string, QueryOwner>([
   [
     "pats.getPATActivity",
     ({ db, subject, request }): Effect.Effect<Response> =>
-      isOAuthCaller(subject)
+      isOAuthCaller(subject) || isHostedCaller(subject)
         ? Effect.succeed(transactionUnavailable())
         : getPATActivity({
             db,
@@ -237,10 +239,47 @@ export const canonicalQueryOwner = (id: string): Option.Option<QueryOwner> =>
   Option.fromUndefinedOr(queryOwners.get(id));
 
 /** The same installed statement queries also accept Agent's held conversation authority. */
+type HostedQueryOwner = (
+  work: StatementDecisionWork & { caller: HostedCanonicalCaller; request: Request }
+) => Effect.Effect<Response>;
+
+const hostedTransactionQueryOwner = (id: string): Option.Option<HostedQueryOwner> => {
+  if (
+    id === "transactions.listTransactions" ||
+    id === "transactions.searchTransactions" ||
+    id === "transactions.getTransaction"
+  ) {
+    return Option.some((work) =>
+      browseTransactions({
+        db: work.db,
+        selection:
+          id === "transactions.searchTransactions"
+            ? { subject: work.caller, request: work.request, search: true, id: Option.none() }
+            : {
+                subject: work.caller,
+                request: work.request,
+                search: false,
+                id:
+                  id === "transactions.getTransaction"
+                    ? Option.some(new URL(work.request.url).pathname.split("/").at(-1) ?? "")
+                    : Option.none(),
+              },
+      })
+    );
+  }
+  return Option.none();
+};
+
 export const canonicalHostedStatementQueryOwner = (
   id: string
-): Option.Option<(work: StatementDecisionWork) => Effect.Effect<Response>> => {
+): Option.Option<
+  (
+    work: StatementDecisionWork & { caller: HostedCanonicalCaller; request: Request }
+  ) => Effect.Effect<Response>
+> => {
   if (Option.isNone(canonicalQueryOwner(id))) return Option.none();
+  const transaction = hostedTransactionQueryOwner(id);
+  if (Option.isSome(transaction)) return transaction;
   if (id === "pats.getPATActivity") {
     return Option.some((work) => {
       const selected = Schema.decodeUnknownOption(Schema.Struct({ params: PATActivityParams }))(
@@ -273,7 +312,17 @@ export const canonicalHostedStatementQueryOwner = (
   if (id === "ingestion.listNeedsReviewItems" || id === "ingestion.getStatementSubmission") {
     return Option.some((work) => readHeldStatementQuery({ operation: id, work }));
   }
-  return Option.none();
+  return Option.map(
+    canonicalQueryOwner(id),
+    (owner) => (work) =>
+      owner({
+        db: work.db,
+        subject: work.caller,
+        request: work.request,
+        bucket: work.bucket,
+        browserOrigin: Option.none(),
+      }).pipe(Effect.orElseSucceed(transactionUnavailable))
+  );
 };
 
 const assertCanonicalQueryOwners = (): void => {

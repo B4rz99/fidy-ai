@@ -82,6 +82,11 @@ const oauthAdmissionStatement = ({
   ],
 });
 
+const authorityCredentialColumn = (authority: AuditAuthority): string => {
+  if (authority.table === "hosted_turns") return "hosted_turn_id";
+  return authority.table === "pats" ? "pat_id" : "session_id";
+};
+
 /** Admission refusals are canonical metadata, not allowance counters or retained request bodies. */
 export const admissionRefusalStatement = ({
   authority,
@@ -92,7 +97,7 @@ export const admissionRefusalStatement = ({
   authority.table === "oauth_credentials"
     ? oauthAdmissionStatement({ authority, id, operation, current, outcome: "rejected" })
     : {
-        sql: `INSERT INTO audit_entries(record_type,id,user_id,${authority.table === "pats" ? "pat_id" : "session_id"},operation,outcome,occurred_at_ms) SELECT 'credential_call',?,user_id,id,?,'rejected',? FROM ${authority.table} WHERE ${authority.predicate}`,
+        sql: `INSERT INTO audit_entries(record_type,id,user_id,${authorityCredentialColumn(authority)},operation,outcome,occurred_at_ms) SELECT 'credential_call',?,user_id,id,?,'rejected',? FROM ${authority.table} WHERE ${authority.predicate}`,
         params: [id, operation, current, ...authority.bindings],
       };
 
@@ -146,6 +151,12 @@ export const queryCallStatement = ({ missingWhen, ...input }: AuditQueryCall): O
         current,
         ...authority.bindings,
       ],
+    };
+  }
+  if (authority.table === "hosted_turns") {
+    return {
+      sql: `INSERT INTO audit_entries(record_type,id,user_id,hosted_turn_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,user_id,id,?,CASE WHEN EXISTS (${missingWhen.sql}) THEN 'rejected' ELSE 'accepted' END,? FROM hosted_turns WHERE ${authority.predicate}`,
+      params: [id, operation, ...missingWhen.params, current, ...authority.bindings],
     };
   }
   const pat = authorityCaller(authority);
@@ -208,22 +219,40 @@ export const replayAccessStatement = ({
         ],
       };
 
+const oauthAuthorizedCallStatement = (
+  input: Omit<AuthorizedAuditCall, "authority"> & {
+    authority: Extract<AuditAuthority, { table: "oauth_credentials" }>;
+  }
+): OwnedStatement => {
+  const { authority, id, operation, outcome, current, afterOwnerWrite } = input;
+  return {
+    sql: `INSERT INTO audit_entries(record_type,id,user_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,?,?,?,? FROM ${authority.table} WHERE ${authority.predicate} ${commitGuard(afterOwnerWrite)}`,
+    params: [
+      id,
+      authority.attribution.userId,
+      authority.attribution.connectionId,
+      authority.attribution.credentialId,
+      operation,
+      outcome === "accepted" || outcome === "success" ? "accepted" : "rejected",
+      current,
+      ...authority.bindings,
+    ],
+  };
+};
+
+const acceptedOutcome = (outcome: AuthorizedAuditCall["outcome"]): string =>
+  outcome === "success" || outcome === "accepted" ? "accepted" : "rejected";
+
 /** Builds evidence under the exact credential gate held by the coordinator. */
 export const authorizedCallStatement = (input: AuthorizedAuditCall): OwnedStatement => {
   const { authority, id, operation, outcome, current, afterOwnerWrite } = input;
   if (authority.table === "oauth_credentials") {
+    return oauthAuthorizedCallStatement({ ...input, authority });
+  }
+  if (authority.table === "hosted_turns" && sessionKind(operation) !== "insight_call") {
     return {
-      sql: `INSERT INTO audit_entries(record_type,id,user_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,?,?,?,? FROM ${authority.table} WHERE ${authority.predicate} ${commitGuard(afterOwnerWrite)}`,
-      params: [
-        id,
-        authority.attribution.userId,
-        authority.attribution.connectionId,
-        authority.attribution.credentialId,
-        operation,
-        outcome === "accepted" || outcome === "success" ? "accepted" : "rejected",
-        current,
-        ...authority.bindings,
-      ],
+      sql: `INSERT INTO audit_entries(record_type,id,user_id,hosted_turn_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,user_id,id,?,?,? FROM hosted_turns WHERE ${authority.predicate} ${commitGuard(afterOwnerWrite)}`,
+      params: [id, operation, acceptedOutcome(outcome), current, ...authority.bindings],
     };
   }
   const pat = authorityCaller(authority);

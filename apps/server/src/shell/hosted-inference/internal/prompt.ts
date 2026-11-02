@@ -56,6 +56,10 @@ const captureWorkflow =
   `Si falta la moneda en una captura de este contexto de lanzamiento, usa COP y conserva cualquier moneda explícita. ` +
   `Usa `;
 
+const paginationWorkflow =
+  `Los cursores de paginación son opacos: cópialos solo de un resultado anterior. ` +
+  `En la primera página omite cursor; nunca inventes uno ni envíes el texto "null" o "undefined". `;
+
 /** @internal */
 export const systemPromptInternal = ({
   serviceMarket,
@@ -104,6 +108,7 @@ export const systemPromptInternal = ({
   `Respeta exactamente la estructura de argumentos de cada herramienta: los campos de ruta van ` +
   `en params, los filtros en query y el cuerpo en payload, según su esquema. No aplanes estos ` +
   `objetos ni muevas campos entre ellos. ${recurringToolWorkflow}` +
+  paginationWorkflow +
   `No solicites credenciales, tokens, contraseñas, números de tarjeta ni números de cuenta, y ` +
   `advierte al Usuario que no envíe información sensible innecesaria. ` +
   `No pidas confirmación conversacional por tu cuenta: sigue la política indicada en cada ` +

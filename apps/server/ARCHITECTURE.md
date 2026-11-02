@@ -197,7 +197,10 @@ abandoned work without granting new execution authority.
 Verified WhatsApp Turns discover every installed canonical operation permitted by the catalog access
 policy. Query and mutation adapters reuse their canonical owners under live held Turn authority,
 including User isolation, audit, confirmation policy and atomic batch commit fences. Browser credentials
-and PAT management authority are never synthesized for the channel. A capture receipt is rendered from the committed
+and PAT management authority are never synthesized for the channel. An invalid or unavailable WhatsApp query ends
+the round with an unconfirmed-result reply; model prose cannot present that rejection as an empty result.
+Canonical not-found evidence can still support an absence reply. Nullable optional query arguments
+are omitted when reconstructing the canonical HTTP query. A capture receipt is rendered from the committed
 canonical result, including its Transaction identifier and date in the User's configured time zone.
 For recognized Spanish capture phrases and compact entries, a Turn without a committed result
 receives an unconfirmed-registration reply instead of the model's proposed confirmation. Turn context supplies both the UTC start and the User-local date.

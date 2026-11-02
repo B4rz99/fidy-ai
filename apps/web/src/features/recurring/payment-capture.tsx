@@ -1,6 +1,7 @@
+import { formatMoneyInput } from "@/transport/money-input";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { BigDecimal, Data, Option } from "effect";
+import { Data, Option } from "effect";
 import { Atom, Reactivity } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
@@ -217,7 +218,7 @@ const captureInitial = ({
   return {
     amount: Option.match(actual, {
       onNone: () => "",
-      onSome: (value) => BigDecimal.format(value.amount),
+      onSome: formatMoneyInput,
     }),
     occurredOn: mark?.actualDate ?? today,
     counterparty: item.plan.counterparty ?? "",

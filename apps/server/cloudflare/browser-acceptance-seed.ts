@@ -33,7 +33,7 @@ export const recurringSummaryUserId = "24000000-0000-4000-8000-000000000411";
 export const recurringEditingUserId = "24000000-0000-4000-8000-000000000501";
 export const recurringIsolatedIdentities = [
   { key: "recurringSplitCapture", userId: "24000000-0000-4000-8000-000000000811" },
-  { key: "recurringCapture", userId: "24000000-0000-4000-8000-000000000781" },
+  { key: "recurringCapture", userId: "24000000-0000-4000-8000-000000000821" },
   { key: "recurringCaptureUncertain", userId: "24000000-0000-4000-8000-000000000791" },
   { key: "recurringCaptureCurrency", userId: "24000000-0000-4000-8000-000000000801" },
   { key: "recurringStableReads", userId: "24000000-0000-4000-8000-000000000661" },

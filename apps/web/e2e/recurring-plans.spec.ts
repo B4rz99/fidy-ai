@@ -896,7 +896,7 @@ test("capturing recurring income preserves its Currency and direction", ({ page,
     Effect.gen(function* () {
       yield* prepareIncomeCapture(page, request);
       yield* Effect.tryPromise(() =>
-        expectPayment(page.getByLabel("Monto · USD", { exact: true })).toHaveValue("20")
+        expectPayment(page.getByLabel("Monto · USD", { exact: true })).toHaveValue("20,5")
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Registrar", exact: true }).click()
@@ -922,7 +922,7 @@ test("capturing recurring income preserves its Currency and direction", ({ page,
       expectPayment(body).toMatchObject({
         data: [
           expect.objectContaining({
-            money: { amount: "20", currency: "USD" },
+            money: { amount: "20.5", currency: "USD" },
             direction: "inflow",
           }),
         ],
@@ -1025,7 +1025,7 @@ const prepareIncomeCapture = (
       name: "Honorarios en USD",
       kind: "income",
       currency: "USD",
-      amount: "20",
+      amount: "20.5",
     });
     yield* Effect.tryPromise(() => recurringItem(page, /Honorarios en USD/u).click());
     yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());

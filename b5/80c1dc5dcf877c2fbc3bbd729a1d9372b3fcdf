@@ -1,0 +1,19 @@
+apps/web/src/ui/components/connection-recovery.tsx
+  s_6c060da8503f0c::t_054e2fff2b0503 3-4,6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b580c1dc5dcf877c2fbc3bbd729a1d9372b3fcdf",
+  "prompts": {},
+  "sessions": {
+    "s_6c060da8503f0c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19e52-ed87-7612-bc80-9ebfbe27f3b2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

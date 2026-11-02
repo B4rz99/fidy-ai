@@ -58,23 +58,32 @@ const pendingContinuation = (
   if (Option.isSome(current.refreshFailure)) return "failure";
   return current.waiting ? "loading" : "complete";
 };
+type BrowsedHistory = HistoryState & Readonly<{ loadedPages: number }>;
 type Browse = Readonly<{
   first: ReadyPage;
   navigation: HistoryNavigation;
   period: HistoryInput;
+  locate: Option.Option<string>;
   read: (
     cursor: string
   ) => Readonly<{ atom: PageAtom; query: CanonicalQueryState<TransactionPage, unknown> }>;
 }>;
 const stopBrowsing = (index: number, navigation: HistoryNavigation, first: ReadyPage): boolean =>
   index >= navigation.pages || first.waiting || Option.isSome(first.refreshFailure);
-const browse = ({ first, navigation, period, read }: Browse): HistoryState => {
+const rememberCursor = (cursors: Set<string>, cursor: string): void => {
+  if (cursors.has(cursor)) throw new Error("Repeated Transaction continuation");
+  cursors.add(cursor);
+};
+const maximumLocatePages = 20;
+const browse = ({ first, navigation, period, locate, read }: Browse): BrowsedHistory => {
   const base = { generation: navigation.generation, retryPage: Option.none<PageAtom>() };
   let page = first.value;
   const data = [...page.data];
-  const ids = new Set(data.map((transaction) => transaction.id));
+  const ids = new Set<string>(data.map((transaction) => transaction.id));
+  let loadedPages = 1;
   const cursors = new Set<string>();
-  const result = (continuation: HistoryState["continuation"]): HistoryState => ({
+  const result = (continuation: HistoryState["continuation"]): BrowsedHistory => ({
+    loadedPages,
     ...base,
     continuation,
     query: { ...first, value: { data } },
@@ -83,9 +92,11 @@ const browse = ({ first, navigation, period, read }: Browse): HistoryState => {
     for (let index = 1; ; index += 1) {
       const cursor = nextCursor(page, period);
       if (Option.isNone(cursor)) return result("complete");
-      if (stopBrowsing(index, navigation, first)) return result("available");
-      if (cursors.has(cursor.value)) throw new Error("Repeated Transaction continuation");
-      cursors.add(cursor.value);
+      const pages = Option.exists(locate, (id) => !ids.has(id))
+        ? Math.max(navigation.pages, maximumLocatePages)
+        : navigation.pages;
+      if (stopBrowsing(index, { ...navigation, pages }, first)) return result("available");
+      rememberCursor(cursors, cursor.value);
       const current = read(cursor.value);
       const continuation = pendingContinuation(current.query);
       if (continuation !== "complete") {
@@ -97,6 +108,7 @@ const browse = ({ first, navigation, period, read }: Browse): HistoryState => {
         ids.add(transaction.id);
         data.push(transaction);
       });
+      loadedPages = index + 1;
       page = current.query.value;
     }
   } catch {
@@ -130,19 +142,22 @@ export const transactionHistory = ({
   apiClient,
   firstPage,
   period,
+  locate,
 }: Readonly<{
   apiClient: FidyClient;
   firstPage: PageAtom;
   period: HistoryInput;
+  locate: Option.Option<string>;
 }>): History => {
   const navigation = Atom.make<HistoryNavigation>({ generation: 0, pages: 1 });
   const pages = Atom.family((key: PageKey) => pageQuery(apiClient, period, key.cursor));
-  const state = Atom.make((get): HistoryState => {
+  const state = Atom.make((get): BrowsedHistory => {
     const current = get(navigation);
     const first = presentCanonicalQuery(get(firstPage));
     if (first._tag !== "Ready") {
       return {
         generation: current.generation,
+        loadedPages: 0,
         continuation: "complete",
         retryPage: Option.none(),
         query: first,
@@ -152,6 +167,7 @@ export const transactionHistory = ({
       first,
       navigation: current,
       period,
+      locate,
       read: (cursor) => {
         const atom = pages(new PageKey({ generation: current.generation, cursor }));
         return { atom, query: presentCanonicalQuery(get(atom)) };
@@ -170,7 +186,7 @@ export const transactionHistory = ({
       });
     } else if (get(state).continuation === "available") {
       const current = get(navigation);
-      get.set(navigation, { ...current, pages: current.pages + 1 });
+      get.set(navigation, { ...current, pages: get(state).loadedPages + 1 });
     }
   });
   return { state, action };

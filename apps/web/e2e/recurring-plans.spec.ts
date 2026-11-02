@@ -1,12 +1,21 @@
-import type { Page, Route } from "@playwright/test";
+import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { type Cause, DateTime, Effect } from "effect";
-import { signInRecurringThroughCore } from "./real-core-fixture";
+import {
+  boundSessionRequests,
+  probeCanonicalRequest,
+  signInRecurringThroughCore,
+} from "./real-core-fixture";
 import { apiOrigin } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
-test.describe.configure({ mode: "parallel" });
 const successStatus = 200;
+const createdStatus = 201;
+const invalidStatus = 400;
+const paymentJourneyMilliseconds = 60000;
+const paymentAssertionMilliseconds = 20000;
+const expectPayment = expect.configure({ timeout: paymentAssertionMilliseconds });
+test.describe.configure({ mode: "parallel", timeout: paymentJourneyMilliseconds });
 const rateLimitedStatus = 429;
 const monthsPerYear = 12;
 test("recurring plans persist through the real canonical API and share monthly list/calendar items", ({
@@ -40,21 +49,44 @@ test("recurring plans persist through the real canonical API and share monthly l
           .click()
       );
       yield* Effect.tryPromise(() =>
+        expect(page.getByRole("dialog")).toContainText(
+          "No crea una transacción ni modifica tus gastos o presupuestos."
+        )
+      );
+      yield* Effect.tryPromise(() =>
         page.getByLabel("Importe real", { exact: true }).fill("400000")
       );
       yield* Effect.tryPromise(() => chooseDate(page, "Fecha real", "2026-10-30"));
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Registrar" }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Marcar solo en recurrentes", exact: true }).click()
+      );
       yield* Effect.tryPromise(() =>
         expect(recurringItem(page, /Arriendo de prueba.*Parcial/u).first()).toBeVisible()
       );
-      yield* Effect.tryPromise(() => page.reload());
-      yield* Effect.tryPromise(() =>
-        expect(recurringItem(page, /Arriendo de prueba.*Parcial/u).first()).toBeVisible()
-      );
+      yield* inspectTrackingNotice(page);
       yield* inspectEditorSelection(page);
       yield* inspectMobile(page);
     })
   ));
+
+const inspectTrackingNotice = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      recurringItem(page, /Arriendo de prueba/u)
+        .first()
+        .click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("dialog")).toContainText("Sin transacción vinculada")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => page.reload());
+    yield* Effect.tryPromise(() =>
+      expect(recurringItem(page, /Arriendo de prueba.*Parcial/u).first()).toBeVisible()
+    );
+  });
 
 type PlanDraft = Readonly<{
   page: Page;
@@ -152,7 +184,7 @@ const createPlan = ({
     }
     yield* Effect.tryPromise(() => page.getByRole("button", { name: "Guardar" }).click());
     yield* Effect.tryPromise(() =>
-      expect(recurringItem(page, new RegExp(name, "u")).first()).toBeVisible()
+      expectPayment(recurringItem(page, new RegExp(name, "u")).first()).toBeVisible()
     );
   });
 const checkUnknownTotals = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
@@ -477,7 +509,7 @@ test("manual tracking can be reversed and skipped", ({ page, request }) =>
       yield* Effect.tryPromise(() => recurringItem(page, /Ciclo de seguimiento/u).click());
       yield* Effect.tryPromise(() => page.getByLabel("Importe real", { exact: true }).fill("40"));
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Registrar", exact: true }).click()
+        page.getByRole("button", { name: "Marcar solo en recurrentes", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
         expect(recurringItem(page, /Ciclo de seguimiento.*Parcial/u)).toBeVisible()
@@ -653,4 +685,523 @@ const editExpectedPlan = (
       page.getByRole("button", { name: "Guardar", exact: true }).click()
     );
     yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+  });
+
+const paymentCategory = "10000000-0000-4000-8000-000000000001";
+const inspectPaymentHistory = ({
+  request,
+  count,
+  spent,
+}: Readonly<{
+  request: APIRequestContext;
+  count: number;
+  spent: string;
+}>): Effect.Effect<void, Cause.UnknownError | Cause.TimeoutError> =>
+  Effect.gen(function* () {
+    const bound = boundSessionRequests(request);
+    const history = yield* probeCanonicalRequest({
+      request,
+      send: () => bound.get(`${apiOrigin}/transactions`),
+    });
+    expectPayment(history.status()).toBe(successStatus);
+    const historyBody: unknown = yield* Effect.tryPromise(() => history.json());
+    expectPayment(historyBody).toMatchObject({
+      data:
+        count === 0
+          ? []
+          : [expect.objectContaining({ money: { amount: "90000", currency: "COP" } })],
+    });
+    const report = yield* probeCanonicalRequest({
+      request,
+      send: () => bound.get(`${apiOrigin}/budget-status?month=2026-10&timeZone=America%2FBogota`),
+    });
+    expectPayment(report.status()).toBe(successStatus);
+    const reportBody: unknown = yield* Effect.tryPromise(() => report.json());
+    expectPayment(reportBody).toMatchObject({
+      data: { statuses: [expect.objectContaining({ spent: { amount: spent, currency: "COP" } })] },
+    });
+  });
+
+test("manual recurring tracking leaves financial totals unchanged and capturing its Transaction replaces the mark once", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({
+          page,
+          request,
+          deferFreshEntry: true,
+          identity: "recurringCapture",
+        })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* createPlan({
+        page,
+        name: "Internet aislado",
+        kind: "expense",
+        currency: "COP",
+        amount: "90000",
+      });
+      yield* createPaymentBudget(page.request);
+      yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
+      yield* Effect.tryPromise(() => chooseDate(page, "Fecha real", "2026-10-31"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Marcar solo en recurrentes", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expectPayment(recurringItem(page, /Internet aislado.*Completados/u)).toBeVisible()
+      );
+      yield* inspectPaymentHistory({ request: page.request, count: 0, spent: "0" });
+      yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
+      yield* Effect.tryPromise(() =>
+        expectPayment(page.getByRole("dialog")).toContainText("Sin transacción vinculada")
+      );
+      yield* captureMarkedPayment(page);
+      yield* inspectPaymentHistory({ request: page.request, count: 1, spent: "90000" });
+      yield* recoverCreatedLink(page);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Vincular transacción creada", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
+      yield* Effect.tryPromise(() =>
+        expectPayment(page.getByRole("dialog")).toContainText("Transacción vinculada")
+      );
+      yield* Effect.tryPromise(() =>
+        expectPayment(page.getByText("Sin transacción vinculada", { exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expectPayment(page.getByRole("dialog")).toContainText(
+          "Completado en recurrentes: COP 90.000,00"
+        )
+      );
+      yield* inspectPaymentHistory({ request: page.request, count: 1, spent: "90000" });
+    })
+  ));
+
+const recoverCreatedLink = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const editRoute = `${apiOrigin}/recurring-plans/edits`;
+    const refuse = (route: Route): Promise<void> =>
+      route.fulfill({
+        status: invalidStatus,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: {
+            code: "validation_failed",
+            message: "Review the recurring payment.",
+            fields: [],
+          },
+          next: [],
+        }),
+      });
+    yield* Effect.tryPromise(() => page.route(editRoute, refuse));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Vincular transacción creada", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("alert")).toContainText("Actualiza los recurrentes")
+    );
+    yield* Effect.tryPromise(() => page.unroute(editRoute, refuse));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Actualizar recurrentes", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("alert")).toHaveCount(0));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Mes siguiente", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Mes anterior", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
+    yield* Effect.tryPromise(() =>
+      page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByText("Transacción creada. Falta vincularla al recurrente.", { exact: true })
+      ).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("button", { name: "Registrar", exact: true })).toHaveCount(0)
+    );
+    yield* repairCapturedReplacement(page);
+  });
+
+test("an uncertain recurring capture stays locked across panel and month changes and can link the existing Transaction", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({
+          page,
+          request,
+          deferFreshEntry: true,
+          identity: "recurringCaptureUncertain",
+        })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* createPlan({
+        page,
+        name: "Pago sin respuesta",
+        kind: "expense",
+        currency: "COP",
+        amount: "90000",
+      });
+      yield* Effect.tryPromise(() => recurringItem(page, /Pago sin respuesta/u).click());
+      yield* Effect.tryPromise(() =>
+        page.getByText("Crear y vincular transacción", { exact: true }).click()
+      );
+      yield* nameUncertainCapture(page);
+      yield* loseCapturedPayment(page);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Cerrar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Mes siguiente", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Mes anterior", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => recurringItem(page, /Pago sin respuesta/u).click());
+      yield* Effect.tryPromise(() =>
+        page.getByText("Crear y vincular transacción", { exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expectPayment(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByText("Vincular transacción existente", { exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: /Pago sin respuesta · COP 90.000/u }).click()
+      );
+      yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+      yield* inspectCapturedTransactions(page.request, [
+        expect.objectContaining({ money: { amount: "90000", currency: "COP" } }),
+      ]);
+    })
+  ));
+
+test("capturing recurring income preserves its Currency and direction", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* prepareIncomeCapture(page, request);
+      yield* Effect.tryPromise(() =>
+        expectPayment(page.getByLabel("Monto · USD", { exact: true })).toHaveValue("20")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Registrar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expectPayment(page.getByText("Transacción vinculada.", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expectPayment(
+          page.getByRole("button", { name: "Vincular transacción creada", exact: true })
+        ).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expectPayment(recurringItem(page, /Honorarios en USD.*Completados/u)).toBeVisible()
+      );
+      const bound = boundSessionRequests(page.request);
+      const history = yield* probeCanonicalRequest({
+        request: page.request,
+        send: () => bound.get(`${apiOrigin}/transactions`),
+      });
+      expectPayment(history.status()).toBe(successStatus);
+      const body: unknown = yield* Effect.tryPromise(() => history.json());
+      expectPayment(body).toMatchObject({
+        data: [
+          expect.objectContaining({
+            money: { amount: "20", currency: "USD" },
+            direction: "inflow",
+          }),
+        ],
+      });
+    })
+  ));
+
+const captureMarkedPayment = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByLabel("Monto · COP", { exact: true })).toHaveValue("90000")
+    );
+    yield* Effect.tryPromise(() => chooseOption(page, "Categoría", "Restaurantes"));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Registrar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByText("Transacción creada. Falta vincularla al recurrente.", { exact: true })
+      ).toBeVisible()
+    );
+  });
+
+const loseCapturedPayment = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const transactionRoute = `${apiOrigin}/transactions`;
+    const loseCapture = (route: Route): Promise<void> =>
+      route.request().method() === "POST"
+        ? route.fetch().then((response) => {
+            if (response.status() === rateLimitedStatus) return route.fulfill({ response });
+            expectPayment(response.status()).toBe(createdStatus);
+            return route.abort("failed");
+          })
+        : route.continue();
+    yield* Effect.tryPromise(() => page.route(transactionRoute, loseCapture));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Registrar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("alert")).toContainText(
+        "No pudimos confirmar el registro de la transacción"
+      )
+    );
+    yield* Effect.tryPromise(() => page.unroute(transactionRoute, loseCapture));
+  });
+
+const createPaymentBudget = (
+  request: APIRequestContext
+): Effect.Effect<void, Cause.UnknownError | Cause.TimeoutError> =>
+  Effect.gen(function* () {
+    const bound = boundSessionRequests(request);
+    const budget = yield* probeCanonicalRequest({
+      request,
+      send: () =>
+        bound.post(`${apiOrigin}/budgets`, {
+          data: {
+            categoryId: paymentCategory,
+            cap: { amount: "200000", currency: "COP" },
+            month: "2026-10",
+          },
+        }),
+    });
+    expectPayment(budget.status()).toBe(createdStatus);
+  });
+
+const inspectCapturedTransactions = (
+  request: APIRequestContext,
+  expectedData: ReadonlyArray<unknown>
+): Effect.Effect<void, Cause.UnknownError | Cause.TimeoutError> =>
+  Effect.gen(function* () {
+    const bound = boundSessionRequests(request);
+    const history = yield* probeCanonicalRequest({
+      request,
+      send: () => bound.get(`${apiOrigin}/transactions`),
+    });
+    expectPayment(history.status()).toBe(successStatus);
+    const body: unknown = yield* Effect.tryPromise(() => history.json());
+    expectPayment(body).toMatchObject({ data: expectedData });
+  });
+
+const prepareIncomeCapture = (
+  page: Page,
+  request: APIRequestContext
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      signInRecurringThroughCore({
+        page,
+        request,
+        deferFreshEntry: true,
+        identity: "recurringCaptureCurrency",
+      })
+    );
+    yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+    yield* createPlan({
+      page,
+      name: "Honorarios en USD",
+      kind: "income",
+      currency: "USD",
+      amount: "20",
+    });
+    yield* Effect.tryPromise(() => recurringItem(page, /Honorarios en USD/u).click());
+    yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
+    yield* Effect.tryPromise(() =>
+      page
+        .getByRole("textbox", { name: "Contraparte (opcional)", exact: true })
+        .fill("Honorarios USD")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Guardar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+    yield* Effect.tryPromise(() => recurringItem(page, /Honorarios en USD/u).click());
+    yield* Effect.tryPromise(() =>
+      page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+  });
+
+const nameUncertainCapture = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    page
+      .getByRole("form", { name: "Registrar transacción" })
+      .getByLabel("Contraparte (opcional)", { exact: true })
+      .fill("Pago sin respuesta")
+  );
+
+test("recurring capture refuses incompatible manual marks and completes unknown payments across two Transactions", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* prepareSplitMarks(page, request);
+      yield* captureSplitPayment(page, "40", false);
+      yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes.*Parcial/u).click());
+      yield* Effect.tryPromise(() =>
+        page.getByText("Crear y vincular transacción", { exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Registrar otro pago o ingreso", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expectPayment(page.getByLabel("Monto · COP", { exact: true })).toHaveValue("")
+      );
+      yield* captureSplitPayment(page, "60", true);
+      yield* Effect.tryPromise(() =>
+        expectPayment(recurringItem(page, /Pago por partes.*Completados/u)).toBeVisible()
+      );
+      yield* inspectSplitHistory(page.request);
+    })
+  ));
+
+const markSplitPayment = (page: Page, amount: string): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes/u).click());
+    yield* Effect.tryPromise(() => page.getByLabel("Importe real", { exact: true }).fill(amount));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Marcar solo en recurrentes", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+  });
+
+const prepareSplitMarks = (
+  page: Page,
+  request: APIRequestContext
+): Effect.Effect<void, Cause.UnknownError | Cause.TimeoutError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      signInRecurringThroughCore({
+        page,
+        request,
+        deferFreshEntry: true,
+        identity: "recurringSplitCapture",
+      })
+    );
+    yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+    yield* createPlan({
+      page,
+      name: "Pago por partes",
+      kind: "expense",
+      currency: "COP",
+      amount: "",
+    });
+    yield* markSplitPayment(page, "40");
+    yield* markSplitPayment(page, "60");
+    yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes/u).click());
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("dialog")).toContainText("Hay varias marcas manuales")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()
+    );
+    yield* inspectCapturedTransactions(page.request, []);
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Revertir", exact: true }).last().click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+    yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes/u).click());
+    yield* Effect.tryPromise(() =>
+      page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+  });
+
+const captureSplitPayment = (
+  page: Page,
+  amount: string,
+  complete: boolean
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.getByLabel("Monto · COP", { exact: true }).fill(amount));
+    yield* Effect.tryPromise(() =>
+      chooseOption(
+        page,
+        "Estado de la transacción vinculada",
+        complete ? "Pago o ingreso completo" : "Parcial"
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Registrar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByText("Transacción creada. Falta vincularla al recurrente.", { exact: true })
+      ).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Vincular transacción creada", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+  });
+
+const inspectSplitHistory = (
+  request: APIRequestContext
+): Effect.Effect<void, Cause.UnknownError | Cause.TimeoutError> =>
+  Effect.gen(function* () {
+    const bound = boundSessionRequests(request);
+    const response = yield* probeCanonicalRequest({
+      request,
+      send: () => bound.get(`${apiOrigin}/transactions`),
+    });
+    expectPayment(response.status()).toBe(successStatus);
+    const body: unknown = yield* Effect.tryPromise(() => response.json());
+    expectPayment(body).toMatchObject({
+      data: expect.arrayContaining([
+        expect.objectContaining({ money: { amount: "40", currency: "COP" } }),
+        expect.objectContaining({ money: { amount: "60", currency: "COP" } }),
+      ]),
+    });
+    expectPayment(body).toMatchObject({ data: [expect.anything(), expect.anything()] });
+  });
+
+const repairCapturedReplacement = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Revertir", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+    yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
+    yield* Effect.tryPromise(() =>
+      page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("dialog")).toContainText("La marca seleccionada ya no existe")
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByRole("button", { name: "Vincular transacción creada", exact: true })
+      ).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() => chooseOption(page, "Marca manual que reemplaza", "Ninguno"));
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByRole("button", { name: "Vincular transacción creada", exact: true })
+      ).toBeEnabled()
+    );
   });

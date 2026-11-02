@@ -43,9 +43,12 @@ const SummaryAmounts = ({
         </>
       )}
     </div>
-    <Progress value={progress(group)} aria-label={`${label} registrados en ${group.currency}`} />
+    <Progress
+      value={progress(group)}
+      aria-label={`${label} completados en recurrentes en ${group.currency}`}
+    />
     <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs tabular-nums">
-      <span>{money(group.completed)} registrados</span>
+      <span>{money(group.completed)} completados en recurrentes</span>
       <span className="text-muted-foreground">{money(group.remaining)} restantes</span>
     </div>
   </div>

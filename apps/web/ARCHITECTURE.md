@@ -457,6 +457,14 @@ workspace queries; an uncertain write remains blocked until an explicit workspac
 reread succeeds. Failed recovery preserves the write lock. The browser does not
 generate schedules, match Transactions, sum Money or change the meaning of historical detection.
 
+Recurring manual marks disclose that they change tracking only. Transaction capture reuses the
+Transactions-owned form and canonical mutation, preserving the plan's Currency and direction.
+Creation and association are separate explicit actions: a confirmed Transaction and its selected
+manual replacement remain in the authentication registry across presentation changes. Failed links
+retry association of that identity, while uncertain creation blocks another capture and directs
+the User to history and existing-Transaction linking. Association replaces the selected manual mark;
+it does not add financial spending. The existing canonical transport owns request observations.
+
 The `/app/needs-review` feature composes the persistent ingestion inbox, browser-only original
 preview, editable draft and lifecycle history. Canonical query atoms retain server ownership;
 a serialized editing owner debounces revision-bound autosaves and flushes before an explicit

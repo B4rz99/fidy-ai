@@ -23,7 +23,7 @@ import { TransactionDetail } from "./detail";
 import { TransactionSummary } from "./summary";
 import { InlineTransactionCategory } from "./inline-category";
 import { TransactionLedger } from "./ledger";
-import { ManualTransactionCapture } from "./manual-capture";
+import { TransactionCapture } from "./capture";
 import type { TransactionPanel } from "./panel-state";
 import type { HistoryState } from "./history";
 import {
@@ -174,9 +174,13 @@ const CapturePanel = ({
   Readonly<{
     panel: Extract<TransactionPanel, { _tag: "Capture" }>;
   }>): JSX.Element => (
-  <ManualTransactionCapture
+  <TransactionCapture
+    currency="COP"
+    initial={{}}
+    direction={Option.none()}
+    disabled={false}
     categories={props.categories}
-    onCancel={() => onPanel({ _tag: "Summary" })}
+    onCancel={Option.some(() => onPanel({ _tag: "Summary" }))}
     renderForm={(form) =>
       renderPanel(
         <section className="flex flex-col gap-6">

@@ -68,6 +68,7 @@ it("counts uncapped expenses and recorded income with exact currency balances", 
     report: {
       period: cap.period,
       statuses: [cap],
+      unbudgetedExpenses: [],
       cashFlow: {
         income: [{ currency: "COP", amount: BigDecimal.fromStringUnsafe("9007199254740993.12") }],
         expenses: [
@@ -102,6 +103,7 @@ it("calculates unallocated income from planned caps rather than actual spending"
     report: {
       period: cap.period,
       statuses: [cap],
+      unbudgetedExpenses: [],
       cashFlow: {
         income: [{ currency: "COP", amount: BigDecimal.fromStringUnsafe("6200000") }],
         expenses: [{ currency: "COP", amount: BigDecimal.fromStringUnsafe("3323000") }],

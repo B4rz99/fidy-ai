@@ -432,7 +432,7 @@ Category editors offer confirmed permanent deletion across all months, with the 
 
 Category editors inherit their group Currency; only group settings or a new group expose the Currency selector. Decimal amount controls refuse non-numeric input before submission.
 
-The Budget summary shows recorded monthly income and all effective expenses, including uncapped categories, using the canonical report’s currency-preserving cash flow. Its Summary, Income, and Expenses selectors change presentation only; income planning remains outside the expense-cap model.
+The Budget summary shows recorded monthly income and all effective expenses, including uncapped categories, using the canonical report’s currency-preserving cash flow. The table identifies its group figures as capped Category spending and shows uncapped Category/Currency outflows separately. Its monthly total reconciles both scopes against that same cash flow. Spending amounts open a read-only, paginated canonical Transaction query with the report’s exact period, Category and Currency; closing the sheet disposes its mounted reader. Its Summary, Income, and Expenses selectors change presentation only; income planning remains outside the expense-cap model.
 
 ### Transaction Correction
 
@@ -581,3 +581,10 @@ by at least one second; explicit Create/Skip flushes remain immediate and revisi
 
 Money presentation retains at most 32 locale/currency/precision formatter configurations. The
 cache contains no amounts or User data; exact decimal parsing and rounding remain unchanged.
+
+Transaction registration and individual/bulk correction interpret amount drafts with `es-CO`
+separators: periods group thousands, commas separate fractional digits, and ungrouped integers
+remain valid. Malformed grouping, foreign separator conventions, nonpositive values and excess
+Currency precision are rejected before submission. Existing Money opens as a plain decimal-comma
+draft; the shared input policy decodes through the canonical Transaction Money codec without
+floating-point conversion. Saving remains the form's existing single action.

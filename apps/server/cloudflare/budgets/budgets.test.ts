@@ -2131,6 +2131,60 @@ it("denies read-scoped PAT writes and write-scoped PAT reads without disclosure 
     })
   ));
 
+it("exposes spending without a matching Category and Currency cap in the monthly report", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      expect(
+        (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload("10000")))))
+          .status
+      ).toBe(201);
+      const unbudgetedCategory = "10000000-0000-4000-8000-000000000015";
+      for (const [index, categoryId, amount, currency, direction] of [
+        [0, category, "20000", "COP", "outflow"],
+        [0, unbudgetedCategory, "5000", "COP", "outflow"],
+        [0, category, "7.25", "USD", "outflow"],
+        [0, unbudgetedCategory, "90000", "COP", "inflow"],
+        [1, unbudgetedCategory, "999", "COP", "outflow"],
+      ] as const) {
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(
+              db,
+              request(index, "/transactions", "POST", {
+                money: { amount, currency },
+                categoryId,
+                direction,
+                occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+              })
+            )
+          )).status
+        ).toBe(201);
+      }
+      const response = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
+      );
+      expect(response.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+        data: {
+          unbudgetedExpenses: [
+            { categoryId: unbudgetedCategory, spent: { amount: "5000", currency: "COP" } },
+            { categoryId: category, spent: { amount: "7.25", currency: "USD" } },
+          ],
+        },
+      });
+      const filtered = yield* Effect.tryPromise(() =>
+        send(
+          db,
+          request(0, `/budget-status?timeZone=America%2FBogota&categoryId=${category}&currency=COP`)
+        )
+      );
+      expect(yield* Effect.tryPromise(() => filtered.json())).toMatchObject({
+        data: { unbudgetedExpenses: [] },
+      });
+    })
+  ));
+
 it("keeps peer Budget cap and spending projections within one explicit User", () =>
   Effect.runPromise(
     Effect.gen(function* () {

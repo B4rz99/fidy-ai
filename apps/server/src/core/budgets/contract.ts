@@ -311,6 +311,8 @@ export type BudgetStatus = typeof BudgetStatus.Type;
 export const BudgetStatusReport = Schema.Struct({
   period: AppliedBudgetMonth,
   statuses: Schema.Array(BudgetStatus),
+  /** Outflows without a cap in the same Category and Currency, from the same monthly snapshot. */
+  unbudgetedExpenses: Schema.Array(Schema.Struct({ categoryId: CategoryId, spent: Money })),
   cashFlow: Schema.Struct({ income: Schema.Array(Money), expenses: Schema.Array(Money) }),
   initialized: Schema.optionalKey(Schema.Boolean),
 }).annotate({ identifier: "BudgetStatusReport" });

@@ -431,7 +431,7 @@ test("saving a later Transaction resets pages and reloads its correction without
           .getByRole("button", { name: `Ver transacción ${last.counterparty}`, exact: true })
           .click()
       );
-      yield* wait(() => page.getByLabel("Monto · USD", { exact: true }).fill("0.02"));
+      yield* wait(() => page.getByLabel("Monto · USD", { exact: true }).fill("0,02"));
       fixture.mode = "hold";
       yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
       yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
@@ -455,7 +455,7 @@ test("saving a later Transaction resets pages and reloads its correction without
           .click()
       );
       yield* wait(() =>
-        expect(page.getByLabel("Monto · USD", { exact: true })).toHaveValue("0.02")
+        expect(page.getByLabel("Monto · USD", { exact: true })).toHaveValue("0,02")
       );
     })
   ));

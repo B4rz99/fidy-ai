@@ -5,20 +5,35 @@ import type {
 } from "../../../src/core/budgets/contract";
 import type { EffectiveTransactionAggregate } from "../../../src/core/transactions/contract";
 
-/** Cash flow and cap spending use the same complete exact financial snapshot. */
-export const monthlyCashFlow = ({
+/** Cash flow, cap spending and uncovered outflows share one complete exact snapshot. */
+export const monthlySpending = ({
   aggregates,
   query,
+  statuses,
 }: Readonly<{
   aggregates: ReadonlyArray<EffectiveTransactionAggregate>;
   query: typeof BudgetStatusQueryParameters.Type;
-}>): BudgetStatusReport["cashFlow"] => {
+  statuses: BudgetStatusReport["statuses"];
+}>): Pick<BudgetStatusReport, "cashFlow" | "unbudgetedExpenses"> => {
   const selected = aggregates.filter(
     (row) =>
       (query.categoryId === undefined || row.categoryId === query.categoryId) &&
       (query.currency === undefined || row.sum.currency === query.currency)
   );
-  return { income: total(selected, "inflow"), expenses: total(selected, "outflow") };
+  return {
+    cashFlow: { income: total(selected, "inflow"), expenses: total(selected, "outflow") },
+    unbudgetedExpenses: selected
+      .filter(
+        (row) =>
+          row.direction === "outflow" &&
+          !statuses.some(
+            (status) =>
+              status.budget.categoryId === row.categoryId &&
+              status.budget.cap.currency === row.sum.currency
+          )
+      )
+      .map((row) => ({ categoryId: row.categoryId, spent: row.sum })),
+  };
 };
 
 const total = (

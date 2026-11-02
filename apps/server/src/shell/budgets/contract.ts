@@ -100,7 +100,7 @@ export const BudgetsGroup = HttpApiGroup.make("budgets")
     })
       .annotate(
         OpenApi.Description,
-        "Answer Budget status for an optional month (YYYY-MM), defaulting to the current month. Uninitialized plans preview previous planned amounts; an explicit month-scoped write freezes the plan. Supply the IANA time zone whose calendar boundaries apply; optional Category and Currency filters combine, and omitted Currency returns separate deterministically ordered results without conversion or aggregation."
+        "Answer Budget status for an optional month (YYYY-MM), defaulting to the current month. Uninitialized plans preview previous planned amounts; an explicit month-scoped write freezes the plan. The report includes all monthly cash flow and a Category/Currency breakdown of outflows without a matching cap, so spending outside Budgets remains traceable. Supply the IANA time zone whose calendar boundaries apply; optional Category and Currency filters combine, and omitted Currency returns separate deterministically ordered results without conversion or aggregation."
       )
       .annotateMerge(read)
   );

@@ -14464,7 +14464,7 @@
     },
     "/budget-status": {
       "get": {
-        "description": "Answer Budget status for an optional month (YYYY-MM), defaulting to the current month. Uninitialized plans preview previous planned amounts; an explicit month-scoped write freezes the plan. Supply the IANA time zone whose calendar boundaries apply; optional Category and Currency filters combine, and omitted Currency returns separate deterministically ordered results without conversion or aggregation.",
+        "description": "Answer Budget status for an optional month (YYYY-MM), defaulting to the current month. Uninitialized plans preview previous planned amounts; an explicit month-scoped write freezes the plan. The report includes all monthly cash flow and a Category/Currency breakdown of outflows without a matching cap, so spending outside Budgets remains traceable. Supply the IANA time zone whose calendar boundaries apply; optional Category and Currency filters combine, and omitted Currency returns separate deterministically ordered results without conversion or aggregation.",
         "operationId": "budgets.getBudgetStatus",
         "parameters": [
           {
@@ -14549,11 +14549,31 @@
                             "$ref": "#/components/schemas/BudgetStatus"
                           },
                           "type": "array"
+                        },
+                        "unbudgetedExpenses": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "categoryId": {
+                                "$ref": "#/components/schemas/CategoryId"
+                              },
+                              "spent": {
+                                "$ref": "#/components/schemas/Money_2"
+                              }
+                            },
+                            "required": [
+                              "categoryId",
+                              "spent"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
                         }
                       },
                       "required": [
                         "period",
                         "statuses",
+                        "unbudgetedExpenses",
                         "cashFlow",
                         "budgets"
                       ],

@@ -39,7 +39,7 @@ import {
   transactionNoStore,
   transactionUnavailable,
 } from "../canonical-work/operations";
-import { monthlyCashFlow } from "./internal/monthly-cash-flow";
+import { monthlySpending } from "./internal/monthly-cash-flow";
 import { recordBudgetCall } from "./internal/budget-audit";
 import { budgetFromRow } from "./internal/budget-row";
 import {
@@ -648,7 +648,7 @@ export const readBudgetSpending = ({
       period,
       statuses,
       initialized,
-      cashFlow: monthlyCashFlow({ aggregates: aggregates.value, query }),
+      ...monthlySpending({ aggregates: aggregates.value, query, statuses }),
     });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 

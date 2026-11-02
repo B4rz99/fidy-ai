@@ -7,6 +7,15 @@ import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
 const budgetJourneyMilliseconds = 60_000;
+const installBudgetUser = (page: Page): Promise<void> =>
+  installUser(page)
+    .then(() =>
+      page.route(`${apiOrigin}/web/session/binding`, (route) =>
+        route.fulfill({ json: { binding: null } })
+      )
+    )
+    .then(() => {});
+
 const categories = [
   { id: "24000000-0000-4000-8000-000000000301", label: "Vivienda" },
   { id: "24000000-0000-4000-8000-000000000302", label: "Restaurantes" },
@@ -33,6 +42,7 @@ const budget = ({
 const reportBase = {
   period,
   initialized: true,
+  unbudgetedExpenses: [],
   cashFlow: {
     income: [{ amount: "300000", currency: "COP" }],
     expenses: [
@@ -110,7 +120,11 @@ const checkSummaryViews = (page: Page): Effect.Effect<void, Cause.UnknownError> 
       expect(page.getByRole("region", { name: "Resumen COP" })).toContainText("300.000")
     );
     yield* Effect.tryPromise(() =>
-      expect(page.getByRole("heading", { name: "Gastos", exact: true })).toHaveCount(0)
+      expect(
+        page
+          .getByRole("region", { name: "Resumen COP" })
+          .getByRole("heading", { name: "Gasto total del mes", exact: true })
+      ).toHaveCount(0)
     );
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Resumen", exact: true }).click()
@@ -122,7 +136,7 @@ test("shows grouped currency totals and prevents replay after a lost save acknow
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installBudgetUser(page));
       yield* Effect.tryPromise(() => installCategories({ page, categories }));
       const edits = { count: 0 };
       yield* Effect.tryPromise(() => installBudgetReport(page));
@@ -196,7 +210,7 @@ const checkFailedRecovery = Effect.fn(function* (page: Page) {
 });
 
 const checkCommittedRefresh = Effect.fn(function* (page: Page) {
-  yield* Effect.tryPromise(() => installUser(page));
+  yield* Effect.tryPromise(() => installBudgetUser(page));
   yield* Effect.tryPromise(() => installCategories({ page, categories }));
   yield* Effect.tryPromise(() => installBudgetReport(page));
   let mutations = 0;
@@ -298,7 +312,7 @@ test("recovers initial load failure and keeps stale budgets read-only until refr
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installBudgetUser(page));
       yield* Effect.tryPromise(() => installCategories({ page, categories }));
       yield* Effect.tryPromise(() => installBudgetReport(page));
       let unavailable = true;
@@ -456,7 +470,7 @@ const installLargeReport = Effect.fn(function* (page: Page) {
     remaining: { amount: "1", currency: "COP" },
   }));
   const caps = statuses.map((status) => status.budget);
-  yield* Effect.tryPromise(() => installUser(page));
+  yield* Effect.tryPromise(() => installBudgetUser(page));
   yield* Effect.tryPromise(() => installCategories({ page, categories: largeCategories }));
   yield* Effect.tryPromise(() =>
     page.route(`${apiOrigin}/budget-status?**`, (route) =>
@@ -466,6 +480,7 @@ const installLargeReport = Effect.fn(function* (page: Page) {
           ...report,
           statuses,
           budgets: caps,
+          unbudgetedExpenses: [],
           cashFlow: { income: [], expenses: [] },
         }),
       })
@@ -509,3 +524,184 @@ const checkLargeReport = Effect.fn(function* (page: Page) {
 test("a thousand-cap report keeps all sixteen groups and the final Category reachable", ({
   page,
 }) => Effect.runPromise(checkLargeReport(page)));
+
+const reconciliationReport = (moved: boolean): object => ({
+  ...report,
+  statuses: [
+    {
+      budget: budget({ index: 1, amount: "10000", currency: "COP", groupName: "Alimentación" }),
+      spent: { amount: moved ? "0" : "20000", currency: "COP" },
+      period,
+      ...(moved
+        ? { type: "under", remaining: { amount: "10000", currency: "COP" } }
+        : { type: "over", overBy: { amount: "10000", currency: "COP" } }),
+    },
+  ],
+  cashFlow: { income: [], expenses: [{ amount: "25000", currency: "COP" }] },
+  unbudgetedExpenses: [
+    { categoryId: categories[2]?.id, spent: { amount: moved ? "25000" : "5000", currency: "COP" } },
+  ],
+});
+const spendingCursor =
+  "2026-10-15T12:00:00.000Z|2026-10-15T12:00:00.000Z|24000000-0000-4000-8000-000000000401";
+const installSpendingHistory = (
+  page: Page,
+  requests: Array<URL>,
+  fixture: { failing: boolean }
+): Promise<unknown> =>
+  page.route(`${apiOrigin}/transactions?**`, (route) => {
+    const url = new URL(route.request().url());
+    requests.push(url);
+    if (fixture.failing) return route.fulfill({ status: 503 });
+    const more = url.searchParams.has("cursor");
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: [
+          {
+            id: more
+              ? "24000000-0000-4000-8000-000000000402"
+              : "24000000-0000-4000-8000-000000000401",
+            revision: 0,
+            categoryId: categories[2]?.id,
+            money: { amount: more ? "5000" : "20000", currency: "COP" },
+            direction: "outflow",
+            counterparty: more ? "Segundo mercado" : "Mercado de prueba",
+            occurredAt: "2026-10-15T12:00:00Z",
+            createdAt: "2026-10-15T12:00:00Z",
+          },
+        ],
+        next: more
+          ? []
+          : [
+              {
+                tool: "transactions.listTransactions",
+                hint: "Continue history.",
+                args: { query: { cursor: spendingCursor } },
+              },
+            ],
+      }),
+    });
+  });
+const checkSpendingTrace = Effect.fn(function* (page: Page) {
+  const requests: Array<URL> = [];
+  const fixture = { failing: true };
+  yield* Effect.tryPromise(() => installSpendingHistory(page, requests, fixture));
+  yield* Effect.tryPromise(() =>
+    page
+      .getByRole("region", { name: "Gastos sin presupuesto" })
+      .getByRole("button", { name: "Ver movimientos de Mercado en COP" })
+      .click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("button", { name: "Reintentar movimientos" })).toBeVisible()
+  );
+  fixture.failing = false;
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Reintentar movimientos" }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("dialog")).toContainText("Mercado de prueba")
+  );
+  yield* Effect.tryPromise(() => page.getByRole("button", { name: "Ver más movimientos" }).click());
+  yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toContainText("Segundo mercado"));
+  expect(requests.at(-1)?.searchParams.get("cursor")).toBe(spendingCursor);
+  expect(requests.at(-1)?.searchParams.get("from")).toBe("2026-10-01T05:00:00.000Z");
+  expect(requests.at(-1)?.searchParams.get("to")).toBe("2026-11-01T05:00:00.000Z");
+  expect(requests.at(-1)?.searchParams.get("categoryId")).toBe(categories[2]?.id);
+  expect(requests.at(-1)?.searchParams.get("currency")).toBe("COP");
+  expect(requests.at(-1)?.searchParams.get("direction")).toBe("outflow");
+  yield* checkAccessibility(page);
+  yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar", exact: true }).click());
+});
+const checkSpendingReconciliation = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => installBudgetUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  let moved = false;
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budget-status?**`, (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: response(reconciliationReport(moved)),
+      })
+    )
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+  const totals = page.getByRole("region", { name: "Gasto total del mes COP" });
+  yield* Effect.tryPromise(() => expect(totals).toContainText("20.000"));
+  yield* Effect.tryPromise(() => expect(totals).toContainText("5.000"));
+  yield* Effect.tryPromise(() => expect(totals).toContainText("25.000"));
+  yield* Effect.tryPromise(() => expect(totals).toContainText("15.000"));
+  const withoutBudget = page.getByRole("region", { name: "Gastos sin presupuesto" });
+  yield* Effect.tryPromise(() => expect(withoutBudget).toContainText("Mercado"));
+  yield* Effect.tryPromise(() => expect(withoutBudget).toContainText("5.000"));
+  moved = true;
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Actualizar", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => expect(withoutBudget).toContainText("25.000"));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("region", { name: "Resumen COP" })).toContainText("25.000")
+  );
+  yield* Effect.tryPromise(() =>
+    page.screenshot({ path: "/tmp/fidy-1645-reconciliation-desktop.png", fullPage: true })
+  );
+  yield* checkSpendingTrace(page);
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+  expect(yield* Effect.tryPromise(() => page.evaluate(fitsViewport))).toBe(true);
+  yield* Effect.tryPromise(() =>
+    page.screenshot({ path: "/tmp/fidy-1645-reconciliation-mobile.png", fullPage: true })
+  );
+});
+test("reconciles budgeted and unbudgeted spending and traces the selected monthly transactions", ({
+  page,
+}) => Effect.runPromise(checkSpendingReconciliation(page)));
+
+const checkUnbudgetedCurrencies = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => installBudgetUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budget-status?**`, (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: response({
+          ...report,
+          statuses: [],
+          budgets: [],
+          cashFlow: {
+            income: [],
+            expenses: [
+              { amount: "15000", currency: "COP" },
+              { amount: "7.25", currency: "USD" },
+            ],
+          },
+          unbudgetedExpenses: [
+            { categoryId: categories[2]?.id, spent: { amount: "15000", currency: "COP" } },
+            { categoryId: categories[2]?.id, spent: { amount: "7.25", currency: "USD" } },
+          ],
+        }),
+      })
+    )
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("region", { name: "Gasto total del mes COP" })).toContainText("15.000")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("region", { name: "Gasto total del mes USD" })).toContainText("7,25")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("region", { name: "Gastos sin presupuesto" })).toContainText(
+      "Mercado · USD"
+    )
+  );
+  yield* Effect.tryPromise(() => page.getByRole("button", { name: "USD", exact: true }).click());
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("region", { name: "Resumen USD" })).toContainText("7,25")
+  );
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+  expect(yield* Effect.tryPromise(() => page.evaluate(fitsViewport))).toBe(true);
+  yield* checkAccessibility(page);
+});
+test("shows spending in each Currency when no Categories have a budget", ({ page }) =>
+  Effect.runPromise(checkUnbudgetedCurrencies(page)));

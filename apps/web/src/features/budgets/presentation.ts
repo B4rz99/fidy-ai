@@ -71,6 +71,8 @@ export type SummaryFigure = Readonly<{
   currency: Budget["cap"]["currency"];
   income: string;
   expenses: string;
+  budgetedExpenses: string;
+  unbudgetedExpenses: string;
   budgeted: string;
   balance: string;
   unallocated: string;
@@ -117,6 +119,20 @@ export const summaryFigures = ({
         currency,
         income: format(income),
         expenses: format(expenses),
+        budgetedExpenses: format(
+          BigDecimal.sumAll(
+            report.statuses.flatMap((status) =>
+              status.spent.currency === currency ? [status.spent.amount] : []
+            )
+          )
+        ),
+        unbudgetedExpenses: format(
+          BigDecimal.sumAll(
+            report.unbudgetedExpenses.flatMap((expense) =>
+              expense.spent.currency === currency ? [expense.spent.amount] : []
+            )
+          )
+        ),
         budgeted: format(cap),
         balance: format(BigDecimal.subtract(income, expenses)),
         unallocated: format(BigDecimal.subtract(income, cap)),

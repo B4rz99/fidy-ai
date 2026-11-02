@@ -4,6 +4,7 @@ import { BigDecimal } from "effect";
 import { type JSX, useState } from "react";
 import { formatMoney } from "@/transport/money";
 import { Button } from "@/ui/components/button";
+import { BudgetSpending } from "./spending";
 import { AmountInput } from "@/ui/components/amount-input";
 import { IconIndicator } from "@/ui/components/icon-indicator";
 import { BudgetBalance, BudgetMeter } from "@/ui/components/budget-meter";
@@ -50,7 +51,12 @@ export const BudgetRow = ({
         />
         <span className="budget-value text-right whitespace-nowrap tabular-nums">
           <span className="budget-value-label">Gastado</span>
-          {formatMoney({ locale: user.locale, money: status.spent })}
+          <BudgetSpending
+            category={category}
+            spent={status.spent}
+            period={status.period}
+            user={user}
+          />
         </span>
         <RowBalance status={status} user={user} />
       </div>

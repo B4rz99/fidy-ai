@@ -98,11 +98,14 @@ const IncomeSummary = ({ figure }: Readonly<{ figure: SummaryFigure }>): JSX.Ele
 const ExpenseSummary = ({ figure }: Readonly<{ figure: SummaryFigure }>): JSX.Element => (
   <div className="flex flex-col gap-3 border-t border-foreground/5 px-4 py-5">
     <div className="flex flex-wrap items-baseline justify-between gap-3 text-sm">
-      <h3 className="text-muted-foreground">Gastos</h3>
+      <h3 className="text-muted-foreground">Gasto total del mes</h3>
       <span className="max-w-full overflow-x-auto text-muted-foreground tabular-nums">
         Plan de gastos: {figure.budgeted}
       </span>
     </div>
+    <p className="text-xs text-muted-foreground">
+      Incluye categorías con y sin presupuesto en esta moneda.
+    </p>
     <BudgetMeter
       variant="summary"
       value={figure.percentage}

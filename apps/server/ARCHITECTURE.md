@@ -72,7 +72,7 @@ caller capabilities and confirmation requirements; Canonical Operations invokes 
 
 Workspace read projections remain specific declared observations. Budget status includes bounded
 editing metadata for the selected reporting month under the same authorization and accounting;
-its report and metadata reads can run concurrently within the coordinated User query. The Review
+its report and metadata reads can run concurrently within the coordinated User query. Monthly cash flow and uncapped Category/Currency outflows derive from the same complete Transaction-owned aggregate snapshot as cap spending. The Review
 workspace projects the first revision-bound item detail from its already-read rows, using the same
 draft expiry and Category suggestion policy as an individual read, and never includes original
 material. Browser User responses can carry the bounded Category display catalog through its

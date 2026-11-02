@@ -54,6 +54,23 @@ paid Subscription. The workspace does not execute payments or cancel services. S
 [#1320](https://github.com/B4rz99/fidy-ai/issues/1320); design:
 [ADR 0036](../../../../../docs/adr/0036-recurring-planning.md).
 
+## Payment tracking and financial history
+
+“Marcar solo en recurrentes” changes occurrence tracking without creating a Transaction or changing
+spending and Budgets. Its disclosure appears before saving, and the saved mark shows that no
+Transaction is linked. Summary amounts describe completion in Recurrentes.
+
+Users can link an existing Transaction or explicitly create one and then link it. Capture retains
+the plan's Currency and direction and prefills known payment facts for review. A manual mark is
+explicitly replaced when associating the same payment, so it contributes only one fulfillment.
+A confirmed capture remains available for linking after a failed association and presentation
+changes. Uncertain capture stays blocked and directs the User to inspect history before linking
+an existing Transaction. Removing tracking does not delete the financial Transaction.
+Capture exposes explicit partial/complete tracking for estimated or unknown payments. After a
+partial Transaction is linked, another capture can record the remaining payment. Multiple manual
+marks must be reduced before linking; stale replacement selections can be corrected while retaining
+the confirmed Transaction.
+
 ## Audit, 2026-10-15
 
 Audited after synchronizing with trunk `5d3db388ee`, including the released planning workspace

@@ -103,6 +103,10 @@ export const openTransactionsThroughCore = (page: Page): Promise<void> =>
 export const openUpgradeThroughCore = (page: Page): Promise<void> =>
   navigateThroughConsent({ page, navigate: () => page.goto("/upgrade") });
 type RecurringIdentity =
+  | "recurringSplitCapture"
+  | "recurringCapture"
+  | "recurringCaptureUncertain"
+  | "recurringCaptureCurrency"
   | "recurringStableReads"
   | "recurring"
   | "recurringSummary"

@@ -1,6 +1,8 @@
 import { BankRequestSkeleton } from "@/ui/components/settings-loading";
 import { TextSkeleton } from "@/ui/components/loading-skeletons";
 import { ConnectionResult } from "./result";
+import { ConnectionRecovery } from "@/ui/components/connection-recovery";
+import { useSession } from "@/session/session-context";
 import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter, useSearch } from "@tanstack/react-router";
@@ -202,15 +204,22 @@ const Continuation = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX
 
 /** Navigation accepts only a public locator; the server verifies same-User authority. */
 export const ConnectionContinuationFeature = (): JSX.Element => {
+  const { sessionBinding } = useRouter().options.context;
+  const { authentication } = useSession();
   const search = useSearch({ strict: false });
   const attempt = Schema.decodeUnknownOption(ConnectionAttemptReference)(search.attempt);
+  if (Option.isNone(attempt)) {
+    return (
+      <ConnectionRecovery
+        destination={
+          authentication === "expired" || sessionBinding === "none" ? "/login" : "/app/transactions"
+        }
+      />
+    );
+  }
   return (
     <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
-      {Option.isSome(attempt) ? (
-        <Continuation key={attempt.value} attempt={attempt.value} />
-      ) : (
-        <p role="alert">La solicitud no es válida.</p>
-      )}
+      <Continuation key={attempt.value} attempt={attempt.value} />
     </main>
   );
 };

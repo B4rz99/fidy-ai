@@ -1,9 +1,9 @@
 import type { JSX } from "react";
 import { Link } from "@tanstack/react-router";
-import { Button } from "@/ui/components/button";
-import { FidyWordmark } from "@/ui/components/wordmark";
+import { Button } from "./button";
+import { FidyWordmark } from "./wordmark";
 import { useTheme } from "./theme";
-import "@/ui/components/connection-recovery.css";
+import "./connection-recovery.css";
 
 export const ConnectionRecovery = ({
   destination,

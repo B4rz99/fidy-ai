@@ -1841,7 +1841,13 @@ test("identifies incomplete emails by receipt date and offers search inside thei
         page.getByRole("textbox", { name: "Buscar en este original" }).fill("Farmacia")
       );
       yield* Effect.tryPromise(() =>
-        expect(page.locator("pre")).toHaveText("Compra Farmacia COP 25000")
+        expect(page.getByText("Compra Farmacia COP 25000", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Asunto: Notificación bancaria", { exact: true })).not.toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Transporte COP 18000", { exact: true })).not.toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByText("1 línea con coincidencias en este original.")).toBeVisible()

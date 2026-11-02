@@ -1,4 +1,5 @@
 import { type TransactionSearch, selectedTransactionPeriod, transactionMonth } from "./period";
+import { TransactionCapture } from "./capture";
 import { transactionFirstPage, transactionPageInitialValue } from "./query";
 import { prepareQuery } from "@/transport/query-preparation";
 import type { AtomRegistry } from "effect/reactivity";
@@ -26,6 +27,13 @@ import {
 } from "./presentation";
 
 export { TransactionSearch } from "./period";
+
+export const TransactionCaptureFeature = (
+  props: Omit<Parameters<typeof TransactionCapture>[0], "apiClient">
+): JSX.Element => {
+  const { apiClient } = useRouter().options.context;
+  return <TransactionCapture {...props} apiClient={apiClient} />;
+};
 
 const TransactionWorkspace = lazyRouteComponent(
   () => import("./workspace"),

@@ -1,5 +1,7 @@
 import { RecurringSkeleton } from "@/ui/components/recurring-loading";
 import { RecurringWorkspace } from "./workspace-components";
+import type { CaptureEditorProps } from "@/features/recurring/feature";
+import { TransactionCaptureFeature } from "@/features/transactions/feature";
 import { useMatch, useRouterState } from "@tanstack/react-router";
 import { Option } from "effect";
 import { type JSX, Suspense, useState } from "react";
@@ -41,8 +43,20 @@ const VisitedRecurringWorkspace = (): JSX.Element => {
   return (
     <div hidden={!active} inert={!active} ref={resume}>
       <Suspense fallback={<RecurringSkeleton />}>
-        <RecurringWorkspace month={Option.fromUndefinedOr(current.value.month)} />
+        <RecurringWorkspace
+          month={Option.fromUndefinedOr(current.value.month)}
+          captureEditor={RecurringTransactionCapture}
+        />
       </Suspense>
     </div>
   );
 };
+
+const RecurringTransactionCapture = (props: CaptureEditorProps): JSX.Element => (
+  <TransactionCaptureFeature
+    {...props}
+    direction={Option.some(props.direction)}
+    onCancel={Option.none()}
+    renderForm={(form) => form}
+  />
+);

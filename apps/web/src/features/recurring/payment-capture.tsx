@@ -4,7 +4,8 @@ import { BigDecimal, Data, Option } from "effect";
 import { Atom, Reactivity } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
-import { type CaptureStatus, TransactionCapture } from "@/features/transactions/capture";
+import { CaptureEditor } from "./capture-editor";
+import type { CaptureEditorProps, CaptureStatus } from "./capture-context";
 import { Button } from "@/ui/components/button";
 import { DeferredDisclosure } from "@/ui/components/disclosure";
 import { ChoiceField } from "./fields";
@@ -94,7 +95,6 @@ const CapturePayment = ({ item, categories, save, disabled, today }: Props): JSX
           today,
           state,
           setState,
-          client,
           refresh,
           restart,
           association,
@@ -149,7 +149,6 @@ type EntryProps = Props &
     restart: () => void;
     state: CaptureState;
     setState: (value: CaptureState | ((previous: CaptureState) => CaptureState)) => void;
-    client: FidyClient;
     refresh: () => void;
   }>;
 const CaptureEntry = ({
@@ -162,7 +161,6 @@ const CaptureEntry = ({
   restart,
   state,
   setState,
-  client,
   refresh,
 }: EntryProps): JSX.Element => {
   const { navigate } = useRouter();
@@ -177,14 +175,13 @@ const CaptureEntry = ({
           restart={restart}
         />
       ) : (
-        <TransactionCapture
+        <CaptureEditor
           key={association.replaces}
           categories={categories}
           currency={item.plan.currency}
-          direction={Option.some(item.plan.kind === "income" ? "inflow" : "outflow")}
+          direction={item.plan.kind === "income" ? "inflow" : "outflow"}
           initial={captureInitial({ item, replaces: association.replaces, today })}
           disabled={disabled || associationBlocked({ item, replaces: association.replaces })}
-          apiClient={client}
           timeZone={item.plan.timeZone}
           status={state.status}
           onStatus={(status) => setState((previous) => ({ ...previous, status }))}
@@ -201,8 +198,6 @@ const CaptureEntry = ({
           onCheckHistory={() => {
             navigate({ to: "/app/transactions" }).catch(() => undefined);
           }}
-          onCancel={Option.none()}
-          renderForm={(form) => form}
         />
       )}
     </>
@@ -215,9 +210,8 @@ const captureInitial = ({
   item,
   replaces,
   today,
-}: Pick<Props, "item" | "today"> & Readonly<{ replaces: string }>): Parameters<
-  typeof TransactionCapture
->[0]["initial"] => {
+}: Pick<Props, "item" | "today"> &
+  Readonly<{ replaces: string }>): CaptureEditorProps["initial"] => {
   const mark = manualMarks(item).find((entry) => entry.id === replaces);
   const actual = mark === undefined ? remainingMoney(item) : Option.some(mark.money);
   return {

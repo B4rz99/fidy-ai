@@ -717,6 +717,21 @@ Provider waiting, consent loading/refusal, one-time recovery and WhatsApp associ
 remain real additional states using the same access surface, pending separate visual review if
 further composition changes are requested.
 
+### Invalid institution connection link recovery
+
+`/connections/continue` uses the approved Guiada composition when the public attempt reference is
+missing or malformed: the supplied Fidy wordmark and bank-connection context sit above a continuous
+canvas. A concise unusable-link explanation and the lime “Volver a Fidy” action sit beside a
+“Cómo continuar” guide. The guide asks the User to return to the originating Fidy conversation and
+request another connection link; it does not start a ConnectionAttempt automatically.
+
+Desktop uses two columns separated by a thin vertical divider, a 28px title and 14px guide copy.
+At 700px and below, the guide stacks after the action with a horizontal divider, the title becomes
+24px and the action fills the available width. Poppins, shared Light/Grafito tokens, the original
+wordmark, pill action and flat surfaces match the rest of the product. No error card, decorative
+icon, shadow or success claim is added. The same visible action leads to Transactions with a browser
+session and to sign-in without one; the destination retains its own access checks.
+
 ### Approved Transactions composition (24 October 2026)
 
 Library `libfile_a81df1bfa6788191b330de877fc0bbb7` v5 owns the approved Transactions composition. `ui/components/transactions.tsx` and its scoped CSS own the continuous workspace planes, controls, contextual rail and type toggle; `/ui-reference.html` includes these controls. The feature retains canonical queries, local filters, continuation, revision-checked corrections and atomic batches. Category and Type keep the original ledger-wide grid/subgrid and 600/481/400px thresholds.

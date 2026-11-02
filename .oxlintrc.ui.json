@@ -68,6 +68,13 @@
           "error",
           {
             "allow": [
+              "connection-recovery",
+              "connection-recovery-header",
+              "connection-recovery-content",
+              "connection-recovery-layout",
+              "connection-recovery-message",
+              "connection-recovery-return",
+              "connection-recovery-guide",
               "recurring-report-cadence",
               "recurring-report-columns",
               "recurring-report-context",

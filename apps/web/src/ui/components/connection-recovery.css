@@ -1,0 +1,112 @@
+.connection-recovery {
+  min-height: 100svh;
+  background: var(--fidy-background-canvas);
+  color: var(--fidy-text-primary);
+}
+.connection-recovery-header {
+  height: 104px;
+  max-width: 1240px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 48px;
+  gap: 20px;
+}
+.connection-recovery-header > span:last-child {
+  font-size: 14px;
+  color: var(--fidy-text-muted);
+}
+.connection-recovery-content {
+  min-height: calc(100svh - 104px);
+  padding: 60px 24px 128px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.connection-recovery-layout {
+  max-width: 1000px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 80px;
+  align-items: center;
+}
+.connection-recovery-message {
+  width: 100%;
+  max-width: 460px;
+}
+.connection-recovery-message h1 {
+  font-size: 28px;
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+}
+.connection-recovery-message p {
+  margin-top: 16px;
+  color: var(--fidy-text-muted);
+}
+.connection-recovery-message .connection-recovery-return {
+  margin-top: 32px;
+  background-clip: border-box;
+  min-height: 48px;
+  padding: 10px 24px;
+  gap: 12px;
+  line-height: 1.7;
+}
+.connection-recovery-guide {
+  border-left: 1px solid var(--fidy-border-decorative-divider);
+  padding-left: 48px;
+}
+.connection-recovery-guide h2 {
+  font-size: 20px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.connection-recovery-guide ol {
+  list-style: decimal;
+  padding-left: 20px;
+  margin-top: 24px;
+  color: var(--fidy-text-muted);
+  font-size: 14px;
+}
+.connection-recovery-guide li {
+  padding-left: 8px;
+  margin-top: 16px;
+}
+.connection-recovery-guide strong {
+  font-weight: 600;
+  color: var(--fidy-text-primary);
+}
+@media (max-width: 700px) {
+  .connection-recovery-header {
+    height: 120px;
+    padding: 48px 20px 16px;
+  }
+  .connection-recovery-header > span:last-child {
+    max-width: 150px;
+    text-align: right;
+    font-size: 12px;
+  }
+  .connection-recovery-content {
+    min-height: calc(100svh - 120px);
+    padding: 48px 20px 110px;
+    align-items: flex-start;
+  }
+  .connection-recovery-layout {
+    display: block;
+  }
+  .connection-recovery-message h1 {
+    font-size: 24px;
+  }
+  .connection-recovery-message .connection-recovery-return {
+    margin-top: 24px;
+    width: 100%;
+  }
+  .connection-recovery-guide {
+    border-left: 0;
+    border-top: 1px solid var(--fidy-border-decorative-divider);
+    padding: 28px 0 0;
+    margin-top: 36px;
+  }
+}

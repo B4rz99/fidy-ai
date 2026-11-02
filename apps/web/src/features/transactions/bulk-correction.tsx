@@ -1,9 +1,11 @@
+import { MoneyField } from "./money-field";
+import { parseMoneyInput } from "./money-input";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { useTransactionCorrections } from "./correction-context";
 
 import { useState } from "react";
 import type { FormEvent, JSX } from "react";
-import { type Array as Arr, BigDecimal, DateTime, Option } from "effect";
+import { type Array as Arr, DateTime, Option } from "effect";
 import { type CanonicalInput } from "@/transport/client";
 
 import { Button } from "@/ui/components/button";
@@ -50,9 +52,8 @@ const draftMoney = (draft: BulkDraft, props: BulkProps): Option.Option<Changes> 
   ) {
     return Option.none();
   }
-  return BigDecimal.fromString(draft.amount.replace(",", ".")).pipe(
-    Option.filter(BigDecimal.isPositive),
-    Option.map((amount) => ({ money: { amount, currency: first.value.money.currency } }))
+  return parseMoneyInput({ text: draft.amount, currency: first.value.money.currency }).pipe(
+    Option.map((money) => ({ money }))
   );
 };
 const draftDate = (draft: BulkDraft, timeZone: string): Option.Option<Changes> => {
@@ -82,20 +83,14 @@ const BulkAmount = ({
     new Set(props.transactions.map((record) => record.money.currency)).size > 1;
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor="bulk-amount">
-        Monto ·{" "}
-        {new Set(props.transactions.map((record) => record.money.currency)).size === 1
-          ? props.transactions[0].money.currency
-          : "Varias monedas"}
-      </Label>
-      <Input
+      <MoneyField
         id="bulk-amount"
-        placeholder="Sin cambiar"
-        inputMode="decimal"
-        disabled={mixedCurrencies}
-        aria-describedby={mixedCurrencies ? "bulk-amount-help" : undefined}
+        currency={props.transactions[0].money.currency}
+        currencyLabel={mixedCurrencies ? "Varias monedas" : props.transactions[0].money.currency}
         value={draft.amount}
-        onChange={(event) => onChange({ ...draft, amount: event.target.value })}
+        onChange={(amount) => onChange({ ...draft, amount })}
+        required={false}
+        disabled={mixedCurrencies}
       />
       {mixedCurrencies ? (
         <p id="bulk-amount-help" className="text-sm text-muted-foreground">
@@ -267,7 +262,7 @@ export const BulkTransactionCorrection = (props: BulkProps): JSX.Element => {
         <Button variant="outline" disabled={status === "saving"} onClick={props.onCancel}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={locked}>
+        <Button type="submit" disabled={locked || Option.isNone(draftMoney(draft, props))}>
           {status === "saving" ? "Guardando…" : "Guardar"}
         </Button>
       </div>

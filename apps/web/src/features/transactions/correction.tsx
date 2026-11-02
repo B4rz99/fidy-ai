@@ -1,3 +1,5 @@
+import { MoneyField } from "./money-field";
+import { formatMoneyInput, parseMoneyInput } from "./money-input";
 import { RefreshButton } from "@/ui/components/refresh-button";
 
 import { BigDecimal, DateTime, Option } from "effect";
@@ -35,7 +37,7 @@ const localDate = (transaction: Transaction, timeZone: string): string =>
     DateTime.setZone(transaction.occurredAt, DateTime.zoneMakeNamedUnsafe(timeZone))
   );
 const initialDraft = (transaction: Transaction, timeZone: string): CorrectionDraft => ({
-  amount: BigDecimal.format(transaction.money.amount),
+  amount: formatMoneyInput(transaction.money),
   counterparty: Option.getOrElse(transaction.counterparty, () => ""),
   notes: Option.getOrElse(transaction.notes, () => ""),
   date: localDate(transaction, timeZone),
@@ -50,8 +52,6 @@ const textChanges = (draft: CorrectionDraft, original: CorrectionDraft): Correct
   ...(draft.notes !== original.notes ? { notes: draft.notes.trim() || null } : {}),
   ...(draft.direction !== original.direction ? { direction: draft.direction } : {}),
 });
-const parseAmount = (text: string): Option.Option<BigDecimal.BigDecimal> =>
-  BigDecimal.fromString(text.trim().replace(",", ".")).pipe(Option.filter(BigDecimal.isPositive));
 const parseDate = (draft: CorrectionDraft, timeZone: string): Option.Option<DateTime.Zoned> =>
   DateTime.makeZoned(`${draft.date}T00:00:00.000Z`, { timeZone, adjustForTimeZone: true }).pipe(
     Option.filter((date) => DateTime.formatIsoDate(date) === draft.date)
@@ -60,19 +60,19 @@ const correctionChanges = (
   draft: CorrectionDraft,
   props: CorrectionProps
 ): Option.Option<CorrectionChanges> => {
-  const amount = parseAmount(draft.amount);
+  const money = parseMoneyInput({ text: draft.amount, currency: props.transaction.money.currency });
   const occurredAt = parseDate(draft, props.timeZone);
   const category = Option.fromNullishOr(
     props.categories.find((item) => item.id === draft.categoryId)
   );
-  if (Option.isNone(amount) || Option.isNone(occurredAt) || Option.isNone(category)) {
+  if (Option.isNone(money) || Option.isNone(occurredAt) || Option.isNone(category)) {
     return Option.none();
   }
   const original = initialDraft(props.transaction, props.timeZone);
   const changes: CorrectionChanges = {
     ...textChanges(draft, original),
-    ...(BigDecimal.Order(amount.value, props.transaction.money.amount) !== 0
-      ? { money: { amount: amount.value, currency: props.transaction.money.currency } }
+    ...(BigDecimal.Order(money.value.amount, props.transaction.money.amount) !== 0
+      ? { money: money.value }
       : {}),
     ...(draft.categoryId !== original.categoryId ? { categoryId: category.value.id } : {}),
     ...(draft.date !== original.date ? { occurredAt: DateTime.toUtc(occurredAt.value) } : {}),
@@ -96,16 +96,15 @@ const DraftInputs = ({
   onChange: (draft: CorrectionDraft) => void;
 }>): JSX.Element => (
   <>
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="correction-amount">Monto · {currency}</Label>
-      <Input
-        id="correction-amount"
-        required
-        inputMode="decimal"
-        value={draft.amount}
-        onChange={(event) => onChange({ ...draft, amount: event.target.value })}
-      />
-    </div>
+    <MoneyField
+      id="correction-amount"
+      currency={currency}
+      currencyLabel={currency}
+      required
+      disabled={false}
+      value={draft.amount}
+      onChange={(amount) => onChange({ ...draft, amount })}
+    />
     <div className="flex flex-col gap-2">
       <Label htmlFor="correction-date">Fecha</Label>
       <CalendarField
@@ -294,7 +293,16 @@ export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
         <DraftNotes draft={draft} onChange={setDraft} />
       </fieldset>
       <CorrectionFeedback status={status} onRefresh={corrections.recover} />
-      <CorrectionActions status={status} locked={locked} onCancel={props.onCancel} />
+      <CorrectionActions
+        status={status}
+        locked={
+          locked ||
+          Option.isNone(
+            parseMoneyInput({ text: draft.amount, currency: props.transaction.money.currency })
+          )
+        }
+        onCancel={props.onCancel}
+      />
     </form>
   );
 };

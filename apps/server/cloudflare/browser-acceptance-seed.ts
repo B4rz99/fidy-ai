@@ -25,6 +25,7 @@ export const privacyUserId = "24000000-0000-4000-8000-000000000381";
 export const privacyErasureUserId = "24000000-0000-4000-8000-000000000441";
 export const privacyRenewalUserId = "24000000-0000-4000-8000-000000000431";
 export const accessUserId = "24000000-0000-4000-8000-000000000361";
+export const moneyInputUserId = "24000000-0000-4000-8000-000000000781";
 export const paginationUserId = "24000000-0000-4000-8000-000000000341";
 export const oauthOperationUserId = "24000000-0000-4000-8000-000000000671";
 export const recurringUserId = "24000000-0000-4000-8000-000000000401";
@@ -203,6 +204,12 @@ await seedIdentity({
   bsuid: "CO.Budget",
   email: "presupuesto@example.com",
   consentId: "24000000-0000-4000-8000-000000000372",
+});
+await seedIdentity({
+  userId: moneyInputUserId,
+  bsuid: "CO.MoneyInput",
+  email: "money-input@example.com",
+  consentId: "24000000-0000-4000-8000-000000000782",
 });
 await seedIdentity({
   userId: paginationUserId,

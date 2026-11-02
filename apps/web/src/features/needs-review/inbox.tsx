@@ -15,6 +15,7 @@ const pageSize = 50;
 export type InboxProps = Readonly<{
   contexts: PageContexts;
   contextLoading: boolean;
+  unfilteredItems: ReadonlyArray<Item>;
   view: Workspace;
   selected: Option.Option<Item["id"]>;
   checked: ReadonlyArray<Item["id"]>;
@@ -79,7 +80,8 @@ const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>)
   const expired = useReviewExpired(item);
   const description = useId();
   const context = Option.fromUndefinedOr(props.contexts.get(item.id));
-  const position = props.page + props.view.items.indexOf(item) + 1;
+  const position =
+    props.page + props.unfilteredItems.findIndex((entry) => entry.id === item.id) + 1;
   const reference = sourceReference({ item, context, position });
   const excerpt = sourceExcerpt({ item, context });
   const evidenceLabel = contextState({

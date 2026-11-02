@@ -283,7 +283,7 @@ const ReadyInboxView = ({
   const [source, setSource] = useState("all");
   const [search, setSearch] = useState("");
   const context = useReviewPageContext({ filter, page, items: view.items });
-  const visible = filterReviewPage({ view, source, search, contexts: context.contexts });
+  const visible = filterReviewPage({ view, source, search, page, contexts: context.contexts });
   const inbox = useInboxControl({ view, visibleItems: visible.items, decisions });
   const control = { ...inbox, locked: inbox.locked || disabled };
   const checked = control.checked.filter((id) => visible.items.some((entry) => entry.id === id));
@@ -310,6 +310,7 @@ const ReadyInboxView = ({
       />
       <ReviewToolbar view={visible} control={{ ...control, checked }} />
       <InboxWorkspace
+        unfilteredItems={view.items}
         contexts={context.contexts}
         contextLoading={context.loading}
         workspaceQuery={workspaceQuery}
@@ -343,6 +344,7 @@ const EmptyInbox = ({
   </ReviewFullState>
 );
 const InboxWorkspace = ({
+  unfilteredItems,
   contexts,
   contextLoading,
   workspaceQuery,
@@ -353,6 +355,7 @@ const InboxWorkspace = ({
   move,
   pageLength,
 }: Readonly<{
+  unfilteredItems: ReadonlyArray<Workspace["items"][number]>;
   contexts: PageContexts;
   contextLoading: boolean;
   caughtUp: boolean;
@@ -363,9 +366,7 @@ const InboxWorkspace = ({
   move: (offset: number) => void;
   pageLength: number;
 }>): JSX.Element => {
-  const item =
-    view.items.find((candidate) => Option.contains(control.selected, candidate.id)) ??
-    view.items[0];
+  const item = view.items.find(({ id }) => Option.contains(control.selected, id)) ?? view.items[0];
   if (item === undefined) {
     return (
       <>
@@ -379,6 +380,7 @@ const InboxWorkspace = ({
   return (
     <div data-review="grid">
       <Inbox
+        unfilteredItems={unfilteredItems}
         contexts={contexts}
         contextLoading={contextLoading}
         view={view}
@@ -405,7 +407,9 @@ const filterReviewPage = ({
   source,
   search,
   contexts,
+  page,
 }: Readonly<{
+  page: number;
   contexts: PageContexts;
   view: Workspace;
   source: string;
@@ -422,7 +426,7 @@ const filterReviewPage = ({
         sourceReference({
           item,
           context: Option.fromUndefinedOr(contexts.get(item.id)),
-          position: index + 1,
+          position: page + index + 1,
         }),
         Option.getOrElse(
           sourceExcerpt({ item, context: Option.fromUndefinedOr(contexts.get(item.id)) }),

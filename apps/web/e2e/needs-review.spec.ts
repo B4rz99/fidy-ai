@@ -1858,3 +1858,50 @@ test("identifies incomplete emails by receipt date and offers search inside thei
 
 const isWorkspaceResponse = (response: BrowserResponse): boolean =>
   new URL(response.url()).pathname.endsWith("/review-workspace");
+
+const unavailablePageRows = 2;
+test("keeps fallback source references stable when filtering a later page without context", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries = identifyIncompleteEntries(reviewPageSize + unavailablePageRows);
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace/context**`, unavailableContextRoute)
+      );
+      yield* Effect.tryPromise(() => page.goto(`/app/needs-review?offset=${reviewPageSize}`));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Reintentar fragmentos" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("checkbox", { name: "Seleccionar Extracto Elemento 52", exact: true })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("textbox", { name: "Buscar pendientes en esta página" }).fill("Elemento 52")
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("checkbox", { name: "Seleccionar Extracto Elemento 52", exact: true })
+        ).toHaveAccessibleDescription(/Elemento 52/u)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Abrir Extracto Elemento 52", exact: true })
+        ).toBeVisible()
+      );
+    })
+  ));
+
+const unavailableContextRoute = (route: Route): Promise<void> =>
+  route.fulfill({
+    status: 503,
+    body: '{"error":{"code":"service_unavailable","message":"Synthetic context refusal"}}',
+  });

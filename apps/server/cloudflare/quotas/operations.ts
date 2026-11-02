@@ -149,13 +149,16 @@ export const quotaStatusForUserSelection = (
 ): D1PreparedStatement => {
   const pro = activeProForUserSelection({ users: input.users, nowEpochMs: input.current });
   const period = allowancePeriod(DateTime.makeUnsafe(input.current));
+  // SQLite needs a contiguous index prefix: allowance precedes period_start_ms.
   return input.db
     .prepare(`SELECT ${pro.sql} AS pro,
     coalesce(sum(CASE WHEN allowance = 'forwarded_email' THEN units ELSE 0 END),0) AS forwarded_email,
     coalesce(sum(CASE WHEN allowance = 'media_submission' THEN units ELSE 0 END),0) AS media_submission,
     coalesce(sum(CASE WHEN allowance = 'hosted_history_turn' THEN units ELSE 0 END),0) AS hosted_history_turn,
     coalesce(sum(CASE WHEN allowance = 'canonical_call' THEN units ELSE 0 END),0) AS canonical_call
-    FROM commercial_allowance_consumptions WHERE user_id IN (${input.users.sql}) AND period_start_ms = ?`)
+    FROM commercial_allowance_consumptions WHERE user_id IN (${input.users.sql})
+    AND allowance IN ('forwarded_email','media_submission','hosted_history_turn','canonical_call')
+    AND period_start_ms = ?`)
     .bind(...pro.params, ...input.users.params, DateTime.toEpochMillis(period.startsAt));
 };
 

@@ -847,3 +847,17 @@ content. The confirmation label and control dimensions remain stable while separ
 submission or status refresh accurately. Back restores focus to the initiator; completed and uncertain requests move focus
 to their result or recovery message. Keep these states usable in Light and Grafito, at mobile,
 intermediate and desktop widths, and with enlarged text.
+
+### Linking recurring occurrences
+
+The linking workspace uses the shared application shell, flat search/results plane and 384px
+review rail. On smaller screens, selecting a candidate opens the shared full-screen review sheet.
+Search covers canonical effective Transaction history, with optional local date bounds, direction,
+Currency and exact amount. Search is explicitly applied with Buscar; the result scope and whether
+another bounded page exists remain visible. Amount drafts use Colombian separators.
+
+`TransactionCandidate` renders comfortable, keyboard-activatable rows with Counterparty, local date,
+notes, direction and exact Money. Selection highlights a row and opens review without linking.
+The review shows occurrence context, selected facts, partial/complete settlement and any manual
+tracking replacement. Only the explicit Vincular transacción action requests the association.
+The shared component reference includes a selectable candidate in light and Grafito.

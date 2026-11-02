@@ -20,6 +20,7 @@ import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { MonthCalendar } from "./month";
 import { OccurrenceList } from "./occurrence-list";
+import { TransactionLink } from "./transaction-link";
 import { TransactionPicker } from "./transactions";
 import { PlanForm } from "./plan-form";
 import { PlanManagement, Suggestions } from "./management";
@@ -41,7 +42,7 @@ type Panel =
       initial: Partial<PlanInput> & Pick<PlanInput, "timeZone">;
       seriesId: Option.Option<string>;
     }>
-  | Readonly<{ kind: "occurrence"; planId: Occurrence["planId"]; date: string }>
+  | Readonly<{ kind: "occurrence" | "link"; planId: Occurrence["planId"]; date: string }>
   | Readonly<{ kind: "plan"; planId: Occurrence["planId"] }>;
 type Props = Readonly<{
   notice: ReactNode;
@@ -58,7 +59,7 @@ type Props = Readonly<{
 }>;
 const selectedOccurrence = (
   view: Workspace,
-  panel: Extract<Panel, { kind: "occurrence" }>
+  panel: Extract<Panel, { kind: "occurrence" | "link" }>
 ): Option.Option<Occurrence> =>
   Array.findFirst(
     [...view.occurrences, ...view.previous],
@@ -70,6 +71,7 @@ type SheetProps = EditorProps &
   Readonly<{
     panel: Option.Option<Panel>;
     setPanel: (panel: Option.Option<Panel>) => void;
+    link: () => void;
   }>;
 const Editor = ({
   panel,
@@ -78,7 +80,8 @@ const Editor = ({
   disabled,
   save,
   statusFor,
-}: EditorProps & Readonly<{ panel: Panel }>): JSX.Element => {
+  link,
+}: EditorProps & Readonly<{ panel: Panel; link: () => void }>): JSX.Element => {
   if (panel.kind === "occurrence") {
     const item = selectedOccurrence(view, panel);
     const plan = view.document.plans.find((entry) => entry.id === panel.planId);
@@ -109,6 +112,7 @@ const Editor = ({
           disabled={disabled}
           save={save}
           today={view.today}
+          link={link}
         />
       </div>
     );
@@ -275,6 +279,12 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
   const editing = { ...props, save };
   const open = (item: Occurrence): void =>
     setPanel(Option.some({ kind: "occurrence", planId: item.planId, date: item.date }));
+  const link = (): void =>
+    setPanel(
+      Option.flatMap(panel, (value) =>
+        value.kind === "occurrence" ? Option.some({ ...value, kind: "link" }) : Option.some(value)
+      )
+    );
   const create = (): void =>
     setPanel(
       Option.some({
@@ -283,6 +293,11 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
         seriesId: Option.none(),
       })
     );
+  if (Option.isSome(panel) && panel.value.kind === "link") {
+    const selection = panel.value;
+    const close = (): void => setPanel(Option.some({ ...selection, kind: "occurrence" }));
+    return <LinkWorkspace {...props} selection={selection} close={close} />;
+  }
   return (
     <RecurringSurface>
       <RecurringToolbar
@@ -297,7 +312,7 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
       {Option.isNone(panel) ? props.notice : null}
       <RecurringColumns
         open={Option.isSome(panel)}
-        panel={<EditorSheet {...editing} panel={panel} setPanel={setPanel} />}
+        panel={<EditorSheet {...editing} panel={panel} setPanel={setPanel} link={link} />}
       >
         <WorkspaceBody
           props={editing}
@@ -310,6 +325,36 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
         />
       </RecurringColumns>
     </RecurringSurface>
+  );
+};
+
+const LinkWorkspace = ({
+  selection,
+  close,
+  ...props
+}: Props &
+  Readonly<{
+    selection: Extract<Panel, { kind: "occurrence" | "link" }>;
+    close: () => void;
+  }>): JSX.Element => {
+  const item = selectedOccurrence(props.view, selection);
+  return Option.isSome(item) ? (
+    <TransactionLink
+      key={`${item.value.planId}:${item.value.date}`}
+      item={item.value}
+      disabled={props.disabled}
+      save={props.save}
+      notice={props.notice}
+      close={close}
+    />
+  ) : (
+    <main className="grid gap-4 p-5">
+      <p>La ocurrencia ya no está en esta vista.</p>
+      <Button variant="outline" onClick={close}>
+        Volver
+      </Button>
+      {props.notice}
+    </main>
   );
 };
 
@@ -382,6 +427,7 @@ const EditorSheet = ({
   disabled,
   save,
   statusFor,
+  link,
 }: SheetProps): JSX.Element => {
   const { theme, toggle } = useTheme();
   const active = useRouterState({
@@ -415,6 +461,7 @@ const EditorSheet = ({
         <Editor
           key={JSON.stringify(panel.value)}
           panel={panel.value}
+          link={link}
           view={view}
           categories={categories}
           disabled={disabled}
@@ -535,6 +582,7 @@ const CreatePlan = ({
         <DeferredDisclosure title="Crear desde una transacción">
           <TransactionPicker
             disabled={disabled}
+            timeZone={panel.initial.timeZone}
             choose={(transaction) =>
               setInitial(planFromTransaction({ transaction, timeZone: panel.initial.timeZone }))
             }

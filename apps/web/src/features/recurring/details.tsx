@@ -5,18 +5,10 @@ import { type FormEvent, type JSX, useState } from "react";
 import { RecurringCommand } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
-import { DeferredDisclosure, Disclosure } from "@/ui/components/disclosure";
-import { ChoiceField, DefaultChoiceField, RecurringDateField } from "./fields";
-import { TransactionPicker } from "./transactions";
+import { Disclosure } from "@/ui/components/disclosure";
+import { DefaultChoiceField, RecurringDateField } from "./fields";
 import { PaymentCapture } from "./payment-capture";
-import {
-  associateTransaction,
-  associationBlocked,
-  defaultReplacement,
-  manualMarks,
-  replacementOptions,
-  settlementOptions,
-} from "./payment-association";
+import { manualMarks, replacementOptions, settlementOptions } from "./payment-association";
 import { PlanForm } from "./plan-form";
 import { Field } from "./form-fields";
 import {
@@ -34,6 +26,7 @@ type Props = Readonly<{
   save: Save;
   disabled: boolean;
   today: string;
+  link: () => void;
 }>;
 const PaymentForm = ({ item, save, disabled, today }: Props): JSX.Element => {
   const [invalid, setInvalid] = useState(false);
@@ -137,7 +130,9 @@ export const OccurrenceDetails = (props: Props): JSX.Element => {
           seguimiento; no elimina transacciones.
         </p>
       ) : null}
-      <LinkTransaction item={item} save={save} disabled={disabled} />
+      <Button variant="outline" disabled={disabled} onClick={props.link}>
+        Vincular transacción existente
+      </Button>
       <PaymentCapture {...props} />
       <PaymentForm {...props} />
       <OccurrenceEditor {...props} />
@@ -290,75 +285,7 @@ const paymentCommand = (form: FormData, item: Occurrence): Option.Option<Recurri
   });
 };
 
-const LinkTransaction = ({
-  item,
-  save,
-  disabled,
-}: Pick<Props, "item" | "save" | "disabled">): JSX.Element => {
-  const [replaces, setReplaces] = useState(() => defaultReplacement(item));
-  const [settled, setSettled] = useState(false);
-  return (
-    <DeferredDisclosure title="Vincular transacción existente">
-      <p className="my-3 text-sm text-muted-foreground">
-        Vincula una transacción que ya está en tu historial. No crea otra ni suma el gasto de nuevo.
-        Si ya marcaste este pago manualmente, elige la marca que reemplaza para no contar dos veces
-        el seguimiento.
-      </p>
-      <LinkFields
-        item={item}
-        disabled={disabled}
-        replaces={replaces}
-        setReplaces={setReplaces}
-        settled={settled}
-        setSettled={setSettled}
-      />
-      <TransactionPicker
-        disabled={disabled || associationBlocked({ item, replaces })}
-        choose={(transaction) =>
-          save(associateTransaction({ item, transaction, replaces, settled }))
-        }
-      />
-    </DeferredDisclosure>
-  );
-};
-
 const formText = (form: FormData, key: string): string => {
   const entry = form.get(key);
   return typeof entry === "string" ? entry : "";
 };
-
-const LinkFields = ({
-  item,
-  disabled,
-  replaces,
-  setReplaces,
-  settled,
-  setSettled,
-}: Pick<Props, "item" | "disabled"> &
-  Readonly<{
-    replaces: string;
-    setReplaces: (value: string) => void;
-    settled: boolean;
-    setSettled: (value: boolean) => void;
-  }>): JSX.Element => (
-  <fieldset disabled={disabled} className="grid gap-3 py-3">
-    <Field label="Registro manual que reemplaza" name="linked-replaces">
-      <ChoiceField
-        name="linked-replaces"
-        label="Registro manual que reemplaza"
-        value={replaces}
-        onChange={setReplaces}
-        options={replacementOptions(item)}
-      />
-    </Field>
-    <Field label="Estado de la transacción vinculada" name="linked-settlement">
-      <ChoiceField
-        name="linked-settlement"
-        label="Estado de la transacción vinculada"
-        value={settled ? "settled" : "partial"}
-        onChange={(value) => setSettled(value === "settled")}
-        options={settlementOptions}
-      />
-    </Field>
-  </fieldset>
-);

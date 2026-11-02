@@ -69,7 +69,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "lastUsedAt": {
-            "$ref": "#/components/schemas/Union_19"
+            "$ref": "#/components/schemas/Union_20"
           },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabel"
@@ -95,7 +95,7 @@
         "additionalProperties": false,
         "properties": {
           "at": {
-            "$ref": "#/components/schemas/Union_9"
+            "$ref": "#/components/schemas/Union_10"
           },
           "op": {
             "enum": [
@@ -159,7 +159,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "requested": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "timeZone": {
             "$ref": "#/components/schemas/IanaTimeZone"
@@ -376,7 +376,7 @@
         "additionalProperties": false,
         "properties": {
           "axis": {
-            "$ref": "#/components/schemas/Union_8"
+            "$ref": "#/components/schemas/Union_9"
           },
           "besideWidget": {
             "$ref": "#/components/schemas/WidgetId"
@@ -1460,7 +1460,7 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_2"
+            "$ref": "#/components/schemas/Union_3"
           },
           "money": {
             "$ref": "#/components/schemas/Money_2"
@@ -2010,7 +2010,7 @@
         "additionalProperties": false,
         "properties": {
           "aggregation": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_8"
           },
           "categories": {
             "$ref": "#/components/schemas/Arrays_3"
@@ -2022,7 +2022,7 @@
             "type": "string"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "title": {
             "maxLength": 80,
@@ -2049,7 +2049,7 @@
         "additionalProperties": false,
         "properties": {
           "aggregation": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_8"
           },
           "categories": {
             "$ref": "#/components/schemas/Arrays_3"
@@ -2064,7 +2064,7 @@
             "type": "string"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "title": {
             "maxLength": 80,
@@ -2248,7 +2248,7 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_2"
+            "$ref": "#/components/schemas/Union_3"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
@@ -2380,7 +2380,7 @@
             "additionalProperties": false,
             "properties": {
               "axis": {
-                "$ref": "#/components/schemas/Union_8"
+                "$ref": "#/components/schemas/Union_9"
               },
               "children": {
                 "items": {
@@ -2737,7 +2737,7 @@
                 "$ref": "#/components/schemas/InterpretationRevision"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_15"
+                "$ref": "#/components/schemas/Union_16"
               },
               "receivedEmailId": {
                 "maxLength": 256,
@@ -2835,7 +2835,7 @@
                     "type": "string"
                   },
                   {
-                    "$ref": "#/components/schemas/Union_15"
+                    "$ref": "#/components/schemas/Union_16"
                   }
                 ]
               },
@@ -3356,7 +3356,7 @@
             "additionalProperties": false,
             "properties": {
               "axis": {
-                "$ref": "#/components/schemas/Union_8"
+                "$ref": "#/components/schemas/Union_9"
               },
               "children": {
                 "items": {
@@ -3846,7 +3846,7 @@
         "additionalProperties": false,
         "properties": {
           "at": {
-            "$ref": "#/components/schemas/Union_9"
+            "$ref": "#/components/schemas/Union_10"
           },
           "op": {
             "enum": [
@@ -4365,7 +4365,7 @@
             "$ref": "#/components/schemas/TransactionCreatedAt"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_2"
+            "$ref": "#/components/schemas/Union_3"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
@@ -4482,7 +4482,7 @@
             "$ref": "#/components/schemas/Objects_32"
           },
           "item": {
-            "$ref": "#/components/schemas/Union_11"
+            "$ref": "#/components/schemas/Union_12"
           },
           "revision": {
             "maximum": 9007199254740991,
@@ -4538,7 +4538,7 @@
             "$ref": "#/components/schemas/Currency"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_2"
+            "$ref": "#/components/schemas/Union_3"
           },
           "occurredAt": {
             "maxLength": 120,
@@ -5084,10 +5084,10 @@
             "type": "string"
           },
           "frequency": {
-            "$ref": "#/components/schemas/Union_17"
+            "$ref": "#/components/schemas/Union_18"
           },
           "kind": {
-            "$ref": "#/components/schemas/Union_16"
+            "$ref": "#/components/schemas/Union_17"
           },
           "money": {
             "$ref": "#/components/schemas/Objects_53"
@@ -5829,7 +5829,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "lastUsedAt": {
-            "$ref": "#/components/schemas/Union_19"
+            "$ref": "#/components/schemas/Union_20"
           },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabel"
@@ -7291,7 +7291,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "sourceProvider": {
                 "maxLength": 80,
@@ -7526,10 +7526,10 @@
             "$ref": "#/components/schemas/Arrays_3"
           },
           "groupBy": {
-            "$ref": "#/components/schemas/Union_5"
+            "$ref": "#/components/schemas/Union_6"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "title": {
             "maxLength": 80,
@@ -7558,13 +7558,13 @@
             "$ref": "#/components/schemas/Arrays_3"
           },
           "groupBy": {
-            "$ref": "#/components/schemas/Union_5"
+            "$ref": "#/components/schemas/Union_6"
           },
           "id": {
             "$ref": "#/components/schemas/WidgetId"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "title": {
             "maxLength": 80,
@@ -7718,7 +7718,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_14"
+                "$ref": "#/components/schemas/Union_15"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -7735,7 +7735,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -7799,7 +7799,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_14"
+                "$ref": "#/components/schemas/Union_15"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -7816,7 +7816,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -8006,7 +8006,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_14"
+                "$ref": "#/components/schemas/Union_15"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -8023,7 +8023,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -8087,7 +8087,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_14"
+                "$ref": "#/components/schemas/Union_15"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -8104,7 +8104,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -8168,7 +8168,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_14"
+                "$ref": "#/components/schemas/Union_15"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -8188,7 +8188,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -8250,7 +8250,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "status": {
                 "enum": [
@@ -8282,7 +8282,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -8321,7 +8321,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -8364,7 +8364,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -8408,7 +8408,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -8462,7 +8462,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -9368,6 +9368,11 @@
                   "query": {
                     "additionalProperties": false,
                     "properties": {
+                      "amount": {
+                        "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
+                        "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+                        "type": "string"
+                      },
                       "categoryId": {
                         "$ref": "#/components/schemas/CategoryId"
                       },
@@ -9385,12 +9390,7 @@
                         "type": "string"
                       },
                       "direction": {
-                        "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
-                        "enum": [
-                          "inflow",
-                          "outflow"
-                        ],
-                        "type": "string"
+                        "$ref": "#/components/schemas/Union_2"
                       },
                       "from": {
                         "$ref": "#/components/schemas/UtcTimestamp"
@@ -9437,14 +9437,43 @@
                   "query": {
                     "additionalProperties": false,
                     "properties": {
+                      "amount": {
+                        "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
+                        "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+                        "type": "string"
+                      },
+                      "categoryId": {
+                        "$ref": "#/components/schemas/CategoryId"
+                      },
+                      "counterparty": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                        "type": "string"
+                      },
+                      "currency": {
+                        "$ref": "#/components/schemas/CurrencyPartial_1"
+                      },
                       "cursor": {
                         "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z\\|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z\\|[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "direction": {
+                        "$ref": "#/components/schemas/Union_2"
+                      },
+                      "from": {
+                        "$ref": "#/components/schemas/UtcTimestamp"
+                      },
+                      "limit": {
                         "type": "string"
                       },
                       "q": {
                         "maxLength": 80,
                         "minLength": 1,
                         "type": "string"
+                      },
+                      "to": {
+                        "$ref": "#/components/schemas/UtcTimestamp"
                       }
                     },
                     "type": "object"
@@ -9798,7 +9827,7 @@
                                 "$ref": "#/components/schemas/Currency"
                               },
                               "direction": {
-                                "$ref": "#/components/schemas/Union_2"
+                                "$ref": "#/components/schemas/Union_3"
                               },
                               "occurredAt": {
                                 "maxLength": 120,
@@ -9906,7 +9935,7 @@
                         "type": "string"
                       },
                       "status": {
-                        "$ref": "#/components/schemas/Union_3"
+                        "$ref": "#/components/schemas/Union_4"
                       }
                     },
                     "type": "object"
@@ -10038,7 +10067,7 @@
                         "type": "string"
                       },
                       "status": {
-                        "$ref": "#/components/schemas/Union_4"
+                        "$ref": "#/components/schemas/Union_5"
                       }
                     },
                     "type": "object"
@@ -11586,7 +11615,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Union_13"
+                    "$ref": "#/components/schemas/Union_14"
                   }
                 },
                 "required": [
@@ -12930,7 +12959,7 @@
             "$ref": "#/components/schemas/TransactionCreatedAt"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_2"
+            "$ref": "#/components/schemas/Union_3"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
@@ -13008,7 +13037,7 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_2"
+            "$ref": "#/components/schemas/Union_3"
           },
           "money": {
             "$ref": "#/components/schemas/Money_2"
@@ -13205,7 +13234,7 @@
             "$ref": "#/components/schemas/TransactionCreatedAt"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_2"
+            "$ref": "#/components/schemas/Union_3"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
@@ -13412,13 +13441,27 @@
         ]
       },
       "Union_10": {
+        "anyOf": [
+          {
+            "enum": [
+              "top",
+              "bottom"
+            ],
+            "type": "string"
+          },
+          {
+            "$ref": "#/components/schemas/BesidePlacement"
+          }
+        ]
+      },
+      "Union_11": {
         "enum": [
           "csv",
           "xlsx"
         ],
         "type": "string"
       },
-      "Union_11": {
+      "Union_12": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -13444,7 +13487,7 @@
                 "type": "integer"
               },
               "source": {
-                "$ref": "#/components/schemas/Union_12"
+                "$ref": "#/components/schemas/Union_13"
               },
               "status": {
                 "enum": [
@@ -13496,7 +13539,7 @@
                 "type": "integer"
               },
               "source": {
-                "$ref": "#/components/schemas/Union_12"
+                "$ref": "#/components/schemas/Union_13"
               },
               "status": {
                 "enum": [
@@ -13527,7 +13570,7 @@
           }
         ]
       },
-      "Union_12": {
+      "Union_13": {
         "enum": [
           "statement",
           "email",
@@ -13535,7 +13578,7 @@
         ],
         "type": "string"
       },
-      "Union_13": {
+      "Union_14": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -13638,7 +13681,7 @@
           }
         ]
       },
-      "Union_14": {
+      "Union_15": {
         "enum": [
           "malformed-source-row",
           "missing-required-fact",
@@ -13650,7 +13693,7 @@
         ],
         "type": "string"
       },
-      "Union_15": {
+      "Union_16": {
         "enum": [
           "provider-retrieval-failed",
           "processing-interrupted",
@@ -13658,7 +13701,7 @@
         ],
         "type": "string"
       },
-      "Union_16": {
+      "Union_17": {
         "enum": [
           "income",
           "expense",
@@ -13666,7 +13709,7 @@
         ],
         "type": "string"
       },
-      "Union_17": {
+      "Union_18": {
         "enum": [
           "weekly",
           "fortnightly",
@@ -13678,7 +13721,7 @@
         ],
         "type": "string"
       },
-      "Union_18": {
+      "Union_19": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -13747,7 +13790,15 @@
           }
         ]
       },
-      "Union_19": {
+      "Union_2": {
+        "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
+        "enum": [
+          "inflow",
+          "outflow"
+        ],
+        "type": "string"
+      },
+      "Union_20": {
         "anyOf": [
           {
             "$ref": "#/components/schemas/UtcTimestamp"
@@ -13757,7 +13808,7 @@
           }
         ]
       },
-      "Union_2": {
+      "Union_3": {
         "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
         "enum": [
           "inflow",
@@ -13765,7 +13816,7 @@
         ],
         "type": "string"
       },
-      "Union_3": {
+      "Union_4": {
         "enum": [
           "pending",
           "created",
@@ -13775,7 +13826,7 @@
         ],
         "type": "string"
       },
-      "Union_4": {
+      "Union_5": {
         "enum": [
           "pending",
           "expired",
@@ -13785,7 +13836,7 @@
         ],
         "type": "string"
       },
-      "Union_5": {
+      "Union_6": {
         "enum": [
           "category",
           "day",
@@ -13793,7 +13844,7 @@
         ],
         "type": "string"
       },
-      "Union_6": {
+      "Union_7": {
         "enum": [
           "this-week",
           "this-month",
@@ -13804,7 +13855,7 @@
         ],
         "type": "string"
       },
-      "Union_7": {
+      "Union_8": {
         "enum": [
           "sum",
           "average",
@@ -13812,26 +13863,12 @@
         ],
         "type": "string"
       },
-      "Union_8": {
+      "Union_9": {
         "enum": [
           "row",
           "column"
         ],
         "type": "string"
-      },
-      "Union_9": {
-        "anyOf": [
-          {
-            "enum": [
-              "top",
-              "bottom"
-            ],
-            "type": "string"
-          },
-          {
-            "$ref": "#/components/schemas/BesidePlacement"
-          }
-        ]
       },
       "UpdateBudgetInput": {
         "additionalProperties": false,
@@ -13950,7 +13987,7 @@
                 ]
               },
               "direction": {
-                "$ref": "#/components/schemas/Union_2"
+                "$ref": "#/components/schemas/Union_3"
               },
               "money": {
                 "$ref": "#/components/schemas/Money_2"
@@ -14009,12 +14046,7 @@
                 ]
               },
               "direction": {
-                "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
-                "enum": [
-                  "inflow",
-                  "outflow"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/Union_2"
               },
               "money": {
                 "$ref": "#/components/schemas/Money_1"
@@ -17721,7 +17753,7 @@
             "name": "status",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_4"
+              "$ref": "#/components/schemas/Union_5"
             }
           },
           {
@@ -18172,7 +18204,7 @@
             "name": "status",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_3"
+              "$ref": "#/components/schemas/Union_4"
             }
           },
           {
@@ -18197,7 +18229,7 @@
                       "properties": {
                         "items": {
                           "items": {
-                            "$ref": "#/components/schemas/Union_11"
+                            "$ref": "#/components/schemas/Union_12"
                           },
                           "type": "array"
                         },
@@ -18698,7 +18730,7 @@
             "name": "status",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_3"
+              "$ref": "#/components/schemas/Union_4"
             }
           },
           {
@@ -18879,7 +18911,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Union_13"
+                "$ref": "#/components/schemas/Union_14"
               }
             }
           },
@@ -22250,16 +22282,16 @@
                           "$ref": "#/components/schemas/AccessTier"
                         },
                         "canonicalCalls": {
-                          "$ref": "#/components/schemas/Union_18"
+                          "$ref": "#/components/schemas/Union_19"
                         },
                         "forwardedEmails": {
-                          "$ref": "#/components/schemas/Union_18"
+                          "$ref": "#/components/schemas/Union_19"
                         },
                         "hostedHistoryTurns": {
-                          "$ref": "#/components/schemas/Union_18"
+                          "$ref": "#/components/schemas/Union_19"
                         },
                         "mediaSubmissions": {
-                          "$ref": "#/components/schemas/Union_18"
+                          "$ref": "#/components/schemas/Union_19"
                         }
                       },
                       "required": [
@@ -22560,7 +22592,7 @@
             "name": "kind",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_16"
+              "$ref": "#/components/schemas/Union_17"
             }
           },
           {
@@ -22568,7 +22600,7 @@
             "name": "frequency",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_17"
+              "$ref": "#/components/schemas/Union_18"
             }
           },
           {
@@ -22721,7 +22753,7 @@
                                 "$ref": "#/components/schemas/Money_2"
                               },
                               "kind": {
-                                "$ref": "#/components/schemas/Union_16"
+                                "$ref": "#/components/schemas/Union_17"
                               },
                               "remaining": {
                                 "$ref": "#/components/schemas/Money_2"
@@ -23662,7 +23694,7 @@
     },
     "/transactions": {
       "get": {
-        "description": "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, counterparty text, direction, and Currency narrows the history; omit every filter for all visible history. limit optionally bounds each response to 1–100 records (default 100); the keyset continuation remains valid when the limit changes.",
+        "description": "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, counterparty text, direction, Currency, and exact nominal amount narrows the history; omit every filter for all visible history. limit optionally bounds each response to 1–100 records (default 100); the keyset continuation remains valid when the limit changes.",
         "operationId": "transactions.listTransactions",
         "parameters": [
           {
@@ -23713,7 +23745,7 @@
             "name": "direction",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_2"
+              "$ref": "#/components/schemas/Union_3"
             }
           },
           {
@@ -23722,6 +23754,16 @@
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/Currency"
+            }
+          },
+          {
+            "in": "query",
+            "name": "amount",
+            "required": false,
+            "schema": {
+              "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
+              "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": "string"
             }
           },
           {
@@ -24699,7 +24741,7 @@
     },
     "/transactions/search": {
       "get": {
-        "description": "Search the caller's FinancialRecord by literal Counterparty or notes text. Supply 2–80 characters; results are bounded and ordered newest first. Follow the returned continuation to browse further matches.",
+        "description": "Search the caller's FinancialRecord by literal Counterparty or notes text. Supply 2–80 characters and optionally combine the history date, direction, Currency, exact nominal amount and Category filters. limit bounds each response to 1–100 records (default 100). Results use effective Transactions and are ordered newest first; amounts compare exactly without currency conversion. Follow the returned continuation to browse further matches.",
         "operationId": "transactions.searchTransactions",
         "parameters": [
           {
@@ -24709,6 +24751,75 @@
             "schema": {
               "maxLength": 80,
               "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/UtcTimestamp"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/UtcTimestamp"
+            }
+          },
+          {
+            "in": "query",
+            "name": "categoryId",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CategoryId"
+            }
+          },
+          {
+            "in": "query",
+            "name": "counterparty",
+            "required": false,
+            "schema": {
+              "maxLength": 120,
+              "minLength": 1,
+              "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Union_3"
+            }
+          },
+          {
+            "in": "query",
+            "name": "currency",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Currency"
+            }
+          },
+          {
+            "in": "query",
+            "name": "amount",
+            "required": false,
+            "schema": {
+              "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
+              "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
               "type": "string"
             }
           },

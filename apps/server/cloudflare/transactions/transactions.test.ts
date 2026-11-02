@@ -3265,6 +3265,19 @@ for (const scenario of [
     input: { query: { q: "Pago literal" } },
     path: "/transactions/search?q=Pago%20literal",
   }),
+  historyQueryCase("filtered search", {
+    operation: CanonicalOperationId.make("transactions.searchTransactions"),
+    input: {
+      query: {
+        q: "Pago literal",
+        currency: "USD",
+        direction: "outflow",
+        amount: "12.340",
+        limit: "1",
+      },
+    },
+    path: "/transactions/search?q=Pago%20literal&currency=USD&direction=outflow&amount=12.340&limit=1",
+  }),
   historyQueryCase("foreign", {
     operation: CanonicalOperationId.make("transactions.getTransaction"),
     input: { params: { id: "70000000-0000-4000-8000-000000000002" } },
@@ -7095,3 +7108,78 @@ it.runIf(loadMeasurement || growthMeasurement)(
     ),
   300_000
 );
+
+it("searches older effective Transactions with combined exact Money filters and bounded continuation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<500)
+        INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,counterparty,notes,occurred_at_ms,created_at_ms)
+        SELECT printf('00000000-0000-4000-8200-%012d',n),CASE WHEN n=8 THEN ? ELSE ? END,
+        CASE WHEN n=7 THEN '9007199254740993.16' ELSE '9007199254740993.15' END,
+        CASE WHEN n=6 THEN 'COP' ELSE 'USD' END,CASE WHEN n=5 THEN 'inflow' ELSE 'outflow' END,?,
+        CASE WHEN n<9 THEN 'Internet antiguo' ELSE 'Otro' END,'Pago del hogar',1736424000000+n*1000,1736424000000 FROM seq`)
+          .bind(users[1], users[0], category)
+          .run()
+      );
+      const read = (query: URLSearchParams): Promise<Response> =>
+        sendPublicRequest(
+          db,
+          new Request(`https://api.fidyapp.com/transactions/search?${query}`, {
+            headers: {
+              origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+            },
+          })
+        );
+      const query = new URLSearchParams({
+        q: "Internet",
+        currency: "USD",
+        direction: "outflow",
+        amount: "9007199254740993.1500",
+        from: "2025-01-09T00:00:00.000Z",
+        to: "2025-01-11T00:00:00.000Z",
+        limit: "2",
+      });
+      const Page = Schema.Struct({
+        data: Schema.Array(Schema.Struct({ id: Transaction.fields.id })),
+        next: Schema.Array(
+          Schema.Struct({
+            args: Schema.Struct({ query: Schema.Record(Schema.String, Schema.String) }),
+          })
+        ),
+      });
+      const first = yield* fromTestPromise(() => read(query));
+      expect(first.status).toBe(200);
+      const page = yield* Schema.decodeUnknownEffect(Page)(
+        yield* fromTestPromise(() => first.json())
+      );
+      expect(page.data.map((row) => row.id)).toEqual([
+        "00000000-0000-4000-8200-000000000004",
+        "00000000-0000-4000-8200-000000000003",
+      ]);
+      const next = Option.getOrThrow(Option.fromUndefinedOr(page.next[0])).args.query;
+      expect(next).toMatchObject({ ...Object.fromEntries(query), amount: "9007199254740993.15" });
+      const second = yield* fromTestPromise(() => read(new URLSearchParams(next)));
+      expect(second.status).toBe(200);
+      const last = yield* Schema.decodeUnknownEffect(Page)(
+        yield* fromTestPromise(() => second.json())
+      );
+      expect(last.data.map((row) => row.id)).toEqual([
+        "00000000-0000-4000-8200-000000000002",
+        "00000000-0000-4000-8200-000000000001",
+      ]);
+      expect(last.next).toEqual([]);
+      query.set("amount", "9007199254740993.17");
+      const absent = yield* fromTestPromise(() => read(query));
+      expect(absent.status).toBe(200);
+      expect(
+        (yield* Schema.decodeUnknownEffect(Page)(yield* fromTestPromise(() => absent.json()))).data
+      ).toEqual([]);
+      query.set("amount", "1e3");
+      expect((yield* fromTestPromise(() => read(query))).status).toBe(400);
+    })
+  ));

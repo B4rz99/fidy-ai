@@ -199,17 +199,16 @@
   display: none;
 }
 .application-agent-trigger {
-  position: fixed;
-  right: 26px;
-  bottom: 24px;
-  width: 52px;
-  height: 52px;
-  border-radius: 17px;
+  position: absolute;
+  right: 100px;
+  top: 34px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
   background: var(--fidy-lime);
   color: var(--fidy-ink);
   border: 1px solid var(--fidy-button-primary-default-border);
   z-index: 40;
-  box-shadow: 0 8px 24px #00000012;
 }
 .application-shell :is(a, button):focus-visible {
   outline: 2px solid var(--fidy-focus-ring-color);
@@ -292,14 +291,10 @@
     border-radius: 15px;
   }
   .application-agent-trigger {
-    position: absolute;
-    top: 20px;
+    top: 21px;
     right: 73px;
-    bottom: auto;
     width: 42px;
     height: 42px;
-    border-radius: 50%;
-    box-shadow: none;
   }
   body:has(.signed-in-compact-navigation:popover-open) .application-agent-trigger {
     display: none;

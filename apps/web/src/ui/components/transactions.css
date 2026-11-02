@@ -732,7 +732,7 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
 }
 [data-transaction-slot~="transaction-page-header"] {
   margin: 0;
-  padding: 0 100px 28px 42px;
+  padding: 0 158px 28px 42px;
   border-bottom: 1px solid var(--transaction-line);
 }
 [data-transaction-slot~="transaction-page-header"] [data-slot="button"] {

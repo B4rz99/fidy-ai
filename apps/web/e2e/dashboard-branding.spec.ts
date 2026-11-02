@@ -21,14 +21,17 @@ const rectanglesOverlap = (box: Rectangle, other: Rectangle): boolean =>
   box.x + box.width > other.x &&
   box.y < other.y + other.height &&
   box.y + box.height > other.y;
-const expectSeparateControls = Effect.fnUntraced(function* (controls: ReadonlyArray<Locator>) {
+const expectSeparateControls = Effect.fnUntraced(function* (
+  controls: ReadonlyArray<Locator>,
+  viewport: Readonly<{ width: number; height: number }> = mobileViewport
+) {
   const boxes = [];
   for (const control of controls) {
     yield* Effect.tryPromise(() => expect(control).toBeVisible());
     const box = yield* Effect.tryPromise(() => control.boundingBox());
     if (box === null) throw new Error("Missing visible mobile header control");
     expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(mobileViewport.width);
+    expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
     boxes.push(box);
   }
   for (let index = 0; index < boxes.length; index++) {
@@ -109,6 +112,30 @@ const installRecentTransactions = Effect.fnUntraced(function* (page: Page) {
     )
   );
 });
+
+test("Dashboard keeps Personalizar clear of the assistant and theme controls on desktop", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const viewport = { width: 1280, height: 720 };
+      yield* Effect.tryPromise(() => page.setViewportSize(viewport));
+      yield* installRecentTransactions(page);
+      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      const personalize = page.getByRole("button", { name: "Personalizar", exact: true });
+      const agent = page.getByRole("button", { name: "Abrir agente Fidy", exact: true });
+      const theme = page.getByRole("button", { name: /Activar tema (claro|oscuro)/u });
+      yield* expectSeparateControls([personalize, agent, theme], viewport);
+      yield* Effect.tryPromise(() => personalize.click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => agent.click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Mensaje", { exact: true })).toBeVisible()
+      );
+    })
+  ));
 
 test("application appearance follows the system until a manual choice survives navigation and logout", ({
   page,

@@ -40,7 +40,7 @@ export const ChatWindow = ({ open, onOpenChange, children }: ChatWindowProps): J
         <HugeiconsIcon icon={SparklesIcon} size={24} strokeWidth={1.5} aria-hidden="true" />
       </PopoverTrigger>
       <PopoverContent
-        side="top"
+        side="bottom"
         align="end"
         sideOffset={12}
         collisionAvoidance={compact ? { side: "shift", align: "shift" } : undefined}

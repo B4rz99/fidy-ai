@@ -1,8 +1,10 @@
+import { MoneyField } from "./money-field";
+import { parseMoneyInput } from "@/transport/money-input";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import type { Category } from "./presentation";
 import type { CaptureStatus } from "./panel-state";
 import { useAtomSet } from "@effect/atom-react";
-import { BigDecimal, Cause, DateTime, Effect, Option, Predicate } from "effect";
+import { Cause, DateTime, Effect, Option, Predicate } from "effect";
 import type * as Atom from "effect/reactivity/Atom";
 import { useState } from "react";
 import type { FormEvent, JSX } from "react";
@@ -33,15 +35,13 @@ type CaptureCommand = Readonly<{
 const makeCapture = (apiClient: FidyClient): Atom.AtomResultFn<CaptureCommand, void, never> =>
   apiClient.runtime.fn<CaptureCommand>()(
     (command) => {
-      const amount = BigDecimal.fromString(command.amount.trim().replace(",", ".")).pipe(
-        Option.filter(BigDecimal.isPositive)
-      );
+      const money = parseMoneyInput({ text: command.amount, currency: "COP" });
       const zoned = DateTime.makeZoned(`${command.occurredOn}T00:00:00.000Z`, {
         timeZone: command.timeZone,
         adjustForTimeZone: true,
       });
       if (
-        Option.isNone(amount) ||
+        Option.isNone(money) ||
         Option.isNone(zoned) ||
         DateTime.formatIsoDate(zoned.value) !== command.occurredOn
       ) {
@@ -49,7 +49,7 @@ const makeCapture = (apiClient: FidyClient): Atom.AtomResultFn<CaptureCommand, v
       }
       const input: CanonicalInput<"transactions.createTransaction"> = {
         payload: {
-          money: { amount: amount.value, currency: "COP" },
+          money: money.value,
           direction: command.direction,
           counterparty: Option.fromNullishOr(command.counterparty.trim() || undefined),
           notes: Option.fromNullishOr(command.notes.trim() || undefined),
@@ -95,16 +95,15 @@ const CaptureInputs = ({
   onCounterparty,
 }: CaptureInputsProps): JSX.Element => (
   <>
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="transaction-amount">Monto · COP</Label>
-      <Input
-        id="transaction-amount"
-        required
-        inputMode="decimal"
-        value={amount}
-        onChange={(event) => onAmount(event.target.value)}
-      />
-    </div>
+    <MoneyField
+      id="transaction-amount"
+      currency="COP"
+      currencyLabel="COP"
+      required
+      disabled={false}
+      value={amount}
+      onChange={onAmount}
+    />
     <div className="flex flex-col gap-2">
       <Label htmlFor="transaction-counterparty">Contraparte (opcional)</Label>
       <Input
@@ -283,7 +282,12 @@ const CaptureForm = ({
         >
           Cancelar
         </Button>
-        <Button type="submit" disabled={locked}>
+        <Button
+          type="submit"
+          disabled={
+            locked || Option.isNone(parseMoneyInput({ text: draft.amount, currency: "COP" }))
+          }
+        >
           {props.status === "saving" ? "Guardando…" : "Registrar"}
         </Button>
       </div>
@@ -303,7 +307,13 @@ export const ManualTransactionCapture = (props: CaptureProps): JSX.Element => {
   }));
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    if (props.status === "saving" || props.status === "uncertain") return;
+    if (
+      props.status === "saving" ||
+      props.status === "uncertain" ||
+      Option.isNone(parseMoneyInput({ text: draft.amount, currency: "COP" }))
+    ) {
+      return;
+    }
     props.onStatus("saving");
     submit({
       ...draft,

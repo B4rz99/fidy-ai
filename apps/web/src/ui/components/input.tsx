@@ -7,6 +7,7 @@ import { cn } from "@/ui/class-names";
 const inputVariants = cva("", {
   variants: { variant: { default: "", amount: "text-right tabular-nums" } },
 });
+/** Controlled onValueChange preserves raw text; decimal onChange accepts one separator. */
 const Input = ({
   className,
   type,
@@ -14,7 +15,9 @@ const Input = ({
   inputMode,
   variant = "default",
   ...props
-}: React.ComponentProps<"input"> & VariantProps<typeof inputVariants>): React.JSX.Element => (
+}: React.ComponentProps<"input"> &
+  Pick<React.ComponentProps<typeof InputPrimitive>, "onValueChange"> &
+  VariantProps<typeof inputVariants>): React.JSX.Element => (
   <InputPrimitive
     type={type}
     data-slot="input"

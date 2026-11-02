@@ -581,3 +581,10 @@ by at least one second; explicit Create/Skip flushes remain immediate and revisi
 
 Money presentation retains at most 32 locale/currency/precision formatter configurations. The
 cache contains no amounts or User data; exact decimal parsing and rounding remain unchanged.
+
+Transaction registration and individual/bulk correction interpret amount drafts with `es-CO`
+separators: periods group thousands, commas separate fractional digits, and ungrouped integers
+remain valid. Malformed grouping, foreign separator conventions, nonpositive values and excess
+Currency precision are rejected before submission. Existing Money opens as a plain decimal-comma
+draft; the shared input policy decodes through the canonical Transaction Money codec without
+floating-point conversion. Saving remains the form's existing single action.

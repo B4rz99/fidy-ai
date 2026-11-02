@@ -134,6 +134,7 @@ const signInThroughBrowser = ({
       | "budget"
       | "budgetEditing"
       | "pagination"
+      | "moneyInput"
       | "access"
       | "privacy"
       | "privacyRenewal"
@@ -321,6 +322,10 @@ export const signInDashboardThroughCore = (input: SignInFixture): Promise<void> 
 /** Budget mutations have their own User so they cannot change another journey's Widget data. */
 export const signInBudgetThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity({ ...input, identity: "budget", clockMode: "controlled" });
+/** Money entry mutations use their own User without changing another journey's history. */
+export const signInMoneyInputThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithIdentity({ ...input, identity: "moneyInput", clockMode: "controlled" });
+
 /** Independent retained history spanning more than one canonical page. */
 export const signInPaginationThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity({ ...input, identity: "pagination", clockMode: "controlled" });

@@ -380,6 +380,7 @@ const checkTransactionForm = Effect.fnUntraced(function* (page: Page, theme: The
     exact: true,
   });
   const submit = page.getByRole("button", { name: "Registrar", exact: true });
+  yield* Effect.tryPromise((signal) => amount.fill("13500", { signal }));
   yield* Effect.tryPromise((signal) =>
     page.getByRole("heading", { name: "Registrar transacción", exact: true }).click({ signal })
   );
@@ -410,7 +411,6 @@ const checkTransactionForm = Effect.fnUntraced(function* (page: Page, theme: The
   );
   yield* contrast(notes, "outlineColor", minimumControlContrast);
   yield* capture(page, `transactions-notes-focus-${theme}`);
-  yield* Effect.tryPromise((signal) => amount.fill("13500", { signal }));
   yield* Effect.tryPromise((signal) => submit.click({ signal }));
   yield* Effect.tryPromise((signal) =>
     expect(page.getByRole("alert")).toContainText("No pudimos confirmar el registro", { signal })

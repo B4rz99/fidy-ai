@@ -1,0 +1,19 @@
+.agents/skills/code-review/SKILL.md
+  s_45a231b63e620e::t_3c62a6e480d1d4 3,62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b953d35d34fc86c6a2a19aceddf6741f1350dfe6",
+  "prompts": {},
+  "sessions": {
+    "s_45a231b63e620e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19e58-ba89-7882-8934-6c83c601e2c8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

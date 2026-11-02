@@ -1,3 +1,5 @@
+import { SubscriptionCancellationManagement } from "./cancellation";
+import { makeCancellationCommand, subscriptionStatusQuery } from "./cancellation-command";
 import { SubscriptionIntroduction } from "@/ui/components/subscription-introduction";
 import { SubscriptionInputDecoration } from "@/ui/components/subscription-input-decoration";
 import { Input } from "@/ui/components/input";
@@ -730,7 +732,11 @@ const PaymentDetails = ({
   </section>
 );
 
-type SubscriptionStandingPresentation = Readonly<{ state: StandingViewState; refresh: () => void }>;
+type SubscriptionStandingPresentation = Readonly<{
+  state: StandingViewState;
+  refresh: () => void;
+  management: JSX.Element;
+}>;
 const hasPaidAccess = (state: StandingViewState): boolean =>
   state._tag === "Ready" &&
   state.standing.accessTier === "pro" &&
@@ -885,6 +891,7 @@ const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
         ) : (
           <>
             <SubscriptionStandingView state={standing.state} onRetry={standing.refresh} />
+            {standing.management}
             {!paid && (
               <OfferOverview
                 selection={selection}
@@ -1001,6 +1008,7 @@ const StandingWithoutOffers = ({
   <div className="subscription-columns" data-paid={hasPaidAccess(standing.state)}>
     <div className="subscription-main">
       <SubscriptionStandingView state={standing.state} onRetry={standing.refresh} />
+      {standing.management}
       <div className="subscription-offers-feedback">{children}</div>
     </div>
     <SubscriptionSummary
@@ -1040,13 +1048,12 @@ export const SubscriptionOffersView = ({
 const subscriptionOffersQuery = Atom.family((client: FidyClient) =>
   client.query("subscription", "listSubscriptionOffers", {})
 );
-const subscriptionStatusQuery = Atom.family((client: FidyClient) =>
-  client.query("subscription", "getSubscriptionStatus", {})
-);
 
 const useSubscriptionStanding = (): SubscriptionStandingPresentation => {
   const router = useRouter();
-  const query = subscriptionStatusQuery(router.options.context.apiClient);
+  const client = router.options.context.apiClient;
+  const [cancellation] = useState(() => client.pipe(makeCancellationCommand));
+  const query = subscriptionStatusQuery(client);
   const status = useAtomValue(query);
   const refresh = useAtomRefresh(query);
   const view = presentCanonicalQuery(status);
@@ -1054,6 +1061,7 @@ const useSubscriptionStanding = (): SubscriptionStandingPresentation => {
     state:
       view._tag === "Ready" ? { _tag: "Ready", standing: view.value.data } : { _tag: view._tag },
     refresh,
+    management: <SubscriptionCancellationManagement client={client} command={cancellation} />,
   };
 };
 

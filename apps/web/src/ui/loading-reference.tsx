@@ -28,6 +28,7 @@ import {
   OffersSkeleton,
   PaymentFormSkeleton,
   PaymentMethodsSkeleton,
+  SubscriptionCancellationSkeleton,
   SubscriptionStandingSkeleton,
 } from "@/ui/components/subscription-loading";
 import { type JSX, type RefCallback, useCallback, useState } from "react";
@@ -227,6 +228,12 @@ const previews = [
     frame: "subscription",
     context: "Lectura del estado de suscripción y acceso.",
     render: (): JSX.Element => <SubscriptionStandingSkeleton />,
+  },
+  {
+    name: "Suscripción · renovaciones",
+    frame: "subscription",
+    context: "Lectura inicial antes de ofrecer cancelación o recuperación.",
+    render: (): JSX.Element => <SubscriptionCancellationSkeleton />,
   },
   {
     name: "Suscripción · métodos",

@@ -41,7 +41,7 @@ const offer = (id: string, billingPeriod: Offer["billingPeriod"], amount: string
   },
   paymentMethods: ["card", "nequi", "daviplata"],
 });
-const offers = [
+export const offers = [
   offer("15520000-0000-4000-8000-000000000010", "weekly", "9900"),
   offer(monthlyId, "monthly", "28900"),
   offer("15520000-0000-4000-8000-000000000012", "yearly", "289900"),
@@ -73,9 +73,10 @@ const freeStanding = {
   accessTier: "free",
   trialPeriod: makeUser().trialPeriod,
   paidSubscription: null,
+  cancellation: null,
   recentAttempts: [],
 };
-const paidStanding = {
+export const paidStanding = {
   ...freeStanding,
   accessTier: "pro",
   paidSubscription: {

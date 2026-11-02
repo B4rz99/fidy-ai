@@ -8561,6 +8561,16 @@
           "accessTier": {
             "$ref": "#/components/schemas/AccessTier"
           },
+          "cancellation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubscriptionCancellation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "paidSubscription": {
             "anyOf": [
               {
@@ -8586,6 +8596,7 @@
           "accessTier",
           "trialPeriod",
           "paidSubscription",
+          "cancellation",
           "recentAttempts"
         ],
         "type": "object"

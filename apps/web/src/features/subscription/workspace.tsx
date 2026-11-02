@@ -257,7 +257,7 @@ const RecentAttempts = ({
     </span>
     <div className="subscription-history-body">
       <h2 id="subscription-history-title">Intentos de cobro recientes</h2>
-      <Table aria-labelledby="subscription-history-title">
+      <Table aria-labelledby="subscription-history-title" tabIndex={0}>
         <TableHeader>
           <TableRow>
             {["Fecha", "Período", "Importe", "Estado"].map((label) => (

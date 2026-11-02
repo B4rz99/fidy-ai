@@ -54,6 +54,7 @@ const standing = {
   accessTier: "free",
   trialPeriod: makeUser().trialPeriod,
   paidSubscription: null,
+  cancellation: null,
   recentAttempts: [],
 };
 

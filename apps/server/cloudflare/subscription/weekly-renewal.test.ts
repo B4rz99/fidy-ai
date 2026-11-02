@@ -1298,6 +1298,12 @@ const cancellationFixture = (
   Effect.gen(function* () {
     const db = yield* fromPromise(() => fixture(method));
     yield* fromPromise(() =>
+      db
+        .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
+        .bind(userId, dueAt - 1209600000, dueAt - 604800000)
+        .run()
+    );
+    yield* fromPromise(() =>
       db.exec(`CREATE TABLE web_sessions (id TEXT PRIMARY KEY,user_id TEXT,token_digest BLOB,revoked_at_ms INTEGER,idle_expires_at_ms INTEGER,hard_expires_at_ms INTEGER);
 
 CREATE TABLE transaction_audit (user_id TEXT,operation TEXT,occurred_at_ms INTEGER);
@@ -1477,6 +1483,32 @@ it.each(["card", "nequi", "daviplata"] as const)(
             cancelledAt: "2026-10-13T14:59:59.000Z",
             paidThrough: "2026-10-13T15:00:00.000Z",
             sourceCancellation: method === "daviplata" ? "void-pending" : "detached",
+          },
+        });
+        const standing = yield* executeProtectedSubscriptionQuery({
+          db,
+          subject: { id: enrollmentId, userId, digest: new Uint8Array(32) },
+          operation: "subscription.getSubscriptionStatus",
+        });
+        expect(standing.status).toBe(200);
+        const foreignStanding = yield* executeProtectedSubscriptionQuery({
+          db,
+          subject: {
+            id: enrollmentId,
+            userId: "10000000-0000-4000-8000-000000000009",
+            digest: new Uint8Array(32),
+          },
+          operation: "subscription.getSubscriptionStatus",
+        });
+        expect(foreignStanding.status).toBe(401);
+        expect(yield* fromPromise(() => foreignStanding.json())).not.toHaveProperty("data");
+        expect(yield* fromPromise(() => standing.json())).toMatchObject({
+          data: {
+            cancellation: {
+              cancelledAt: "2026-10-13T14:59:59.000Z",
+              paidThrough: "2026-10-13T15:00:00.000Z",
+              sourceCancellation: method === "daviplata" ? "void-pending" : "detached",
+            },
           },
         });
         expect((yield* cancel(db, cancelledAt + 500)).status).toBe(200);

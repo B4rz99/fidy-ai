@@ -485,3 +485,23 @@
 [data-recurring-slot="workspace"] [data-recurring-slot="context-panel"] {
   height: 100%;
 }
+[data-recurring-slot="plan-status"] {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--recurring-line, var(--fidy-border-decorative-divider));
+}
+[data-recurring-slot="plan-status-actions"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+[data-recurring-slot="plan-status-actions"] > [data-slot="button"] {
+  margin-left: auto;
+}
+[data-recurring-slot="plan-status"] > p {
+  color: var(--fidy-text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}

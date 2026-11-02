@@ -3,10 +3,25 @@ import { Button } from "@/ui/components/button";
 import {
   RecurringColumns,
   RecurringContextPanel,
+  RecurringPlanStatus,
   RecurringSurface,
   RecurringThemeControl,
 } from "@/ui/components/recurring";
 import "@/ui/components/application.css";
+
+const PlanStatusExample = (): JSX.Element => {
+  const [paused, setPaused] = useState(false);
+  return (
+    <RecurringPlanStatus
+      status={paused ? "paused" : "active"}
+      action={
+        <Button variant={paused ? "default" : "destructive"} onClick={() => setPaused(!paused)}>
+          {paused ? "Reanudar plan" : "Pausar plan"}
+        </Button>
+      }
+    />
+  );
+};
 
 export const RecurringReference = ({
   dark,
@@ -39,6 +54,7 @@ export const RecurringReference = ({
               onClose={() => setOpen(false)}
             >
               <p>Panel contextual de ejemplo. No crea un plan ni mueve dinero.</p>
+              <PlanStatusExample />
               <Button variant="outline" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>

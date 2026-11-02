@@ -776,6 +776,15 @@ The global header spans the entire workspace and retains the base canvas color, 
 
 The component ownership is `src/ui/components/recurring.tsx` and `recurring.css`; `src/ui/recurring-reference.tsx` demonstrates the composition. Feature code owns data and interactions, not a separate visual token system.
 
+Occurrence details show the current plan lifecycle in a compact row above the occurrence's own
+tracking status. `RecurringPlanStatus` and `RecurringPlanBadge` share the lifecycle labels and
+semantic treatments with plan management. Active plans offer the coral destructive “Pausar plan”;
+paused plans offer the lime “Reanudar plan”; stopped plans offer neither. Explain a pause as
+“No aparecerán nuevas fechas de este plan mientras esté pausado. Los registros existentes se conservan.”
+Confirmed pause/resume keeps the detail open and names the affected plan and resulting state in
+accessible success feedback. The planning owner retains that feedback when an occurrence disappears
+from the projection or the panel closes; pending, rejected and uncertain writes remain distinct.
+
 ## Settings workspace
 
 Cuenta, Privacidad and Accesos use the approved continuous canvas: a 40px desktop

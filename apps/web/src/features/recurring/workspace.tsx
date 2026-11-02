@@ -14,6 +14,7 @@ import {
 import { useTheme } from "@/ui/components/theme";
 import { MonthlyOverview, RecurringToolbar } from "./controls";
 import { OccurrenceDetails } from "./details";
+import { PlanLifecycle } from "./lifecycle";
 import { FiltersForm } from "./filters";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -26,10 +27,12 @@ import {
   type Category,
   type Filters,
   type Occurrence,
+  type Plan,
   type PlanInput,
   type Save,
   type Workspace,
   planFromTransaction,
+  type planStatus,
 } from "./model";
 
 type Panel =
@@ -45,6 +48,7 @@ type Props = Readonly<{
   view: Workspace;
   categories: ReadonlyArray<Category>;
   save: Save;
+  statusFor: typeof planStatus;
   disabled: boolean;
   filters: Filters;
   applyFilters: (filters: Filters) => void;
@@ -60,51 +64,91 @@ const selectedOccurrence = (
     [...view.occurrences, ...view.previous],
     (item) => item.planId === panel.planId && item.date === panel.date
   );
+type EditorProps = Pick<Props, "view" | "categories" | "disabled" | "save" | "statusFor">;
+type SheetProps = EditorProps &
+  Pick<Props, "notice"> &
+  Readonly<{
+    panel: Option.Option<Panel>;
+    setPanel: (panel: Option.Option<Panel>) => void;
+  }>;
 const Editor = ({
   panel,
   view,
   categories,
   disabled,
   save,
-}: Readonly<{
-  panel: Panel;
-  view: Workspace;
-  categories: ReadonlyArray<Category>;
-  disabled: boolean;
-  save: Save;
-}>): JSX.Element => {
+  statusFor,
+}: EditorProps & Readonly<{ panel: Panel }>): JSX.Element => {
   if (panel.kind === "occurrence") {
     const item = selectedOccurrence(view, panel);
+    const plan = view.document.plans.find((entry) => entry.id === panel.planId);
+    const lifecycle =
+      plan === undefined ? null : (
+        <PlanLifecycle
+          plan={plan}
+          status={statusFor(plan)}
+          save={save}
+          disabled={disabled}
+          today={view.today}
+        />
+      );
     if (Option.isNone(item)) {
       return (
-        <p>Este elemento ya no está en la vista actual. Cierra el detalle y revisa los filtros.</p>
+        <div className="grid gap-5">
+          {lifecycle}
+          <p>Esta fecha ya no aparece en la vista actual. Los registros existentes se conservan.</p>
+        </div>
       );
     }
     return (
-      <OccurrenceDetails
-        item={item.value}
-        categories={categories}
-        disabled={disabled}
-        save={save}
-        today={view.today}
-      />
+      <div className="grid gap-5">
+        {lifecycle}
+        <OccurrenceDetails
+          item={item.value}
+          categories={categories}
+          disabled={disabled}
+          save={save}
+          today={view.today}
+        />
+      </div>
     );
   }
   if (panel.kind === "create") {
     return <CreatePlan panel={panel} categories={categories} disabled={disabled} save={save} />;
   }
-  const latest = view.document.plans.find((plan) => plan.id === panel.planId)?.revisions.at(-1);
-  return latest === undefined ? (
+  return <PlanEditor planId={panel.planId} {...{ view, categories, disabled, save, statusFor }} />;
+};
+const PlanEditor = ({
+  planId,
+  view,
+  categories,
+  disabled,
+  save,
+  statusFor,
+}: EditorProps & Readonly<{ planId: Plan["id"] }>): JSX.Element => {
+  const plan = view.document.plans.find((entry) => entry.id === planId);
+  const latest = plan?.revisions.at(-1);
+  return plan === undefined || latest === undefined ? (
     <p>Plan no disponible.</p>
   ) : (
-    <PlanForm
-      initial={latest.plan}
-      categories={categories}
-      disabled={disabled}
-      onSubmit={(plan) =>
-        save({ kind: "edit", planId: panel.planId, date: view.today, scope: "forward", plan })
-      }
-    />
+    <div className="grid gap-5">
+      <PlanLifecycle
+        plan={plan}
+        status={statusFor(plan)}
+        save={save}
+        disabled={disabled}
+        today={view.today}
+      />
+      <PlanForm
+        key={JSON.stringify(latest.plan)}
+        initial={latest.plan}
+        categories={categories}
+        disabled={disabled}
+        onSubmit={(input) =>
+          save({ kind: "edit", planId, date: view.today, scope: "forward", plan: input })
+        }
+      />
+    </div>
   );
 };
 const Matching = ({ view }: Pick<Props, "view">): JSX.Element => (
@@ -222,6 +266,13 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
   const [calendar, setCalendar] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(Object.keys(filters).length > 0);
   const [panel, setPanel] = useState<Option.Option<Panel>>(() => Option.none());
+  const save: Save = (edit) =>
+    props.save(edit, () => {
+      if (edit.kind !== "lifecycle" || edit.action === "stop") {
+        setPanel((current) => (current === panel ? Option.none() : current));
+      }
+    });
+  const editing = { ...props, save };
   const open = (item: Occurrence): void =>
     setPanel(Option.some({ kind: "occurrence", planId: item.planId, date: item.date }));
   const create = (): void =>
@@ -246,10 +297,10 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
       {Option.isNone(panel) ? props.notice : null}
       <RecurringColumns
         open={Option.isSome(panel)}
-        panel={<EditorSheet {...props} panel={panel} setPanel={setPanel} />}
+        panel={<EditorSheet {...editing} panel={panel} setPanel={setPanel} />}
       >
         <WorkspaceBody
-          props={props}
+          props={editing}
           tab={tab}
           calendar={calendar}
           setCalendar={setCalendar}
@@ -315,6 +366,7 @@ const WorkspaceBody = ({
           open={(plan) => setPanel(Option.some({ kind: "plan", planId: plan.id }))}
           disabled={disabled}
           save={save}
+          statusFor={props.statusFor}
         />
       )}
     </main>
@@ -329,11 +381,8 @@ const EditorSheet = ({
   categories,
   disabled,
   save,
-}: Pick<Props, "view" | "categories" | "disabled" | "save" | "notice"> &
-  Readonly<{
-    panel: Option.Option<Panel>;
-    setPanel: (panel: Option.Option<Panel>) => void;
-  }>): JSX.Element => {
+  statusFor,
+}: SheetProps): JSX.Element => {
   const { theme, toggle } = useTheme();
   const active = useRouterState({
     select: (state) => state.location.pathname === "/app/recurring",
@@ -344,7 +393,11 @@ const EditorSheet = ({
       if (selected.kind === "occurrence") {
         return selectedOccurrence(view, selected).pipe(
           Option.map((item) => item.plan.name),
-          Option.getOrElse(() => "Recurrente no disponible")
+          Option.getOrElse(
+            () =>
+              view.document.plans.find((plan) => plan.id === selected.planId)?.revisions.at(-1)
+                ?.plan.name ?? "Recurrente no disponible"
+          )
         );
       }
       return selected.kind === "create" ? "Nuevo recurrente" : "Editar recurrente";
@@ -366,6 +419,7 @@ const EditorSheet = ({
           categories={categories}
           disabled={disabled}
           save={save}
+          statusFor={statusFor}
         />
       ) : null}
       {Option.isSome(panel) && panel.value.kind !== "occurrence" ? (

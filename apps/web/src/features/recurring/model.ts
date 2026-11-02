@@ -12,7 +12,11 @@ export type Filters = Omit<
   "month" | "previousMonth" | "view"
 >;
 export type Category = CanonicalSuccess<"categories.listCategories">["data"][number];
-export type Save = (edit: Edit) => void;
+export type Save = (edit: Edit, onSaved?: () => void) => void;
+export const planStatus = (plan: Plan): "stopped" | "paused" | "active" => {
+  if (plan.stoppedOn !== undefined) return "stopped";
+  return plan.pauses.some((pause) => pause.through === undefined) ? "paused" : "active";
+};
 export const frequencies = [
   ["weekly", "Cada semana"],
   ["fortnightly", "Cada 2 semanas"],

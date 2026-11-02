@@ -1,0 +1,21 @@
+.agents/skills/code-review/agents/openai.yaml
+  s_45a231b63e620e::t_1e02c0caf44d96 3
+.agents/skills/code-review/SKILL.md
+  s_45a231b63e620e::t_1e02c0caf44d96 3,6,8-9,12,14-16,49,51,55-61,63,87,89,95-97,99,103,105,107,111,113,117,119,123-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d2548652b012849d3abf35c9e9fa4268d93ba2f0",
+  "prompts": {},
+  "sessions": {
+    "s_45a231b63e620e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19e58-ba89-7882-8934-6c83c601e2c8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

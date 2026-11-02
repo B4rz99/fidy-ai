@@ -1,0 +1,27 @@
+apps/web/e2e/budgets.spec.ts
+  s_d8d9a849e0c227::t_baa30440dfcd64 932-992
+apps/web/src/features/budgets/deletion.tsx
+  s_d8d9a849e0c227::t_9e9f0d72421aed 1,5-9,42,44,46-52,55-61
+apps/web/src/features/budgets/editor.tsx
+  s_d8d9a849e0c227::t_aa4485cd57bd65 5,172-180,187,193,209-210,224,226-230,259-266
+apps/web/src/features/budgets/workspace.tsx
+  s_d8d9a849e0c227::t_c603a4ea73e617 2,96-98,145-149
+apps/web/src/features/budgets/write-feedback.tsx
+  s_d8d9a849e0c227::t_82d49fd4fc322b 1-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34ab113440d07e60ea613c5f5fa3501e29ad4f0d",
+  "prompts": {},
+  "sessions": {
+    "s_d8d9a849e0c227": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19c82-6f9f-71c1-9ee2-a9047dc3c640",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+apps/web/src/features/subscription/cancellation.tsx
+  s_a875b3cd0b32e9::t_ff2d82cc9b9bdb 210-211,228-229
+apps/server/package.json
+  s_a875b3cd0b32e9::t_d894e51edf52c2 321
+apps/web/package.json
+  s_a875b3cd0b32e9::t_725bc8887647c8 64
+bun.lock
+  s_a875b3cd0b32e9::t_3985f94ed67d14 81,150,167,369,371,373,375,377,2249,2251,2511
+infra/cloudflare/package.json
+  s_a875b3cd0b32e9::t_2f9c91b85e3188 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9690010886c3730ba055818f4e3b7644e911d871",
+  "prompts": {},
+  "sessions": {
+    "s_a875b3cd0b32e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19c82-ac78-71d2-a32a-c37f0bf6bb91",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

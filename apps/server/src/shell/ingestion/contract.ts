@@ -1,3 +1,4 @@
+import { UtcTimestamp } from "~/core/_shared/time";
 import { InterpretationRevision } from "~/core/interpretation-evidence/contract";
 import { Data, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api";
@@ -19,6 +20,7 @@ import {
   StatementSubmissionId,
   SubmitForExtractionInput,
   maximumStatementBytes,
+  reviewPageSize,
 } from "~/core/ingestion/contract";
 
 import {
@@ -83,7 +85,40 @@ export const ReviewMaterial = Schema.Union([
   }),
 ]);
 
+export const maximumReviewExcerptCharacters = 180;
+export const ReviewPageContext = Schema.Struct({
+  items: Schema.Array(
+    Schema.Struct({
+      id: NeedsReviewItemId,
+      reference: Schema.NonEmptyString,
+      expiresAt: UtcTimestamp,
+      excerpt: Schema.OptionFromOptionalKey(
+        Schema.String.check(Schema.isMaxLength(maximumReviewExcerptCharacters))
+      ),
+    })
+  ).check(Schema.isMaxLength(reviewPageSize)),
+});
+
 export const IngestionGroup = HttpApiGroup.make("ingestion")
+  .add(
+    HttpApiEndpoint.get("getReviewPageContext", "/ingestion/review-workspace/context", {
+      query: ReviewWorkspaceQuery,
+      success: OperationResponse(ReviewPageContext),
+      error: ValidationFailed,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Browser-only, no-store source references and unconfirmed excerpts for one inbox page. At most 50 excerpts of 180 characters; expired or unavailable originals are omitted. Unavailable as an agent tool."
+      )
+      .annotateMerge(
+        operationPolicy({
+          access: webSessionOnly,
+          requiredTier: "free",
+          agentConfirmation: "not-required",
+          kind: "query",
+        })
+      )
+  )
   .add(
     HttpApiEndpoint.get("getReviewMaterial", "/ingestion/review-workspace/:id/material", {
       params: Schema.Struct({ id: NeedsReviewItemId }),

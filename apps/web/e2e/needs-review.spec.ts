@@ -98,6 +98,13 @@ test("saves an initial draft promptly and spaces continued autosaves", ({ page }
 
 const reviewRoute = (route: Route): Promise<void> => {
   const path = new URL(route.request().url()).pathname;
+  if (path.endsWith("/context")) {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response({ items: [{ id, reference: "Fila 1", expiresAt: item.expiresAt }] }),
+    });
+  }
   if (path.endsWith("/material")) {
     return route.fulfill({
       status: 200,
@@ -251,6 +258,24 @@ const workspaceFixture = (route: Route, entries: Fixture[], url: URL): Promise<v
   const visible = entries.filter((candidate) =>
     filter === "history" ? candidate.status !== "pending" : candidate.status === filter
   );
+  if (url.pathname.endsWith("/context")) {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response({
+        items: visible
+          .slice(
+            Number(url.searchParams.get("offset") ?? "0"),
+            Number(url.searchParams.get("offset") ?? "0") + reviewPageSize
+          )
+          .map((entry) => ({
+            id: entry.id,
+            reference: `Fila ${entries.indexOf(entry) + 1}`,
+            expiresAt: item.expiresAt,
+          })),
+      }),
+    });
+  }
   return route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -313,22 +338,20 @@ test("skips and restores in bulk, advances, and preserves edited drafts", ({ pag
         page.getByRole("button", { name: "Omitir", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` })).toHaveCount(0)
+        expect(page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 1" })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
-        expect(
-          page.getByRole("checkbox", { name: `Seleccionar Extracto ${secondId}` })
-        ).toBeVisible()
+        expect(page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 2" })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Deshacer omisión" }).click()
       );
       yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(2));
       yield* Effect.tryPromise(() =>
-        page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` }).click()
+        page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 1" }).click()
       );
       yield* Effect.tryPromise(() =>
-        page.getByRole("checkbox", { name: `Seleccionar Extracto ${secondId}` }).click()
+        page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 2" }).click()
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Omitir 2 seleccionados" }).click()
@@ -363,12 +386,10 @@ test("confirms creation with a toast and continues reviewing without leaving the
       );
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/needs-review$/u));
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` })).toHaveCount(0)
+        expect(page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 1" })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
-        expect(
-          page.getByRole("checkbox", { name: `Seleccionar Extracto ${secondId}` })
-        ).toBeVisible()
+        expect(page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 2" })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Historial", exact: true }).click()
@@ -615,7 +636,9 @@ test("opens rows without bulk selection and keeps history discoverable", ({ page
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Abrir Extracto" }).click());
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` })).not.toBeChecked()
+        expect(
+          page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 1" })
+        ).not.toBeChecked()
       );
       yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
       yield* Effect.tryPromise(() =>
@@ -1567,3 +1590,141 @@ for (const width of [compactDesktopWidth, wideDesktopWidth]) {
     );
   });
 }
+
+const contextMobileWidth = 390;
+const contextDesktopWidth = 1440;
+
+const identifyIncompleteEntries = (count: number): Fixture[] =>
+  Array.from({ length: count }, (_, index) => ({
+    id: `24000000-0000-4000-8000-${String(fixtureStart + index).padStart(uuidTailLength, "0")}`,
+    revision: 0,
+    status: "pending",
+    draft: undefined,
+  }));
+
+for (const width of [contextMobileWidth, contextDesktopWidth]) {
+  test(`identifies and searches incomplete originals without highlighting at ${width}px`, ({
+    page,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const entries = identifyIncompleteEntries(reviewPageSize);
+        yield* Effect.tryPromise(() => page.setViewportSize({ width, height: 900 }));
+        yield* Effect.tryPromise(() => installUser(page));
+        yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+        yield* Effect.tryPromise(() =>
+          page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+        );
+        yield* Effect.tryPromise(() =>
+          page.route(
+            `${apiOrigin}/ingestion/review-workspace/context**`,
+            incompleteContextRoute(entries)
+          )
+        );
+        yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+        const first = page.getByRole("checkbox", {
+          name: "Seleccionar Extracto Fila 1",
+          exact: true,
+        });
+        yield* Effect.tryPromise(() =>
+          expect(first).toHaveAccessibleDescription(
+            /Original sin confirmar: 2026-10-01,25000,Mercado/u
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          expect(
+            page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 3", exact: true })
+          ).toHaveAccessibleDescription(/Sin fragmento disponible/u)
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.locator('[data-review="inbox"] img')).toHaveCount(0)
+        );
+        yield* Effect.tryPromise(() =>
+          page.getByRole("textbox", { name: "Buscar pendientes en esta página" }).fill("Mercado")
+        );
+        yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
+        yield* Effect.tryPromise(() =>
+          expect(page.getByText("2026-10-01,25000,Mercado", { exact: true })).toBeVisible()
+        );
+        yield* Effect.tryPromise(() => expect(page.locator("mark")).toHaveCount(0));
+        yield* Effect.tryPromise(() => first.check());
+        yield* Effect.tryPromise(() => expect(first).toBeChecked());
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Abrir Extracto Fila 1", exact: true }).click()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByLabel("Valor", { exact: true })).toHaveValue("")
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByText(/^Solo en esta página/u)).toBeVisible()
+        );
+      })
+    ));
+}
+
+const incompleteContextRoute =
+  (entries: ReadonlyArray<Fixture>) =>
+  (route: Route): Promise<void> =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response({
+        items: entries.map((entry, index) => ({
+          id: entry.id,
+          reference: `Fila ${index + 1}`,
+          expiresAt: item.expiresAt,
+          ...(index === 2
+            ? {}
+            : {
+                excerpt:
+                  index === 0
+                    ? "2026-10-01,25000,Mercado"
+                    : '2026-10-02,18000,Transporte <img src=x onerror="alert(1)">',
+              }),
+        })),
+      }),
+    });
+
+test("removes expired source context from page search and accessible descriptions", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        page.clock.install({
+          time: DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T11:59:00Z")),
+        })
+      );
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(
+          `${apiOrigin}/ingestion/review-workspace/context**`,
+          incompleteContextRoute([{ id, revision: 0, status: "pending", draft: undefined }])
+        )
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      const search = page.getByRole("textbox", { name: "Buscar pendientes en esta página" });
+      const checkbox = page.getByRole("checkbox", {
+        name: "Seleccionar Extracto Fila 1",
+        exact: true,
+      });
+      yield* Effect.tryPromise(() => expect(checkbox).toHaveAccessibleDescription(/Mercado/u));
+      yield* Effect.tryPromise(() => search.fill("Mercado"));
+      yield* Effect.tryPromise(() => expect(checkbox).toHaveCount(1));
+      yield* Effect.tryPromise(() => page.clock.fastForward("01:01"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Sin elementos en esta vista" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => search.fill(""));
+      yield* Effect.tryPromise(() => expect(checkbox).toBeDisabled());
+      yield* Effect.tryPromise(() =>
+        expect(checkbox).toHaveAccessibleDescription(/Original vencido/u)
+      );
+      yield* Effect.tryPromise(() => expect(checkbox).not.toHaveAccessibleDescription(/Mercado/u));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("2026-10-01,25000,Mercado", { exact: true })).toHaveCount(0)
+      );
+    })
+  ));

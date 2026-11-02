@@ -23,3 +23,12 @@ export const useReviewExpired = (item: Item): boolean => {
   const expired = useAtomValue(deadlineExpired(DateTime.toEpochMillis(item.expiresAt)));
   return expired || reviewHasExpired(item);
 };
+
+/** Wake page-local search when the next retained original or draft reaches its deadline. */
+export const useReviewPageExpiry = (items: ReadonlyArray<Pick<Item, "expiresAt">>): void => {
+  const current = DateTime.toEpochMillis(DateTime.nowUnsafe());
+  const future = items
+    .map((item) => DateTime.toEpochMillis(item.expiresAt))
+    .filter((time) => time > current);
+  useAtomValue(deadlineExpired(future.length === 0 ? 0 : Math.min(...future)));
+};

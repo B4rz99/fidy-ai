@@ -63,6 +63,12 @@ protected request retains the bound header, server checks, and authentication-li
 Navigation requests Review counts with a zero-row window; the Review workspace retains its
 default 50-record window and the same User-scoped counts and authority checks.
 
+Review loads source context through the browser-only `ingestion.getReviewPageContext` query,
+separately from the metadata workspace. The authentication registry owns its short idle retention;
+page deadline subscriptions suppress expired excerpts in rows, search and accessible descriptions.
+Search covers the current page's displayed draft facts, source references and unconfirmed excerpts;
+visible guidance states that scope. Context read failure retains explicit retry and metadata access.
+
 Transactions requests 25 records for its initial view, then uses the existing default 100-record
 continuations. The canonical query accepts an integer limit from 1 through 100, defaulting to 100;
 the User-owned keyset cursor remains valid across page sizes. Display summaries still describe

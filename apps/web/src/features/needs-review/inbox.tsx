@@ -1,3 +1,5 @@
+import { type PageContexts, sourceExcerpt } from "./source-context";
+import { useId } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { File01Icon, Image01Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { Badge } from "@/ui/components/badge";
@@ -11,6 +13,8 @@ import { reviewAmount, reviewExpiry, reviewTitle } from "./presentation";
 
 const pageSize = 50;
 export type InboxProps = Readonly<{
+  contexts: PageContexts;
+  contextLoading: boolean;
   view: Workspace;
   selected: Option.Option<Item["id"]>;
   checked: ReadonlyArray<Item["id"]>;
@@ -73,19 +77,31 @@ export const ReviewPagination = (
 
 const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>): JSX.Element => {
   const expired = useReviewExpired(item);
+  const description = useId();
+  const context = Option.fromUndefinedOr(props.contexts.get(item.id));
+  const position = props.page + props.view.items.indexOf(item) + 1;
+  const reference = Option.match(context, {
+    onNone: () => `Elemento ${position}`,
+    onSome: (entry) => entry.reference,
+  });
+  const excerpt = sourceExcerpt({ item, context });
+  const evidenceLabel = contextState(expired, props.contextLoading);
+  const actionable = ["pending", "skipped"].includes(item.status);
   return (
     <div data-review="inbox-row" data-active={Option.contains(props.selected, item.id)}>
       <div data-review="row-check">
         <Checkbox
-          aria-label={`Seleccionar ${sources[item.source]} ${item.id}`}
+          aria-label={`Seleccionar ${sources[item.source]} ${reference}`}
+          aria-describedby={description}
           checked={props.checked.includes(item.id)}
-          disabled={expired || (item.status !== "pending" && item.status !== "skipped")}
+          disabled={expired || !actionable}
           onCheckedChange={() => props.toggle(item)}
         />
       </div>
       <button
         type="button"
-        aria-label={`Abrir ${sources[item.source]}`}
+        aria-label={`Abrir ${sources[item.source]} ${reference}`}
+        aria-describedby={description}
         data-review="row-content"
         onClick={() => props.choose(item)}
         aria-current={Option.contains(props.selected, item.id) ? "true" : undefined}
@@ -96,11 +112,18 @@ const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>)
               icon={{ statement: File01Icon, media: Image01Icon, email: Mail01Icon }[item.source]}
               aria-hidden="true"
             />
-            {sources[item.source]}
+            {sources[item.source]} · {reference}
             {item.status === "pending" ? "" : ` · ${statuses[item.status]}`}
           </span>
           <span data-review="row-title">{reviewTitle(item)}</span>
           <span data-review="row-amount">{reviewAmount(item)}</span>
+          <RowContext
+            description={description}
+            position={position}
+            item={item}
+            excerpt={excerpt}
+            evidenceLabel={evidenceLabel}
+          />
           <Badge variant="secondary" data-review="deadline" title={deadline(item)}>
             {reviewExpiry(item)}
           </Badge>
@@ -109,3 +132,37 @@ const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>)
     </div>
   );
 };
+
+const contextState = (expired: boolean, loading: boolean): string => {
+  if (expired) return "Original vencido";
+  return loading ? "Cargando contexto…" : "Sin fragmento disponible";
+};
+
+const RowContext = ({
+  description,
+  position,
+  item,
+  excerpt,
+  evidenceLabel,
+}: Readonly<{
+  description: string;
+  position: number;
+  item: Item;
+  excerpt: Option.Option<string>;
+  evidenceLabel: string;
+}>): JSX.Element => (
+  <span id={description} data-review="row-context">
+    <span className="sr-only">
+      Elemento {position}. {reviewTitle(item)}.{" "}
+    </span>
+    {Option.match(excerpt, {
+      onNone: () => <span data-review="context-state">{evidenceLabel}</span>,
+      onSome: (text) => (
+        <>
+          <span data-review="context-state">Original sin confirmar: </span>
+          <span data-review="context-excerpt">{text}</span>
+        </>
+      ),
+    })}
+  </span>
+);

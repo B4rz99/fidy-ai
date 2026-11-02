@@ -1,13 +1,14 @@
 import { Badge } from "@/ui/components/badge";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Option } from "effect";
-import type { JSX } from "react";
+import { type JSX, type ReactNode, useId } from "react";
 import { Button } from "@/ui/components/button";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { Input } from "@/ui/components/input";
 
 export type Filter = "pending" | "history" | "created" | "skipped" | "expired";
 type Props = Readonly<{
+  contextFeedback: ReactNode;
   filter: Filter;
   select: (status: Filter, offset: number) => void;
   count: Option.Option<number>;
@@ -25,30 +26,41 @@ const filters = [
   { value: "skipped", label: "Omitidas" },
   { value: "expired", label: "Vencidas" },
 ] as const;
-export const ReviewNavigation = (props: Props): JSX.Element => (
-  <nav aria-label="Vistas de revisión" data-review="navigation">
-    <div data-review="tabs">
-      <Button
-        variant={props.filter === "pending" ? "secondary" : "ghost"}
-        aria-pressed={props.filter === "pending"}
-        onClick={() => props.select("pending", 0)}
-      >
-        Pendientes{" "}
-        {Option.isSome(props.count) ? <Badge variant="secondary">{props.count.value}</Badge> : null}
-      </Button>
-      <Button
-        variant={props.filter !== "pending" ? "secondary" : "ghost"}
-        aria-pressed={props.filter !== "pending"}
-        onClick={() => props.select("history", 0)}
-      >
-        Historial
-      </Button>
-    </div>
-    <ReviewFilters {...props} />
-    <RefreshButton variant="ghost" onClick={props.refresh} label="Actualizar" />
-  </nav>
-);
-const ReviewFilters = (props: Props): JSX.Element => (
+export const ReviewNavigation = (props: Props): JSX.Element => {
+  const searchHelp = useId();
+  return (
+    <>
+      <nav aria-label="Vistas de revisión" data-review="navigation">
+        <div data-review="tabs">
+          <Button
+            variant={props.filter === "pending" ? "secondary" : "ghost"}
+            aria-pressed={props.filter === "pending"}
+            onClick={() => props.select("pending", 0)}
+          >
+            Pendientes{" "}
+            {Option.isSome(props.count) ? (
+              <Badge variant="secondary">{props.count.value}</Badge>
+            ) : null}
+          </Button>
+          <Button
+            variant={props.filter !== "pending" ? "secondary" : "ghost"}
+            aria-pressed={props.filter !== "pending"}
+            onClick={() => props.select("history", 0)}
+          >
+            Historial
+          </Button>
+        </div>
+        <ReviewFilters {...props} searchHelp={searchHelp} />
+        <RefreshButton variant="ghost" onClick={props.refresh} label="Actualizar" />
+      </nav>
+      <p data-review="search-help" id={searchHelp}>
+        Solo en esta página. Busca en los datos disponibles y los fragmentos del original.
+        {props.contextFeedback}
+      </p>
+    </>
+  );
+};
+const ReviewFilters = (props: Props & Readonly<{ searchHelp: string }>): JSX.Element => (
   <div data-review="filters">
     {props.filter !== "pending" ? (
       <ChoiceDropdown
@@ -85,7 +97,8 @@ const ReviewFilters = (props: Props): JSX.Element => (
     <div data-review="search">
       <Input
         aria-label="Buscar pendientes en esta página"
-        placeholder="Buscar pendiente…"
+        placeholder="Buscar en esta página"
+        aria-describedby={props.searchHelp}
         value={props.search}
         disabled={props.unavailable}
         onChange={(event) => props.setSearch(event.target.value)}

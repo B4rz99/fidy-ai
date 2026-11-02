@@ -668,6 +668,13 @@ editable draft, deadline notices, save feedback and the individual Confirmar act
 Features keep command authority, serialized autosave, revisions and expiry suppression.
 The history surface preserves skip, restore and Undo without adding bulk confirmation.
 
+Incomplete rows expose an available source reference and a short “Original sin confirmar”
+fragment, separate from editable Transaction facts. Page-local search covers displayed data and
+available fragments, with visible scope guidance and no search-word highlighting. Selection and
+open controls reuse the source reference and describe the unconfirmed fragment. Missing fragments
+and expired originals have explicit text; expired fragments disappear from search and accessible
+descriptions as well as the visible list.
+
 The pattern composes the actual Input, Currency selector, category choices, calendar and
 time controls. `CalendarField appearance="review"` changes only the compact Spanish date
 label; the default calendar appearance and timezone behavior remain shared. Narrow screens

@@ -1,3 +1,4 @@
+import { browseReviewPageContext as browseContext } from "./internal/review-page-context";
 import { browseReviewWorkspace as browseInbox } from "./internal/review-workspace";
 import { browseReviewItem as browseItem } from "./internal/review-detail";
 import { browseReviewMaterial as browseMaterial } from "./internal/review-material";
@@ -208,6 +209,8 @@ export const browseReviewWorkspace = (input: ReviewQueryWork): Effect.Effect<Res
   browseInbox(input);
 export const browseReviewItem = (input: ReviewQueryWork): Effect.Effect<Response> =>
   browseItem(input);
+export const browseReviewPageContext = (input: ReviewQueryWork): Effect.Effect<Response> =>
+  browseContext(input);
 export const browseReviewMaterial = (input: ReviewQueryWork): Effect.Effect<Response> =>
   browseMaterial(input);
 export const prepareReviewEdit = (

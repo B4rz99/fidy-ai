@@ -59,6 +59,7 @@ export const PrivacyTransactions = (): JSX.Element => {
       <TransactionWorkspace
         key={history.generation}
         readOnly
+        monthFilter={Option.none()}
         dateFilter={{ value: date, onChange: setDate }}
         editable={false}
         apiClient={router.options.context.apiClient}

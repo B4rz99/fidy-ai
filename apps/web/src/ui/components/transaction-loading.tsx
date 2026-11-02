@@ -1,6 +1,8 @@
 import type { JSX, ReactNode } from "react";
 import { LoadingRegion } from "./loading-skeletons";
 import { Skeleton } from "./skeleton";
+import { Input } from "./input";
+import { Button } from "./button";
 import { Table, TableBody, TableCell, TableRow } from "./table";
 import "./transactions.css";
 
@@ -127,8 +129,28 @@ export const TransactionsSkeleton = ({
     <div data-transaction-slot="transaction-workspace" data-panel-open="false">
       <header data-transaction-slot="transaction-page-header">
         <h1>Transacciones</h1>
-        {readOnly ? null : <Skeleton className="h-[46px] w-28" />}
+        {readOnly ? null : (
+          <Button disabled>
+            <span className="invisible">+ Registrar</span>
+          </Button>
+        )}
       </header>
+      {readOnly ? null : (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2" inert>
+          <Skeleton className="h-11 w-11" />
+          <Skeleton className="h-5 w-32" />
+          <Input type="month" className="w-auto" disabled />
+          <Skeleton className="h-11 w-11" />
+        </div>
+      )}
+      <div className="px-4 py-2 text-sm">
+        <Skeleton className="w-full">
+          <span className="invisible">
+            Mostrando transacciones en el periodo seleccionado. Búsqueda y resumen sobre los
+            registros cargados que coinciden con los filtros.
+          </span>
+        </Skeleton>
+      </div>
       <div inert>{notice}</div>
       <div data-transaction-slot="transaction-columns">
         <div data-transaction-slot="transaction-records">

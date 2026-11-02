@@ -376,7 +376,7 @@ const signupHistoryJourney = Effect.fn(function* (
   );
   yield* Effect.tryPromise(() => openTransactionsThroughCore(page));
   yield* Effect.tryPromise(() =>
-    expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
+    expect(page.getByRole("heading", { name: /^No hay transacciones (en|para)/u })).toBeVisible()
   );
 });
 
@@ -404,7 +404,7 @@ const staleRecoverySessionJourney = Effect.fn(function* (
   );
   yield* Effect.tryPromise(() => openTransactionsThroughCore(page));
   yield* Effect.tryPromise(() =>
-    expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
+    expect(page.getByRole("heading", { name: /^No hay transacciones (en|para)/u })).toBeVisible()
   );
 });
 const expectSignupNotice = Effect.fn(function* (page: Page) {
@@ -473,7 +473,9 @@ export const signupJourney = ({
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
       yield* Effect.tryPromise(() => reloadTransactionsThroughCore(page));
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
+        expect(
+          page.getByRole("heading", { name: /^No hay transacciones (en|para)/u })
+        ).toBeVisible()
       );
       expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
       yield* signupHistoryJourney(configuration, page);

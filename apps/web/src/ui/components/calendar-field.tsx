@@ -17,9 +17,12 @@ type DateFieldProps = Readonly<{
   timeZone: string;
   disabled: boolean;
   required: boolean;
-  appearance: "field" | "filter" | "review";
   onChange: (value: string) => void;
-}>;
+}> &
+  (
+    | Readonly<{ appearance: "filter"; month: Option.Option<string> }>
+    | Readonly<{ appearance: "field" | "review" }>
+  );
 const localDate = (value: string, timeZone: string): Option.Option<Date> =>
   DateTime.makeZoned(`${value}T00:00:00.000Z`, { timeZone, adjustForTimeZone: true }).pipe(
     Option.map(DateTime.toDateUtc)
@@ -45,7 +48,7 @@ const calendarLabel = ({
   appearance,
   value,
 }: Pick<DateFieldProps, "appearance" | "value">): string => {
-  if (appearance === "filter") return "Fecha";
+  if (appearance === "filter") return value === "" ? "Fecha" : `Fecha: ${compactDateLabel(value)}`;
   if (appearance === "review" && value !== "") {
     return compactDateLabel(value);
   }
@@ -53,8 +56,8 @@ const calendarLabel = ({
 };
 
 const calendarAccessibleLabel = (props: DateFieldProps): string => {
-  if (props.appearance === "filter") return props.label;
-  if (props.appearance !== "review" || props.value === "") {
+  if (props.appearance === "filter" && props.value === "") return props.label;
+  if ((props.appearance !== "review" && props.appearance !== "filter") || props.value === "") {
     return `${props.label}: ${calendarLabel(props)}`;
   }
   const date = accessibleDateFormat.format(
@@ -62,6 +65,11 @@ const calendarAccessibleLabel = (props: DateFieldProps): string => {
   );
   return `${props.label}: ${date}`;
 };
+
+const filterMonth = (props: DateFieldProps): Option.Option<Date> =>
+  props.appearance === "filter"
+    ? Option.flatMap(props.month, (value) => localDate(`${value}-01`, props.timeZone))
+    : Option.none();
 
 export const CalendarField = (props: DateFieldProps): JSX.Element => {
   const [open, setOpen] = useState(false);
@@ -100,7 +108,7 @@ export const CalendarField = (props: DateFieldProps): JSX.Element => {
           locale={es}
           timeZone={props.timeZone}
           selected={selected}
-          defaultMonth={selected}
+          defaultMonth={selected ?? Option.getOrUndefined(filterMonth(props))}
           onSelect={(date) => {
             if (date === undefined && props.required) return;
             props.onChange(selectedDate(Option.fromNullishOr(date), props.timeZone));
@@ -116,7 +124,7 @@ export const CalendarField = (props: DateFieldProps): JSX.Element => {
               setOpen(false);
             }}
           >
-            {props.appearance === "filter" ? "Todas las fechas" : "Sin cambiar fecha"}
+            {props.appearance === "filter" ? "Quitar filtro de día" : "Sin cambiar fecha"}
           </Button>
         ) : null}
       </PopoverContent>

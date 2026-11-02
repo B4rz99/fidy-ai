@@ -66,7 +66,15 @@ default 50-record window and the same User-scoped counts and authority checks.
 Transactions requests 25 records for its initial view, then uses the existing default 100-record
 continuations. The canonical query accepts an integer limit from 1 through 100, defaulting to 100;
 the User-owned keyset cursor remains valid across page sizes. Display summaries still describe
-only loaded records, and reaching the continuation retains access to the remaining history.
+only loaded records, and reaching the continuation retains access to the remaining history. Validated
+Transactions route search owns the selected month and optional local day. Date changes within the
+mounted route reuse its current Consent observation so other local filters survive; entering from
+another route still refreshes Consent before revealing ordinary history. Both loader preparation
+and the mounted history derive the same User-time-zone month bounds. Month changes replace query,
+continuation and editing lifetimes; clearing a day retains the month. Visible scope labels and
+summary counts identify the period and loaded coverage. Dashboard recent entries link to their
+Transaction's local day in this route. Read-only privacy history retains its independent unbounded
+query and local day filter.
 
 ## 2. Behavioral ownership
 

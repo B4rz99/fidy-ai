@@ -1,7 +1,7 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { DateTime, Option, Schema } from "effect";
-import { type JSX, useState } from "react";
+import { type JSX, useMemo, useState } from "react";
 import { type CanonicalSuccess, TransactionQueryValues } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { formatMoney } from "@/transport/money";
@@ -39,6 +39,15 @@ const continuation = (page: Page): Option.Option<string> => {
 export const BudgetSpending = (props: Props): JSX.Element => {
   const [open, setOpen] = useState(false);
   const amount = formatMoney({ locale: props.user.locale, money: props.spent });
+  const month = useMemo(
+    () =>
+      new Intl.DateTimeFormat(props.user.locale, {
+        month: "long",
+        year: "numeric",
+        timeZone: props.period.timeZone,
+      }).format(props.period.from.epochMilliseconds),
+    [props.user.locale, props.period.timeZone, props.period.from.epochMilliseconds]
+  );
   return (
     <>
       <Button
@@ -54,12 +63,7 @@ export const BudgetSpending = (props: Props): JSX.Element => {
           <SheetHeader>
             <SheetTitle>Movimientos de {props.category.label}</SheetTitle>
             <SheetDescription>
-              Gastos en {props.spent.currency} ·{" "}
-              {new Intl.DateTimeFormat(props.user.locale, {
-                month: "long",
-                year: "numeric",
-                timeZone: props.period.timeZone,
-              }).format(props.period.from.epochMilliseconds)}
+              Gastos en {props.spent.currency} · {month}
             </SheetDescription>
           </SheetHeader>
           <div className="min-h-0 overflow-y-auto px-4 pb-4">

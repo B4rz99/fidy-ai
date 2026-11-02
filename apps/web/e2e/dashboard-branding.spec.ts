@@ -355,3 +355,66 @@ test("long personalized Widget titles remain clear of the currency badge and edi
       expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport);
     })
   ));
+
+const recentHistory = recentTransactions.map(({ category, ...transaction }) => ({
+  ...transaction,
+  categoryId: category.id,
+  createdAt: transaction.occurredAt,
+  revision: 0,
+}));
+
+const installRecentHistory = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/categories`, (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: response([recentTransactions[0]?.category]),
+      })
+    )
+  );
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/transactions?*`, (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: response(recentHistory),
+      })
+    )
+  );
+});
+
+test("a recent dashboard Transaction opens history on its local date", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* installRecentTransactions(page);
+      yield* installRecentHistory(page);
+      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: /^Comercio de prueba 5,/u }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Fecha: 23 de octubre de 2026", exact: true })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Ver transacción Comercio de prueba 5", exact: true })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Ver transacción Comercio de prueba 1", exact: true })
+        ).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("button", { name: "Ver transacción Comercio de prueba 5", exact: true })
+          .click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("heading", { name: "Detalle de transacción", exact: true })
+        ).toBeVisible()
+      );
+    })
+  ));

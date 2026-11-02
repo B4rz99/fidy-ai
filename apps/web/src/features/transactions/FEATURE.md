@@ -50,7 +50,8 @@ Current local pagination regression, 2026-10-12, trunk baseline `9aafe8db54`: th
 
 `/app/transactions` initially displays the User's current local month. Selecting a calendar date loads
 that date's local month and filters its records to the selected day. Clearing the day retains the
-selected month. A full reload starts in the current month. This is a capability and verification map, not a separate specification.
+selected month. A full reload restores the period in the URL; an entry without a selected period
+starts in the current month. This is a capability and verification map, not a separate specification.
 
 | Capability              | Behaviour                                                                                                                                                                                                                                                                                                                                                          | Verification                                                                                                                                                                                                                                  |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -66,6 +67,18 @@ selected month. A full reload starts in the current month. This is a capability 
 | Loading and failure     | Retains loaded history during continuation failure; explicit retry repeats the same bounded page. Stale reads disable edits; uncertain saves require reading before another decision. Expired authentication clears financial state.                                                                                                                               | Local rendered/browser and Worker/D1 checks. Production refresh failure retained 100 records and disabled edits; a fresh load showed an explicit retry. Live session expiry was not induced.                                                  |
 | Responsive interaction  | Desktop detail panel becomes a mobile sheet; draft/pending edits preserve their interaction state.                                                                                                                                                                                                                                                                 | Local rendered/browser checks. Production desktop type-cell entry/record switching and mobile second-page detail/cancel passed.                                                                                                               |
 | Ownership and integrity | Canonical operations enforce same-User authority, current Consent, exact Money, revisions, immutable SourceAttestations and Audit.                                                                                                                                                                                                                                 | Core and real local Worker/D1 negative checks. Production anonymous history returned 401 on 2026-10-11; cross-User mutation not attempted against live accounts.                                                                              |
+
+## History period
+
+Ordinary history defaults to the User's current local month. The visible month controls navigate
+months directly or select a month and year; month changes clear the selected day. Validated route
+search owns the month and optional local day, so reload and browser Back restore the period.
+A selected day remains in the closed date control and its accessible name. Removing the day filter
+retains the month. Dashboard recent Transaction links select that Transaction's local date in history.
+
+The period remains visible with empty results. Counts and Money summaries describe loaded records
+matching the filters within that period; continuation feedback identifies incomplete coverage.
+Read-only privacy history keeps its separate unbounded query and has no month navigation.
 
 ## Owners
 

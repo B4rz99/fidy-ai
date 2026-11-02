@@ -1503,6 +1503,7 @@ test("finds and reviews an older recurring Transaction across 500 records before
           searchPageSize
         )
       );
+      yield* inspectAppliedAmountScope(page);
       yield* inspectLastSearchResult(page);
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Ver más transacciones", exact: true }).click()
@@ -1673,4 +1674,19 @@ const inspectLastSearchResult = (page: Page): Effect.Effect<void, Cause.UnknownE
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Cerrar revisión", exact: true }).click()
     );
+  });
+
+const inspectAppliedAmountScope = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const amount = page.getByLabel("Importe exacto", { exact: true });
+    yield* Effect.tryPromise(() => expect(amount).toHaveAttribute("inputmode", "decimal"));
+    yield* Effect.tryPromise(() => amount.fill("90.000,50"));
+    yield* Effect.tryPromise(() => amount.pressSequentially("abc"));
+    yield* Effect.tryPromise(() => expect(amount).toHaveValue("90.000,50"));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Resultados de transacciones" })).toContainText(
+        "Importe exacto: COP 45.000,00"
+      )
+    );
+    yield* Effect.tryPromise(() => amount.fill("45.000"));
   });

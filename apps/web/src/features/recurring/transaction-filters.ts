@@ -1,5 +1,6 @@
 import { DateTime, Option, Schema } from "effect";
 import { type CanonicalInput, type CanonicalSuccess, Currency } from "@/transport/client";
+import { formatMoneyWithCode } from "@/transport/money";
 import { parseMoneyInput } from "@/transport/money-input";
 
 export type TransactionFilters = Readonly<{
@@ -101,9 +102,16 @@ export const transactionScope = ({
     filters.direction === undefined
       ? "Todas las direcciones"
       : { inflow: "Entradas", outflow: "Salidas" }[filters.direction];
+  const amount =
+    filters.amount === undefined || filters.currency === undefined
+      ? []
+      : [
+          `Importe exacto: ${formatMoneyWithCode({ locale: "es-CO", money: { amount: filters.amount, currency: filters.currency } })}`,
+        ];
   return [
     filters.currency ?? "Todas las monedas",
     direction,
+    ...amount,
     ...Option.toArray(Option.map(query.text, (text) => `Texto: ${text}`)),
     filters.from === undefined ? "Sin fecha inicial" : `Desde ${date(filters.from)}`,
     filters.to === undefined

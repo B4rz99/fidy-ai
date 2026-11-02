@@ -654,7 +654,7 @@ shown in chat history. Delivery acknowledgement remains automatic and separate f
 
 ### Financial workspace components
 
-Use `AmountInput` for decimal drafts. It composes `Input`, refuses letters, places the caret at the end on click, and offers full or content width. Features retain exact validation, Currency precision, and command ownership.
+Use `AmountInput` for decimal drafts. It composes `Input`, refuses letters, places the caret at the end on click, and offers full or content width. Its controlled `onValueChange` preserves Colombian grouping and decimal separators; features retain exact parsing, Currency precision, and command ownership.
 
 Use `SearchableChoiceDropdown` for long single-choice lists. It composes the shadcn Base UI Combobox pattern with the existing outline pill trigger, an accessible search input, keyboard selection, dismissal, and an explicit empty result. Short lists retain `ChoiceDropdown` or summary currency pills. Both the Budget group editor and large summary currency lists share this searchable control.
 
@@ -855,7 +855,8 @@ review rail. The full-height divider stays on the outer rail; review content sti
 within the viewport and scrolls when needed, including beside later result rows. On smaller screens, selecting a candidate opens the shared full-screen review sheet.
 Search covers canonical effective Transaction history, with optional local date bounds, direction,
 Currency and exact amount. Search is explicitly applied with Buscar; the result scope and whether
-another bounded page exists remain visible. Amount drafts use Colombian separators.
+another bounded page exists remain visible. The applied exact Money stays in the scope label while
+a different amount draft is edited. Amount drafts use the shared control with Colombian separators.
 
 `TransactionCandidate` renders comfortable, keyboard-activatable rows with Counterparty, local date,
 notes, direction and exact Money. Selection highlights a row and opens review without linking.

@@ -1,6 +1,7 @@
 import { type JSX, useId, useState } from "react";
 import { Option } from "effect";
 import { Button } from "@/ui/components/button";
+import { AmountInput } from "@/ui/components/amount-input";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
 import { CalendarField } from "@/ui/components/calendar-field";
@@ -110,12 +111,12 @@ const DateAmountFields = ({
     ))}
     <div className="col-span-2 grid gap-2 sm:col-span-1">
       <Label htmlFor={`${id}-amount`}>Importe exacto</Label>
-      <Input
+      <AmountInput
         id={`${id}-amount`}
-        inputMode="text"
+        width="full"
         placeholder="Cualquier importe"
         value={draft.amount}
-        onChange={(event) => change("amount")(event.target.value)}
+        onValueChange={change("amount")}
       />
     </div>
   </div>

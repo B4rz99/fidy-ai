@@ -9,11 +9,12 @@ type AmountInputProps = Omit<
 > &
   Readonly<{ value: string; width: "full" | "content" }>;
 
-/** Decimal draft input; validation and exact monetary meaning belong to the caller. */
+/** Decimal drafts with end-caret editing. onValueChange retains localized separators; callers own exact Money validation. */
 export const AmountInput = ({
   value,
   width,
   onClick,
+  onValueChange,
   style,
   ...props
 }: AmountInputProps): JSX.Element => (
@@ -22,6 +23,9 @@ export const AmountInput = ({
     value={value}
     inputMode="decimal"
     variant="amount"
+    onValueChange={(text, eventDetails) => {
+      if (/^[0-9.,]*$/u.test(text)) onValueChange?.(text, eventDetails);
+    }}
     style={{
       ...style,
       width:

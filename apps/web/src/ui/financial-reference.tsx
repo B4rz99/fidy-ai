@@ -49,6 +49,7 @@ export const FinancialReference = (): JSX.Element => {
         />
       </div>
       <AmountStates />
+      <LocalizedAmountReference />
       <SearchableChoiceDropdown
         id="reference-searchable-currency"
         label="Moneda de ejemplo"
@@ -80,3 +81,22 @@ const AmountStates = (): JSX.Element => (
     </div>
   </>
 );
+
+const LocalizedAmountReference = (): JSX.Element => {
+  const [amount, setAmount] = useState("89.900,50");
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor="reference-localized-amount">Importe en formato colombiano</Label>
+      <AmountInput
+        id="reference-localized-amount"
+        width="full"
+        value={amount}
+        onValueChange={setAmount}
+      />
+      <p className="text-sm text-muted-foreground">
+        Admite puntos de miles y coma decimal. La función que guarda valida la moneda y su
+        precisión.
+      </p>
+    </div>
+  );
+};

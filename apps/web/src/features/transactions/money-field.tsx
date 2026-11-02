@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import type { JSX } from "react";
-import { Input } from "@/ui/components/input";
+import { AmountInput } from "@/ui/components/amount-input";
 import { Label } from "@/ui/components/label";
 import { moneyInputHint, parseMoneyInput } from "@/transport/money-input";
 import type { Transaction } from "./presentation";
@@ -51,10 +51,10 @@ export const MoneyField = ({
   return (
     <div className="flex flex-col gap-2">
       <Label htmlFor={id}>Monto · {currencyLabel}</Label>
-      <Input
+      <AmountInput
+        width="full"
         id={id}
         required={required}
-        inputMode="decimal"
         placeholder={required ? undefined : "Sin cambiar"}
         disabled={disabled}
         aria-describedby={`${id}-help`}

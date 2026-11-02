@@ -8,13 +8,16 @@ import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Atom } from "effect/reactivity";
-import { type JSX, Suspense, lazy, useState } from "react";
+import { type ComponentType, type JSX, Suspense, lazy, useState } from "react";
+import { CaptureEditorContext, type CaptureEditorProps } from "./capture-context";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { RecurringQueryFailure } from "./query-failure";
 import { Button } from "@/ui/components/button";
 import { RecurringWorkspace } from "./workspace";
 import { type SaveState, recurringWorkspaceQuery, useRecurringPlanning } from "./controller";
 import { type Filters, type PlanInput, shiftMonth } from "./model";
+
+export type { CaptureEditorProps } from "./capture-context";
 
 const PreviewWorkspace = import.meta.env.DEV
   ? lazy(() => import("./dev-preview").then((module) => ({ default: module.RecurringDataPreview })))
@@ -86,8 +89,10 @@ const Resources = (props: Props): JSX.Element => {
 };
 export const RecurringFeature = ({
   month: selectedMonth,
+  captureEditor,
 }: Readonly<{
   month: Option.Option<string>;
+  captureEditor: ComponentType<CaptureEditorProps>;
 }>): JSX.Element => {
   const router = useRouter();
   const [profile] = useState(() => workspaceProfileQuery(router.options.context.apiClient));
@@ -117,18 +122,20 @@ export const RecurringFeature = ({
   ).slice(0, "2026-01".length);
   const month = Option.getOrElse(selectedMonth, () => currentMonth);
   return (
-    <Resources
-      profileStale={Option.isSome(state.refreshFailure)}
-      profileWaiting={state.waiting}
-      refreshProfile={refresh}
-      key={user.id}
-      month={month}
-      timeZone={user.timeZone}
-      filters={filters}
-      applyFilters={setFilters}
-      previous={Option.filter(previous, (value) => value < month)}
-      earlier={(value) => setPrevious(Option.some(value))}
-    />
+    <CaptureEditorContext value={Option.some(captureEditor)}>
+      <Resources
+        profileStale={Option.isSome(state.refreshFailure)}
+        profileWaiting={state.waiting}
+        refreshProfile={refresh}
+        key={user.id}
+        month={month}
+        timeZone={user.timeZone}
+        filters={filters}
+        applyFilters={setFilters}
+        previous={Option.filter(previous, (value) => value < month)}
+        earlier={(value) => setPrevious(Option.some(value))}
+      />
+    </CaptureEditorContext>
   );
 };
 const SaveNotice = ({

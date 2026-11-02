@@ -46,13 +46,13 @@ type Commands = Readonly<{
   refresh: Atom.AtomResultFn<Query, boolean, never>;
 }>;
 class WorkspaceKey extends Data.Class<Query & Readonly<{ apiClient: FidyClient }>> {}
-const workspaceKey = "recurring-plans";
+export const recurringWorkspaceKey = "recurring-plans";
 const workspaceSources = Atom.family(({ apiClient, ...query }: WorkspaceKey) =>
   apiClient.query("recurringPlans", "getRecurringWorkspace", { query, ...workspaceQueryRetention })
 );
 const workspaceViews = Atom.family((key: WorkspaceKey) =>
   workspaceSources(key).pipe(
-    key.apiClient.runtime.factory.withReactivity([workspaceKey, "recurring-resume"]),
+    key.apiClient.runtime.factory.withReactivity([recurringWorkspaceKey, "recurring-resume"]),
     revalidateWorkspaceQuery,
     Atom.setIdleTTL("400 millis")
   )
@@ -73,7 +73,7 @@ const makeCommands = (apiClient: FidyClient): Commands => {
         Effect.gen(function* () {
           const client = yield* apiClient;
           yield* client.recurringPlans.applyRecurringEdit(input);
-          yield* Reactivity.invalidate([workspaceKey]);
+          yield* Reactivity.invalidate([recurringWorkspaceKey]);
           return "saved" as const;
         }).pipe(
           Effect.catch((failure) =>

@@ -18,6 +18,9 @@ const trial = {
   ends_at_ms: null,
   renewal_anchor_ms: null,
   access_ends_at_ms: null,
+  cancelled_at_ms: null,
+  paid_through_ms: null,
+  source_cancellation: null,
 };
 
 it("ends the original TrialPeriod at its half-open boundary without hiding history", () => {

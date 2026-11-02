@@ -176,6 +176,14 @@ export const PaidSubscription = Schema.Struct({
   renewalAnchor: UtcTimestamp,
 }).annotate({ identifier: "PaidSubscription" });
 
+/** Retained cancellation stops future collection while preserving the already-paid interval. */
+export const SubscriptionCancellation = Schema.Struct({
+  cancelledAt: UtcTimestamp,
+  paidThrough: UtcTimestamp,
+  sourceCancellation: Schema.Literals(["detached", "void-pending", "voided"]),
+}).annotate({ identifier: "SubscriptionCancellation" });
+export type SubscriptionCancellation = typeof SubscriptionCancellation.Type;
+
 const maximumRecentBillingAttempts = 10;
 
 /** Standing at one decision instant, including expired evidence without hiding existing data. */
@@ -183,6 +191,7 @@ export const SubscriptionStatus = Schema.Struct({
   accessTier: AccessTier,
   trialPeriod: TrialPeriod,
   paidSubscription: Schema.OptionFromNullOr(PaidSubscription),
+  cancellation: Schema.OptionFromNullOr(SubscriptionCancellation),
   recentAttempts: Schema.Array(BillingAttempt).check(
     Schema.isMaxLength(maximumRecentBillingAttempts)
   ),
@@ -478,11 +487,3 @@ export type RefundStartFailure = typeof RefundStartFailure.Type;
 
 /** Fixed post-boundary Pro continuation for an unstopped Subscription; paid history is unchanged. */
 export const renewalGraceMs = 259_200_000;
-
-/** Retained cancellation stops future collection while preserving the already-paid interval. */
-export const SubscriptionCancellation = Schema.Struct({
-  cancelledAt: UtcTimestamp,
-  paidThrough: UtcTimestamp,
-  sourceCancellation: Schema.Literals(["detached", "void-pending", "voided"]),
-}).annotate({ identifier: "SubscriptionCancellation" });
-export type SubscriptionCancellation = typeof SubscriptionCancellation.Type;

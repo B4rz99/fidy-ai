@@ -134,6 +134,12 @@ on entry, and only Continue prepares the chosen enrollment. Returning to selecti
 form; pending or successful payment and live DaviPlata authorization keep that action locked. Payment
 feedback separates source availability from verified settlement, and paid access/history use canonical
 SubscriptionStatus rather than invented renewal or payment-source metadata.
+Paid Users can review and cancel future renewals through the existing canonical cancellation operation.
+Cancellation results distinguish the Fidy renewal fence from pending or verified provider source
+annulment. The canonical SubscriptionStatus includes retained cancellation evidence so reload can
+recover the paid-through date and detachment outcome. A failed or uncertain mutation blocks another
+submission until an explicit status read succeeds; status refresh never replays cancellation. These
+requests use the existing canonical browser transport, lifetime and diagnostic policy.
 
 The mounted PaymentEnrollment interaction module owns Price and method selection admission,
 preparation, submission progression, bounded visible-page observation and explicit recovery.

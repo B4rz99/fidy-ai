@@ -379,6 +379,28 @@ it(
   30_000
 );
 
+it("withholds absence on an unavailable source and refuses revoked browser admission", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* recoveryDatabase(yield* setup());
+      yield* Effect.tryPromise(() => db.prepare("DROP TABLE categories").run());
+      const missing = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+      expect(missing.status).toBe(503);
+      expect(yield* Effect.tryPromise(() => missing.json())).toEqual({ status: "unavailable" });
+      expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(0);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE web_sessions SET revoked_at_ms = created_at_ms WHERE id = ?")
+          .bind(sessions[0])
+          .run()
+      );
+      const expired = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+      expect(expired.status).toBe(401);
+      yield* Effect.tryPromise(() => expired.arrayBuffer());
+      expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(0);
+    })
+  ));
+
 it(
   "unreadable Dashboard storage is unavailable, not an invitation to initialize",
   () =>
@@ -622,7 +644,7 @@ it("rejects a substituted query target, mutation id or foreign User admission be
     })
   ));
 
-type QueryFault = "revoked" | "withdrawn" | "audit-failed";
+type QueryFault = "revoked" | "withdrawn" | "audit-failed" | "audit-ignored";
 const assertQueryRefusal = Effect.fn(function* ({
   reply,
   http,
@@ -665,10 +687,10 @@ const queryFault = ({
           .bind(sessions[0])
           .run();
   }
-  if (fault === "audit-failed") {
+  if (fault === "audit-failed" || fault === "audit-ignored") {
     return db
       .prepare(
-        `CREATE TRIGGER refuse_query_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type = '${pat ? "credential_call" : "session_call"}' BEGIN SELECT RAISE(ABORT, 'test_unavailable'); END`
+        `CREATE TRIGGER refuse_query_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type = '${pat ? "credential_call" : "session_call"}' BEGIN SELECT ${fault === "audit-ignored" ? "RAISE(IGNORE)" : "RAISE(ABORT, 'test_unavailable')"}; END`
       )
       .run();
   }
@@ -790,7 +812,7 @@ const queryReleaseFailure = Effect.fnUntraced(function* ({
   ).toEqual({ last_used_at_ms: null });
 });
 
-for (const fault of ["revoked", "withdrawn", "audit-failed"] as const) {
+for (const fault of ["revoked", "withdrawn", "audit-failed", "audit-ignored"] as const) {
   for (const caller of [
     { pat: false, http: false },
     { pat: false, http: true },
@@ -1804,6 +1826,42 @@ it(
     ),
   30_000
 );
+
+it("keeps the complete browser Dashboard journey within five fresh recovery-fenced native units", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const raw = yield* initializedSetup();
+      const observed = observeRetentionCost(raw);
+      const { bucket } = yield* Effect.tryPromise(() => recoveryStorage.acquire());
+      yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
+      let generationReads = 0;
+      const tracked = new Proxy(bucket, {
+        get(target, key): unknown {
+          if (key === "get") {
+            return (...args: Parameters<R2Bucket["get"]>) => {
+              generationReads++;
+              return target.get(...args);
+            };
+          }
+          const value: unknown = Reflect.get(target, key);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const db = withErasureRecovery({
+        DB: observed.database,
+        ERASURE_REQUIRED: "true",
+        ERASURE_BUCKET: tracked,
+      }).DB;
+      const reply = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+      expect(reply.status).toBe(200);
+      yield* Schema.decodeUnknownEffect(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
+        yield* Effect.tryPromise(() => reply.json())
+      );
+      expect(observed.roundTrips()).toBe(5);
+      expect(generationReads).toBe(5);
+      expect(observed.cost().rowsWritten).toBeLessThanOrEqual(19);
+    })
+  ));
 
 it("reads the established Dashboard document once per document request", () =>
   Effect.runPromise(

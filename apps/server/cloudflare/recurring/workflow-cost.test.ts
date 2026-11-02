@@ -188,10 +188,7 @@ it.skipIf(!enabled)(
           )(measurements);
           yield* Effect.tryPromise(() =>
             Bun.write(
-              new URL(
-                "../../../../docs/research/recurring-workflow-measurements.json",
-                import.meta.url
-              ),
+              new URL("../../test-results/recurring-workflow-measurements.json", import.meta.url),
               encoded
             )
           );
@@ -332,7 +329,7 @@ it.skipIf(!enabled)(
           yield* Effect.tryPromise(() =>
             Bun.write(
               new URL(
-                "../../../../docs/research/digest-source-workflow-measurements.json",
+                "../../test-results/digest-source-workflow-measurements.json",
                 import.meta.url
               ),
               encoded

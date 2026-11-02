@@ -1,11 +1,12 @@
 import { captureCategories } from "./internal/capture";
+import type { QueryAuthority } from "../canonical-work/operations";
 import {
   prepareBoundCategoryRead as prepareBrowserRead,
   executeProtectedCategories as readProtectedCategories,
 } from "./internal/canonical-category";
 import type { CanonicalBrowserRead } from "../canonical-admission/contract";
 import { keywordRuleGuardFailure as classifyRuleGuardFailure } from "./internal/keyword-rule-outcome";
-import type { Effect } from "effect";
+import type { Effect, Option } from "effect";
 import {
   type Category,
   type CategoryId,
@@ -16,9 +17,11 @@ import type { CategoriesUnavailable } from "./contract";
 import {
   categoryList,
   categoryReferenceStatement,
+  prepareCategorySnapshot as preparePeerSnapshot,
   requiredCategory,
   verifyStorage,
 } from "./internal/projection";
+
 import {
   prepareCreateKeywordRule as createRule,
   keywordRuleIdFromPath as decodeRuleId,
@@ -29,6 +32,14 @@ import {
   keywordRuleUnknownId as unknownRuleId,
   prepareUpdateKeywordRule as updateRule,
 } from "./internal/canonical-keyword-rules";
+
+/** Prepare an authority-gated peer read; its containing protected query owns Audit and disclosure. */
+export const prepareCategorySnapshot = (
+  input: Readonly<{ db: D1Database; authority: QueryAuthority }>
+): Readonly<{
+  statement: D1PreparedStatement;
+  decode: (rows: unknown) => Option.Option<ReadonlyArray<Category>>;
+}> => preparePeerSnapshot(input);
 
 /** Compose the bounded Category listing and its Audit in a protected browser snapshot. */
 export const prepareBoundCategoryRead: CanonicalBrowserRead = (input) => prepareBrowserRead(input);

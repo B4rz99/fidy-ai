@@ -7,7 +7,7 @@ import {
 } from "../../../src/shell/categories/operations";
 import { recordBrowserCategoryWork } from "./canonical-work";
 import type { CanonicalBrowserRead } from "../../canonical-admission/contract";
-import { prepareReservedChangeAssertion } from "../../../src/shell/sql-assertions/operations";
+import { prepareReservedChangeCheck } from "../../../src/shell/sql-assertions/operations";
 import { readConsentStatus } from "../../consent/operations";
 import { ListCategoriesResponse } from "../../../src/shell/categories/contract";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
@@ -30,6 +30,7 @@ type CategoryCaller = TransactionCaller | OAuthCaller;
 const oauthCaller = (subject: CategoryCaller): subject is OAuthCaller =>
   "oauthConnectionId" in subject;
 const headers = { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" };
+const encodeCategoryResponse = Schema.encodeEffect(Schema.fromJsonString(ListCategoriesResponse));
 const unavailable = (): Response => Response.json(categoryUnavailable(), { status: 503, headers });
 const unauthenticated = (): Response =>
   Response.json(
@@ -70,7 +71,7 @@ export const prepareBoundCategoryRead: CanonicalBrowserRead = ({
     statements: [
       prepareCategoryRead({ db, authority: Option.some(authority) }),
       db.prepare(audit.sql).bind(...audit.params),
-      prepareReservedChangeAssertion({
+      prepareReservedChangeCheck({
         db,
         scope: "category_mutation",
         reservation,
@@ -80,7 +81,7 @@ export const prepareBoundCategoryRead: CanonicalBrowserRead = ({
       if (results[1]?.meta.changes !== 1) return Effect.succeed(unavailable());
       const decoded = decodeCategoryRead(results[0]?.results);
       if (Option.isNone(decoded)) return Effect.succeed(unavailable());
-      return Schema.encodeEffect(Schema.fromJsonString(ListCategoriesResponse))(decoded.value).pipe(
+      return encodeCategoryResponse(decoded.value).pipe(
         Effect.map((body) => new Response(body, { status: 200, headers })),
         Effect.orElseSucceed(unavailable)
       );
@@ -166,9 +167,7 @@ const presentCategoryWork = (
     const rows = results[pat ? 1 : 0]?.results;
     const response = decodeCategoryRead(rows);
     if (Option.isNone(response)) return unavailable();
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(ListCategoriesResponse))(
-      response.value
-    );
+    const body = yield* encodeCategoryResponse(response.value);
     return new Response(body, { status: 200, headers });
   });
 

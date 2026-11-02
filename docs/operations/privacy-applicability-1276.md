@@ -1,7 +1,7 @@
 # RNBD and reporting applicability — #1276
 
 Version 6, 2026-10-19. Use the [decision procedure](privacy-decisions-1276.md) and
-[official-source record](../research/privacy-reporting-public-evidence-1276.md). This records the owner-confirmed completed RNBD review and
+[official-source record](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/research/privacy-reporting-public-evidence-1276.md). This records the owner-confirmed completed RNBD review and
 ongoing reporting reconciliation; it is not an independent professional certification or incident report. No registration, submission,
 account creation or third-party drill contact was performed.
 
@@ -31,7 +31,7 @@ is below the binding asset threshold, and the company first registered during th
 no preceding-year company balance to obtain. Record **NotRequiredForReviewedPeriod** for the
 reviewed snapshot; absence of an express first-year substitute does not itself create a registration
 obligation. This is not a permanent or first-year exemption. Recheck assets when they change and at
-year-end, and reassess before bank submission. The [conclusion recheck](../research/rnbd-conclusion-recheck-1276.md)
+year-end, and reassess before bank submission. The [conclusion recheck](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/research/rnbd-conclusion-recheck-1276.md)
 distinguishes this supported practical conclusion from the narrower interpretive limitation and
 from the approval status recorded at that time. Restricted decision version 5,
 `dcdba84a-f85b-4fe3-b6ed-b53326509451`, preserves this reassessment and the bounded provider-mail check.
@@ -81,12 +81,12 @@ Its authenticated account authority and a follow-up channel for a particular inc
 verified before actual submission. Never use a public search-result form or send credentials to
 support. Preserve failure, alternative-route choice and actual receipt.
 
-The [public-source reporting check](../research/privacy-reporting-public-evidence-1276.md#provider-reporting-check--2026-10-16)
+The [public-source reporting check](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/research/privacy-reporting-public-evidence-1276.md#provider-reporting-check--2026-10-16)
 records published notification clauses and contact purposes for Cloudflare, Kapso and Resend. Their
 application to the actual agreement/version and incident-specific routing remain separate checks.
 A substantive Resend reply now identifies its governing account Documents and absence of a separate
 corporate-customer record; see the dated #1275 supplement. It does not establish a corporate
-assignment, a security SLA or an incident-specific recipient. The [#1275 record](provider-reconciliation-1275.md) preserves account context
+assignment, a security SLA or an incident-specific recipient. The [#1275 record](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/provider-reconciliation-1275.md) preserves account context
 and provider correspondence. Wompi's published privacy email rejected the enquiry; use the recorded
 authenticated support escalation for routing rather than treating that email as a verified working
 incident channel. A rights enquiry is not proof of an incident SLA. No provider contact is made as
@@ -102,7 +102,7 @@ periods nor establishes continuous response coverage.
 
 ## Bounded technical handoff available to this procedure
 
-The existing [CI alert-receipt and controlled-release evidence](provider-reconciliation-1275.md#ci-alert-receipt-and-controlled-release)
+The existing [CI alert-receipt and controlled-release evidence](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/provider-reconciliation-1275.md#ci-alert-receipt-and-controlled-release)
 contains actual Resend-delivered and company-inbox-observed notification evidence, private receipt
 `6ea30774-282b-4e39-b5ab-ae327e886af5`, and the linked
 [notification workflow result](https://github.com/B4rz99/fidy-ai/actions/runs/38895084735) and
@@ -122,7 +122,7 @@ a critical operational alert does not itself establish a personal-data incident.
 native detection, containment and recovery evidence remains with [#1262](https://github.com/B4rz99/fidy-ai/issues/1262).
 This handoff neither creates another detector nor claims that technical drill completed.
 
-The owner-authorized [bounded live drill](security-drill-1276.md#resumption--2026-10-19) now
+The owner-authorized [bounded live drill](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/security-drill-1276.md#resumption--2026-10-19) now
 records native scheduled warning and resolution emails independently observed in the company
 mailbox, ordinary API revocation of a synthetic read-only PAT, stale-bearer refusal, an unaffected
 control PAT and verified temporary-authority cleanup. The signal was injected downstream of the

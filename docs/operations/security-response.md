@@ -1,6 +1,6 @@
 # Security incident response
 
-Repository procedure established by #1260. The [2026-10-19 bounded drill](security-drill-1276.md#resumption--2026-10-19)
+Repository procedure established by #1260. The [2026-10-19 bounded drill](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/security-drill-1276.md#resumption--2026-10-19)
 records scheduled alert receipt/resolution and synthetic PAT containment/cleanup, with explicit
 detection and acknowledgement limits.
 Use with [production recovery](production-recovery.md) and

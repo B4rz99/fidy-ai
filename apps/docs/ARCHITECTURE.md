@@ -50,5 +50,4 @@ Alchemy build memoization is disabled. The Worker
 has only `docs.fidyapp.com`, no workers.dev URL, no product bindings, no runtime script and a real 404.
 The workflow verifies the served Markdown and agent index against the built artifact after deployment.
 
-See [publication operations](../../docs/operations/docs-site.md) and the
-[implementation checklist/spec](../../docs/operations/docs-site-plan.md).
+See [publication operations](../../docs/operations/docs-site.md).

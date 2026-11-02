@@ -33,12 +33,12 @@ financial fact.
 Google web signup/login is implemented with atomic Consent, trial and recovery creation, followed
 by Browser Login session redemption. Synthetic Worker/browser checks cover the journey; actual
 Google application registration, deployed credentials and real sign-in remain unchecked. See
-[configuration and evidence](docs/operations/google-authentication.md).
+[provider configuration](docs/operations/google-authentication.md).
 
 Some product paths remain deliberately unavailable. Forwarded institutional email requires verified
 sender and connection admission before inbound routing can be enabled. Receipt/image processing is
 not yet an executable capture path, while hosted MCP/OAuth setup and its verification limits are documented in
-[the customer connection guide](docs/guides/hosted-mcp.md).
+[the customer connection guide](apps/docs/src/content/docs/conectar/mcp.md).
 
 ## Local browser testing
 

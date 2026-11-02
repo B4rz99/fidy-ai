@@ -45,7 +45,7 @@ IDs. Indexed policy/scope selection also checks explicit User ownership; global 
 The counter store now accepts the three email policies and the hashed PAT source policy. #1435
 adds calendar accounting with its production consumer and populated conversion. PAT review events
 retain exact WebSession/User ownership; anonymous source counters have neither owner. The
-[cutover guide](../../../../docs/operations/database-cutover-1428.md#email-admission-counters-1432)
+[cutover guide](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/database-cutover-1428.md#email-admission-counters-1432)
 contains the populated conversion for existing databases.
 
 ## Equivalence and cost gates
@@ -153,7 +153,7 @@ is bounded to at most ten admitted attempts per WebSession per ten minutes; refu
 add grants. Source writes and global atomic capacity are unchanged. This is storage consolidation,
 not a claim of reduced D1 spend. The original read ceilings remain recorded above for comparison.
 
-The populated [PAT cutover](../../../../docs/operations/database-cutover-1428.md#pat-admission-1433)
+The populated [PAT cutover](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/database-cutover-1428.md#pat-admission-1433)
 retains original keyed sources, anchors, counts, review identities and session ownership alongside
 existing email counters and shared events. Native checks prove exact cutoffs, rollback after source
 drops and refusal of corrupt deadlines. Public integration covers mixed-age rolling attempts,
@@ -191,7 +191,7 @@ remained necessary, so the extra work offered no concrete code/behavior benefit.
 
 Retain Recovery's `support_recovery_admissions` store and current persistence owner under #1405's
 explicit cost-gate exception. No shared recovery policy or schema conversion is installed. The
-[comparison evidence](../../../../docs/operations/recovery-admission-1434.md) records the candidate,
+[comparison evidence](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/recovery-admission-1434.md) records the candidate,
 its native measurements, exact cutoff and foreign-operator preservation, and why the conditional
 mapping must be revisited before migration. The existing public recovery test now also checks
 cleanup immediately before and at the one-hour cutoff; production limits and accounting are unchanged.
@@ -223,7 +223,7 @@ also retain their backlog, fairness and idle-work budgets. The public hosted jou
 attempt charging; native integrated admission covers concurrent sessions, exact UTC boundaries,
 foreign ownership and revoked credentials. Populated native conversion checks cover historical days,
 counts, unrelated shared counters, archives, invalid history, collision, in-progress erasure and
-rollback after dropping the sources. See the [cutover runbook](../../../../docs/operations/database-cutover-1428.md#compaction-admission-1435).
+rollback after dropping the sources. See the [cutover runbook](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/database-cutover-1428.md#compaction-admission-1435).
 
 The same regression journeys also measure the cost carried by existing anchored consumers after
 installing the calendar index and conversation-erasure guards: email login uses 77 reads/14 writes

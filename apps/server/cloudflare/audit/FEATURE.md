@@ -39,7 +39,7 @@ writes none. Native query plans use the existing User/global retention indexes. 
 the global expiry index, SQLite chose a plan reading 4005 rows for that idle sweep; the final query
 avoids this scan. These are focused native database observations, not deployment measurements.
 
-The [populated cutover](../../../../docs/operations/database-cutover-1428.md#audit-retention-permits-1436)
+The [populated cutover](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/database-cutover-1428.md#audit-retention-permits-1436)
 rejects any retained old User cutoff and unfinished erasure chunk, preserves User rowids and retained
 fields, Audit sequences/contents, session relationships and archive references, and proves native
 rollback after column removal. Other Audit extraction tickets retain their own migration obligations.
@@ -52,7 +52,7 @@ Approval commits that case with credential consumption and pairing approval; Aud
 `support_recovery` rows or their four dedicated columns. Other Audit variants retain their shape,
 sequence ordering, retention and erasure permissions. Historical event IDs/archive references remain
 bounded Case metadata under the original credential-erasure purpose. See the
-[validated cutover](../../../../docs/operations/database-cutover-1428.md#recovery-case-evidence-1442).
+[validated cutover](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/database-cutover-1428.md#recovery-case-evidence-1442).
 
 ## Final accountability log (#1476)
 

@@ -581,7 +581,7 @@ requires its negative evidence. They do not import every upstream recommendation
 | [Agentic Applications Top 10](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) | 2026                            | Agent execution and authority risks; applicability compared on 2026-10-12.                                                            |
 | [MCP Top 10](https://owasp.org/projects/mcp-top-10?tab=top10)                                                   | 2025 beta, consulted 2026-10-13 | MCP transport, tool and context risks. The upstream roadmap still labels this list beta; same-year revisions also require comparison. |
 
-The [2026-10-13 reference reconciliation](docs/research/owasp-reference-verification-2026-10-13.md)
+The [2026-10-13 reference reconciliation](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/research/owasp-reference-verification-2026-10-13.md)
 records the LLM 2025 → 2026 crosswalk and changed mitigation scope. The linked official 2026
 artifact retains publication-date placeholders and the general landing page still says 2025;
 this policy pins the linked artifact, not an inferred final publication status. LLM identifiers below

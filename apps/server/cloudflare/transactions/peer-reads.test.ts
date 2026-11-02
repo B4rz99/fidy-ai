@@ -266,18 +266,23 @@ it("returns ready owned Dashboard pages with caller context and refuses incomple
         db,
         userId,
         categories,
+        ranges: [],
         lists: [{ categories: [categoryId], search: Option.some("árb"), limit: 1 }],
         snapshot: {
-          statement: prepareUserContext({
-            db,
-            userId: UserId.make(userId),
-            statement: {
-              sql: "SELECT serviceMarket, locale, timeZone FROM identity_user_context",
-              params: [],
-            },
-          }),
-          decode: (rows: ReadonlyArray<unknown>): Option.Option<UserContext> =>
-            Schema.decodeUnknownOption(UserContext)(rows[0]),
+          statements: [
+            prepareUserContext({
+              db,
+              userId: UserId.make(userId),
+              statement: {
+                sql: "SELECT serviceMarket, locale, timeZone FROM identity_user_context",
+                params: [],
+              },
+            }),
+          ],
+          accepts: (rows: ReadonlyArray<unknown>): boolean =>
+            rows.length === 1 && Schema.is(UserContext)(rows[0]),
+          decode: (rows: ReadonlyArray<D1Result>): Effect.Effect<Option.Option<UserContext>> =>
+            Effect.succeed(Schema.decodeUnknownOption(UserContext)(rows[0]?.results[0])),
         },
       };
       const found = Option.getOrThrow(yield* readDashboardTransactions(query));

@@ -1,6 +1,7 @@
 import type { CapturedInterpretationContext } from "../../src/core/interpretation-evidence/contract";
 import type { IanaTimeZone } from "../../src/core/_shared/context";
 import {
+  type EffectiveTransactionAggregate,
   type NotificationInterpretationEvidence,
   type RecurringTransactionFact,
   type Transaction,
@@ -8,7 +9,7 @@ import {
   type TransactionPair,
 } from "../../src/core/transactions/contract";
 import type { TransactionMutationOperation } from "../canonical-work/contract";
-import { Data, type DateTime, type Option } from "effect";
+import { Data, type DateTime, type Effect, type Option } from "effect";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { type Category, type CategoryId } from "../../src/core/categories/contract";
 
@@ -144,14 +145,17 @@ export type DashboardTransactionList = Readonly<{
  * read's rows and must fail closed on absent or malformed facts; it cannot confer authority.
  */
 export type DashboardSnapshotRead<A> = Readonly<{
-  statement: D1PreparedStatement;
-  decode: (rows: ReadonlyArray<unknown>) => Option.Option<A>;
+  /** At most two owner-prepared reads; only the first proof repeats after the first chunk. */
+  statements: ReadonlyArray<D1PreparedStatement>;
+  accepts: (proof: ReadonlyArray<unknown>) => boolean;
+  decode: (results: ReadonlyArray<D1Result>) => Effect.Effect<Option.Option<A>>;
 }>;
 
 /** One complete ready Transaction projection read and its atomically observed caller facts. */
 export type DashboardTransactionSnapshot<A> = Readonly<{
   snapshot: A;
   lists: ReadonlyArray<ReadonlyArray<DashboardTransactionFact>>;
+  ranges: ReadonlyArray<ReadonlyArray<EffectiveTransactionAggregate>>;
 }>;
 
 /** Explicit User and bounded list selections, together with public Category metadata. */
@@ -159,6 +163,7 @@ export type DashboardTransactionRead<A> = Readonly<{
   db: D1Database;
   userId: string;
   lists: ReadonlyArray<DashboardTransactionList>;
+  ranges: ReadonlyArray<Readonly<{ from: number; toExclusive: number }>>;
   categories: ReadonlyArray<Category>;
   snapshot: DashboardSnapshotRead<A>;
 }>;

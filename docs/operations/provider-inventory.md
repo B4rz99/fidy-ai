@@ -3,7 +3,7 @@
 Reconciled against source revision `0bd4d7d668f2c577f195360d466c530dffc90e1a` on
 2026-10-15. These are source-configured services, not evidence of enabled Production account
 settings, contracting entities or accepted terms. The per-flow evidence and outstanding account
-checks are in the [#1275 reconciliation](provider-reconciliation-1275.md).
+checks are in the [#1275 reconciliation](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/provider-reconciliation-1275.md).
 
 | Provider     | Purpose and data boundary                                                                                                                                                              | Operational/legal check                                                                                                                                                                                                                                          |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

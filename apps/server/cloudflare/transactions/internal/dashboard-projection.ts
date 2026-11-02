@@ -44,10 +44,10 @@ const groupKey = (row: GroupKey): string => `${row.currency}:${row.direction}:${
 export const projectionReady = (raw: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(StateRow)(raw));
 
-const projectionRange = (
-  from: number,
-  toExclusive: number
-): Option.Option<
+export const projectionRange = ({
+  from,
+  toExclusive,
+}: Readonly<{ from: number; toExclusive: number }>): Option.Option<
   Readonly<{
     firstDay: number;
     lastDay: number;
@@ -84,16 +84,20 @@ const selectedDigits = selectedBuckets.replaceAll(
   "transaction_projection_digit"
 );
 
-const projectionQueries = (
-  db: D1Database,
-  userId: string,
+export const projectionQueries = ({
+  db,
+  userId,
+  range,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
   range: Readonly<{
     firstDay: number;
     lastDay: number;
     firstMinute: number;
     lastMinute: number;
-  }>
-): Array<D1PreparedStatement> => {
+  }>;
+}>): Array<D1PreparedStatement> => {
   const params = [
     userId,
     range.firstDay,
@@ -168,9 +172,9 @@ const decodeGroups = (
 
 type AggregateRange = Readonly<{ from: number; toExclusive: number }>;
 // At most 32 native batches, leaving room for the caller within the Free invocation query budget.
-const maximumAggregateRanges = 128;
+export const maximumAggregateRanges = 128;
 // Bound transient raw results without starting additional concurrent provider work.
-const aggregateRangesPerBatch = 4;
+export const aggregateRangesPerBatch = 4;
 
 /** Read one exact interval through the bounded projection snapshot reader. */
 export const findDashboardAggregate = (
@@ -180,7 +184,7 @@ export const findDashboardAggregate = (
     Effect.map(Option.flatMap((ranges) => Option.fromUndefinedOr(ranges[0])))
   );
 
-type AggregateSnapshot = Readonly<{
+export type AggregateSnapshot = Readonly<{
   revision: number;
   values: ReadonlyArray<ReadonlyArray<EffectiveTransactionAggregate>>;
 }>;
@@ -196,10 +200,13 @@ const decodeAggregateRows = (
     : Option.flatMap(decodeSums(digits.results), (sums) => decodeGroups(groups.results, sums));
 };
 
-const decodeAggregateSnapshot = (
-  rows: ReadonlyArray<D1Result>,
-  count: number
-): Option.Option<AggregateSnapshot> => {
+export const decodeAggregateSnapshot = ({
+  rows,
+  count,
+}: Readonly<{
+  rows: ReadonlyArray<D1Result>;
+  count: number;
+}>): Option.Option<AggregateSnapshot> => {
   const state = rows[0];
   if (rows.length !== 1 + count * 2 || state?.results.length !== 1) return Option.none();
   const revision = Schema.decodeUnknownOption(AggregateRevision)(state.results[0]);
@@ -225,9 +232,7 @@ export const findDashboardAggregateRanges = ({
 }>): Effect.Effect<Option.Option<ReadonlyArray<ReadonlyArray<EffectiveTransactionAggregate>>>> =>
   Effect.gen(function* () {
     if (ranges.length > maximumAggregateRanges) return Option.none();
-    const prepared = Option.all(
-      ranges.map((range) => projectionRange(range.from, range.toExclusive))
-    );
+    const prepared = Option.all(ranges.map((range) => projectionRange(range)));
     if (Option.isNone(prepared)) return Option.none();
     const values: Array<ReadonlyArray<EffectiveTransactionAggregate>> = [];
     let observedRevision = Option.none<number>();
@@ -241,10 +246,10 @@ export const findDashboardAggregateRanges = ({
             requirement: "unrevoked",
             statement: revisionSelection(UserId.make(userId)),
           }),
-          ...chunk.flatMap((range) => projectionQueries(db, userId, range)),
+          ...chunk.flatMap((range) => projectionQueries({ db, userId, range })),
         ])
       );
-      const decoded = decodeAggregateSnapshot(rows, chunk.length);
+      const decoded = decodeAggregateSnapshot({ rows, count: chunk.length });
       if (
         Option.isNone(decoded) ||
         (Option.isSome(observedRevision) && observedRevision.value !== decoded.value.revision)
@@ -260,7 +265,7 @@ export const findDashboardAggregateRanges = ({
 const AggregateRevision = Schema.Struct({
   revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
-const revisionSelection = (
+export const revisionSelection = (
   userId: UserId
 ): Readonly<{ sql: string; params: readonly [UserId] }> => ({
   sql: `SELECT COALESCE(p.fact_revision, 0) AS revision FROM transaction_projection_state p
@@ -311,14 +316,14 @@ export const readPeriodAggregates = (
   }>
 ): Effect.Effect<Option.Option<CompletePeriodAggregates>, TransactionAggregatesUnavailable> =>
   Effect.gen(function* () {
-    const firstRange = projectionRange(
-      input.periods[0].from.epochMilliseconds,
-      input.periods[0].toExclusive.epochMilliseconds
-    );
-    const secondRange = projectionRange(
-      input.periods[1].from.epochMilliseconds,
-      input.periods[1].toExclusive.epochMilliseconds
-    );
+    const firstRange = projectionRange({
+      from: input.periods[0].from.epochMilliseconds,
+      toExclusive: input.periods[0].toExclusive.epochMilliseconds,
+    });
+    const secondRange = projectionRange({
+      from: input.periods[1].from.epochMilliseconds,
+      toExclusive: input.periods[1].toExclusive.epochMilliseconds,
+    });
     if (Option.isNone(firstRange) || Option.isNone(secondRange)) return Option.none();
     const result = yield* Effect.tryPromise({
       try: () =>
@@ -329,8 +334,8 @@ export const readPeriodAggregates = (
             requirement: "active",
             statement: revisionSelection(input.userId),
           }),
-          ...projectionQueries(input.db, input.userId, firstRange.value),
-          ...projectionQueries(input.db, input.userId, secondRange.value),
+          ...projectionQueries({ db: input.db, userId: input.userId, range: firstRange.value }),
+          ...projectionQueries({ db: input.db, userId: input.userId, range: secondRange.value }),
         ]),
       catch: () => new TransactionAggregatesUnavailable(),
     });

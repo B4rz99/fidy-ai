@@ -2,8 +2,46 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "ae61d99556a7ff40e74381c56ca749a40a23f1ca773d06d21b84474c6aab36e4";
+const expectedEdgePolicyDigest = "a014d68eb4fc25e27edbeb2a5aba666810433f14977a1a55322eeda71d0b96ae";
 const securityArtifacts = [
+  await Bun.file(new URL("../../patches/alchemy@2.0.0-beta.80.patch", import.meta.url)).text(),
+  await Bun.file(new URL("./smoke-exchange.ts", import.meta.url)).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/runtime/release-smoke/internal/database.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/migrations/0006_audit_media_index.sql", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/user-documents/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/dashboard/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/dashboard/internal/dashboard.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/dashboard/internal/dashboard-mutation.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/dashboard/internal/dashboard-view.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/categories/internal/projection.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/transactions/internal/dashboard-read.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/operations.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL(
       "../../apps/server/cloudflare/canonical-admission/internal/response-timing.ts",

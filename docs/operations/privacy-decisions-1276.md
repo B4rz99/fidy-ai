@@ -8,7 +8,7 @@ production access, reporting automation or new identity mechanism.
 
 The [applicability record](privacy-applicability-1276.md) owns RNBD inputs, recipient-specific
 reporting rules, public-channel verification and the bank evidence index. Its
-[official-source research](../research/privacy-reporting-public-evidence-1276.md) records versions,
+[official-source research](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/research/privacy-reporting-public-evidence-1276.md) records versions,
 clause references, statutory timing and unresolved interpretations.
 
 ## Accountable function
@@ -47,7 +47,7 @@ acceptance does not waive statutory or contractual duties or make unattended res
 ## Restricted decision record
 
 Keep records under the existing encrypted, operator-owned evidence directory outside Git, as used
-by [provider reconciliation](provider-reconciliation-1275.md). Verify directory ownership and mode
+by [provider reconciliation](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/provider-reconciliation-1275.md). Verify directory ownership and mode
 0700 and file mode 0600; do not follow links or overwrite an original observation. Access is limited
 to the owner and an explicitly authorized reviewer. No shared mailbox access, cloud backup or
 reviewer access is granted by this document. Record backup destinations before copying evidence.
@@ -116,7 +116,7 @@ purge is performed by this procedure.
 
 ## Decision and training evidence
 
-The [tabletop](privacy-tabletop-1276.md) exercises this procedure with fictional facts. It must
+The [tabletop](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/privacy-tabletop-1276.md) exercises this procedure with fictional facts. It must
 identify the actual facilitator/reviewer, exercise time, source versions, scenario facts,
 independent reasoning, draft notices, outcomes and gaps. Assistant execution or code review is not
 operator training or qualified Colombian legal approval. Store actual decision/training records

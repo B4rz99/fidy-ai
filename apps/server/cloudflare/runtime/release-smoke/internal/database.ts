@@ -40,9 +40,8 @@ export const verifySmokeDatabase = (db: D1Database): Effect.Effect<void, SmokeBi
       stage: "schema",
       tryWork: () =>
         db
-          .prepare(
-            "SELECT count(*) AS remaining FROM sqlite_schema WHERE name='fidy_release_verification'"
-          )
+          .prepare("SELECT count(*) AS remaining FROM pragma_table_info(?, 'main')")
+          .bind("fidy_release_verification")
           .first<number>("remaining"),
     });
     if (remaining !== 0) return yield* new SmokeBindingFailed({ stage: "schema" });

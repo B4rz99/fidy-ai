@@ -15,6 +15,7 @@ import {
   Budget,
   type BudgetCrossing,
   BudgetId,
+  BudgetMonth,
   type BudgetStatusQueryParameters,
   type BudgetStatusReport,
   BudgetWorkspace,
@@ -482,7 +483,7 @@ export const prepareDeleteBudget = ({
 const maximumBudgetCount = 128;
 const monthLabelLength = 7;
 
-const readPlannedCaps = ({
+const preparePlannedCaps = ({
   db,
   userId,
   month,
@@ -492,21 +493,61 @@ const readPlannedCaps = ({
   userId: string;
   month: string;
   includeInactive: boolean;
-}>): Effect.Effect<Option.Option<ReadonlyArray<Budget>>> =>
-  Effect.gen(function* () {
-    const rows = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT b.id,b.category_id,
+}>): D1PreparedStatement =>
+  db
+    .prepare(`SELECT b.id,b.category_id,
       COALESCE((SELECT g.currency FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency') g WHERE g.user_id=b.user_id AND g.group_name=b.group_name AND g.month<=? ORDER BY g.month DESC LIMIT 1),b.currency) AS currency,
       COALESCE((SELECT p.cap FROM (SELECT rowid,user_id,budget_id,month,cap FROM budget_month_plan_records WHERE kind='cap') p WHERE p.user_id=b.user_id AND p.budget_id=b.id AND p.month<=? ORDER BY p.month DESC LIMIT 1),b.cap) AS cap,
       b.created_at_ms,b.updated_at_ms,b.group_name FROM budgets b WHERE b.user_id=? AND (?=1 OR b.starts_month IS NULL OR b.starts_month<=?)
       ORDER BY b.currency,b.category_id LIMIT ${maximumBudgetCount + 1}`)
-        .bind(month, month, userId, includeInactive ? 1 : 0, month)
-        .all()
-    );
-    if (rows.results.length > maximumBudgetCount) return Option.none<ReadonlyArray<Budget>>();
-    return Option.some(yield* Effect.forEach(rows.results, budgetFromRow));
-  }).pipe(Effect.orElseSucceed(() => Option.none()));
+    .bind(month, month, userId, includeInactive ? 1 : 0, month);
+
+const decodePlannedCaps = (
+  rows: ReadonlyArray<unknown>
+): Effect.Effect<Option.Option<ReadonlyArray<Budget>>> =>
+  rows.length > maximumBudgetCount
+    ? Effect.succeedNone
+    : Effect.forEach(rows, budgetFromRow).pipe(
+        Effect.asSome,
+        Effect.orElseSucceed(() => Option.none())
+      );
+
+const readPlannedCaps = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    month: string;
+    includeInactive: boolean;
+  }>
+): Effect.Effect<Option.Option<ReadonlyArray<Budget>>> =>
+  Effect.tryPromise(() => preparePlannedCaps(input).all()).pipe(
+    Effect.flatMap((rows) => decodePlannedCaps(rows.results)),
+    Effect.orElseSucceed(() => Option.none())
+  );
+
+/**
+ * Prepare the complete peer cap projection for one explicitly planned local month. Calendar inputs
+ * grant no authority: the caller retains the same User's coordination, current context proof,
+ * live authorization and Audit. Commit this read in that caller's existing native snapshot.
+ */
+export const prepareBudgetCaps = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    month: string;
+  }>
+): Option.Option<
+  Readonly<{
+    statement: D1PreparedStatement;
+    decode: (rows: ReadonlyArray<unknown>) => Effect.Effect<Option.Option<ReadonlyArray<Budget>>>;
+  }>
+> =>
+  Schema.is(BudgetMonth)(input.month)
+    ? Option.some({
+        statement: preparePlannedCaps({ ...input, includeInactive: true }),
+        decode: decodePlannedCaps,
+      })
+    : Option.none();
 
 const respond = <A>(schema: Schema.Codec<A, Schema.Json>, data: A): Response =>
   Response.json(

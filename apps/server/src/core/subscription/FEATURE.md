@@ -55,8 +55,8 @@ bun run --cwd apps/web test:browser e2e/product-journeys.spec.ts --workers=1
 
 Eight opt-in real-provider cases are skipped by the ordinary local suite: four Nequi and four
 DaviPlata Sandbox scenarios. Both providers have separate passing four-case live-provider evidence. The protected
-[Nequi Sandbox proof](../../../../../docs/operations/nequi-sandbox-proof.md) and
-[DaviPlata Sandbox proof](../../../../../docs/operations/daviplata-sandbox-proof.md) document
+[Nequi Sandbox proof](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/nequi-sandbox-proof.md) and
+[DaviPlata Sandbox proof](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/daviplata-sandbox-proof.md) document
 synthetic-only provider execution. After the passing DaviPlata proof, the two protected OTP variables were set to the exact Sandbox
 endpoint; release now forwards them. Real-payment activation remains disabled. Manual synthetic tokenization on 2026-10-15 established the
 exact Sandbox host/path and identity/operation query binding. The adapter and browser CSP now
@@ -339,7 +339,7 @@ separate seeded User through the same public pairing flow. The resulting full lo
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),
 [AccessTier guard](../../shell/access-tier/operations.ts), and
-[commercial allowances](../../../../../docs/operations/commercial-allowances.md).
+[commercial allowances](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/commercial-allowances.md).
 
 ## Verified-decline recovery (2026-10-21)
 

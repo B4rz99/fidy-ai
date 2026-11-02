@@ -33,5 +33,5 @@ responses are not reconstructed from callback hints or a failed status. Choosing
 is explicit browser intent; fresh provider terms and authorization are still required and no charge
 is submitted automatically. Immutable source and billing identities remain retained. Method expansion and source-history
 changes use forward D1 migrations that preserve authorization and billing history.
-The [Sandbox proof runbook](../operations/daviplata-sandbox-proof.md) distinguishes synthetic fixtures,
+The [Sandbox proof runbook](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/daviplata-sandbox-proof.md) distinguishes synthetic fixtures,
 the opt-in real-provider check and unresolved browser/native/recovery release gates.

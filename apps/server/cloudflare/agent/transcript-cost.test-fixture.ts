@@ -182,7 +182,7 @@ export const measureTranscriptOwnership = Effect.fn(function* (db: D1Database, u
   );
   yield* Effect.tryPromise(() =>
     Bun.write(
-      new URL("../../../../docs/research/transcript-session-measurements.json", import.meta.url),
+      new URL("../../test-results/transcript-session-measurements.json", import.meta.url),
       encoded
     )
   );

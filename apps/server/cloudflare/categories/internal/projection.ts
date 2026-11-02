@@ -4,6 +4,19 @@ import { Effect, Option, Schema } from "effect";
 import { Category, type CategoryId, CategoryNotFound } from "../../../src/core/categories/contract";
 
 import { CategoriesUnavailable } from "../contract";
+import type { QueryAuthority } from "../../canonical-work/operations";
+
+/** Read-only peer plan; the protected containing query owns coordination, Audit and disclosure. */
+export const prepareCategorySnapshot = ({
+  db,
+  authority,
+}: Readonly<{ db: D1Database; authority: QueryAuthority }>): Readonly<{
+  statement: D1PreparedStatement;
+  decode: (rows: unknown) => Option.Option<ReadonlyArray<Category>>;
+}> => ({
+  statement: prepareCategoryRead({ db, authority: Option.some(authority) }),
+  decode: (rows) => Option.map(decodeCategoryRead(rows), (response) => response.data),
+});
 
 /** Load one required current projection; absence remains distinct from invalid or unreadable storage. */
 export const requiredCategory = ({

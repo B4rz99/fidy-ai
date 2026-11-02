@@ -1,4 +1,7 @@
-import { preparePredicateAssertion } from "../../src/shell/sql-assertions/operations";
+import {
+  preparePredicateAssertion,
+  preparePredicateCheck,
+} from "../../src/shell/sql-assertions/operations";
 import { prepareAuthorizedAuditCall, recordedPATCallProof } from "../../src/shell/audit/operations";
 import {
   livePATAuthority,
@@ -7,10 +10,9 @@ import {
 import { type QueryCaller, callerAuthority, isPATCaller } from "../canonical-work/operations";
 import { newId } from "../secret-material/operations";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { allowanceMeter, allowancePeriod } from "../../src/core/quotas/operations";
+import { allowancePeriod, projectQuotaStatus } from "../../src/core/quotas/operations";
 import {
   type AllowanceKind,
-  type AllowanceMeter,
   QuotaStatus,
   freeAllowanceLimits,
 } from "../../src/core/quotas/contract";
@@ -169,7 +171,7 @@ export const prepareAuthorizedQuotaRead = ({
   current: number;
   authority: OwnedStatement;
 }>): ReadonlyArray<D1PreparedStatement> => [
-  preparePredicateAssertion({
+  preparePredicateCheck({
     db,
     scope: "commercial_allowance",
     predicate: {
@@ -184,23 +186,13 @@ export const prepareAuthorizedQuotaRead = ({
 export const decodeQuotaStatus = (
   input: Readonly<{ row: unknown; current: number }>
 ): Option.Option<QuotaStatus> =>
-  Option.map(Schema.decodeUnknownOption(CountRow)(input.row), (counts) => {
-    const accessTier = counts.pro === 1 ? "pro" : "free";
-    const meter = (allowance: keyof Omit<typeof counts, "pro">): AllowanceMeter =>
-      allowanceMeter({
-        allowance,
-        accessTier,
-        consumed: counts[allowance],
-        now: DateTime.makeUnsafe(input.current),
-      });
-    return {
-      accessTier,
-      forwardedEmails: meter("forwarded_email"),
-      mediaSubmissions: meter("media_submission"),
-      hostedHistoryTurns: meter("hosted_history_turn"),
-      canonicalCalls: meter("canonical_call"),
-    };
-  });
+  Option.map(Schema.decodeUnknownOption(CountRow)(input.row), (counts) =>
+    projectQuotaStatus({
+      accessTier: counts.pro === 1 ? "pro" : "free",
+      consumed: counts,
+      now: DateTime.makeUnsafe(input.current),
+    })
+  );
 
 /** Reads only one explicit User for guarded peer composition; storage/decode failure remains absent authority. */
 export const readQuotaStatus = (

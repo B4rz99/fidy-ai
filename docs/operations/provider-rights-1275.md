@@ -1,10 +1,10 @@
 # Provider rights requests — #1275
 
 Execution draft for the sole operator, `obarboza@fidyapp.com`. Provider-specific account testing and
-qualified review remain outstanding as recorded in [the reconciliation](provider-reconciliation-1275.md).
+qualified review remain outstanding as recorded in [the reconciliation](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/provider-reconciliation-1275.md).
 Use the already approved [Titular procedure](titular-requests-1273.md) and
-[erasure procedure](titular-erasure-1274.md); this document neither grants claimant entitlement nor
-approves deletion. [Official-source evidence](../research/provider-public-evidence-1275.md) supplies
+[account deletion feature](../../apps/web/src/features/privacy/FEATURE.md); this document neither grants claimant entitlement nor
+approves deletion. [Official-source evidence](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/research/provider-public-evidence-1275.md) supplies
 the provider capabilities and their limits. Recheck the actual account before executing a request.
 
 ## Prepare one verified case
@@ -66,67 +66,6 @@ exact disposable fixture and request; record the actual account and remove no re
 5. Report **tested API boundary**, **tested support boundary**, or **not tested** accurately. A
    prepared email draft and a passing local case-register test are neither provider acceptance nor
    a tested support process. Preserve logs/backups/third-party exclusions and next action.
-
-## Prepared support enquiry
-
-This is an unsent minimization draft, not authorization to contact a provider. Fill it using the
-approved account context after its identity has been verified. First ask for requirements without
-sharing personal locators or attachments; provide the minimum approved fields over the verified
-account route only if needed.
-
-> FIDY S.A.S. is reviewing the data-rights process for [specific enabled service] in our account.
-> Please confirm the authenticated route and minimum identifiers required for a narrowly scoped
-> disposable-data deletion rehearsal. What happens to [specified data classes], logs, backups and
-> relevant subprocessor copies? How do you distinguish a queued/accepted request from completed
-> erasure, and report retained scope, its basis and expiry? Please identify the applicable account
-> agreement/version and rights/incident contacts. This enquiry requests capability information only;
-> it does not authorize deletion, account closure, contract changes or a paid upgrade.
-
-Ask Kapso separately for the actual transcript route and current Free feature/model-improvement
-instruction/preference, including how prospective withdrawal is recorded. Indefinite-history
-acceptance is not training authorization. Do not change the account preference or claim a new
-conflict resolved without inspecting the actual accepted/configured instruction.
-
-## Public-document check and authorized enquiries — 2026-10-16
-
-The operator authorized provider contact **only after checking official documentation and limiting
-questions to information not established publicly**. The scoped checks record sources, public
-answers, access limitations and remaining questions:
-
-- [Kapso check](../research/kapso-public-enquiry-check-1275.md): published incorporation,
-  prospective opt-out, support subprocessors, retention and contact-erasure endpoint/identifiers
-  already answer the broad draft. Remaining scope is actual customer/version history, earlier
-  improvement use, unavailable route evidence and erasure completion/residual-copy details.
-- [Resend check](../research/resend-public-enquiry-check-1275.md): DPA execution/download,
-  US storage, standard Sending/Receiving retention, backups and published contacts are answered.
-  Remaining scope is actual account acceptance evidence and minimum early-removal fields and
-  per-class completion/residual reporting for one disposable email.
-- [Wompi check](../research/wompi-public-enquiry-check-1275.md): the newer policy supplies general
-  retention, complaint requirements/deadlines and a current privacy channel. Existing merchant
-  identification is not editable. Remaining scope is this merchant's historical acceptance record,
-  supported transition/continuity to FIDY S.A.S., a no-charge sandbox rights procedure and
-  route-specific recipients/technical residuals not settled by the general documents.
-
-These checks do not prove that no other public page could answer a question. They establish a
-bounded, documented search before the authorized contact; a later public answer should replace an
-unnecessary support question. They do not authorize deletion or legal/account changes.
-
-The enquiries use the approved company mailbox and only the company name and service/project label.
-No User identifiers, message IDs, financial records, attachments or restricted evidence are included.
-Kapso's legal address is published in its Trust hub; Resend's support address is explicitly published
-for early removal and rights requests. Wompi's current privacy-policy address is used for a limited
-informational enquiry, requesting routing where needed. The merchant-linked support form requires
-additional identification and telephone fields, so it was not submitted using unapproved extra data.
-The previous broad drafts above are preparation examples, not the text to send after this check.
-Actual submission status and restricted correspondence references are in the
-[reconciliation](provider-reconciliation-1275.md).
-
-A provider may require further verification. Obtain authorization for the exact additional sensitive
-fields before sharing them; no enquiry grants access to User content. The operational test email
-already sent on 2026-10-16 is a candidate disposable fixture for Resend; its provider ID remains
-private and no deletion instruction has been sent. Retain the release-failure email as operational
-evidence. A sent enquiry, acknowledgement or process description is not completed erasure or a
-completed provider-boundary rehearsal.
 
 ## Record and deliver the result
 

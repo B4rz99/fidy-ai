@@ -474,6 +474,7 @@ const budgetReport = {
   budgets: [budget],
   period: budgetPeriod,
   initialized: true,
+  unbudgetedExpenses: [],
   cashFlow: {
     income: [{ amount: "50000", currency: "COP" }],
     expenses: [{ amount: "130000", currency: "COP" }],

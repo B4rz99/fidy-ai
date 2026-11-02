@@ -432,7 +432,7 @@ Category editors offer confirmed permanent deletion across all months, with the 
 
 Category editors inherit their group Currency; only group settings or a new group expose the Currency selector. Decimal amount controls refuse non-numeric input before submission.
 
-The Budget summary shows recorded monthly income and all effective expenses, including uncapped categories, using the canonical report’s currency-preserving cash flow. Its Summary, Income, and Expenses selectors change presentation only; income planning remains outside the expense-cap model.
+The Budget summary shows recorded monthly income and all effective expenses, including uncapped categories, using the canonical report’s currency-preserving cash flow. The table identifies its group figures as capped Category spending and shows uncapped Category/Currency outflows separately. Its monthly total reconciles both scopes against that same cash flow. Spending amounts open a read-only, paginated canonical Transaction query with the report’s exact period, Category and Currency; closing the sheet disposes its mounted reader. Its Summary, Income, and Expenses selectors change presentation only; income planning remains outside the expense-cap model.
 
 ### Transaction Correction
 

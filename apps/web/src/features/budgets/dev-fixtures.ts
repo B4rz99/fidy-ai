@@ -153,6 +153,7 @@ export const previewProps = ({
   const report: BudgetReport = BudgetStatusReport.make({
     ...props.report,
     statuses,
+    unbudgetedExpenses: [],
     cashFlow: {
       income:
         dataset === "empty"

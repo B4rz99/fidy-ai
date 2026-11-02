@@ -16,14 +16,11 @@ import { Button } from "@/ui/components/button";
 import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { WorkspacePanel } from "@/ui/components/workspace-panel";
 import { BudgetBalance } from "@/ui/components/budget-meter";
-import {
-  type BudgetReport,
-  type BudgetStatus,
-  budgetFigures,
-  defaultBudgetGroup,
-} from "./presentation";
+import { type BudgetStatus, budgetFigures, defaultBudgetGroup } from "./presentation";
 import { BudgetEditor } from "./editor";
 import { BudgetRow } from "./row";
+import { BudgetTotals } from "./totals";
+import { UnbudgetedSpending } from "./unbudgeted-spending";
 import { BudgetSummary } from "./summary";
 import {
   type BudgetEditing,
@@ -154,35 +151,10 @@ const BudgetPanel = ({
 );
 const BudgetHead = (): JSX.Element => (
   <div className="budget-head budget-tracks gap-4 rounded-md bg-muted px-4 py-2 text-sm text-muted-foreground">
-    <span>Gastos</span>
+    <span>Categorías con presupuesto</span>
     <span className="text-right">Presupuesto</span>
     <span className="text-right">Gastado</span>
     <span className="text-right">Disponible</span>
-  </div>
-);
-const BudgetTotals = ({
-  report,
-  locale,
-}: Readonly<{ report: BudgetReport; locale: string }>): JSX.Element => (
-  <div className="budget-totals rounded-lg border bg-card px-4 py-4">
-    <h2 className="font-semibold">Total de gastos</h2>
-    {budgetFigures({ statuses: report.statuses, locale }).map((figure) => (
-      <div key={figure.currency} className="budget-tracks mt-3 items-center gap-4">
-        <span>{figure.currency}</span>
-        <span className="budget-value text-right tabular-nums">
-          <span className="budget-value-label">Presupuesto</span>
-          {figure.budgeted}
-        </span>
-        <span className="budget-value text-right tabular-nums">
-          <span className="budget-value-label">Gastado</span>
-          {figure.spent}
-        </span>
-        <span className="budget-value text-right tabular-nums">
-          <span className="budget-value-label">Disponible</span>
-          {figure.remaining}
-        </span>
-      </div>
-    ))}
   </div>
 );
 type GroupHeadingProps = Readonly<{
@@ -358,6 +330,10 @@ export const BudgetWorkspace = (props: WorkspaceProps): JSX.Element => {
         >
           <div className="budget-table-container">
             <div className="budget-table gap-4">
+              <p className="col-span-full text-sm text-muted-foreground">
+                Los grupos muestran solo categorías con presupuesto en la moneda del plan. El total
+                del mes incluye también los gastos sin presupuesto.
+              </p>
               <BudgetHead />
               {props.report.statuses.length === 0 ? (
                 <Empty className="col-span-full">
@@ -372,7 +348,8 @@ export const BudgetWorkspace = (props: WorkspaceProps): JSX.Element => {
               {groups.map((group) => (
                 <BudgetGroup key={group} group={group} props={props} controller={controller} />
               ))}
-              {props.report.statuses.length > 0 ? (
+              <UnbudgetedSpending props={props} />
+              {props.report.statuses.length > 0 || props.report.cashFlow.expenses.length > 0 ? (
                 <BudgetTotals report={props.report} locale={props.user.locale} />
               ) : null}
             </div>

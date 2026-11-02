@@ -61,6 +61,7 @@ apps/web/e2e/recurring-plans.spec.ts
   s_029c451e40829c::t_b688a9f97ad8f1 715
   s_029c451e40829c::t_8bbc2642bed70f 731
   s_029c451e40829c::t_4ab83ca4dd3e81 716-722
+  s_029c451e40829c::t_4d6c0705045b3b 656
 apps/web/src/ui/recurring-reference.tsx
   s_029c451e40829c::t_15b9c0ab05fb55 6,12-25,57
 apps/web/src/features/recurring/controller.test.ts

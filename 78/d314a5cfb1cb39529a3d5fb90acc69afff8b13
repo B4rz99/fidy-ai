@@ -1,0 +1,67 @@
+apps/web/src/features/budgets/FEATURE.md
+  s_d8d9a849e0c227::t_c914ba1a125fe1 28-29
+  s_d8d9a849e0c227::t_3b60d6748f17af 60-61
+apps/web/src/features/budgets/model.ts
+  s_d8d9a849e0c227::t_2ddefe1aaca3f3 34,38
+apps/web/src/features/dashboard/query.ts
+  s_d8d9a849e0c227::t_950fae5326ce61 58,74,76
+  s_a875b3cd0b32e9::t_5ba6589c55c9a4 2-3,21-22,27-35,47-57,59-71,73,75,77
+apps/web/src/features/budgets/queries.ts
+  s_d8d9a849e0c227::t_2ddefe1aaca3f3 26
+apps/web/src/features/budgets/deletion.tsx
+  s_d8d9a849e0c227::t_480674a5f36dae 39-44
+  s_d8d9a849e0c227::t_dfa7f4e5339797 1-38,45-55
+apps/web/src/features/budgets/controller.ts
+  s_d8d9a849e0c227::t_2ddefe1aaca3f3 5,25,27,81-82,159-165,178,184,189-229,241,248-249,253,257-259,261,269,271-275,280,283,286,302,306
+  s_d8d9a849e0c227::t_dbe57eccc93cd9 96-100,158,260,262,265-268
+apps/web/e2e/budgets.spec.ts
+  s_d8d9a849e0c227::t_a9512d1b9e3edd 558,560,576-583,588-597,599-609,612-631,726,740,750,764
+  s_d8d9a849e0c227::t_1511e60f9d54f9 792
+  s_d8d9a849e0c227::t_2ddefe1aaca3f3 584-585,587
+  s_d8d9a849e0c227::t_480674a5f36dae 637-718
+  s_d8d9a849e0c227::t_c914ba1a125fe1 400,439-478
+  s_d8d9a849e0c227::t_0c28329ab2b19c 742,752,755,758,769,772,778-782,785-786,791,793-804,806-851,930
+  s_d8d9a849e0c227::t_950fae5326ce61 720,722-723,725,727,735-738,748-749,751,753-754,756-757,759-760,762-763,766-768,770-771,773,775,853-928
+  s_d8d9a849e0c227::t_34d4fcfd35c7e3 63-68,479,559,561-575,586,598,610-611,632-636,719,721,724,728-734,739,741,743-747,761,765,774,776-777,783-784,787-790,805,852,929,931
+apps/web/src/features/budgets/editor.tsx
+  s_d8d9a849e0c227::t_2ddefe1aaca3f3 22-24,168-170,172,180,182,184,189-217,244,246-248
+  s_d8d9a849e0c227::t_369f3ee95b095d 1,11,173,179,181,183,185-188,245
+apps/web/ARCHITECTURE.md
+  s_d8d9a849e0c227::t_c914ba1a125fe1 413-414
+  s_d8d9a849e0c227::t_d8b37eb0a796a2 415,464-465
+apps/web/src/features/budgets/workspace.tsx
+  s_d8d9a849e0c227::t_2ddefe1aaca3f3 178
+  s_d8d9a849e0c227::t_b23c354ff89690 94-111,116,121,126,131,179-180
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_d8d9a849e0c227::t_480674a5f36dae 2800
+  s_d8d9a849e0c227::t_f7e62474ee53be 2743-2799,2801-2806,2808-2838
+  s_d8d9a849e0c227::t_fda89382ff0764 2807
+apps/web/e2e/budget-widget.spec.ts
+  s_d8d9a849e0c227::t_e2a23fd98c281c 109-127
+apps/web/src/features/dashboard/feature.tsx
+  s_d8d9a849e0c227::t_235bcff044d676 6,29-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "78d314a5cfb1cb39529a3d5fb90acc69afff8b13",
+  "prompts": {},
+  "sessions": {
+    "s_a875b3cd0b32e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19c82-ac78-71d2-a32a-c37f0bf6bb91",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_d8d9a849e0c227": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19c82-6f9f-71c1-9ee2-a9047dc3c640",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

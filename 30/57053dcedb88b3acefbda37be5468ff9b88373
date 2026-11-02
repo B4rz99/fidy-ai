@@ -1,0 +1,35 @@
+apps/web/e2e/budgets.spec.ts
+  s_d8d9a849e0c227::t_baa30440dfcd64 934-994
+apps/web/src/features/budgets/deletion.tsx
+  s_d8d9a849e0c227::t_9e9f0d72421aed 1,5-9,42,44,46-52,55-61
+apps/web/src/features/budgets/editor.tsx
+  s_d8d9a849e0c227::t_aa4485cd57bd65 5,172-180,187,193,209-210,224,226-230,259-266
+apps/web/src/features/budgets/workspace.tsx
+  s_d8d9a849e0c227::t_c603a4ea73e617 2,96-98,145-149
+apps/web/src/features/budgets/write-feedback.tsx
+  s_d8d9a849e0c227::t_82d49fd4fc322b 1-42
+apps/server/package.json
+  s_d8d9a849e0c227::t_e4d12cf814aa9a 321
+apps/web/package.json
+  s_d8d9a849e0c227::t_2cdedcb2754a90 64
+bun.lock
+  s_d8d9a849e0c227::t_b888075b981208 81,150,167,369,371,373,375,377,2249,2251,2511
+infra/cloudflare/package.json
+  s_d8d9a849e0c227::t_a05e550b4e4b59 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3057053dcedb88b3acefbda37be5468ff9b88373",
+  "prompts": {},
+  "sessions": {
+    "s_d8d9a849e0c227": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19c82-6f9f-71c1-9ee2-a9047dc3c640",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

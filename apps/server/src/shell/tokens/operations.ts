@@ -21,7 +21,7 @@ import {
   protectConsentStatement,
   protectPATRevocationStatement,
 } from "~/shell/consent/operations";
-import { type FreshSessionSubject, type WebSessionAuthority } from "~/shell/web-session/contract";
+import { type FreshSessionSubject } from "~/shell/web-session/contract";
 import {
   freshSessionExists,
   freshSessionParams,
@@ -413,7 +413,11 @@ export const preparePATMetadata = (
   input: Readonly<{
     userId: string;
     current: number;
-    authority: WebSessionAuthority;
+    authority: Readonly<{
+      table: "web_sessions" | "hosted_turns";
+      predicate: string;
+      bindings: ReadonlyArray<string | number | Uint8Array>;
+    }>;
   }>
 ): Readonly<{
   statement: OwnedStatement;

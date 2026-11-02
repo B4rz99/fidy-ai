@@ -194,6 +194,14 @@ An accepted User entry and Pending Turn commit together. A generated reply is a 
 verified visible-delivery evidence permits completion. WhatsApp publishes channel evidence; Agent
 owns the resulting Turn and Transcript transition. Alarms and independent maintenance recover
 abandoned work without granting new execution authority.
+Verified WhatsApp Turns discover every installed canonical operation permitted by the catalog access
+policy. Query and mutation adapters reuse their canonical owners under live held Turn authority,
+including User isolation, audit, confirmation policy and atomic batch commit fences. Browser credentials
+and PAT management authority are never synthesized for the channel. A capture receipt is rendered from the committed
+canonical result, including its Transaction identifier and date in the User's configured time zone.
+For recognized Spanish capture phrases and compact entries, a Turn without a committed result
+receives an unconfirmed-registration reply instead of the model's proposed confirmation. Turn context supplies both the UTC start and the User-local date.
+
 See [ADR 0014](../../docs/adr/0014-deep-hosted-turn-modules.md).
 
 ## 7. Background execution and availability

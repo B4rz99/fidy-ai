@@ -1,9 +1,8 @@
 import { Data, type Option } from "effect";
 import type { OAuthAuthority, OAuthCaller } from "../../src/shell/oauth-agents/contract";
-import type { PATAuthority } from "../../src/shell/tokens/contract";
+import type { PATSubject as AuthorizedPAT, PATAuthority } from "../../src/shell/tokens/contract";
 import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
-import type { AuthorizedPAT } from "../tokens/contract";
 
 /** A recorded refusal stands, whether or not its owner retains Audit; other dispositions identify why durable recording failed. */
 export type CanonicalRefusalDisposition = "recorded" | "credential_refused" | "unavailable";
@@ -33,7 +32,12 @@ export type HostedCanonicalCaller = Readonly<{
 }>;
 
 /** Live canonical callers retain their distinct browser, PAT, or OAuth authority. */
-export type TransactionCaller = TransactionSubject | AuthorizedPAT | OAuthCaller;
+export type TransactionCaller =
+  | TransactionSubject
+  | AuthorizedPAT
+  | OAuthCaller
+  | HostedCanonicalCaller;
+export type CanonicalCaller = TransactionCaller;
 export type QueryCaller = TransactionCaller;
 
 export const transactionNoStore = { "cache-control": "no-store" };

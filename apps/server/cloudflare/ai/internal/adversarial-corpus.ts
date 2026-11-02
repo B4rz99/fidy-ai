@@ -317,7 +317,11 @@ export const adversarialCorpus = cases.map((entry) => ({
             timeZone: IanaTimeZone.make("America/Bogota"),
           },
         },
-        { _tag: "TurnStarted", startedAt: DateTime.makeUnsafe("2026-10-13T12:00:00Z") },
+        {
+          _tag: "TurnStarted",
+          timeZone: "America/Bogota",
+          startedAt: DateTime.makeUnsafe("2026-10-13T12:00:00Z"),
+        },
         { _tag: "ContinuityBoundary", boundary: "open" },
         ...entry.sections,
         { _tag: "ContinuityBoundary", boundary: "close" },

@@ -364,11 +364,22 @@ afterEach(() => vi.unstubAllGlobals());
 
 afterAll(() => databases.dispose());
 
-export const queuedWhatsAppTurn = ({
+export const queuedWhatsAppTurn = (
+  input: Readonly<{ db: D1Database; index: 0 | 1; text: string }>
+): Promise<TranscriptTurnId> =>
+  queuedWhatsAppTurnWithMessage({ ...input, messageId: `wamid.isolation.${input.index}` });
+
+export const queuedWhatsAppTurnWithMessage = ({
   db,
   index,
   text,
-}: Readonly<{ db: D1Database; index: 0 | 1; text: string }>): Promise<TranscriptTurnId> =>
+  messageId,
+}: Readonly<{
+  db: D1Database;
+  index: 0 | 1;
+  text: string;
+  messageId: string;
+}>): Promise<TranscriptTurnId> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const userId = UserId.make(users[index]);
@@ -396,7 +407,7 @@ export const queuedWhatsAppTurn = ({
           _tag: "WhatsApp",
           subject,
           inbound: WhatsAppInboundEvidence.make({
-            messageId: WhatsAppProviderMessageId.make(`wamid.isolation.${index}`),
+            messageId: WhatsAppProviderMessageId.make(messageId),
             replyToMessageId: Option.none(),
             sandboxPhone: Option.none(),
             businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),

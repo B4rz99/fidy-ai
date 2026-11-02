@@ -1,3 +1,4 @@
+import { callerAuthority } from "../../canonical-work/operations";
 import {
   patRevokeAllCompletion,
   preparePATMetadata,
@@ -33,7 +34,6 @@ import {
 import { newId } from "../../secret-material/operations";
 import { commitPATUnit } from "./pat-unit";
 import { authenticateCanonicalWebSession } from "../../web-session/operations";
-import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import type { PATMetadataQuery } from "../contract";
 
 export { createManualPAT } from "./pat-manual";
@@ -56,8 +56,7 @@ export const listPATsForCaller = ({ db, subject }: PATMetadataQuery): Effect.Eff
   Effect.gen(function* () {
     if ("patId" in subject) return unauthorized();
     const current = yield* Clock.currentTimeMillis;
-    const authority = liveWebSessionAuthority({ subject, current });
-    const session = { id: subject.id, user_id: subject.userId };
+    const authority = callerAuthority({ subject, current });
     const metadata = preparePATMetadata({ userId: subject.userId, current, authority });
     return yield* Effect.gen(function* () {
       const [rows, recorded] = yield* Effect.tryPromise({
@@ -67,7 +66,6 @@ export const listPATsForCaller = ({ db, subject }: PATMetadataQuery): Effect.Eff
               metadata.statement,
 
               recordPATList({
-                session,
                 authority,
                 input: { id: newId(), current },
               }),

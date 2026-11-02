@@ -23,6 +23,7 @@ import { commitPATUnit } from "../../tokens/operations";
 import {
   type TransactionCaller,
   boundaryFailure,
+  isHostedCaller,
   isPATCaller,
 } from "../../canonical-work/operations";
 
@@ -94,6 +95,20 @@ const categoryStatements = (
   subject: CategoryCaller,
   current: number
 ): Array<D1PreparedStatement> => {
+  if (isHostedCaller(subject)) {
+    const audit = recordAuthorizedCall({
+      authority: subject.authority,
+      id: newId(),
+      current,
+      operation: "categories.listCategories",
+      outcome: "success",
+      afterOwnerWrite: false,
+    });
+    return [
+      prepareCategoryRead({ db, authority: Option.some(subject.authority) }),
+      db.prepare(audit.sql).bind(...audit.params),
+    ];
+  }
   if (oauthCaller(subject)) {
     const authority = liveOAuthAuthority({ subject, current });
     const auditStatement = recordOAuthCall({

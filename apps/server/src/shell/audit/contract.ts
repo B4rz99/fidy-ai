@@ -128,7 +128,7 @@ export type AuthorizedAuditCall = Readonly<{
         outcome: AcceptedOutcome;
       }>
     | Readonly<{
-        authority: AuditAuthority & { table: "pats" | "oauth_credentials" };
+        authority: AuditAuthority & { table: "pats" | "oauth_credentials" | "hosted_turns" };
         operation: AuditCredentialOperation;
         outcome: AcceptedOutcome;
       }>

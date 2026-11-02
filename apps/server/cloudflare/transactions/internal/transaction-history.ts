@@ -1,3 +1,4 @@
+import type { HostedCanonicalCaller } from "../../canonical-work/contract";
 import { TransactionListResponse } from "../../../src/shell/transactions/contract";
 import {
   prepareAuditQueryCall,
@@ -36,10 +37,11 @@ import { listCategories } from "../../categories/operations";
 import type { AuthorizedPAT } from "../../tokens/contract";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import {
+  type CanonicalCaller,
   type QueryAuthority,
-  type QueryCaller,
   type TransactionSubject,
   callerAuthority,
+  isHostedCaller,
   isOAuthCaller,
   isPATCaller,
   missingTransactionMessage,
@@ -103,7 +105,7 @@ const notFound = (): Response => failure("not_found", HTTP_NOT_FOUND);
 
 const noSession = (): Response => failure("unauthenticated", HTTP_UNAUTHENTICATED);
 const failedAudit = (): Response => unavailable();
-type Subject = QueryCaller;
+type Subject = CanonicalCaller;
 type Selection = Readonly<{ request: Request; subject: Subject }> &
   (
     | Readonly<{ search: true; id: Option.Option<never> }>
@@ -730,6 +732,7 @@ const readAuthorizedHistory = (
 ): Promise<Response> => {
   const { selection, query, current } = input;
   const { subject } = selection;
+  if (isHostedCaller(subject)) return Promise.resolve(unavailable());
   if (isOAuthCaller(subject)) return Promise.resolve(unavailable());
   if (isPATCaller(subject)) {
     const patSelection = { ...selection, subject };
@@ -755,6 +758,44 @@ const readAuthorizedHistory = (
 };
 
 /** Browse the same bounded canonical Transaction projection under live WebSession or PAT authority. */
+const readHostedHistory = ({
+  db,
+  selection,
+  query,
+  current,
+}: Readonly<{
+  db: D1Database;
+  selection: Selection & { subject: HostedCanonicalCaller };
+  query: ReturnType<typeof parseQuery>;
+  current: number;
+}>): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const { subject } = selection;
+    const authority = subject.authority;
+    const results = yield* Effect.tryPromise(() =>
+      db.batch([
+        ...(Option.isSome(query)
+          ? [historyStatement({ db, selection, query: query.value, authority })]
+          : []),
+        prepareAuthorizedAuditCall({
+          db,
+          authority,
+          id: uuid(),
+          current,
+          operation: historyOperation(selection),
+          outcome: Option.isSome(query) ? "success" : "validation_failed",
+          afterOwnerWrite: false,
+        }),
+      ])
+    ).pipe(Effect.uninterruptible);
+    if (results.at(-1)?.meta.changes !== 1) return noSession();
+    if (Option.isNone(query)) return invalid();
+    const rows = results[0];
+    return rows === undefined
+      ? unavailable()
+      : presentHistory({ rows, selection, query: query.value });
+  }).pipe(Effect.orElseSucceed(() => failedAudit()));
+
 export const browseTransactions = ({
   db,
   selection,
@@ -766,6 +807,9 @@ export const browseTransactions = ({
     const query = parseQuery(selection);
     const current = DateTime.toEpochMillis(yield* DateTime.now);
     const { subject } = selection;
+    if (isHostedCaller(subject)) {
+      return yield* readHostedHistory({ db, selection: { ...selection, subject }, query, current });
+    }
     if (Option.isNone(query) && !isPATCaller(subject) && !isOAuthCaller(subject)) {
       return yield* Effect.tryPromise(() =>
         invalidQueryAudit(db, { ...selection, subject }, current)

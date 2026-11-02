@@ -10,9 +10,10 @@ import { prepareOwnerAuditCall } from "../../../src/shell/audit/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 import {
+  type CanonicalCaller,
   type TransactionBoundaryFailure,
-  type TransactionCaller,
   type TransactionRefusal,
+  acceptedHostedStatement,
   acceptedOAuthStatement,
   acceptedPATStatements,
   boundaryFailure,
@@ -21,6 +22,7 @@ import {
   credentialRefusedPreparation,
   failedPreparation,
   invalidTransactionMessage,
+  isHostedCaller,
   isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
@@ -54,7 +56,7 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
 });
 type Correction = Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   id: string;
   input: typeof Input.Type;
 }>;
@@ -173,10 +175,20 @@ const auditStatements = ({
   correctionId,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   current: number;
   correctionId: string;
 }>): ReadonlyArray<D1PreparedStatement> => {
+  if (isHostedCaller(subject)) {
+    return [
+      acceptedHostedStatement({
+        db,
+        subject,
+        operation: "transactions.updateTransaction",
+        current,
+      }),
+    ];
+  }
   if (isOAuthCaller(subject)) {
     return [
       acceptedOAuthStatement({ db, subject, operation: "transactions.updateTransaction", current }),
@@ -216,7 +228,7 @@ const findOwnedCorrection = ({
   id,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   id: string;
 }>): Effect.Effect<Option.Option<StoredTransaction>, TransactionBoundaryFailure> =>
   Effect.tryPromise({

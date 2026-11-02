@@ -5,7 +5,6 @@ import {
   recordCanonicalPATWork,
   recordOAuthCall,
 } from "../../../src/shell/audit/operations";
-import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
@@ -104,7 +103,7 @@ export const forwardingAddressAudit = ({
       }),
     ].map(({ sql, params }) => db.prepare(sql).bind(...params));
   }
-  const authority = liveWebSessionAuthority({ subject, current });
+  const authority = callerAuthority({ subject, current });
   return [
     prepareAuthorizedAuditCall({
       db,
@@ -152,7 +151,7 @@ export const forwardingAddressGuardAudit = ({
       afterOwnerWrite: false,
     });
   }
-  const authority = liveWebSessionAuthority({ subject, current });
+  const authority = callerAuthority({ subject, current });
   return prepareAuthorizedAuditCall({
     db,
     authority,

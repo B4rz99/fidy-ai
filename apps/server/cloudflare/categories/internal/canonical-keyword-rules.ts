@@ -36,11 +36,11 @@ import { validateKeywordRuleChange } from "../../../src/core/categories/operatio
 import {
   type QueryCaller,
   type TransactionCaller,
-  type TransactionSubject,
   callerAuthority,
   callerScope,
   credentialRefusedPreparation,
   failedPreparation,
+  isHostedCaller,
   isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
@@ -172,6 +172,17 @@ const writeStatements = ({
   statement: D1PreparedStatement;
   current: number;
 }>): ReadonlyArray<D1PreparedStatement> => {
+  if (isHostedCaller(subject)) {
+    const audit = recordAuthorizedCall({
+      authority: subject.authority,
+      id: uuid(),
+      current,
+      operation,
+      outcome: "accepted",
+      afterOwnerWrite: true,
+    });
+    return [statement, db.prepare(audit.sql).bind(...audit.params)];
+  }
   if (isOAuthCaller(subject)) {
     return [statement, oauthWriteAudit({ db, subject, operation, current })];
   }
@@ -447,7 +458,7 @@ const listStatements = ({
   ];
 };
 const listAudit = (
-  subject: TransactionSubject | OAuthCaller,
+  subject: Exclude<QueryCaller, { patId: string }>,
   current: number
 ): ReturnType<typeof recordAuthorizedCall> => {
   const fields = {
@@ -456,6 +467,9 @@ const listAudit = (
     operation: "categories.listKeywordRules" as const,
     afterOwnerWrite: false,
   };
+  if (isHostedCaller(subject)) {
+    return recordAuthorizedCall({ ...fields, authority: subject.authority, outcome: "accepted" });
+  }
   if (isOAuthCaller(subject)) {
     return recordAuthorizedCall({
       ...fields,

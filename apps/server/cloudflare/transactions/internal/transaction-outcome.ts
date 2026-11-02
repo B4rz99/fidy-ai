@@ -12,7 +12,7 @@ import {
   type GuardRefusalWork,
 } from "../../canonical-operations/contract";
 import {
-  type TransactionCaller,
+  type CanonicalCaller,
   type TransactionMutationOperation,
   type TransactionRefusal,
   alreadyLinkedMessage,
@@ -91,7 +91,7 @@ export const transactionRefusal = ({
   current,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   operation: TransactionMutationOperation;
   refusal: TransactionRefusal;
   current: number;
@@ -133,7 +133,7 @@ export const refusedTransactionMutation = ({
   current,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   operation: TransactionMutationOperation;
   refusal: TransactionRefusal;
   current: number;

@@ -1,3 +1,4 @@
+import type { HostedCanonicalCaller } from "../canonical-work/contract";
 import type { PATActivityAuthority } from "../../src/shell/audit/contract";
 import type { PATSubject } from "../../src/shell/tokens/contract";
 import type { WebSessionSubject } from "../../src/shell/web-session/contract";
@@ -21,7 +22,7 @@ export type PATRequest = Readonly<{ request: Request; db: D1Database }>;
 /** Admitted query proof; Tokens rechecks the exact WebSession and refuses PAT self-management. */
 export type PATMetadataQuery = Readonly<{
   db: D1Database;
-  subject: WebSessionSubject | AuthorizedPAT;
+  subject: WebSessionSubject | AuthorizedPAT | HostedCanonicalCaller;
 }>;
 
 /** A PAT activity read inside already admitted browser or hosted authority. Tokens correlates the User with that proof again at the audited snapshot. */

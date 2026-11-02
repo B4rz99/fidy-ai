@@ -13,16 +13,18 @@ import { authenticateCanonicalWebSession } from "../../web-session/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 import {
+  type CanonicalCaller,
   type TransactionBoundaryFailure,
-  type TransactionCaller,
   type TransactionRefusal,
   type TransactionSubject,
+  acceptedHostedStatement,
   acceptedOAuthStatement,
   acceptedPATStatements,
   boundaryFailure,
   callerAuthority,
   callerScope,
   failedPreparation,
+  isHostedCaller,
   isOAuthCaller,
   isPATCaller,
   maximumTransactionInputBytes,
@@ -46,7 +48,7 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
 
 type Capture = Readonly<{
   input: typeof Input.Type;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   context: UserContext;
   categoryId: CategoryId;
   id: string;
@@ -126,6 +128,16 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
   const { subject, context, id, current } = capture;
   const createdAt = current;
   const accountability = (): ReadonlyArray<D1PreparedStatement> => {
+    if (isHostedCaller(subject)) {
+      return [
+        acceptedHostedStatement({
+          db,
+          subject,
+          operation: "transactions.createTransaction",
+          current,
+        }),
+      ];
+    }
     if (isPATCaller(subject)) {
       return acceptedPATStatements({
         db,
@@ -192,7 +204,7 @@ const resolveCaptureCategory = ({
   input,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   input: typeof Input.Type;
 }>): Effect.Effect<CategoryId, TransactionBoundaryFailure> =>
   categorizeCaptures({
@@ -217,7 +229,7 @@ const refusedCapture = ({
   refusal,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   current: number;
   refusal: TransactionRefusal;
 }>): CanonicalMutationPreparation =>
@@ -239,7 +251,7 @@ const captureMutation = ({
   current,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   input: typeof Input.Type;
   context: UserContext;
   categoryId: CategoryId;
@@ -283,7 +295,7 @@ export const prepareCapture = ({
   current,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   input: typeof Input.Type;
   current: number;
 }>): Effect.Effect<CanonicalMutationPreparation> =>

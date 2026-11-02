@@ -38,7 +38,11 @@ const context = (text: string): HostedInitialTextContext =>
           timeZone: IanaTimeZone.make("America/Bogota"),
         },
       },
-      { _tag: "TurnStarted", startedAt: DateTime.makeUnsafe("2026-09-22T12:00:00Z") },
+      {
+        _tag: "TurnStarted",
+        timeZone: "America/Bogota",
+        startedAt: DateTime.makeUnsafe("2026-09-22T12:00:00Z"),
+      },
     ],
     activeRequest: { _tag: "Present", text },
   });

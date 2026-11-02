@@ -327,7 +327,10 @@ const sessionAdmission = (
  * Bind one admitted caller to the exact admission variant for this canonical work. The
  * coordinator's own published schema types every field here, so the Worker cannot drift from it.
  */
-type TransactionCaller = Exclude<CanonicalCaller, { oauthConnectionId: string }>;
+type TransactionCaller = Exclude<
+  CanonicalCaller,
+  { oauthConnectionId: string } | { _tag: "HostedCanonical" }
+>;
 const coordinatorAdmission = (
   subject: TransactionCaller,
   work: CanonicalWork

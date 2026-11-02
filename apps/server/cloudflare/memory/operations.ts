@@ -41,6 +41,7 @@ import {
   callerAuthority,
   callerScope,
   failedPreparation,
+  isHostedCaller,
   isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
@@ -133,7 +134,7 @@ const acceptedAudit = ({
   operation: MemoryOperationId;
   current: number;
 }>): D1PreparedStatement => {
-  if (isOAuthCaller(subject)) {
+  if (isOAuthCaller(subject) || isHostedCaller(subject)) {
     return prepareAuthorizedAuditCall({
       db,
       authority: callerAuthority({ subject, current }),
@@ -491,6 +492,20 @@ const recallStatements = ({
   current: number;
   statement: D1PreparedStatement;
 }>): ReadonlyArray<D1PreparedStatement> => {
+  if (isHostedCaller(subject)) {
+    return [
+      statement,
+      prepareAuthorizedAuditCall({
+        db,
+        authority: subject.authority,
+        id: memoryId(),
+        current,
+        operation: "memory.recall",
+        outcome: "accepted",
+        afterOwnerWrite: false,
+      }),
+    ];
+  }
   if (isOAuthCaller(subject)) {
     const auditStatement = recordOAuthCall({
       authority: callerAuthority({ subject, current }),

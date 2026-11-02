@@ -23,6 +23,7 @@ import { newId } from "../../secret-material/operations";
 import {
   type TransactionCaller,
   callerAuthority,
+  isHostedCaller,
   isOAuthCaller,
   isPATCaller,
   refusedCredentialResponse,
@@ -101,7 +102,7 @@ const rejectionStatement = ({
   current: number;
 }>): D1PreparedStatement => {
   const id = newId();
-  if (isOAuthCaller(subject)) {
+  if (isOAuthCaller(subject) || isHostedCaller(subject)) {
     return prepareAuthorizedAuditCall({
       db,
       authority: callerAuthority({ subject, current }),

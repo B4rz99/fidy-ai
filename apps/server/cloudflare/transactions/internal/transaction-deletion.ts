@@ -3,8 +3,9 @@ import { TransactionId } from "../../../src/core/transactions/contract";
 import { prepareOwnerAuditCall } from "../../../src/shell/audit/operations";
 import type { CanonicalMutationPreparation } from "../../canonical-operations/contract";
 import {
-  type TransactionCaller,
+  type CanonicalCaller,
   type TransactionRefusal,
+  acceptedHostedStatement,
   acceptedOAuthStatement,
   acceptedPATStatements,
   boundaryFailure,
@@ -12,6 +13,7 @@ import {
   callerScope,
   credentialRefusedPreparation,
   failedPreparation,
+  isHostedCaller,
   isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
@@ -33,7 +35,7 @@ const Membership = Schema.Struct({ total: Schema.Int });
 
 type DeletionInput = Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   id: string;
   current: number;
 }>;
@@ -43,6 +45,16 @@ const deletionAudit = ({
   id,
   current,
 }: DeletionInput): ReadonlyArray<D1PreparedStatement> => {
+  if (isHostedCaller(subject)) {
+    return [
+      acceptedHostedStatement({
+        db,
+        subject,
+        operation: "transactions.deleteTransaction",
+        current,
+      }),
+    ];
+  }
   if (isOAuthCaller(subject)) {
     return [acceptedOAuthStatement({ db, subject, operation, current })];
   }
@@ -128,7 +140,7 @@ export const prepareDeletion = ({
   current,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   id: string;
   current: number;
 }>): Effect.Effect<CanonicalMutationPreparation> =>

@@ -293,7 +293,7 @@ export const paymentEnrollmentRateLimitedBody = { error: rateLimitedError } as c
 
 /** Live credential predicate composed into a Subscription read within the caller's atomic unit. */
 export type SubscriptionReadAuthority = Readonly<{
-  table: "pats" | "web_sessions" | "oauth_credentials";
+  table: "pats" | "web_sessions" | "oauth_credentials" | "hosted_turns";
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;

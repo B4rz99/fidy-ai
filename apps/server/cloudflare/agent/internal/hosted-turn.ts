@@ -1,3 +1,4 @@
+import { captureWithoutCommit, transactionReceipt } from "./capture-reply";
 import { browserConfirmationText, readBrowserConfirmation } from "./hosted-browser-confirmation";
 import type { HostedTurnProposal } from "../../../src/shell/agent/contract";
 import { observeApplicationOperation } from "../../runtime/application-observation/operations";
@@ -435,7 +436,7 @@ export const resumeWhatsAppTurn = ({
         turnId,
         startedAtMs,
         challenge: challenge.value,
-        executeMutation: whatsAppStatementMutationExecutor({ db, bucket, subject }),
+        executeMutation: whatsAppStatementMutationExecutor({ db, bucket, subject, inference }),
         signal,
         deliver: deliver(work.value),
         scheduleRecovery,
@@ -452,7 +453,9 @@ export const resumeWhatsAppTurn = ({
       text,
       inference,
       signal,
-      executeMutation: Option.some(whatsAppStatementMutationExecutor({ db, bucket, subject })),
+      executeMutation: Option.some(
+        whatsAppStatementMutationExecutor({ db, bucket, subject, inference })
+      ),
       admittedWhatsAppTurn: Option.some(turnId),
       contextualReplyQuery: deliver(work.value).contextualReplyQuery,
     });
@@ -476,8 +479,12 @@ export const resumeWhatsAppTurn = ({
       turnId,
       subject,
       bucket,
-      executeMutation: Option.some(whatsAppStatementMutationExecutor({ db, bucket, subject })),
+      executeMutation: Option.some(
+        whatsAppStatementMutationExecutor({ db, bucket, subject, inference })
+      ),
       startedAtMs,
+      requestText: text,
+      timeZone: snapshot.value.user.timeZone,
       prepared: prepared.value,
       deliver: deliver(work.value),
       signal,
@@ -518,7 +525,7 @@ const executeHostedTurn = (
     onAdmitted,
   } = input;
   const executeMutation = isWhatsAppHosted(subject)
-    ? Option.some(whatsAppStatementMutationExecutor({ db, bucket, subject }))
+    ? Option.some(whatsAppStatementMutationExecutor({ db, bucket, subject, inference }))
     : browserMutation;
   return Effect.gen(function* () {
     const isAborted = (): boolean => signal.aborted;
@@ -682,6 +689,8 @@ const executeHostedTurn = (
       bucket,
       executeMutation,
       startedAtMs,
+      requestText: text,
+      timeZone: snapshot.user.timeZone,
       prepared: prepared.value,
       deliver: "inbound" in input ? input.deliver : { _tag: "Browser", propose: input.deliver },
       signal,
@@ -944,6 +953,8 @@ type AdmittedWork = Readonly<{
   turnId: TranscriptTurnId;
   startedAtMs: number;
   prepared: PreparedHostedText;
+  requestText: TranscriptText;
+  timeZone: string;
   deliver: ChannelDelivery;
   signal: AbortSignal;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
@@ -973,6 +984,8 @@ const executeAdmittedTurn = ({
   executeMutation,
   startedAtMs,
   prepared,
+  requestText,
+  timeZone,
   deliver,
   signal,
   scheduleRecovery,
@@ -1132,7 +1145,7 @@ const executeAdmittedTurn = ({
                 db,
                 userId,
                 turnId,
-                answer: committedAnswer(Option.none()),
+                answer: committedAnswer(Option.none(), timeZone),
                 deliver,
                 finish,
                 scheduleRecovery,
@@ -1153,7 +1166,7 @@ const executeAdmittedTurn = ({
               db,
               userId,
               turnId,
-              answer: committedAnswer(Option.some(actions)),
+              answer: committedAnswer(Option.some(actions), timeZone),
               deliver,
               finish,
               scheduleRecovery,
@@ -1203,7 +1216,11 @@ const executeAdmittedTurn = ({
           }
           return yield* executeRound(next.value, iteration + 1, nextCount);
         }
-        const answer = approvedAnswer(generated.value);
+        const answer = isWhatsAppHosted(subject)
+          ? Option.orElse(captureWithoutCommit({ request: requestText }), () =>
+              approvedAnswer(generated.value)
+            )
+          : approvedAnswer(generated.value);
         if (Option.isNone(answer)) {
           yield* finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
           return unavailable();
@@ -1260,7 +1277,8 @@ type HostedToolAction =
   | Readonly<{ _tag: "Challenge"; text: TranscriptText }>;
 /** A completed canonical write never licenses an unqualified success for other failed calls. */
 const committedAnswer = (
-  actions: Option.Option<ReadonlyArray<HostedToolAction>>
+  actions: Option.Option<ReadonlyArray<HostedToolAction>>,
+  timeZone: string
 ): TranscriptText => {
   if (Option.isNone(actions)) {
     return TranscriptText.make(
@@ -1273,6 +1291,17 @@ const committedAnswer = (
       action.event.outcome._tag !== "Succeeded" &&
       action.event.outcome._tag !== "CommittedOutputUnavailable"
   );
+  if (!partial) {
+    for (const action of actions.value) {
+      if (action._tag !== "Result" || action.event.outcome._tag !== "Succeeded") continue;
+      const receipt = transactionReceipt({
+        operation: action.event.operation,
+        output: action.event.outcome.output,
+        timeZone,
+      });
+      if (Option.isSome(receipt)) return receipt.value;
+    }
+  }
   return TranscriptText.make(
     partial ? "Una operación se completó; otras no pudieron completarse." : "Operación completada."
   );

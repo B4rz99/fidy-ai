@@ -3,7 +3,7 @@ import { patIdentityQuery } from "~/shell/tokens/operations";
 import { Option } from "effect";
 import { authorizedCallStatement } from "./recording";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
-import type { FreshSessionSubject, WebSessionAuthority } from "~/shell/web-session/contract";
+import type { FreshSessionSubject } from "~/shell/web-session/contract";
 import { freshSessionExists, freshSessionParams } from "~/shell/web-session/operations";
 import type { AuditedPATOperation, PATAuthority } from "~/shell/tokens/contract";
 
@@ -62,18 +62,20 @@ export const recordClaimedPAT = (
   params: [input.id, input.userId, input.patId, input.current],
 });
 
-/** Account for PAT listing only while the same User-owned WebSession remains live. */
+/** Account for safe PAT metadata listing while the same User-owned caller proof remains live. */
 export const recordPATList = ({
-  session,
   authority,
   input,
 }: Readonly<{
-  session: FreshSessionSubject;
-  authority: WebSessionAuthority;
+  authority: Readonly<{
+    table: "web_sessions" | "hosted_turns";
+    predicate: string;
+    bindings: ReadonlyArray<string | number | Uint8Array>;
+  }>;
   input: AuditTime;
 }>): OwnedStatement => ({
-  sql: `INSERT INTO audit_entries(record_type,id,user_id,session_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,'pats.listPATs','accepted',? WHERE EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
-  params: [input.id, session.user_id, session.id, input.current, ...authority.bindings],
+  sql: `INSERT INTO audit_entries(record_type,id,user_id,${authority.table === "hosted_turns" ? "hosted_turn_id" : "session_id"},operation,outcome,occurred_at_ms) SELECT 'credential_call',?,user_id,id,'pats.listPATs','accepted',? FROM ${authority.table} WHERE ${authority.predicate}`,
+  params: [input.id, input.current, ...authority.bindings],
 });
 
 type RevokeAuditInput = AuditTime & Readonly<{ shortId: string }>;

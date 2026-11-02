@@ -19,7 +19,7 @@ export const hostedContextSections = (
   input: HostedContextSectionInput
 ): ReadonlyArray<HostedContextSection> => [
   { _tag: "AssistantPolicy", user: input.user },
-  { _tag: "TurnStarted", startedAt: input.startedAt },
+  { _tag: "TurnStarted", startedAt: input.startedAt, timeZone: input.user.timeZone },
   { _tag: "ContinuityBoundary", boundary: "open" },
   ...input.memories.map(({ text }) => ({ _tag: "Memory" as const, text })),
   ...Option.match(input.compactedConversation, {

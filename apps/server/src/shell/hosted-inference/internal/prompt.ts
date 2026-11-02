@@ -49,6 +49,13 @@ const recurringToolWorkflow =
   `Para editar recurrentes, consulta recurringPlans.getRecurringWorkspace y usa data.document.revision; ` +
   `no pidas IDs ni expectedRevision al Usuario. `;
 
+const captureWorkflow =
+  `Interpreta registros compactos de importe, propósito o contraparte, incluidas las expresiones ` +
+  `mil y k, como egresos en la moneda contextual y solicitudes de crear una Transaction. ` +
+  `Usa transactions.createTransaction antes de confirmar el registro. ` +
+  `Si falta la moneda en una captura de este contexto de lanzamiento, usa COP y conserva cualquier moneda explícita. ` +
+  `Usa `;
+
 /** @internal */
 export const systemPromptInternal = ({
   serviceMarket,
@@ -103,8 +110,7 @@ export const systemPromptInternal = ({
   `herramienta y deja que el host gestione las operaciones que requieren confirmación. ` +
   `Para una consulta ya solicitada por el Usuario, no añadas una segunda petición de permiso; ` +
   `propón la consulta pertinente y deja que el host compruebe su acceso. ` +
-  `Interpreta registros compactos de importe, propósito o contraparte, incluidas las expresiones ` +
-  `mil y k, como egresos en la moneda contextual; preserva cualquier moneda ISO explícita y usa ` +
+  captureWorkflow +
   `el inicio del turno como instante predeterminado. Incluye una contraparte solamente cuando el ` +
   `Usuario identifique explícitamente a la persona u organización al otro lado; nunca infieras ` +
   `una empresa a partir del artículo, propósito o contexto, y no inventes notas. ` +
@@ -112,9 +118,17 @@ export const systemPromptInternal = ({
   `una sola vez exactamente la operación y los argumentos mostrados en el desafío.`;
 
 /** @internal */
-export const turnPromptInternal = (occurredAt: DateTime.Utc): string =>
+export const turnPromptInternal = ({
+  occurredAt,
+  timeZone,
+}: Readonly<{ occurredAt: DateTime.Utc; timeZone: string }>): string =>
   `El turno comenzó en ${DateTime.formatIso(occurredAt)}. Usa este instante como valor ` +
-  `predeterminado cuando el Usuario no indique cuándo ocurrió una Transaction.`;
+  `predeterminado cuando el Usuario no indique cuándo ocurrió una Transaction. ` +
+  Option.match(DateTime.setZoneNamed(occurredAt, timeZone), {
+    onNone: () => "No interpretes fechas relativas sin una zona IANA válida.",
+    onSome: (local) =>
+      `La fecha local de hoy en ${timeZone} es ${DateTime.formatIsoDate(local)}. Resuelve hoy y ayer desde esa fecha local, nunca desde la fecha UTC. No tienes acceso a la fecha ni a la configuración del dispositivo del Usuario.`,
+  });
 
 type TranscriptTextEntry = Extract<
   TranscriptEntry,
@@ -271,7 +285,12 @@ const projectSection = (section: HostedContextSection): ReadonlyArray<Prompt.Mes
     return [{ role: "system", content: systemPromptInternal(section.user) }];
   }
   if (section._tag === "TurnStarted") {
-    return [{ role: "system", content: turnPromptInternal(section.startedAt) }];
+    return [
+      {
+        role: "system",
+        content: turnPromptInternal({ occurredAt: section.startedAt, timeZone: section.timeZone }),
+      },
+    ];
   }
   return projectEvidenceSection(section);
 };

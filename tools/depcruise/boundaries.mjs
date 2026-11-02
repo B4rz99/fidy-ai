@@ -94,6 +94,8 @@ const testRunner = new Set([
   "cloudflare/test-shards.test.ts",
 ]);
 const sharedTestSupport = new Set([
+  // Downstream journeys publish real statements through the ingestion owner protocol.
+  "cloudflare/ingestion/statement-publication.test-fixture.ts",
   // Subscription and Audit proofs seed the same completed Sandbox charge and paid access.
   "cloudflare/subscription/refund-charge.test-fixture.ts",
   "cloudflare/schema-cutover.test-fixture.ts",

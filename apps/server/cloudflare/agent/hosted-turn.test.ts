@@ -1546,7 +1546,7 @@ it("serializes duplicate verified WhatsApp admissions and completes only after t
     })
   ));
 
-it("treats signed voice instructions as User text without granting identity or tool authority", () =>
+it("does not let signed voice text change the User or bypass canonical input validation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => setup());
@@ -1605,7 +1605,7 @@ it("treats signed voice instructions as User text without granting identity or t
       let modelCalls = 0;
       const model = (input: unknown): Promise<Response> => {
         modelCalls++;
-        expect(encodeJson(input)).not.toContain("transactions__createTransaction");
+        expect(encodeJson(input)).toContain("transactions__createTransaction");
         return Promise.resolve(
           Response.json({
             choices: [

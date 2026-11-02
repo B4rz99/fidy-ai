@@ -24,7 +24,7 @@ export type HostedContextSection =
       _tag: "AssistantPolicy";
       user: Pick<User, "serviceMarket" | "locale" | "timeZone">;
     }>
-  | Readonly<{ _tag: "TurnStarted"; startedAt: DateTime.Utc }>
+  | Readonly<{ _tag: "TurnStarted"; startedAt: DateTime.Utc; timeZone: string }>
   | Readonly<{ _tag: "ContinuityBoundary"; boundary: "open" | "close" }>
   | Readonly<{ _tag: "Memory"; text: string }>
   | Readonly<{ _tag: "CompactedConversation"; text: string }>

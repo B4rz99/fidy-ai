@@ -42,6 +42,7 @@ import {
   prepareUpdateBudget,
 } from "../../budgets/operations";
 import type { StatementDecisionWork } from "../../ingestion/contract";
+import type { HostedCanonicalCaller } from "../../canonical-work/contract";
 import {
   invalidForwardingAddress,
   prepareForwardingAddress,
@@ -97,14 +98,93 @@ export type CanonicalMutationAdapter = Readonly<{
   invalidRefusal: (work: CanonicalPreparationWork) => CanonicalMutationRefusal;
 }>;
 
+type HostedMutationAdapter = Readonly<{
+  prepare: (
+    work: StatementDecisionWork & { caller: HostedCanonicalCaller }
+  ) => Effect.Effect<CanonicalMutationPreparation, never, HostedInference>;
+  present: CanonicalMutationAdapter["present"];
+}>;
+
+const hostedTransactionPairAdapter = (operation: string): Option.Option<HostedMutationAdapter> => {
+  if (
+    operation === "transactions.linkTransactions" ||
+    operation === "transactions.unlinkTransactions"
+  ) {
+    return Option.some({
+      prepare: (work) => {
+        const input = Schema.decodeUnknownOption(
+          Schema.toType(getCanonicalOperationInput("transactions.linkTransactions"))
+        )(work.input);
+        if (Option.isNone(input)) return Effect.succeed(failedPreparation());
+        const selected = { ...work, subject: work.caller, pair: input.value.payload };
+        return operation === "transactions.linkTransactions"
+          ? prepareLink(selected)
+          : prepareUnlink(selected);
+      },
+      present: present(HTTP_OK),
+    });
+  }
+  return Option.none();
+};
+
+const hostedTransactionAdapter = (operation: string): Option.Option<HostedMutationAdapter> => {
+  if (operation === "transactions.createTransaction") {
+    return Option.some({
+      prepare: (work) => {
+        const input = Schema.decodeUnknownOption(
+          Schema.toType(getCanonicalOperationInput("transactions.createTransaction"))
+        )(work.input);
+        return Option.isNone(input)
+          ? Effect.succeed(failedPreparation())
+          : prepareCapture({ ...work, subject: work.caller, input: input.value.payload });
+      },
+      present: present(HTTP_CREATED),
+    });
+  }
+  if (operation === "transactions.updateTransaction") {
+    return Option.some({
+      prepare: (work) => {
+        const input = Schema.decodeUnknownOption(
+          Schema.toType(getCanonicalOperationInput("transactions.updateTransaction"))
+        )(work.input);
+        return Option.isNone(input)
+          ? Effect.succeed(failedPreparation())
+          : prepareCorrection({
+              ...work,
+              subject: work.caller,
+              id: input.value.params.id,
+              input: input.value.payload,
+            });
+      },
+      present: present(HTTP_OK),
+    });
+  }
+  if (operation === "transactions.deleteTransaction") {
+    return Option.some({
+      prepare: (work) => {
+        const input = Schema.decodeUnknownOption(
+          Schema.toType(getCanonicalOperationInput("transactions.deleteTransaction"))
+        )(work.input);
+        return Option.isNone(input)
+          ? Effect.succeed(failedPreparation())
+          : prepareDeletion({ ...work, subject: work.caller, id: input.value.params.id });
+      },
+      present: present(HTTP_OK),
+    });
+  }
+  return hostedTransactionPairAdapter(operation);
+};
+
+const isHeldReviewOperation = (
+  operation: string
+): operation is "ingestion.resolveNeedsReviewItem" | "ingestion.skipNeedsReviewItem" =>
+  operation === "ingestion.resolveNeedsReviewItem" || operation === "ingestion.skipNeedsReviewItem";
+
 export const canonicalHostedStatementAdapter = (
   operation: string
-): Option.Option<
-  Readonly<{
-    prepare: (work: StatementDecisionWork) => Effect.Effect<CanonicalMutationPreparation>;
-    present: CanonicalMutationAdapter["present"];
-  }>
-> => {
+): Option.Option<HostedMutationAdapter> => {
+  const transaction = hostedTransactionAdapter(operation);
+  if (Option.isSome(transaction)) return transaction;
   if (operation === "insights.updateReminderSchedule") {
     return Option.some({
       prepare: (work) =>
@@ -128,10 +208,7 @@ export const canonicalHostedStatementAdapter = (
   if (Option.isNone(id)) return Option.none();
   const installed = canonicalMutationAdapter(id.value);
   if (Option.isNone(installed)) return Option.none();
-  if (
-    operation === "ingestion.resolveNeedsReviewItem" ||
-    operation === "ingestion.skipNeedsReviewItem"
-  ) {
+  if (isHeldReviewOperation(operation)) {
     return Option.some({
       prepare: (work) => prepareHeldStatementReviewDecision({ operation, work }),
       present: installed.value.present,
@@ -143,7 +220,10 @@ export const canonicalHostedStatementAdapter = (
       present: installed.value.present,
     });
   }
-  return Option.none();
+  return Option.some({
+    prepare: (work) => installed.value.prepare({ ...work, subject: work.caller }),
+    present: installed.value.present,
+  });
 };
 
 const HTTP_OK = 200;

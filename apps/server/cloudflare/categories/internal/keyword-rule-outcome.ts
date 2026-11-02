@@ -38,6 +38,7 @@ import type {
 import {
   type TransactionCaller,
   callerAuthority,
+  isHostedCaller,
   isOAuthCaller,
   isPATCaller,
 } from "../../canonical-work/operations";
@@ -105,7 +106,7 @@ const recordKeywordRuleGuard = ({
   current: number;
   operation: KeywordRuleOutcome["operation"];
 }>): Effect.Effect<"recorded" | "credential_refused" | "unavailable"> => {
-  if (isOAuthCaller(subject)) {
+  if (isOAuthCaller(subject) || isHostedCaller(subject)) {
     return Effect.tryPromise(() =>
       prepareAuthorizedAuditCall({
         db,

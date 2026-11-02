@@ -6,7 +6,9 @@ import type {
   CanonicalMutationRefusal,
 } from "../canonical-operations/contract";
 import {
+  type CanonicalCaller,
   type CanonicalRefusalDisposition,
+  type HostedCanonicalCaller,
   type QueryAuthority,
   type QueryCaller,
   type TransactionAuthority,
@@ -43,12 +45,15 @@ import { newId } from "../secret-material/operations";
 export const boundaryFailure = (cause: unknown): TransactionBoundaryFailure =>
   new TransactionBoundaryFailure({ cause });
 
-export const isPATCaller = (subject: QueryCaller): subject is AuthorizedPAT => "patId" in subject;
+export const isPATCaller = (subject: CanonicalCaller): subject is AuthorizedPAT =>
+  "patId" in subject;
+export const isHostedCaller = (subject: CanonicalCaller): subject is HostedCanonicalCaller =>
+  "_tag" in subject;
 /** Distinguish OAuth authority without granting browser or PAT lifecycle privileges. */
-export const isOAuthCaller = (subject: QueryCaller): subject is OAuthCaller =>
+export const isOAuthCaller = (subject: CanonicalCaller): subject is OAuthCaller =>
   "oauthConnectionId" in subject;
 /** The exact User-owned agent capability; a WebSession carries none. */
-export const callerScope = (subject: QueryCaller): Option.Option<CanonicalCapability> =>
+export const callerScope = (subject: CanonicalCaller): Option.Option<CanonicalCapability> =>
   isPATCaller(subject) || isOAuthCaller(subject) ? subject.requiredScope : Option.none();
 /** Execute and audit one child under its exact PAT or OAuth capability; preserve browser authority unchanged. */
 export const childCaller = <Caller extends QueryCaller>({
@@ -129,6 +134,24 @@ export const acceptedOAuthStatement = (
     afterOwnerWrite: true,
   });
 
+export const acceptedHostedStatement = (
+  input: Readonly<{
+    db: D1Database;
+    subject: HostedCanonicalCaller;
+    current: number;
+    operation: TransactionMutationOperation;
+  }>
+): D1PreparedStatement =>
+  prepareAuthorizedAuditCall({
+    db: input.db,
+    authority: input.subject.authority,
+    id: newId(),
+    current: input.current,
+    operation: input.operation,
+    outcome: "success",
+    afterOwnerWrite: true,
+  });
+
 const refusalStatement = ({
   db,
   subject,
@@ -137,11 +160,22 @@ const refusalStatement = ({
   current,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   outcome: TransactionRefusal["outcome"];
   operation: TransactionMutationOperation;
   current: number;
 }>): D1PreparedStatement => {
+  if (isHostedCaller(subject)) {
+    return prepareAuthorizedAuditCall({
+      db,
+      authority: subject.authority,
+      id: transactionId(),
+      operation,
+      outcome,
+      current,
+      afterOwnerWrite: false,
+    });
+  }
   if (isOAuthCaller(subject)) {
     const auditStatement = recordOAuthCall({
       authority: liveOAuthAuthority({ subject, current }),
@@ -182,7 +216,7 @@ const sessionRefusalStatement = ({
   operation: TransactionMutationOperation;
   current: number;
 }>): D1PreparedStatement => {
-  const authority = liveWebSessionAuthority({ subject, current });
+  const authority = callerAuthority({ subject, current });
   return prepareAuthorizedAuditCall({
     db,
     authority,
@@ -207,7 +241,7 @@ export const recordTransactionRefusal = ({
   current,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: CanonicalCaller;
   outcome: TransactionRefusal["outcome"];
   operation: TransactionMutationOperation;
   current: number;
@@ -371,7 +405,7 @@ const batchEnvelopeStatement = ({
     });
     return db.prepare(auditStatement.sql).bind(...auditStatement.params);
   }
-  const authority = liveWebSessionAuthority({ subject, current });
+  const authority = callerAuthority({ subject, current });
   return prepareAuthorizedAuditCall({
     db,
     authority,
@@ -452,7 +486,7 @@ export const refusedTransactionWork = ({
 export const refusedCredentialResponse = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
+}: Readonly<{ db: D1Database; subject: CanonicalCaller }>): Effect.Effect<Response> =>
   (isPATCaller(subject) || isOAuthCaller(subject)
     ? refusedBearerWork({ db, userId: subject.userId })
     : Effect.succeed(unauthenticatedTransaction())
@@ -465,15 +499,25 @@ export function callerAuthority(
   input: Readonly<{ subject: OAuthCaller; current: number }>
 ): OAuthAuthority;
 export function callerAuthority(
-  input: Readonly<{ subject: Exclude<TransactionCaller, OAuthCaller>; current: number }>
+  input: Readonly<{ subject: HostedCanonicalCaller; current: number }>
+): HostedCanonicalCaller["authority"];
+export function callerAuthority(
+  input: Readonly<{ subject: HostedCanonicalCaller | OAuthCaller; current: number }>
+): HostedCanonicalCaller["authority"] | OAuthAuthority;
+export function callerAuthority(
+  input: Readonly<{ subject: HostedCanonicalCaller | TransactionSubject; current: number }>
+): HostedCanonicalCaller["authority"] | WebSessionAuthority;
+export function callerAuthority(
+  input: Readonly<{ subject: TransactionSubject | AuthorizedPAT; current: number }>
 ): PATAuthority | WebSessionAuthority;
 export function callerAuthority(
-  input: Readonly<{ subject: QueryCaller; current: number }>
-): PATAuthority | WebSessionAuthority | OAuthAuthority;
+  input: Readonly<{ subject: CanonicalCaller; current: number }>
+): QueryAuthority;
 export function callerAuthority({
   subject,
   current,
-}: Readonly<{ subject: QueryCaller; current: number }>): QueryAuthority {
+}: Readonly<{ subject: CanonicalCaller; current: number }>): QueryAuthority {
+  if (isHostedCaller(subject)) return subject.authority;
   if (isOAuthCaller(subject)) return liveOAuthAuthority({ subject, current });
   return isPATCaller(subject)
     ? livePATAuthority({ subject, current })
@@ -492,7 +536,7 @@ export const liveTransactionCredential = ({
   db,
   subject,
   current,
-}: Readonly<{ db: D1Database; subject: QueryCaller; current: number }>): Promise<boolean> =>
+}: Readonly<{ db: D1Database; subject: CanonicalCaller; current: number }>): Promise<boolean> =>
   authorityExists(
     db,
     isPATCaller(subject)
@@ -508,10 +552,11 @@ export const liveTransactionAuthority = ({
   db,
   subject,
   current,
-}: Readonly<{ db: D1Database; subject: QueryCaller; current: number }>): Promise<boolean> =>
+}: Readonly<{ db: D1Database; subject: CanonicalCaller; current: number }>): Promise<boolean> =>
   authorityExists(db, callerAuthority({ subject, current }));
 
 export type {
+  CanonicalCaller,
   CanonicalRefusalDisposition,
   TransactionSubject,
   TransactionCaller,

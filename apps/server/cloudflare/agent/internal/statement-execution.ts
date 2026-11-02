@@ -1,3 +1,5 @@
+import { HostedInference } from "../../../src/shell/hosted-inference/operations";
+import type { HostedInferenceService } from "../../../src/shell/hosted-inference/contract";
 import { Clock, Effect, Option } from "effect";
 import type { CanonicalToolEvidence } from "../../../src/core/agent/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
@@ -10,6 +12,7 @@ import {
 } from "../../canonical-operations/operations";
 import { mintHostedStatementCaller } from "./statement-authority";
 import { hostedAuthority } from "./hosted-authority";
+import { operationCatalog } from "../../../src/shell/api";
 
 type Context = Readonly<{
   db: D1Database;
@@ -25,7 +28,8 @@ export const whatsAppStatementMutationExecutor =
     db,
     bucket,
     subject,
-  }: Context): ((
+    inference,
+  }: Context & { inference: HostedInferenceService }): ((
     operation: CatalogOperation["id"],
     input: CanonicalToolEvidence,
     fence: HostedCommitFence
@@ -39,7 +43,10 @@ export const whatsAppStatementMutationExecutor =
         turnId: fence.turnId,
         current,
         live: hostedAuthority({ subject, current }),
-        approval: Option.some({ operation, input }),
+        approval:
+          operationCatalog.byId.get(operation)?.policy.agentConfirmation === "required"
+            ? Option.some({ operation, input })
+            : Option.none(),
       });
       return Option.isNone(caller)
         ? transactionUnavailable()
@@ -52,7 +59,7 @@ export const whatsAppStatementMutationExecutor =
             input,
             fence,
           });
-    });
+    }).pipe(Effect.provideService(HostedInference, inference));
 
 /** Use the installed read owner without lending the channel a WebSession or PAT. */
 export const executeWhatsAppStatementQuery = ({

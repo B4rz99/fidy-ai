@@ -1,3 +1,4 @@
+import { requestFor } from "./internal/canonical-request";
 import { observeCanonicalResponse } from "../runtime/application-observation/operations";
 import {
   executeHostedStatementCall as heldStatementCall,
@@ -35,7 +36,10 @@ import { executeSingleCanonicalMutation } from "./internal/mutation-unit";
 import { checkpointOAuthResponse, recordOAuthRefusal } from "./internal/oauth-response";
 import { oauthConfirmationRefusal, requiresOAuthConfirmation } from "./internal/oauth-confirmation";
 import { withCanonicalLifetime } from "./internal/canonical-lifetime";
-import { canonicalOperationRequiresInference } from "./internal/inference-requirement";
+import {
+  canonicalOperationRequiresInference,
+  unreachableHostedInference,
+} from "./internal/inference-requirement";
 import { resolveOAuthQueryCaller } from "../oauth-agents/operations";
 import { canonicalHostedStatementQueryOwner, canonicalQueryOwner } from "./internal/query-registry";
 import { matchesRouteTemplate } from "../../src/shell/public-http/operations";
@@ -312,14 +316,6 @@ const executeOAuthOwnedWork = (input: OAuthCanonicalWork): Effect.Effect<Respons
     return yield* checkpointOAuthResponse({ response, caller: caller.value });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
-const unreachableHostedInference = HostedInference.of({
-  countText: () => Effect.die("Hosted inference reached without Memory work"),
-  countTranscript: () => Effect.die("Hosted inference reached without Memory work"),
-  prepareText: () => Effect.die("Hosted inference reached without Memory work"),
-  validateText: () => Effect.die("Hosted inference reached without Memory work"),
-  prepareStructured: () => Effect.die("Hosted inference reached without Memory work"),
-});
-
 type WorkInput = Readonly<{
   db: D1Database;
   bucket: Option.Option<R2Bucket>;
@@ -543,9 +539,14 @@ export const executeCanonicalWork = (
 /** The verified statement channel discovers only adapters installed for its native authority. */
 export const installedHostedStatementOperations = (): ReadonlyArray<CatalogOperation> =>
   operationCatalog.operations.filter(
-    ({ id }) =>
-      Option.isSome(canonicalHostedStatementAdapter(id)) ||
-      Option.isSome(canonicalHostedStatementQueryOwner(id))
+    ({ id, policy }) =>
+      decideOperationAccess(policy.access, {
+        _tag: "HostedAgentSession",
+        authorityRoot: "verified-whatsapp",
+      })._tag === "Allowed" &&
+      (id === atomicBatchOperation ||
+        Option.isSome(canonicalHostedStatementAdapter(id)) ||
+        Option.isSome(canonicalHostedStatementQueryOwner(id)))
   );
 
 export const installedCanonicalOperations = (): ReadonlyArray<CatalogOperation> =>
@@ -554,29 +555,6 @@ export const installedCanonicalOperations = (): ReadonlyArray<CatalogOperation> 
       ? Option.isSome(canonicalQueryOwner(id))
       : id === atomicBatchOperation || Option.isSome(canonicalMutationAdapter(id))
   );
-
-const requestParts = Schema.Struct({
-  params: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-  query: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Finite, Schema.Boolean]))
-  ),
-});
-
-/** Build only a catalog-owned route from validated canonical arguments, never an arbitrary destination. */
-const requestFor = (operation: CatalogOperation, input: Schema.Json): Option.Option<Request> => {
-  const parts = Schema.decodeUnknownOption(requestParts)(input);
-  if (Option.isNone(parts)) return Option.none();
-  let route = operation.route;
-  for (const [key, value] of Object.entries(parts.value.params ?? {})) {
-    route = route.replace(`:${key}`, encodeURIComponent(value));
-  }
-  if (route.includes(":")) return Option.none();
-  const url = new URL(route, "https://canonical.internal");
-  for (const [key, value] of Object.entries(parts.value.query ?? {})) {
-    url.searchParams.set(key, String(value));
-  }
-  return Option.some(new Request(url, { method: operation.method }));
-};
 
 /** Only a declared query may reach dispatch; its owner classifies malformed route/query input. */
 const queryDeclaration = (operation: CanonicalOperationId): Option.Option<CatalogOperation> =>
@@ -717,7 +695,7 @@ export const executeCanonicalQuery = ({
   Effect.gen(function* () {
     const operation = queryDeclaration(operationId);
     if (Option.isNone(operation)) return Option.none();
-    const request = requestFor(operation.value, input);
+    const request = requestFor({ operation: operation.value, input });
     if (Option.isNone(request)) return Option.none();
     return yield* invokeQueryOwner({
       db,

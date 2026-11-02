@@ -49,10 +49,12 @@ export const subscriptionStandingQuery = ({
       MIN(a.paid_ends_at_ms,COALESCE((SELECT MIN(adjustment.access_ends_at_ms) FROM refund_attempts adjustment
         WHERE adjustment.access_ends_at_ms IS NOT NULL AND adjustment.billing_attempt_id=a.id),a.paid_ends_at_ms)) AS ends_at_ms,
       a.paid_renewal_anchor_ms AS renewal_anchor_ms,
-      ${paidAccessEndSql} AS access_ends_at_ms
+      ${paidAccessEndSql} AS access_ends_at_ms,
+      c.cancelled_at_ms, c.paid_through_ms, c.source_cancellation
       FROM (${trial.sql}) AS t LEFT JOIN subscription_standing AS s ON s.user_id = ?
       LEFT JOIN billing_attempt_context AS a ON a.id = s.attempt_id AND a.user_id = s.user_id
       LEFT JOIN payment_source_context AS source ON source.id = a.payment_source_id AND source.user_id = a.user_id
+      LEFT JOIN subscription_cancellation_context AS c ON c.user_id=s.user_id AND c.subscription_id=a.subscription_id
       WHERE TRUE${guard(authority)} LIMIT 1`,
     params: [...trial.params, userId, ...bindings(authority)],
   };

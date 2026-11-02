@@ -1,7 +1,12 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { type UserId } from "~/core/identity/contract";
-import { Price, SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/contract";
+import {
+  Price,
+  SubscriptionCancellation,
+  SubscriptionOffers,
+  SubscriptionStatus,
+} from "~/core/subscription/contract";
 import { Unavailable } from "~/shell/public-http/contract";
 import {
   subscriptionAttemptsQuery,
@@ -35,6 +40,9 @@ const StandingRow = Schema.Struct({
   ends_at_ms: Schema.NullOr(Schema.Finite),
   renewal_anchor_ms: Schema.NullOr(Schema.Finite),
   access_ends_at_ms: Schema.NullOr(Schema.Finite),
+  cancelled_at_ms: Schema.NullOr(Schema.Finite),
+  paid_through_ms: Schema.NullOr(Schema.Finite),
+  source_cancellation: Schema.NullOr(SubscriptionCancellation.fields.sourceCancellation),
 });
 const AttemptRow = Schema.Struct({
   id: Schema.String,
@@ -145,6 +153,15 @@ const projectAttempt = (raw: unknown): unknown => {
   };
 };
 
+const projectCancellation = (row: typeof StandingRow.Type): unknown =>
+  row.cancelled_at_ms === null
+    ? null
+    : {
+        cancelledAt: instant(row.cancelled_at_ms),
+        paidThrough: instant(decode(Schema.Finite, row.paid_through_ms)),
+        sourceCancellation: row.source_cancellation,
+      };
+
 /** Build a closed User-specific standing projection from decoded authoritative rows. */
 export const projectSubscriptionStatus = ({
   standingRow,
@@ -181,6 +198,7 @@ export const projectSubscriptionStatus = ({
         : "free",
     trialPeriod: { startedAt: instant(row.started_at_ms), endsAt: instant(row.trial_ends_at_ms) },
     paidSubscription,
+    cancellation: projectCancellation(row),
     recentAttempts,
   });
   return data;

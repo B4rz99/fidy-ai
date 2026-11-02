@@ -16,6 +16,14 @@ export const SubscriptionStandingSkeleton = (): JSX.Element => (
     </div>
   </LoadingRegion>
 );
+export const SubscriptionCancellationSkeleton = (): JSX.Element => (
+  <LoadingRegion label="Cargando renovaciones">
+    <div className="flex flex-col gap-4">
+      <Skeleton data-slot="button" className="h-[50px] w-full" />
+      <Skeleton data-slot="button" className="h-[50px] w-52 max-w-full" />
+    </div>
+  </LoadingRegion>
+);
 export const PaymentMethodsSkeleton = (): JSX.Element => (
   <LoadingRegion label="Consultando métodos de pago">
     <div className="subscription-methods">

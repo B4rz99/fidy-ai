@@ -1,4 +1,4 @@
-import { AsyncResult, Atom } from "effect/reactivity";
+import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 import { type Context, type Effect, Option } from "effect";
 import type { CanonicalSuccess, FidyClient } from "./client";
 
@@ -75,6 +75,15 @@ export const workspaceMetadataInitialValue = ({
   ReturnType<typeof initialMetadata>,
   Option.Option<AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, ProfileError>>,
 ] => [initialMetadata(client), Option.some(AsyncResult.success(value, { timestamp }))] as const;
+/** Retain supplied display metadata in its canonical owner without starting another HTTP read. */
+export const retainPreparedWorkspaceMetadata = ({
+  client,
+  registry,
+}: Readonly<{ client: FidyClient; registry: AtomRegistry.AtomRegistry }>): void => {
+  if (Option.isSome(registry.get(initialMetadata(client)))) {
+    registry.get(workspaceMetadataQuery(client));
+  }
+};
 /** All workspaces observe one profile and its optional inline display taxonomy. */
 export const workspaceProfileQuery: (client: FidyClient) => ProfileQuery = Atom.family(
   (client: FidyClient) => workspaceMetadataQuery(client).pipe(revalidateWorkspaceQuery)

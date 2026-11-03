@@ -537,8 +537,10 @@ renders that result immediately. Reads younger than five seconds remain fresh on
 window focus; older reads revalidate, and explicit invalidation always refreshes. Retained
 Recurring workspace returns coalesce refreshes inside the same five-second window using wall
 time, including calendar changes. Review always revalidates on return to observe remote drafts. Review categories share
-the normal category snapshot; an unvisited history panel starts only when selected. Budget navigation
-uses a retained profile for display preparation while its refresh remains pending. Recurring
+the normal category snapshot; an unvisited history panel starts only when selected. The actual
+Review loader retains already-supplied startup metadata in its canonical owner, including an empty
+inbox, without starting a profile HTTP read. Budget navigation uses a retained profile
+for display preparation while its refresh remains pending. Recurring
 transaction pickers retain their query across disclosure changes and revalidate on reopening once
 stale. Cached profiles and resource results do not grant authority: the server checks live Consent, caller authority and
 revision guards for every write; refresh failures still gate editing. Authenticated clients share

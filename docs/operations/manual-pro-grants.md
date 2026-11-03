@@ -24,13 +24,14 @@ Configure these environment variables in the operator's secure local environment
 
 The operator label records accountability; the Cloudflare token authorizes database access.
 Keep the token out of arguments, source files and committed configuration. The command fixes the
-Cloudflare API origin, validates database identifiers, bounds requests/responses and waits at most
-15 seconds per request. It sends no trace context and never retries automatically. Existing
+Cloudflare API origin, validates database identifiers, bounds requests/responses and applies a
+15-second request deadline. It sends no trace context and never retries automatically. Existing
 metadata-only outbound policy applies; no extra telemetry exporter is needed for this short tool.
 
-Email resolution includes provider contact emails and verified email credentials, normalized to
-lowercase. Matching credentials for the same User count once. A missing or ambiguous match makes
-no change. Ambiguous matches print candidate UserIds; select the intended User explicitly:
+Email lookup uses independently verified email credentials, normalized to lowercase. Provider
+contact emails do not prove mailbox ownership and cannot select a User for a grant or revocation.
+A tester can verify their email under Settings → Account. For a User without a verified email,
+select their stable UserId explicitly. A missing or ambiguous match makes no change:
 
 ```sh
 bun run pro grant --user-id 10000000-0000-4000-8000-000000000001

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { UserId } from "../src/core/identity/contract";
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, Option } from "effect";
@@ -14,7 +13,7 @@ afterAll(() => databases.dispose());
 const userA = "10000000-0000-4000-8000-000000000001";
 const userB = "10000000-0000-4000-8000-000000000002";
 it.effect(
-  "grants by signup email, refuses ambiguous identities without granting, and lists only active grants",
+  "refuses unverified provider contacts, grants only the verified mailbox owner, and lists active grants",
   () =>
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => databases.acquire());
@@ -53,36 +52,36 @@ it.effect(
               catch: () => new ProGrantFailure({ reason: "unavailable", candidates: [] }),
             }),
         });
-      expect(yield* run({ action: "grant", selector: { email: "TESTER@example.com" } })).toEqual([
-        { userId: userA, action: "grant" },
-      ]);
+      const unverified = yield* Effect.exit(
+        run({ action: "grant", selector: { email: "TESTER@example.com" } })
+      );
+      assert.deepStrictEqual(
+        Exit.isFailure(unverified)
+          ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(unverified.cause)))
+          : unverified,
+        Exit.fail(new ProGrantFailure({ reason: "user-not-found", candidates: [] }))
+      );
+      expect(yield* run({ action: "list" })).toEqual([]);
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "INSERT INTO provider_credentials(issuer,subject,user_id,contact_email,established_at_ms) VALUES('https://accounts.google.com','b',?,'tester@example.com',0)"
+            "INSERT INTO verified_email_credentials(user_id,address,verified_at_ms) VALUES(?,'tester@example.com',0)"
           )
           .bind(userB)
           .run()
       );
-      const ambiguous = yield* Effect.exit(
-        run({ action: "grant", selector: { email: "tester@example.com" } })
-      );
-      assert.deepStrictEqual(
-        Exit.isFailure(ambiguous)
-          ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(ambiguous.cause)))
-          : ambiguous,
-        Exit.fail(
-          new ProGrantFailure({
-            reason: "ambiguous-email",
-            candidates: [UserId.make(userA), UserId.make(userB)],
-          })
-        )
-      );
-      expect(yield* run({ action: "list" })).toEqual([{ userId: userA, action: "grant" }]);
-      expect(yield* run({ action: "revoke", selector: { userId: userA } })).toEqual([
-        { userId: userA, action: "revoke" },
+      expect(yield* run({ action: "grant", selector: { email: "TESTER@example.com" } })).toEqual([
+        { userId: userB, action: "grant" },
+      ]);
+      expect(yield* run({ action: "list" })).toEqual([{ userId: userB, action: "grant" }]);
+      expect(yield* run({ action: "revoke", selector: { userId: userB } })).toEqual([
+        { userId: userB, action: "revoke" },
       ]);
       expect(yield* run({ action: "list" })).toEqual([]);
+      expect(yield* run({ action: "grant", selector: { userId: userA } })).toEqual([
+        { userId: userA, action: "grant" },
+      ]);
+      yield* run({ action: "revoke", selector: { userId: userA } });
       yield* fromTestPromise(() =>
         expect(db.prepare("UPDATE pro_grant_events SET action='grant'").run()).rejects.toThrow()
       );

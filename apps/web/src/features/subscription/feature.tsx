@@ -882,22 +882,24 @@ const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
   const lifetimeRef = useEnrollmentLifetime(selection);
   const { standing } = props;
   const paid = hasNonTrialPro(standing.state);
+  const resolved = standing.state._tag === "Ready";
+  const checkout = selection.checkout && resolved && !standing.state.standing.hasProGrant;
   return (
     <div
       ref={lifetimeRef}
       className="subscription-columns"
-      data-checkout={selection.checkout}
+      data-checkout={checkout}
       data-method={selection.method}
       data-paid={paid}
     >
       <div className="subscription-main">
-        {selection.checkout ? (
+        {checkout ? (
           <Checkout selection={selection} gateway={props.gateway} />
         ) : (
           <>
             <SubscriptionStandingView state={standing.state} onRetry={standing.refresh} />
             {showBillingManagement(standing.state) && standing.management}
-            {!paid && (
+            {resolved && !paid && (
               <OfferOverview
                 selection={selection}
                 terms={presentSubscriptionOffer(props.offers[0])}
@@ -906,12 +908,14 @@ const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
           </>
         )}
       </div>
-      <SubscriptionSummary
-        offer={selection.selectedOffer}
-        checkout={selection.checkout}
-        paid={paid}
-        granted={standing.state._tag === "Ready" && standing.state.standing.hasProGrant}
-      />
+      {resolved && (
+        <SubscriptionSummary
+          offer={selection.selectedOffer}
+          checkout={checkout}
+          paid={paid}
+          granted={standing.state.standing.hasProGrant}
+        />
+      )}
     </div>
   );
 };
@@ -1017,12 +1021,14 @@ const StandingWithoutOffers = ({
       {showBillingManagement(standing.state) && standing.management}
       <div className="subscription-offers-feedback">{children}</div>
     </div>
-    <SubscriptionSummary
-      paid={hasNonTrialPro(standing.state)}
-      granted={standing.state._tag === "Ready" && standing.state.standing.hasProGrant}
-      offer={Option.none()}
-      checkout={false}
-    />
+    {standing.state._tag === "Ready" && (
+      <SubscriptionSummary
+        paid={hasNonTrialPro(standing.state)}
+        granted={standing.state.standing.hasProGrant}
+        offer={Option.none()}
+        checkout={false}
+      />
+    )}
   </div>
 );
 

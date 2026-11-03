@@ -6,6 +6,7 @@ const sharedKernel = /^src\/core\/_shared\/(?:money|context|time)\.ts$/u;
 const testSource = /(?:\.(?:test|spec|fixture)|\.test-fixture)\.[cm]?[jt]sx?$/u;
 
 const compositionRoots = new Set([
+  "../../scripts/pro/runtime.ts",
   "src/client.ts",
   "src/browser-bootstrap.ts",
   "src/browser-transport.ts",

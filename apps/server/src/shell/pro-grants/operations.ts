@@ -1,4 +1,3 @@
-import { providerContactUsers } from "~/shell/provider-authentication/operations";
 import { verifiedEmailUsers } from "~/shell/email-authentication/operations";
 import { existingUserSelection } from "~/shell/identity/operations";
 import { UserId } from "~/core/identity/contract";
@@ -37,12 +36,7 @@ const selectProUser = (
   selector: Readonly<{ userId: string }> | Readonly<{ email: string }>
 ): ProStatement => {
   if ("userId" in selector) return existingUserSelection(selector.userId);
-  const provider = providerContactUsers(selector.email);
-  const verified = verifiedEmailUsers(selector.email);
-  return {
-    sql: `SELECT userId FROM (${provider.sql}) UNION SELECT userId FROM (${verified.sql})`,
-    params: [...provider.params, ...verified.params],
-  };
+  return verifiedEmailUsers(selector.email);
 };
 
 /** Compose current manual access into the protected caller's own snapshot; this is not authority. */

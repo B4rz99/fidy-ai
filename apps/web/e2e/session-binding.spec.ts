@@ -5,6 +5,7 @@ import { apiOrigin } from "./http-fixtures";
 import {
   probeCanonicalRequest,
   signInDashboardThroughCore,
+  signInNavigationThroughCore,
   signInThroughCore,
 } from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
@@ -82,7 +83,9 @@ test("retains ordinary navigation when payment availability refuses a live sessi
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInNavigationThroughCore({ page, request, identity: "navigationPayment" })
+      );
       yield* Effect.tryPromise(() =>
         page.route(
           `${apiOrigin}/web/subscription/payment-enrollments/availability`,

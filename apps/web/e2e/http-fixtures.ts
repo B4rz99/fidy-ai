@@ -19,14 +19,25 @@ export const makeUser = (overrides: Partial<UserFixture> = {}): UserFixture => (
 
 export const response = (data: unknown): string => JSON.stringify({ data, next: [] });
 
+// Presentation fixtures have no live authority for unrelated speculative product reads.
+const presentationConnection = (): void => {
+  Object.defineProperty(navigator, "connection", {
+    configurable: true,
+    value: { saveData: true, effectiveType: "4g" },
+  });
+};
+
 export const installUser = (page: Page): Promise<void> =>
   page
-    .route(`${apiOrigin}/user`, (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: response(makeUser()),
-      })
+    .addInitScript(presentationConnection)
+    .then(() =>
+      page.route(`${apiOrigin}/user`, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: response(makeUser()),
+        })
+      )
     )
     .then(() =>
       page.route(`${apiOrigin}/web/consent`, (route) =>

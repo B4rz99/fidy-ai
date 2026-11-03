@@ -1,0 +1,39 @@
+apps/web/src/features/budgets/workspace.tsx
+  s_b26c86cfdf2ace::t_df0bc8d72c2c82 204-206
+  s_b26c86cfdf2ace::t_4bb1cb51d54695 16,163,169,199-203,207,293,295-298,301
+DESIGN.md
+  s_b26c86cfdf2ace::t_0ac958f9ba7797 659-660
+apps/web/src/features/budgets/spending.tsx
+  s_b26c86cfdf2ace::t_4bb1cb51d54695 7,41,146
+apps/web/src/features/budgets/row.tsx
+  s_b26c86cfdf2ace::t_4bb1cb51d54695 5,71,121-134,142
+apps/web/src/features/budgets/presentation.test.ts
+  s_b26c86cfdf2ace::t_5feb98bcb218c2 41,55-56
+  s_b26c86cfdf2ace::t_16af95f579bfbe 91-93,119-121
+  s_b26c86cfdf2ace::t_2fa2d0b5ab984d 95-99
+  s_b26c86cfdf2ace::t_b387f41a8290eb 94
+apps/web/e2e/budgets.spec.ts
+  s_b26c86cfdf2ace::t_4bb1cb51d54695 622,631
+  s_b26c86cfdf2ace::t_2fa2d0b5ab984d 149-150
+  s_b26c86cfdf2ace::t_df0bc8d72c2c82 151-153,157-158,163-165,168,182-187,193-198,202-204
+  s_b26c86cfdf2ace::t_d93484bc81c561 145-148,159-161,171-181,188-192,199-201,205-211
+  s_b26c86cfdf2ace::t_a5cb8fc4972d65 143-144,154-156,162,166-167,169-170,484
+apps/web/src/features/budgets/presentation.ts
+  s_b26c86cfdf2ace::t_0d6e17910c9cfa 3,59,117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "22e84df85cf981ecabe31644d9539a32dd79b1ab",
+  "prompts": {},
+  "sessions": {
+    "s_b26c86cfdf2ace": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19f3f-f807-7212-9983-1cc83e398d8c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -22662,6 +22662,50 @@
                           },
                           "type": "array"
                         },
+                        "linkedTransactions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "categoryId": {
+                                "$ref": "#/components/schemas/CategoryId"
+                              },
+                              "counterparty": {
+                                "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+                                "maxLength": 120,
+                                "minLength": 1,
+                                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                                "type": "string"
+                              },
+                              "direction": {
+                                "$ref": "#/components/schemas/Union_3"
+                              },
+                              "id": {
+                                "$ref": "#/components/schemas/TransactionId"
+                              },
+                              "money": {
+                                "$ref": "#/components/schemas/Money_2"
+                              },
+                              "notes": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                                "type": "string"
+                              },
+                              "occurredAt": {
+                                "$ref": "#/components/schemas/TransactionOccurredAt"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "money",
+                              "direction",
+                              "categoryId",
+                              "occurredAt"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
                         "matches": {
                           "items": {
                             "additionalProperties": false,
@@ -22787,6 +22831,7 @@
                         "occurrences",
                         "previous",
                         "summary",
+                        "linkedTransactions",
                         "invalidFulfillmentIds",
                         "matches",
                         "matchesComplete"

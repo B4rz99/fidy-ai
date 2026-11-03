@@ -254,6 +254,7 @@ const representativeRecurringWorkspace = (
       occurrences,
       previous: [],
       summary: summarizeRecurring(occurrences),
+      linkedTransactions: [],
       invalidFulfillmentIds: [],
       matches: [],
       matchesComplete: true,

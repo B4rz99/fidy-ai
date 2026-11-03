@@ -789,6 +789,14 @@ Confirmed pause/resume keeps the detail open and names the affected plan and res
 accessible success feedback. The planning owner retains that feedback when an occurrence disappears
 from the projection or the panel closes; pending, rejected and uncertain writes remain distinct.
 
+Linked Transaction entries show Counterparty, exact signed Money, local date and direction in the
+occurrence detail. Category and Notes appear inline when present, with long content wrapping.
+There is no separate Transaction-opening action. Each linked entry offers the shared coral
+“Desvincular transacción” action and an inline confirmation explaining that only this date's
+tracking is removed; the Transaction remains in history. Manual marks retain their separate
+“Revertir” action. Unavailable or invalidated associations remain reviewable without contributing
+to completed totals.
+
 ## Settings workspace
 
 Cuenta, Privacidad and Accesos use the approved continuous canvas: a 40px desktop

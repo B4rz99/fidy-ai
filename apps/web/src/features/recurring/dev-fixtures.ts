@@ -359,6 +359,7 @@ export const fixtureWorkspace = ({
     summary: summaryFor(occurrences),
     matches: [],
     matchesComplete: dataset !== "stale",
+    linkedTransactions: [],
     invalidFulfillmentIds: [],
     document: {
       revision: 1,

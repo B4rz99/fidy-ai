@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, Struct } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import {
   RecurringCommand,
@@ -9,6 +9,7 @@ import {
   RecurringOccurrence,
   RecurringSummary,
 } from "~/core/recurring-plans/contract";
+import { Transaction } from "~/core/transactions/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
 
@@ -18,6 +19,9 @@ export const RecurringWorkspaceQuery = Schema.Struct({
   view: Schema.optionalKey(Schema.Literal("compact")),
   ...RecurringFilters.fields,
 });
+const LinkedTransaction = Transaction.mapFields(
+  Struct.pick(["id", "money", "counterparty", "direction", "categoryId", "notes", "occurredAt"])
+);
 export const RecurringWorkspace = Schema.Struct({
   document: RecurringDocument,
   month: RecurringMonth,
@@ -26,6 +30,7 @@ export const RecurringWorkspace = Schema.Struct({
   previous: Schema.Array(RecurringOccurrence),
   previousMonth: Schema.optionalKey(RecurringMonth),
   summary: Schema.Array(RecurringSummary),
+  linkedTransactions: Schema.Array(LinkedTransaction),
   invalidFulfillmentIds: Schema.Array(Schema.String),
   matches: Schema.Array(Schema.Struct({ item: RecurringOccurrence, fact: RecurringMatchFact })),
   matchesComplete: Schema.Boolean,

@@ -105,6 +105,9 @@ it.each(["none", "own", "missing", "foreign"] as const)(
         const observed = observeRetentionCost(db);
         const result = yield* workspaceValue({ db: observed.database, userId, document, query });
         expect(result.matchesComplete).toBe(true);
+        expect(result.linkedTransactions.map((transaction) => transaction.id)).toEqual(
+          { own: [linkedId], none: [], missing: [], foreign: [] }[link]
+        );
         expect(result.invalidFulfillmentIds).toEqual(
           link === "missing" || link === "foreign" ? ["90000000-0000-4000-8000-000000000001"] : []
         );

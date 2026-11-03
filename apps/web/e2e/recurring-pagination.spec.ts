@@ -61,6 +61,7 @@ const workspace = {
       unknown: 0,
     },
   ],
+  linkedTransactions: [],
   invalidFulfillmentIds: [],
   matches: [],
   matchesComplete: true,
